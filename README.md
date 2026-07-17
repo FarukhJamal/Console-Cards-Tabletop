@@ -4,7 +4,7 @@ Console Cards is a multiplayer, top-down virtual tabletop Platform centered arou
 
 ## Current Status
 
-**Approved documentation baseline. M0 is ready to begin after fresh-project creation and a no-change repository audit.**
+**The approved Unity project baseline exists. Console Cards runtime implementation has not started.**
 
 ## Approved Technical Baseline
 
