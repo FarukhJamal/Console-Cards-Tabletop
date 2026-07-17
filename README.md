@@ -50,4 +50,5 @@ Networking technology and host migration remain intentionally deferred to M6.
 
 ## Tests
 
-No Unity implementation exists inside this documentation-only pack.
+The approved Unity project baseline exists.
+Console Cards runtime implementation has not started.

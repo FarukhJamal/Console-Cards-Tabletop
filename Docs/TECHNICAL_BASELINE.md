@@ -26,7 +26,9 @@
 - A slight visual angle may be evaluated later, but the approved foundation is orthographic top-down.
 - Cards, Pawns, Tokens, Boards, and pieces are 3D objects with controlled deterministic movement.
 - Unrestricted physics is not authoritative.
-
+- The orthographic Tabletop Scene and Camera are M1 deliverables.
+- The default Unity starter scene is not required to match the final
+- presentation before M0 begins.
 ## 4. Initial Platform
 
 - **Target:** Windows desktop.
@@ -98,4 +100,7 @@ Before adding any package:
 
 This document resolves implementation blockers OD-001 through OD-008.
 
-M0 may begin after the fresh repository is created and a no-change project audit confirms this baseline.
+M0 may begin after the project version, URP, Input System, Windows
+profile, source control, and approved documentation are verified.
+
+Scene and Camera presentation requirements are verified during M1.
