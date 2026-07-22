@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.2.3-m1-closure]
+
+### Added
+
+- M1.12: Added immutable local `TabletopCameraBookmark`.
+- M1.12: Added Camera bookmark capture and restoration.
+- M1.12: Kept bookmark state Presentation-only, with no Seat, Play Area, persistence, UI, input binding, or networking integration.
+- M1.12: Added 21 Edit Mode cases and 11 Play Mode cases.
+- M1.13: Added `TabletopCameraViewBounds`.
+- M1.13: Added `TabletopVisibilityEvaluator`.
+- M1.13: Added orthographic view-bound calculation using Camera focus, orthographic size, aspect ratio, world scale, and culling margin.
+- M1.13: Kept visibility evaluation as a local Presentation optimization aid, with no renderer toggling, object registry, pooling, security visibility, network visibility, or GameObject activation.
+- M1.13: Added 95 Edit Mode cases.
+
+### Verified
+
+- M1 milestone closure totals: Edit Mode 381 passed, Play Mode 109 passed, Failed 0, Skipped 0, Unity compilation errors 0.
+- M1 delivered direct logical-to-render coordinate conversion, an orthographic top-down Camera, keyboard and mouse pan/zoom, local Camera bookmarks, a camera-local Table Surface proxy, direct-coordinate precision characterization, and basic logical viewport visibility evaluation.
+- Logical tabletop state and objects do not move during Camera panning.
+
 ## [1.2.2-m1.11]
 
 ### Changed
