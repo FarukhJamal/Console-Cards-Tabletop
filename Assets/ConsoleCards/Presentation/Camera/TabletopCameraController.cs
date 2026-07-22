@@ -82,6 +82,21 @@ namespace ConsoleCards.Presentation.Camera
             ApplyState();
         }
 
+        public TabletopCameraBookmark CaptureBookmark(string name)
+        {
+            EnsureInitialized();
+
+            return new TabletopCameraBookmark(name, State.FocusCoordinate, State.OrthographicSize);
+        }
+
+        public void Focus(TabletopCameraBookmark bookmark)
+        {
+            EnsureInitialized();
+
+            State.SetFocus(bookmark.FocusCoordinate, bookmark.OrthographicSize);
+            ApplyState();
+        }
+
         public void ApplyState()
         {
             EnsureInitialized();

@@ -111,6 +111,164 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         }
 
         [Test]
+        public void CaptureBookmark_CapturesCurrentLogicalFocus()
+        {
+            TabletopCameraController controller = CreateInitializedController();
+            TableCoordinate focus = new TableCoordinate(3.0, -4.0);
+            controller.Focus(focus);
+
+            TabletopCameraBookmark bookmark = controller.CaptureBookmark("Current");
+
+            Assert.That(bookmark.FocusCoordinate, Is.EqualTo(focus));
+        }
+
+        [Test]
+        public void CaptureBookmark_CapturesCurrentOrthographicSize()
+        {
+            TabletopCameraController controller = CreateInitializedController();
+            controller.Zoom(2f);
+
+            TabletopCameraBookmark bookmark = controller.CaptureBookmark("Current");
+
+            Assert.That(bookmark.OrthographicSize, Is.EqualTo(7f).Within(Tolerance));
+        }
+
+        [Test]
+        public void CaptureBookmark_PreservesSuppliedName()
+        {
+            TabletopCameraController controller = CreateInitializedController();
+
+            TabletopCameraBookmark bookmark = controller.CaptureBookmark("Primary Play Area");
+
+            Assert.That(bookmark.Name, Is.EqualTo("Primary Play Area"));
+        }
+
+        [Test]
+        public void CaptureBookmark_WhenControllerIsNotInitialized_ThrowsInvalidOperationException()
+        {
+            GameObject controllerObject = CreateGameObject("Controller");
+            controllerObject.SetActive(false);
+            TabletopCameraController controller = controllerObject.AddComponent<TabletopCameraController>();
+
+            Assert.Throws<System.InvalidOperationException>(() => controller.CaptureBookmark("Current"));
+        }
+
+        [Test]
+        public void FocusBookmark_AppliesCoordinate()
+        {
+            TabletopCameraController controller = CreateInitializedController(worldUnitsPerTableUnit: 2f, cameraHeight: 11f);
+            TabletopCameraBookmark bookmark = new TabletopCameraBookmark(
+                "Saved",
+                new TableCoordinate(-2.0, 3.0),
+                6f);
+
+            controller.Focus(bookmark);
+
+            Assert.That(controller.State.FocusCoordinate, Is.EqualTo(bookmark.FocusCoordinate));
+            AssertVector3(controller.CameraRig.position, -4f, 11f, 6f);
+        }
+
+        [Test]
+        public void FocusBookmark_AppliesZoom()
+        {
+            TabletopCameraController controller = CreateInitializedController();
+            TabletopCameraBookmark bookmark = new TabletopCameraBookmark("Saved", TableCoordinate.Zero, 8f);
+
+            controller.Focus(bookmark);
+
+            Assert.That(controller.State.OrthographicSize, Is.EqualTo(8f).Within(Tolerance));
+            Assert.That(controller.TargetCamera.orthographicSize, Is.EqualTo(8f).Within(Tolerance));
+        }
+
+        [Test]
+        public void FocusBookmark_ClampsZoomToControllerLimits()
+        {
+            TabletopCameraController controller = CreateInitializedController(
+                minimumOrthographicSize: 2f,
+                maximumOrthographicSize: 6f);
+            TabletopCameraBookmark bookmark = new TabletopCameraBookmark("Saved", TableCoordinate.Zero, 10f);
+
+            controller.Focus(bookmark);
+
+            Assert.That(controller.State.OrthographicSize, Is.EqualTo(6f).Within(Tolerance));
+            Assert.That(controller.TargetCamera.orthographicSize, Is.EqualTo(6f).Within(Tolerance));
+        }
+
+        [Test]
+        public void FocusBookmark_LeavesCameraRotationUnchanged()
+        {
+            TabletopCameraController controller = CreateInitializedController();
+            Quaternion originalRotation = Quaternion.Euler(90f, 25f, 5f);
+            controller.TargetCamera.transform.rotation = originalRotation;
+            TabletopCameraBookmark bookmark = new TabletopCameraBookmark(
+                "Saved",
+                new TableCoordinate(2.0, 3.0),
+                6f);
+
+            controller.Focus(bookmark);
+
+            Assert.That(Quaternion.Angle(originalRotation, controller.TargetCamera.transform.rotation), Is.EqualTo(0f).Within(Tolerance));
+        }
+
+        [Test]
+        public void FocusBookmark_WhenControllerIsNotInitialized_ThrowsInvalidOperationException()
+        {
+            GameObject controllerObject = CreateGameObject("Controller");
+            controllerObject.SetActive(false);
+            TabletopCameraController controller = controllerObject.AddComponent<TabletopCameraController>();
+            TabletopCameraBookmark bookmark = new TabletopCameraBookmark("Saved", TableCoordinate.Zero, 5f);
+
+            Assert.Throws<System.InvalidOperationException>(() => controller.Focus(bookmark));
+        }
+
+        [Test]
+        public void CaptureBookmark_DoesNotMutateCameraState()
+        {
+            TabletopCameraController controller = CreateInitializedController();
+            controller.Focus(new TableCoordinate(3.0, 4.0), 7f);
+            TableCoordinate originalFocus = controller.State.FocusCoordinate;
+            float originalSize = controller.State.OrthographicSize;
+            Vector3 originalRigPosition = controller.CameraRig.position;
+            float originalCameraSize = controller.TargetCamera.orthographicSize;
+
+            controller.CaptureBookmark("Current");
+
+            Assert.That(controller.State.FocusCoordinate, Is.EqualTo(originalFocus));
+            Assert.That(controller.State.OrthographicSize, Is.EqualTo(originalSize).Within(Tolerance));
+            Assert.That(controller.CameraRig.position, Is.EqualTo(originalRigPosition));
+            Assert.That(controller.TargetCamera.orthographicSize, Is.EqualTo(originalCameraSize).Within(Tolerance));
+        }
+
+        [Test]
+        public void FocusBookmark_WhenApplyingOneBookmarkAfterAnother_RestoresEachState()
+        {
+            TabletopCameraController controller = CreateInitializedController(worldUnitsPerTableUnit: 1.5f);
+            TabletopCameraBookmark first = new TabletopCameraBookmark(
+                "First",
+                new TableCoordinate(2.0, -4.0),
+                6f);
+            TabletopCameraBookmark second = new TabletopCameraBookmark(
+                "Second",
+                new TableCoordinate(-3.0, 5.0),
+                9f);
+
+            controller.Focus(first);
+            Assert.That(controller.State.FocusCoordinate, Is.EqualTo(first.FocusCoordinate));
+            Assert.That(controller.State.OrthographicSize, Is.EqualTo(first.OrthographicSize).Within(Tolerance));
+            AssertVector3(controller.CameraRig.position, 3f, 10f, -6f);
+
+            controller.Focus(second);
+            Assert.That(controller.State.FocusCoordinate, Is.EqualTo(second.FocusCoordinate));
+            Assert.That(controller.State.OrthographicSize, Is.EqualTo(second.OrthographicSize).Within(Tolerance));
+            AssertVector3(controller.CameraRig.position, -4.5f, 10f, 7.5f);
+
+            controller.Focus(first);
+            Assert.That(controller.State.FocusCoordinate, Is.EqualTo(first.FocusCoordinate));
+            Assert.That(controller.State.OrthographicSize, Is.EqualTo(first.OrthographicSize).Within(Tolerance));
+            AssertVector3(controller.CameraRig.position, 3f, 10f, -6f);
+        }
+
+        [Test]
         public void ApplyState_DoesNotModifyCameraRotation()
         {
             TabletopCameraController controller = CreateInitializedController();
