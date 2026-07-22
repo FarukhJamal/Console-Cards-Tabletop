@@ -438,8 +438,9 @@ Implement first:
 - Container State.
 - Deck, Stack, Hand.
 - Seat and Console State.
-- Play Area base state.
 - Match State.
 - Commands and Results.
+
+M0 implements PlayAreaId only. PlayAreaState, Play Area layout state, Zones, Slots, Grids, and other Play Area runtime models are deferred to M4 — Play Areas and Game Template Loading.
 
 Defer detailed Miniature, Bag, Spinner, and advanced Dice state until a milestone requires them.
