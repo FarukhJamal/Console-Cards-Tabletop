@@ -24,15 +24,14 @@ See `TECHNICAL_BASELINE.md`.
 
 ```text
 Assets/
-└── _Project/
-    └── ConsoleCards/
-        ├── Runtime/
-        ├── Content/
-        ├── Presentation/
-        ├── Infrastructure/
-        ├── Bootstrap/
-        ├── Editor/
-        └── Tests/
+└── ConsoleCards/
+    ├── Runtime/
+    ├── Content/
+    ├── Presentation/
+    ├── Infrastructure/
+    ├── Bootstrap/
+    ├── Editor/
+    └── Tests/
 ```
 
 Do not scatter project code across `Assets/Scripts`, package demo folders, or scene-specific folders.
