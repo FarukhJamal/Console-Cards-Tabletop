@@ -26,6 +26,7 @@
 - Updated README, AGENTS, Unity structure, index, and roadmap.
 - M0 is now unblocked.
 - Corrected `Docs/05_Core_Data_Model.md` to explicitly defer `PlayAreaState` from M0 to M4, matching the approved roadmap and implementation prompts.
+- Simplified the Unity project root from the previous `_Project/ConsoleCards` location to `Assets/ConsoleCards` before M1.
 
 ### Deferred
 
