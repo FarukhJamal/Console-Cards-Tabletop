@@ -64,8 +64,13 @@ The ratio is a project convention, not a requirement that all future cards share
 ## 8. Coordinate Baseline
 
 - M0 begins with minimal logical two-dimensional Table Coordinates independent of Unity transforms.
-- M1 measures large-area precision and visual-surface behavior.
-- Sectoring, chunking, or floating-origin rebasing is not introduced before M1 evidence justifies it.
+- The M1 Presentation baseline uses direct logical-to-render mapping.
+- `1` table unit maps to `1` Unity world unit.
+- Logical X maps to Unity world X.
+- Logical Y maps to Unity world Z.
+- The characterized MVP render range is +/-100,000 table units.
+- Within that range, the measured `0.10` card gap remains within the approved `0.01` world-unit error tolerance.
+- Sectoring, chunking, floating-origin rebasing, and render-origin rebasing are not implemented in the Foundation because M1 evidence does not justify them.
 
 ## 9. Networking
 

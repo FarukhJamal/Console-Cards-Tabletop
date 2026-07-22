@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.2-m1.11]
+
+### Changed
+
+- Recorded M1 precision evidence for direct logical-to-render coordinate mapping.
+- Accepted the MVP baseline of `1` table unit to `1` Unity world unit, with logical X mapped to Unity world X and logical Y mapped to Unity world Z.
+- Documented the characterized MVP render range of +/-100,000 table units, where the measured `0.10` card gap remains within the approved `0.01` world-unit error tolerance.
+- Recorded known limits outside the approved normal-use range: approximately `0.125` represented gap at 1,000,000 table units and collapse of a `0.10` separation at 2,097,152 table units.
+- Rejected floating origin, render-origin rebasing, sectors, and chunks for the MVP because current evidence does not justify them.
+
 ## [1.2.1-m1.10]
 
 ### Changed

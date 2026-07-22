@@ -165,13 +165,14 @@ Do not merge these concepts.
 
 ## 12. Effectively Unbounded Tabletop
 
-The logical Virtual Tabletop is effectively unbounded. It never expands by stretching, appending, or duplicating logical tables, and there is no meaningful logical table edge for normal freeform play.
+The logical Virtual Tabletop is effectively unbounded as a product abstraction. It never expands by stretching, appending, or duplicating logical tables, and there is no meaningful logical table edge for normal freeform play.
 
 Rendered Table Surface coverage is a Presentation concern:
 
 - Only nearby visual coverage is rendered.
 - Surface proxies may reposition around each local Camera.
 - Objects retain stable logical `TableCoordinate` values in Tabletop Space.
+- Objects may retain double-precision logical coordinates beyond the current practical render range.
 - Repositioned proxy geometry must not cause texture, pattern, or marking swimming.
 - Play Areas and Boards remain independent from the surface proxy.
 
@@ -179,11 +180,11 @@ This is not parallax.
 
 ## 13. Large-Coordinate Strategy
 
-The first implementation uses logical two-dimensional coordinates and keeps them independent from rendered Unity positions.
+The first Presentation implementation uses direct logical-to-render mapping: logical X maps to Unity world X, logical Y maps to Unity world Z, and `1` table unit maps to `1` Unity world unit. This has a characterized MVP render range of +/-100,000 table units, where a `0.10` card gap remains within the approved `0.01` world-unit error tolerance.
 
-Sectoring, chunk coordinates, or floating-origin rebasing are not foundation contracts yet. During the Virtual Table milestone, prototype large-area navigation and measure precision. Adopt one of those strategies only if the prototype demonstrates a real need.
+The effectively unbounded logical tabletop is not a claim of mathematically infinite float render precision. Known measurements outside the approved normal-use range show increasing error: at 1,000,000 table units a requested `0.10` gap is represented at approximately `0.125`, and at 2,097,152 table units the `0.10` separation collapses.
 
-Any later render-origin adjustment must not alter accepted logical Match State.
+Sectoring, chunk coordinates, floating-origin rebasing, or render-origin rebasing are not Foundation implementations. Any future larger-range rendering strategy remains Presentation-only and must not alter accepted logical Match State.
 
 ## 14. Layering
 

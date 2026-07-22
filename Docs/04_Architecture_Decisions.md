@@ -139,7 +139,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 
 **Status:** Accepted
 
-**Decision:** Use logical Tabletop Space with a seamless rendered Table Surface around the local Camera. The logical Virtual Tabletop is effectively unbounded and does not move during Camera panning. Camera movement must not move Match State or tabletop objects. Begin with minimal logical two-dimensional coordinates; adopt sectoring or floating-origin behavior only after M1 measurements justify it.
+**Decision:** Use logical Tabletop Space with a seamless rendered Table Surface around the local Camera. The logical Virtual Tabletop is effectively unbounded and does not move during Camera panning. Camera movement must not move Match State or tabletop objects. For the MVP, use direct logical-to-render mapping: logical X maps to Unity world X, logical Y maps to Unity world Z, and `1` table unit maps to `1` Unity world unit.
 
 **Reason:** Players must continue placing objects without visible table duplication or a practical edge.
 
@@ -149,8 +149,11 @@ This file records accepted or proposed Architecture Decision Records. A decision
 - Visible surface geometry may be camera-local and repositioned as a Presentation rendering proxy.
 - Surface-proxy transforms are Presentation state only, not Match State, object placement authority, Play Area state, or coordinate source.
 - Surface visual patterns, markings, and textures must remain anchored to Tabletop Space or world-space X/Z coordinates so proxy repositioning is visually undetectable.
-- Large-coordinate precision is measured in M1.
-- Sectoring and floating origin remain deferred pending measurement.
+- M1 direct-coordinate precision measurement accepts a characterized normal-use render range of +/-100,000 table units for the MVP.
+- Within that range, the prototype `0.10` card gap remains within the approved `0.01` world-unit error tolerance. At 100,000 table units, the measured represented gap is approximately `0.1015625`, with approximately `0.0015625` error.
+- This is a measured MVP rendering baseline, not a claim of infinite floating-point precision.
+- Floating origin, render-origin rebasing, sectors, and chunks are rejected for the MVP because current evidence does not justify their complexity.
+- Reconsider those strategies only if a real product requirement exceeds the characterized range or visual testing reveals instability inside it.
 - Far objects may be culled visually while remaining in Runtime State.
 
 ---
