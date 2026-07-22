@@ -425,6 +425,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1862448551}
   - component: {fileID: 1862448552}
+  - component: {fileID: 1862448553}
   m_Layer: 0
   m_Name: CameraRig
   m_TagString: Untagged
@@ -467,6 +468,26 @@ MonoBehaviour:
   minimumOrthographicSize: 2
   maximumOrthographicSize: 20
   initialOrthographicSize: 5
+--- !u!114 &1862448553
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1862448550}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1e605ff45f2143a3be2047df4fdd53d7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: ConsoleCards.Presentation::ConsoleCards.Presentation.Input.TabletopCameraInputAdapter
+  cameraController: {fileID: 1862448552}
+  keyboardPanAction: {fileID: 3730818235376949441, guid: c689e4a7fb79ef84c8201eed2e8f9f70, type: 3}
+  dragPanAction: {fileID: 358669001161530887, guid: c689e4a7fb79ef84c8201eed2e8f9f70, type: 3}
+  pointerDeltaAction: {fileID: 4637217966104487933, guid: c689e4a7fb79ef84c8201eed2e8f9f70, type: 3}
+  zoomAction: {fileID: -4609614349652017270, guid: c689e4a7fb79ef84c8201eed2e8f9f70, type: 3}
+  keyboardPanSpeed: 5
+  dragPanUnitsPerPixel: 0.02
+  zoomSensitivity: 0.01
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
