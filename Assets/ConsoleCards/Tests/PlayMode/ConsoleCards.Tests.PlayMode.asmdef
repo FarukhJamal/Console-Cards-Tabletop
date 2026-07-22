@@ -3,7 +3,8 @@
   "rootNamespace": "ConsoleCards.Tests.PlayMode",
   "references": [
     "ConsoleCards.Core",
-    "ConsoleCards.Presentation"
+    "ConsoleCards.Presentation",
+    "Unity.InputSystem"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
