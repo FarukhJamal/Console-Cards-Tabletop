@@ -181,6 +181,14 @@ During drag:
 5. Submit requested and suggested placement data as required.
 6. Authority applies the accepted result.
 
+### 12.1 Future Pointer Placement Boundary
+
+Pointer placement must not depend on a visual Table Surface proxy mesh.
+
+Future pointer-to-table conversion should raycast or intersect against a mathematical tabletop plane, initially `Y = 0`, then convert the resulting intersection to a `TableCoordinate`.
+
+No infinite physical collider is required for freeform table placement.
+
 ## 13. Snap Bypass
 
 An explicit modifier must permit freeform placement unless Policy blocks bypass.

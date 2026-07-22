@@ -89,7 +89,7 @@ Deliver:
 - Top-down local Camera.
 - Pan, zoom, and focus bookmarks.
 - Logical-to-render coordinate conversion.
-- Seamless Table Surface prototype.
+- Camera-local Table Surface proxy providing seamless visual coverage without moving the logical tabletop.
 - Large-area precision measurements.
 - Decision on whether sectoring/floating origin is actually required.
 - Basic View culling strategy.

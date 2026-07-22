@@ -4,9 +4,12 @@ using UnityEngine;
 namespace ConsoleCards.Presentation.TableSurface
 {
     /// <summary>
-    /// Keeps a visual Table Surface aligned beneath a tracked Presentation transform.
+    /// Local Presentation coverage proxy for the Table Surface.
+    /// It may follow the Camera in X/Z, but it does not represent or move
+    /// the logical tabletop. Future patterned or textured surface visuals
+    /// must remain anchored to Tabletop-space or world-space X/Z coordinates.
     /// </summary>
-    public sealed class TabletopSurfaceFollower : MonoBehaviour
+    public sealed class TabletopSurfaceProxy : MonoBehaviour
     {
         [SerializeField] internal Transform trackedTransform;
         [SerializeField] internal Transform surfaceTransform;
@@ -60,19 +63,19 @@ namespace ConsoleCards.Presentation.TableSurface
         {
             if (trackedTransform == null)
             {
-                LogConfigurationError("TabletopSurfaceFollower requires a tracked Transform reference.");
+                LogConfigurationError("TabletopSurfaceProxy requires a tracked Transform reference.");
                 return false;
             }
 
             if (surfaceTransform == null)
             {
-                LogConfigurationError("TabletopSurfaceFollower requires a surface Transform reference.");
+                LogConfigurationError("TabletopSurfaceProxy requires a surface Transform reference.");
                 return false;
             }
 
             if (!IsFinite(surfaceHeight))
             {
-                LogConfigurationError("TabletopSurfaceFollower requires finite surfaceHeight.");
+                LogConfigurationError("TabletopSurfaceProxy requires finite surfaceHeight.");
                 return false;
             }
 
@@ -83,7 +86,7 @@ namespace ConsoleCards.Presentation.TableSurface
         {
             if (!IsInitialized)
             {
-                throw new InvalidOperationException("TabletopSurfaceFollower has not been successfully initialized.");
+                throw new InvalidOperationException("TabletopSurfaceProxy has not been successfully initialized.");
             }
         }
 

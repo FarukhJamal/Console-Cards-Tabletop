@@ -139,15 +139,18 @@ This file records accepted or proposed Architecture Decision Records. A decision
 
 **Status:** Accepted
 
-**Decision:** Use logical Tabletop Space with a seamless rendered Table Surface around the local Camera. Begin with minimal logical two-dimensional coordinates; adopt sectoring or floating-origin behavior only after M1 measurements justify it.
+**Decision:** Use logical Tabletop Space with a seamless rendered Table Surface around the local Camera. The logical Virtual Tabletop is effectively unbounded and does not move during Camera panning. Camera movement must not move Match State or tabletop objects. Begin with minimal logical two-dimensional coordinates; adopt sectoring or floating-origin behavior only after M1 measurements justify it.
 
 **Reason:** Players must continue placing objects without visible table duplication or a practical edge.
 
 **Consequences:**
 
 - Logical coordinates are independent from visible surface sections.
+- Visible surface geometry may be camera-local and repositioned as a Presentation rendering proxy.
+- Surface-proxy transforms are Presentation state only, not Match State, object placement authority, Play Area state, or coordinate source.
+- Surface visual patterns, markings, and textures must remain anchored to Tabletop Space or world-space X/Z coordinates so proxy repositioning is visually undetectable.
 - Large-coordinate precision is measured in M1.
-- Sectoring/floating origin is not an approved M0 contract.
+- Sectoring and floating origin remain deferred pending measurement.
 - Far objects may be culled visually while remaining in Runtime State.
 
 ---

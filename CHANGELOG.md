@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.1-m1.10]
+
+### Changed
+
+- Renamed `TabletopSurfaceFollower` to `TabletopSurfaceProxy`.
+- Clarified the distinction between the effectively unbounded logical tabletop and the camera-local visual coverage proxy.
+- Documented that future surface visuals must remain anchored to Tabletop Space or world-space X/Z coordinates.
+
 ## [1.2.0-approved-baseline]
 
 ### Resolved

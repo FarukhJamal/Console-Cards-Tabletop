@@ -8,7 +8,7 @@ using UnityObject = UnityEngine.Object;
 
 namespace ConsoleCards.Tests.PlayMode.Presentation
 {
-    public sealed class TabletopSurfaceFollowerTests
+    public sealed class TabletopSurfaceProxyTests
     {
         private const float Tolerance = 0.0001f;
 
@@ -31,19 +31,19 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [Test]
         public void ValidReferences_InitializesSuccessfully()
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower();
+            SurfaceProxyTestContext context = CreateInitializedProxy();
 
-            Assert.That(context.Follower.enabled, Is.True);
-            Assert.That(context.Follower.IsInitialized, Is.True);
-            Assert.That(context.Follower.TrackedTransform, Is.SameAs(context.TrackedTransform));
-            Assert.That(context.Follower.SurfaceTransform, Is.SameAs(context.SurfaceTransform));
-            Assert.That(context.Follower.SurfaceHeight, Is.EqualTo(0f).Within(Tolerance));
+            Assert.That(context.Proxy.enabled, Is.True);
+            Assert.That(context.Proxy.IsInitialized, Is.True);
+            Assert.That(context.Proxy.TrackedTransform, Is.SameAs(context.TrackedTransform));
+            Assert.That(context.Proxy.SurfaceTransform, Is.SameAs(context.SurfaceTransform));
+            Assert.That(context.Proxy.SurfaceHeight, Is.EqualTo(0f).Within(Tolerance));
         }
 
         [Test]
         public void Awake_WhenValidReferences_AppliesInitialAlignment()
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower(
+            SurfaceProxyTestContext context = CreateInitializedProxy(
                 trackedPosition: new Vector3(4f, 9f, -6f),
                 surfaceHeight: 1.5f);
 
@@ -53,23 +53,23 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [Test]
         public void Awake_WhenTrackedTransformIsMissing_DisablesComponent()
         {
-            LogAssert.Expect(LogType.Error, "TabletopSurfaceFollower requires a tracked Transform reference.");
+            LogAssert.Expect(LogType.Error, "TabletopSurfaceProxy requires a tracked Transform reference.");
 
-            SurfaceFollowerTestContext context = CreateInitializedFollower(assignTrackedTransform: false);
+            SurfaceProxyTestContext context = CreateInitializedProxy(assignTrackedTransform: false);
 
-            Assert.That(context.Follower.enabled, Is.False);
-            Assert.That(context.Follower.IsInitialized, Is.False);
+            Assert.That(context.Proxy.enabled, Is.False);
+            Assert.That(context.Proxy.IsInitialized, Is.False);
         }
 
         [Test]
         public void Awake_WhenSurfaceTransformIsMissing_DisablesComponent()
         {
-            LogAssert.Expect(LogType.Error, "TabletopSurfaceFollower requires a surface Transform reference.");
+            LogAssert.Expect(LogType.Error, "TabletopSurfaceProxy requires a surface Transform reference.");
 
-            SurfaceFollowerTestContext context = CreateInitializedFollower(assignSurfaceTransform: false);
+            SurfaceProxyTestContext context = CreateInitializedProxy(assignSurfaceTransform: false);
 
-            Assert.That(context.Follower.enabled, Is.False);
-            Assert.That(context.Follower.IsInitialized, Is.False);
+            Assert.That(context.Proxy.enabled, Is.False);
+            Assert.That(context.Proxy.IsInitialized, Is.False);
         }
 
         [TestCase(float.NaN)]
@@ -77,20 +77,20 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [TestCase(float.NegativeInfinity)]
         public void Awake_WhenSurfaceHeightIsNonFinite_DisablesComponent(float surfaceHeight)
         {
-            LogAssert.Expect(LogType.Error, "TabletopSurfaceFollower requires finite surfaceHeight.");
+            LogAssert.Expect(LogType.Error, "TabletopSurfaceProxy requires finite surfaceHeight.");
 
-            SurfaceFollowerTestContext context = CreateInitializedFollower(surfaceHeight: surfaceHeight);
+            SurfaceProxyTestContext context = CreateInitializedProxy(surfaceHeight: surfaceHeight);
 
-            Assert.That(context.Follower.enabled, Is.False);
-            Assert.That(context.Follower.IsInitialized, Is.False);
+            Assert.That(context.Proxy.enabled, Is.False);
+            Assert.That(context.Proxy.IsInitialized, Is.False);
         }
 
         [Test]
         public void ApplyFollow_SurfaceXFollowsTrackedX()
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower();
+            SurfaceProxyTestContext context = CreateInitializedProxy();
 
-            context.Follower.ApplyFollowPosition(new Vector3(7f, 0f, 0f));
+            context.Proxy.ApplyFollowPosition(new Vector3(7f, 0f, 0f));
 
             Assert.That(context.SurfaceTransform.position.x, Is.EqualTo(7f).Within(Tolerance));
         }
@@ -98,9 +98,9 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [Test]
         public void ApplyFollow_SurfaceZFollowsTrackedZ()
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower();
+            SurfaceProxyTestContext context = CreateInitializedProxy();
 
-            context.Follower.ApplyFollowPosition(new Vector3(0f, 0f, -8f));
+            context.Proxy.ApplyFollowPosition(new Vector3(0f, 0f, -8f));
 
             Assert.That(context.SurfaceTransform.position.z, Is.EqualTo(-8f).Within(Tolerance));
         }
@@ -108,9 +108,9 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [Test]
         public void ApplyFollow_SurfaceYUsesConfiguredSurfaceHeight()
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower(surfaceHeight: -2f);
+            SurfaceProxyTestContext context = CreateInitializedProxy(surfaceHeight: -2f);
 
-            context.Follower.ApplyFollowPosition(new Vector3(3f, 99f, 4f));
+            context.Proxy.ApplyFollowPosition(new Vector3(3f, 99f, 4f));
 
             Assert.That(context.SurfaceTransform.position.y, Is.EqualTo(-2f).Within(Tolerance));
         }
@@ -118,9 +118,9 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [Test]
         public void ApplyFollow_TrackedYDoesNotAffectSurfaceY()
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower(surfaceHeight: 2.5f);
+            SurfaceProxyTestContext context = CreateInitializedProxy(surfaceHeight: 2.5f);
 
-            context.Follower.ApplyFollowPosition(new Vector3(0f, -100f, 0f));
+            context.Proxy.ApplyFollowPosition(new Vector3(0f, -100f, 0f));
 
             AssertVector3(context.SurfaceTransform.position, 0f, 2.5f, 0f);
         }
@@ -128,9 +128,9 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [Test]
         public void ApplyFollow_PreservesNegativeXZPositions()
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower(surfaceHeight: 0.5f);
+            SurfaceProxyTestContext context = CreateInitializedProxy(surfaceHeight: 0.5f);
 
-            context.Follower.ApplyFollowPosition(new Vector3(-12f, 1f, -14f));
+            context.Proxy.ApplyFollowPosition(new Vector3(-12f, 1f, -14f));
 
             AssertVector3(context.SurfaceTransform.position, -12f, 0.5f, -14f);
         }
@@ -138,10 +138,10 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [Test]
         public void ApplyFollow_WhenTrackedTransformMoves_SurfaceFollows()
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower();
+            SurfaceProxyTestContext context = CreateInitializedProxy();
 
             context.TrackedTransform.position = new Vector3(9f, 3f, 11f);
-            context.Follower.ApplyFollow();
+            context.Proxy.ApplyFollow();
 
             AssertVector3(context.SurfaceTransform.position, 9f, 0f, 11f);
         }
@@ -149,12 +149,12 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [Test]
         public void ApplyFollow_WhenRepeated_RemainsDeterministic()
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower(surfaceHeight: 1f);
+            SurfaceProxyTestContext context = CreateInitializedProxy(surfaceHeight: 1f);
             Vector3 trackedPosition = new Vector3(6f, 5f, -3f);
 
-            context.Follower.ApplyFollowPosition(trackedPosition);
+            context.Proxy.ApplyFollowPosition(trackedPosition);
             Vector3 firstPosition = context.SurfaceTransform.position;
-            context.Follower.ApplyFollowPosition(trackedPosition);
+            context.Proxy.ApplyFollowPosition(trackedPosition);
 
             AssertVector3(context.SurfaceTransform.position, firstPosition.x, firstPosition.y, firstPosition.z);
         }
@@ -162,11 +162,11 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [Test]
         public void ApplyFollow_PreservesSurfaceRotation()
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower();
+            SurfaceProxyTestContext context = CreateInitializedProxy();
             Quaternion originalRotation = Quaternion.Euler(10f, 25f, 40f);
             context.SurfaceTransform.rotation = originalRotation;
 
-            context.Follower.ApplyFollowPosition(new Vector3(5f, 6f, 7f));
+            context.Proxy.ApplyFollowPosition(new Vector3(5f, 6f, 7f));
 
             Assert.That(Quaternion.Angle(originalRotation, context.SurfaceTransform.rotation), Is.EqualTo(0f).Within(Tolerance));
         }
@@ -174,11 +174,11 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [Test]
         public void ApplyFollow_PreservesSurfaceScale()
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower();
+            SurfaceProxyTestContext context = CreateInitializedProxy();
             Vector3 originalScale = new Vector3(3f, 1f, 4f);
             context.SurfaceTransform.localScale = originalScale;
 
-            context.Follower.ApplyFollowPosition(new Vector3(5f, 6f, 7f));
+            context.Proxy.ApplyFollowPosition(new Vector3(5f, 6f, 7f));
 
             AssertVector3(context.SurfaceTransform.localScale, originalScale.x, originalScale.y, originalScale.z);
         }
@@ -186,11 +186,11 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [Test]
         public void ApplyFollow_DoesNotMoveTrackedTransform()
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower();
+            SurfaceProxyTestContext context = CreateInitializedProxy();
             Vector3 originalTrackedPosition = new Vector3(2f, 3f, 4f);
             context.TrackedTransform.position = originalTrackedPosition;
 
-            context.Follower.ApplyFollow();
+            context.Proxy.ApplyFollow();
 
             AssertVector3(context.TrackedTransform.position, originalTrackedPosition.x, originalTrackedPosition.y, originalTrackedPosition.z);
         }
@@ -200,13 +200,13 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [TestCase(float.NegativeInfinity)]
         public void ApplyFollow_WhenTrackedXIsNonFinite_ThrowsWithoutMutation(float trackedX)
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower(
+            SurfaceProxyTestContext context = CreateInitializedProxy(
                 trackedPosition: new Vector3(1f, 2f, 3f),
                 surfaceHeight: 0.75f);
             Vector3 acceptedPosition = context.SurfaceTransform.position;
 
             Assert.Throws<ArgumentOutOfRangeException>(
-                () => context.Follower.ApplyFollowPosition(new Vector3(trackedX, 4f, 5f)));
+                () => context.Proxy.ApplyFollowPosition(new Vector3(trackedX, 4f, 5f)));
 
             AssertVector3(context.SurfaceTransform.position, acceptedPosition.x, acceptedPosition.y, acceptedPosition.z);
         }
@@ -216,13 +216,13 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [TestCase(float.NegativeInfinity)]
         public void ApplyFollow_WhenTrackedYIsNonFinite_ThrowsWithoutMutation(float trackedY)
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower(
+            SurfaceProxyTestContext context = CreateInitializedProxy(
                 trackedPosition: new Vector3(1f, 2f, 3f),
                 surfaceHeight: 0.75f);
             Vector3 acceptedPosition = context.SurfaceTransform.position;
 
             Assert.Throws<ArgumentOutOfRangeException>(
-                () => context.Follower.ApplyFollowPosition(new Vector3(4f, trackedY, 5f)));
+                () => context.Proxy.ApplyFollowPosition(new Vector3(4f, trackedY, 5f)));
 
             AssertVector3(context.SurfaceTransform.position, acceptedPosition.x, acceptedPosition.y, acceptedPosition.z);
         }
@@ -232,13 +232,13 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [TestCase(float.NegativeInfinity)]
         public void ApplyFollow_WhenTrackedZIsNonFinite_ThrowsWithoutMutation(float trackedZ)
         {
-            SurfaceFollowerTestContext context = CreateInitializedFollower(
+            SurfaceProxyTestContext context = CreateInitializedProxy(
                 trackedPosition: new Vector3(1f, 2f, 3f),
                 surfaceHeight: 0.75f);
             Vector3 acceptedPosition = context.SurfaceTransform.position;
 
             Assert.Throws<ArgumentOutOfRangeException>(
-                () => context.Follower.ApplyFollowPosition(new Vector3(4f, 5f, trackedZ)));
+                () => context.Proxy.ApplyFollowPosition(new Vector3(4f, 5f, trackedZ)));
 
             AssertVector3(context.SurfaceTransform.position, acceptedPosition.x, acceptedPosition.y, acceptedPosition.z);
         }
@@ -246,28 +246,28 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [Test]
         public void ApplyFollow_WhenInitializationFailed_ThrowsInvalidOperationException()
         {
-            LogAssert.Expect(LogType.Error, "TabletopSurfaceFollower requires a tracked Transform reference.");
-            SurfaceFollowerTestContext context = CreateInitializedFollower(assignTrackedTransform: false);
+            LogAssert.Expect(LogType.Error, "TabletopSurfaceProxy requires a tracked Transform reference.");
+            SurfaceProxyTestContext context = CreateInitializedProxy(assignTrackedTransform: false);
 
-            Assert.Throws<InvalidOperationException>(() => context.Follower.ApplyFollow());
+            Assert.Throws<InvalidOperationException>(() => context.Proxy.ApplyFollow());
         }
 
         [Test]
-        public void Lifecycle_WhenInvalidFollower_DoesNotThrowDuringDisableOrActivation()
+        public void Lifecycle_WhenInvalidProxy_DoesNotThrowDuringDisableOrActivation()
         {
-            LogAssert.Expect(LogType.Error, "TabletopSurfaceFollower requires a tracked Transform reference.");
-            SurfaceFollowerTestContext context = CreateInitializedFollower(assignTrackedTransform: false);
+            LogAssert.Expect(LogType.Error, "TabletopSurfaceProxy requires a tracked Transform reference.");
+            SurfaceProxyTestContext context = CreateInitializedProxy(assignTrackedTransform: false);
 
             Assert.DoesNotThrow(() =>
             {
-                context.Follower.enabled = false;
-                context.Follower.gameObject.SetActive(false);
-                context.Follower.gameObject.SetActive(true);
-                context.Follower.enabled = false;
+                context.Proxy.enabled = false;
+                context.Proxy.gameObject.SetActive(false);
+                context.Proxy.gameObject.SetActive(true);
+                context.Proxy.enabled = false;
             });
         }
 
-        private SurfaceFollowerTestContext CreateInitializedFollower(
+        private SurfaceProxyTestContext CreateInitializedProxy(
             bool assignTrackedTransform = true,
             bool assignSurfaceTransform = true,
             Vector3? trackedPosition = null,
@@ -278,16 +278,16 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             trackedTransform.position = trackedPosition ?? Vector3.zero;
             surfaceTransform.position = new Vector3(-3f, -3f, -3f);
 
-            GameObject followerObject = CreateGameObject("Tabletop Surface Follower");
-            followerObject.SetActive(false);
-            TabletopSurfaceFollower follower = followerObject.AddComponent<TabletopSurfaceFollower>();
-            follower.trackedTransform = assignTrackedTransform ? trackedTransform : null;
-            follower.surfaceTransform = assignSurfaceTransform ? surfaceTransform : null;
-            follower.surfaceHeight = surfaceHeight;
+            GameObject proxyObject = CreateGameObject("Tabletop Surface Proxy");
+            proxyObject.SetActive(false);
+            TabletopSurfaceProxy proxy = proxyObject.AddComponent<TabletopSurfaceProxy>();
+            proxy.trackedTransform = assignTrackedTransform ? trackedTransform : null;
+            proxy.surfaceTransform = assignSurfaceTransform ? surfaceTransform : null;
+            proxy.surfaceHeight = surfaceHeight;
 
-            followerObject.SetActive(true);
+            proxyObject.SetActive(true);
 
-            return new SurfaceFollowerTestContext(follower, trackedTransform, surfaceTransform);
+            return new SurfaceProxyTestContext(proxy, trackedTransform, surfaceTransform);
         }
 
         private GameObject CreateGameObject(string name)
@@ -304,19 +304,19 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(actual.z, Is.EqualTo(expectedZ).Within(Tolerance));
         }
 
-        private sealed class SurfaceFollowerTestContext
+        private sealed class SurfaceProxyTestContext
         {
-            public SurfaceFollowerTestContext(
-                TabletopSurfaceFollower follower,
+            public SurfaceProxyTestContext(
+                TabletopSurfaceProxy proxy,
                 Transform trackedTransform,
                 Transform surfaceTransform)
             {
-                Follower = follower;
+                Proxy = proxy;
                 TrackedTransform = trackedTransform;
                 SurfaceTransform = surfaceTransform;
             }
 
-            public TabletopSurfaceFollower Follower { get; }
+            public TabletopSurfaceProxy Proxy { get; }
 
             public Transform TrackedTransform { get; }
 

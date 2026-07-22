@@ -165,15 +165,15 @@ Do not merge these concepts.
 
 ## 12. Effectively Unbounded Tabletop
 
-The Tabletop is not expanded by stretching one mesh.
+The logical Virtual Tabletop is effectively unbounded. It never expands by stretching, appending, or duplicating logical tables, and there is no meaningful logical table edge for normal freeform play.
 
-Recommended model:
+Rendered Table Surface coverage is a Presentation concern:
 
-- Logical sector-based coordinates.
-- Camera-centered visible surface sections.
-- Seamless repeatable material.
-- Visual culling for distant objects.
-- Stable Runtime State independent of visible surface.
+- Only nearby visual coverage is rendered.
+- Surface proxies may reposition around each local Camera.
+- Objects retain stable logical `TableCoordinate` values in Tabletop Space.
+- Repositioned proxy geometry must not cause texture, pattern, or marking swimming.
+- Play Areas and Boards remain independent from the surface proxy.
 
 This is not parallax.
 
