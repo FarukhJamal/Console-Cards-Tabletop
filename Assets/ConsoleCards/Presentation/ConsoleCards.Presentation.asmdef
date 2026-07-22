@@ -1,0 +1,17 @@
+{
+  "name": "ConsoleCards.Presentation",
+  "rootNamespace": "ConsoleCards.Presentation",
+  "references": [
+    "ConsoleCards.Core"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
+

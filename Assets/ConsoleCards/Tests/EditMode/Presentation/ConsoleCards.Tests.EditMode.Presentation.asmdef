@@ -1,0 +1,23 @@
+{
+  "name": "ConsoleCards.Tests.EditMode.Presentation",
+  "rootNamespace": "ConsoleCards.Tests.EditMode.Presentation",
+  "references": [
+    "ConsoleCards.Core",
+    "ConsoleCards.Presentation"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "noEngineReferences": false
+}
+
