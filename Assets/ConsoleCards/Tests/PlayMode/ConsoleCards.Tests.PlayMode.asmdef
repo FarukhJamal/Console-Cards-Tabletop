@@ -1,0 +1,20 @@
+{
+  "name": "ConsoleCards.Tests.PlayMode",
+  "rootNamespace": "ConsoleCards.Tests.PlayMode",
+  "references": [
+    "ConsoleCards.Core",
+    "ConsoleCards.Presentation"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "noEngineReferences": false
+}
