@@ -303,11 +303,115 @@ namespace ConsoleCards.Tests.EditMode.Presentation
             AssertVector3(rotatedUp, Vector3.up.x, Vector3.up.y, Vector3.up.z);
         }
 
+        [Test]
+        public void ToTableCoordinate_WithWorldOrigin_MapsToTableCoordinateZero()
+        {
+            TabletopCoordinateConverter converter = new TabletopCoordinateConverter(1f, 0f, 0f, 0f);
+
+            TableCoordinate coordinate = converter.ToTableCoordinate(Vector3.zero);
+
+            AssertTableCoordinate(coordinate, 0.0, 0.0);
+        }
+
+        [Test]
+        public void ToTableCoordinate_WithPositiveWorldXZ_MapsToPositiveLogicalXY()
+        {
+            TabletopCoordinateConverter converter = new TabletopCoordinateConverter(1f, 0f, 0f, 0f);
+
+            TableCoordinate coordinate = converter.ToTableCoordinate(new Vector3(2.5f, 8f, 3.75f));
+
+            AssertTableCoordinate(coordinate, 2.5, 3.75);
+        }
+
+        [Test]
+        public void ToTableCoordinate_WithNegativeWorldXZ_MapsToNegativeLogicalXY()
+        {
+            TabletopCoordinateConverter converter = new TabletopCoordinateConverter(1f, 0f, 0f, 0f);
+
+            TableCoordinate coordinate = converter.ToTableCoordinate(new Vector3(-2.5f, -8f, -3.75f));
+
+            AssertTableCoordinate(coordinate, -2.5, -3.75);
+        }
+
+        [Test]
+        public void ToTableCoordinate_AppliesInverseWorldUnitsPerTableUnit()
+        {
+            TabletopCoordinateConverter converter = new TabletopCoordinateConverter(2.5f, 0f, 0f, 0f);
+
+            TableCoordinate coordinate = converter.ToTableCoordinate(new Vector3(5f, 0f, -10f));
+
+            AssertTableCoordinate(coordinate, 2.0, -4.0);
+        }
+
+        [Test]
+        public void ToTableCoordinate_IgnoresWorldY()
+        {
+            TabletopCoordinateConverter converter = new TabletopCoordinateConverter(1f, 0f, 0f, 0f);
+
+            TableCoordinate lowCoordinate = converter.ToTableCoordinate(new Vector3(3f, -100f, 4f));
+            TableCoordinate highCoordinate = converter.ToTableCoordinate(new Vector3(3f, 100f, 4f));
+
+            Assert.That(highCoordinate, Is.EqualTo(lowCoordinate));
+        }
+
+        [TestCase(0.0, 0.0)]
+        [TestCase(2.5, -3.75)]
+        [TestCase(-1000.25, 2000.5)]
+        public void ToTableCoordinate_AfterForwardConversion_PreservesRepresentativeValues(double x, double y)
+        {
+            TabletopCoordinateConverter converter = new TabletopCoordinateConverter(1.25f, 0.5f, 0.1f, 0.01f);
+            TableCoordinate original = new TableCoordinate(x, y);
+
+            Vector3 worldPosition = converter.ToWorldPosition(original);
+            TableCoordinate restored = converter.ToTableCoordinate(worldPosition);
+
+            AssertTableCoordinate(restored, x, y);
+        }
+
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        [TestCase(float.NegativeInfinity)]
+        public void ToTableCoordinate_WhenWorldXIsNonFinite_ThrowsArgumentOutOfRangeException(float worldX)
+        {
+            TabletopCoordinateConverter converter = new TabletopCoordinateConverter(1f, 0f, 0f, 0f);
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => converter.ToTableCoordinate(new Vector3(worldX, 0f, 0f)));
+        }
+
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        [TestCase(float.NegativeInfinity)]
+        public void ToTableCoordinate_WhenWorldYIsNonFinite_ThrowsArgumentOutOfRangeException(float worldY)
+        {
+            TabletopCoordinateConverter converter = new TabletopCoordinateConverter(1f, 0f, 0f, 0f);
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => converter.ToTableCoordinate(new Vector3(0f, worldY, 0f)));
+        }
+
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        [TestCase(float.NegativeInfinity)]
+        public void ToTableCoordinate_WhenWorldZIsNonFinite_ThrowsArgumentOutOfRangeException(float worldZ)
+        {
+            TabletopCoordinateConverter converter = new TabletopCoordinateConverter(1f, 0f, 0f, 0f);
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => converter.ToTableCoordinate(new Vector3(0f, 0f, worldZ)));
+        }
+
         private static void AssertVector3(Vector3 actual, float expectedX, float expectedY, float expectedZ)
         {
             Assert.That(actual.x, Is.EqualTo(expectedX).Within(Tolerance));
             Assert.That(actual.y, Is.EqualTo(expectedY).Within(Tolerance));
             Assert.That(actual.z, Is.EqualTo(expectedZ).Within(Tolerance));
+        }
+
+        private static void AssertTableCoordinate(TableCoordinate actual, double expectedX, double expectedY)
+        {
+            Assert.That(actual.X, Is.EqualTo(expectedX).Within(Tolerance));
+            Assert.That(actual.Y, Is.EqualTo(expectedY).Within(Tolerance));
         }
     }
 }

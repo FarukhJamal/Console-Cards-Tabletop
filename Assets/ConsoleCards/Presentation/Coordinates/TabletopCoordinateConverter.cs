@@ -102,6 +102,19 @@ namespace ConsoleCards.Presentation.Coordinates
             return Quaternion.Euler(0f, pose.RotationDegrees, 0f);
         }
 
+        /// <summary>
+        /// Converts a Unity world position back to its logical table coordinate using the approved X/Z mapping.
+        /// </summary>
+        public TableCoordinate ToTableCoordinate(Vector3 worldPosition)
+        {
+            ValidateFinite(worldPosition);
+
+            double logicalX = ConvertToFiniteDouble(worldPosition.x / WorldUnitsPerTableUnit);
+            double logicalY = ConvertToFiniteDouble(worldPosition.z / WorldUnitsPerTableUnit);
+
+            return new TableCoordinate(logicalX, logicalY);
+        }
+
         private static void ValidateFinite(TableCoordinate coordinate)
         {
             if (!IsFinite(coordinate.X) || !IsFinite(coordinate.Y))
@@ -118,6 +131,14 @@ namespace ConsoleCards.Presentation.Coordinates
             }
         }
 
+        private static void ValidateFinite(Vector3 worldPosition)
+        {
+            if (!IsFinite(worldPosition.x) || !IsFinite(worldPosition.y) || !IsFinite(worldPosition.z))
+            {
+                throw new ArgumentOutOfRangeException(nameof(worldPosition));
+            }
+        }
+
         private static float ConvertToFiniteFloat(double value)
         {
             float convertedValue = (float)value;
@@ -127,6 +148,16 @@ namespace ConsoleCards.Presentation.Coordinates
             }
 
             return convertedValue;
+        }
+
+        private static double ConvertToFiniteDouble(double value)
+        {
+            if (!IsFinite(value))
+            {
+                throw new OverflowException("Converted logical table coordinate component is not finite.");
+            }
+
+            return value;
         }
 
         private static bool IsFinite(float value)
