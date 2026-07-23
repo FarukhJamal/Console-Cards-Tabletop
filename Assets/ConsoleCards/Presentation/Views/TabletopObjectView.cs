@@ -1,4 +1,5 @@
 using System;
+using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Presentation.Coordinates;
@@ -14,12 +15,18 @@ namespace ConsoleCards.Presentation.Views
         private TabletopObjectState boundState;
         private TabletopCoordinateConverter coordinateConverter;
         private bool isBound;
+        private bool isPreviewing;
+        private TabletopPose previewPose;
 
         public bool IsBound => isBound;
 
         public TabletopObjectId ObjectId => isBound ? boundState.Id : TabletopObjectId.Empty;
 
         public TabletopObjectState BoundState => isBound ? boundState : null;
+
+        public bool IsPreviewing => isPreviewing;
+
+        public TabletopPose PreviewPose => isPreviewing ? previewPose : TabletopPose.Default;
 
         protected void BindBase(
             TabletopObjectState state,
@@ -41,9 +48,29 @@ namespace ConsoleCards.Presentation.Views
         {
             EnsureBound();
 
-            transform.SetPositionAndRotation(
-                coordinateConverter.ToWorldPosition(boundState.Pose),
-                coordinateConverter.ToWorldRotation(boundState.Pose));
+            Vector3 worldPosition = coordinateConverter.ToWorldPosition(boundState.Pose);
+            Quaternion worldRotation = coordinateConverter.ToWorldRotation(boundState.Pose);
+
+            transform.SetPositionAndRotation(worldPosition, worldRotation);
+            ClearPreviewState();
+        }
+
+        public void ApplyPreviewPose(TabletopPose pose)
+        {
+            EnsureBound();
+
+            ValidateFinitePreviewPose(pose);
+            Vector3 worldPosition = coordinateConverter.ToWorldPosition(pose);
+            Quaternion worldRotation = coordinateConverter.ToWorldRotation(pose);
+
+            previewPose = pose;
+            isPreviewing = true;
+            transform.SetPositionAndRotation(worldPosition, worldRotation);
+        }
+
+        public void ReconcileAcceptedState()
+        {
+            ApplyAcceptedState();
         }
 
         public virtual void Unbind()
@@ -51,6 +78,7 @@ namespace ConsoleCards.Presentation.Views
             boundState = null;
             coordinateConverter = null;
             isBound = false;
+            ClearPreviewState();
 
             OnUnbound();
         }
@@ -90,12 +118,36 @@ namespace ConsoleCards.Presentation.Views
             }
         }
 
+        private static void ValidateFinitePreviewPose(TabletopPose pose)
+        {
+            if (!IsFinite(pose.Position.X) || !IsFinite(pose.Position.Y) || !IsFinite(pose.RotationDegrees))
+            {
+                throw new ArgumentOutOfRangeException(nameof(pose));
+            }
+        }
+
         private void EnsureBound()
         {
             if (!isBound)
             {
                 throw new InvalidOperationException("TabletopObjectView is not bound to Runtime State.");
             }
+        }
+
+        private void ClearPreviewState()
+        {
+            previewPose = TabletopPose.Default;
+            isPreviewing = false;
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        private static bool IsFinite(double value)
+        {
+            return !double.IsNaN(value) && !double.IsInfinity(value);
         }
     }
 }
