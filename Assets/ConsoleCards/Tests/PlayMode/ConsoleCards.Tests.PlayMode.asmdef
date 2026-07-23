@@ -3,6 +3,7 @@
   "rootNamespace": "ConsoleCards.Tests.PlayMode",
   "references": [
     "ConsoleCards.Core",
+    "ConsoleCards.Application",
     "ConsoleCards.Presentation",
     "Unity.InputSystem"
   ],

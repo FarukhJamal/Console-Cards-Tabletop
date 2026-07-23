@@ -3,6 +3,7 @@
   "rootNamespace": "ConsoleCards.Presentation",
   "references": [
     "ConsoleCards.Core",
+    "ConsoleCards.Application",
     "Unity.InputSystem"
   ],
   "includePlatforms": [],
