@@ -25,6 +25,7 @@ namespace ConsoleCards.Presentation.Input
         private bool pointerDeltaEnabledByAdapter;
         private bool zoomEnabledByAdapter;
         private TabletopInteractionInputRoutingPolicy scrollRoutingPolicy;
+        private TabletopInputFrameCoordinator externalFrameDriver;
 
         public bool IsInitialized { get; private set; }
 
@@ -39,6 +40,13 @@ namespace ConsoleCards.Presentation.Input
         public bool HasScrollRoutingPolicy => scrollRoutingPolicy != null;
 
         public TabletopInteractionInputRoutingPolicy ScrollRoutingPolicy => scrollRoutingPolicy;
+
+        internal bool IsExternallyDriven => externalFrameDriver != null;
+
+        internal bool IsExternallyDrivenBy(TabletopInputFrameCoordinator frameDriver)
+        {
+            return externalFrameDriver == frameDriver;
+        }
 
         public void ConfigureScrollRoutingPolicy(TabletopInteractionInputRoutingPolicy policy)
         {
@@ -94,7 +102,7 @@ namespace ConsoleCards.Presentation.Input
 
         private void Update()
         {
-            if (!IsInitialized)
+            if (!IsInitialized || IsExternallyDriven)
             {
                 return;
             }
@@ -105,6 +113,53 @@ namespace ConsoleCards.Presentation.Input
                 pointerDeltaAction.action.ReadValue<Vector2>(),
                 zoomAction.action.ReadValue<float>(),
                 Time.unscaledDeltaTime);
+        }
+
+        internal void AttachExternalFrameDriver(TabletopInputFrameCoordinator frameDriver)
+        {
+            if (frameDriver == null)
+            {
+                throw new ArgumentNullException(nameof(frameDriver));
+            }
+
+            if (externalFrameDriver != null)
+            {
+                throw new InvalidOperationException("TabletopCameraInputAdapter already has an external frame driver.");
+            }
+
+            externalFrameDriver = frameDriver;
+        }
+
+        internal void DetachExternalFrameDriver(TabletopInputFrameCoordinator frameDriver)
+        {
+            if (frameDriver == null)
+            {
+                throw new ArgumentNullException(nameof(frameDriver));
+            }
+
+            if (externalFrameDriver != frameDriver)
+            {
+                throw new InvalidOperationException("TabletopCameraInputAdapter cannot detach a different external frame driver.");
+            }
+
+            externalFrameDriver = null;
+        }
+
+        internal void ReadCameraInputValues(
+            out Vector2 keyboardPan,
+            out bool dragPanHeld,
+            out Vector2 pointerDelta,
+            out float zoomDelta)
+        {
+            if (!IsInitialized)
+            {
+                throw new InvalidOperationException("TabletopCameraInputAdapter must be initialized before input values are read.");
+            }
+
+            keyboardPan = keyboardPanAction.action.ReadValue<Vector2>();
+            dragPanHeld = dragPanAction.action.IsPressed();
+            pointerDelta = pointerDeltaAction.action.ReadValue<Vector2>();
+            zoomDelta = zoomAction.action.ReadValue<float>();
         }
 
         internal void ApplyInputFrame(

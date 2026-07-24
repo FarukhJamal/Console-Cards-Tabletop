@@ -17,6 +17,7 @@ namespace ConsoleCards.Presentation.Input
 
         private readonly List<InputAction> actionsEnabledByAdapter = new List<InputAction>();
         private TabletopMoveInteractionCoordinator coordinator;
+        private TabletopInputFrameCoordinator externalFrameDriver;
 
         public bool HasValidActionConfiguration { get; private set; }
 
@@ -31,6 +32,13 @@ namespace ConsoleCards.Presentation.Input
         public InputActionReference CancelAction => cancelAction;
 
         public MoveInteractionReleaseResult? LastReleaseResult { get; private set; }
+
+        internal bool IsExternallyDriven => externalFrameDriver != null;
+
+        internal bool IsExternallyDrivenBy(TabletopInputFrameCoordinator frameDriver)
+        {
+            return externalFrameDriver == frameDriver;
+        }
 
         public void Initialize(TabletopMoveInteractionCoordinator coordinator)
         {
@@ -115,7 +123,7 @@ namespace ConsoleCards.Presentation.Input
 
         private void Update()
         {
-            if (!IsInitialized)
+            if (!IsInitialized || IsExternallyDriven)
             {
                 return;
             }
@@ -126,6 +134,55 @@ namespace ConsoleCards.Presentation.Input
                 selectAction.action.IsPressed(),
                 selectAction.action.WasReleasedThisFrame(),
                 cancelAction.action.WasPressedThisFrame());
+        }
+
+        internal void AttachExternalFrameDriver(TabletopInputFrameCoordinator frameDriver)
+        {
+            if (frameDriver == null)
+            {
+                throw new ArgumentNullException(nameof(frameDriver));
+            }
+
+            if (externalFrameDriver != null)
+            {
+                throw new InvalidOperationException("TabletopObjectInputAdapter already has an external frame driver.");
+            }
+
+            externalFrameDriver = frameDriver;
+        }
+
+        internal void DetachExternalFrameDriver(TabletopInputFrameCoordinator frameDriver)
+        {
+            if (frameDriver == null)
+            {
+                throw new ArgumentNullException(nameof(frameDriver));
+            }
+
+            if (externalFrameDriver != frameDriver)
+            {
+                throw new InvalidOperationException("TabletopObjectInputAdapter cannot detach a different external frame driver.");
+            }
+
+            externalFrameDriver = null;
+        }
+
+        internal void ReadObjectInputValues(
+            out Vector2 screenPosition,
+            out bool selectPressedThisFrame,
+            out bool selectHeld,
+            out bool selectReleasedThisFrame,
+            out bool cancelPressedThisFrame)
+        {
+            if (!IsInitialized)
+            {
+                throw new InvalidOperationException("TabletopObjectInputAdapter must be initialized before input values are read.");
+            }
+
+            screenPosition = pointAction.action.ReadValue<Vector2>();
+            selectPressedThisFrame = selectAction.action.WasPressedThisFrame();
+            selectHeld = selectAction.action.IsPressed();
+            selectReleasedThisFrame = selectAction.action.WasReleasedThisFrame();
+            cancelPressedThisFrame = cancelAction.action.WasPressedThisFrame();
         }
 
         internal MoveInteractionReleaseResult? ApplyInputFrame(
