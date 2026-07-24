@@ -11,12 +11,41 @@ namespace ConsoleCards.Presentation.Input
 
         private bool isInitialized;
         private bool isAttached;
+        private TabletopSelectionPresenter selectionPresenter;
 
         public bool IsInitialized => isInitialized;
 
         public TabletopCameraInputAdapter CameraInputAdapter => cameraInputAdapter;
 
         public TabletopObjectInputAdapter ObjectInputAdapter => objectInputAdapter;
+
+        public bool HasSelectionPresenter => selectionPresenter != null;
+
+        public TabletopSelectionPresenter SelectionPresenter => selectionPresenter;
+
+        public void ConfigureSelectionPresenter(TabletopSelectionPresenter presenter)
+        {
+            if (presenter == null)
+            {
+                throw new ArgumentNullException(nameof(presenter));
+            }
+
+            if (selectionPresenter != null)
+            {
+                throw new InvalidOperationException("TabletopInputFrameCoordinator already has a selection presenter.");
+            }
+
+            selectionPresenter = presenter;
+        }
+
+        public void ClearSelectionPresenter()
+        {
+            if (selectionPresenter != null)
+            {
+                selectionPresenter.Clear();
+                selectionPresenter = null;
+            }
+        }
 
         private void Awake()
         {
@@ -110,6 +139,11 @@ namespace ConsoleCards.Presentation.Input
                 frame.CancelPressedThisFrame,
                 effectiveRotateDelta,
                 effectiveFlipPressedThisFrame);
+
+            if (selectionPresenter != null)
+            {
+                selectionPresenter.Refresh();
+            }
 
             float effectiveScroll = suppressScrollForPointerTransition ? 0f : frame.ScrollDelta;
             cameraInputAdapter.ApplyInputFrame(

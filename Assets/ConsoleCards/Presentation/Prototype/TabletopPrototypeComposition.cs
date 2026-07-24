@@ -24,6 +24,12 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal CardView cardView;
         [SerializeField] internal PawnView pawnView;
         [SerializeField] internal TokenView tokenView;
+        [SerializeField] internal TabletopSelectionVisual cardSelectionVisual;
+        [SerializeField] internal GameObject cardHighlightRoot;
+        [SerializeField] internal TabletopSelectionVisual pawnSelectionVisual;
+        [SerializeField] internal GameObject pawnHighlightRoot;
+        [SerializeField] internal TabletopSelectionVisual tokenSelectionVisual;
+        [SerializeField] internal GameObject tokenHighlightRoot;
 
         [SerializeField] internal LayerMask interactionLayerMask;
         [SerializeField] internal float maximumHitDistance = 100f;
@@ -37,6 +43,9 @@ namespace ConsoleCards.Presentation.Prototype
         private bool cardViewBoundByComposition;
         private bool pawnViewBoundByComposition;
         private bool tokenViewBoundByComposition;
+        private bool cardSelectionVisualConfiguredByComposition;
+        private bool pawnSelectionVisualConfiguredByComposition;
+        private bool tokenSelectionVisualConfiguredByComposition;
 
         private MatchState matchState;
         private PlayerId localPlayerId;
@@ -55,6 +64,7 @@ namespace ConsoleCards.Presentation.Prototype
         private TabletopRotationCoordinator rotationCoordinator;
         private TabletopCardFlipCoordinator flipCoordinator;
         private TabletopInteractionInputRoutingPolicy inputRoutingPolicy;
+        private TabletopSelectionPresenter selectionPresenter;
 
         public bool IsInitialized { get; private set; }
 
@@ -89,6 +99,8 @@ namespace ConsoleCards.Presentation.Prototype
         public TabletopCardFlipCoordinator FlipCoordinator => flipCoordinator;
 
         public TabletopInteractionInputRoutingPolicy InputRoutingPolicy => inputRoutingPolicy;
+
+        public TabletopSelectionPresenter SelectionPresenter => selectionPresenter;
 
         public void Initialize()
         {
@@ -170,6 +182,7 @@ namespace ConsoleCards.Presentation.Prototype
                     new TabletopInteractionInputRoutingPolicy(
                         createdSelectionState,
                         createdMoveCoordinator);
+                TabletopSelectionPresenter createdSelectionPresenter = null;
 
                 localPlayerId = createdPlayerId;
                 interactionOwnerId = createdOwnerId;
@@ -196,6 +209,20 @@ namespace ConsoleCards.Presentation.Prototype
                 tokenView.Bind(tokenState, coordinateConverter);
                 tokenViewBoundByComposition = true;
 
+                cardSelectionVisual.Configure(cardView, cardHighlightRoot);
+                cardSelectionVisualConfiguredByComposition = true;
+                pawnSelectionVisual.Configure(pawnView, pawnHighlightRoot);
+                pawnSelectionVisualConfiguredByComposition = true;
+                tokenSelectionVisual.Configure(tokenView, tokenHighlightRoot);
+                tokenSelectionVisualConfiguredByComposition = true;
+
+                createdSelectionPresenter = new TabletopSelectionPresenter(
+                    selectionState,
+                    cardSelectionVisual,
+                    pawnSelectionVisual,
+                    tokenSelectionVisual);
+                selectionPresenter = createdSelectionPresenter;
+
                 cameraInputAdapter.ConfigureScrollRoutingPolicy(inputRoutingPolicy);
                 cameraRoutingConfiguredByComposition = true;
 
@@ -206,6 +233,7 @@ namespace ConsoleCards.Presentation.Prototype
                     inputRoutingPolicy);
                 objectAdapterInitializedByComposition = true;
 
+                inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
                 inputFrameCoordinator.enabled = true;
                 frameCoordinatorEnabledByComposition = true;
 
@@ -215,6 +243,7 @@ namespace ConsoleCards.Presentation.Prototype
                     throw new InvalidOperationException("TabletopInputFrameCoordinator failed to attach both input adapters.");
                 }
 
+                selectionPresenter.Refresh();
                 IsInitialized = true;
             }
             catch
@@ -232,6 +261,11 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             frameCoordinatorEnabledByComposition = false;
+
+            if (inputFrameCoordinator != null)
+            {
+                inputFrameCoordinator.ClearSelectionPresenter();
+            }
 
             if (objectAdapterInitializedByComposition && objectInputAdapter != null)
             {
@@ -261,6 +295,15 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 lockService.Clear();
             }
+
+            selectionPresenter?.Clear();
+            selectionPresenter = null;
+            ClearSelectionVisualIfOwned(cardSelectionVisual, ref cardSelectionVisualConfiguredByComposition);
+            ClearSelectionVisualIfOwned(pawnSelectionVisual, ref pawnSelectionVisualConfiguredByComposition);
+            ClearSelectionVisualIfOwned(tokenSelectionVisual, ref tokenSelectionVisualConfiguredByComposition);
+            DeactivateHighlightRoot(cardHighlightRoot);
+            DeactivateHighlightRoot(pawnHighlightRoot);
+            DeactivateHighlightRoot(tokenHighlightRoot);
 
             UnbindIfOwned(cardView, ref cardViewBoundByComposition);
             UnbindIfOwned(pawnView, ref pawnViewBoundByComposition);
@@ -321,6 +364,12 @@ namespace ConsoleCards.Presentation.Prototype
             RequireReference(cardView, nameof(cardView));
             RequireReference(pawnView, nameof(pawnView));
             RequireReference(tokenView, nameof(tokenView));
+            RequireReference(cardSelectionVisual, nameof(cardSelectionVisual));
+            RequireReference(cardHighlightRoot, nameof(cardHighlightRoot));
+            RequireReference(pawnSelectionVisual, nameof(pawnSelectionVisual));
+            RequireReference(pawnHighlightRoot, nameof(pawnHighlightRoot));
+            RequireReference(tokenSelectionVisual, nameof(tokenSelectionVisual));
+            RequireReference(tokenHighlightRoot, nameof(tokenHighlightRoot));
 
             if (!targetCamera.orthographic)
             {
@@ -332,6 +381,7 @@ namespace ConsoleCards.Presentation.Prototype
             ValidateFiniteGreaterThanZero(worldUnitsPerTableUnit, nameof(worldUnitsPerTableUnit));
             ValidateFinite(tabletopHeight, nameof(tabletopHeight));
             ValidateDistinctViews();
+            ValidateSelectionPresentationReferences();
             ValidatePreInitializationState();
         }
 
@@ -392,6 +442,11 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 throw new InvalidOperationException("TabletopPrototypeComposition requires input adapters to begin without an external frame driver.");
             }
+
+            if (inputFrameCoordinator.HasSelectionPresenter)
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires the input-frame coordinator to begin without a selection presenter.");
+            }
         }
 
         private void ValidateDistinctViews()
@@ -408,6 +463,45 @@ namespace ConsoleCards.Presentation.Prototype
                 || ReferenceEquals(pawnView.gameObject, tokenView.gameObject))
             {
                 throw new InvalidOperationException("TabletopPrototypeComposition requires Card, Pawn, and Token Views on distinct GameObjects.");
+            }
+        }
+
+        private void ValidateSelectionPresentationReferences()
+        {
+            if (!ReferenceEquals(cardSelectionVisual.gameObject, cardView.gameObject))
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires the Card selection visual on the CardView GameObject.");
+            }
+
+            if (!ReferenceEquals(pawnSelectionVisual.gameObject, pawnView.gameObject))
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires the Pawn selection visual on the PawnView GameObject.");
+            }
+
+            if (!ReferenceEquals(tokenSelectionVisual.gameObject, tokenView.gameObject))
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires the Token selection visual on the TokenView GameObject.");
+            }
+
+            if (ReferenceEquals(cardSelectionVisual, pawnSelectionVisual)
+                || ReferenceEquals(cardSelectionVisual, tokenSelectionVisual)
+                || ReferenceEquals(pawnSelectionVisual, tokenSelectionVisual))
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires distinct selection visual components.");
+            }
+
+            if (ReferenceEquals(cardHighlightRoot, pawnHighlightRoot)
+                || ReferenceEquals(cardHighlightRoot, tokenHighlightRoot)
+                || ReferenceEquals(pawnHighlightRoot, tokenHighlightRoot))
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires distinct selection highlight roots.");
+            }
+
+            if (cardSelectionVisual.IsConfigured
+                || pawnSelectionVisual.IsConfigured
+                || tokenSelectionVisual.IsConfigured)
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires selection visuals to begin unconfigured.");
             }
         }
 
@@ -464,6 +558,31 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             boundByComposition = false;
+        }
+
+        private static void ClearSelectionVisualIfOwned(
+            TabletopSelectionVisual visual,
+            ref bool configuredByComposition)
+        {
+            if (!configuredByComposition)
+            {
+                return;
+            }
+
+            if (visual != null)
+            {
+                visual.Clear();
+            }
+
+            configuredByComposition = false;
+        }
+
+        private static void DeactivateHighlightRoot(GameObject highlightRoot)
+        {
+            if (highlightRoot != null)
+            {
+                highlightRoot.SetActive(false);
+            }
         }
 
         private static void RequireReference(UnityEngine.Object reference, string name)

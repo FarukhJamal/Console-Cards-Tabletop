@@ -34,6 +34,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [TearDown]
         public void TearDown()
         {
+            ShutdownRuntimeComponents();
+
             for (int i = 0; i < createdInputAssets.Count; i++)
             {
                 if (createdInputAssets[i] != null)
@@ -103,6 +105,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.Composition.RotationCoordinator, Is.Not.Null);
             Assert.That(fixture.Composition.FlipCoordinator, Is.Not.Null);
             Assert.That(fixture.Composition.InputRoutingPolicy, Is.Not.Null);
+            Assert.That(fixture.Composition.SelectionPresenter, Is.Not.Null);
         }
 
         [TestCase(MissingReference.TargetCamera)]
@@ -112,13 +115,20 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [TestCase(MissingReference.CardView)]
         [TestCase(MissingReference.PawnView)]
         [TestCase(MissingReference.TokenView)]
+        [TestCase(MissingReference.CardSelectionVisual)]
+        [TestCase(MissingReference.CardHighlightRoot)]
+        [TestCase(MissingReference.PawnSelectionVisual)]
+        [TestCase(MissingReference.PawnHighlightRoot)]
+        [TestCase(MissingReference.TokenSelectionVisual)]
+        [TestCase(MissingReference.TokenHighlightRoot)]
         public void Initialize_WhenRequiredReferenceIsMissing_RejectsConfiguration(MissingReference missingReference)
         {
             PrototypeFixture fixture = CreateFixture();
             fixture.RemoveReference(missingReference);
 
             Assert.Throws<InvalidOperationException>(() => fixture.Composition.Initialize());
-            fixture.AssertNoRuntimeGraphPublished();
+            fixture.AssertFailedInitializationCleanup();
+            fixture.AssertCompositionAssignedValidHighlightsInactive();
         }
 
         [TestCase(InvalidConfiguration.PerspectiveCamera)]
@@ -140,15 +150,44 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         [TestCase(InvalidConfiguration.EnabledFrameCoordinator)]
         [TestCase(InvalidConfiguration.ExistingExternalFrameDriver)]
         [TestCase(InvalidConfiguration.CoordinatorReferencesDifferentAdapters)]
+        [TestCase(InvalidConfiguration.CardVisualOnWrongView)]
+        [TestCase(InvalidConfiguration.PawnVisualOnWrongView)]
+        [TestCase(InvalidConfiguration.TokenVisualOnWrongView)]
+        [TestCase(InvalidConfiguration.InvalidCardHighlightRoot)]
+        [TestCase(InvalidConfiguration.InvalidPawnHighlightRoot)]
+        [TestCase(InvalidConfiguration.InvalidTokenHighlightRoot)]
+        [TestCase(InvalidConfiguration.DuplicateSelectionVisual)]
+        [TestCase(InvalidConfiguration.DuplicateHighlightRoot)]
+        [TestCase(InvalidConfiguration.ExistingFrameSelectionPresenter)]
         public void Initialize_WhenPreconditionsAreInvalid_RejectsConfiguration(InvalidConfiguration invalidConfiguration)
         {
             PrototypeFixture fixture = CreateFixture();
             ApplyInvalidConfiguration(fixture, invalidConfiguration);
+            ExternalLifecycleState externalLifecycleBeforeInitialize = fixture.CaptureExternalLifecycleState();
 
             Assert.That(
                 () => fixture.Composition.Initialize(),
                 Throws.TypeOf(ExpectedExceptionTypeFor(invalidConfiguration)));
-            Assert.That(fixture.Composition.IsInitialized, Is.False);
+            fixture.AssertFailedInitializationCleanup(invalidConfiguration, externalLifecycleBeforeInitialize);
+            fixture.AssertCompositionAssignedValidHighlightsInactive();
+        }
+
+        [TestCase(InvalidConfiguration.InvalidPawnHighlightRoot)]
+        [TestCase(InvalidConfiguration.InvalidTokenHighlightRoot)]
+        public void Initialize_WhenFailureOccursAfterSelectionVisualConfiguration_ClearsConfiguredHighlights(
+            InvalidConfiguration invalidConfiguration)
+        {
+            PrototypeFixture fixture = CreateFixture();
+            fixture.SetAllHighlightsActive();
+            ApplyInvalidConfiguration(fixture, invalidConfiguration);
+            ExternalLifecycleState externalLifecycleBeforeInitialize = fixture.CaptureExternalLifecycleState();
+
+            Assert.That(
+                () => fixture.Composition.Initialize(),
+                Throws.TypeOf(ExpectedExceptionTypeFor(invalidConfiguration)));
+
+            fixture.AssertFailedInitializationCleanup(invalidConfiguration, externalLifecycleBeforeInitialize);
+            fixture.AssertConfiguredBeforeFailureHighlightsInactive(invalidConfiguration);
         }
 
         [Test]
@@ -238,6 +277,16 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.FrameCoordinator.ObjectInputAdapter, Is.SameAs(fixture.ObjectAdapter));
             Assert.That(fixture.CameraAdapter.IsExternallyDrivenBy(fixture.FrameCoordinator), Is.True);
             Assert.That(fixture.ObjectAdapter.IsExternallyDrivenBy(fixture.FrameCoordinator), Is.True);
+            Assert.That(fixture.FrameCoordinator.HasSelectionPresenter, Is.True);
+            Assert.That(fixture.FrameCoordinator.SelectionPresenter, Is.SameAs(fixture.Composition.SelectionPresenter));
+            Assert.That(fixture.Composition.SelectionPresenter.SelectionState, Is.SameAs(fixture.Composition.SelectionState));
+            Assert.That(fixture.Composition.SelectionPresenter.CardSelectionVisual, Is.SameAs(fixture.CardSelectionVisual));
+            Assert.That(fixture.Composition.SelectionPresenter.PawnSelectionVisual, Is.SameAs(fixture.PawnSelectionVisual));
+            Assert.That(fixture.Composition.SelectionPresenter.TokenSelectionVisual, Is.SameAs(fixture.TokenSelectionVisual));
+            Assert.That(fixture.CardSelectionVisual.ObjectView, Is.SameAs(fixture.CardView));
+            Assert.That(fixture.PawnSelectionVisual.ObjectView, Is.SameAs(fixture.PawnView));
+            Assert.That(fixture.TokenSelectionVisual.ObjectView, Is.SameAs(fixture.TokenView));
+            fixture.AssertAllHighlightsInactive();
         }
 
         [Test]
@@ -251,6 +300,37 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.Composition.SelectionState.SelectedView, Is.SameAs(fixture.CardView));
             Assert.That(fixture.Composition.MoveCoordinator.HasActiveInteraction, Is.True);
             Assert.That(fixture.Composition.LockService.Count, Is.EqualTo(1));
+        }
+
+        [TestCase(TabletopObjectKind.Card)]
+        [TestCase(TabletopObjectKind.Pawn)]
+        [TestCase(TabletopObjectKind.Token)]
+        public void RuntimeInput_SelectingObjectThroughSharedFrame_HighlightsOnlySelectedObject(TabletopObjectKind kind)
+        {
+            PrototypeFixture fixture = CreateInitializedFixture();
+            TabletopObjectView view = fixture.ViewFor(kind);
+
+            fixture.ApplySharedFrame(fixture.CreatePressFrame(view));
+
+            Assert.That(fixture.Composition.SelectionState.SelectedView, Is.SameAs(view));
+            fixture.AssertOnlyHighlightActive(kind);
+            Assert.That(fixture.Composition.MatchState.Revision, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void RuntimeInput_EmptyClickThroughSharedFrame_ClearsSelectionAndHighlights()
+        {
+            PrototypeFixture fixture = CreateInitializedFixture();
+            fixture.Composition.SelectionState.Select(fixture.CardView);
+            fixture.Composition.SelectionPresenter.Refresh();
+            Assert.That(fixture.CardHighlightRoot.activeSelf, Is.True);
+
+            fixture.ApplySharedFrame(fixture.CreateEmptyPressFrame());
+
+            Assert.That(fixture.Composition.SelectionState.HasSelection, Is.False);
+            fixture.AssertAllHighlightsInactive();
+            Assert.That(fixture.CameraController.State.OrthographicSize, Is.EqualTo(5f).Within(FloatTolerance));
+            Assert.That(fixture.Composition.MatchState.Revision, Is.EqualTo(0));
         }
 
         [TestCase(TabletopObjectKind.Card, -1d, 1d)]
@@ -308,6 +388,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.ObjectAdapter.LastRotationResult.Value.Succeeded, Is.True);
             AssertWorldPose(fixture.PawnView, fixture.Composition.PawnState.BaseState.Pose);
             Assert.That(fixture.CameraController.State.OrthographicSize, Is.EqualTo(5f).Within(FloatTolerance));
+            fixture.AssertOnlyHighlightActive(TabletopObjectKind.Pawn);
         }
 
         [Test]
@@ -336,6 +417,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.FaceDownRoot.activeSelf, Is.True);
             Assert.That(fixture.ObjectAdapter.LastFlipResult.HasValue, Is.True);
             Assert.That(fixture.ObjectAdapter.LastFlipResult.Value.Succeeded, Is.True);
+            fixture.AssertOnlyHighlightActive(TabletopObjectKind.Card);
         }
 
         [Test]
@@ -371,6 +453,10 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.ObjectAdapter.IsExternallyDriven, Is.False);
             Assert.That(fixture.ObjectAdapter.IsInitialized, Is.False);
             Assert.That(fixture.CameraAdapter.HasScrollRoutingPolicy, Is.False);
+            Assert.That(fixture.FrameCoordinator.HasSelectionPresenter, Is.False);
+            Assert.That(fixture.Composition.SelectionPresenter, Is.Null);
+            fixture.AssertSelectionVisualsUnconfigured();
+            fixture.AssertAllHighlightsInactive();
             Assert.That(fixture.CardView.IsBound, Is.False);
             Assert.That(fixture.PawnView.IsBound, Is.False);
             Assert.That(fixture.TokenView.IsBound, Is.False);
@@ -400,6 +486,9 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.ObjectAdapter.IsInitialized, Is.False);
             Assert.That(fixture.CameraAdapter.IsExternallyDriven, Is.False);
             Assert.That(fixture.ObjectAdapter.IsExternallyDriven, Is.False);
+            Assert.That(fixture.FrameCoordinator.HasSelectionPresenter, Is.False);
+            fixture.AssertSelectionVisualsUnconfigured();
+            fixture.AssertAllHighlightsInactive();
         }
 
         [Test]
@@ -441,6 +530,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 CreateActionReference(objectMap, "Cancel", InputActionType.Button, "Button"),
                 CreateActionReference(objectMap, "Rotate", InputActionType.PassThrough, "Axis"),
                 CreateActionReference(objectMap, "Flip", InputActionType.Button, "Button"));
+            AssertInputGraphDisabled(inputActionAsset);
 
             GameObject cameraRigObject = CreateGameObject("Prototype Camera Rig");
             cameraRigObject.SetActive(false);
@@ -494,6 +584,18 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             AddBoxCollider(cardView.gameObject, InteractionLayer);
             AddBoxCollider(pawnView.gameObject, InteractionLayer);
             AddBoxCollider(tokenView.gameObject, InteractionLayer);
+            TabletopSelectionVisual cardSelectionVisual =
+                cardView.gameObject.AddComponent<TabletopSelectionVisual>();
+            TabletopSelectionVisual pawnSelectionVisual =
+                pawnView.gameObject.AddComponent<TabletopSelectionVisual>();
+            TabletopSelectionVisual tokenSelectionVisual =
+                tokenView.gameObject.AddComponent<TabletopSelectionVisual>();
+            GameObject cardHighlightRoot = CreateChild(cardView.gameObject, "Card Selection Highlight");
+            GameObject pawnHighlightRoot = CreateChild(pawnView.gameObject, "Pawn Selection Highlight");
+            GameObject tokenHighlightRoot = CreateChild(tokenView.gameObject, "Token Selection Highlight");
+            cardHighlightRoot.SetActive(false);
+            pawnHighlightRoot.SetActive(false);
+            tokenHighlightRoot.SetActive(false);
 
             GameObject frameCoordinatorObject = CreateGameObject("Prototype Input Frame Coordinator");
             frameCoordinatorObject.SetActive(false);
@@ -515,6 +617,12 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             composition.cardView = cardView;
             composition.pawnView = pawnView;
             composition.tokenView = tokenView;
+            composition.cardSelectionVisual = cardSelectionVisual;
+            composition.cardHighlightRoot = cardHighlightRoot;
+            composition.pawnSelectionVisual = pawnSelectionVisual;
+            composition.pawnHighlightRoot = pawnHighlightRoot;
+            composition.tokenSelectionVisual = tokenSelectionVisual;
+            composition.tokenHighlightRoot = tokenHighlightRoot;
             composition.interactionLayerMask = LayerMaskFor(InteractionLayer);
             composition.maximumHitDistance = 100f;
             composition.dragThresholdPixels = 8f;
@@ -532,6 +640,12 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 cardView,
                 pawnView,
                 tokenView,
+                cardSelectionVisual,
+                pawnSelectionVisual,
+                tokenSelectionVisual,
+                cardHighlightRoot,
+                pawnHighlightRoot,
+                tokenHighlightRoot,
                 faceUpRoot,
                 faceDownRoot);
         }
@@ -564,9 +678,97 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             string expectedControlType)
         {
             InputAction action = actionMap.AddAction(actionName, actionType, expectedControlLayout: expectedControlType);
+            AddRequiredBinding(action, actionName);
             InputActionReference actionReference = InputActionReference.Create(action);
             createdActionReferences.Add(actionReference);
             return actionReference;
+        }
+
+        private static void AddRequiredBinding(InputAction action, string actionName)
+        {
+            switch (actionName)
+            {
+                case "KeyboardPan":
+                    action.AddCompositeBinding("2DVector")
+                        .With("Up", "<Keyboard>/w")
+                        .With("Down", "<Keyboard>/s")
+                        .With("Left", "<Keyboard>/a")
+                        .With("Right", "<Keyboard>/d");
+                    break;
+                case "DragPan":
+                    action.AddBinding("<Mouse>/middleButton");
+                    break;
+                case "PointerDelta":
+                    action.AddBinding("<Pointer>/delta");
+                    break;
+                case "Zoom":
+                case "Rotate":
+                    action.AddBinding("<Mouse>/scroll/y");
+                    break;
+                case "Point":
+                    action.AddBinding("<Pointer>/position");
+                    break;
+                case "Select":
+                    action.AddBinding("<Mouse>/leftButton");
+                    break;
+                case "Cancel":
+                    action.AddBinding("<Keyboard>/escape");
+                    break;
+                case "Flip":
+                    action.AddBinding("<Keyboard>/f");
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(actionName), actionName, "Unsupported input action.");
+            }
+        }
+
+        private static void AssertInputGraphDisabled(InputActionAsset inputActionAsset)
+        {
+            foreach (InputActionMap actionMap in inputActionAsset.actionMaps)
+            {
+                Assert.That(actionMap.enabled, Is.False);
+
+                foreach (InputAction action in actionMap.actions)
+                {
+                    Assert.That(action.enabled, Is.False);
+                }
+            }
+        }
+
+        private void ShutdownRuntimeComponents()
+        {
+            for (int i = 0; i < createdGameObjects.Count; i++)
+            {
+                GameObject gameObject = createdGameObjects[i];
+                if (gameObject == null)
+                {
+                    continue;
+                }
+
+                TabletopPrototypeComposition composition = gameObject.GetComponent<TabletopPrototypeComposition>();
+                if (composition != null)
+                {
+                    composition.Shutdown();
+                }
+
+                TabletopInputFrameCoordinator frameCoordinator = gameObject.GetComponent<TabletopInputFrameCoordinator>();
+                if (frameCoordinator != null)
+                {
+                    frameCoordinator.enabled = false;
+                }
+
+                TabletopObjectInputAdapter objectInputAdapter = gameObject.GetComponent<TabletopObjectInputAdapter>();
+                if (objectInputAdapter != null)
+                {
+                    objectInputAdapter.Shutdown();
+                }
+
+                TabletopCameraInputAdapter cameraInputAdapter = gameObject.GetComponent<TabletopCameraInputAdapter>();
+                if (cameraInputAdapter != null)
+                {
+                    cameraInputAdapter.enabled = false;
+                }
+            }
         }
 
         private TabletopInteractionInputRoutingPolicy CreateManualRoutingPolicy(PrototypeFixture fixture)
@@ -697,6 +899,10 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 case InvalidConfiguration.NaNWorldScale:
                 case InvalidConfiguration.NaNTabletopHeight:
                     return typeof(ArgumentOutOfRangeException);
+                case InvalidConfiguration.InvalidCardHighlightRoot:
+                case InvalidConfiguration.InvalidPawnHighlightRoot:
+                case InvalidConfiguration.InvalidTokenHighlightRoot:
+                    return typeof(ArgumentException);
                 default:
                     return typeof(InvalidOperationException);
             }
@@ -710,7 +916,13 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             InputFrameCoordinator,
             CardView,
             PawnView,
-            TokenView
+            TokenView,
+            CardSelectionVisual,
+            CardHighlightRoot,
+            PawnSelectionVisual,
+            PawnHighlightRoot,
+            TokenSelectionVisual,
+            TokenHighlightRoot
         }
 
         public enum InvalidConfiguration
@@ -733,7 +945,16 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             ExistingCameraScrollPolicy,
             EnabledFrameCoordinator,
             ExistingExternalFrameDriver,
-            CoordinatorReferencesDifferentAdapters
+            CoordinatorReferencesDifferentAdapters,
+            CardVisualOnWrongView,
+            PawnVisualOnWrongView,
+            TokenVisualOnWrongView,
+            InvalidCardHighlightRoot,
+            InvalidPawnHighlightRoot,
+            InvalidTokenHighlightRoot,
+            DuplicateSelectionVisual,
+            DuplicateHighlightRoot,
+            ExistingFrameSelectionPresenter
         }
 
         private readonly struct CameraActions
@@ -786,6 +1007,33 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             public InputActionReference Flip { get; }
         }
 
+        private readonly struct ExternalLifecycleState
+        {
+            public ExternalLifecycleState(
+                bool frameCoordinatorEnabled,
+                bool cameraAdapterExternallyDriven,
+                bool objectAdapterExternallyDriven,
+                bool cameraAdapterExternallyDrivenByFrameCoordinator,
+                bool objectAdapterExternallyDrivenByFrameCoordinator)
+            {
+                FrameCoordinatorEnabled = frameCoordinatorEnabled;
+                CameraAdapterExternallyDriven = cameraAdapterExternallyDriven;
+                ObjectAdapterExternallyDriven = objectAdapterExternallyDriven;
+                CameraAdapterExternallyDrivenByFrameCoordinator = cameraAdapterExternallyDrivenByFrameCoordinator;
+                ObjectAdapterExternallyDrivenByFrameCoordinator = objectAdapterExternallyDrivenByFrameCoordinator;
+            }
+
+            public bool FrameCoordinatorEnabled { get; }
+
+            public bool CameraAdapterExternallyDriven { get; }
+
+            public bool ObjectAdapterExternallyDriven { get; }
+
+            public bool CameraAdapterExternallyDrivenByFrameCoordinator { get; }
+
+            public bool ObjectAdapterExternallyDrivenByFrameCoordinator { get; }
+        }
+
         private sealed class PrototypeFixture
         {
             public PrototypeFixture(
@@ -798,6 +1046,12 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 CardView cardView,
                 PawnView pawnView,
                 TokenView tokenView,
+                TabletopSelectionVisual cardSelectionVisual,
+                TabletopSelectionVisual pawnSelectionVisual,
+                TabletopSelectionVisual tokenSelectionVisual,
+                GameObject cardHighlightRoot,
+                GameObject pawnHighlightRoot,
+                GameObject tokenHighlightRoot,
                 GameObject faceUpRoot,
                 GameObject faceDownRoot)
             {
@@ -810,6 +1064,12 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 CardView = cardView;
                 PawnView = pawnView;
                 TokenView = tokenView;
+                CardSelectionVisual = cardSelectionVisual;
+                PawnSelectionVisual = pawnSelectionVisual;
+                TokenSelectionVisual = tokenSelectionVisual;
+                CardHighlightRoot = cardHighlightRoot;
+                PawnHighlightRoot = pawnHighlightRoot;
+                TokenHighlightRoot = tokenHighlightRoot;
                 FaceUpRoot = faceUpRoot;
                 FaceDownRoot = faceDownRoot;
             }
@@ -832,6 +1092,18 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
 
             public TokenView TokenView { get; }
 
+            public TabletopSelectionVisual CardSelectionVisual { get; }
+
+            public TabletopSelectionVisual PawnSelectionVisual { get; }
+
+            public TabletopSelectionVisual TokenSelectionVisual { get; }
+
+            public GameObject CardHighlightRoot { get; }
+
+            public GameObject PawnHighlightRoot { get; }
+
+            public GameObject TokenHighlightRoot { get; }
+
             public GameObject FaceUpRoot { get; }
 
             public GameObject FaceDownRoot { get; }
@@ -839,6 +1111,26 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             public void ApplySharedFrame(TabletopInputFrame frame)
             {
                 FrameCoordinator.ApplyInputFrame(frame, DeltaTime);
+            }
+
+            public TabletopInputFrame CreatePressFrame(TabletopObjectView view)
+            {
+                return CreateFrame(ScreenPointFor(view), selectPressedThisFrame: true);
+            }
+
+            public TabletopInputFrame CreateEmptyPressFrame()
+            {
+                return CreateFrame(ScreenPointForWorld(7f, 7f), selectPressedThisFrame: true);
+            }
+
+            public TabletopInputFrame CreateStableScrollFrame(TabletopObjectView view)
+            {
+                return CreateFrame(ScreenPointFor(view), scrollDelta: 100f, rotateDelta: 100f);
+            }
+
+            public TabletopInputFrame CreateFlipFrame(TabletopObjectView view)
+            {
+                return CreateFrame(ScreenPointFor(view), flipPressedThisFrame: true);
             }
 
             public Vector2 ScreenPointFor(TabletopObjectView view)
@@ -910,9 +1202,81 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                     case MissingReference.TokenView:
                         Composition.tokenView = null;
                         break;
+                    case MissingReference.CardSelectionVisual:
+                        Composition.cardSelectionVisual = null;
+                        break;
+                    case MissingReference.CardHighlightRoot:
+                        Composition.cardHighlightRoot = null;
+                        break;
+                    case MissingReference.PawnSelectionVisual:
+                        Composition.pawnSelectionVisual = null;
+                        break;
+                    case MissingReference.PawnHighlightRoot:
+                        Composition.pawnHighlightRoot = null;
+                        break;
+                    case MissingReference.TokenSelectionVisual:
+                        Composition.tokenSelectionVisual = null;
+                        break;
+                    case MissingReference.TokenHighlightRoot:
+                        Composition.tokenHighlightRoot = null;
+                        break;
                     default:
                         throw new ArgumentOutOfRangeException(nameof(missingReference), missingReference, "Unsupported missing reference.");
                 }
+            }
+
+            public void AssertSelectionVisualsUnconfigured()
+            {
+                Assert.That(CardSelectionVisual.IsConfigured, Is.False);
+                Assert.That(PawnSelectionVisual.IsConfigured, Is.False);
+                Assert.That(TokenSelectionVisual.IsConfigured, Is.False);
+            }
+
+            public void AssertAllHighlightsInactive()
+            {
+                Assert.That(CardHighlightRoot.activeSelf, Is.False);
+                Assert.That(PawnHighlightRoot.activeSelf, Is.False);
+                Assert.That(TokenHighlightRoot.activeSelf, Is.False);
+            }
+
+            public void AssertCompositionAssignedValidHighlightsInactive()
+            {
+                AssertAssignedValidHighlightInactive(Composition.cardHighlightRoot, CardView);
+                AssertAssignedValidHighlightInactive(Composition.pawnHighlightRoot, PawnView);
+                AssertAssignedValidHighlightInactive(Composition.tokenHighlightRoot, TokenView);
+            }
+
+            public void AssertConfiguredBeforeFailureHighlightsInactive(InvalidConfiguration invalidConfiguration)
+            {
+                switch (invalidConfiguration)
+                {
+                    case InvalidConfiguration.InvalidPawnHighlightRoot:
+                        Assert.That(CardHighlightRoot.activeSelf, Is.False);
+                        break;
+                    case InvalidConfiguration.InvalidTokenHighlightRoot:
+                        Assert.That(CardHighlightRoot.activeSelf, Is.False);
+                        Assert.That(PawnHighlightRoot.activeSelf, Is.False);
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(
+                            nameof(invalidConfiguration),
+                            invalidConfiguration,
+                            "Unsupported partial selection-visual configuration failure.");
+                }
+            }
+
+            public void AssertOnlyHighlightActive(TabletopObjectKind kind)
+            {
+                Assert.That(CardHighlightRoot.activeSelf, Is.EqualTo(kind == TabletopObjectKind.Card));
+                Assert.That(PawnHighlightRoot.activeSelf, Is.EqualTo(kind == TabletopObjectKind.Pawn));
+                Assert.That(TokenHighlightRoot.activeSelf, Is.EqualTo(kind == TabletopObjectKind.Token));
+            }
+
+            public void SetAllHighlightsActive()
+            {
+                CardHighlightRoot.SetActive(true);
+                PawnHighlightRoot.SetActive(true);
+                TokenHighlightRoot.SetActive(true);
             }
 
             public void AssertNoRuntimeGraphPublished()
@@ -922,12 +1286,162 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 Assert.That(Composition.SelectionState, Is.Null);
                 Assert.That(Composition.MoveCoordinator, Is.Null);
                 Assert.That(Composition.InputRoutingPolicy, Is.Null);
+                Assert.That(Composition.SelectionPresenter, Is.Null);
                 Assert.That(Composition.LocalPlayerId, Is.EqualTo(PlayerId.Empty));
+            }
+
+            public void AssertFailedInitializationCleanup()
+            {
+                AssertCommonFailedInitializationCleanup();
+                Assert.That(CardView.IsBound, Is.False);
+                Assert.That(PawnView.IsBound, Is.False);
+                Assert.That(TokenView.IsBound, Is.False);
+                Assert.That(ObjectAdapter.IsInitialized, Is.False);
+                Assert.That(CameraAdapter.HasScrollRoutingPolicy, Is.False);
+                Assert.That(CameraAdapter.IsExternallyDriven, Is.False);
+                Assert.That(ObjectAdapter.IsExternallyDriven, Is.False);
+            }
+
+            public ExternalLifecycleState CaptureExternalLifecycleState()
+            {
+                return new ExternalLifecycleState(
+                    FrameCoordinator.enabled,
+                    CameraAdapter.IsExternallyDriven,
+                    ObjectAdapter.IsExternallyDriven,
+                    CameraAdapter.IsExternallyDrivenBy(FrameCoordinator),
+                    ObjectAdapter.IsExternallyDrivenBy(FrameCoordinator));
+            }
+
+            public void AssertFailedInitializationCleanup(
+                InvalidConfiguration invalidConfiguration,
+                ExternalLifecycleState externalLifecycleBeforeInitialize)
+            {
+                AssertCommonFailedInitializationCleanup();
+                AssertExternalLifecycleState(externalLifecycleBeforeInitialize);
+
+                if (invalidConfiguration != InvalidConfiguration.PreBoundCardView)
+                {
+                    Assert.That(CardView.IsBound, Is.False);
+                }
+
+                if (invalidConfiguration != InvalidConfiguration.PreBoundPawnView)
+                {
+                    Assert.That(PawnView.IsBound, Is.False);
+                }
+
+                if (invalidConfiguration != InvalidConfiguration.PreBoundTokenView)
+                {
+                    Assert.That(TokenView.IsBound, Is.False);
+                }
+
+                if (invalidConfiguration != InvalidConfiguration.PreInitializedObjectAdapter)
+                {
+                    Assert.That(ObjectAdapter.IsInitialized, Is.False);
+                }
+
+                if (invalidConfiguration != InvalidConfiguration.ExistingCameraScrollPolicy)
+                {
+                    Assert.That(CameraAdapter.HasScrollRoutingPolicy, Is.False);
+                }
+
+            }
+
+            private static TabletopInputFrame CreateFrame(
+                Vector2 screenPosition,
+                bool selectPressedThisFrame = false,
+                bool selectHeld = false,
+                bool selectReleasedThisFrame = false,
+                bool cancelPressedThisFrame = false,
+                float scrollDelta = 0f,
+                float rotateDelta = 0f,
+                bool flipPressedThisFrame = false)
+            {
+                return new TabletopInputFrame(
+                    Vector2.zero,
+                    false,
+                    Vector2.zero,
+                    scrollDelta,
+                    screenPosition,
+                    selectPressedThisFrame,
+                    selectHeld,
+                    selectReleasedThisFrame,
+                    cancelPressedThisFrame,
+                    rotateDelta,
+                    flipPressedThisFrame);
             }
 
             private static bool IsFinite(float value)
             {
                 return !float.IsNaN(value) && !float.IsInfinity(value);
+            }
+
+            private void AssertCommonFailedInitializationCleanup()
+            {
+                Assert.That(Composition.IsInitialized, Is.False);
+                Assert.That(Composition.SelectionPresenter, Is.Null);
+                Assert.That(FrameCoordinator.HasSelectionPresenter, Is.False);
+                AssertSelectionVisualsUnconfigured();
+                AssertNoRuntimeGraphPublished();
+                Assert.That(Composition.LockService, Is.Null);
+                Assert.That(Composition.PreviewSession, Is.Null);
+            }
+
+            private void AssertExternalLifecycleState(ExternalLifecycleState expected)
+            {
+                Assert.That(FrameCoordinator.enabled, Is.EqualTo(expected.FrameCoordinatorEnabled));
+                Assert.That(CameraAdapter.IsExternallyDriven, Is.EqualTo(expected.CameraAdapterExternallyDriven));
+                Assert.That(ObjectAdapter.IsExternallyDriven, Is.EqualTo(expected.ObjectAdapterExternallyDriven));
+                Assert.That(
+                    CameraAdapter.IsExternallyDrivenBy(FrameCoordinator),
+                    Is.EqualTo(expected.CameraAdapterExternallyDrivenByFrameCoordinator));
+                Assert.That(
+                    ObjectAdapter.IsExternallyDrivenBy(FrameCoordinator),
+                    Is.EqualTo(expected.ObjectAdapterExternallyDrivenByFrameCoordinator));
+            }
+
+            private static void AssertAssignedValidHighlightInactive(
+                GameObject assignedHighlightRoot,
+                TabletopObjectView ownerView)
+            {
+                if (!IsValidAssignedHighlightRoot(assignedHighlightRoot, ownerView))
+                {
+                    return;
+                }
+
+                Assert.That(assignedHighlightRoot.activeSelf, Is.False);
+            }
+
+            private static bool IsValidAssignedHighlightRoot(
+                GameObject assignedHighlightRoot,
+                TabletopObjectView ownerView)
+            {
+                if (assignedHighlightRoot == null
+                    || ownerView == null
+                    || ReferenceEquals(assignedHighlightRoot, ownerView.gameObject)
+                    || !assignedHighlightRoot.transform.IsChildOf(ownerView.transform))
+                {
+                    return false;
+                }
+
+                return !ContainsTabletopObjectView(assignedHighlightRoot.transform);
+            }
+
+            private static bool ContainsTabletopObjectView(Transform transform)
+            {
+                if (transform.GetComponent<TabletopObjectView>() != null)
+                {
+                    return true;
+                }
+
+                for (int i = 0; i < transform.childCount; i++)
+                {
+                    if (ContainsTabletopObjectView(transform.GetChild(i)))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
             }
         }
 
@@ -998,6 +1512,49 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                     break;
                 case InvalidConfiguration.CoordinatorReferencesDifferentAdapters:
                     fixture.FrameCoordinator.objectInputAdapter = null;
+                    break;
+                case InvalidConfiguration.CardVisualOnWrongView:
+                    fixture.Composition.cardSelectionVisual = fixture.PawnSelectionVisual;
+                    break;
+                case InvalidConfiguration.PawnVisualOnWrongView:
+                    fixture.Composition.pawnSelectionVisual = fixture.TokenSelectionVisual;
+                    break;
+                case InvalidConfiguration.TokenVisualOnWrongView:
+                    fixture.Composition.tokenSelectionVisual = fixture.CardSelectionVisual;
+                    break;
+                case InvalidConfiguration.InvalidCardHighlightRoot:
+                    fixture.Composition.cardHighlightRoot = CreateGameObject("Invalid Card Highlight");
+                    break;
+                case InvalidConfiguration.InvalidPawnHighlightRoot:
+                    fixture.Composition.pawnHighlightRoot = CreateGameObject("Invalid Pawn Highlight");
+                    break;
+                case InvalidConfiguration.InvalidTokenHighlightRoot:
+                    fixture.Composition.tokenHighlightRoot = CreateGameObject("Invalid Token Highlight");
+                    break;
+                case InvalidConfiguration.DuplicateSelectionVisual:
+                    fixture.Composition.pawnSelectionVisual = fixture.CardSelectionVisual;
+                    break;
+                case InvalidConfiguration.DuplicateHighlightRoot:
+                    fixture.Composition.pawnHighlightRoot = fixture.CardHighlightRoot;
+                    break;
+                case InvalidConfiguration.ExistingFrameSelectionPresenter:
+                    CardView externalCardView = CreateView<CardView>("External Presenter Card");
+                    PawnView externalPawnView = CreateView<PawnView>("External Presenter Pawn");
+                    TokenView externalTokenView = CreateView<TokenView>("External Presenter Token");
+                    TabletopSelectionVisual externalCardVisual =
+                        externalCardView.gameObject.AddComponent<TabletopSelectionVisual>();
+                    TabletopSelectionVisual externalPawnVisual =
+                        externalPawnView.gameObject.AddComponent<TabletopSelectionVisual>();
+                    TabletopSelectionVisual externalTokenVisual =
+                        externalTokenView.gameObject.AddComponent<TabletopSelectionVisual>();
+                    externalCardVisual.Configure(externalCardView, CreateChild(externalCardView.gameObject, "External Card Highlight"));
+                    externalPawnVisual.Configure(externalPawnView, CreateChild(externalPawnView.gameObject, "External Pawn Highlight"));
+                    externalTokenVisual.Configure(externalTokenView, CreateChild(externalTokenView.gameObject, "External Token Highlight"));
+                    fixture.FrameCoordinator.ConfigureSelectionPresenter(new TabletopSelectionPresenter(
+                        new TabletopSelectionState(),
+                        externalCardVisual,
+                        externalPawnVisual,
+                        externalTokenVisual));
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(invalidConfiguration), invalidConfiguration, "Unsupported invalid configuration.");
