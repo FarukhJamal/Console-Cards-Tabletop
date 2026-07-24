@@ -1,8 +1,17 @@
 using System;
 using System.Collections.Generic;
+using ConsoleCards.Application.UseCases;
 using ConsoleCards.Core.Coordinates;
+using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Containers;
+using ConsoleCards.Core.Domain.Match;
+using ConsoleCards.Core.Domain.Seats;
+using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Presentation.Camera;
+using ConsoleCards.Presentation.Coordinates;
 using ConsoleCards.Presentation.Input;
+using ConsoleCards.Presentation.Interaction;
+using ConsoleCards.Presentation.Views;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -442,6 +451,275 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             AssertCoordinate(context.Controller.State.FocusCoordinate, 0.0, 5.0);
         }
 
+        [Test]
+        public void ScrollRoutingPolicy_InitiallyIsNotConfigured()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+
+            Assert.That(context.Adapter.HasScrollRoutingPolicy, Is.False);
+            Assert.That(context.Adapter.ScrollRoutingPolicy, Is.Null);
+        }
+
+        [Test]
+        public void ConfigureScrollRoutingPolicy_StoresPolicy()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture(selectView: false);
+
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            Assert.That(context.Adapter.HasScrollRoutingPolicy, Is.True);
+            Assert.That(context.Adapter.ScrollRoutingPolicy, Is.SameAs(routing.Policy));
+        }
+
+        [Test]
+        public void ConfigureScrollRoutingPolicy_WhenPolicyIsNull_ThrowsArgumentNullException()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+
+            Assert.Throws<ArgumentNullException>(() => context.Adapter.ConfigureScrollRoutingPolicy(null));
+        }
+
+        [Test]
+        public void ConfigureScrollRoutingPolicy_WhenAlreadyConfigured_ThrowsInvalidOperationException()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture(selectView: false);
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            Assert.Throws<InvalidOperationException>(() => context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy));
+        }
+
+        [Test]
+        public void ClearScrollRoutingPolicy_RemovesPolicy()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture(selectView: false);
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            context.Adapter.ClearScrollRoutingPolicy();
+
+            Assert.That(context.Adapter.HasScrollRoutingPolicy, Is.False);
+            Assert.That(context.Adapter.ScrollRoutingPolicy, Is.Null);
+        }
+
+        [Test]
+        public void ClearScrollRoutingPolicy_WhenCalledTwice_IsSafe()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+
+            Assert.DoesNotThrow(() =>
+            {
+                context.Adapter.ClearScrollRoutingPolicy();
+                context.Adapter.ClearScrollRoutingPolicy();
+            });
+        }
+
+        [Test]
+        public void ConfigureAndClearScrollRoutingPolicy_DoNotMoveOrZoomCamera()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture(selectView: false);
+            TableCoordinate focusBefore = context.Controller.State.FocusCoordinate;
+            float sizeBefore = context.Controller.State.OrthographicSize;
+            Vector3 rigPositionBefore = context.Controller.CameraRig.position;
+
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+            context.Adapter.ClearScrollRoutingPolicy();
+
+            Assert.That(context.Controller.State.FocusCoordinate, Is.EqualTo(focusBefore));
+            Assert.That(context.Controller.State.OrthographicSize, Is.EqualTo(sizeBefore).Within(Tolerance));
+            AssertVector3(context.Controller.CameraRig.position, rigPositionBefore.x, rigPositionBefore.y, rigPositionBefore.z);
+        }
+
+        [Test]
+        public void ApplyInputFrame_WithoutRoutingPolicy_PreservesExistingZoomBehavior()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+
+            context.Adapter.ApplyInputFrame(Vector2.zero, false, Vector2.zero, 100f, 1f);
+
+            Assert.That(context.Controller.State.OrthographicSize, Is.EqualTo(4f).Within(Tolerance));
+        }
+
+        [Test]
+        public void ApplyInputFrame_WhenRouteIsCameraZoom_AppliesZoom()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture(selectView: false);
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            context.Adapter.ApplyInputFrame(Vector2.zero, false, Vector2.zero, 100f, 1f);
+
+            Assert.That(context.Controller.State.OrthographicSize, Is.EqualTo(4f).Within(Tolerance));
+        }
+
+        [Test]
+        public void ApplyInputFrame_WhenRouteIsCameraZoom_StillAppliesKeyboardPan()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture(selectView: false);
+            TabletopPose poseBefore = routing.State.Pose;
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            Assert.That(routing.Policy.ResolveScrollRoute(), Is.EqualTo(TabletopScrollInputRoute.CameraZoom));
+
+            context.Adapter.ApplyInputFrame(new Vector2(1f, 0f), false, Vector2.zero, 100f, 1f);
+
+            AssertCoordinate(context.Controller.State.FocusCoordinate, 5.0, 0.0);
+            AssertVector3(context.Controller.CameraRig.position, 5f, 10f, 0f);
+            Assert.That(context.Controller.State.OrthographicSize, Is.EqualTo(4f).Within(Tolerance));
+            Assert.That(context.Controller.TargetCamera.orthographicSize, Is.EqualTo(4f).Within(Tolerance));
+            Assert.That(routing.State.Pose, Is.EqualTo(poseBefore));
+            Assert.That(routing.SelectionState.HasSelection, Is.False);
+            Assert.That(routing.SelectionState.SelectedView, Is.Null);
+            Assert.That(routing.Match.Revision, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void ApplyInputFrame_WhenRouteIsCameraZoom_StillAppliesDragPan()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture(selectView: false);
+            TabletopPose poseBefore = routing.State.Pose;
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            Assert.That(routing.Policy.ResolveScrollRoute(), Is.EqualTo(TabletopScrollInputRoute.CameraZoom));
+
+            context.Adapter.ApplyInputFrame(Vector2.zero, true, new Vector2(10f, 0f), 100f, 1f);
+
+            AssertCoordinate(context.Controller.State.FocusCoordinate, -0.2, 0.0);
+            AssertVector3(context.Controller.CameraRig.position, -0.2f, 10f, 0f);
+            Assert.That(context.Controller.State.OrthographicSize, Is.EqualTo(4f).Within(Tolerance));
+            Assert.That(context.Controller.TargetCamera.orthographicSize, Is.EqualTo(4f).Within(Tolerance));
+            Assert.That(routing.State.Pose, Is.EqualTo(poseBefore));
+            Assert.That(routing.SelectionState.HasSelection, Is.False);
+            Assert.That(routing.SelectionState.SelectedView, Is.Null);
+            Assert.That(routing.Match.Revision, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void ApplyInputFrame_WhenRouteIsObjectRotation_SuppressesCameraZoom()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture();
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            context.Adapter.ApplyInputFrame(Vector2.zero, false, Vector2.zero, 100f, 1f);
+
+            Assert.That(context.Controller.State.OrthographicSize, Is.EqualTo(5f).Within(Tolerance));
+        }
+
+        [Test]
+        public void ApplyInputFrame_WhenRouteIsSuppressed_SuppressesCameraZoom()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture();
+            routing.View.ApplyPreviewPose(new TabletopPose(new TableCoordinate(3.0, 4.0), 0f, 0, 0));
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            context.Adapter.ApplyInputFrame(Vector2.zero, false, Vector2.zero, 100f, 1f);
+
+            Assert.That(context.Controller.State.OrthographicSize, Is.EqualTo(5f).Within(Tolerance));
+        }
+
+        [Test]
+        public void ApplyInputFrame_WhenSuppressed_DoesNotChangeTargetCameraOrthographicSize()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture();
+            routing.View.ApplyPreviewPose(new TabletopPose(new TableCoordinate(3.0, 4.0), 0f, 0, 0));
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            context.Adapter.ApplyInputFrame(Vector2.zero, false, Vector2.zero, -100f, 1f);
+
+            Assert.That(context.Controller.TargetCamera.orthographicSize, Is.EqualTo(5f).Within(Tolerance));
+        }
+
+        [Test]
+        public void ApplyInputFrame_WhenRouteIsObjectRotation_KeyboardPanStillWorks()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture();
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            context.Adapter.ApplyInputFrame(new Vector2(1f, 0f), false, Vector2.zero, 100f, 1f);
+
+            AssertCoordinate(context.Controller.State.FocusCoordinate, 5.0, 0.0);
+            Assert.That(context.Controller.State.OrthographicSize, Is.EqualTo(5f).Within(Tolerance));
+        }
+
+        [Test]
+        public void ApplyInputFrame_WhenRouteIsSuppressed_KeyboardPanStillWorks()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture();
+            routing.View.ApplyPreviewPose(new TabletopPose(new TableCoordinate(3.0, 4.0), 0f, 0, 0));
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            context.Adapter.ApplyInputFrame(new Vector2(0f, 1f), false, Vector2.zero, 100f, 1f);
+
+            AssertCoordinate(context.Controller.State.FocusCoordinate, 0.0, 5.0);
+            Assert.That(context.Controller.State.OrthographicSize, Is.EqualTo(5f).Within(Tolerance));
+        }
+
+        [Test]
+        public void ApplyInputFrame_WhenRouteIsObjectRotation_DragPanStillWorks()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture();
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            context.Adapter.ApplyInputFrame(Vector2.zero, true, new Vector2(10f, 0f), 100f, 1f);
+
+            AssertCoordinate(context.Controller.State.FocusCoordinate, -0.2, 0.0);
+            Assert.That(context.Controller.State.OrthographicSize, Is.EqualTo(5f).Within(Tolerance));
+        }
+
+        [Test]
+        public void ApplyInputFrame_WhenRouteIsSuppressed_DragPanStillWorks()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture();
+            routing.View.ApplyPreviewPose(new TabletopPose(new TableCoordinate(3.0, 4.0), 0f, 0, 0));
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            context.Adapter.ApplyInputFrame(Vector2.zero, true, new Vector2(0f, 10f), 100f, 1f);
+
+            AssertCoordinate(context.Controller.State.FocusCoordinate, 0.0, -0.2);
+            Assert.That(context.Controller.State.OrthographicSize, Is.EqualTo(5f).Within(Tolerance));
+        }
+
+        [Test]
+        public void ApplyInputFrame_WithRoutingPolicy_WhenInputIsInvalid_ThrowsWithoutMutation()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture();
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => context.Adapter.ApplyInputFrame(new Vector2(float.NaN, 0f), false, Vector2.zero, 100f, 1f));
+
+            AssertUnchanged(context);
+        }
+
+        [Test]
+        public void ApplyInputFrame_RoutingOnlyMutatesSelectionThroughUnavailableCleanup()
+        {
+            AdapterTestContext context = CreateInitializedAdapter();
+            RoutingFixture routing = CreateRoutingFixture();
+            TabletopPose poseBefore = routing.State.Pose;
+            UnityObject.DestroyImmediate(routing.View.gameObject);
+            context.Adapter.ConfigureScrollRoutingPolicy(routing.Policy);
+
+            context.Adapter.ApplyInputFrame(Vector2.zero, false, Vector2.zero, 100f, 1f);
+
+            Assert.That(routing.SelectionState.HasSelection, Is.False);
+            Assert.That(routing.State.Pose, Is.EqualTo(poseBefore));
+            Assert.That(routing.Match.Revision, Is.EqualTo(0));
+            Assert.That(context.Controller.State.OrthographicSize, Is.EqualTo(4f).Within(Tolerance));
+        }
+
         private AdapterTestContext CreateInitializedAdapter(
             bool assignCameraController = true,
             bool enableActionsBeforeAdapter = false,
@@ -581,6 +859,116 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(actual.z, Is.EqualTo(expectedZ).Within(Tolerance));
         }
 
+        private RoutingFixture CreateRoutingFixture(bool selectView = true)
+        {
+            UnityCamera camera = CreateRoutingCamera();
+            TabletopCoordinateConverter converter = CreateTabletopConverter();
+            CardView view = CreateView<CardView>();
+            TabletopObjectState state = CreateBaseState();
+            view.Bind(new CardInstanceState(state, CardFace.FaceUp), converter);
+            AddBoxCollider(view.gameObject, 8);
+
+            MatchState match = CreateMatch(state);
+            TabletopSelectionState selectionState = new TabletopSelectionState();
+            if (selectView)
+            {
+                selectionState.Select(view);
+            }
+
+            TabletopObjectHitResolver hitResolver = new TabletopObjectHitResolver(camera, LayerMaskFor(8), 25f);
+            TabletopPointerProjector pointerProjector = new TabletopPointerProjector(camera, converter, 0f);
+            LocalInteractionLockService lockService = new LocalInteractionLockService();
+            TabletopInteractionStateMachine stateMachine = new TabletopInteractionStateMachine(5f);
+            TabletopDragPreviewSession previewSession = new TabletopDragPreviewSession();
+            MoveObjectUseCase moveUseCase = new MoveObjectUseCase();
+            TabletopMoveInteractionCoordinator moveCoordinator = new TabletopMoveInteractionCoordinator(
+                match,
+                PlayerId.New(),
+                InteractionOwnerId.New(),
+                selectionState,
+                hitResolver,
+                pointerProjector,
+                lockService,
+                stateMachine,
+                previewSession,
+                moveUseCase);
+            TabletopInteractionInputRoutingPolicy policy = new TabletopInteractionInputRoutingPolicy(
+                selectionState,
+                moveCoordinator);
+
+            return new RoutingFixture(policy, match, view, state, selectionState);
+        }
+
+        private UnityCamera CreateRoutingCamera()
+        {
+            GameObject cameraObject = CreateGameObject("Routing Camera");
+            UnityCamera camera = cameraObject.AddComponent<UnityCamera>();
+            camera.targetTexture = null;
+            camera.rect = new Rect(0f, 0f, 1f, 1f);
+            camera.orthographic = true;
+            camera.orthographicSize = 8f;
+            camera.nearClipPlane = 0.1f;
+            camera.farClipPlane = 100f;
+            camera.transform.SetPositionAndRotation(new Vector3(0f, 10f, 0f), Quaternion.Euler(90f, 0f, 0f));
+            return camera;
+        }
+
+        private T CreateView<T>()
+            where T : TabletopObjectView
+        {
+            GameObject gameObject = CreateGameObject(typeof(T).Name);
+            return gameObject.AddComponent<T>();
+        }
+
+        private static TabletopObjectState CreateBaseState()
+        {
+            return new TabletopObjectState(
+                new TabletopObjectId(GuidFromSeed(1)),
+                new ObjectDefinitionId(GuidFromSeed(1001)),
+                TabletopObjectKind.Card,
+                TabletopPose.Default,
+                ContainerId.Empty,
+                PlayerId.Empty,
+                ObjectVisibility.Public,
+                false);
+        }
+
+        private static MatchState CreateMatch(TabletopObjectState state)
+        {
+            return new MatchState(
+                MatchId.New(),
+                GameTemplateId.New(),
+                0,
+                new[] { new CardInstanceState(state, CardFace.FaceUp) },
+                Array.Empty<PawnState>(),
+                Array.Empty<TokenState>(),
+                Array.Empty<ContainerState>(),
+                Array.Empty<SeatState>());
+        }
+
+        private static BoxCollider AddBoxCollider(GameObject gameObject, int layer)
+        {
+            gameObject.layer = layer;
+            BoxCollider collider = gameObject.AddComponent<BoxCollider>();
+            collider.size = new Vector3(1f, 0.2f, 1f);
+            return collider;
+        }
+
+        private static TabletopCoordinateConverter CreateTabletopConverter()
+        {
+            return new TabletopCoordinateConverter(1f, 0f, 0f, 0f);
+        }
+
+        private static LayerMask LayerMaskFor(int layer)
+        {
+            return 1 << layer;
+        }
+
+        private static Guid GuidFromSeed(int seed)
+        {
+            return new Guid(0, 0, 0, 0, 0, 0, 0, 0, 0, (byte)(seed / 256), (byte)(seed % 256));
+        }
+
         private sealed class AdapterTestContext
         {
             public AdapterTestContext(
@@ -610,6 +998,33 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             public InputActionReference PointerDeltaAction { get; }
 
             public InputActionReference ZoomAction { get; }
+        }
+
+        private sealed class RoutingFixture
+        {
+            public RoutingFixture(
+                TabletopInteractionInputRoutingPolicy policy,
+                MatchState match,
+                TabletopObjectView view,
+                TabletopObjectState state,
+                TabletopSelectionState selectionState)
+            {
+                Policy = policy;
+                Match = match;
+                View = view;
+                State = state;
+                SelectionState = selectionState;
+            }
+
+            public TabletopInteractionInputRoutingPolicy Policy { get; }
+
+            public MatchState Match { get; }
+
+            public TabletopObjectView View { get; }
+
+            public TabletopObjectState State { get; }
+
+            public TabletopSelectionState SelectionState { get; }
         }
     }
 }

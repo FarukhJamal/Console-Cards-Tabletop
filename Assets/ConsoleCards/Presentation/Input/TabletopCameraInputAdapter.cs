@@ -24,6 +24,7 @@ namespace ConsoleCards.Presentation.Input
         private bool dragPanEnabledByAdapter;
         private bool pointerDeltaEnabledByAdapter;
         private bool zoomEnabledByAdapter;
+        private TabletopInteractionInputRoutingPolicy scrollRoutingPolicy;
 
         public bool IsInitialized { get; private set; }
 
@@ -34,6 +35,30 @@ namespace ConsoleCards.Presentation.Input
         public float DragPanUnitsPerPixel => dragPanUnitsPerPixel;
 
         public float ZoomSensitivity => zoomSensitivity;
+
+        public bool HasScrollRoutingPolicy => scrollRoutingPolicy != null;
+
+        public TabletopInteractionInputRoutingPolicy ScrollRoutingPolicy => scrollRoutingPolicy;
+
+        public void ConfigureScrollRoutingPolicy(TabletopInteractionInputRoutingPolicy policy)
+        {
+            if (policy == null)
+            {
+                throw new ArgumentNullException(nameof(policy));
+            }
+
+            if (scrollRoutingPolicy != null)
+            {
+                throw new InvalidOperationException("TabletopCameraInputAdapter already has a scroll routing policy.");
+            }
+
+            scrollRoutingPolicy = policy;
+        }
+
+        public void ClearScrollRoutingPolicy()
+        {
+            scrollRoutingPolicy = null;
+        }
 
         private void Awake()
         {
@@ -110,9 +135,28 @@ namespace ConsoleCards.Presentation.Input
                 cameraController.Pan(combinedPan.x, combinedPan.y);
             }
 
-            if (zoomDelta != 0f)
+            if (zoomDelta != 0f && ShouldApplyCameraZoom())
             {
                 cameraController.Zoom(-zoomDelta * zoomSensitivity);
+            }
+        }
+
+        private bool ShouldApplyCameraZoom()
+        {
+            if (scrollRoutingPolicy == null)
+            {
+                return true;
+            }
+
+            switch (scrollRoutingPolicy.ResolveScrollRoute())
+            {
+                case TabletopScrollInputRoute.CameraZoom:
+                    return true;
+                case TabletopScrollInputRoute.ObjectRotation:
+                case TabletopScrollInputRoute.Suppressed:
+                    return false;
+                default:
+                    throw new InvalidOperationException("Unsupported scroll input route.");
             }
         }
 
