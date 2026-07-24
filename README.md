@@ -4,7 +4,15 @@ Console Cards is a multiplayer, top-down virtual tabletop Platform centered arou
 
 ## Current Status
 
-**The approved Unity project baseline exists. Console Cards runtime implementation has not started.**
+**M0, M1, and M2 are complete.**
+
+- M0 completed the Core/Application foundation.
+- M1 completed the tabletop visual and Camera foundation.
+- M2 completed generic Card, Pawn, and Token interaction in the local Tabletop prototype.
+
+The current prototype supports explicit Card, Pawn, and Token Views; selection with visible local feedback; mathematical tabletop pointer projection; collider-based object selection; drag preview; accepted movement; cancel/rollback; rotation; Card flipping with visible face projection; deterministic shared-frame input routing; local interaction locks; orthographic Camera pan/zoom; prototype composition; and an integrated `TabletopPrototype` scene.
+
+M3, Decks, Stacks, Hands, and Consoles, is the next milestone.
 
 ## Approved Technical Baseline
 
@@ -37,12 +45,7 @@ See `DOCUMENTATION_INDEX.md` for the complete hierarchy.
 
 ## Next Action
 
-1. Create the fresh URP project in Unity `6000.5.4f1`.
-2. Initialize Git and open it through GitHub Desktop.
-3. Add this documentation pack at the repository root.
-4. Commit the untouched baseline.
-5. Give Codex a no-change repository audit prompt.
-6. Begin M0 only after the audit confirms the exact baseline.
+Begin M3: Decks, Stacks, Hands, and Consoles.
 
 ## Networking
 
@@ -50,5 +53,10 @@ Networking technology and host migration remain intentionally deferred to M6.
 
 ## Tests
 
-The approved Unity project baseline exists.
-Console Cards runtime implementation has not started.
+Latest verified M2 closure evidence:
+
+- Edit Mode: 828 passed
+- Play Mode: 793 passed
+- Failed: 0
+- Skipped: 0
+- Unity compilation errors: 0

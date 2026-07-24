@@ -1,5 +1,53 @@
 # Changelog
 
+## [1.3.0-m2-closure]
+
+### Foundations
+
+- Completed explicit `CardView`, `PawnView`, and `TokenView` binding to authoritative Runtime State.
+- Added mathematical pointer-to-table projection that does not depend on the visual Table Surface proxy.
+- Added collider-based tabletop object hit resolution, local selection state, temporary local interaction locks, and an explicit interaction lifecycle/state machine.
+
+### Manipulation
+
+- Added View-only drag preview with accepted movement through `MoveObjectCommand` and `MoveObjectUseCase`.
+- Added cancel and rejection reconciliation back to accepted Runtime State.
+- Added accepted object rotation through `RotateObjectCommand` and `RotateObjectUseCase`.
+- Added accepted Card face mutation through `FlipCardCommand` and `FlipCardUseCase`.
+
+### Deterministic Input
+
+- Added dedicated Camera and object input assets.
+- Added an immutable `TabletopInputFrame`.
+- Added one `TabletopInputFrameCoordinator` that samples both adapters before mutation.
+- Added pointer-transition suppression, stable Camera zoom versus object rotation ownership, and Flip priority over Rotate.
+- Kept deterministic routing free of Script Execution Order dependencies and static consumed flags.
+
+### Presentation
+
+- Added authoritative `CardFace` projection to explicit FaceUp and FaceDown visual roots.
+- Added local selection highlight projection.
+- Added prototype Card, Pawn, and Token materials and prefabs.
+- Added a dedicated `TabletopObject` picking layer.
+- Integrated the `TabletopPrototype` scene with a prototype-only scene composition root.
+
+### Verified
+
+- M2 milestone closure totals: Edit Mode 828 passed, Play Mode 793 passed, Failed 0, Skipped 0, Unity compilation errors 0.
+- Integrated interaction smoke coverage uses the real `TabletopPrototype` scene.
+
+### Excluded
+
+- Networking.
+- Persistence.
+- Official Game Templates.
+- `PlayAreaState`.
+- Grid placement and snapping.
+- Game rules.
+- Undo/redo.
+- Hidden-information enforcement.
+- Final art.
+
 ## [1.2.3-m1-closure]
 
 ### Added

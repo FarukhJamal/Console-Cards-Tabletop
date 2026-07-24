@@ -100,12 +100,14 @@ Exit:
 
 ## 5. M2 — Generic Object and Card Interaction
 
+**Status:** Complete
+
 **Expected:** 55 hours  
 **Safe:** 70 hours
 
 Deliver:
 
-- Object Views and registry.
+- Explicit Card, Pawn, and Token object Views with local hit resolution.
 - Selection and drag preview.
 - Final Move Command.
 - Rotation and flipping.
@@ -113,10 +115,18 @@ Deliver:
 - Temporary Interaction Lock abstraction.
 - Card, Pawn, and basic Token Views.
 - Play Mode interaction tests.
+- No global View registry was required for M2. A registry remains deferred unless later product requirements prove one is necessary.
 
 Exit:
 
 - One Player naturally manipulates Cards, Pawns, and Tokens through accepted Runtime State.
+
+Completion evidence:
+
+- Generic object interaction is implemented in `TabletopPrototype`.
+- Edit Mode: 828 passed.
+- Play Mode: 793 passed.
+- Integrated real-scene smoke coverage completed.
 
 ## 6. M3 — Decks, Stacks, Hands, and Consoles
 
