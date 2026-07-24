@@ -53,6 +53,7 @@ namespace ConsoleCards.Presentation.Views
 
             transform.SetPositionAndRotation(worldPosition, worldRotation);
             ClearPreviewState();
+            OnAcceptedStateApplied();
         }
 
         public void ApplyPreviewPose(TabletopPose pose)
@@ -84,6 +85,10 @@ namespace ConsoleCards.Presentation.Views
         }
 
         protected virtual void OnUnbound()
+        {
+        }
+
+        protected virtual void OnAcceptedStateApplied()
         {
         }
 
