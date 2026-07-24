@@ -144,6 +144,10 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             AssertOutcomesEqual(cameraFirst, objectFirst);
             Assert.That(cameraFirst.CameraOrthographicSize, Is.EqualTo(5f).Within(FloatTolerance));
             Assert.That(objectFirst.CameraOrthographicSize, Is.EqualTo(5f).Within(FloatTolerance));
+            Assert.That(cameraFirst.ObjectPose.RotationDegrees, Is.EqualTo(0f).Within(FloatTolerance));
+            Assert.That(objectFirst.ObjectPose.RotationDegrees, Is.EqualTo(0f).Within(FloatTolerance));
+            Assert.That(cameraFirst.MatchRevision, Is.EqualTo(0));
+            Assert.That(objectFirst.MatchRevision, Is.EqualTo(0));
         }
 
         [Test]
@@ -282,6 +286,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 true,
                 false,
                 false,
+                false,
+                0f,
                 false));
 
             AssertCoordinate(fixture.CameraController.State.FocusCoordinate, new TableCoordinate(5.0, 0.0), "Keyboard pan should remain active.");
@@ -303,6 +309,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 true,
                 false,
                 false,
+                false,
+                0f,
                 false));
 
             AssertCoordinate(fixture.CameraController.State.FocusCoordinate, new TableCoordinate(-0.2, 0.0), "Drag pan should remain active.");
@@ -337,7 +345,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         }
 
         [Test]
-        public void Coordinator_DoesNotReferenceRotateFlipOrPlayerInput()
+        public void Coordinator_DoesNotOwnPlayerInputAndObjectAdapterOwnsConfiguredActions()
         {
             OrderFixture fixture = CreateOrderFixture(FixtureVariant.CameraAdapterCreatedFirst);
 
@@ -345,6 +353,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.ObjectAdapter.PointAction, Is.Not.Null);
             Assert.That(fixture.ObjectAdapter.SelectAction, Is.Not.Null);
             Assert.That(fixture.ObjectAdapter.CancelAction, Is.Not.Null);
+            Assert.That(fixture.ObjectAdapter.RotateAction, Is.Not.Null);
+            Assert.That(fixture.ObjectAdapter.FlipAction, Is.Not.Null);
         }
 
         [TestCase(float.NaN, 0f)]
@@ -362,6 +372,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 false,
                 false,
                 false,
+                false,
+                0f,
                 false));
 
             Assert.Throws<ArgumentOutOfRangeException>(() => new TabletopInputFrame(
@@ -373,6 +385,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 false,
                 false,
                 false,
+                false,
+                0f,
                 false));
 
             Assert.Throws<ArgumentOutOfRangeException>(() => new TabletopInputFrame(
@@ -384,6 +398,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 false,
                 false,
                 false,
+                false,
+                0f,
                 false));
         }
 
@@ -401,6 +417,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 false,
                 false,
                 false,
+                false,
+                0f,
                 false));
         }
 
@@ -421,7 +439,9 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 selectPressedThisFrame,
                 false,
                 selectReleasedThisFrame,
-                cancelPressedThisFrame);
+                cancelPressedThisFrame,
+                0f,
+                false);
 
             Assert.That(frame.HasPointerTransition, Is.True);
         }
@@ -438,6 +458,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 false,
                 true,
                 false,
+                false,
+                0f,
                 false);
 
             Assert.That(frame.HasPointerTransition, Is.False);
@@ -469,10 +491,12 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             LocalInteractionLockService lockService = new LocalInteractionLockService();
             TabletopInteractionStateMachine stateMachine = new TabletopInteractionStateMachine(5f);
             TabletopDragPreviewSession previewSession = new TabletopDragPreviewSession();
+            PlayerId requestedByPlayerId = PlayerId.New();
+            InteractionOwnerId ownerId = InteractionOwnerId.New();
             TabletopMoveInteractionCoordinator moveCoordinator = new TabletopMoveInteractionCoordinator(
                 match,
-                PlayerId.New(),
-                InteractionOwnerId.New(),
+                requestedByPlayerId,
+                ownerId,
                 selectionState,
                 hitResolver,
                 pointerProjector,
@@ -480,6 +504,20 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 stateMachine,
                 previewSession,
                 new MoveObjectUseCase());
+            TabletopRotationCoordinator rotationCoordinator = new TabletopRotationCoordinator(
+                match,
+                requestedByPlayerId,
+                ownerId,
+                selectionState,
+                lockService,
+                new RotateObjectUseCase());
+            TabletopCardFlipCoordinator flipCoordinator = new TabletopCardFlipCoordinator(
+                match,
+                requestedByPlayerId,
+                ownerId,
+                selectionState,
+                lockService,
+                new FlipCardUseCase());
             TabletopInteractionInputRoutingPolicy routingPolicy = new TabletopInteractionInputRoutingPolicy(
                 selectionState,
                 moveCoordinator);
@@ -490,11 +528,19 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             if (variant == FixtureVariant.CameraAdapterCreatedFirst)
             {
                 cameraAdapter = CreateInitializedCameraAdapter(cameraController);
-                objectAdapter = CreateInitializedObjectAdapter(moveCoordinator);
+                objectAdapter = CreateInitializedObjectAdapter(
+                    moveCoordinator,
+                    rotationCoordinator,
+                    flipCoordinator,
+                    routingPolicy);
             }
             else
             {
-                objectAdapter = CreateInitializedObjectAdapter(moveCoordinator);
+                objectAdapter = CreateInitializedObjectAdapter(
+                    moveCoordinator,
+                    rotationCoordinator,
+                    flipCoordinator,
+                    routingPolicy);
                 cameraAdapter = CreateInitializedCameraAdapter(cameraController);
             }
 
@@ -583,12 +629,18 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             return adapter;
         }
 
-        private TabletopObjectInputAdapter CreateInitializedObjectAdapter(TabletopMoveInteractionCoordinator moveCoordinator)
+        private TabletopObjectInputAdapter CreateInitializedObjectAdapter(
+            TabletopMoveInteractionCoordinator moveCoordinator,
+            TabletopRotationCoordinator rotationCoordinator,
+            TabletopCardFlipCoordinator flipCoordinator,
+            TabletopInteractionInputRoutingPolicy routingPolicy)
         {
             InputActionMap actionMap = CreateActionMap("RoutingOrderObject");
             InputActionReference pointAction = CreateActionReference(actionMap, "Point", InputActionType.PassThrough, "Vector2");
             InputActionReference selectAction = CreateActionReference(actionMap, "Select", InputActionType.Button, "Button");
             InputActionReference cancelAction = CreateActionReference(actionMap, "Cancel", InputActionType.Button, "Button");
+            InputActionReference rotateAction = CreateActionReference(actionMap, "Rotate", InputActionType.PassThrough, "Axis");
+            InputActionReference flipAction = CreateActionReference(actionMap, "Flip", InputActionType.Button, "Button");
 
             GameObject adapterObject = CreateGameObject("Routing Order Object Input Adapter");
             adapterObject.SetActive(false);
@@ -596,8 +648,14 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             adapter.pointAction = pointAction;
             adapter.selectAction = selectAction;
             adapter.cancelAction = cancelAction;
+            adapter.rotateAction = rotateAction;
+            adapter.flipAction = flipAction;
             adapterObject.SetActive(true);
-            adapter.Initialize(moveCoordinator);
+            adapter.Initialize(
+                moveCoordinator,
+                rotationCoordinator,
+                flipCoordinator,
+                routingPolicy);
             return adapter;
         }
 
@@ -689,6 +747,12 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                     break;
                 case "Cancel":
                     action.AddBinding("<Keyboard>/escape");
+                    break;
+                case "Rotate":
+                    action.AddBinding("<Mouse>/scroll/y");
+                    break;
+                case "Flip":
+                    action.AddBinding("<Keyboard>/f");
                     break;
             }
         }
@@ -997,7 +1061,9 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                     selectPressedThisFrame,
                     selectHeld,
                     selectReleasedThisFrame,
-                    cancelPressedThisFrame);
+                    cancelPressedThisFrame,
+                    ScrollDelta,
+                    false);
             }
 
             private Vector2 ScreenPointForWorld(float x, float z)

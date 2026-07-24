@@ -14,12 +14,15 @@ namespace ConsoleCards.Presentation.Input
             bool selectPressedThisFrame,
             bool selectHeld,
             bool selectReleasedThisFrame,
-            bool cancelPressedThisFrame)
+            bool cancelPressedThisFrame,
+            float rotateDelta,
+            bool flipPressedThisFrame)
         {
             ValidateFinite(keyboardPan, nameof(keyboardPan));
             ValidateFinite(pointerDelta, nameof(pointerDelta));
             ValidateFinite(scrollDelta, nameof(scrollDelta));
             ValidateFinite(screenPosition, nameof(screenPosition));
+            ValidateFinite(rotateDelta, nameof(rotateDelta));
 
             KeyboardPan = keyboardPan;
             DragHeld = dragHeld;
@@ -30,6 +33,8 @@ namespace ConsoleCards.Presentation.Input
             SelectHeld = selectHeld;
             SelectReleasedThisFrame = selectReleasedThisFrame;
             CancelPressedThisFrame = cancelPressedThisFrame;
+            RotateDelta = rotateDelta;
+            FlipPressedThisFrame = flipPressedThisFrame;
         }
 
         public Vector2 KeyboardPan { get; }
@@ -50,10 +55,18 @@ namespace ConsoleCards.Presentation.Input
 
         public bool CancelPressedThisFrame { get; }
 
+        public float RotateDelta { get; }
+
+        public bool FlipPressedThisFrame { get; }
+
         public bool HasPointerTransition =>
             SelectPressedThisFrame ||
             SelectReleasedThisFrame ||
             CancelPressedThisFrame;
+
+        public bool HasDiscreteObjectAction =>
+            RotateDelta != 0f ||
+            FlipPressedThisFrame;
 
         private static void ValidateFinite(Vector2 value, string parameterName)
         {

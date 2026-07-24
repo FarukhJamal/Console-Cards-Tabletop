@@ -1,4 +1,5 @@
 using System;
+using ConsoleCards.Presentation.Interaction;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Input
@@ -65,7 +66,9 @@ namespace ConsoleCards.Presentation.Input
                 out bool selectPressedThisFrame,
                 out bool selectHeld,
                 out bool selectReleasedThisFrame,
-                out bool cancelPressedThisFrame);
+                out bool cancelPressedThisFrame,
+                out float rotateDelta,
+                out bool flipPressedThisFrame);
 
             ApplyInputFrame(new TabletopInputFrame(
                 keyboardPan,
@@ -76,15 +79,17 @@ namespace ConsoleCards.Presentation.Input
                 selectPressedThisFrame,
                 selectHeld,
                 selectReleasedThisFrame,
-                cancelPressedThisFrame));
+                cancelPressedThisFrame,
+                rotateDelta,
+                flipPressedThisFrame));
         }
 
-        internal void ApplyInputFrame(TabletopInputFrame frame)
+        internal MoveInteractionReleaseResult? ApplyInputFrame(TabletopInputFrame frame)
         {
-            ApplyInputFrame(frame, Time.unscaledDeltaTime);
+            return ApplyInputFrame(frame, Time.unscaledDeltaTime);
         }
 
-        internal void ApplyInputFrame(TabletopInputFrame frame, float unscaledDeltaTime)
+        internal MoveInteractionReleaseResult? ApplyInputFrame(TabletopInputFrame frame, float unscaledDeltaTime)
         {
             if (!IsFinite(unscaledDeltaTime) || unscaledDeltaTime < 0f)
             {
@@ -92,13 +97,19 @@ namespace ConsoleCards.Presentation.Input
             }
 
             bool suppressScrollForPointerTransition = frame.HasPointerTransition;
+            float effectiveRotateDelta = frame.HasPointerTransition ? 0f : frame.RotateDelta;
+            bool effectiveFlipPressedThisFrame = frame.HasPointerTransition
+                ? false
+                : frame.FlipPressedThisFrame;
 
-            objectInputAdapter.ApplyInputFrame(
+            MoveInteractionReleaseResult? releaseResult = objectInputAdapter.ApplyInputFrame(
                 frame.ScreenPosition,
                 frame.SelectPressedThisFrame,
                 frame.SelectHeld,
                 frame.SelectReleasedThisFrame,
-                frame.CancelPressedThisFrame);
+                frame.CancelPressedThisFrame,
+                effectiveRotateDelta,
+                effectiveFlipPressedThisFrame);
 
             float effectiveScroll = suppressScrollForPointerTransition ? 0f : frame.ScrollDelta;
             cameraInputAdapter.ApplyInputFrame(
@@ -107,6 +118,8 @@ namespace ConsoleCards.Presentation.Input
                 frame.PointerDelta,
                 effectiveScroll,
                 unscaledDeltaTime);
+
+            return releaseResult;
         }
 
         private void AttachAdapters()

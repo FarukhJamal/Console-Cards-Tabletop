@@ -79,11 +79,16 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.Adapter.PointAction, Is.SameAs(fixture.PointReference));
             Assert.That(fixture.Adapter.SelectAction, Is.SameAs(fixture.SelectReference));
             Assert.That(fixture.Adapter.CancelAction, Is.SameAs(fixture.CancelReference));
+            Assert.That(fixture.Adapter.RotateAction, Is.SameAs(fixture.RotateReference));
+            Assert.That(fixture.Adapter.FlipAction, Is.SameAs(fixture.FlipReference));
+            Assert.That(fixture.Adapter.RotationStepDegrees, Is.EqualTo(15f));
         }
 
         [TestCase(RequiredActionReference.Point, "TabletopObjectInputAdapter requires a Point InputActionReference.")]
         [TestCase(RequiredActionReference.Select, "TabletopObjectInputAdapter requires a Select InputActionReference.")]
         [TestCase(RequiredActionReference.Cancel, "TabletopObjectInputAdapter requires a Cancel InputActionReference.")]
+        [TestCase(RequiredActionReference.Rotate, "TabletopObjectInputAdapter requires a Rotate InputActionReference.")]
+        [TestCase(RequiredActionReference.Flip, "TabletopObjectInputAdapter requires a Flip InputActionReference.")]
         public void Awake_WhenRequiredReferenceIsMissing_DisablesAdapter(
             RequiredActionReference missingReference,
             string expectedMessage)
@@ -103,6 +108,28 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             LogAssert.Expect(LogType.Error, "TabletopObjectInputAdapter requires the Point InputActionReference to resolve to an InputAction.");
 
             AdapterFixture fixture = CreateAdapterFixture(pointReferenceOverride: CreateReferenceWithoutAction());
+
+            Assert.That(fixture.Adapter.enabled, Is.False);
+            Assert.That(fixture.Adapter.HasValidActionConfiguration, Is.False);
+        }
+
+        [Test]
+        public void Awake_WhenRotateReferenceHasNoAction_DisablesAdapter()
+        {
+            LogAssert.Expect(LogType.Error, "TabletopObjectInputAdapter requires the Rotate InputActionReference to resolve to an InputAction.");
+
+            AdapterFixture fixture = CreateAdapterFixture(rotateReferenceOverride: CreateReferenceWithoutAction());
+
+            Assert.That(fixture.Adapter.enabled, Is.False);
+            Assert.That(fixture.Adapter.HasValidActionConfiguration, Is.False);
+        }
+
+        [Test]
+        public void Awake_WhenFlipReferenceHasNoAction_DisablesAdapter()
+        {
+            LogAssert.Expect(LogType.Error, "TabletopObjectInputAdapter requires the Flip InputActionReference to resolve to an InputAction.");
+
+            AdapterFixture fixture = CreateAdapterFixture(flipReferenceOverride: CreateReferenceWithoutAction());
 
             Assert.That(fixture.Adapter.enabled, Is.False);
             Assert.That(fixture.Adapter.HasValidActionConfiguration, Is.False);
@@ -149,22 +176,68 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         }
 
         [Test]
+        public void Awake_WhenRotateControlTypeIsWrong_DisablesAdapter()
+        {
+            LogAssert.Expect(LogType.Error, "TabletopObjectInputAdapter requires the Rotate action expected control type to be Axis.");
+
+            InputActionMap actionMap = CreateActionMap();
+            InputActionReference rotateReference = CreateActionReference(actionMap, "Rotate", InputActionType.PassThrough, "Vector2");
+
+            AdapterFixture fixture = CreateAdapterFixture(rotateReferenceOverride: rotateReference);
+
+            Assert.That(fixture.Adapter.enabled, Is.False);
+        }
+
+        [Test]
+        public void Awake_WhenFlipIsNotButton_DisablesAdapter()
+        {
+            LogAssert.Expect(LogType.Error, "TabletopObjectInputAdapter requires the Flip action to be a Button.");
+
+            InputActionMap actionMap = CreateActionMap();
+            InputActionReference flipReference = CreateActionReference(actionMap, "Flip", InputActionType.PassThrough, "Axis");
+
+            AdapterFixture fixture = CreateAdapterFixture(flipReferenceOverride: flipReference);
+
+            Assert.That(fixture.Adapter.enabled, Is.False);
+        }
+
+        [TestCase(0f)]
+        [TestCase(-1f)]
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        public void Awake_WhenRotationStepIsInvalid_DisablesAdapter(float rotationStepDegrees)
+        {
+            LogAssert.Expect(LogType.Error, "TabletopObjectInputAdapter requires finite rotationStepDegrees greater than zero.");
+
+            AdapterFixture fixture = CreateAdapterFixture(rotationStepDegrees: rotationStepDegrees);
+
+            Assert.That(fixture.Adapter.enabled, Is.False);
+            Assert.That(fixture.Adapter.HasValidActionConfiguration, Is.False);
+        }
+
+        [Test]
         public void Initialize_WithValidCoordinator_StoresCoordinatorAndMarksInitialized()
         {
             AdapterFixture fixture = CreateAdapterFixture();
 
-            fixture.Adapter.Initialize(fixture.Coordinator);
+            fixture.InitializeAdapter();
 
             Assert.That(fixture.Adapter.IsInitialized, Is.True);
             Assert.That(fixture.Adapter.Coordinator, Is.SameAs(fixture.Coordinator));
+            Assert.That(fixture.Adapter.RotationCoordinator, Is.SameAs(fixture.RotationCoordinator));
+            Assert.That(fixture.Adapter.FlipCoordinator, Is.SameAs(fixture.FlipCoordinator));
+            Assert.That(fixture.Adapter.RoutingPolicy, Is.SameAs(fixture.RoutingPolicy));
         }
 
-        [Test]
-        public void Initialize_WhenCoordinatorIsNull_Throws()
+        [TestCase(RequiredDependency.MoveCoordinator)]
+        [TestCase(RequiredDependency.RotationCoordinator)]
+        [TestCase(RequiredDependency.FlipCoordinator)]
+        [TestCase(RequiredDependency.RoutingPolicy)]
+        public void Initialize_WhenDependencyIsNull_Throws(RequiredDependency missingDependency)
         {
             AdapterFixture fixture = CreateAdapterFixture();
 
-            Assert.Throws<ArgumentNullException>(() => fixture.Adapter.Initialize(null));
+            Assert.Throws<ArgumentNullException>(() => fixture.InitializeWithMissingDependency(missingDependency));
         }
 
         [Test]
@@ -173,7 +246,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             LogAssert.Expect(LogType.Error, "TabletopObjectInputAdapter requires a Point InputActionReference.");
             AdapterFixture fixture = CreateAdapterFixture(missingReference: RequiredActionReference.Point);
 
-            Assert.Throws<InvalidOperationException>(() => fixture.Adapter.Initialize(fixture.Coordinator));
+            Assert.Throws<InvalidOperationException>(() => fixture.InitializeAdapter());
         }
 
         [Test]
@@ -181,7 +254,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         {
             AdapterFixture fixture = CreateInitializedAdapterFixture();
 
-            Assert.Throws<InvalidOperationException>(() => fixture.Adapter.Initialize(fixture.Coordinator));
+            Assert.Throws<InvalidOperationException>(() => fixture.InitializeAdapter());
         }
 
         [Test]
@@ -190,7 +263,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             AdapterFixture fixture = CreateAdapterFixture();
             fixture.Coordinator.TryBeginPress(fixture.ScreenPointFor(fixture.View));
 
-            Assert.Throws<ArgumentException>(() => fixture.Adapter.Initialize(fixture.Coordinator));
+            Assert.Throws<ArgumentException>(() => fixture.InitializeAdapter());
         }
 
         [Test]
@@ -201,9 +274,11 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.Adapter.LastReleaseResult.HasValue, Is.True);
 
             fixture.Adapter.Shutdown();
-            fixture.Adapter.Initialize(fixture.Coordinator);
+            fixture.InitializeAdapter();
 
             Assert.That(fixture.Adapter.LastReleaseResult.HasValue, Is.False);
+            Assert.That(fixture.Adapter.LastRotationResult.HasValue, Is.False);
+            Assert.That(fixture.Adapter.LastFlipResult.HasValue, Is.False);
         }
 
         [Test]
@@ -214,6 +289,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.PointReference.action.enabled, Is.True);
             Assert.That(fixture.SelectReference.action.enabled, Is.True);
             Assert.That(fixture.CancelReference.action.enabled, Is.True);
+            Assert.That(fixture.RotateReference.action.enabled, Is.True);
+            Assert.That(fixture.FlipReference.action.enabled, Is.True);
         }
 
         [Test]
@@ -224,6 +301,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.PointReference.action.enabled, Is.False);
             Assert.That(fixture.SelectReference.action.enabled, Is.False);
             Assert.That(fixture.CancelReference.action.enabled, Is.False);
+            Assert.That(fixture.RotateReference.action.enabled, Is.False);
+            Assert.That(fixture.FlipReference.action.enabled, Is.False);
         }
 
         [Test]
@@ -236,19 +315,23 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.PointReference.action.enabled, Is.False);
             Assert.That(fixture.SelectReference.action.enabled, Is.False);
             Assert.That(fixture.CancelReference.action.enabled, Is.False);
+            Assert.That(fixture.RotateReference.action.enabled, Is.False);
+            Assert.That(fixture.FlipReference.action.enabled, Is.False);
         }
 
         [Test]
         public void OnDisable_PreservesExternallyEnabledActions()
         {
             AdapterFixture fixture = CreateAdapterFixture(enableActionsBeforeAdapter: true);
-            fixture.Adapter.Initialize(fixture.Coordinator);
+            fixture.InitializeAdapter();
 
             fixture.Adapter.enabled = false;
 
             Assert.That(fixture.PointReference.action.enabled, Is.True);
             Assert.That(fixture.SelectReference.action.enabled, Is.True);
             Assert.That(fixture.CancelReference.action.enabled, Is.True);
+            Assert.That(fixture.RotateReference.action.enabled, Is.True);
+            Assert.That(fixture.FlipReference.action.enabled, Is.True);
         }
 
         [Test]
@@ -257,16 +340,20 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             InputActionMap actionMap = CreateActionMap();
             InputActionReference pointReference = CreateActionReference(actionMap, "Point", InputActionType.PassThrough, "Vector2");
             InputActionReference sharedButtonReference = CreateActionReference(actionMap, "SharedButton", InputActionType.Button, "Button");
+            InputActionReference rotateReference = CreateActionReference(actionMap, "Rotate", InputActionType.PassThrough, "Axis");
             AdapterFixture fixture = CreateAdapterFixture(
                 pointReferenceOverride: pointReference,
                 selectReferenceOverride: sharedButtonReference,
-                cancelReferenceOverride: sharedButtonReference);
-            fixture.Adapter.Initialize(fixture.Coordinator);
+                cancelReferenceOverride: sharedButtonReference,
+                rotateReferenceOverride: rotateReference,
+                flipReferenceOverride: sharedButtonReference);
+            fixture.InitializeAdapter();
 
             fixture.Adapter.enabled = false;
 
             Assert.That(pointReference.action.enabled, Is.False);
             Assert.That(sharedButtonReference.action.enabled, Is.False);
+            Assert.That(rotateReference.action.enabled, Is.False);
         }
 
         [Test]
@@ -282,6 +369,9 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
 
             Assert.That(fixture.Adapter.IsInitialized, Is.False);
             Assert.That(fixture.Adapter.Coordinator, Is.Null);
+            Assert.That(fixture.Adapter.RotationCoordinator, Is.Null);
+            Assert.That(fixture.Adapter.FlipCoordinator, Is.Null);
+            Assert.That(fixture.Adapter.RoutingPolicy, Is.Null);
         }
 
         [Test]
@@ -599,13 +689,16 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         }
 
         [Test]
-        public void Adapter_DoesNotReferenceRotateOrFlipActions()
+        public void Adapter_ReferencesOwnedRotateAndFlipActions()
         {
             AdapterFixture fixture = CreateInitializedAdapterFixture();
 
             Assert.That(fixture.Adapter.PointAction, Is.SameAs(fixture.PointReference));
             Assert.That(fixture.Adapter.SelectAction, Is.SameAs(fixture.SelectReference));
             Assert.That(fixture.Adapter.CancelAction, Is.SameAs(fixture.CancelReference));
+            Assert.That(fixture.Adapter.RotateAction, Is.SameAs(fixture.RotateReference));
+            Assert.That(fixture.Adapter.FlipAction, Is.SameAs(fixture.FlipReference));
+            Assert.That(fixture.Adapter.RotationStepDegrees, Is.EqualTo(15f));
         }
 
         [Test]
@@ -633,7 +726,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             bool enableActionsBeforeAdapter = false)
         {
             AdapterFixture fixture = CreateAdapterFixture(revision: revision, enableActionsBeforeAdapter: enableActionsBeforeAdapter);
-            fixture.Adapter.Initialize(fixture.Coordinator);
+            fixture.InitializeAdapter();
             return fixture;
         }
 
@@ -643,12 +736,17 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             InputActionReference pointReferenceOverride = null,
             InputActionReference selectReferenceOverride = null,
             InputActionReference cancelReferenceOverride = null,
+            InputActionReference rotateReferenceOverride = null,
+            InputActionReference flipReferenceOverride = null,
+            float rotationStepDegrees = 15f,
             bool enableActionsBeforeAdapter = false)
         {
             InputActionMap actionMap = CreateActionMap();
             InputActionReference createdPointReference = CreateActionReference(actionMap, "Point", InputActionType.PassThrough, "Vector2");
             InputActionReference createdSelectReference = CreateActionReference(actionMap, "Select", InputActionType.Button, "Button");
             InputActionReference createdCancelReference = CreateActionReference(actionMap, "Cancel", InputActionType.Button, "Button");
+            InputActionReference createdRotateReference = CreateActionReference(actionMap, "Rotate", InputActionType.PassThrough, "Axis");
+            InputActionReference createdFlipReference = CreateActionReference(actionMap, "Flip", InputActionType.Button, "Button");
 
             InputActionReference assignedPointReference = missingReference == RequiredActionReference.Point
                 ? null
@@ -659,12 +757,20 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             InputActionReference assignedCancelReference = missingReference == RequiredActionReference.Cancel
                 ? null
                 : cancelReferenceOverride ?? createdCancelReference;
+            InputActionReference assignedRotateReference = missingReference == RequiredActionReference.Rotate
+                ? null
+                : rotateReferenceOverride ?? createdRotateReference;
+            InputActionReference assignedFlipReference = missingReference == RequiredActionReference.Flip
+                ? null
+                : flipReferenceOverride ?? createdFlipReference;
 
             if (enableActionsBeforeAdapter)
             {
                 assignedPointReference.action.Enable();
                 assignedSelectReference.action.Enable();
                 assignedCancelReference.action.Enable();
+                assignedRotateReference.action.Enable();
+                assignedFlipReference.action.Enable();
             }
 
             CoordinatorFixture coordinatorFixture = CreateCoordinatorFixture(revision);
@@ -674,6 +780,9 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             adapter.pointAction = assignedPointReference;
             adapter.selectAction = assignedSelectReference;
             adapter.cancelAction = assignedCancelReference;
+            adapter.rotateAction = assignedRotateReference;
+            adapter.flipAction = assignedFlipReference;
+            adapter.rotationStepDegrees = rotationStepDegrees;
             adapterObject.SetActive(true);
 
             return new AdapterFixture(
@@ -681,6 +790,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 assignedPointReference,
                 assignedSelectReference,
                 assignedCancelReference,
+                assignedRotateReference,
+                assignedFlipReference,
                 coordinatorFixture);
         }
 
@@ -699,6 +810,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             TabletopInteractionStateMachine stateMachine = new TabletopInteractionStateMachine(5f);
             TabletopDragPreviewSession previewSession = new TabletopDragPreviewSession();
             MoveObjectUseCase moveUseCase = new MoveObjectUseCase();
+            RotateObjectUseCase rotateUseCase = new RotateObjectUseCase();
+            FlipCardUseCase flipUseCase = new FlipCardUseCase();
             PlayerId requestedByPlayerId = PlayerId.New();
             InteractionOwnerId ownerId = InteractionOwnerId.New();
             TabletopMoveInteractionCoordinator coordinator = new TabletopMoveInteractionCoordinator(
@@ -712,9 +825,29 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 stateMachine,
                 previewSession,
                 moveUseCase);
+            TabletopRotationCoordinator rotationCoordinator = new TabletopRotationCoordinator(
+                match,
+                requestedByPlayerId,
+                ownerId,
+                selectionState,
+                lockService,
+                rotateUseCase);
+            TabletopCardFlipCoordinator flipCoordinator = new TabletopCardFlipCoordinator(
+                match,
+                requestedByPlayerId,
+                ownerId,
+                selectionState,
+                lockService,
+                flipUseCase);
+            TabletopInteractionInputRoutingPolicy routingPolicy = new TabletopInteractionInputRoutingPolicy(
+                selectionState,
+                coordinator);
 
             return new CoordinatorFixture(
                 coordinator,
+                rotationCoordinator,
+                flipCoordinator,
+                routingPolicy,
                 camera,
                 match,
                 view,
@@ -895,7 +1028,17 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         {
             Point,
             Select,
-            Cancel
+            Cancel,
+            Rotate,
+            Flip
+        }
+
+        public enum RequiredDependency
+        {
+            MoveCoordinator,
+            RotationCoordinator,
+            FlipCoordinator,
+            RoutingPolicy
         }
 
         private sealed class AdapterFixture
@@ -907,12 +1050,16 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 InputActionReference pointReference,
                 InputActionReference selectReference,
                 InputActionReference cancelReference,
+                InputActionReference rotateReference,
+                InputActionReference flipReference,
                 CoordinatorFixture coordinatorFixture)
             {
                 Adapter = adapter;
                 PointReference = pointReference;
                 SelectReference = selectReference;
                 CancelReference = cancelReference;
+                RotateReference = rotateReference;
+                FlipReference = flipReference;
                 this.coordinatorFixture = coordinatorFixture;
             }
 
@@ -924,7 +1071,17 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
 
             public InputActionReference CancelReference { get; }
 
+            public InputActionReference RotateReference { get; }
+
+            public InputActionReference FlipReference { get; }
+
             public TabletopMoveInteractionCoordinator Coordinator => coordinatorFixture.Coordinator;
+
+            public TabletopRotationCoordinator RotationCoordinator => coordinatorFixture.RotationCoordinator;
+
+            public TabletopCardFlipCoordinator FlipCoordinator => coordinatorFixture.FlipCoordinator;
+
+            public TabletopInteractionInputRoutingPolicy RoutingPolicy => coordinatorFixture.RoutingPolicy;
 
             public MatchState Match => coordinatorFixture.Match;
 
@@ -941,6 +1098,24 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             public TabletopDragPreviewSession PreviewSession => coordinatorFixture.PreviewSession;
 
             public Vector2 PressScreenPoint => coordinatorFixture.PressScreenPoint;
+
+            public void InitializeAdapter()
+            {
+                Adapter.Initialize(
+                    Coordinator,
+                    RotationCoordinator,
+                    FlipCoordinator,
+                    RoutingPolicy);
+            }
+
+            public void InitializeWithMissingDependency(RequiredDependency missingDependency)
+            {
+                Adapter.Initialize(
+                    missingDependency == RequiredDependency.MoveCoordinator ? null : Coordinator,
+                    missingDependency == RequiredDependency.RotationCoordinator ? null : RotationCoordinator,
+                    missingDependency == RequiredDependency.FlipCoordinator ? null : FlipCoordinator,
+                    missingDependency == RequiredDependency.RoutingPolicy ? null : RoutingPolicy);
+            }
 
             public void BeginPressThroughAdapter()
             {
@@ -970,6 +1145,9 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         {
             public CoordinatorFixture(
                 TabletopMoveInteractionCoordinator coordinator,
+                TabletopRotationCoordinator rotationCoordinator,
+                TabletopCardFlipCoordinator flipCoordinator,
+                TabletopInteractionInputRoutingPolicy routingPolicy,
                 Camera camera,
                 MatchState match,
                 TabletopObjectView view,
@@ -982,6 +1160,9 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 InteractionOwnerId ownerId)
             {
                 Coordinator = coordinator;
+                RotationCoordinator = rotationCoordinator;
+                FlipCoordinator = flipCoordinator;
+                RoutingPolicy = routingPolicy;
                 Camera = camera;
                 Match = match;
                 View = view;
@@ -996,6 +1177,12 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             }
 
             public TabletopMoveInteractionCoordinator Coordinator { get; }
+
+            public TabletopRotationCoordinator RotationCoordinator { get; }
+
+            public TabletopCardFlipCoordinator FlipCoordinator { get; }
+
+            public TabletopInteractionInputRoutingPolicy RoutingPolicy { get; }
 
             public Camera Camera { get; }
 
