@@ -12,6 +12,9 @@ namespace ConsoleCards.Core.Results
         SourceDoesNotContainObject,
         DestinationFull,
         InvalidDestinationIndex,
-        SameContainer
+        SameContainer,
+        TransferListRequired,
+        DuplicateObjectId,
+        ObjectStateMissing
     }
 }
