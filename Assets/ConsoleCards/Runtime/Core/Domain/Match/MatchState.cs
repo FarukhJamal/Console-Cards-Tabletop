@@ -182,6 +182,76 @@ namespace ConsoleCards.Core.Domain.Match
             return false;
         }
 
+        public void AddEmptyPlacedContainer(
+            ContainerState container,
+            ContainerPlacementState placement)
+        {
+            if (container == null)
+            {
+                throw new ArgumentNullException(nameof(container));
+            }
+
+            if (placement == null)
+            {
+                throw new ArgumentNullException(nameof(placement));
+            }
+
+            if (container.Id.IsEmpty)
+            {
+                throw new ArgumentException("Container ID cannot be empty.", nameof(container));
+            }
+
+            if (placement.ContainerId != container.Id)
+            {
+                throw new ArgumentException("Container placement ID must match the Container ID.", nameof(placement));
+            }
+
+            if (containers.ContainsKey(container.Id))
+            {
+                throw new ArgumentException("Container ID already exists in the Match.", nameof(container));
+            }
+
+            if (containerPlacements.ContainsKey(placement.ContainerId))
+            {
+                throw new ArgumentException("Container placement ID already exists in the Match.", nameof(placement));
+            }
+
+            if (container.Count != 0)
+            {
+                throw new InvalidOperationException("Only empty Containers can be added through this operation.");
+            }
+
+            if (!CanHavePlacement(container.Kind))
+            {
+                throw new ArgumentException("Only Deck, Stack, and DiscardPile Containers can be added with placement.", nameof(container));
+            }
+
+            bool containerAdded = false;
+            bool placementAdded = false;
+
+            try
+            {
+                containers.Add(container.Id, container);
+                containerAdded = true;
+                containerPlacements.Add(placement.ContainerId, placement);
+                placementAdded = true;
+            }
+            catch
+            {
+                if (placementAdded)
+                {
+                    containerPlacements.Remove(placement.ContainerId);
+                }
+
+                if (containerAdded)
+                {
+                    containers.Remove(container.Id);
+                }
+
+                throw;
+            }
+        }
+
         public ContainerState RemoveEmptyContainer(ContainerId containerId)
         {
             if (containerId.IsEmpty)

@@ -285,7 +285,6 @@ namespace ConsoleCards.Tests.EditMode.Application
             Assert.That(referencedAssemblyNames, Does.Contain("ConsoleCards.Core"));
             Assert.That(referencedAssemblyNames.Any(name => name.StartsWith("UnityEngine", StringComparison.Ordinal)), Is.False);
             Assert.That(referencedAssemblyNames, Does.Not.Contain("ConsoleCards.Presentation"));
-            Assert.That(applicationAssembly.GetType("ConsoleCards.Application.UseCases.SplitStackUseCase"), Is.Null);
         }
 
         private static DrawCardsResult Execute(DrawFixture fixture, int count)
