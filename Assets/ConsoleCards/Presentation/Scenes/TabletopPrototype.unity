@@ -626,6 +626,7 @@ Transform:
   m_Children:
   - {fileID: 2100000011}
   - {fileID: 2100000021}
+  - {fileID: 2100000041}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2100000010
@@ -757,6 +758,71 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   cameraInputAdapter: {fileID: 1862448553}
   objectInputAdapter: {fileID: 2100000022}
+--- !u!1 &2100000040
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2100000041}
+  - component: {fileID: 2100000042}
+  m_Layer: 0
+  m_Name: PrototypeInteractionGuide
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2100000041
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2100000040}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2100000001}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2100000042
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2100000040}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 269a4af40f2a4d62ba2beafcbb0e2218, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  showGuide: 1
+  guideArea:
+    serializedVersion: 2
+    x: 16
+    y: 16
+    width: 360
+    height: 300
+  title: Console Cards Prototype
+  guideLines:
+  - 'Click Card, Pawn, or Token: select'
+  - 'Click empty table: clear selection'
+  - 'Drag selected object: preview move'
+  - 'Release drag: accept movement'
+  - 'Esc: cancel / rollback'
+  - 'Mouse wheel + selection: rotate 15 degrees'
+  - 'Mouse wheel + no selection: camera zoom'
+  - 'Scroll during drag: no zoom or rotation'
+  - 'F + selected Card: flip face'
+  - 'F + Pawn or Token: rejected, no visible change'
+  - 'WASD / Arrow keys: camera pan'
+  - 'Middle mouse drag: camera pan'
 --- !u!1 &2100000030
 GameObject:
   m_ObjectHideFlags: 0

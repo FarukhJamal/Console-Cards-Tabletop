@@ -5,6 +5,7 @@ using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Prototype;
 using ConsoleCards.Presentation.TableSurface;
+using ConsoleCards.Presentation.UI;
 using ConsoleCards.Presentation.Views;
 using NUnit.Framework;
 using UnityEditor;
@@ -50,7 +51,11 @@ namespace ConsoleCards.Tests.EditMode.Presentation
                     Is.EquivalentTo(new[] { "CameraRig", "Environment", "Interaction", "TabletopObjects" }));
                 AssertDirectChildren(FindRoot(scene, "CameraRig"), "Main Camera");
                 AssertDirectChildren(FindRoot(scene, "Environment"), "Directional Light", "TableSurfaceProxy");
-                AssertDirectChildren(FindRoot(scene, "Interaction"), "PrototypeComposition", "TabletopInput");
+                AssertDirectChildren(
+                    FindRoot(scene, "Interaction"),
+                    "PrototypeComposition",
+                    "TabletopInput",
+                    "PrototypeInteractionGuide");
                 AssertDirectChildren(FindRoot(scene, "TabletopObjects"), "PrototypeCard", "PrototypePawn", "PrototypeToken");
 
                 Assert.That(AllObjects(scene).Count(go => go.name == "PrototypeCard"), Is.EqualTo(1));
@@ -73,6 +78,7 @@ namespace ConsoleCards.Tests.EditMode.Presentation
                 Assert.That(GetComponents<TabletopObjectInputAdapter>(scene), Has.Length.EqualTo(1));
                 Assert.That(GetComponents<TabletopInputFrameCoordinator>(scene), Has.Length.EqualTo(1));
                 Assert.That(GetComponents<TabletopPrototypeComposition>(scene), Has.Length.EqualTo(1));
+                Assert.That(GetComponents<PrototypeInteractionGuide>(scene), Has.Length.EqualTo(1));
                 Assert.That(GetComponents<CardView>(scene), Has.Length.EqualTo(1));
                 Assert.That(GetComponents<PawnView>(scene), Has.Length.EqualTo(1));
                 Assert.That(GetComponents<TokenView>(scene), Has.Length.EqualTo(1));
@@ -217,6 +223,28 @@ namespace ConsoleCards.Tests.EditMode.Presentation
         }
 
         [Test]
+        public void PrototypeInteractionGuide_IsSceneLocalAndPresentationOnly()
+        {
+            WithScene(scene =>
+            {
+                GameObject guideObject = FindPath(scene, "Interaction/PrototypeInteractionGuide");
+                PrototypeInteractionGuide guide = guideObject.GetComponent<PrototypeInteractionGuide>();
+                SerializedObject serializedGuide = new SerializedObject(guide);
+
+                Assert.That(guide, Is.Not.Null);
+                Assert.That(guide.enabled, Is.True);
+                AssertIdentity(guideObject.transform);
+                Assert.That(serializedGuide.FindProperty("showGuide").boolValue, Is.True);
+                Assert.That(serializedGuide.FindProperty("title").stringValue, Is.EqualTo("Console Cards Prototype"));
+                Assert.That(serializedGuide.FindProperty("guideLines").arraySize, Is.EqualTo(12));
+                Assert.That(GuideLines(serializedGuide), Has.Member("F + selected Card: flip face"));
+                Assert.That(GuideLines(serializedGuide), Has.Member("Mouse wheel + selection: rotate 15 degrees"));
+                Assert.That(GuideLines(serializedGuide), Has.Member("Mouse wheel + no selection: camera zoom"));
+                Assert.That(guideObject.GetComponents<Component>(), Has.Length.EqualTo(2));
+            });
+        }
+
+        [Test]
         public void Boundaries_NoRootInputActionsOrOutOfScopeContentIsSerialized()
         {
             WithScene(scene =>
@@ -325,6 +353,18 @@ namespace ConsoleCards.Tests.EditMode.Presentation
                 .SelectMany(root => root.GetComponentsInChildren<Transform>(true))
                 .Select(transform => transform.gameObject)
                 .ToList();
+        }
+
+        private static string[] GuideLines(SerializedObject serializedGuide)
+        {
+            SerializedProperty guideLines = serializedGuide.FindProperty("guideLines");
+            string[] lines = new string[guideLines.arraySize];
+            for (int i = 0; i < guideLines.arraySize; i++)
+            {
+                lines[i] = guideLines.GetArrayElementAtIndex(i).stringValue;
+            }
+
+            return lines;
         }
 
         private static T[] GetComponents<T>(Scene scene)
