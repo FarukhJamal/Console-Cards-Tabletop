@@ -48,6 +48,12 @@ namespace ConsoleCards.Core.Domain.Containers
 
         public int Count => objectIds.Count;
 
+        /// <summary>
+        /// Gets the index of the top item in bottom-to-top container order.
+        /// Index 0 is the bottom item; index Count - 1 is the top item.
+        /// </summary>
+        public int TopIndex => Count - 1;
+
         public bool IsFull => Capacity > 0 && Count >= Capacity;
 
         public IReadOnlyList<TabletopObjectId> ObjectIds => readOnlyObjectIds;
@@ -59,7 +65,59 @@ namespace ConsoleCards.Core.Domain.Containers
 
         public int IndexOf(TabletopObjectId objectId)
         {
+            if (objectId.IsEmpty)
+            {
+                throw new ArgumentException("Tabletop object ID cannot be empty.", nameof(objectId));
+            }
+
             return objectIds.IndexOf(objectId);
+        }
+
+        /// <summary>
+        /// Attempts to read the top item without changing bottom-to-top order.
+        /// </summary>
+        public bool TryPeekTop(out TabletopObjectId objectId)
+        {
+            if (objectIds.Count == 0)
+            {
+                objectId = TabletopObjectId.Empty;
+                return false;
+            }
+
+            objectId = objectIds[TopIndex];
+            return true;
+        }
+
+        /// <summary>
+        /// Gets the object ID at the specified bottom-to-top order index.
+        /// </summary>
+        public TabletopObjectId GetObjectAt(int index)
+        {
+            if (index < 0 || index >= objectIds.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index), "Index must reference an existing container member.");
+            }
+
+            return objectIds[index];
+        }
+
+        /// <summary>
+        /// Moves one member to its final destination index within this container.
+        /// Moving index 0 to index 2 in [A, B, C] produces [B, C, A].
+        /// </summary>
+        public void Reorder(int fromIndex, int toIndex)
+        {
+            ValidateReorderIndex(fromIndex, nameof(fromIndex));
+            ValidateReorderIndex(toIndex, nameof(toIndex));
+
+            if (fromIndex == toIndex)
+            {
+                return;
+            }
+
+            TabletopObjectId objectId = objectIds[fromIndex];
+            objectIds.RemoveAt(fromIndex);
+            objectIds.Insert(toIndex, objectId);
         }
 
         internal void InsertObject(TabletopObjectId objectId, int index)
@@ -87,6 +145,14 @@ namespace ConsoleCards.Core.Domain.Containers
             if (!objectIds.Remove(objectId))
             {
                 throw new ArgumentException("Container does not contain the tabletop object ID.", nameof(objectId));
+            }
+        }
+
+        private void ValidateReorderIndex(int index, string parameterName)
+        {
+            if (index < 0 || index >= objectIds.Count)
+            {
+                throw new ArgumentOutOfRangeException(parameterName, "Index must reference an existing container member.");
             }
         }
     }

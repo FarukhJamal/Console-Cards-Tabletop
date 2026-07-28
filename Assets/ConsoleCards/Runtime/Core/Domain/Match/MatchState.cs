@@ -13,11 +13,13 @@ namespace ConsoleCards.Core.Domain.Match
         private readonly Dictionary<TabletopObjectId, PawnState> pawns;
         private readonly Dictionary<TabletopObjectId, TokenState> tokens;
         private readonly Dictionary<ContainerId, ContainerState> containers;
+        private readonly Dictionary<ContainerId, ContainerPlacementState> containerPlacements;
         private readonly Dictionary<SeatId, SeatState> seats;
         private readonly ReadOnlyDictionary<TabletopObjectId, CardInstanceState> readOnlyCards;
         private readonly ReadOnlyDictionary<TabletopObjectId, PawnState> readOnlyPawns;
         private readonly ReadOnlyDictionary<TabletopObjectId, TokenState> readOnlyTokens;
         private readonly ReadOnlyDictionary<ContainerId, ContainerState> readOnlyContainers;
+        private readonly ReadOnlyDictionary<ContainerId, ContainerPlacementState> readOnlyContainerPlacements;
         private readonly ReadOnlyDictionary<SeatId, SeatState> readOnlySeats;
 
         public MatchState(
@@ -29,6 +31,52 @@ namespace ConsoleCards.Core.Domain.Match
             IEnumerable<TokenState> tokens,
             IEnumerable<ContainerState> containers,
             IEnumerable<SeatState> seats)
+            : this(
+                id,
+                gameTemplateId,
+                revision,
+                cards,
+                pawns,
+                tokens,
+                containers,
+                seats,
+                Array.Empty<ContainerPlacementState>())
+        {
+        }
+
+        public MatchState(
+            MatchId id,
+            GameTemplateId gameTemplateId,
+            long revision,
+            IEnumerable<CardInstanceState> cards,
+            IEnumerable<PawnState> pawns,
+            IEnumerable<TokenState> tokens,
+            IEnumerable<ContainerState> containers,
+            IEnumerable<SeatState> seats,
+            IReadOnlyDictionary<ContainerId, ContainerPlacementState> containerPlacements)
+            : this(
+                id,
+                gameTemplateId,
+                revision,
+                cards,
+                pawns,
+                tokens,
+                containers,
+                seats,
+                CopyContainerPlacements(containerPlacements).Values)
+        {
+        }
+
+        public MatchState(
+            MatchId id,
+            GameTemplateId gameTemplateId,
+            long revision,
+            IEnumerable<CardInstanceState> cards,
+            IEnumerable<PawnState> pawns,
+            IEnumerable<TokenState> tokens,
+            IEnumerable<ContainerState> containers,
+            IEnumerable<SeatState> seats,
+            IEnumerable<ContainerPlacementState> containerPlacements)
         {
             if (id.IsEmpty)
             {
@@ -49,15 +97,18 @@ namespace ConsoleCards.Core.Domain.Match
             this.pawns = CopyPawns(pawns, seenObjectIds);
             this.tokens = CopyTokens(tokens, seenObjectIds);
             this.containers = CopyContainers(containers);
+            this.containerPlacements = CopyContainerPlacements(containerPlacements);
             this.seats = CopySeats(seats);
 
             ValidateObjectContainerConsistency();
+            ValidateContainerPlacementConsistency();
             ValidateSeatConsistency();
 
             readOnlyCards = new ReadOnlyDictionary<TabletopObjectId, CardInstanceState>(this.cards);
             readOnlyPawns = new ReadOnlyDictionary<TabletopObjectId, PawnState>(this.pawns);
             readOnlyTokens = new ReadOnlyDictionary<TabletopObjectId, TokenState>(this.tokens);
             readOnlyContainers = new ReadOnlyDictionary<ContainerId, ContainerState>(this.containers);
+            readOnlyContainerPlacements = new ReadOnlyDictionary<ContainerId, ContainerPlacementState>(this.containerPlacements);
             readOnlySeats = new ReadOnlyDictionary<SeatId, SeatState>(this.seats);
         }
 
@@ -76,6 +127,8 @@ namespace ConsoleCards.Core.Domain.Match
         public IReadOnlyDictionary<TabletopObjectId, TokenState> Tokens => readOnlyTokens;
 
         public IReadOnlyDictionary<ContainerId, ContainerState> Containers => readOnlyContainers;
+
+        public IReadOnlyDictionary<ContainerId, ContainerPlacementState> ContainerPlacements => readOnlyContainerPlacements;
 
         public IReadOnlyDictionary<SeatId, SeatState> Seats => readOnlySeats;
 
@@ -114,6 +167,19 @@ namespace ConsoleCards.Core.Domain.Match
             }
 
             throw new KeyNotFoundException("Container was not found.");
+        }
+
+        public bool TryGetContainerPlacement(
+            ContainerId containerId,
+            out ContainerPlacementState placement)
+        {
+            if (containerPlacements.TryGetValue(containerId, out placement))
+            {
+                return true;
+            }
+
+            placement = null;
+            return false;
         }
 
         public SeatState GetSeat(SeatId seatId)
@@ -234,6 +300,69 @@ namespace ConsoleCards.Core.Domain.Match
             return copiedContainers;
         }
 
+        private static Dictionary<ContainerId, ContainerPlacementState> CopyContainerPlacements(
+            IEnumerable<ContainerPlacementState> containerPlacements)
+        {
+            if (containerPlacements == null)
+            {
+                throw new ArgumentNullException(nameof(containerPlacements));
+            }
+
+            Dictionary<ContainerId, ContainerPlacementState> copiedPlacements =
+                new Dictionary<ContainerId, ContainerPlacementState>();
+
+            foreach (ContainerPlacementState placement in containerPlacements)
+            {
+                if (placement == null)
+                {
+                    throw new ArgumentException("Container placements cannot contain null items.", nameof(containerPlacements));
+                }
+
+                if (copiedPlacements.ContainsKey(placement.ContainerId))
+                {
+                    throw new ArgumentException("Container placements cannot contain duplicate Container IDs.", nameof(containerPlacements));
+                }
+
+                copiedPlacements.Add(placement.ContainerId, placement);
+            }
+
+            return copiedPlacements;
+        }
+
+        private static Dictionary<ContainerId, ContainerPlacementState> CopyContainerPlacements(
+            IReadOnlyDictionary<ContainerId, ContainerPlacementState> containerPlacements)
+        {
+            if (containerPlacements == null)
+            {
+                throw new ArgumentNullException(nameof(containerPlacements));
+            }
+
+            Dictionary<ContainerId, ContainerPlacementState> copiedPlacements =
+                new Dictionary<ContainerId, ContainerPlacementState>();
+
+            foreach (KeyValuePair<ContainerId, ContainerPlacementState> pair in containerPlacements)
+            {
+                if (pair.Value == null)
+                {
+                    throw new ArgumentException("Container placements cannot contain null items.", nameof(containerPlacements));
+                }
+
+                if (pair.Key != pair.Value.ContainerId)
+                {
+                    throw new ArgumentException("Container placement dictionary key must match the placement Container ID.", nameof(containerPlacements));
+                }
+
+                if (copiedPlacements.ContainsKey(pair.Value.ContainerId))
+                {
+                    throw new ArgumentException("Container placements cannot contain duplicate Container IDs.", nameof(containerPlacements));
+                }
+
+                copiedPlacements.Add(pair.Value.ContainerId, pair.Value);
+            }
+
+            return copiedPlacements;
+        }
+
         private static Dictionary<SeatId, SeatState> CopySeats(IEnumerable<SeatState> seats)
         {
             if (seats == null)
@@ -309,6 +438,29 @@ namespace ConsoleCards.Core.Domain.Match
                     }
                 }
             }
+        }
+
+        private void ValidateContainerPlacementConsistency()
+        {
+            foreach (ContainerPlacementState placement in containerPlacements.Values)
+            {
+                if (!containers.TryGetValue(placement.ContainerId, out ContainerState container))
+                {
+                    throw new ArgumentException("Container placement references a missing Container.", nameof(containerPlacements));
+                }
+
+                if (!CanHavePlacement(container.Kind))
+                {
+                    throw new ArgumentException("Container placement is only valid for Deck, Stack, and DiscardPile Containers.", nameof(containerPlacements));
+                }
+            }
+        }
+
+        private static bool CanHavePlacement(ContainerKind kind)
+        {
+            return kind == ContainerKind.Deck
+                || kind == ContainerKind.Stack
+                || kind == ContainerKind.DiscardPile;
         }
 
         private void ValidateSeatConsistency()
