@@ -182,6 +182,38 @@ namespace ConsoleCards.Core.Domain.Match
             return false;
         }
 
+        public ContainerState RemoveEmptyContainer(ContainerId containerId)
+        {
+            if (containerId.IsEmpty)
+            {
+                throw new ArgumentException("Container ID cannot be empty.", nameof(containerId));
+            }
+
+            if (!containers.TryGetValue(containerId, out ContainerState container))
+            {
+                throw new KeyNotFoundException("Container was not found.");
+            }
+
+            if (container.Count != 0)
+            {
+                throw new InvalidOperationException("Only empty Containers can be removed.");
+            }
+
+            if (IsReferencedBySeatHand(containerId))
+            {
+                throw new InvalidOperationException("Seat Hand Containers cannot be removed.");
+            }
+
+            if (IsReferencedByConsoleSlot(containerId))
+            {
+                throw new InvalidOperationException("Console Slot Containers cannot be removed.");
+            }
+
+            containers.Remove(containerId);
+            containerPlacements.Remove(containerId);
+            return container;
+        }
+
         public SeatState GetSeat(SeatId seatId)
         {
             if (seats.TryGetValue(seatId, out SeatState seat))
@@ -461,6 +493,32 @@ namespace ConsoleCards.Core.Domain.Match
             return kind == ContainerKind.Deck
                 || kind == ContainerKind.Stack
                 || kind == ContainerKind.DiscardPile;
+        }
+
+        private bool IsReferencedBySeatHand(ContainerId containerId)
+        {
+            foreach (SeatState seat in seats.Values)
+            {
+                if (seat.HandContainerId == containerId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool IsReferencedByConsoleSlot(ContainerId containerId)
+        {
+            foreach (SeatState seat in seats.Values)
+            {
+                if (seat.Console.ContainsSlot(containerId))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void ValidateSeatConsistency()

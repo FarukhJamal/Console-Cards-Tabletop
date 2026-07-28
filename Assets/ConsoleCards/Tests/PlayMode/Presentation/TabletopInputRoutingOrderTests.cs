@@ -247,9 +247,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         public IEnumerator Coordinator_OnDisable_DetachesAdaptersAndRestoresStandalonePolling()
         {
             OrderFixture fixture = CreateOrderFixture(FixtureVariant.CameraAdapterCreatedFirst);
-            Mouse mouse = CreateMouseDevice();
-            float initialSize = fixture.CameraController.State.OrthographicSize;
-            float expectedSize = initialSize - ScrollDelta * fixture.CameraAdapter.ZoomSensitivity;
+            Keyboard keyboard = CreateKeyboardDevice();
 
             fixture.CoordinatorComponent.enabled = false;
             Assert.That(fixture.CoordinatorComponent.enabled, Is.False);
@@ -257,15 +255,27 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.CameraAdapter.IsExternallyDriven, Is.False);
             Assert.That(fixture.ObjectAdapter.IsExternallyDriven, Is.False);
             Assert.That(fixture.CameraAdapter.isActiveAndEnabled, Is.True);
-            Assert.That(fixture.CameraAdapter.zoomAction.action.enabled, Is.True);
+            Assert.That(fixture.CameraAdapter.keyboardPanAction.action.enabled, Is.True);
 
             yield return null;
 
-            InputSystem.QueueStateEvent(mouse, new MouseState { scroll = new Vector2(0f, ScrollDelta) });
+            TableCoordinate initialFocus = fixture.CameraController.State.FocusCoordinate;
+            Vector3 initialRigPosition = fixture.CameraController.CameraRig.position;
+
+            InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.RightArrow));
 
             yield return null;
 
-            Assert.That(fixture.CameraController.State.OrthographicSize, Is.EqualTo(expectedSize).Within(FloatTolerance));
+            Assert.That(fixture.CameraAdapter.keyboardPanAction.action.ReadValue<Vector2>().x, Is.GreaterThan(0f));
+
+            yield return null;
+
+            Assert.That(fixture.CameraController.State.FocusCoordinate.X, Is.GreaterThan(initialFocus.X));
+            Assert.That(fixture.CameraController.CameraRig.position.x, Is.GreaterThan(initialRigPosition.x));
+
+            InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+
+            yield return null;
         }
 
         [Test]
@@ -736,6 +746,11 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                         .With("Down", "<Keyboard>/s")
                         .With("Left", "<Keyboard>/a")
                         .With("Right", "<Keyboard>/d");
+                    action.AddCompositeBinding("2DVector")
+                        .With("Up", "<Keyboard>/upArrow")
+                        .With("Down", "<Keyboard>/downArrow")
+                        .With("Left", "<Keyboard>/leftArrow")
+                        .With("Right", "<Keyboard>/rightArrow");
                     break;
                 case "DragPan":
                     action.AddBinding("<Mouse>/middleButton");
@@ -769,6 +784,13 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Mouse mouse = InputSystem.AddDevice<Mouse>();
             createdInputDevices.Add(mouse);
             return mouse;
+        }
+
+        private Keyboard CreateKeyboardDevice()
+        {
+            Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+            createdInputDevices.Add(keyboard);
+            return keyboard;
         }
 
         private static void InvokeUpdate(MonoBehaviour behaviour)
