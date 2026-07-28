@@ -229,7 +229,8 @@ namespace ConsoleCards.Tests.EditMode.Application
             Assert.That(referencedAssemblyNames.Any(name => name.StartsWith("UnityEngine", StringComparison.Ordinal)), Is.False);
             Assert.That(referencedAssemblyNames, Does.Not.Contain("ConsoleCards.Presentation"));
             Assert.That(applicationAssembly.GetType("ConsoleCards.Application.Commands.TransferCardsCommand"), Is.Null);
-            Assert.That(applicationAssembly.GetType("ConsoleCards.Application.UseCases.ReorderContainerUseCase"), Is.Null);
+            Assert.That(applicationAssembly.GetType("ConsoleCards.Application.UseCases.MergeStacksUseCase"), Is.Null);
+            Assert.That(applicationAssembly.GetType("ConsoleCards.Application.UseCases.SplitStackUseCase"), Is.Null);
         }
 
         private static TransferCardResult Execute(

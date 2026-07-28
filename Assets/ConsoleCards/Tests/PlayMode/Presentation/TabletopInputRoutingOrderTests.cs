@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using ConsoleCards.Application.UseCases;
@@ -242,23 +243,29 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.Throws<InvalidOperationException>(() => fixture.ObjectAdapter.DetachExternalFrameDriver(secondDriver));
         }
 
-        [Test]
-        public void Coordinator_OnDisable_DetachesAdaptersAndRestoresStandalonePolling()
+        [UnityTest]
+        public IEnumerator Coordinator_OnDisable_DetachesAdaptersAndRestoresStandalonePolling()
         {
             OrderFixture fixture = CreateOrderFixture(FixtureVariant.CameraAdapterCreatedFirst);
             Mouse mouse = CreateMouseDevice();
-            InputSystem.QueueStateEvent(mouse, new MouseState { scroll = new Vector2(0f, ScrollDelta) });
-            InputSystem.Update();
-
-            InvokeUpdate(fixture.CameraAdapter);
-            Assert.That(fixture.CameraController.State.OrthographicSize, Is.EqualTo(5f).Within(FloatTolerance));
+            float initialSize = fixture.CameraController.State.OrthographicSize;
+            float expectedSize = initialSize - ScrollDelta * fixture.CameraAdapter.ZoomSensitivity;
 
             fixture.CoordinatorComponent.enabled = false;
+            Assert.That(fixture.CoordinatorComponent.enabled, Is.False);
+            Assert.That(fixture.CoordinatorComponent.gameObject.activeInHierarchy, Is.True);
             Assert.That(fixture.CameraAdapter.IsExternallyDriven, Is.False);
             Assert.That(fixture.ObjectAdapter.IsExternallyDriven, Is.False);
+            Assert.That(fixture.CameraAdapter.isActiveAndEnabled, Is.True);
+            Assert.That(fixture.CameraAdapter.zoomAction.action.enabled, Is.True);
 
-            InvokeUpdate(fixture.CameraAdapter);
-            Assert.That(fixture.CameraController.State.OrthographicSize, Is.EqualTo(4f).Within(FloatTolerance));
+            yield return null;
+
+            InputSystem.QueueStateEvent(mouse, new MouseState { scroll = new Vector2(0f, ScrollDelta) });
+
+            yield return null;
+
+            Assert.That(fixture.CameraController.State.OrthographicSize, Is.EqualTo(expectedSize).Within(FloatTolerance));
         }
 
         [Test]
