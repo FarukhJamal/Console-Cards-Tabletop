@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Core.Results;
 
@@ -45,8 +46,23 @@ namespace ConsoleCards.Core.Domain.Containers
                 return ContainerTransferResult.Failure(ContainerTransferError.InvalidDestinationIndex);
             }
 
-            destination.InsertObject(objectState.Id, actualDestinationIndex);
-            objectState.SetContainer(destination.Id);
+            ContainerId originalContainerId = objectState.ContainerId;
+
+            try
+            {
+                destination.InsertObject(objectState.Id, actualDestinationIndex);
+                objectState.SetContainer(destination.Id);
+            }
+            catch
+            {
+                if (destination.Contains(objectState.Id))
+                {
+                    destination.RemoveObject(objectState.Id);
+                }
+
+                objectState.SetContainer(originalContainerId);
+                throw;
+            }
 
             return ContainerTransferResult.Success(actualDestinationIndex);
         }
@@ -107,9 +123,23 @@ namespace ConsoleCards.Core.Domain.Containers
                 return ContainerTransferResult.Failure(ContainerTransferError.InvalidDestinationIndex);
             }
 
-            source.RemoveObject(objectState.Id);
-            destination.InsertObject(objectState.Id, actualDestinationIndex);
-            objectState.SetContainer(destination.Id);
+            IReadOnlyList<TabletopObjectId> originalSourceOrder = CopyOrder(source);
+            IReadOnlyList<TabletopObjectId> originalDestinationOrder = CopyOrder(destination);
+            ContainerId originalContainerId = objectState.ContainerId;
+
+            try
+            {
+                source.RemoveObject(objectState.Id);
+                destination.InsertObject(objectState.Id, actualDestinationIndex);
+                objectState.SetContainer(destination.Id);
+            }
+            catch
+            {
+                RestoreContainerOrder(source, originalSourceOrder);
+                RestoreContainerOrder(destination, originalDestinationOrder);
+                objectState.SetContainer(originalContainerId);
+                throw;
+            }
 
             return ContainerTransferResult.Success(actualDestinationIndex);
         }
@@ -143,10 +173,54 @@ namespace ConsoleCards.Core.Domain.Containers
                 return ContainerTransferResult.Failure(ContainerTransferError.SourceDoesNotContainObject);
             }
 
-            source.RemoveObject(objectState.Id);
-            objectState.SetContainer(ContainerId.Empty);
+            IReadOnlyList<TabletopObjectId> originalSourceOrder = CopyOrder(source);
+            ContainerId originalContainerId = objectState.ContainerId;
+
+            try
+            {
+                source.RemoveObject(objectState.Id);
+                objectState.SetContainer(ContainerId.Empty);
+            }
+            catch
+            {
+                RestoreContainerOrder(source, originalSourceOrder);
+                objectState.SetContainer(originalContainerId);
+                throw;
+            }
 
             return ContainerTransferResult.Success(-1);
+        }
+
+        private static IReadOnlyList<TabletopObjectId> CopyOrder(ContainerState container)
+        {
+            return new List<TabletopObjectId>(container.ObjectIds);
+        }
+
+        private static void RestoreContainerOrder(
+            ContainerState container,
+            IReadOnlyList<TabletopObjectId> originalOrder)
+        {
+            HashSet<TabletopObjectId> originalMembers = new HashSet<TabletopObjectId>(originalOrder);
+            List<TabletopObjectId> currentOrder = new List<TabletopObjectId>(container.ObjectIds);
+
+            foreach (TabletopObjectId objectId in currentOrder)
+            {
+                if (!originalMembers.Contains(objectId))
+                {
+                    container.RemoveObject(objectId);
+                }
+            }
+
+            for (int index = 0; index < originalOrder.Count; index++)
+            {
+                TabletopObjectId objectId = originalOrder[index];
+                if (!container.Contains(objectId))
+                {
+                    container.InsertObject(objectId, index);
+                }
+            }
+
+            container.ReplaceOrder(originalOrder);
         }
 
         private static bool TryResolveDestinationIndex(
