@@ -247,7 +247,6 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         public IEnumerator Coordinator_OnDisable_DetachesAdaptersAndRestoresStandalonePolling()
         {
             OrderFixture fixture = CreateOrderFixture(FixtureVariant.CameraAdapterCreatedFirst);
-            Keyboard keyboard = CreateKeyboardDevice();
 
             fixture.CoordinatorComponent.enabled = false;
             Assert.That(fixture.CoordinatorComponent.enabled, Is.False);
@@ -255,6 +254,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.CameraAdapter.IsExternallyDriven, Is.False);
             Assert.That(fixture.ObjectAdapter.IsExternallyDriven, Is.False);
             Assert.That(fixture.CameraAdapter.isActiveAndEnabled, Is.True);
+            Assert.That(fixture.CameraAdapter.IsInitialized, Is.True);
             Assert.That(fixture.CameraAdapter.keyboardPanAction.action.enabled, Is.True);
 
             yield return null;
@@ -262,18 +262,20 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             TableCoordinate initialFocus = fixture.CameraController.State.FocusCoordinate;
             Vector3 initialRigPosition = fixture.CameraController.CameraRig.position;
 
-            InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.RightArrow));
-
-            yield return null;
-
-            Assert.That(fixture.CameraAdapter.keyboardPanAction.action.ReadValue<Vector2>().x, Is.GreaterThan(0f));
+            InputSystem.QueueStateEvent(fixture.Keyboard, new KeyboardState(Key.RightArrow));
+            InputSystem.Update();
+            Assert.That(
+                fixture.CameraAdapter.keyboardPanAction.action.ReadValue<Vector2>().x,
+                Is.GreaterThan(0f),
+                "KeyboardPan did not read RightArrow input from the fixture keyboard. Verify the arrow-key composite is bound before enabling actions and that the queued device matches the fixture device.");
 
             yield return null;
 
             Assert.That(fixture.CameraController.State.FocusCoordinate.X, Is.GreaterThan(initialFocus.X));
             Assert.That(fixture.CameraController.CameraRig.position.x, Is.GreaterThan(initialRigPosition.x));
 
-            InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+            InputSystem.QueueStateEvent(fixture.Keyboard, new KeyboardState());
+            InputSystem.Update();
 
             yield return null;
         }
@@ -539,6 +541,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 selectionState,
                 moveCoordinator);
 
+            Keyboard keyboard = CreateKeyboardDevice();
             TabletopCameraController cameraController = CreateInitializedCameraController(targetCamera);
             TabletopCameraInputAdapter cameraAdapter;
             TabletopObjectInputAdapter objectAdapter;
@@ -580,7 +583,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 view,
                 state,
                 cardState,
-                targetCamera);
+                targetCamera,
+                keyboard);
         }
 
         private TabletopInputFrameCoordinator CreateCoordinator(
@@ -981,7 +985,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 CardView view,
                 TabletopObjectState state,
                 CardInstanceState cardState,
-                UnityEngine.Camera pointerCamera)
+                UnityEngine.Camera pointerCamera,
+                Keyboard keyboard)
             {
                 Variant = variant;
                 CameraController = cameraController;
@@ -997,6 +1002,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 State = state;
                 CardState = cardState;
                 PointerCamera = pointerCamera;
+                Keyboard = keyboard;
                 ObjectScreenPoint = ScreenPointForWorld(0f, 0f);
                 EmptyScreenPoint = ScreenPointForWorld(7f, 7f);
                 DragScreenPoint = ScreenPointForWorld(2f, 0f);
@@ -1029,6 +1035,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             public CardInstanceState CardState { get; }
 
             public UnityEngine.Camera PointerCamera { get; }
+
+            public Keyboard Keyboard { get; }
 
             public Vector2 ObjectScreenPoint { get; }
 
