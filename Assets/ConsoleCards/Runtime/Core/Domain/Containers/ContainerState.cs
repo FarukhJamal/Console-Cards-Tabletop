@@ -120,6 +120,54 @@ namespace ConsoleCards.Core.Domain.Containers
             objectIds.Insert(toIndex, objectId);
         }
 
+        /// <summary>
+        /// Replaces bottom-to-top order without changing membership.
+        /// The supplied IDs must be an exact permutation of the current members.
+        /// </summary>
+        public void ReplaceOrder(IReadOnlyList<TabletopObjectId> orderedObjectIds)
+        {
+            if (orderedObjectIds == null)
+            {
+                throw new ArgumentNullException(nameof(orderedObjectIds));
+            }
+
+            if (orderedObjectIds.Count != objectIds.Count)
+            {
+                throw new ArgumentException("Replacement order must contain the same number of object IDs.", nameof(orderedObjectIds));
+            }
+
+            HashSet<TabletopObjectId> seenObjectIds = new HashSet<TabletopObjectId>();
+
+            foreach (TabletopObjectId objectId in orderedObjectIds)
+            {
+                if (objectId.IsEmpty)
+                {
+                    throw new ArgumentException("Replacement order cannot contain an empty tabletop object ID.", nameof(orderedObjectIds));
+                }
+
+                if (!seenObjectIds.Add(objectId))
+                {
+                    throw new ArgumentException("Replacement order cannot contain duplicate tabletop object IDs.", nameof(orderedObjectIds));
+                }
+
+                if (!objectIds.Contains(objectId))
+                {
+                    throw new ArgumentException("Replacement order cannot contain unknown tabletop object IDs.", nameof(orderedObjectIds));
+                }
+            }
+
+            foreach (TabletopObjectId objectId in objectIds)
+            {
+                if (!seenObjectIds.Contains(objectId))
+                {
+                    throw new ArgumentException("Replacement order must include every current tabletop object ID.", nameof(orderedObjectIds));
+                }
+            }
+
+            objectIds.Clear();
+            objectIds.AddRange(orderedObjectIds);
+        }
+
         internal void InsertObject(TabletopObjectId objectId, int index)
         {
             if (objectId.IsEmpty)
