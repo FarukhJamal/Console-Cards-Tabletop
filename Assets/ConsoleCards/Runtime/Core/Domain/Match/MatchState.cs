@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using ConsoleCards.Core.Domain.Consoles;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Seats;
 using ConsoleCards.Core.Identifiers;
@@ -199,6 +200,64 @@ namespace ConsoleCards.Core.Domain.Match
             if (handContainer.Kind != ContainerKind.Hand || handContainer.OwnerSeatId != seat.Id)
             {
                 handContainer = null;
+                return false;
+            }
+
+            return true;
+        }
+
+        public bool TryGetSeatConsole(SeatId seatId, out ConsoleState console)
+        {
+            if (!seats.TryGetValue(seatId, out SeatState seat))
+            {
+                console = null;
+                return false;
+            }
+
+            if (seat.Console.OwnerSeatId != seat.Id)
+            {
+                console = null;
+                return false;
+            }
+
+            console = seat.Console;
+            return true;
+        }
+
+        public bool TryGetConsoleSlot(
+            SeatId seatId,
+            int slotIndex,
+            out ContainerState slotContainer)
+        {
+            if (slotIndex < 0)
+            {
+                slotContainer = null;
+                return false;
+            }
+
+            if (!TryGetSeatConsole(seatId, out ConsoleState console))
+            {
+                slotContainer = null;
+                return false;
+            }
+
+            if (slotIndex >= console.SlotCount)
+            {
+                slotContainer = null;
+                return false;
+            }
+
+            ContainerId slotContainerId = console.SlotContainerIds[slotIndex];
+            if (!containers.TryGetValue(slotContainerId, out slotContainer))
+            {
+                slotContainer = null;
+                return false;
+            }
+
+            if (slotContainer.Kind != ContainerKind.ConsoleSlot
+                || slotContainer.OwnerSeatId != console.OwnerSeatId)
+            {
+                slotContainer = null;
                 return false;
             }
 
