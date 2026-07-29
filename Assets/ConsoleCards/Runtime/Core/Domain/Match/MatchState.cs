@@ -182,6 +182,29 @@ namespace ConsoleCards.Core.Domain.Match
             return false;
         }
 
+        public bool TryGetSeatHand(SeatId seatId, out ContainerState handContainer)
+        {
+            if (!seats.TryGetValue(seatId, out SeatState seat))
+            {
+                handContainer = null;
+                return false;
+            }
+
+            if (!containers.TryGetValue(seat.HandContainerId, out handContainer))
+            {
+                handContainer = null;
+                return false;
+            }
+
+            if (handContainer.Kind != ContainerKind.Hand || handContainer.OwnerSeatId != seat.Id)
+            {
+                handContainer = null;
+                return false;
+            }
+
+            return true;
+        }
+
         public void AddEmptyPlacedContainer(
             ContainerState container,
             ContainerPlacementState placement)
