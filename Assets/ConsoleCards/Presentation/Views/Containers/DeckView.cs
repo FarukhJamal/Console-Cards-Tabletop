@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace ConsoleCards.Presentation.Views.Containers
 {
-    public sealed class DeckView : MonoBehaviour
+    public sealed class DeckView : MonoBehaviour, IContainerView
     {
         [SerializeField] private float cardThicknessOffset = 0.02f;
 

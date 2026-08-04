@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace ConsoleCards.Presentation.Views.Containers
 {
-    public sealed class HandView : MonoBehaviour
+    public sealed class HandView : MonoBehaviour, IContainerView
     {
         [SerializeField] private Transform layoutAnchor;
         [SerializeField] private float horizontalSpacing = 0.75f;
