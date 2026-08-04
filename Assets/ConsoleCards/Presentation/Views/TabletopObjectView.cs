@@ -17,6 +17,8 @@ namespace ConsoleCards.Presentation.Views
         private bool isBound;
         private bool isPreviewing;
         private TabletopPose previewPose;
+        private bool isContainerLayoutApplied;
+        private TabletopPose containerLayoutPose;
 
         public bool IsBound => isBound;
 
@@ -27,6 +29,10 @@ namespace ConsoleCards.Presentation.Views
         public bool IsPreviewing => isPreviewing;
 
         public TabletopPose PreviewPose => isPreviewing ? previewPose : TabletopPose.Default;
+
+        public bool IsContainerLayoutApplied => isContainerLayoutApplied;
+
+        public TabletopPose ContainerLayoutPose => isContainerLayoutApplied ? containerLayoutPose : TabletopPose.Default;
 
         protected void BindBase(
             TabletopObjectState state,
@@ -69,6 +75,48 @@ namespace ConsoleCards.Presentation.Views
             transform.SetPositionAndRotation(worldPosition, worldRotation);
         }
 
+        public void ApplyContainerLayoutPose(TabletopPose pose)
+        {
+            ApplyContainerLayoutPose(pose, 0f);
+        }
+
+        public void ApplyContainerLayoutPose(TabletopPose pose, float additionalWorldHeight)
+        {
+            EnsureBound();
+
+            if (boundState.ContainerId.IsEmpty)
+            {
+                throw new InvalidOperationException("Container layout can only be applied to contained objects.");
+            }
+
+            ValidateFiniteContainerLayoutPose(pose);
+            if (!IsFinite(additionalWorldHeight))
+            {
+                throw new ArgumentOutOfRangeException(nameof(additionalWorldHeight));
+            }
+
+            Vector3 worldPosition = coordinateConverter.ToWorldPosition(pose);
+            Quaternion worldRotation = coordinateConverter.ToWorldRotation(pose);
+
+            containerLayoutPose = pose;
+            isContainerLayoutApplied = true;
+            transform.SetPositionAndRotation(
+                worldPosition + (Vector3.up * additionalWorldHeight),
+                worldRotation);
+        }
+
+        public void ClearContainerLayout()
+        {
+            containerLayoutPose = TabletopPose.Default;
+            isContainerLayoutApplied = false;
+        }
+
+        public void ClearContainerLayoutAndReconcile()
+        {
+            ClearContainerLayout();
+            ApplyAcceptedState();
+        }
+
         public void ReconcileAcceptedState()
         {
             ApplyAcceptedState();
@@ -79,6 +127,7 @@ namespace ConsoleCards.Presentation.Views
             boundState = null;
             coordinateConverter = null;
             isBound = false;
+            ClearContainerLayout();
             ClearPreviewState();
 
             OnUnbound();
@@ -124,6 +173,14 @@ namespace ConsoleCards.Presentation.Views
         }
 
         private static void ValidateFinitePreviewPose(TabletopPose pose)
+        {
+            if (!IsFinite(pose.Position.X) || !IsFinite(pose.Position.Y) || !IsFinite(pose.RotationDegrees))
+            {
+                throw new ArgumentOutOfRangeException(nameof(pose));
+            }
+        }
+
+        private static void ValidateFiniteContainerLayoutPose(TabletopPose pose)
         {
             if (!IsFinite(pose.Position.X) || !IsFinite(pose.Position.Y) || !IsFinite(pose.RotationDegrees))
             {
