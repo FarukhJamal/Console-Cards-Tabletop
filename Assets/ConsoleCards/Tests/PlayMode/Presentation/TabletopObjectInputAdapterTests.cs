@@ -11,6 +11,7 @@ using ConsoleCards.Presentation.Coordinates;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
 using ConsoleCards.Presentation.Views;
+using ConsoleCards.Presentation.Views.Containers;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -279,6 +280,63 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.Adapter.LastReleaseResult.HasValue, Is.False);
             Assert.That(fixture.Adapter.LastRotationResult.HasValue, Is.False);
             Assert.That(fixture.Adapter.LastFlipResult.HasValue, Is.False);
+        }
+
+        [Test]
+        public void ConfigureInteractionRouter_BeforeInitialize_InitializePreservesExactRouter()
+        {
+            AdapterFixture fixture = CreateAdapterFixture();
+            TabletopInteractionRouter router = CreateRouterForAdapterFixture(fixture);
+
+            fixture.Adapter.ConfigureInteractionRouter(router);
+            fixture.InitializeAdapter();
+
+            Assert.That(fixture.Adapter.HasInteractionRouter, Is.True);
+            Assert.That(fixture.Adapter.InteractionRouter, Is.SameAs(router));
+            Assert.That(fixture.Adapter.IsInitialized, Is.True);
+        }
+
+        [Test]
+        public void ConfigureInteractionRouter_AfterInitialize_StoresExactRouter()
+        {
+            AdapterFixture fixture = CreateInitializedAdapterFixture();
+            TabletopInteractionRouter router = CreateRouterForAdapterFixture(fixture);
+
+            fixture.Adapter.ConfigureInteractionRouter(router);
+
+            Assert.That(fixture.Adapter.HasInteractionRouter, Is.True);
+            Assert.That(fixture.Adapter.InteractionRouter, Is.SameAs(router));
+        }
+
+        [Test]
+        public void AttachExternalFrameDriver_AfterRouterConfiguration_PreservesRouter()
+        {
+            AdapterFixture fixture = CreateAdapterFixture();
+            TabletopInteractionRouter router = CreateRouterForAdapterFixture(fixture);
+            TabletopInputFrameCoordinator frameCoordinator = CreateDisabledFrameCoordinator();
+
+            fixture.Adapter.ConfigureInteractionRouter(router);
+            fixture.InitializeAdapter();
+            fixture.Adapter.AttachExternalFrameDriver(frameCoordinator);
+
+            Assert.That(fixture.Adapter.HasInteractionRouter, Is.True);
+            Assert.That(fixture.Adapter.InteractionRouter, Is.SameAs(router));
+            Assert.That(fixture.Adapter.IsExternallyDrivenBy(frameCoordinator), Is.True);
+        }
+
+        [Test]
+        public void ConfigureInteractionRouter_AfterExternalFrameDriverAttachment_StoresExactRouter()
+        {
+            AdapterFixture fixture = CreateInitializedAdapterFixture();
+            TabletopInteractionRouter router = CreateRouterForAdapterFixture(fixture);
+            TabletopInputFrameCoordinator frameCoordinator = CreateDisabledFrameCoordinator();
+
+            fixture.Adapter.AttachExternalFrameDriver(frameCoordinator);
+            fixture.Adapter.ConfigureInteractionRouter(router);
+
+            Assert.That(fixture.Adapter.HasInteractionRouter, Is.True);
+            Assert.That(fixture.Adapter.InteractionRouter, Is.SameAs(router));
+            Assert.That(fixture.Adapter.IsExternallyDrivenBy(frameCoordinator), Is.True);
         }
 
         [Test]
@@ -795,6 +853,47 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 coordinatorFixture);
         }
 
+        private TabletopInteractionRouter CreateRouterForAdapterFixture(AdapterFixture fixture)
+        {
+            InteractionOwnerId containedOwnerId = InteractionOwnerId.New();
+            CardTransferInteractionCoordinator transferCoordinator = new CardTransferInteractionCoordinator(
+                fixture.Match,
+                fixture.RequestedByPlayerId,
+                containedOwnerId,
+                fixture.LockService,
+                new TransferCardUseCase(),
+                Array.Empty<IContainerLayoutView>());
+            ContainedCardDragCoordinator containedCoordinator = new ContainedCardDragCoordinator(
+                containedOwnerId,
+                fixture.LockService,
+                new TabletopInteractionStateMachine(5f),
+                new TabletopDragPreviewSession(),
+                fixture.PointerProjector,
+                new CardDropTargetResolver(
+                    fixture.Camera,
+                    fixture.PointerProjector,
+                    LayerMaskFor(InteractionLayer),
+                    25f,
+                    QueryTriggerInteraction.Collide),
+                transferCoordinator,
+                new ContainerLayoutViewLookup(Array.Empty<IContainerLayoutView>()));
+
+            return new TabletopInteractionRouter(
+                fixture.HitResolver,
+                fixture.Coordinator,
+                containedCoordinator,
+                fixture.SelectionState);
+        }
+
+        private TabletopInputFrameCoordinator CreateDisabledFrameCoordinator()
+        {
+            GameObject gameObject = CreateGameObject("Object Input Adapter Frame Driver");
+            gameObject.SetActive(false);
+            TabletopInputFrameCoordinator frameCoordinator = gameObject.AddComponent<TabletopInputFrameCoordinator>();
+            frameCoordinator.enabled = false;
+            return frameCoordinator;
+        }
+
         private CoordinatorFixture CreateCoordinatorFixture(long revision)
         {
             Camera camera = CreateCamera();
@@ -856,6 +955,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 lockService,
                 stateMachine,
                 previewSession,
+                hitResolver,
+                pointerProjector,
                 requestedByPlayerId,
                 ownerId);
         }
@@ -1097,6 +1198,14 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
 
             public TabletopDragPreviewSession PreviewSession => coordinatorFixture.PreviewSession;
 
+            public TabletopObjectHitResolver HitResolver => coordinatorFixture.HitResolver;
+
+            public TabletopPointerProjector PointerProjector => coordinatorFixture.PointerProjector;
+
+            public Camera Camera => coordinatorFixture.Camera;
+
+            public PlayerId RequestedByPlayerId => coordinatorFixture.RequestedByPlayerId;
+
             public Vector2 PressScreenPoint => coordinatorFixture.PressScreenPoint;
 
             public void InitializeAdapter()
@@ -1156,6 +1265,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 LocalInteractionLockService lockService,
                 TabletopInteractionStateMachine stateMachine,
                 TabletopDragPreviewSession previewSession,
+                TabletopObjectHitResolver hitResolver,
+                TabletopPointerProjector pointerProjector,
                 PlayerId requestedByPlayerId,
                 InteractionOwnerId ownerId)
             {
@@ -1171,6 +1282,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 LockService = lockService;
                 StateMachine = stateMachine;
                 PreviewSession = previewSession;
+                HitResolver = hitResolver;
+                PointerProjector = pointerProjector;
                 RequestedByPlayerId = requestedByPlayerId;
                 OwnerId = ownerId;
                 PressScreenPoint = ScreenPointFor(view);
@@ -1199,6 +1312,10 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             public TabletopInteractionStateMachine StateMachine { get; }
 
             public TabletopDragPreviewSession PreviewSession { get; }
+
+            public TabletopObjectHitResolver HitResolver { get; }
+
+            public TabletopPointerProjector PointerProjector { get; }
 
             public PlayerId RequestedByPlayerId { get; }
 

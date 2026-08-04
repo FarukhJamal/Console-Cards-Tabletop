@@ -24,6 +24,7 @@ namespace ConsoleCards.Presentation.Input
         private TabletopRotationCoordinator rotationCoordinator;
         private TabletopCardFlipCoordinator flipCoordinator;
         private TabletopInteractionInputRoutingPolicy routingPolicy;
+        private TabletopInteractionRouter interactionRouter;
         private TabletopInputFrameCoordinator externalFrameDriver;
 
         public bool HasValidActionConfiguration { get; private set; }
@@ -40,6 +41,10 @@ namespace ConsoleCards.Presentation.Input
 
         public TabletopInteractionInputRoutingPolicy RoutingPolicy => routingPolicy;
 
+        public bool HasInteractionRouter => interactionRouter != null;
+
+        public TabletopInteractionRouter InteractionRouter => interactionRouter;
+
         public InputActionReference PointAction => pointAction;
 
         public InputActionReference SelectAction => selectAction;
@@ -53,6 +58,8 @@ namespace ConsoleCards.Presentation.Input
         public float RotationStepDegrees => rotationStepDegrees;
 
         public MoveInteractionReleaseResult? LastReleaseResult { get; private set; }
+
+        public TabletopInteractionReleaseResult? LastInteractionReleaseResult { get; private set; }
 
         public RotationInteractionResult? LastRotationResult { get; private set; }
 
@@ -112,6 +119,7 @@ namespace ConsoleCards.Presentation.Input
             this.routingPolicy = routingPolicy;
             IsInitialized = true;
             LastReleaseResult = null;
+            LastInteractionReleaseResult = null;
             LastRotationResult = null;
             LastFlipResult = null;
 
@@ -123,7 +131,11 @@ namespace ConsoleCards.Presentation.Input
 
         public void Shutdown()
         {
-            if (IsInitialized && moveCoordinator != null && moveCoordinator.HasActiveInteraction)
+            if (IsInitialized && interactionRouter != null && interactionRouter.HasActiveInteraction)
+            {
+                interactionRouter.Reset();
+            }
+            else if (IsInitialized && moveCoordinator != null && moveCoordinator.HasActiveInteraction)
             {
                 moveCoordinator.Reset();
             }
@@ -133,10 +145,47 @@ namespace ConsoleCards.Presentation.Input
             rotationCoordinator = null;
             flipCoordinator = null;
             routingPolicy = null;
+            interactionRouter = null;
             IsInitialized = false;
             LastReleaseResult = null;
+            LastInteractionReleaseResult = null;
             LastRotationResult = null;
             LastFlipResult = null;
+        }
+
+        public void ConfigureInteractionRouter(TabletopInteractionRouter router)
+        {
+            if (router == null)
+            {
+                throw new ArgumentNullException(nameof(router));
+            }
+
+            if (interactionRouter != null)
+            {
+                throw new InvalidOperationException("TabletopObjectInputAdapter already has an interaction router.");
+            }
+
+            if (moveCoordinator != null && moveCoordinator.HasActiveInteraction)
+            {
+                throw new InvalidOperationException("TabletopObjectInputAdapter cannot configure an interaction router while a move interaction is active.");
+            }
+
+            if (router.HasActiveInteraction)
+            {
+                throw new InvalidOperationException("TabletopObjectInputAdapter cannot configure an active interaction router.");
+            }
+
+            interactionRouter = router;
+        }
+
+        public void ClearInteractionRouter()
+        {
+            if (interactionRouter != null && interactionRouter.HasActiveInteraction)
+            {
+                throw new InvalidOperationException("TabletopObjectInputAdapter cannot clear an active interaction router.");
+            }
+
+            interactionRouter = null;
         }
 
         private void Awake()
@@ -281,6 +330,16 @@ namespace ConsoleCards.Presentation.Input
 
             if (cancelPressedThisFrame)
             {
+                if (interactionRouter != null)
+                {
+                    if (interactionRouter.HasActiveInteraction)
+                    {
+                        interactionRouter.Cancel();
+                    }
+
+                    return null;
+                }
+
                 if (moveCoordinator.HasActiveInteraction)
                 {
                     moveCoordinator.Cancel();
@@ -290,6 +349,43 @@ namespace ConsoleCards.Presentation.Input
             }
 
             MoveInteractionReleaseResult? releaseResult = null;
+            if (interactionRouter != null)
+            {
+                if (selectPressedThisFrame && !interactionRouter.HasActiveInteraction)
+                {
+                    interactionRouter.TryBegin(screenPosition);
+                }
+
+                if (selectReleasedThisFrame && interactionRouter.HasActiveInteraction)
+                {
+                    TabletopInteractionReleaseResult result = interactionRouter.Release(screenPosition);
+                    LastInteractionReleaseResult = result;
+                    if (result.Route == TabletopInteractionRoute.TabletopMove && result.MoveResult.HasValue)
+                    {
+                        LastReleaseResult = result.MoveResult.Value;
+                        releaseResult = result.MoveResult.Value;
+                    }
+                    else
+                    {
+                        LastReleaseResult = null;
+                    }
+                }
+                else if (selectHeld && interactionRouter.HasActiveInteraction)
+                {
+                    interactionRouter.UpdatePointer(screenPosition);
+                }
+
+                if (selectPressedThisFrame || selectReleasedThisFrame)
+                {
+                    return releaseResult;
+                }
+
+                if (interactionRouter.HasActiveInteraction)
+                {
+                    return releaseResult;
+                }
+            }
+
             if (selectPressedThisFrame && !moveCoordinator.HasActiveInteraction)
             {
                 moveCoordinator.TryBeginPress(screenPosition);
