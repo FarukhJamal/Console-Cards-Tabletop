@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace ConsoleCards.Presentation.Views.Containers
 {
-    public sealed class DiscardPileView : MonoBehaviour, IContainerView
+    public sealed class DiscardPileView : MonoBehaviour, IContainerLayoutView
     {
         [SerializeField] private float verticalOffset = 0.012f;
         [SerializeField] private float diagonalTableOffsetPerCard = 0.035f;

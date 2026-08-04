@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace ConsoleCards.Presentation.Views.Containers
 {
-    public sealed class ConsoleSlotView : MonoBehaviour, IContainerView
+    public sealed class ConsoleSlotView : MonoBehaviour, IContainerLayoutView
     {
         [SerializeField] private Transform layoutAnchor;
         [SerializeField] private float verticalOffset = 0.01f;

@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace ConsoleCards.Presentation.Views.Containers
 {
-    public sealed class StackView : MonoBehaviour, IContainerView
+    public sealed class StackView : MonoBehaviour, IContainerLayoutView
     {
         [SerializeField] private float verticalOffset = 0.015f;
         [SerializeField] private float tableOffsetPerCard = 0.04f;
