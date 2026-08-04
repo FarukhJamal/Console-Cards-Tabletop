@@ -602,6 +602,53 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         }
 
         [Test]
+        public void EndPreviewWithoutReconcile_ClearsPreviewButLeavesTransformAtPreviewPose()
+        {
+            ContainerId containerId = new ContainerId(GuidFromSeed(3900));
+            TabletopPose acceptedPose = new TabletopPose(new TableCoordinate(2.0, 3.0), 25f, 0, 0);
+            CardView view = CreateBoundCardView(
+                3901,
+                out CardInstanceState state,
+                acceptedPose);
+            state.BaseState.SetContainer(containerId);
+            TabletopPose containerLayoutPose = new TabletopPose(new TableCoordinate(-1.0, -2.0), 45f, 0, 0);
+            TabletopPose previewPose = new TabletopPose(new TableCoordinate(8.0, 9.0), 90f, 0, 0);
+            view.ApplyContainerLayoutPose(containerLayoutPose);
+            TabletopDragPreviewSession session = new TabletopDragPreviewSession();
+            session.Begin(view);
+            session.UpdatePose(previewPose);
+
+            session.EndPreviewWithoutReconcile();
+
+            Assert.That(session.IsActive, Is.False);
+            Assert.That(view.IsPreviewing, Is.False);
+            Assert.That(view.PreviewPose, Is.EqualTo(TabletopPose.Default));
+            Assert.That(view.IsContainerLayoutApplied, Is.True);
+            Assert.That(view.ContainerLayoutPose, Is.EqualTo(containerLayoutPose));
+            Assert.That(state.BaseState.Pose, Is.EqualTo(acceptedPose));
+            AssertWorldPose(view, previewPose);
+        }
+
+        [Test]
+        public void EndPreviewWithoutReconcile_WhenNoPreviewPoseIsActive_ThrowsAndKeepsSession()
+        {
+            TabletopDragPreviewSession session = BeginCardSession(3902, out CardView view, out _);
+
+            Assert.Throws<InvalidOperationException>(() => session.EndPreviewWithoutReconcile());
+
+            Assert.That(session.IsActive, Is.True);
+            Assert.That(session.ActiveView, Is.SameAs(view));
+        }
+
+        [Test]
+        public void EndPreviewWithoutReconcile_WithoutActiveSession_ThrowsInvalidOperationException()
+        {
+            TabletopDragPreviewSession session = new TabletopDragPreviewSession();
+
+            Assert.Throws<InvalidOperationException>(() => session.EndPreviewWithoutReconcile());
+        }
+
+        [Test]
         public void CancelAndEnd_RestoresAcceptedPose()
         {
             TabletopPose acceptedPose = new TabletopPose(new TableCoordinate(2.0, 3.0), 25f, 0, 0);

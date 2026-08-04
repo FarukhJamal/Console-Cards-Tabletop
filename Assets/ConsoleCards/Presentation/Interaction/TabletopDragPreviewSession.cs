@@ -72,6 +72,13 @@ namespace ConsoleCards.Presentation.Interaction
             activeView = null;
         }
 
+        public void EndPreviewWithoutReconcile()
+        {
+            TabletopObjectView view = GetActiveView();
+            view.ClearPreviewWithoutReconcile();
+            activeView = null;
+        }
+
         public void CancelAndEnd()
         {
             ReconcileAndEnd();

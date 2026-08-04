@@ -75,6 +75,18 @@ namespace ConsoleCards.Presentation.Views
             transform.SetPositionAndRotation(worldPosition, worldRotation);
         }
 
+        public void ClearPreviewWithoutReconcile()
+        {
+            EnsureBound();
+
+            if (!isPreviewing)
+            {
+                throw new InvalidOperationException("TabletopObjectView is not previewing.");
+            }
+
+            ClearPreviewState();
+        }
+
         public void ApplyContainerLayoutPose(TabletopPose pose)
         {
             ApplyContainerLayoutPose(pose, 0f);
