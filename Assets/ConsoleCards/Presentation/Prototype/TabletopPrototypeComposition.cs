@@ -65,7 +65,6 @@ namespace ConsoleCards.Presentation.Prototype
 
         private readonly List<RuntimeCardInstance> runtimeCardInstances = new List<RuntimeCardInstance>();
         private readonly List<GameObject> runtimeOwnedStackRoots = new List<GameObject>();
-        private readonly List<GameObject> runtimeGeneratedHierarchyRoots = new List<GameObject>();
         private readonly List<CardView> cardViews = new List<CardView>();
         private readonly List<TabletopSelectionVisual> cardSelectionVisuals = new List<TabletopSelectionVisual>();
         private readonly List<IContainerLayoutView> layoutViews = new List<IContainerLayoutView>();
@@ -137,11 +136,6 @@ namespace ConsoleCards.Presentation.Prototype
         private readonly List<ConsoleSlotView> consoleSlotViews = new List<ConsoleSlotView>();
         private ConsoleSlotView[] resolvedSceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
         private PrototypeConsoleSlotVisual[] resolvedSceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
-
-        private Material cardFrontMaterial;
-        private Material cardBackMaterial;
-        private Material buttonCardMaterial;
-        private Material selectionMaterial;
 
         public bool IsInitialized { get; private set; }
 
@@ -237,7 +231,6 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 ValidateConfiguration();
                 ReactivateSceneOwnedObjectViews();
-                BuildRuntimeMaterials();
                 BuildRuntimeGraph();
                 BindObjectViews();
                 BuildContainerViews();
@@ -352,8 +345,6 @@ namespace ConsoleCards.Presentation.Prototype
             ReleaseAllStackViews();
             ReleaseSceneOwnedFixedContainerViews();
             ReleaseRuntimeCardInstances();
-            ReleaseRuntimeGeneratedHierarchyRoots();
-            DestroyRuntimeMaterials();
 
             matchState = null;
             localPlayerId = PlayerId.Empty;
@@ -395,7 +386,6 @@ namespace ConsoleCards.Presentation.Prototype
             cardSelectionVisuals.Clear();
             runtimeCardInstances.Clear();
             runtimeOwnedStackRoots.Clear();
-            runtimeGeneratedHierarchyRoots.Clear();
             consoleSlotViews.Clear();
             resolvedSceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
             resolvedSceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
@@ -1115,9 +1105,6 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void BuildContainerViews()
         {
-            GameObject dynamicRoot = EnsureRuntimeRoot("DynamicContainers");
-            EnsureRuntimeRoot("LooseCards");
-
             deckView = sceneDeckVisual.GetView<DeckView>();
             handView = sceneHandVisual.GetView<HandView>();
             StackRuntimeView stackA = CreateSceneOwnedStackView(
@@ -1132,7 +1119,6 @@ namespace ConsoleCards.Presentation.Prototype
             stackViewsByContainerId.Add(stackBContainerId, stackB);
             discardPileView = sceneDiscardPileVisual.GetView<DiscardPileView>();
             consoleView = sceneConsoleView;
-            dynamicRoot.SetActive(true);
         }
 
         private static StackRuntimeView CreateSceneOwnedStackView(
@@ -1550,11 +1536,15 @@ namespace ConsoleCards.Presentation.Prototype
         {
             PrototypeCardVisualReferences createdVisualReferences = Instantiate(prototypeCardPrefab);
             GameObject clone = createdVisualReferences.gameObject;
+            if (clone.scene != gameObject.scene)
+            {
+                SceneManager.MoveGameObjectToScene(clone, gameObject.scene);
+            }
+
             clone.name = $"Card {label}";
             RuntimeCardInstance runtimeCardInstance = new RuntimeCardInstance(clone);
             runtimeCardInstances.Add(runtimeCardInstance);
             createdVisualReferences.ValidateReferences();
-            clone.transform.SetParent(EnsureRuntimeRoot("LooseCards").transform, false);
             CardView createdView = createdVisualReferences.CardView;
             selectionVisual = createdVisualReferences.SelectionVisual;
             runtimeCardInstance.SetReferences(createdView, selectionVisual);
@@ -1569,10 +1559,24 @@ namespace ConsoleCards.Presentation.Prototype
             string label,
             bool isButtonCard)
         {
-            Material frontMaterial = isButtonCard ? buttonCardMaterial : cardFrontMaterial;
-            visualReferences.FaceUpRenderer.sharedMaterial = frontMaterial;
-            visualReferences.FaceDownRenderer.sharedMaterial = cardBackMaterial;
+            ApplyCardColor(
+                visualReferences.FaceUpRenderer,
+                isButtonCard
+                    ? new Color(0.58f, 0.88f, 0.82f)
+                    : new Color(0.95f, 0.88f, 0.42f));
+            ApplyCardColor(visualReferences.FaceDownRenderer, new Color(0.10f, 0.19f, 0.42f));
             visualReferences.FrontLabel.text = label;
+        }
+
+        private static void ApplyCardColor(Renderer renderer, Color color)
+        {
+            MaterialPropertyBlock properties = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(properties);
+            properties.SetColor("_BaseColor", color);
+            properties.SetColor("_Color", color);
+            properties.SetFloat("_Metallic", 0f);
+            properties.SetFloat("_Smoothness", 0.12f);
+            renderer.SetPropertyBlock(properties);
         }
 
         private StackRuntimeView CreateStackRuntimeView(
@@ -1580,9 +1584,13 @@ namespace ConsoleCards.Presentation.Prototype
             ContainerState container,
             ContainerPlacementState placement)
         {
-            Transform parent = EnsureRuntimeRoot("DynamicContainers").transform;
-            PrototypeFixedContainerVisual visual = Instantiate(prototypeStackPrefab, parent, false);
+            PrototypeFixedContainerVisual visual = Instantiate(prototypeStackPrefab);
             GameObject root = visual.gameObject;
+            if (root.scene != gameObject.scene)
+            {
+                SceneManager.MoveGameObjectToScene(root, gameObject.scene);
+            }
+
             root.name = name;
             runtimeOwnedStackRoots.Add(root);
 
@@ -1615,65 +1623,6 @@ namespace ConsoleCards.Presentation.Prototype
             slotVisual.DropTarget.Configure(slotView, slotVisual.TargetCollider);
             slotVisual.ClearFeedback();
             feedbackTargetsByContainerId[slotView.ContainerId] = new ContainerFeedbackTarget(slotVisual);
-        }
-
-        private void BuildRuntimeMaterials()
-        {
-            cardFrontMaterial = CreateMaterial("M3 Card Front", new Color(0.95f, 0.88f, 0.42f));
-            cardBackMaterial = CreateMaterial("M3 Card Back", new Color(0.10f, 0.19f, 0.42f));
-            buttonCardMaterial = CreateMaterial("M3 Button Card", new Color(0.58f, 0.88f, 0.82f));
-            selectionMaterial = CreateMaterial("M3 Selection", new Color(0.90f, 0.30f, 0.80f));
-        }
-
-        private static Material CreateMaterial(string name, Color color)
-        {
-            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
-            if (shader == null)
-            {
-                shader = Shader.Find("Standard");
-            }
-
-            Material material = new Material(shader) { name = name };
-            if (material.HasProperty("_BaseColor"))
-            {
-                material.SetColor("_BaseColor", color);
-            }
-            else
-            {
-                material.color = color;
-            }
-
-            if (material.HasProperty("_Metallic"))
-            {
-                material.SetFloat("_Metallic", 0f);
-            }
-
-            if (material.HasProperty("_Smoothness"))
-            {
-                material.SetFloat("_Smoothness", 0.12f);
-            }
-
-            return material;
-        }
-
-        private void DestroyRuntimeMaterials()
-        {
-            DestroyMaterial(cardFrontMaterial);
-            DestroyMaterial(cardBackMaterial);
-            DestroyMaterial(buttonCardMaterial);
-            DestroyMaterial(selectionMaterial);
-            cardFrontMaterial = null;
-            cardBackMaterial = null;
-            buttonCardMaterial = null;
-            selectionMaterial = null;
-        }
-
-        private static void DestroyMaterial(Material material)
-        {
-            if (material != null)
-            {
-                Destroy(material);
-            }
         }
 
         private bool IsButtonCard(CardInstanceState card)
@@ -1792,28 +1741,6 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 throw new InvalidOperationException("TabletopPrototypeComposition is not initialized.");
             }
-        }
-
-        private GameObject EnsureRuntimeRoot(string name)
-        {
-            Scene scene = gameObject.scene;
-            GameObject[] roots = scene.GetRootGameObjects();
-            for (int i = 0; i < roots.Length; i++)
-            {
-                if (roots[i].name == name)
-                {
-                    return roots[i];
-                }
-            }
-
-            GameObject root = new GameObject(name);
-            SceneManager.MoveGameObjectToScene(root, scene);
-            if (!runtimeGeneratedHierarchyRoots.Contains(root))
-            {
-                runtimeGeneratedHierarchyRoots.Add(root);
-            }
-
-            return root;
         }
 
         private void ReleaseAllStackViews()
@@ -2042,18 +1969,6 @@ namespace ConsoleCards.Presentation.Prototype
 
                 runtimeCardInstances.RemoveAt(lastIndex);
                 runtimeCardInstance.ClearReferences();
-                DestroyRuntimeOwnedGameObject(root);
-            }
-        }
-
-        private void ReleaseRuntimeGeneratedHierarchyRoots()
-        {
-            while (runtimeGeneratedHierarchyRoots.Count > 0)
-            {
-                int lastIndex = runtimeGeneratedHierarchyRoots.Count - 1;
-                GameObject root = runtimeGeneratedHierarchyRoots[lastIndex];
-                runtimeGeneratedHierarchyRoots.RemoveAt(lastIndex);
-                DisableRuntimeInteraction(root);
                 DestroyRuntimeOwnedGameObject(root);
             }
         }
