@@ -60,8 +60,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cb0998b6408248299b642edf34a22d1b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  objectView: {fileID: 0}
-  highlightRoot: {fileID: 0}
+  objectView: {fileID: 114100}
+  highlightRoot: {fileID: 200400}
 --- !u!65 &650100
 BoxCollider:
   m_ObjectHideFlags: 0
