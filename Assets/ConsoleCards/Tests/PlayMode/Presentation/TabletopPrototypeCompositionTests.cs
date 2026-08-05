@@ -197,16 +197,21 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             MatchState match = fixture.Composition.MatchState;
 
             Assert.That(match.Revision, Is.EqualTo(0));
-            Assert.That(match.ObjectCount, Is.EqualTo(3));
-            Assert.That(match.Cards.Count, Is.EqualTo(1));
+            Assert.That(match.ObjectCount, Is.EqualTo(18));
+            Assert.That(match.Cards.Count, Is.EqualTo(16));
             Assert.That(match.Pawns.Count, Is.EqualTo(1));
             Assert.That(match.Tokens.Count, Is.EqualTo(1));
-            Assert.That(match.Containers.Count, Is.EqualTo(0));
-            Assert.That(match.Seats.Count, Is.EqualTo(0));
+            Assert.That(match.Containers.Count, Is.EqualTo(8));
+            Assert.That(match.Seats.Count, Is.EqualTo(1));
+            Assert.That(fixture.Composition.ButtonDefinitions.Count, Is.EqualTo(8));
+            Assert.That(fixture.Composition.CardViews.Count, Is.EqualTo(16));
+            Assert.That(fixture.Composition.DeckView.VisibleCardCount, Is.EqualTo(12));
+            Assert.That(fixture.Composition.HandView.VisibleCardCount, Is.EqualTo(0));
+            Assert.That(fixture.Composition.ConsoleSlotViews.Count, Is.EqualTo(3));
             Assert.That(fixture.Composition.CardState.Face, Is.EqualTo(CardFace.FaceUp));
             AssertPose(fixture.Composition.CardState.BaseState.Pose, -2d, 0d, 0f);
-            AssertPose(fixture.Composition.PawnState.BaseState.Pose, 0d, 0d, 0f);
-            AssertPose(fixture.Composition.TokenState.BaseState.Pose, 2d, 0d, 0f);
+            AssertPose(fixture.Composition.PawnState.BaseState.Pose, -3.5d, -0.5d, 0f);
+            AssertPose(fixture.Composition.TokenState.BaseState.Pose, 3.5d, -0.5d, 0f);
             Assert.That(fixture.Composition.CardState.BaseState.Id.IsEmpty, Is.False);
             Assert.That(fixture.Composition.PawnState.BaseState.Id.IsEmpty, Is.False);
             Assert.That(fixture.Composition.TokenState.BaseState.Id.IsEmpty, Is.False);
@@ -333,7 +338,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.Composition.MatchState.Revision, Is.EqualTo(0));
         }
 
-        [TestCase(TabletopObjectKind.Card, -1d, 1d)]
+        [TestCase(TabletopObjectKind.Card, 0d, 0d)]
         [TestCase(TabletopObjectKind.Pawn, 1d, 1d)]
         [TestCase(TabletopObjectKind.Token, 3d, 1d)]
         public void RuntimeInput_AcceptedMovement_MutatesCompositionMatchStateAndReconcilesSameView(
@@ -500,8 +505,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.CardView.GetComponent<Renderer>(), Is.Null);
             Assert.That(fixture.PawnView.GetComponent<Renderer>(), Is.Null);
             Assert.That(fixture.TokenView.GetComponent<Renderer>(), Is.Null);
-            Assert.That(fixture.Composition.MatchState.Containers.Count, Is.EqualTo(0));
-            Assert.That(fixture.Composition.MatchState.Seats.Count, Is.EqualTo(0));
+            Assert.That(fixture.Composition.MatchState.Containers.Count, Is.EqualTo(8));
+            Assert.That(fixture.Composition.MatchState.Seats.Count, Is.EqualTo(1));
             Assert.That(fixture.Composition.MatchState.GameTemplateId, Is.EqualTo(GameTemplateId.Empty));
         }
 

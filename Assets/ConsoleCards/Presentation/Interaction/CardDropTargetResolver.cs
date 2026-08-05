@@ -79,6 +79,7 @@ namespace ConsoleCards.Presentation.Interaction
         {
             ValidateFinite(screenPosition, nameof(screenPosition));
 
+            Physics.SyncTransforms();
             Ray ray = TargetCamera.ScreenPointToRay(screenPosition);
             int hitCount = Physics.RaycastNonAlloc(
                 ray,

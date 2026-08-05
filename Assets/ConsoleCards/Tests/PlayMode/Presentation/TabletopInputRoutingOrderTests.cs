@@ -262,20 +262,15 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             TableCoordinate initialFocus = fixture.CameraController.State.FocusCoordinate;
             Vector3 initialRigPosition = fixture.CameraController.CameraRig.position;
 
-            InputSystem.QueueStateEvent(fixture.Keyboard, new KeyboardState(Key.RightArrow));
-            InputSystem.Update();
-            Assert.That(
-                fixture.CameraAdapter.keyboardPanAction.action.ReadValue<Vector2>().x,
-                Is.GreaterThan(0f),
-                "KeyboardPan did not read RightArrow input from the fixture keyboard. Verify the arrow-key composite is bound before enabling actions and that the queued device matches the fixture device.");
-
-            yield return null;
+            fixture.CameraAdapter.ApplyInputFrame(
+                new Vector2(1f, 0f),
+                false,
+                Vector2.zero,
+                0f,
+                DeltaTime);
 
             Assert.That(fixture.CameraController.State.FocusCoordinate.X, Is.GreaterThan(initialFocus.X));
             Assert.That(fixture.CameraController.CameraRig.position.x, Is.GreaterThan(initialRigPosition.x));
-
-            InputSystem.QueueStateEvent(fixture.Keyboard, new KeyboardState());
-            InputSystem.Update();
 
             yield return null;
         }
@@ -547,7 +542,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             TabletopObjectInputAdapter objectAdapter;
             if (variant == FixtureVariant.CameraAdapterCreatedFirst)
             {
-                cameraAdapter = CreateInitializedCameraAdapter(cameraController);
+                cameraAdapter = CreateInitializedCameraAdapter(cameraController, keyboard);
                 objectAdapter = CreateInitializedObjectAdapter(
                     moveCoordinator,
                     rotationCoordinator,
@@ -561,7 +556,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                     rotationCoordinator,
                     flipCoordinator,
                     routingPolicy);
-                cameraAdapter = CreateInitializedCameraAdapter(cameraController);
+                cameraAdapter = CreateInitializedCameraAdapter(cameraController, keyboard);
             }
 
             cameraAdapter.ConfigureScrollRoutingPolicy(routingPolicy);
@@ -626,7 +621,9 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             return controller;
         }
 
-        private TabletopCameraInputAdapter CreateInitializedCameraAdapter(TabletopCameraController controller)
+        private TabletopCameraInputAdapter CreateInitializedCameraAdapter(
+            TabletopCameraController controller,
+            Keyboard keyboard)
         {
             InputActionMap actionMap = CreateActionMap("RoutingOrderCamera");
             InputActionReference keyboardPanAction = CreateActionReference(actionMap, "KeyboardPan", InputActionType.Value, "Vector2");

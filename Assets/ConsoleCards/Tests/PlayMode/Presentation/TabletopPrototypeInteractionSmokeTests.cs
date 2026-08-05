@@ -163,7 +163,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         {
             yield return LoadFixture();
 
-            fixture.AssertAcceptedMove(fixture.CardView, new TableCoordinate(-1d, 1.25d));
+            fixture.AssertAcceptedMove(fixture.CardView, new TableCoordinate(0d, 0d));
         }
 
         [UnityTest]
@@ -503,7 +503,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             PawnState pawnState = fixture.PawnState;
             TokenState tokenState = fixture.TokenState;
 
-            fixture.AssertAcceptedMove(fixture.CardView, new TableCoordinate(-1d, 1d));
+            fixture.AssertAcceptedMove(fixture.CardView, new TableCoordinate(0d, 0d));
             fixture.Click(fixture.PawnView);
             fixture.ApplyWheelFrame(-ScrollDelta);
             fixture.Click(fixture.CardView);

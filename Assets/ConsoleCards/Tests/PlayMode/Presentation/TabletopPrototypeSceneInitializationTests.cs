@@ -63,8 +63,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(tokenView.BoundState, Is.SameAs(composition.MatchState.GetObject(composition.TokenState.BaseState.Id)));
 
             AssertPosition(cardView.transform.position, -2f, 0f, 0f);
-            AssertPosition(pawnView.transform.position, 0f, 0f, 0f);
-            AssertPosition(tokenView.transform.position, 2f, 0f, 0f);
+            AssertPosition(pawnView.transform.position, -3.5f, 0f, -0.5f);
+            AssertPosition(tokenView.transform.position, 3.5f, 0f, -0.5f);
             Assert.That(composition.CardState.Face, Is.EqualTo(CardFace.FaceUp));
             Assert.That(cardView.DisplayedFace, Is.EqualTo(CardFace.FaceUp));
             Assert.That(FindPath(scene, "TabletopObjects/PrototypeCard/SelectionHighlightRoot").activeSelf, Is.False);

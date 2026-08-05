@@ -48,15 +48,28 @@ namespace ConsoleCards.Tests.EditMode.Presentation
 
                 Assert.That(
                     roots.Select(root => root.name),
-                    Is.EquivalentTo(new[] { "CameraRig", "Environment", "Interaction", "TabletopObjects" }));
+                    Is.EquivalentTo(new[]
+                    {
+                        "CameraRig",
+                        "Environment",
+                        "Interaction",
+                        "TabletopObjects",
+                        "Containers",
+                        "DynamicContainers",
+                        "LooseCards",
+                    }));
                 AssertDirectChildren(FindRoot(scene, "CameraRig"), "Main Camera");
                 AssertDirectChildren(FindRoot(scene, "Environment"), "Directional Light", "TableSurfaceProxy");
                 AssertDirectChildren(
                     FindRoot(scene, "Interaction"),
                     "PrototypeComposition",
                     "TabletopInput",
+                    "PrototypeControlPanel",
                     "PrototypeInteractionGuide");
                 AssertDirectChildren(FindRoot(scene, "TabletopObjects"), "PrototypeCard", "PrototypePawn", "PrototypeToken");
+                AssertDirectChildren(FindRoot(scene, "Containers"));
+                AssertDirectChildren(FindRoot(scene, "DynamicContainers"));
+                AssertDirectChildren(FindRoot(scene, "LooseCards"));
 
                 Assert.That(AllObjects(scene).Count(go => go.name == "PrototypeCard"), Is.EqualTo(1));
                 Assert.That(AllObjects(scene).Count(go => go.name == "PrototypePawn"), Is.EqualTo(1));
@@ -236,8 +249,9 @@ namespace ConsoleCards.Tests.EditMode.Presentation
                 AssertIdentity(guideObject.transform);
                 Assert.That(serializedGuide.FindProperty("showGuide").boolValue, Is.True);
                 Assert.That(serializedGuide.FindProperty("title").stringValue, Is.EqualTo("Console Cards Prototype"));
-                Assert.That(serializedGuide.FindProperty("guideLines").arraySize, Is.EqualTo(12));
+                Assert.That(serializedGuide.FindProperty("guideLines").arraySize, Is.EqualTo(14));
                 Assert.That(GuideLines(serializedGuide), Has.Member("F + selected Card: flip face"));
+                Assert.That(GuideLines(serializedGuide), Has.Member("Use M3 controls: shuffle, draw, reorder, merge, split"));
                 Assert.That(GuideLines(serializedGuide), Has.Member("Mouse wheel + selection: rotate 15 degrees"));
                 Assert.That(GuideLines(serializedGuide), Has.Member("Mouse wheel + no selection: camera zoom"));
                 Assert.That(guideObject.GetComponents<Component>(), Has.Length.EqualTo(2));

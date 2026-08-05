@@ -45,6 +45,7 @@ namespace ConsoleCards.Presentation.Interaction
         {
             ValidateFinite(screenPosition);
 
+            Physics.SyncTransforms();
             Ray ray = TargetCamera.ScreenPointToRay(screenPosition);
             if (!Physics.Raycast(
                 ray,

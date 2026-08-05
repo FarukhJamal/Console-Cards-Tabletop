@@ -19,6 +19,8 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly TabletopInteractionStateMachine stateMachine;
         private readonly TabletopDragPreviewSession previewSession;
         private readonly MoveObjectUseCase moveUseCase;
+        private readonly CardDropTargetResolver cardDropTargetResolver;
+        private readonly CardTransferInteractionCoordinator cardTransferCoordinator;
         private TabletopObjectView activeView;
 
         public TabletopMoveInteractionCoordinator(
@@ -32,6 +34,35 @@ namespace ConsoleCards.Presentation.Interaction
             TabletopInteractionStateMachine stateMachine,
             TabletopDragPreviewSession previewSession,
             MoveObjectUseCase moveUseCase)
+            : this(
+                matchState,
+                requestedByPlayerId,
+                interactionOwnerId,
+                selectionState,
+                hitResolver,
+                pointerProjector,
+                lockService,
+                stateMachine,
+                previewSession,
+                moveUseCase,
+                null,
+                null)
+        {
+        }
+
+        public TabletopMoveInteractionCoordinator(
+            MatchState matchState,
+            PlayerId requestedByPlayerId,
+            InteractionOwnerId interactionOwnerId,
+            TabletopSelectionState selectionState,
+            TabletopObjectHitResolver hitResolver,
+            TabletopPointerProjector pointerProjector,
+            LocalInteractionLockService lockService,
+            TabletopInteractionStateMachine stateMachine,
+            TabletopDragPreviewSession previewSession,
+            MoveObjectUseCase moveUseCase,
+            CardDropTargetResolver cardDropTargetResolver,
+            CardTransferInteractionCoordinator cardTransferCoordinator)
         {
             MatchState = matchState ?? throw new ArgumentNullException(nameof(matchState));
             if (requestedByPlayerId.IsEmpty)
@@ -51,6 +82,8 @@ namespace ConsoleCards.Presentation.Interaction
             this.stateMachine = stateMachine ?? throw new ArgumentNullException(nameof(stateMachine));
             this.previewSession = previewSession ?? throw new ArgumentNullException(nameof(previewSession));
             this.moveUseCase = moveUseCase ?? throw new ArgumentNullException(nameof(moveUseCase));
+            this.cardDropTargetResolver = cardDropTargetResolver;
+            this.cardTransferCoordinator = cardTransferCoordinator;
 
             if (stateMachine.Phase != TabletopInteractionPhase.Idle)
             {
@@ -164,6 +197,27 @@ namespace ConsoleCards.Presentation.Interaction
 
             stateMachine.ReleasePointer();
 
+            if (TryTransferTabletopCardToContainer(
+                view,
+                screenPosition,
+                out MoveInteractionReleaseResult transferReleaseResult,
+                out bool transferAccepted))
+            {
+                lockService.Release(view.ObjectId, InteractionOwnerId);
+                if (transferAccepted)
+                {
+                    stateMachine.CompleteAcceptance();
+                }
+                else
+                {
+                    stateMachine.BeginCancellation();
+                    stateMachine.CompleteCancellation();
+                }
+
+                activeView = null;
+                return transferReleaseResult;
+            }
+
             if (!pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate))
             {
                 stateMachine.BeginCancellation();
@@ -203,6 +257,48 @@ namespace ConsoleCards.Presentation.Interaction
             stateMachine.CompleteCancellation();
             activeView = null;
             return MoveInteractionReleaseResult.FromMoveResult(moveResult);
+        }
+
+        private bool TryTransferTabletopCardToContainer(
+            TabletopObjectView view,
+            Vector2 screenPosition,
+            out MoveInteractionReleaseResult releaseResult,
+            out bool transferAccepted)
+        {
+            releaseResult = default;
+            transferAccepted = false;
+
+            CardView cardView = view as CardView;
+            if (cardView == null
+                || cardView.CardState == null
+                || !cardView.CardState.BaseState.ContainerId.IsEmpty
+                || cardDropTargetResolver == null
+                || cardTransferCoordinator == null)
+            {
+                return false;
+            }
+
+            if (!cardDropTargetResolver.TryResolve(screenPosition, out CardDropTarget target)
+                || target.Kind != CardDropTargetKind.Container)
+            {
+                return false;
+            }
+
+            if (previewSession.IsActive)
+            {
+                previewSession.EndPreviewWithoutReconcile();
+            }
+
+            CardTransferInteractionResult transferResult = cardTransferCoordinator.Transfer(cardView, target);
+            releaseResult = MoveInteractionReleaseResult.FromCardTransferResult(transferResult);
+            if (transferResult.Succeeded)
+            {
+                transferAccepted = true;
+                return true;
+            }
+
+            cardView.ReconcileAcceptedState();
+            return true;
         }
 
         public void Cancel()

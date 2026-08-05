@@ -11,8 +11,10 @@ namespace ConsoleCards.Presentation.UI
         {
             "Click Card, Pawn, or Token: select",
             "Click empty table: clear selection",
-            "Drag selected object: preview move",
-            "Release drag: accept movement",
+            "Drag tabletop Card, Pawn, or Token: move",
+            "Drag contained Card: transfer or play to table",
+            "Drag tabletop Card onto Container: place in Container",
+            "Use M3 controls: shuffle, draw, reorder, merge, split",
             "Esc: cancel / rollback",
             "Mouse wheel + selection: rotate 15 degrees",
             "Mouse wheel + no selection: camera zoom",

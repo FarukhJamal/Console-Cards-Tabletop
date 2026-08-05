@@ -54,6 +54,17 @@ namespace ConsoleCards.Presentation.Interaction
                 result);
         }
 
+        public static MoveInteractionReleaseResult FromCardTransferResult(CardTransferInteractionResult result)
+        {
+            return new MoveInteractionReleaseResult(
+                result.Succeeded
+                    ? MoveInteractionReleaseStatus.CardTransferAccepted
+                    : MoveInteractionReleaseStatus.CardTransferRejected,
+                false,
+                result.Succeeded,
+                null);
+        }
+
         public bool Equals(MoveInteractionReleaseResult other)
         {
             return Status == other.Status

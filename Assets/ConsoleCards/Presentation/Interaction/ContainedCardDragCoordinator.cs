@@ -1,6 +1,7 @@
 using System;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Presentation.Views;
 using ConsoleCards.Presentation.Views.Containers;
@@ -17,6 +18,7 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly CardDropTargetResolver dropTargetResolver;
         private readonly CardTransferInteractionCoordinator transferCoordinator;
         private readonly ContainerLayoutViewLookup layoutViewLookup;
+        private readonly IContainedCardDragFeedback feedback;
 
         private CardView activeCardView;
         private ContainerId sourceContainerId;
@@ -32,6 +34,29 @@ namespace ConsoleCards.Presentation.Interaction
             CardDropTargetResolver dropTargetResolver,
             CardTransferInteractionCoordinator transferCoordinator,
             ContainerLayoutViewLookup layoutViewLookup)
+            : this(
+                interactionOwnerId,
+                lockService,
+                stateMachine,
+                previewSession,
+                pointerProjector,
+                dropTargetResolver,
+                transferCoordinator,
+                layoutViewLookup,
+                null)
+        {
+        }
+
+        public ContainedCardDragCoordinator(
+            InteractionOwnerId interactionOwnerId,
+            LocalInteractionLockService lockService,
+            TabletopInteractionStateMachine stateMachine,
+            TabletopDragPreviewSession previewSession,
+            TabletopPointerProjector pointerProjector,
+            CardDropTargetResolver dropTargetResolver,
+            CardTransferInteractionCoordinator transferCoordinator,
+            ContainerLayoutViewLookup layoutViewLookup,
+            IContainedCardDragFeedback feedback)
         {
             if (interactionOwnerId.IsEmpty)
             {
@@ -45,6 +70,7 @@ namespace ConsoleCards.Presentation.Interaction
             this.dropTargetResolver = dropTargetResolver ?? throw new ArgumentNullException(nameof(dropTargetResolver));
             this.transferCoordinator = transferCoordinator ?? throw new ArgumentNullException(nameof(transferCoordinator));
             this.layoutViewLookup = layoutViewLookup ?? throw new ArgumentNullException(nameof(layoutViewLookup));
+            this.feedback = feedback;
 
             if (stateMachine.Phase != TabletopInteractionPhase.Idle)
             {
@@ -111,6 +137,7 @@ namespace ConsoleCards.Presentation.Interaction
                 sourceContainerId = currentSourceId;
                 sourceLayoutView = currentSourceLayout;
                 releasesLockOnCompletion = acquiredByThisCall;
+                feedback?.Begin(sourceContainerId);
                 return true;
             }
             catch
@@ -154,6 +181,7 @@ namespace ConsoleCards.Presentation.Interaction
                 acceptedPose.RotationDegrees,
                 acceptedPose.Layer,
                 acceptedPose.LocalOrder));
+            UpdateFeedback(screenPosition);
         }
 
         public ContainedCardDragReleaseResult Release(Vector2 screenPosition)
@@ -215,6 +243,7 @@ namespace ConsoleCards.Presentation.Interaction
                 }
                 else
                 {
+                    feedback?.ShowRejected(sourceContainerId, target);
                     stateMachine.BeginCancellation();
                     stateMachine.CompleteCancellation();
                 }
@@ -223,6 +252,7 @@ namespace ConsoleCards.Presentation.Interaction
             }
             finally
             {
+                feedback?.Clear();
                 CompleteLifecycleWithoutStateMachineMutation();
             }
         }
@@ -264,6 +294,7 @@ namespace ConsoleCards.Presentation.Interaction
             }
             finally
             {
+                feedback?.Clear();
                 ReleaseLifecycleOwnedLock();
                 stateMachine.Reset();
                 ClearLocalLifecycleState();
@@ -295,6 +326,7 @@ namespace ConsoleCards.Presentation.Interaction
             }
             finally
             {
+                feedback?.Clear();
                 ReleaseLifecycleOwnedLock();
                 if (stateMachine.Phase == TabletopInteractionPhase.Cancelling)
                 {
@@ -400,6 +432,40 @@ namespace ConsoleCards.Presentation.Interaction
             {
                 previewSession.EndPreviewWithoutReconcile();
             }
+        }
+
+        private void UpdateFeedback(Vector2 screenPosition)
+        {
+            if (feedback == null)
+            {
+                return;
+            }
+
+            if (!dropTargetResolver.TryResolve(screenPosition, sourceContainerId, out CardDropTarget target))
+            {
+                feedback.Update(sourceContainerId, CardDropTarget.None(), false);
+                return;
+            }
+
+            feedback.Update(sourceContainerId, target, TargetWouldAccept(target));
+        }
+
+        private bool TargetWouldAccept(CardDropTarget target)
+        {
+            if (target.Kind == CardDropTargetKind.Tabletop)
+            {
+                return true;
+            }
+
+            if (target.Kind != CardDropTargetKind.Container
+                || target.ContainerId.IsEmpty
+                || target.ContainerId == sourceContainerId
+                || !transferCoordinator.MatchState.Containers.TryGetValue(target.ContainerId, out ContainerState container))
+            {
+                return false;
+            }
+
+            return !container.IsFull;
         }
 
         private void ReleaseLifecycleOwnedLock()
