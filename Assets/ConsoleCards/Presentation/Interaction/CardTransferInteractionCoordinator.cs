@@ -18,6 +18,11 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly ContainerLayoutViewLookup layoutViewLookup;
         private readonly LocalInteractionLockService lockService;
         private readonly TransferCardUseCase transferUseCase;
+        private readonly IReadOnlyList<CardView> cardViews;
+        private readonly TabletopPresentationTransitionController transitions;
+        private readonly float settleDuration;
+        private readonly float returnDuration;
+        private readonly float handReflowDuration;
 
         public CardTransferInteractionCoordinator(
             MatchState matchState,
@@ -41,9 +46,41 @@ namespace ConsoleCards.Presentation.Interaction
             this.lockService = lockService ?? throw new ArgumentNullException(nameof(lockService));
             this.transferUseCase = transferUseCase ?? throw new ArgumentNullException(nameof(transferUseCase));
             layoutViewLookup = new ContainerLayoutViewLookup(layoutViews);
+            cardViews = null;
+            transitions = null;
+            settleDuration = 0f;
+            returnDuration = 0f;
+            handReflowDuration = 0f;
 
             RequestedByPlayerId = requestedByPlayerId;
             InteractionOwnerId = interactionOwnerId;
+        }
+
+        internal CardTransferInteractionCoordinator(
+            MatchState matchState,
+            PlayerId requestedByPlayerId,
+            InteractionOwnerId interactionOwnerId,
+            LocalInteractionLockService lockService,
+            TransferCardUseCase transferUseCase,
+            IReadOnlyList<IContainerLayoutView> layoutViews,
+            IReadOnlyList<CardView> cardViews,
+            TabletopPresentationTransitionController transitions,
+            float settleDuration,
+            float returnDuration,
+            float handReflowDuration)
+            : this(
+                matchState,
+                requestedByPlayerId,
+                interactionOwnerId,
+                lockService,
+                transferUseCase,
+                layoutViews)
+        {
+            this.cardViews = cardViews ?? throw new ArgumentNullException(nameof(cardViews));
+            this.transitions = transitions ?? throw new ArgumentNullException(nameof(transitions));
+            this.settleDuration = ValidateNonNegative(settleDuration, nameof(settleDuration));
+            this.returnDuration = ValidateNonNegative(returnDuration, nameof(returnDuration));
+            this.handReflowDuration = ValidateNonNegative(handReflowDuration, nameof(handReflowDuration));
         }
 
         public MatchState MatchState { get; }
@@ -122,16 +159,47 @@ namespace ConsoleCards.Presentation.Interaction
             bool acquiredByThisCall = acquireResult.Status == InteractionLockAcquireStatus.Acquired;
             try
             {
+                IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
+                    transitions != null
+                        ? CaptureAffectedCardTransforms(cardView, sourceContainerId, target.ContainerId)
+                        : null;
                 TransferCardCommand command = CreateCommand(matchCard, sourceContainerId, target);
-                TransferCardResult transferResult = transferUseCase.Execute(MatchState, command);
+                TransferCardResult transferResult;
+                try
+                {
+                    transferResult = transferUseCase.Execute(MatchState, command);
 
-                ReconcileAfterTransfer(
-                    cardView,
-                    sourceContainerId,
-                    command.DestinationContainerId,
-                    sourceLayoutView,
-                    destinationLayoutView,
-                    transferResult);
+                    ReconcileAfterTransfer(
+                        cardView,
+                        sourceContainerId,
+                        command.DestinationContainerId,
+                        sourceLayoutView,
+                        destinationLayoutView,
+                        transferResult);
+                }
+                catch
+                {
+                    ReconcileCurrentPresentation(cardView, sourceLayoutView, destinationLayoutView);
+                    if (transitions != null)
+                    {
+                        transitions.AnimateCardsFromCurrentResults(
+                            transitionStarts,
+                            returnDuration);
+                    }
+
+                    throw;
+                }
+
+                if (transitions != null)
+                {
+                    float duration = transferResult.Succeeded
+                        ? ResolveAcceptedDuration(sourceLayoutView, destinationLayoutView)
+                        : returnDuration;
+                    float arcHeight = transferResult.Succeeded && destinationLayoutView is DiscardPileView
+                        ? 0.045f
+                        : 0f;
+                    transitions.AnimateCardsFromCurrentResults(transitionStarts, duration, arcHeight);
+                }
 
                 return CardTransferInteractionResult.FromTransferResult(transferResult);
             }
@@ -302,6 +370,75 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             sourceLayoutView.ApplyAcceptedLayout();
+        }
+
+        private float ResolveAcceptedDuration(
+            IContainerLayoutView sourceLayoutView,
+            IContainerLayoutView destinationLayoutView)
+        {
+            return sourceLayoutView is HandView || destinationLayoutView is HandView
+                ? handReflowDuration
+                : settleDuration;
+        }
+
+        private IReadOnlyDictionary<Transform, TabletopTransformSnapshot> CaptureAffectedCardTransforms(
+            CardView activeCard,
+            ContainerId sourceContainerId,
+            ContainerId destinationContainerId)
+        {
+            Dictionary<Transform, TabletopTransformSnapshot> starts =
+                new Dictionary<Transform, TabletopTransformSnapshot>();
+            for (int i = 0; i < cardViews.Count; i++)
+            {
+                CardView candidate = cardViews[i];
+                if (candidate == null || candidate.CardState == null)
+                {
+                    continue;
+                }
+
+                ContainerId candidateContainerId = candidate.CardState.BaseState.ContainerId;
+                if (!ReferenceEquals(candidate, activeCard)
+                    && (sourceContainerId.IsEmpty || candidateContainerId != sourceContainerId)
+                    && (destinationContainerId.IsEmpty || candidateContainerId != destinationContainerId))
+                {
+                    continue;
+                }
+
+                starts[candidate.transform] = transitions.StopAndCapture(candidate.transform);
+            }
+
+            return starts;
+        }
+
+        private static void ReconcileCurrentPresentation(
+            CardView cardView,
+            IContainerLayoutView sourceLayoutView,
+            IContainerLayoutView destinationLayoutView)
+        {
+            if (sourceLayoutView != null && sourceLayoutView.IsBound)
+            {
+                sourceLayoutView.ApplyAcceptedLayout();
+            }
+
+            if (destinationLayoutView != null && destinationLayoutView.IsBound)
+            {
+                destinationLayoutView.ApplyAcceptedLayout();
+            }
+
+            if (cardView.CardState != null && cardView.CardState.BaseState.ContainerId.IsEmpty)
+            {
+                cardView.ClearContainerLayoutAndReconcile();
+            }
+        }
+
+        private static float ValidateNonNegative(float value, string parameterName)
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value) || value < 0f)
+            {
+                throw new ArgumentOutOfRangeException(parameterName);
+            }
+
+            return value;
         }
     }
 }

@@ -19,6 +19,7 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly CardTransferInteractionCoordinator transferCoordinator;
         private readonly ContainerLayoutViewLookup layoutViewLookup;
         private readonly IContainedCardDragFeedback feedback;
+        private readonly float magneticDistance;
 
         private CardView activeCardView;
         private ContainerId sourceContainerId;
@@ -71,6 +72,7 @@ namespace ConsoleCards.Presentation.Interaction
             this.transferCoordinator = transferCoordinator ?? throw new ArgumentNullException(nameof(transferCoordinator));
             this.layoutViewLookup = layoutViewLookup ?? throw new ArgumentNullException(nameof(layoutViewLookup));
             this.feedback = feedback;
+            magneticDistance = 0f;
 
             if (stateMachine.Phase != TabletopInteractionPhase.Idle)
             {
@@ -93,6 +95,36 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             InteractionOwnerId = interactionOwnerId;
+        }
+
+        internal ContainedCardDragCoordinator(
+            InteractionOwnerId interactionOwnerId,
+            LocalInteractionLockService lockService,
+            TabletopInteractionStateMachine stateMachine,
+            TabletopDragPreviewSession previewSession,
+            TabletopPointerProjector pointerProjector,
+            CardDropTargetResolver dropTargetResolver,
+            CardTransferInteractionCoordinator transferCoordinator,
+            ContainerLayoutViewLookup layoutViewLookup,
+            IContainedCardDragFeedback feedback,
+            float magneticDistance)
+            : this(
+                interactionOwnerId,
+                lockService,
+                stateMachine,
+                previewSession,
+                pointerProjector,
+                dropTargetResolver,
+                transferCoordinator,
+                layoutViewLookup,
+                feedback)
+        {
+            if (!IsFinite(magneticDistance) || magneticDistance < 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(magneticDistance));
+            }
+
+            this.magneticDistance = magneticDistance;
         }
 
         public InteractionOwnerId InteractionOwnerId { get; }
@@ -137,6 +169,7 @@ namespace ConsoleCards.Presentation.Interaction
                 sourceContainerId = currentSourceId;
                 sourceLayoutView = currentSourceLayout;
                 releasesLockOnCompletion = acquiredByThisCall;
+                previewSession.BeginPress(cardView);
                 feedback?.Begin(sourceContainerId);
                 return true;
             }
@@ -147,6 +180,8 @@ namespace ConsoleCards.Presentation.Interaction
                     lockService.Release(matchCard.BaseState.Id, InteractionOwnerId);
                 }
 
+                previewSession.Reset();
+                feedback?.Clear();
                 ClearLocalLifecycleState();
                 throw;
             }
@@ -176,11 +211,12 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             TabletopPose acceptedPose = view.CardState.BaseState.Pose;
-            previewSession.UpdatePose(new TabletopPose(
+            TabletopPose previewPose = new TabletopPose(
                 coordinate,
                 acceptedPose.RotationDegrees,
                 acceptedPose.Layer,
-                acceptedPose.LocalOrder));
+                acceptedPose.LocalOrder);
+            previewSession.UpdatePose(ApplyStackMagnetism(previewPose, screenPosition));
             UpdateFeedback(screenPosition);
         }
 
@@ -189,17 +225,22 @@ namespace ConsoleCards.Presentation.Interaction
             ValidateScreenPosition(screenPosition, nameof(screenPosition));
             CardView view = GetActiveCardView();
             EnsurePhaseAllows(nameof(Release), TabletopInteractionPhase.Pressed, TabletopInteractionPhase.DraggingObject);
+            bool keepRejectedFeedback = false;
 
             if (stateMachine.Phase == TabletopInteractionPhase.Pressed)
             {
                 stateMachine.ReleasePointer();
                 try
                 {
+                    TabletopTransformSnapshot start =
+                        previewSession.EndPressWithoutReconcileAndCapture(view);
                     RestoreSourceLayout();
+                    previewSession.AnimateReturnFrom(view, start);
                     return ContainedCardDragReleaseResult.ClickReleased();
                 }
                 finally
                 {
+                    feedback?.Clear();
                     CompleteLifecycleWithoutStateMachineMutation();
                 }
             }
@@ -209,8 +250,9 @@ namespace ConsoleCards.Presentation.Interaction
             {
                 if (!dropTargetResolver.TryResolve(screenPosition, out CardDropTarget target))
                 {
-                    EndPreviewIfActiveWithoutReconcile();
+                    TabletopTransformSnapshot start = EndPresentationWithoutReconcile(view);
                     RestoreSourceLayout();
+                    previewSession.AnimateReturnFrom(view, start);
                     stateMachine.BeginCancellation();
                     stateMachine.CompleteCancellation();
                     return ContainedCardDragReleaseResult.ProjectionFailed();
@@ -218,8 +260,9 @@ namespace ConsoleCards.Presentation.Interaction
 
                 if (target.Kind == CardDropTargetKind.None)
                 {
-                    EndPreviewIfActiveWithoutReconcile();
+                    TabletopTransformSnapshot start = EndPresentationWithoutReconcile(view);
                     RestoreSourceLayout();
+                    previewSession.AnimateReturnFrom(view, start);
                     stateMachine.BeginCancellation();
                     stateMachine.CompleteCancellation();
                     return ContainedCardDragReleaseResult.NoTarget();
@@ -227,16 +270,20 @@ namespace ConsoleCards.Presentation.Interaction
 
                 if (target.Kind == CardDropTargetKind.Container && target.ContainerId == sourceContainerId)
                 {
-                    EndPreviewIfActiveWithoutReconcile();
+                    TabletopTransformSnapshot start = EndPresentationWithoutReconcile(view);
                     RestoreSourceLayout();
+                    previewSession.AnimateReturnFrom(view, start);
                     stateMachine.BeginCancellation();
                     stateMachine.CompleteCancellation();
                     return ContainedCardDragReleaseResult.SameSource();
                 }
 
-                EndPreviewIfActiveWithoutReconcile();
+                TabletopTransformSnapshot transferStart = EndPresentationWithoutReconcile(view);
                 CardTransferInteractionResult transferResult = transferCoordinator.Transfer(view, target);
-                ContainedCardDragReleaseResult releaseResult = MapTransferResult(transferResult);
+                ContainedCardDragReleaseResult releaseResult = MapTransferResult(
+                    transferResult,
+                    view,
+                    transferStart);
                 if (releaseResult.Status == ContainedCardDragReleaseStatus.TransferAccepted)
                 {
                     stateMachine.CompleteAcceptance();
@@ -246,13 +293,18 @@ namespace ConsoleCards.Presentation.Interaction
                     feedback?.ShowRejected(sourceContainerId, target);
                     stateMachine.BeginCancellation();
                     stateMachine.CompleteCancellation();
+                    keepRejectedFeedback = true;
                 }
 
                 return releaseResult;
             }
             finally
             {
-                feedback?.Clear();
+                if (!keepRejectedFeedback)
+                {
+                    feedback?.Clear();
+                }
+
                 CompleteLifecycleWithoutStateMachineMutation();
             }
         }
@@ -271,6 +323,7 @@ namespace ConsoleCards.Presentation.Interaction
 
         public void Reset()
         {
+            feedback?.Clear();
             if (!HasActiveInteraction)
             {
                 if (previewSession.IsActive)
@@ -285,8 +338,9 @@ namespace ConsoleCards.Presentation.Interaction
             Exception cleanupFailure = null;
             try
             {
-                EndPreviewIfActiveWithoutReconcile();
+                TabletopTransformSnapshot start = EndPresentationWithoutReconcile(GetActiveCardView());
                 RestoreSourceLayout();
+                previewSession.AnimateReturnFrom(GetActiveCardView(), start);
             }
             catch (Exception exception)
             {
@@ -317,8 +371,10 @@ namespace ConsoleCards.Presentation.Interaction
                     stateMachine.BeginCancellation();
                 }
 
-                EndPreviewIfActiveWithoutReconcile();
+                CardView view = GetActiveCardView();
+                TabletopTransformSnapshot start = EndPresentationWithoutReconcile(view);
                 RestoreSourceLayout();
+                previewSession.AnimateReturnFrom(view, start);
             }
             catch (Exception exception)
             {
@@ -348,7 +404,10 @@ namespace ConsoleCards.Presentation.Interaction
             }
         }
 
-        private ContainedCardDragReleaseResult MapTransferResult(CardTransferInteractionResult transferResult)
+        private ContainedCardDragReleaseResult MapTransferResult(
+            CardTransferInteractionResult transferResult,
+            CardView view,
+            TabletopTransformSnapshot transferStart)
         {
             if (transferResult.TransferAttempted)
             {
@@ -356,6 +415,7 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             RestoreSourceLayout();
+            previewSession.AnimateReturnFrom(view, transferStart);
             return ContainedCardDragReleaseResult.Cancelled();
         }
 
@@ -426,12 +486,52 @@ namespace ConsoleCards.Presentation.Interaction
             sourceLayoutView.ApplyAcceptedLayout();
         }
 
-        private void EndPreviewIfActiveWithoutReconcile()
+        private TabletopTransformSnapshot EndPresentationWithoutReconcile(CardView view)
         {
             if (previewSession.IsActive)
             {
-                previewSession.EndPreviewWithoutReconcile();
+                return previewSession.EndPreviewWithoutReconcileAndCapture();
             }
+
+            return previewSession.EndPressWithoutReconcileAndCapture(view);
+        }
+
+        private TabletopPose ApplyStackMagnetism(TabletopPose previewPose, Vector2 screenPosition)
+        {
+            if (magneticDistance <= 0f
+                || !dropTargetResolver.TryResolve(screenPosition, sourceContainerId, out CardDropTarget target)
+                || target.Kind != CardDropTargetKind.Container
+                || !TargetWouldAccept(target)
+                || !layoutViewLookup.TryGet(target.ContainerId, out IContainerLayoutView layoutView)
+                || !(layoutView is StackView stackView)
+                || stackView.PlacementState == null)
+            {
+                return previewPose;
+            }
+
+            int destinationIndex = stackView.ContainerState.Count;
+            TabletopPose stackPose = stackView.PlacementState.Pose;
+            TableCoordinate magneticCoordinate = new TableCoordinate(
+                stackPose.Position.X + (destinationIndex * stackView.TableOffsetPerCard),
+                stackPose.Position.Y + (destinationIndex * stackView.TableOffsetPerCard));
+            double deltaX = magneticCoordinate.X - previewPose.Position.X;
+            double deltaY = magneticCoordinate.Y - previewPose.Position.Y;
+            double distance = Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
+            if (distance >= magneticDistance)
+            {
+                return previewPose;
+            }
+
+            float strength = 1f - Mathf.Clamp01((float)(distance / magneticDistance));
+            strength = strength * strength * (3f - (2f * strength));
+            TableCoordinate alignedCoordinate = new TableCoordinate(
+                previewPose.Position.X + (deltaX * strength),
+                previewPose.Position.Y + (deltaY * strength));
+            return new TabletopPose(
+                alignedCoordinate,
+                Mathf.LerpAngle(previewPose.RotationDegrees, stackPose.RotationDegrees, strength),
+                previewPose.Layer,
+                previewPose.LocalOrder);
         }
 
         private void UpdateFeedback(Vector2 screenPosition)

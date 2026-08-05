@@ -62,6 +62,16 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal float dragThresholdPixels = 8f;
         [SerializeField] internal float worldUnitsPerTableUnit = 1f;
         [SerializeField] internal float tabletopHeight = 0f;
+        [SerializeField] internal float pickupLift = 0.08f;
+        [SerializeField] internal float dragLift = 0.16f;
+        [SerializeField] internal float pickupResponseDuration = 0.06f;
+        [SerializeField] internal float dragFollowSmoothing = 0.045f;
+        [SerializeField] internal float settleDuration = 0.12f;
+        [SerializeField] internal float returnDuration = 0.1f;
+        [SerializeField] internal float handReflowDuration = 0.14f;
+        [SerializeField] internal float magneticDistance = 0.8f;
+        [SerializeField] internal float feedbackDuration = 0.18f;
+        [SerializeField] internal float shuffleCompression = 0.06f;
 
         private readonly List<RuntimeCardInstance> runtimeCardInstances = new List<RuntimeCardInstance>();
         private readonly List<GameObject> runtimeOwnedStackRoots = new List<GameObject>();
@@ -116,6 +126,7 @@ namespace ConsoleCards.Presentation.Prototype
         private ContainedCardDragCoordinator containedCardDragCoordinator;
         private TabletopInteractionRouter interactionRouter;
         private ContainerLayoutViewLookup layoutViewLookup;
+        private TabletopPresentationTransitionController presentationTransitions;
 
         private SeatId localSeatId;
         private ContainerId deckContainerId;
@@ -128,6 +139,7 @@ namespace ConsoleCards.Presentation.Prototype
         private int dynamicStackSequence;
         private string operationMessage = "M3 prototype ready.";
         private float operationMessageUntil;
+        private float feedbackHoldUntil;
 
         private DeckView deckView;
         private HandView handView;
@@ -230,6 +242,7 @@ namespace ConsoleCards.Presentation.Prototype
             try
             {
                 ValidateConfiguration();
+                presentationTransitions = new TabletopPresentationTransitionController();
                 ReactivateSceneOwnedObjectViews();
                 BuildRuntimeGraph();
                 BindObjectViews();
@@ -248,7 +261,7 @@ namespace ConsoleCards.Presentation.Prototype
                 }
 
                 selectionPresenter.Refresh();
-                ShowMessage("M3.17 prototype ready.");
+                ShowMessage("M3.18 prototype ready.");
                 IsInitialized = true;
             }
             catch
@@ -290,9 +303,9 @@ namespace ConsoleCards.Presentation.Prototype
             cameraRoutingConfiguredByComposition = false;
 
             inputRoutingPolicy?.ClearInteractionRouter();
-            moveCoordinator?.Reset();
-            containedCardDragCoordinator?.Reset();
+            interactionRouter?.Reset();
             previewSession?.Reset();
+            presentationTransitions?.CompleteAll();
             lockService?.Clear();
 
             selectionPresenter?.Clear();
@@ -333,6 +346,7 @@ namespace ConsoleCards.Presentation.Prototype
             previewSession = null;
             dropTargetResolver = null;
             layoutViewLookup = null;
+            presentationTransitions = null;
             transferCoordinator = null;
             containedCardDragCoordinator = null;
             moveCoordinator = null;
@@ -394,22 +408,36 @@ namespace ConsoleCards.Presentation.Prototype
             buttonDefinitions.Clear();
             stackViewsByContainerId.Clear();
             feedbackTargetsByContainerId.Clear();
+            feedbackHoldUntil = 0f;
             IsInitialized = false;
         }
 
         public ShuffleDeckResult ShuffleDeck()
         {
             EnsureInitialized();
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
+                CaptureContainerCardTransforms(deckContainerId);
             ShuffleDeckResult result = new ShuffleDeckUseCase().Execute(
                 matchState,
                 new ShuffleDeckCommand(CreateCommandContext(), deckContainerId, ShuffleSeed));
             if (result.Succeeded)
             {
                 deckView.ApplyAcceptedLayout();
+                presentationTransitions.AnimateCardsFromCurrentResults(
+                    transitionStarts,
+                    settleDuration);
+                presentationTransitions.Pulse(
+                    sceneDeckVisual.transform,
+                    shuffleCompression,
+                    feedbackDuration);
                 ShowMessage("Deck shuffled.");
             }
             else
             {
+                deckView.ApplyAcceptedLayout();
+                presentationTransitions.AnimateCardsFromCurrentResults(
+                    transitionStarts,
+                    returnDuration);
                 ShowMessage($"Shuffle rejected: {result.Error}.");
             }
 
@@ -429,6 +457,8 @@ namespace ConsoleCards.Presentation.Prototype
         public DrawCardsResult DrawCards(int count)
         {
             EnsureInitialized();
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
+                CaptureContainerCardTransforms(deckContainerId, handContainerId);
             DrawCardsResult result = new DrawCardsUseCase().Execute(
                 matchState,
                 new DrawCardsCommand(CreateCommandContext(), deckContainerId, handContainerId, count));
@@ -436,12 +466,19 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 deckView.ApplyAcceptedLayout();
                 handView.ApplyAcceptedLayout();
+                presentationTransitions.AnimateCardsFromCurrentResults(
+                    transitionStarts,
+                    handReflowDuration,
+                    0.035f);
                 ShowMessage($"Drew {count} card{(count == 1 ? string.Empty : "s")} to Hand.");
             }
             else
             {
                 deckView.ApplyAcceptedLayout();
                 handView.ApplyAcceptedLayout();
+                presentationTransitions.AnimateCardsFromCurrentResults(
+                    transitionStarts,
+                    returnDuration);
                 ShowMessage($"Draw rejected: {result.Error}.");
             }
 
@@ -488,6 +525,8 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             int firstMovedIndex = Math.Max(1, source.Count / 2);
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
+                CaptureContainerCardTransforms(source.Id);
             ContainerId newStackId = CreateDeterministicDynamicStackId(dynamicStackSequence++);
             TabletopPose sourcePose = sourceView.Placement.Pose;
             TabletopPose newPose = new TabletopPose(
@@ -515,11 +554,20 @@ namespace ConsoleCards.Presentation.Prototype
                 primaryStackContainerId = newStackId;
                 sourceView.View.ApplyAcceptedLayout();
                 newStackView.View.ApplyAcceptedLayout();
+                presentationTransitions.AnimateCardsFromCurrentResults(
+                    transitionStarts,
+                    settleDuration,
+                    0.035f);
+                presentationTransitions.Appear(newStackView.Root.transform, settleDuration);
                 RebuildLayoutLookupAndRouter();
                 ShowMessage("Stack split.");
             }
             else
             {
+                sourceView.View.ApplyAcceptedLayout();
+                presentationTransitions.AnimateCardsFromCurrentResults(
+                    transitionStarts,
+                    returnDuration);
                 ShowMessage($"Split rejected: {result.Error}.");
             }
 
@@ -580,10 +628,12 @@ namespace ConsoleCards.Presentation.Prototype
 
         void IContainedCardDragFeedback.ShowRejected(ContainerId sourceContainerId, CardDropTarget target)
         {
+            ClearFeedback();
             if (target.Kind == CardDropTargetKind.Container
                 && feedbackTargetsByContainerId.TryGetValue(target.ContainerId, out ContainerFeedbackTarget feedbackTarget))
             {
                 feedbackTarget.SetInvalid();
+                feedbackHoldUntil = Time.unscaledTime + feedbackDuration;
             }
 
             ShowMessage("Transfer rejected.");
@@ -618,6 +668,15 @@ namespace ConsoleCards.Presentation.Prototype
         private void OnDestroy()
         {
             Shutdown();
+        }
+
+        private void Update()
+        {
+            presentationTransitions?.Tick(Time.unscaledDeltaTime);
+            if (feedbackHoldUntil > 0f && Time.unscaledTime >= feedbackHoldUntil)
+            {
+                ClearFeedback();
+            }
         }
 
         private void OnGUI()
@@ -729,6 +788,16 @@ namespace ConsoleCards.Presentation.Prototype
             ValidateFiniteGreaterThanOrEqualToZero(dragThresholdPixels, nameof(dragThresholdPixels));
             ValidateFiniteGreaterThanZero(worldUnitsPerTableUnit, nameof(worldUnitsPerTableUnit));
             ValidateFinite(tabletopHeight, nameof(tabletopHeight));
+            ValidateFiniteGreaterThanOrEqualToZero(pickupLift, nameof(pickupLift));
+            ValidateFiniteGreaterThanOrEqualToZero(dragLift, nameof(dragLift));
+            ValidateFiniteGreaterThanOrEqualToZero(pickupResponseDuration, nameof(pickupResponseDuration));
+            ValidateFiniteGreaterThanOrEqualToZero(dragFollowSmoothing, nameof(dragFollowSmoothing));
+            ValidateFiniteGreaterThanOrEqualToZero(settleDuration, nameof(settleDuration));
+            ValidateFiniteGreaterThanOrEqualToZero(returnDuration, nameof(returnDuration));
+            ValidateFiniteGreaterThanOrEqualToZero(handReflowDuration, nameof(handReflowDuration));
+            ValidateFiniteGreaterThanOrEqualToZero(magneticDistance, nameof(magneticDistance));
+            ValidateFiniteGreaterThanOrEqualToZero(feedbackDuration, nameof(feedbackDuration));
+            ValidateFiniteGreaterThanOrEqualToZero(shuffleCompression, nameof(shuffleCompression));
             ValidateDistinctViews();
             ValidateSelectionPresentationReferences();
             ValidateCardPrefabReferences();
@@ -1193,7 +1262,14 @@ namespace ConsoleCards.Presentation.Prototype
             pointerProjector = new TabletopPointerProjector(targetCamera, coordinateConverter, tabletopHeight);
             lockService = new LocalInteractionLockService();
             interactionStateMachine = new TabletopInteractionStateMachine(dragThresholdPixels);
-            previewSession = new TabletopDragPreviewSession();
+            previewSession = new TabletopDragPreviewSession(
+                presentationTransitions,
+                pickupLift,
+                dragLift,
+                pickupResponseDuration,
+                dragFollowSmoothing,
+                settleDuration,
+                returnDuration);
             dropTargetResolver = new CardDropTargetResolver(
                 targetCamera,
                 pointerProjector,
@@ -1218,7 +1294,12 @@ namespace ConsoleCards.Presentation.Prototype
                 interactionOwnerId,
                 lockService,
                 new TransferCardUseCase(),
-                layoutViews);
+                layoutViews,
+                cardViews,
+                presentationTransitions,
+                settleDuration,
+                returnDuration,
+                handReflowDuration);
             containedCardDragCoordinator = new ContainedCardDragCoordinator(
                 interactionOwnerId,
                 lockService,
@@ -1228,7 +1309,8 @@ namespace ConsoleCards.Presentation.Prototype
                 dropTargetResolver,
                 transferCoordinator,
                 layoutViewLookup,
-                this);
+                this,
+                magneticDistance);
             moveCoordinator = new TabletopMoveInteractionCoordinator(
                 matchState,
                 localPlayerId,
@@ -1241,7 +1323,10 @@ namespace ConsoleCards.Presentation.Prototype
                 previewSession,
                 new MoveObjectUseCase(),
                 dropTargetResolver,
-                transferCoordinator);
+                transferCoordinator,
+                layoutViewLookup,
+                this,
+                magneticDistance);
             rotationCoordinator = new TabletopRotationCoordinator(
                 matchState,
                 localPlayerId,
@@ -1394,6 +1479,8 @@ namespace ConsoleCards.Presentation.Prototype
             ContainerState container = matchState.GetContainer(containerId);
             int fromIndex = container.IndexOf(selectedCard.ObjectId);
             int toIndex = Mathf.Clamp(fromIndex + delta, 0, container.Count - 1);
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
+                CaptureContainerCardTransforms(containerId);
             ReorderContainerResult result = new ReorderContainerUseCase().Execute(
                 matchState,
                 new ReorderContainerCommand(
@@ -1406,11 +1493,17 @@ namespace ConsoleCards.Presentation.Prototype
             if (result.Succeeded)
             {
                 ApplyLayout(containerId);
+                presentationTransitions.AnimateCardsFromCurrentResults(
+                    transitionStarts,
+                    containerId == handContainerId ? handReflowDuration : settleDuration);
                 ShowMessage("Card reordered.");
             }
             else
             {
                 ApplyLayout(containerId);
+                presentationTransitions.AnimateCardsFromCurrentResults(
+                    transitionStarts,
+                    returnDuration);
                 ShowMessage($"Reorder rejected: {result.Error}.");
             }
 
@@ -1429,19 +1522,31 @@ namespace ConsoleCards.Presentation.Prototype
                 return MergeStacksResult.Failure(CommandResultStatus.Rejected, MergeStacksError.SourceStackMissing);
             }
 
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
+                CaptureContainerCardTransforms(sourceId, destinationId);
             MergeStacksResult result = new MergeStacksUseCase().Execute(
                 matchState,
                 new MergeStacksCommand(CreateCommandContext(), sourceId, destinationId));
             if (result.Succeeded)
             {
                 StackRuntimeView destinationView = stackViewsByContainerId[destinationId];
-                destinationView.View.ApplyAcceptedLayout();
                 RemoveStackRuntimeView(sourceId);
+                destinationView.View.ApplyAcceptedLayout();
+                presentationTransitions.AnimateCardsFromCurrentResults(
+                    transitionStarts,
+                    settleDuration,
+                    0.04f);
+                presentationTransitions.Pulse(destinationView.Root.transform, shuffleCompression, feedbackDuration);
                 primaryStackContainerId = destinationId;
                 ShowMessage("Stacks merged.");
             }
             else
             {
+                stackViewsByContainerId[sourceId].View.ApplyAcceptedLayout();
+                stackViewsByContainerId[destinationId].View.ApplyAcceptedLayout();
+                presentationTransitions.AnimateCardsFromCurrentResults(
+                    transitionStarts,
+                    returnDuration);
                 ShowMessage($"Merge rejected: {result.Error}.");
             }
 
@@ -1522,6 +1627,36 @@ namespace ConsoleCards.Presentation.Prototype
                     }
                 }
             }
+        }
+
+        private IReadOnlyDictionary<Transform, TabletopTransformSnapshot> CaptureContainerCardTransforms(
+            params ContainerId[] containerIds)
+        {
+            Dictionary<Transform, TabletopTransformSnapshot> starts =
+                new Dictionary<Transform, TabletopTransformSnapshot>();
+            for (int cardIndex = 0; cardIndex < cardViews.Count; cardIndex++)
+            {
+                CardView candidate = cardViews[cardIndex];
+                if (candidate == null || candidate.CardState == null)
+                {
+                    continue;
+                }
+
+                ContainerId candidateContainerId = candidate.CardState.BaseState.ContainerId;
+                for (int containerIndex = 0; containerIndex < containerIds.Length; containerIndex++)
+                {
+                    if (candidateContainerId != containerIds[containerIndex])
+                    {
+                        continue;
+                    }
+
+                    starts[candidate.transform] =
+                        presentationTransitions.StopAndCapture(candidate.transform);
+                    break;
+                }
+            }
+
+            return starts;
         }
 
         private CommandContext CreateCommandContext()
@@ -1706,6 +1841,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ClearFeedback()
         {
+            feedbackHoldUntil = 0f;
             foreach (ContainerFeedbackTarget target in feedbackTargetsByContainerId.Values)
             {
                 target.Clear();
@@ -1805,6 +1941,7 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
+            presentationTransitions?.Forget(root.transform);
             root.SetActive(false);
             if (ownership == StackViewOwnership.RuntimeOwned)
             {
@@ -1965,6 +2102,11 @@ namespace ConsoleCards.Presentation.Prototype
                 if (selectionVisual != null)
                 {
                     cardSelectionVisuals.Remove(selectionVisual);
+                }
+
+                if (view != null)
+                {
+                    presentationTransitions?.Forget(view.transform);
                 }
 
                 runtimeCardInstances.RemoveAt(lastIndex);
