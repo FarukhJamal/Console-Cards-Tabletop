@@ -10,6 +10,12 @@ namespace ConsoleCards.Presentation.Interaction
     /// </summary>
     public sealed class TabletopObjectHitResolver
     {
+        // RaycastNonAlloc returns at most this many hits. When the buffer fills,
+        // only the returned hits are inspected, sorted deterministically below.
+        private const int HitBufferCapacity = 32;
+
+        private readonly RaycastHit[] hitBuffer;
+
         public TabletopObjectHitResolver(
             UnityCamera targetCamera,
             LayerMask interactionLayerMask,
@@ -33,6 +39,7 @@ namespace ConsoleCards.Presentation.Interaction
             TargetCamera = targetCamera;
             InteractionLayerMask = interactionLayerMask;
             MaximumDistance = maximumDistance;
+            hitBuffer = new RaycastHit[HitBufferCapacity];
         }
 
         public UnityCamera TargetCamera { get; }
@@ -47,28 +54,91 @@ namespace ConsoleCards.Presentation.Interaction
 
             Physics.SyncTransforms();
             Ray ray = TargetCamera.ScreenPointToRay(screenPosition);
-            if (!Physics.Raycast(
+            int hitCount = Physics.RaycastNonAlloc(
                 ray,
-                out RaycastHit hit,
+                hitBuffer,
                 MaximumDistance,
                 InteractionLayerMask,
-                QueryTriggerInteraction.Collide))
+                QueryTriggerInteraction.Collide);
+            if (hitCount == 0)
             {
                 view = null;
                 return false;
             }
 
-            TabletopObjectView resolvedView = hit.collider.GetComponentInParent<TabletopObjectView>();
-            if (resolvedView == null
-                || !resolvedView.IsBound
-                || !resolvedView.isActiveAndEnabled)
+            SortHitsNearestFirst(hitCount);
+            for (int i = 0; i < hitCount; i++)
             {
-                view = null;
-                return false;
+                Collider hitCollider = hitBuffer[i].collider;
+                if (hitCollider == null
+                    || !hitCollider.enabled
+                    || !hitCollider.gameObject.activeInHierarchy)
+                {
+                    continue;
+                }
+
+                TabletopObjectView resolvedView = hitCollider.GetComponentInParent<TabletopObjectView>();
+                if (resolvedView == null
+                    || !resolvedView.isActiveAndEnabled
+                    || !resolvedView.IsBound
+                    || !IsPickableObjectView(resolvedView))
+                {
+                    continue;
+                }
+
+                view = resolvedView;
+                return true;
             }
 
-            view = resolvedView;
-            return true;
+            view = null;
+            return false;
+        }
+
+        private void SortHitsNearestFirst(int hitCount)
+        {
+            for (int i = 1; i < hitCount; i++)
+            {
+                RaycastHit candidate = hitBuffer[i];
+                int insertionIndex = i - 1;
+                while (insertionIndex >= 0
+                    && CompareHits(candidate, hitBuffer[insertionIndex]) < 0)
+                {
+                    hitBuffer[insertionIndex + 1] = hitBuffer[insertionIndex];
+                    insertionIndex--;
+                }
+
+                hitBuffer[insertionIndex + 1] = candidate;
+            }
+        }
+
+        private static int CompareHits(RaycastHit left, RaycastHit right)
+        {
+            int distanceComparison = left.distance.CompareTo(right.distance);
+            if (distanceComparison != 0)
+            {
+                return distanceComparison;
+            }
+
+            Collider leftCollider = left.collider;
+            Collider rightCollider = right.collider;
+            if (leftCollider == null)
+            {
+                return rightCollider == null ? 0 : 1;
+            }
+
+            if (rightCollider == null)
+            {
+                return -1;
+            }
+
+            return leftCollider.GetEntityId().CompareTo(rightCollider.GetEntityId());
+        }
+
+        private static bool IsPickableObjectView(TabletopObjectView view)
+        {
+            return view is CardView
+                || view is PawnView
+                || view is TokenView;
         }
 
         private static void ValidateFinite(Vector2 value)
