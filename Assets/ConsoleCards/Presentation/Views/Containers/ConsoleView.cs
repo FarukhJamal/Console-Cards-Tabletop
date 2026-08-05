@@ -10,6 +10,7 @@ namespace ConsoleCards.Presentation.Views.Containers
     {
         [SerializeField] private Transform layoutAnchor;
         [SerializeField] private float slotSpacing = 1.25f;
+        [SerializeField] private Transform[] slotAnchors = Array.Empty<Transform>();
 
         private readonly List<ConsoleSlotView> slotViews = new List<ConsoleSlotView>();
         private ConsoleState consoleState;
@@ -20,6 +21,8 @@ namespace ConsoleCards.Presentation.Views.Containers
         public ConsoleState ConsoleState => isBound ? consoleState : null;
 
         public Transform LayoutAnchor => layoutAnchor;
+
+        public IReadOnlyList<Transform> SlotAnchors => slotAnchors;
 
         public int VisibleSlotCount => isBound ? slotViews.Count : 0;
 
@@ -57,11 +60,18 @@ namespace ConsoleCards.Presentation.Views.Containers
             for (int i = 0; i < slotViews.Count; i++)
             {
                 ConsoleSlotView slotView = slotViews[i];
-                float centeredIndex = i - center;
-                Transform slotAnchor = slotView.LayoutAnchor;
-                slotAnchor.SetPositionAndRotation(
-                    layoutAnchor.position + (layoutAnchor.right * centeredIndex * slotSpacing),
-                    layoutAnchor.rotation);
+                if (slotAnchors.Length > 0)
+                {
+                    slotView.LayoutAnchor.SetPositionAndRotation(slotAnchors[i].position, slotAnchors[i].rotation);
+                }
+                else
+                {
+                    float centeredIndex = i - center;
+                    slotView.LayoutAnchor.SetPositionAndRotation(
+                        layoutAnchor.position + (layoutAnchor.right * centeredIndex * slotSpacing),
+                        layoutAnchor.rotation);
+                }
+
                 slotView.ApplyAcceptedLayout();
             }
         }
@@ -96,6 +106,8 @@ namespace ConsoleCards.Presentation.Views.Containers
                 throw new ArgumentException("Console Slot View count must match Console slot count.", nameof(orderedSlotViews));
             }
 
+            ValidateAuthoredSlotAnchors(orderedSlotViews.Count);
+
             HashSet<ConsoleSlotView> seenViews = new HashSet<ConsoleSlotView>();
             HashSet<ContainerId> seenContainerIds = new HashSet<ContainerId>();
             for (int i = 0; i < orderedSlotViews.Count; i++)
@@ -125,6 +137,39 @@ namespace ConsoleCards.Presentation.Views.Containers
                 if (slotView.ContainerId != expectedContainerId)
                 {
                     throw new ArgumentException("Console Slot View order must match ConsoleState slot order.", nameof(orderedSlotViews));
+                }
+            }
+        }
+
+        private void ValidateAuthoredSlotAnchors(int expectedCount)
+        {
+            if (slotAnchors == null || slotAnchors.Length == 0)
+            {
+                return;
+            }
+
+            if (slotAnchors.Length != expectedCount)
+            {
+                throw new InvalidOperationException("ConsoleView authored Slot anchor count must match Console slot count.");
+            }
+
+            HashSet<Transform> seenAnchors = new HashSet<Transform>();
+            for (int i = 0; i < slotAnchors.Length; i++)
+            {
+                Transform slotAnchor = slotAnchors[i];
+                if (slotAnchor == null)
+                {
+                    throw new InvalidOperationException("ConsoleView authored Slot anchors cannot contain null entries.");
+                }
+
+                if (slotAnchor != transform && !slotAnchor.IsChildOf(transform))
+                {
+                    throw new InvalidOperationException("ConsoleView authored Slot anchors must belong to the Console hierarchy.");
+                }
+
+                if (!seenAnchors.Add(slotAnchor))
+                {
+                    throw new InvalidOperationException("ConsoleView authored Slot anchors must be distinct.");
                 }
             }
         }

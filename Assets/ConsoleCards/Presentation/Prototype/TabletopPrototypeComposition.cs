@@ -27,6 +27,7 @@ namespace ConsoleCards.Presentation.Prototype
     public sealed class TabletopPrototypeComposition : MonoBehaviour, IContainedCardDragFeedback
     {
         private const int TotalCardCount = 16;
+        private const int PrototypeConsoleSlotCount = 3;
         private const int ShuffleSeed = 123;
         private const string ButtonUpLabel = "\u2191";
         private const string ButtonDownLabel = "\u2193";
@@ -46,6 +47,9 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal GameObject pawnHighlightRoot;
         [SerializeField] internal TabletopSelectionVisual tokenSelectionVisual;
         [SerializeField] internal GameObject tokenHighlightRoot;
+        [SerializeField] internal ConsoleView sceneConsoleView;
+        [SerializeField] internal ConsoleSlotView[] sceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
+        [SerializeField] internal PrototypeConsoleSlotVisual[] sceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
 
         [SerializeField] internal LayerMask interactionLayerMask;
         [SerializeField] internal float maximumHitDistance = 100f;
@@ -53,7 +57,10 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal float worldUnitsPerTableUnit = 1f;
         [SerializeField] internal float tabletopHeight = 0f;
 
-        private readonly List<GameObject> runtimeObjects = new List<GameObject>();
+        private readonly List<RuntimeCardInstance> runtimeCardInstances = new List<RuntimeCardInstance>();
+        private readonly List<GameObject> runtimeOwnedStackRoots = new List<GameObject>();
+        private readonly List<GameObject> runtimeGeneratedFixedContainerRoots = new List<GameObject>();
+        private readonly List<GameObject> runtimeGeneratedHierarchyRoots = new List<GameObject>();
         private readonly List<CardView> cardViews = new List<CardView>();
         private readonly List<TabletopSelectionVisual> cardSelectionVisuals = new List<TabletopSelectionVisual>();
         private readonly List<IContainerLayoutView> layoutViews = new List<IContainerLayoutView>();
@@ -117,6 +124,8 @@ namespace ConsoleCards.Presentation.Prototype
         private DiscardPileView discardPileView;
         private ConsoleView consoleView;
         private readonly List<ConsoleSlotView> consoleSlotViews = new List<ConsoleSlotView>();
+        private ConsoleSlotView[] resolvedSceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
+        private PrototypeConsoleSlotVisual[] resolvedSceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
 
         private Material cardFrontMaterial;
         private Material cardBackMaterial;
@@ -125,8 +134,6 @@ namespace ConsoleCards.Presentation.Prototype
         private Material handMaterial;
         private Material stackMaterial;
         private Material discardMaterial;
-        private Material consoleMaterial;
-        private Material slotMaterial;
         private Material validTargetMaterial;
         private Material sourceTargetMaterial;
         private Material invalidTargetMaterial;
@@ -293,11 +300,6 @@ namespace ConsoleCards.Presentation.Prototype
             selectionPresenter?.Clear();
             selectionPresenter = null;
             ClearSelectionVisualIfOwned(cardSelectionVisual, ref cardSelectionVisualConfiguredByComposition);
-            for (int i = 1; i < cardSelectionVisuals.Count; i++)
-            {
-                cardSelectionVisuals[i]?.Clear();
-            }
-
             ClearSelectionVisualIfOwned(pawnSelectionVisual, ref pawnSelectionVisualConfiguredByComposition);
             ClearSelectionVisualIfOwned(tokenSelectionVisual, ref tokenSelectionVisualConfiguredByComposition);
             DeactivateHighlightRoot(cardHighlightRoot);
@@ -306,39 +308,49 @@ namespace ConsoleCards.Presentation.Prototype
 
             for (int i = 0; i < consoleSlotViews.Count; i++)
             {
+                if (i < resolvedSceneConsoleSlotVisuals.Length)
+                {
+                    PrototypeConsoleSlotVisual slotVisual = resolvedSceneConsoleSlotVisuals[i];
+                    if (slotVisual != null)
+                    {
+                        slotVisual.DropTarget?.ClearConfiguration();
+                        slotVisual.ClearFeedback();
+                    }
+                }
+
                 if (consoleSlotViews[i] != null && consoleSlotViews[i].IsBound)
                 {
                     consoleSlotViews[i].Unbind();
                 }
             }
 
-            deckView?.Unbind();
-            handView?.Unbind();
-            discardPileView?.Unbind();
             consoleView?.Unbind();
 
-            foreach (StackRuntimeView stackView in stackViewsByContainerId.Values)
-            {
-                stackView.DropTarget?.ClearConfiguration();
-                if (stackView.View != null && stackView.View.IsBound)
-                {
-                    stackView.View.Unbind();
-                }
-            }
-
             UnbindIfOwned(cardView, ref cardViewBoundByComposition);
-            for (int i = 1; i < cardViews.Count; i++)
-            {
-                if (cardViews[i] != null && cardViews[i].IsBound)
-                {
-                    cardViews[i].Unbind();
-                }
-            }
-
             UnbindIfOwned(pawnView, ref pawnViewBoundByComposition);
             UnbindIfOwned(tokenView, ref tokenViewBoundByComposition);
 
-            DestroyRuntimeObjects();
+            selectionState = null;
+            hitResolver = null;
+            pointerProjector = null;
+            lockService = null;
+            interactionStateMachine = null;
+            previewSession = null;
+            dropTargetResolver = null;
+            layoutViewLookup = null;
+            transferCoordinator = null;
+            containedCardDragCoordinator = null;
+            moveCoordinator = null;
+            rotationCoordinator = null;
+            flipCoordinator = null;
+            inputRoutingPolicy = null;
+            interactionRouter = null;
+            layoutViews.Clear();
+
+            ReleaseAllStackViews();
+            ReleaseRuntimeGeneratedFixedContainerViews();
+            ReleaseRuntimeCardInstances();
+            ReleaseRuntimeGeneratedHierarchyRoots();
             DestroyRuntimeMaterials();
 
             matchState = null;
@@ -378,7 +390,13 @@ namespace ConsoleCards.Presentation.Prototype
             consoleView = null;
             cardViews.Clear();
             cardSelectionVisuals.Clear();
+            runtimeCardInstances.Clear();
+            runtimeOwnedStackRoots.Clear();
+            runtimeGeneratedFixedContainerRoots.Clear();
+            runtimeGeneratedHierarchyRoots.Clear();
             consoleSlotViews.Clear();
+            resolvedSceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
+            resolvedSceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
             layoutViews.Clear();
             labelsByCardId.Clear();
             buttonDefinitions.Clear();
@@ -707,6 +725,7 @@ namespace ConsoleCards.Presentation.Prototype
             RequireReference(pawnHighlightRoot, nameof(pawnHighlightRoot));
             RequireReference(tokenSelectionVisual, nameof(tokenSelectionVisual));
             RequireReference(tokenHighlightRoot, nameof(tokenHighlightRoot));
+            ValidateSceneConsoleReferences();
 
             if (!targetCamera.orthographic)
             {
@@ -747,6 +766,24 @@ namespace ConsoleCards.Presentation.Prototype
             if (tokenView.IsBound)
             {
                 throw new InvalidOperationException("TabletopPrototypeComposition requires the TokenView to begin unbound.");
+            }
+
+            if (sceneConsoleView.IsBound)
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires the scene ConsoleView to begin unbound.");
+            }
+
+            for (int i = 0; i < resolvedSceneConsoleSlotViews.Length; i++)
+            {
+                if (resolvedSceneConsoleSlotViews[i].IsBound)
+                {
+                    throw new InvalidOperationException("TabletopPrototypeComposition requires scene ConsoleSlotViews to begin unbound.");
+                }
+
+                if (resolvedSceneConsoleSlotVisuals[i].DropTarget.IsConfigured)
+                {
+                    throw new InvalidOperationException("TabletopPrototypeComposition requires scene Console Slot drop targets to begin unconfigured.");
+                }
             }
 
             if (objectInputAdapter.IsInitialized)
@@ -998,7 +1035,7 @@ namespace ConsoleCards.Presentation.Prototype
             stackViewsByContainerId.Add(stackAContainerId, stackA);
             stackViewsByContainerId.Add(stackBContainerId, stackB);
             discardPileView = CreateDiscardObject(containersRoot.transform);
-            consoleView = CreateConsoleObject(containersRoot.transform);
+            consoleView = sceneConsoleView;
             dynamicRoot.SetActive(true);
         }
 
@@ -1026,12 +1063,12 @@ namespace ConsoleCards.Presentation.Prototype
             for (int i = 0; i < runtimeConsole.SlotCount; i++)
             {
                 ContainerState slot = matchState.GetContainer(runtimeConsole.SlotContainerIds[i]);
-                ConsoleSlotView slotView = CreateConsoleSlotObject(consoleView.transform, $"Slot{(char)('A' + i)}");
-                slotView.Bind(slot, slotView.transform, coordinateConverter, cardViews);
+                ConsoleSlotView slotView = resolvedSceneConsoleSlotViews[i];
+                slotView.Bind(slot, resolvedSceneConsoleSlotVisuals[i].LayoutAnchor, coordinateConverter, cardViews);
                 consoleSlotViews.Add(slotView);
             }
 
-            consoleView.Bind(runtimeConsole, consoleView.transform, consoleSlotViews);
+            consoleView.Bind(runtimeConsole, consoleView.LayoutAnchor, consoleSlotViews);
             RebuildLayoutViewCollection();
         }
 
@@ -1047,7 +1084,7 @@ namespace ConsoleCards.Presentation.Prototype
             ConfigureDropTarget(discardPileView.gameObject, discardPileView, discardMaterial);
             for (int i = 0; i < consoleSlotViews.Count; i++)
             {
-                ConfigureDropTarget(consoleSlotViews[i].gameObject, consoleSlotViews[i], slotMaterial);
+                ConfigureSceneConsoleSlot(i);
             }
         }
 
@@ -1137,6 +1174,12 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void RebuildLayoutLookupAndRouter()
         {
+            SuspendInteractionDependenciesForRebuild();
+            ResumeInteractionDependenciesAfterRebuild();
+        }
+
+        private void SuspendInteractionDependenciesForRebuild()
+        {
             if (interactionRouter != null && interactionRouter.HasActiveInteraction)
             {
                 throw new InvalidOperationException("Cannot rebuild M3 interaction graph during an active interaction.");
@@ -1161,6 +1204,18 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             inputRoutingPolicy?.ClearInteractionRouter();
+            layoutViewLookup = null;
+            transferCoordinator = null;
+            containedCardDragCoordinator = null;
+            moveCoordinator = null;
+            rotationCoordinator = null;
+            flipCoordinator = null;
+            inputRoutingPolicy = null;
+            interactionRouter = null;
+        }
+
+        private void ResumeInteractionDependenciesAfterRebuild()
+        {
             RebuildInteractionDependencies();
             inputFrameCoordinator.enabled = true;
             frameCoordinatorEnabledByComposition = true;
@@ -1281,12 +1336,10 @@ namespace ConsoleCards.Presentation.Prototype
                 new MergeStacksCommand(CreateCommandContext(), sourceId, destinationId));
             if (result.Succeeded)
             {
-                StackRuntimeView sourceView = stackViewsByContainerId[sourceId];
                 StackRuntimeView destinationView = stackViewsByContainerId[destinationId];
-                RemoveStackRuntimeView(sourceId);
                 destinationView.View.ApplyAcceptedLayout();
+                RemoveStackRuntimeView(sourceId);
                 primaryStackContainerId = destinationId;
-                RebuildLayoutLookupAndRouter();
                 ShowMessage("Stacks merged.");
             }
             else
@@ -1338,18 +1391,9 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            stackRuntimeView.DropTarget?.ClearConfiguration();
-            feedbackTargetsByContainerId.Remove(containerId);
-            if (stackRuntimeView.View != null && stackRuntimeView.View.IsBound)
-            {
-                stackRuntimeView.View.Unbind();
-            }
-
-            stackViewsByContainerId.Remove(containerId);
-            if (stackRuntimeView.Root != null)
-            {
-                Destroy(stackRuntimeView.Root);
-            }
+            SuspendInteractionDependenciesForRebuild();
+            ReleaseStackView(containerId, stackRuntimeView);
+            ResumeInteractionDependenciesAfterRebuild();
         }
 
         private void ApplyLayout(ContainerId containerId)
@@ -1401,10 +1445,12 @@ namespace ConsoleCards.Presentation.Prototype
         {
             GameObject clone = Instantiate(cardView.gameObject);
             clone.name = $"Card {label}";
-            RegisterRuntimeObject(clone);
+            RuntimeCardInstance runtimeCardInstance = new RuntimeCardInstance(clone);
+            runtimeCardInstances.Add(runtimeCardInstance);
             clone.transform.SetParent(EnsureRuntimeRoot("LooseCards").transform, false);
             CardView createdView = clone.GetComponent<CardView>();
             TabletopSelectionVisual selectionVisual = clone.GetComponent<TabletopSelectionVisual>();
+            runtimeCardInstance.SetReferences(createdView, selectionVisual);
             GameObject highlightRoot = ResolveGeneratedCardHighlightRoot(clone.transform).gameObject;
             selectionVisual.Clear();
             selectionVisual.Configure(createdView, highlightRoot);
@@ -1472,7 +1518,13 @@ namespace ConsoleCards.Presentation.Prototype
 
         private DeckView CreateDeckObject(Transform parent)
         {
-            GameObject root = CreateContainerRoot("Deck", parent, new TableCoordinate(-5d, 2d), deckMaterial, new Vector3(1.25f, 0.04f, 1.65f));
+            GameObject root = CreateContainerRoot(
+                "Deck",
+                parent,
+                new TableCoordinate(-5d, 2d),
+                deckMaterial,
+                new Vector3(1.25f, 0.04f, 1.65f),
+                RuntimeGeneratedContainerOwnership.FixedContainer);
             DeckView view = root.AddComponent<DeckView>();
             AddContainerLabel(root.transform, "Deck", Color.white);
             return view;
@@ -1480,7 +1532,13 @@ namespace ConsoleCards.Presentation.Prototype
 
         private HandView CreateHandObject(Transform parent)
         {
-            GameObject root = CreateContainerRoot("Hand", parent, new TableCoordinate(0d, -3.2d), handMaterial, new Vector3(5.8f, 0.035f, 1.65f));
+            GameObject root = CreateContainerRoot(
+                "Hand",
+                parent,
+                new TableCoordinate(0d, -3.2d),
+                handMaterial,
+                new Vector3(5.8f, 0.035f, 1.65f),
+                RuntimeGeneratedContainerOwnership.FixedContainer);
             HandView view = root.AddComponent<HandView>();
             AddContainerLabel(root.transform, "Hand", Color.white);
             return view;
@@ -1488,26 +1546,15 @@ namespace ConsoleCards.Presentation.Prototype
 
         private DiscardPileView CreateDiscardObject(Transform parent)
         {
-            GameObject root = CreateContainerRoot("Discard", parent, new TableCoordinate(5d, 2d), discardMaterial, new Vector3(1.35f, 0.04f, 1.75f));
+            GameObject root = CreateContainerRoot(
+                "Discard",
+                parent,
+                new TableCoordinate(5d, 2d),
+                discardMaterial,
+                new Vector3(1.35f, 0.04f, 1.75f),
+                RuntimeGeneratedContainerOwnership.FixedContainer);
             DiscardPileView view = root.AddComponent<DiscardPileView>();
             AddContainerLabel(root.transform, "Discard", Color.white);
-            return view;
-        }
-
-        private ConsoleView CreateConsoleObject(Transform parent)
-        {
-            GameObject root = CreateContainerRoot("Console", parent, new TableCoordinate(0d, -5.2d), consoleMaterial, new Vector3(4.8f, 0.04f, 1.55f));
-            ConsoleView view = root.AddComponent<ConsoleView>();
-            AddContainerLabel(root.transform, "Console", Color.white);
-            return view;
-        }
-
-        private ConsoleSlotView CreateConsoleSlotObject(Transform parent, string name)
-        {
-            double xOffset = consoleSlotViews.Count == 0 ? -1.25d : consoleSlotViews.Count == 1 ? 0d : 1.25d;
-            GameObject root = CreateContainerRoot(name, parent, new TableCoordinate(xOffset, 0d), slotMaterial, new Vector3(1.05f, 0.055f, 1.45f));
-            ConsoleSlotView view = root.AddComponent<ConsoleSlotView>();
-            AddContainerLabel(root.transform, name, Color.white);
             return view;
         }
 
@@ -1518,12 +1565,25 @@ namespace ConsoleCards.Presentation.Prototype
             bool dynamic)
         {
             Transform parent = dynamic ? EnsureRuntimeRoot("DynamicContainers").transform : null;
-            GameObject root = CreateContainerRoot(name, parent, placement.Pose.Position, stackMaterial, new Vector3(1.25f, 0.045f, 1.65f));
+            GameObject root = CreateContainerRoot(
+                name,
+                parent,
+                placement.Pose.Position,
+                stackMaterial,
+                new Vector3(1.25f, 0.045f, 1.65f),
+                RuntimeGeneratedContainerOwnership.Stack);
             StackView view = root.AddComponent<StackView>();
             AddContainerLabel(root.transform, name, Color.white);
             view.Bind(container, placement, coordinateConverter, cardViews);
-            TabletopContainerDropTarget dropTarget = ConfigureDropTarget(root, view, stackMaterial);
-            return new StackRuntimeView(root, view, container, placement, dropTarget);
+            StackRuntimeView stackRuntimeView = new StackRuntimeView(
+                StackViewOwnership.RuntimeOwned,
+                root,
+                view,
+                container,
+                placement,
+                null);
+            stackRuntimeView.DropTarget = ConfigureDropTarget(root, view, stackMaterial);
+            return stackRuntimeView;
         }
 
         private GameObject CreateContainerRoot(
@@ -1531,10 +1591,19 @@ namespace ConsoleCards.Presentation.Prototype
             Transform parent,
             TableCoordinate coordinate,
             Material material,
-            Vector3 boundaryScale)
+            Vector3 boundaryScale,
+            RuntimeGeneratedContainerOwnership ownership)
         {
             GameObject root = new GameObject(name);
-            RegisterRuntimeObject(root);
+            if (ownership == RuntimeGeneratedContainerOwnership.Stack)
+            {
+                runtimeOwnedStackRoots.Add(root);
+            }
+            else
+            {
+                runtimeGeneratedFixedContainerRoots.Add(root);
+            }
+
             if (parent != null)
             {
                 root.transform.SetParent(parent, false);
@@ -1546,7 +1615,6 @@ namespace ConsoleCards.Presentation.Prototype
 
             GameObject boundary = GameObject.CreatePrimitive(PrimitiveType.Cube);
             boundary.name = "Boundary";
-            RegisterRuntimeObject(boundary);
             boundary.transform.SetParent(root.transform, false);
             boundary.transform.localPosition = Vector3.zero;
             boundary.transform.localRotation = Quaternion.identity;
@@ -1577,6 +1645,8 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             Collider collider = root.GetComponent<Collider>();
+            collider.enabled = true;
+            target.enabled = true;
             target.Configure(view, collider);
             Renderer renderer = FindChild(root.transform, "Boundary").GetComponent<Renderer>();
             feedbackTargetsByContainerId[view.ContainerId] = new ContainerFeedbackTarget(
@@ -1595,6 +1665,15 @@ namespace ConsoleCards.Presentation.Prototype
                 stackRuntimeView.View,
                 stackMaterial);
             stackRuntimeView.DropTarget = dropTarget;
+        }
+
+        private void ConfigureSceneConsoleSlot(int index)
+        {
+            ConsoleSlotView slotView = consoleSlotViews[index];
+            PrototypeConsoleSlotVisual slotVisual = resolvedSceneConsoleSlotVisuals[index];
+            slotVisual.DropTarget.Configure(slotView, slotVisual.TargetCollider);
+            slotVisual.ClearFeedback();
+            feedbackTargetsByContainerId[slotView.ContainerId] = new ContainerFeedbackTarget(slotVisual);
         }
 
         private void AddContainerLabel(Transform root, string text, Color color)
@@ -1625,8 +1704,6 @@ namespace ConsoleCards.Presentation.Prototype
             handMaterial = CreateMaterial("M3 Hand Boundary", new Color(0.18f, 0.26f, 0.29f));
             stackMaterial = CreateMaterial("M3 Stack Boundary", new Color(0.24f, 0.21f, 0.29f));
             discardMaterial = CreateMaterial("M3 Discard Boundary", new Color(0.33f, 0.18f, 0.19f));
-            consoleMaterial = CreateMaterial("M3 Console Boundary", new Color(0.13f, 0.13f, 0.15f));
-            slotMaterial = CreateMaterial("M3 Console Slot Boundary", new Color(0.22f, 0.24f, 0.28f));
             validTargetMaterial = CreateMaterial("M3 Valid Target", new Color(0.18f, 0.62f, 0.38f));
             sourceTargetMaterial = CreateMaterial("M3 Source Target", new Color(0.34f, 0.37f, 0.42f));
             invalidTargetMaterial = CreateMaterial("M3 Invalid Target", new Color(0.72f, 0.18f, 0.16f));
@@ -1673,8 +1750,6 @@ namespace ConsoleCards.Presentation.Prototype
             DestroyMaterial(handMaterial);
             DestroyMaterial(stackMaterial);
             DestroyMaterial(discardMaterial);
-            DestroyMaterial(consoleMaterial);
-            DestroyMaterial(slotMaterial);
             DestroyMaterial(validTargetMaterial);
             DestroyMaterial(sourceTargetMaterial);
             DestroyMaterial(invalidTargetMaterial);
@@ -1686,8 +1761,6 @@ namespace ConsoleCards.Presentation.Prototype
             handMaterial = null;
             stackMaterial = null;
             discardMaterial = null;
-            consoleMaterial = null;
-            slotMaterial = null;
             validTargetMaterial = null;
             sourceTargetMaterial = null;
             invalidTargetMaterial = null;
@@ -1803,29 +1876,233 @@ namespace ConsoleCards.Presentation.Prototype
 
             GameObject root = new GameObject(name);
             SceneManager.MoveGameObjectToScene(root, scene);
-            RegisterRuntimeObject(root);
+            if (!runtimeGeneratedHierarchyRoots.Contains(root))
+            {
+                runtimeGeneratedHierarchyRoots.Add(root);
+            }
+
             return root;
         }
 
-        private void RegisterRuntimeObject(GameObject gameObject)
+        private void ReleaseAllStackViews()
         {
-            if (gameObject != null && !runtimeObjects.Contains(gameObject))
+            List<KeyValuePair<ContainerId, StackRuntimeView>> activeStackViews =
+                new List<KeyValuePair<ContainerId, StackRuntimeView>>(stackViewsByContainerId);
+            for (int i = activeStackViews.Count - 1; i >= 0; i--)
             {
-                runtimeObjects.Add(gameObject);
+                ReleaseStackView(activeStackViews[i].Key, activeStackViews[i].Value);
+            }
+
+            while (runtimeOwnedStackRoots.Count > 0)
+            {
+                int lastIndex = runtimeOwnedStackRoots.Count - 1;
+                GameObject root = runtimeOwnedStackRoots[lastIndex];
+                runtimeOwnedStackRoots.RemoveAt(lastIndex);
+                DisableRuntimeInteraction(root);
+                DestroyRuntimeOwnedGameObject(root);
+            }
+
+            stackViewsByContainerId.Clear();
+        }
+
+        private void ReleaseStackView(ContainerId containerId, StackRuntimeView stackRuntimeView)
+        {
+            if (stackRuntimeView == null)
+            {
+                return;
+            }
+
+            StackViewOwnership ownership = stackRuntimeView.Ownership;
+            GameObject root = stackRuntimeView.Root;
+            StackView view = stackRuntimeView.View;
+            TabletopContainerDropTarget dropTarget = stackRuntimeView.DropTarget;
+
+            DisableRuntimeInteraction(root);
+            if (dropTarget != null)
+            {
+                dropTarget.ClearConfiguration();
+                dropTarget.enabled = false;
+            }
+
+            if (view != null && view.IsBound)
+            {
+                view.Unbind();
+            }
+
+            feedbackTargetsByContainerId.Remove(containerId);
+            stackViewsByContainerId.Remove(containerId);
+            if (view != null)
+            {
+                layoutViews.Remove(view);
+            }
+
+            runtimeOwnedStackRoots.Remove(root);
+            stackRuntimeView.ClearReferences();
+
+            if (root == null)
+            {
+                return;
+            }
+
+            root.SetActive(false);
+            if (ownership == StackViewOwnership.RuntimeOwned)
+            {
+                DestroyRuntimeOwnedGameObject(root);
             }
         }
 
-        private void DestroyRuntimeObjects()
+        private void ReleaseRuntimeGeneratedFixedContainerViews()
         {
-            for (int i = runtimeObjects.Count - 1; i >= 0; i--)
+            DeckView runtimeDeckView = deckView;
+            GameObject deckRoot = runtimeDeckView != null ? runtimeDeckView.gameObject : null;
+            DisableRuntimeInteraction(deckRoot);
+            if (runtimeDeckView != null && runtimeDeckView.IsBound)
             {
-                if (runtimeObjects[i] != null)
-                {
-                    Destroy(runtimeObjects[i]);
-                }
+                runtimeDeckView.Unbind();
             }
 
-            runtimeObjects.Clear();
+            feedbackTargetsByContainerId.Remove(deckContainerId);
+            if (runtimeDeckView != null)
+            {
+                layoutViews.Remove(runtimeDeckView);
+            }
+
+            deckView = null;
+            ReleaseRuntimeGeneratedFixedContainerRoot(deckRoot);
+
+            HandView runtimeHandView = handView;
+            GameObject handRoot = runtimeHandView != null ? runtimeHandView.gameObject : null;
+            DisableRuntimeInteraction(handRoot);
+            if (runtimeHandView != null && runtimeHandView.IsBound)
+            {
+                runtimeHandView.Unbind();
+            }
+
+            feedbackTargetsByContainerId.Remove(handContainerId);
+            if (runtimeHandView != null)
+            {
+                layoutViews.Remove(runtimeHandView);
+            }
+
+            handView = null;
+            ReleaseRuntimeGeneratedFixedContainerRoot(handRoot);
+
+            DiscardPileView runtimeDiscardView = discardPileView;
+            GameObject discardRoot = runtimeDiscardView != null ? runtimeDiscardView.gameObject : null;
+            DisableRuntimeInteraction(discardRoot);
+            if (runtimeDiscardView != null && runtimeDiscardView.IsBound)
+            {
+                runtimeDiscardView.Unbind();
+            }
+
+            feedbackTargetsByContainerId.Remove(discardContainerId);
+            if (runtimeDiscardView != null)
+            {
+                layoutViews.Remove(runtimeDiscardView);
+            }
+
+            discardPileView = null;
+            ReleaseRuntimeGeneratedFixedContainerRoot(discardRoot);
+
+            while (runtimeGeneratedFixedContainerRoots.Count > 0)
+            {
+                int lastIndex = runtimeGeneratedFixedContainerRoots.Count - 1;
+                GameObject root = runtimeGeneratedFixedContainerRoots[lastIndex];
+                runtimeGeneratedFixedContainerRoots.RemoveAt(lastIndex);
+                DisableRuntimeInteraction(root);
+                DestroyRuntimeOwnedGameObject(root);
+            }
+        }
+
+        private void ReleaseRuntimeGeneratedFixedContainerRoot(GameObject root)
+        {
+            if (root == null || !runtimeGeneratedFixedContainerRoots.Remove(root))
+            {
+                return;
+            }
+
+            DestroyRuntimeOwnedGameObject(root);
+        }
+
+        private void ReleaseRuntimeCardInstances()
+        {
+            while (runtimeCardInstances.Count > 0)
+            {
+                int lastIndex = runtimeCardInstances.Count - 1;
+                RuntimeCardInstance runtimeCardInstance = runtimeCardInstances[lastIndex];
+                GameObject root = runtimeCardInstance.Root;
+                CardView view = runtimeCardInstance.View;
+                TabletopSelectionVisual selectionVisual = runtimeCardInstance.SelectionVisual;
+
+                DisableRuntimeInteraction(root);
+                selectionVisual?.Clear();
+                if (view != null && view.IsBound)
+                {
+                    view.Unbind();
+                }
+
+                if (view != null)
+                {
+                    cardViews.Remove(view);
+                }
+
+                if (selectionVisual != null)
+                {
+                    cardSelectionVisuals.Remove(selectionVisual);
+                }
+
+                runtimeCardInstances.RemoveAt(lastIndex);
+                runtimeCardInstance.ClearReferences();
+                DestroyRuntimeOwnedGameObject(root);
+            }
+        }
+
+        private void ReleaseRuntimeGeneratedHierarchyRoots()
+        {
+            while (runtimeGeneratedHierarchyRoots.Count > 0)
+            {
+                int lastIndex = runtimeGeneratedHierarchyRoots.Count - 1;
+                GameObject root = runtimeGeneratedHierarchyRoots[lastIndex];
+                runtimeGeneratedHierarchyRoots.RemoveAt(lastIndex);
+                DisableRuntimeInteraction(root);
+                DestroyRuntimeOwnedGameObject(root);
+            }
+        }
+
+        private static void DisableRuntimeInteraction(GameObject root)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            TabletopContainerDropTarget dropTarget = root.GetComponent<TabletopContainerDropTarget>();
+            if (dropTarget != null)
+            {
+                dropTarget.ClearConfiguration();
+                dropTarget.enabled = false;
+            }
+
+            Collider[] colliders = root.GetComponents<Collider>();
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                if (colliders[i] != null)
+                {
+                    colliders[i].enabled = false;
+                }
+            }
+        }
+
+        private static void DestroyRuntimeOwnedGameObject(GameObject root)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            root.SetActive(false);
+            root.name = $"{root.name} (Pending Runtime Destruction)";
+            Destroy(root);
         }
 
         private static void ApplyMaterialToRenderers(GameObject root, Material material)
@@ -1931,6 +2208,162 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
+        private void ValidateSceneConsoleReferences()
+        {
+            RequireReference(sceneConsoleView, nameof(sceneConsoleView));
+            resolvedSceneConsoleSlotViews = ResolveSceneConsoleSlotViews();
+            resolvedSceneConsoleSlotVisuals = new PrototypeConsoleSlotVisual[PrototypeConsoleSlotCount];
+
+            HashSet<ConsoleSlotView> seenViews = new HashSet<ConsoleSlotView>();
+            for (int i = 0; i < PrototypeConsoleSlotCount; i++)
+            {
+                ConsoleSlotView slotView = resolvedSceneConsoleSlotViews[i];
+                if (!seenViews.Add(slotView))
+                {
+                    throw new InvalidOperationException("Duplicate ConsoleSlotView detected.");
+                }
+
+                if (!slotView.transform.IsChildOf(sceneConsoleView.transform))
+                {
+                    throw new InvalidOperationException("ConsoleSlotView must belong to sceneConsoleView hierarchy.");
+                }
+
+                Collider targetCollider = slotView.GetComponent<Collider>();
+                if (targetCollider == null)
+                {
+                    throw new InvalidOperationException("ConsoleSlotView requires a Collider on its Slot root.");
+                }
+
+                TabletopContainerDropTarget dropTarget = slotView.GetComponent<TabletopContainerDropTarget>();
+                if (dropTarget == null)
+                {
+                    throw new InvalidOperationException("ConsoleSlotView requires a TabletopContainerDropTarget on its Slot root.");
+                }
+
+                PrototypeConsoleSlotVisual slotVisual = ResolveSceneConsoleSlotVisual(slotView);
+                RequireReference(slotVisual, $"PrototypeConsoleSlotVisual for Console Slot {i}");
+                slotVisual.ValidateReferences();
+                if (!ReferenceEquals(slotVisual.SlotView, slotView))
+                {
+                    throw new InvalidOperationException("TabletopPrototypeComposition Console Slot View order must match its authored visual order.");
+                }
+
+                if (!ReferenceEquals(slotVisual.TargetCollider, targetCollider)
+                    || !ReferenceEquals(slotVisual.DropTarget, dropTarget))
+                {
+                    throw new InvalidOperationException("ConsoleSlotView Collider and drop target must match its authored visual references.");
+                }
+
+                resolvedSceneConsoleSlotVisuals[i] = slotVisual;
+            }
+
+            for (int i = 1; i < resolvedSceneConsoleSlotViews.Length; i++)
+            {
+                if (CompareConsoleHierarchyOrder(
+                        resolvedSceneConsoleSlotViews[i - 1].transform,
+                        resolvedSceneConsoleSlotViews[i].transform) >= 0)
+                {
+                    throw new InvalidOperationException("ConsoleSlotView sibling order must be stable.");
+                }
+            }
+        }
+
+        private ConsoleSlotView[] ResolveSceneConsoleSlotViews()
+        {
+            ConsoleSlotView[] resolvedViews;
+            if (sceneConsoleSlotViews != null
+                && sceneConsoleSlotViews.Length == PrototypeConsoleSlotCount
+                && Array.TrueForAll(sceneConsoleSlotViews, view => view != null))
+            {
+                resolvedViews = (ConsoleSlotView[])sceneConsoleSlotViews.Clone();
+            }
+            else
+            {
+                resolvedViews = sceneConsoleView.GetComponentsInChildren<ConsoleSlotView>(true);
+            }
+
+            if (resolvedViews.Length != PrototypeConsoleSlotCount)
+            {
+                throw new InvalidOperationException(
+                    $"Expected exactly {PrototypeConsoleSlotCount} ConsoleSlotView components under sceneConsoleView.");
+            }
+
+            for (int i = 0; i < resolvedViews.Length; i++)
+            {
+                if (resolvedViews[i] == null)
+                {
+                    throw new InvalidOperationException("ConsoleSlotView resolution returned a null entry.");
+                }
+
+                if (!resolvedViews[i].transform.IsChildOf(sceneConsoleView.transform))
+                {
+                    throw new InvalidOperationException("ConsoleSlotView must belong to sceneConsoleView hierarchy.");
+                }
+            }
+
+            Array.Sort(
+                resolvedViews,
+                (left, right) => CompareConsoleHierarchyOrder(left.transform, right.transform));
+            return resolvedViews;
+        }
+
+        private PrototypeConsoleSlotVisual ResolveSceneConsoleSlotVisual(ConsoleSlotView slotView)
+        {
+            if (sceneConsoleSlotVisuals != null)
+            {
+                for (int i = 0; i < sceneConsoleSlotVisuals.Length; i++)
+                {
+                    PrototypeConsoleSlotVisual explicitVisual = sceneConsoleSlotVisuals[i];
+                    if (explicitVisual != null && ReferenceEquals(explicitVisual.SlotView, slotView))
+                    {
+                        return explicitVisual;
+                    }
+                }
+            }
+
+            return slotView.GetComponent<PrototypeConsoleSlotVisual>();
+        }
+
+        private int CompareConsoleHierarchyOrder(Transform left, Transform right)
+        {
+            if (ReferenceEquals(left, right))
+            {
+                return 0;
+            }
+
+            List<int> leftOrder = GetConsoleHierarchyOrder(left);
+            List<int> rightOrder = GetConsoleHierarchyOrder(right);
+            int sharedDepth = Math.Min(leftOrder.Count, rightOrder.Count);
+            for (int i = 0; i < sharedDepth; i++)
+            {
+                int comparison = leftOrder[i].CompareTo(rightOrder[i]);
+                if (comparison != 0)
+                {
+                    return comparison;
+                }
+            }
+
+            return leftOrder.Count.CompareTo(rightOrder.Count);
+        }
+
+        private List<int> GetConsoleHierarchyOrder(Transform slotTransform)
+        {
+            List<int> order = new List<int>();
+            Transform current = slotTransform;
+            while (!ReferenceEquals(current, sceneConsoleView.transform))
+            {
+                order.Add(current.GetSiblingIndex());
+                current = current.parent;
+                if (current == null)
+                {
+                    throw new InvalidOperationException("ConsoleSlotView must belong to sceneConsoleView hierarchy.");
+                }
+            }
+
+            order.Reverse();
+            return order;
+        }
+
         private static void UnbindIfOwned(TabletopObjectView view, ref bool boundByComposition)
         {
             if (!boundByComposition)
@@ -2005,15 +2438,56 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
+        private enum StackViewOwnership
+        {
+            SceneOwned,
+            RuntimeOwned,
+        }
+
+        private enum RuntimeGeneratedContainerOwnership
+        {
+            FixedContainer,
+            Stack,
+        }
+
+        private sealed class RuntimeCardInstance
+        {
+            public RuntimeCardInstance(GameObject root)
+            {
+                Root = root;
+            }
+
+            public GameObject Root { get; private set; }
+
+            public CardView View { get; private set; }
+
+            public TabletopSelectionVisual SelectionVisual { get; private set; }
+
+            public void SetReferences(CardView view, TabletopSelectionVisual selectionVisual)
+            {
+                View = view;
+                SelectionVisual = selectionVisual;
+            }
+
+            public void ClearReferences()
+            {
+                Root = null;
+                View = null;
+                SelectionVisual = null;
+            }
+        }
+
         private sealed class StackRuntimeView
         {
             public StackRuntimeView(
+                StackViewOwnership ownership,
                 GameObject root,
                 StackView view,
                 ContainerState container,
                 ContainerPlacementState placement,
                 TabletopContainerDropTarget dropTarget)
             {
+                Ownership = ownership;
                 Root = root;
                 View = view;
                 Container = container;
@@ -2021,15 +2495,26 @@ namespace ConsoleCards.Presentation.Prototype
                 DropTarget = dropTarget;
             }
 
-            public GameObject Root { get; }
+            public StackViewOwnership Ownership { get; }
 
-            public StackView View { get; }
+            public GameObject Root { get; private set; }
 
-            public ContainerState Container { get; }
+            public StackView View { get; private set; }
 
-            public ContainerPlacementState Placement { get; }
+            public ContainerState Container { get; private set; }
+
+            public ContainerPlacementState Placement { get; private set; }
 
             public TabletopContainerDropTarget DropTarget { get; set; }
+
+            public void ClearReferences()
+            {
+                Root = null;
+                View = null;
+                Container = default(ContainerState);
+                Placement = default(ContainerPlacementState);
+                DropTarget = null;
+            }
         }
 
         private sealed class ContainerFeedbackTarget
@@ -2039,6 +2524,7 @@ namespace ConsoleCards.Presentation.Prototype
             private readonly Material validMaterial;
             private readonly Material sourceMaterial;
             private readonly Material invalidMaterial;
+            private readonly PrototypeConsoleSlotVisual authoredSlotVisual;
 
             public ContainerFeedbackTarget(
                 Renderer renderer,
@@ -2055,23 +2541,53 @@ namespace ConsoleCards.Presentation.Prototype
                 Clear();
             }
 
+            public ContainerFeedbackTarget(PrototypeConsoleSlotVisual slotVisual)
+            {
+                authoredSlotVisual = slotVisual ?? throw new ArgumentNullException(nameof(slotVisual));
+                Clear();
+            }
+
             public void SetValid()
             {
+                if (authoredSlotVisual != null)
+                {
+                    authoredSlotVisual.ShowValidTarget();
+                    return;
+                }
+
                 Set(validMaterial);
             }
 
             public void SetSource()
             {
+                if (authoredSlotVisual != null)
+                {
+                    authoredSlotVisual.ShowSourceTarget();
+                    return;
+                }
+
                 Set(sourceMaterial);
             }
 
             public void SetInvalid()
             {
+                if (authoredSlotVisual != null)
+                {
+                    authoredSlotVisual.ShowInvalidTarget();
+                    return;
+                }
+
                 Set(invalidMaterial);
             }
 
             public void Clear()
             {
+                if (authoredSlotVisual != null)
+                {
+                    authoredSlotVisual.ClearFeedback();
+                    return;
+                }
+
                 Set(baseMaterial);
             }
 
