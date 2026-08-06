@@ -32,6 +32,7 @@ namespace ConsoleCards.Presentation.Prototype
         private const string ButtonDownLabel = "\u2193";
         private const string ButtonLeftLabel = "\u2190";
         private const string ButtonRightLabel = "\u2192";
+        private static readonly Rect PrototypeControlsPanelRect = new Rect(16f, 330f, 280f, 390f);
 
         [SerializeField] internal UnityCamera targetCamera;
         [SerializeField] internal TabletopCameraInputAdapter cameraInputAdapter;
@@ -76,6 +77,8 @@ namespace ConsoleCards.Presentation.Prototype
         private readonly List<RuntimeCardInstance> runtimeCardInstances = new List<RuntimeCardInstance>();
         private readonly List<GameObject> runtimeOwnedStackRoots = new List<GameObject>();
         private readonly List<CardView> cardViews = new List<CardView>();
+        private readonly List<PrototypeCardVisualReferences> cardVisualReferences =
+            new List<PrototypeCardVisualReferences>();
         private readonly List<TabletopSelectionVisual> cardSelectionVisuals = new List<TabletopSelectionVisual>();
         private readonly List<IContainerLayoutView> layoutViews = new List<IContainerLayoutView>();
         private readonly Dictionary<TabletopObjectId, string> labelsByCardId = new Dictionary<TabletopObjectId, string>();
@@ -88,6 +91,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private bool cameraRoutingConfiguredByComposition;
         private bool frameCoordinatorEnabledByComposition;
+        private bool controlsPanelInputBlockConfiguredByComposition;
         private bool objectAdapterInitializedByComposition;
         private bool cardViewBoundByComposition;
         private bool pawnViewBoundByComposition;
@@ -203,6 +207,8 @@ namespace ConsoleCards.Presentation.Prototype
 
         public TabletopInputFrameCoordinator FrameCoordinator => inputFrameCoordinator;
 
+        public Rect ControlsPanelScreenRect => PrototypeControlsPanelRect;
+
         public IReadOnlyList<CardView> CardViews => cardViews.AsReadOnly();
 
         public DeckView DeckView => deckView;
@@ -248,8 +254,11 @@ namespace ConsoleCards.Presentation.Prototype
                 BindObjectViews();
                 BuildContainerViews();
                 BindContainerViews();
+                RefreshCardContentVisibility();
                 ConfigureDropTargets();
                 BuildInteractionGraph();
+                inputFrameCoordinator.ConfigureObjectInputBlockingGuiRect(ControlsPanelScreenRect);
+                controlsPanelInputBlockConfiguredByComposition = true;
                 inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
                 inputFrameCoordinator.enabled = true;
                 frameCoordinatorEnabledByComposition = true;
@@ -282,6 +291,13 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             frameCoordinatorEnabledByComposition = false;
+
+            if (controlsPanelInputBlockConfiguredByComposition && inputFrameCoordinator != null)
+            {
+                inputFrameCoordinator.ClearObjectInputBlockingGuiRect();
+            }
+
+            controlsPanelInputBlockConfiguredByComposition = false;
 
             if (inputFrameCoordinator != null)
             {
@@ -397,6 +413,7 @@ namespace ConsoleCards.Presentation.Prototype
             discardPileView = null;
             consoleView = null;
             cardViews.Clear();
+            cardVisualReferences.Clear();
             cardSelectionVisuals.Clear();
             runtimeCardInstances.Clear();
             runtimeOwnedStackRoots.Clear();
@@ -441,6 +458,7 @@ namespace ConsoleCards.Presentation.Prototype
                 ShowMessage($"Shuffle rejected: {result.Error}.");
             }
 
+            RefreshCardContentVisibility();
             return result;
         }
 
@@ -482,6 +500,7 @@ namespace ConsoleCards.Presentation.Prototype
                 ShowMessage($"Draw rejected: {result.Error}.");
             }
 
+            RefreshCardContentVisibility();
             return result;
         }
 
@@ -571,6 +590,7 @@ namespace ConsoleCards.Presentation.Prototype
                 ShowMessage($"Split rejected: {result.Error}.");
             }
 
+            RefreshCardContentVisibility();
             return result;
         }
 
@@ -673,6 +693,7 @@ namespace ConsoleCards.Presentation.Prototype
         private void Update()
         {
             presentationTransitions?.Tick(Time.unscaledDeltaTime);
+            RefreshCardContentVisibility();
             if (feedbackHoldUntil > 0f && Time.unscaledTime >= feedbackHoldUntil)
             {
                 ClearFeedback();
@@ -686,7 +707,7 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            GUILayout.BeginArea(new Rect(16f, 330f, 280f, 390f), GUI.skin.box);
+            GUILayout.BeginArea(ControlsPanelScreenRect, GUI.skin.box);
             GUILayout.Label("M3 Prototype Controls");
             GUILayout.Space(4f);
             if (GUILayout.Button("Shuffle Deck"))
@@ -1146,6 +1167,7 @@ namespace ConsoleCards.Presentation.Prototype
             cardSelectionVisual.SetSelected(false);
             cardView.Bind(cardState, coordinateConverter);
             cardViewBoundByComposition = true;
+            cardVisualReferences.Add(looseCardVisualReferences);
             cardSelectionVisuals.Add(cardSelectionVisual);
             cardViews.Add(cardView);
 
@@ -1550,6 +1572,7 @@ namespace ConsoleCards.Presentation.Prototype
                 ShowMessage($"Merge rejected: {result.Error}.");
             }
 
+            RefreshCardContentVisibility();
             return result;
         }
 
@@ -1627,6 +1650,57 @@ namespace ConsoleCards.Presentation.Prototype
                     }
                 }
             }
+
+            RefreshCardContentVisibility();
+        }
+
+        private void RefreshCardContentVisibility()
+        {
+            if (matchState == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < cardVisualReferences.Count; i++)
+            {
+                PrototypeCardVisualReferences visualReferences = cardVisualReferences[i];
+                if (visualReferences == null)
+                {
+                    continue;
+                }
+
+                CardView boundCardView = visualReferences.CardView;
+                if (boundCardView == null
+                    || !boundCardView.IsBound
+                    || boundCardView.CardState == null)
+                {
+                    continue;
+                }
+
+                visualReferences.SetCardContentVisible(
+                    ShouldShowCardContent(boundCardView.CardState));
+            }
+        }
+
+        private bool ShouldShowCardContent(CardInstanceState card)
+        {
+            ContainerId containerId = card.BaseState.ContainerId;
+            if (containerId.IsEmpty
+                || !matchState.Containers.TryGetValue(containerId, out ContainerState container)
+                || !ShowsOnlyTopCardContent(container.Kind))
+            {
+                return true;
+            }
+
+            return container.Count > 0
+                && container.ObjectIds[container.Count - 1] == card.BaseState.Id;
+        }
+
+        private static bool ShowsOnlyTopCardContent(ContainerKind kind)
+        {
+            return kind == ContainerKind.Deck
+                || kind == ContainerKind.Stack
+                || kind == ContainerKind.DiscardPile;
         }
 
         private IReadOnlyDictionary<Transform, TabletopTransformSnapshot> CaptureContainerCardTransforms(
@@ -1682,10 +1756,11 @@ namespace ConsoleCards.Presentation.Prototype
             createdVisualReferences.ValidateReferences();
             CardView createdView = createdVisualReferences.CardView;
             selectionVisual = createdVisualReferences.SelectionVisual;
-            runtimeCardInstance.SetReferences(createdView, selectionVisual);
+            runtimeCardInstance.SetReferences(createdView, selectionVisual, createdVisualReferences);
             selectionVisual.SetSelected(false);
             ConfigureCardVisuals(createdVisualReferences, label, IsButtonCard(card));
             createdView.Bind(card, coordinateConverter);
+            cardVisualReferences.Add(createdVisualReferences);
             return createdView;
         }
 
@@ -2086,6 +2161,7 @@ namespace ConsoleCards.Presentation.Prototype
                 GameObject root = runtimeCardInstance.Root;
                 CardView view = runtimeCardInstance.View;
                 TabletopSelectionVisual selectionVisual = runtimeCardInstance.SelectionVisual;
+                PrototypeCardVisualReferences visualReferences = runtimeCardInstance.VisualReferences;
 
                 DisableRuntimeInteraction(root);
                 selectionVisual?.Clear();
@@ -2102,6 +2178,11 @@ namespace ConsoleCards.Presentation.Prototype
                 if (selectionVisual != null)
                 {
                     cardSelectionVisuals.Remove(selectionVisual);
+                }
+
+                if (visualReferences != null)
+                {
+                    cardVisualReferences.Remove(visualReferences);
                 }
 
                 if (view != null)
@@ -2464,10 +2545,16 @@ namespace ConsoleCards.Presentation.Prototype
 
             public TabletopSelectionVisual SelectionVisual { get; private set; }
 
-            public void SetReferences(CardView view, TabletopSelectionVisual selectionVisual)
+            public PrototypeCardVisualReferences VisualReferences { get; private set; }
+
+            public void SetReferences(
+                CardView view,
+                TabletopSelectionVisual selectionVisual,
+                PrototypeCardVisualReferences visualReferences)
             {
                 View = view;
                 SelectionVisual = selectionVisual;
+                VisualReferences = visualReferences;
             }
 
             public void ClearReferences()
@@ -2475,6 +2562,7 @@ namespace ConsoleCards.Presentation.Prototype
                 Root = null;
                 View = null;
                 SelectionVisual = null;
+                VisualReferences = null;
             }
         }
 

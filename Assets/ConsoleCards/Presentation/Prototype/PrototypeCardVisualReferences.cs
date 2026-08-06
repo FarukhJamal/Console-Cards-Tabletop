@@ -28,6 +28,19 @@ namespace ConsoleCards.Presentation.Prototype
 
         public TextMesh BackLabel => backLabel;
 
+        public void SetCardContentVisible(bool visible)
+        {
+            if (frontLabel != null && frontLabel.gameObject.activeSelf != visible)
+            {
+                frontLabel.gameObject.SetActive(visible);
+            }
+
+            if (backLabel != null && backLabel.gameObject.activeSelf != visible)
+            {
+                backLabel.gameObject.SetActive(visible);
+            }
+        }
+
         public void ValidateReferences()
         {
             RequireReference(cardView, nameof(cardView));

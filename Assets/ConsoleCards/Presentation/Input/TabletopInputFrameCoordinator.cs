@@ -11,6 +11,9 @@ namespace ConsoleCards.Presentation.Input
 
         private bool isInitialized;
         private bool isAttached;
+        private bool hasObjectInputBlockingGuiRect;
+        private bool suppressObjectPointerUntilRelease;
+        private Rect objectInputBlockingGuiRect;
         private TabletopSelectionPresenter selectionPresenter;
 
         public bool IsInitialized => isInitialized;
@@ -22,6 +25,26 @@ namespace ConsoleCards.Presentation.Input
         public bool HasSelectionPresenter => selectionPresenter != null;
 
         public TabletopSelectionPresenter SelectionPresenter => selectionPresenter;
+
+        internal void ConfigureObjectInputBlockingGuiRect(Rect guiRect)
+        {
+            if (hasObjectInputBlockingGuiRect)
+            {
+                throw new InvalidOperationException(
+                    "TabletopInputFrameCoordinator already has an object-input blocking GUI Rect.");
+            }
+
+            objectInputBlockingGuiRect = guiRect;
+            hasObjectInputBlockingGuiRect = true;
+            suppressObjectPointerUntilRelease = false;
+        }
+
+        internal void ClearObjectInputBlockingGuiRect()
+        {
+            objectInputBlockingGuiRect = default;
+            hasObjectInputBlockingGuiRect = false;
+            suppressObjectPointerUntilRelease = false;
+        }
 
         public void ConfigureSelectionPresenter(TabletopSelectionPresenter presenter)
         {
@@ -131,11 +154,34 @@ namespace ConsoleCards.Presentation.Input
                 ? false
                 : frame.FlipPressedThisFrame;
 
+            if (frame.SelectPressedThisFrame
+                && !HasActiveObjectInteraction()
+                && IsInsideObjectInputBlockingGuiRect(frame.ScreenPosition))
+            {
+                suppressObjectPointerUntilRelease = true;
+            }
+
+            bool suppressObjectPointer = suppressObjectPointerUntilRelease;
+            bool effectiveSelectPressedThisFrame = suppressObjectPointer
+                ? false
+                : frame.SelectPressedThisFrame;
+            bool effectiveSelectHeld = suppressObjectPointer
+                ? false
+                : frame.SelectHeld;
+            bool effectiveSelectReleasedThisFrame = suppressObjectPointer
+                ? false
+                : frame.SelectReleasedThisFrame;
+
+            if (suppressObjectPointer && frame.SelectReleasedThisFrame)
+            {
+                suppressObjectPointerUntilRelease = false;
+            }
+
             MoveInteractionReleaseResult? releaseResult = objectInputAdapter.ApplyInputFrame(
                 frame.ScreenPosition,
-                frame.SelectPressedThisFrame,
-                frame.SelectHeld,
-                frame.SelectReleasedThisFrame,
+                effectiveSelectPressedThisFrame,
+                effectiveSelectHeld,
+                effectiveSelectReleasedThisFrame,
                 frame.CancelPressedThisFrame,
                 effectiveRotateDelta,
                 effectiveFlipPressedThisFrame);
@@ -154,6 +200,30 @@ namespace ConsoleCards.Presentation.Input
                 unscaledDeltaTime);
 
             return releaseResult;
+        }
+
+        private bool HasActiveObjectInteraction()
+        {
+            if (objectInputAdapter.HasInteractionRouter)
+            {
+                return objectInputAdapter.InteractionRouter.HasActiveInteraction;
+            }
+
+            return objectInputAdapter.MoveCoordinator != null
+                && objectInputAdapter.MoveCoordinator.HasActiveInteraction;
+        }
+
+        private bool IsInsideObjectInputBlockingGuiRect(Vector2 screenPosition)
+        {
+            if (!hasObjectInputBlockingGuiRect)
+            {
+                return false;
+            }
+
+            Vector2 guiPosition = new Vector2(
+                screenPosition.x,
+                Screen.height - screenPosition.y);
+            return objectInputBlockingGuiRect.Contains(guiPosition);
         }
 
         private void AttachAdapters()
