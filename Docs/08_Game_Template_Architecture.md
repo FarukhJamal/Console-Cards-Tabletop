@@ -1,7 +1,8 @@
 # Console Cards — Game Template Architecture
 
 **Document ID:** 08_Game_Template_Architecture  
-**Version:** 1.0 Draft  
+**Version:** 1.1
+
 **Status:** Approved
 
 > **Contract note:** Code blocks, type names, interfaces, field lists, and diagrams in this document are illustrative unless explicitly labelled **Approved Contract**. Codex must not treat illustrative examples as fixed public APIs.
@@ -31,7 +32,9 @@ GameTemplate
 - Recommended Player Range
 - Rulebook Reference
 - Seat Definitions
+- Player Layout Definition/Reference
 - Console Definitions
+- Game Board Definition/Reference
 - Play Area Definitions
 - Object Definitions/References
 - Initial Object Instances
@@ -40,6 +43,7 @@ GameTemplate
 - Starting Poses
 - Default Policies
 - Camera Bookmarks
+- Default Central Focus Region
 - Content Dependencies
 - Initial Snapshot Metadata
 ```
@@ -54,13 +58,15 @@ Loading follows an explicit pipeline:
 4. Validate stable IDs.
 5. Create Match ID.
 6. Instantiate Seats and Containers.
-7. Instantiate Play Areas.
-8. Instantiate Object Instances.
-9. Apply starting membership and poses.
-10. Apply default Policies.
-11. Generate Initial Snapshot.
-12. Bind Views.
-13. Report completion or full failure.
+7. Apply the Player Layout selected for the active one-to-eight Player count.
+8. Instantiate the Game-specific Game Board and Play Areas.
+9. Instantiate Object Instances.
+10. Apply starting membership and poses.
+11. Apply default Policies.
+12. Generate Initial Snapshot.
+13. Bind Views.
+14. Frame the default central focus and required interactive areas.
+15. Report completion or full failure.
 
 Template loading must be atomic from the Match perspective.
 
@@ -71,6 +77,8 @@ Validation checks:
 - Unique IDs.
 - Available Definition references.
 - Valid Seat range.
+- Supported one-to-eight Player count and valid Player Layout reference.
+- Required standard four-Player, eight-Player, and compact four-Player layout availability.
 - Valid Container membership.
 - No Object Instance in multiple Containers.
 - Valid Play Area references.
@@ -100,6 +108,21 @@ It is a first-class workflow, not an error case.
 Official templates are signed or identified as developer-maintained content.
 
 They may be duplicated but should not be overwritten directly by user changes.
+
+The approved Phase 1 production order is:
+
+1. Trap Door.
+2. Super Leroy Sisters.
+
+Each is a separate official Game Template and Game-specific Board type. Their Game content must not be embedded in universal Platform modules.
+
+## 7.1 Universal Console and Game-Specific Game Board
+
+The Console contract is universal and persists across Games. A Game Template may configure Console contents, Slot usage, labels, and allowed Card Definitions, but it must not replace the universal Console concept with a Game-specific Board.
+
+The central Game Board is Game-specific Template content. It may reference one or more Boards and Play Areas, and it may choose a Player Layout compatible with the active Player count.
+
+Template validation must treat Console configuration and Game Board configuration as separate concerns.
 
 ## 8. Modified Templates
 
@@ -216,9 +239,11 @@ Disallowed without a separate secure system:
 
 Implement:
 
-- Local official/empty template format.
+- Minimum local official/empty Template format required to load Trap Door and Super Leroy Sisters without Platform code changes.
 - Validation.
 - Template loading.
+- Player Layout selection for one to eight Players, including standard four-Player, eight-Player, and compact four-Player layouts.
+- Universal Console configuration separate from Game-specific Game Board and Play Area content.
 - Initial Snapshot creation.
 - Reset.
 - Save-as-new-template contract.

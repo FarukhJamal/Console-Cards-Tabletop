@@ -1,7 +1,8 @@
 # Console Cards — Platform Architecture
 
 **Document ID:** 01_Platform_Architecture  
-**Version:** 1.0 Draft  
+**Version:** 1.1
+
 **Status:** Approved with Open Decisions
 **Depends on:** `00_Product_Vision.md`, `02_Terminology.md`, `03_Project_Principles.md`
 
@@ -226,6 +227,8 @@ Owns:
 - Drag previews.
 - Rotation and flip input.
 - Multi-selection.
+- Marquee selection and selected-collection feedback.
+- Live Card and selected-group landing indicators.
 - Interaction cancellation.
 - Snap bypass.
 - Object-control requests.
@@ -241,6 +244,8 @@ Owns:
 - Zones.
 - Placement suggestions.
 - Camera focus regions.
+- Reusable Player Layout configuration for one to eight Players.
+- Standard four-Player, eight-Player, and compact four-Player Seat arrangements.
 - Optional occupancy information.
 
 Play Areas do not inherently enforce Game Rules.
@@ -254,6 +259,7 @@ Owns:
 - Personal focus targets.
 - Transfer between Hand, Tabletop, and Console.
 - Universal Button Card presentation.
+- A universal Console contract that remains separate from the Game-specific central Game Board.
 
 ### 6.7 Game Templates
 
@@ -263,6 +269,8 @@ Owns:
 - Rulebook references.
 - Initial objects and Containers.
 - Seats.
+- Player Layout selection.
+- Game-specific Game Board configuration.
 - Play Areas.
 - Starting poses.
 - Default Policies.
@@ -280,6 +288,7 @@ Owns:
 - Animation.
 - Audio and visual feedback.
 - Local hidden-information presentation.
+- Large hideable/reopenable high-stakes Card-choice UI.
 - View pooling when later justified.
 
 ### 6.9 Infrastructure
@@ -387,6 +396,7 @@ The architecture is acceptable when:
 - Replacing card visuals does not change deck logic.
 - Adding a new Play Area does not change cards.
 - Adding a new Game Template does not change Platform code.
+- Changing a Game-specific Game Board does not replace or redefine the universal Console.
 - Replacing networking does not change Runtime State.
 - Increasing Console slots changes configuration and presentation, not card architecture.
 - Adding controller input changes the input adapter, not Commands.

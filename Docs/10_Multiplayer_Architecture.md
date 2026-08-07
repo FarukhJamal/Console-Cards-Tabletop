@@ -1,7 +1,8 @@
 # Console Cards — Multiplayer Architecture
 
 **Document ID:** 10_Multiplayer_Architecture  
-**Version:** 1.0 Draft  
+**Version:** 1.1
+
 **Status:** Approved with Open Decisions
 
 > **Contract note:** Code blocks, type names, interfaces, field lists, and diagrams in this document are illustrative unless explicitly labelled **Approved Contract**. Codex must not treat illustrative examples as fixed public APIs.
@@ -11,7 +12,7 @@
 Multiplayer must support:
 
 - Shared authoritative Match State.
-- Two-to-six Players initially.
+- One-to-eight Players.
 - Stable Seats.
 - Private Hands.
 - Concurrent object interaction.
@@ -265,7 +266,7 @@ Not acceptable for:
 
 ## 17. Initial Multiplayer Completion Criteria
 
-- Two-to-six Players join.
+- One-to-eight Players join and occupy the Player Layout selected for the active Player count.
 - Stable Seats.
 - Shared object movement.
 - Draw and shuffle consistency.

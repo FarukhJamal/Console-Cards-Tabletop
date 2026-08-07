@@ -1,7 +1,8 @@
 # Console Cards — Play Area Architecture
 
 **Document ID:** 07_Play_Area_Architecture  
-**Version:** 1.0 Draft  
+**Version:** 1.1
+
 **Status:** Approved
 
 > **Contract note:** Code blocks, type names, interfaces, field lists, and diagrams in this document are illustrative unless explicitly labelled **Approved Contract**. Codex must not treat illustrative examples as fixed public APIs.
@@ -27,6 +28,22 @@ A Play Area may provide:
 - Policy references.
 
 A Match may contain zero, one, or multiple Play Areas.
+
+The default composition keeps the active shared Game Board or core Game action centered. Seat, Hand, Console, personal resource, and supporting UI layouts are arranged around that center and must not force the table to grow with Player count.
+
+## 2.1 Player Layout Foundation
+
+Player Layout is separate from Play Area layout. It arranges Seats and their personal areas around the central Game Board without defining the Game Board itself.
+
+Required reusable Player Layouts are:
+
+- Standard four-Player: one Seat per side.
+- Eight-Player: two Seats per side.
+- Compact four-Player: Seats pulled toward the central action.
+
+The Platform supports one to eight Players. For smaller Player counts, occupied Seats reposition toward the center rather than remaining at distant unused edge positions. The logical Virtual Tabletop and central Game Board do not scale up as more Players join.
+
+Selection of a Player Layout is Game Template and Player-count configuration, not hardcoded Game logic. Exact mappings for one to three and five to seven Players remain open.
 
 ## 3. Base Contract
 
@@ -163,6 +180,14 @@ Possible relationships:
 
 Do not merge these concepts.
 
+### 11.1 Universal Console and Game-Specific Game Board
+
+The universal Console is not a Play Area strategy and is not part of the Game-specific Game Board.
+
+The loaded Game Template supplies the central Game Board and associated Play Areas. Different Games may therefore use different central layouts, including a Card-built dungeon/room structure or a Side-Scroller Play Area, while reusing the same Console contract.
+
+Reference screenshots and mockups demonstrate possible compositions only. They do not define one mandatory Board, Grid, Seat, or Camera layout for every Game.
+
 ## 12. Effectively Unbounded Tabletop
 
 The logical Virtual Tabletop is effectively unbounded as a product abstraction. It never expands by stretching, appending, or duplicating logical tables, and there is no meaningful logical table edge for normal freeform play.
@@ -254,11 +279,13 @@ Visual caches are not persisted.
 
 ## 19. Initial Implementation Order
 
-1. Freeform table placement.
-2. Generic Zone and Slot.
-3. Rectangular Grid.
-4. Side-scroller layout.
-5. Camera focus bounds.
-6. Tile-built or Track layout when required.
+1. Player Layout model and standard four-Player, eight-Player, and compact four-Player arrangements.
+2. Central Game Board focus bounds and default framing.
+3. Freeform table placement.
+4. Generic Zone and Slot.
+5. Rectangular Grid.
+6. Side-Scroller Play Area required by Super Leroy Sisters.
+7. Independent personal Play Area visibility configuration.
+8. Tile-built or Track layout only when an approved Game Template requires it.
 
 Do not implement every future Play Area before a template requires it.

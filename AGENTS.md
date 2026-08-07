@@ -44,7 +44,7 @@ Do not add a networking package before M6.
 - Do not add or update packages without approval.
 - Do not modify scenes, prefabs, assets, or settings unless the task requires it.
 - Do not introduce Game-specific logic into Platform modules.
-- Do not assume Super Leroy Sisters or Trap Floor define universal behavior.
+- Do not assume Trap Door or Super Leroy Sisters define universal behavior.
 
 ## 3. No Hallucination Rule
 

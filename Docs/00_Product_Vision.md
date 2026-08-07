@@ -1,9 +1,12 @@
 # Console Cards — Product Vision
 
 **Document ID:** 00_Product_Vision  
-**Version:** 1.0 Draft  
+**Version:** 1.1
+
 **Status:** Approved
 **Purpose:** Define what Console Cards is, what experience it must create, and which product boundaries must remain stable before architecture and implementation begin.
+
+The layout and interaction requirements derived from `Consolecards_LayoutRef_doc.pdf` are canonically traced in `17_Layout_Design_Requirements_Matrix.md`.
 
 ---
 
@@ -45,7 +48,7 @@ Items in the second and third groups are not automatically part of the first fou
 
 ## 2. Core Experience
 
-The intended experience is the digital equivalent of two to six friends sitting around a physical table.
+The intended experience is the digital equivalent of one to eight friends sitting around a physical table.
 
 A typical session should allow players to:
 
@@ -180,15 +183,19 @@ The first foundation version should use Free mode for game rules while always en
 
 ---
 
-## 6. Player Count
+## 6. Player Count and Seating
 
-The platform must not be fixed to four players.
+The Platform must support one to eight Players and must not be fixed to four Players.
 
-The first supported target is:
+The table does not grow as Player count increases. It provides eight available Seat positions around a stable central play space. Occupied Seats are arranged for the active Player count so smaller groups remain visually close to the core action rather than occupying distant edge positions.
 
-- Two to six players.
+Required reusable Seat layouts include:
 
-The architecture should keep seat count configurable so future templates may support different numbers where technically practical.
+- Standard four-Player layout, one Seat per side.
+- Eight-Player layout, two Seats per side.
+- Compact/alternate four-Player layout with Seats pulled toward the central action.
+
+The exact Seat assignment for other Player counts and the selection rule between the standard and compact four-Player layouts remain open in `OPEN_DECISIONS.md`.
 
 Player count may be defined by:
 
@@ -218,6 +225,8 @@ The table should appear seamless and effectively unbounded for normal use.
 Players should be able to continue placing objects without reaching an obvious visual table edge or seeing multiple separate table meshes placed beside each other.
 
 The virtual tabletop should maintain stable logical coordinates while rendering only the nearby visible surface and objects.
+
+Player-count adaptation must not enlarge the table or reduce Card readability. Important usable and interactable areas should be within the default Game Template framing, while local Camera pan and zoom remain available.
 
 ---
 
@@ -259,6 +268,14 @@ For official Game Templates, the required Play Area and its layout should load a
 
 For custom games, players may create or configure their own Play Areas.
 
+### 8.1 Universal Console and Game-Specific Game Board
+
+The Console is universal. It is the persistent personal interaction and storage system that Players learn once and reuse across Games.
+
+The central Game Board is Game-specific. A Game Template defines the Board, Play Areas, layout, and supporting content required by that Game. The Console and Game Board are separate even when they are shown in one tabletop composition.
+
+The core Game action remains centered. Player tools, personal resources, Seats, and controls are arranged around that center. Reference screenshots are design examples, not universal layouts that every Game Template must reproduce.
+
 ---
 
 ## 9. Tabletop Objects
@@ -297,6 +314,7 @@ Not every object category must be completed in the first milestone.
 The platform should eventually allow common physical tabletop actions, including:
 
 - Selecting objects.
+- Selecting multiple Cards with a marquee and clearly highlighting every selected Card.
 - Moving objects.
 - Rotating objects.
 - Flipping double-sided objects.
@@ -312,11 +330,18 @@ The platform should eventually allow common physical tabletop actions, including
 - Rolling dice.
 - Moving tokens and counters.
 - Grouping and organizing components.
+- Previewing the exact landing placement of a dragged Card or selected Card group before release.
 - Locking setup objects when needed.
 - Undoing or manually correcting accidental placement.
 - Resetting a Match to its initial setup.
 
 Interactions should be responsive, predictable, and easier to manage than unrestricted physical simulation.
+
+Cards must support natural free-form dragging with smooth controlled Presentation motion. This physical feel does not make Unity physics or Transforms authoritative.
+
+High-stakes Card choices require a large, central, readable selection UI. Players must be able to hide it temporarily to inspect the Board, reopen it without losing the pending choice, and receive clear hover, selection, and confirmation feedback.
+
+Hand visibility, personal Play Area visibility, and individual Card face/identity visibility are separate concerns. Hiding one must not implicitly hide or reveal the others.
 
 ---
 
@@ -344,14 +369,14 @@ The initial architecture must avoid blocking it, but the first implementation sh
 
 ## 12. Official Games
 
-Official games such as Super Leroy Sisters and Trap Floor may later be delivered as Game Templates.
+Official games such as Trap Door and Super Leroy Sisters are delivered as separate Game Templates and Game-specific Board content after the shared Play Area and minimum Game Template foundations exist.
 
 They are validation cases and content packages, not architectural foundations.
 
 The Platform must not contain hardcoded checks such as:
 
 - `if currentGame is SuperLeroySisters`
-- `if currentGame is TrapFloor`
+- `if currentGame is TrapDoor`
 
 Instead, those games should be represented through combinations of:
 
@@ -408,7 +433,7 @@ In the first builds, players own:
 The first foundation should focus on:
 
 - Top-down virtual tabletop.
-- Two-to-six-player seating model.
+- One-to-eight-Player seating model.
 - Private hands.
 - Player Consoles.
 - Cards and decks.
@@ -418,6 +443,8 @@ The first foundation should focus on:
 - Tokens.
 - Optional placement guides.
 - Freeform interaction.
+- Marquee multi-selection and live landing indicators.
+- High-stakes Card-choice Presentation.
 - Game Template loading architecture.
 - Saving and reset architecture.
 - Networking-ready state design.
@@ -436,7 +463,7 @@ The first foundation should not attempt to deliver:
 - Production economy.
 - Cosmetic store.
 - Voice chat.
-- Complete official game implementations.
+- Production-complete or fully automated official Games beyond the approved minimum playable Trap Door and Super Leroy Sisters scope.
 
 ---
 
@@ -453,6 +480,8 @@ The foundation is successful when a group can:
 7. Complete a tabletop session without the platform needing to understand the game.
 8. Reset or restore the session reliably.
 9. Load a different Game Template without changing the universal foundation.
+10. Keep the universal Console stable while loading a Game-specific central Game Board and Player layout.
+11. Play the approved minimum Trap Door and Super Leroy Sisters flows using their separate Game-specific Boards.
 
 ---
 

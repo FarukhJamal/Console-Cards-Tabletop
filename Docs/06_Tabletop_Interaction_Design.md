@@ -1,7 +1,8 @@
 # Console Cards — Tabletop Interaction Design
 
 **Document ID:** 06_Tabletop_Interaction_Design  
-**Version:** 1.0 Draft  
+**Version:** 1.1
+
 **Status:** Approved
 
 > **Contract note:** Code blocks, type names, interfaces, field lists, and diagrams in this document are illustrative unless explicitly labelled **Approved Contract**. Codex must not treat illustrative examples as fixed public APIs.
@@ -11,6 +12,8 @@
 Interaction should reproduce physical tabletop freedom while being more predictable than unrestricted physics.
 
 Players must understand what will happen before releasing an object.
+
+The Platform must support natural free-form Card dragging with smooth, controlled Presentation motion. Reference products communicate feel and feedback; they do not require physics-authoritative Runtime State or unrestricted simulation.
 
 ## 2. Input Independence
 
@@ -63,6 +66,8 @@ Avoid many overlapping Boolean fields.
 - Click object to select.
 - Click empty space to clear selection.
 - Modifier-click adds or removes objects from multi-selection.
+- Click-hold-drag from empty tabletop space creates a marquee selection box for Cards.
+- Every Card included in the current selection displays clear selected feedback.
 - Selection is local unless a shared highlight feature is explicitly enabled.
 
 ### 5.2 Move
@@ -70,6 +75,7 @@ Avoid many overlapping Boolean fields.
 - Press and drag an object.
 - During drag, the local View follows the pointer.
 - Placement Guides show suggested destinations.
+- A live landing indicator shows where the Card or selected Card group will land if released.
 - Release submits the final Move Command.
 - Cancel restores the last accepted pose.
 
@@ -93,6 +99,18 @@ A flip is a discrete Command.
 ### 5.5 Inspect
 
 A zoomed local preview may show card text or object details without changing Match State.
+
+### 5.6 High-Stakes Card Choice
+
+When a Game asks a Player to choose between Cards as a strategic decision:
+
+- Present the choices large, central, and readable.
+- Provide distinct hover, candidate selection, confirmation, and registered-choice feedback.
+- Allow the Player to hide the choice UI temporarily to inspect the Game Board.
+- Preserve the pending choice while hidden and allow the Player to reopen it.
+- Keep the choice UI isolated from tabletop and Camera input.
+
+The Platform owns this Presentation capability. The Game or Game Template supplies the candidates and determines what a confirmed choice means.
 
 ## 6. Deck Interaction
 
@@ -161,14 +179,18 @@ The first build may implement top-card removal and whole-Stack movement before a
 
 ## 11. Multi-Selection
 
-Initial scope:
+Required scope:
 
-- Modifier-click selection.
-- Drag selected group as one temporary manipulation.
-- Preserve individual poses relative to group origin.
-- Final command may be a batch transaction.
+- Modifier-click may add or remove Cards from the current selection.
+- Click-hold-drag on empty tabletop space creates a visible marquee.
+- Cards inside the accepted marquee become selected according to the approved inclusion rule.
+- Every selected Card displays unambiguous local feedback.
+- Drag the selected group as one temporary manipulation.
+- Preserve individual poses relative to the group origin.
+- Preview the group landing arrangement before release.
+- Final accepted movement is a batch transaction; preview never mutates Runtime State.
 
-Marquee selection may be deferred.
+Detailed marquee inclusion, overlapping-Card, and mixed-Container behavior remain in `OPEN_DECISIONS.md`.
 
 ## 12. Placement Suggestions
 
@@ -177,9 +199,10 @@ During drag:
 1. Query nearby Play Areas, Zones, Slots, and Containers.
 2. Calculate candidate placement.
 3. Display highlight and preview.
-4. Allow snap bypass.
-5. Submit requested and suggested placement data as required.
-6. Authority applies the accepted result.
+4. Display the exact landing indicator for the current Card or selected Card group.
+5. Allow snap bypass.
+6. Submit requested and suggested placement data as required.
+7. Authority applies the accepted result.
 
 ### 12.1 Future Pointer Placement Boundary
 

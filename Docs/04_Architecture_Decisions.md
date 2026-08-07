@@ -1,7 +1,8 @@
 # Console Cards — Architecture Decisions
 
 **Document ID:** 04_Architecture_Decisions  
-**Version:** 1.0 Draft  
+**Version:** 1.1
+
 **Status:** Approved with Open Decisions
 
 This file records accepted or proposed Architecture Decision Records. A decision must not be silently reversed during implementation.
@@ -81,7 +82,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 
 **Consequences:**
 
-- Super Leroy Sisters and Trap Floor do not define Platform code.
+- Trap Door and Super Leroy Sisters do not define Platform code.
 - Optional automated rule modules may be added later.
 - A Game Template is not a Unity scene.
 
@@ -316,3 +317,37 @@ This file records accepted or proposed Architecture Decision Records. A decision
 - New object-specific state is added only when a milestone requires it.
 - Capability composition begins as controlled configuration and interfaces.
 - Generic state frameworks require a later ADR.
+
+---
+
+## ADR-020 - Universal Console, Game-Specific Game Board
+
+**Status:** Accepted
+
+**Decision:** Keep the Console as a universal Platform system and represent the central Game Board, Board layout, and Play Areas as Game-specific Game Template content.
+
+**Reason:** Players should learn the Console once while each Game remains free to present its own central Board type and layout.
+
+**Consequences:**
+
+- Trap Door and Super Leroy Sisters use separate Game-specific Boards.
+- Game Templates may configure Console contents without replacing the Console contract.
+- The Platform must not force one reference screenshot, Grid, or Board layout onto every Game.
+- Game Board content must not introduce Game-specific dependencies into universal Console modules.
+
+---
+
+## ADR-021 - Stable Table with Configurable Player Layouts
+
+**Status:** Accepted with mappings deferred
+
+**Decision:** Support one to eight Players by repositioning Seats around a stable central play space. Do not enlarge the table as Player count increases.
+
+**Reason:** Table growth reduces Card readability and weakens the centered core-gameplay composition.
+
+**Consequences:**
+
+- Standard four-Player, eight-Player, and compact four-Player layouts are required.
+- Smaller groups move toward the central action rather than occupying distant unused edge positions.
+- Player Layout configuration is separate from Game Board and Play Area configuration.
+- Exact mappings for one to three and five to seven Players remain in `OPEN_DECISIONS.md`.

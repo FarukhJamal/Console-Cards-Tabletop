@@ -1,7 +1,8 @@
 # Console Cards — Terminology
 
 **Document ID:** 02_Terminology  
-**Version:** 1.0 Draft  
+**Version:** 1.1
+
 **Status:** Approved
 **Depends on:** `00_Product_Vision.md`  
 **Purpose:** Establish one canonical vocabulary for product, design, architecture, documentation, and implementation.
@@ -33,7 +34,7 @@ All project documents, code, comments, task prompts, implementation reports, and
 
 ## 2.1 Console Cards
 
-**Definition:**  
+**Definition:**
 The complete multiplayer virtual tabletop platform.
 
 Console Cards includes:
@@ -60,7 +61,7 @@ Console Cards includes:
 
 ## 2.2 Platform
 
-**Definition:**  
+**Definition:**
 The reusable systems that exist independently of any particular game.
 
 The Platform owns universal functionality such as:
@@ -78,7 +79,7 @@ The Platform owns universal functionality such as:
 - Multiplayer synchronization.
 
 **Important distinction:**  
-The Platform does not know the rules of Super Leroy Sisters, Trap Floor, or any other specific game unless a future optional game-specific module is explicitly added.
+The Platform does not know the rules of Trap Door, Super Leroy Sisters, or any other specific Game unless a future optional Game-specific module is explicitly added.
 
 ---
 
@@ -313,6 +314,15 @@ Examples include:
 - Mirror connection ID.
 
 A Network Connection ID may change after reconnection and must not own persistent seat or hand state.
+
+---
+
+## 3.7 Player Layout
+
+**Definition:**
+A reusable arrangement of Seat positions and Player-facing areas around the stable central play space.
+
+Required Player Layout capabilities include standard four-Player, eight-Player, and compact four-Player arrangements. A Player Layout repositions Seats; it does not enlarge the logical Virtual Tabletop or define a Game's central Game Board.
 
 ---
 
@@ -698,7 +708,18 @@ A Board and a Play Area are related but not identical:
 
 ---
 
-## 6.10 Tile
+## 6.10 Game Board
+
+**Definition:**
+The Game-specific central Board presentation and associated Play Areas used by the loaded Game Template.
+
+A Game Board may be a single Board, several Boards, a Card-built level, or a Play Area without one large Board object. It is separate from the universal Console.
+
+Reference screenshots do not define one mandatory Game Board layout for every Game.
+
+---
+
+## 6.11 Tile
 
 **Definition:**  
 A modular Tabletop Object used to construct maps, paths, rooms, terrain, or sections.
@@ -707,7 +728,7 @@ Tiles may snap to each other or to a Play Area.
 
 ---
 
-## 6.11 Pawn or Meeple
+## 6.12 Pawn or Meeple
 
 **Definition:**  
 A generic movable game piece representing a player, character, position, or objective.
@@ -717,21 +738,21 @@ Use `Meeple` only in player-facing content where the shape or game language spec
 
 ---
 
-## 6.12 Miniature
+## 6.13 Miniature
 
 **Definition:**  
 A three-dimensional Tabletop Object representing a character, creature, vehicle, building, or decorative piece.
 
 ---
 
-## 6.13 Token
+## 6.14 Token
 
 **Definition:**  
 A small physical marker representing a state, resource, objective, effect, or ownership.
 
 ---
 
-## 6.14 Counter
+## 6.15 Counter
 
 **Definition:**  
 A value-tracking object or UI representation.
@@ -746,7 +767,7 @@ A Counter is not always a physical Token.
 
 ---
 
-## 6.15 Dice
+## 6.16 Dice
 
 **Definition:**  
 A randomizable tabletop object with defined faces and outcomes.
@@ -756,7 +777,7 @@ Use `Die` only when referring to exactly one object in grammatical prose.
 
 ---
 
-## 6.16 Note
+## 6.17 Note
 
 **Definition:**  
 A text-bearing tabletop object used for rules, reminders, labels, or player-authored information.
@@ -1258,6 +1279,8 @@ These pairs must not be treated as interchangeable.
 | Object Definition | Object Instance | Static type data vs. runtime copy |
 | Card Definition | Card Instance | Card type vs. one physical copy |
 | Board | Play Area | Visual object vs. logical organization region |
+| Console | Game Board | Universal personal interaction/storage system vs. Game-specific central play structure |
+| Player Layout | Game Board | Seat/personal-area arrangement vs. Game-specific central play structure |
 | Zone | Container | Placement region vs. ownership structure |
 | Deck | Stack | Configured ordered draw collection vs. general pile |
 | Hand | Console | Private card collection vs. personal storage/interface area |

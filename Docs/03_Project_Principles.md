@@ -23,7 +23,7 @@ Future restrictions must be added through explicit Policies. They must not requi
 
 The Platform must remain independent of any specific Game Template.
 
-Super Leroy Sisters, Trap Floor, and future Games are content and validation cases. They must not introduce conditional logic into universal systems.
+Trap Door, Super Leroy Sisters, and future Games are content and validation cases. They must not introduce conditional logic into universal systems.
 
 Forbidden pattern:
 

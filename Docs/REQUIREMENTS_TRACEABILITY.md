@@ -1,26 +1,29 @@
 # Console Cards — Requirements Traceability
 
-**Version:** 1.0  
+**Version:** 1.1
+
 **Status:** Approved
+
+The page-level source, scope, repository status, milestone, and unresolved-decision trace for `Consolecards_LayoutRef_doc.pdf` is maintained in `17_Layout_Design_Requirements_Matrix.md`.
 
 | ID | Requirement | Architecture Owner | Planned Milestone | Evidence |
 |---|---|---|---|---|
 | PR-001 | Top-down shared Virtual Tabletop | Platform + Play Area Architecture | M1 | Camera/Table Surface manual test |
 | PR-002 | Effectively unbounded normal-use table | Play Area Architecture | M1 | Large-area precision and seam test |
-| PR-003 | Two-to-six configurable Seats | Core Data + Multiplayer | M0, M7 | Seat unit tests; multiplayer join test |
+| PR-003 | One-to-eight configurable Seats and Player Layouts | Core Data + Play Areas + Multiplayer | M0, M4, M7 | Seat state evidence; Player Layout tests; multiplayer join test |
 | PR-004 | Private Hands | Core Data + Multiplayer | M3, M7 | Visibility tests; multiplayer filtering |
 | PR-005 | Personal Consoles separate from Hands | Core Data + Interaction | M3 | Console transfer and UI tests |
 | PR-006 | Universal Button Cards | Product Vision + Game Templates | M3 | Definition and deck tests |
 | PR-007 | Freeform object movement | Interaction Design | M2 | Object Views, pointer projection, hit resolution, selection, drag preview, accepted movement, and cancel/rollback: `Assets/ConsoleCards/Presentation/Views/`, `Assets/ConsoleCards/Presentation/Interaction/`, `Assets/ConsoleCards/Tests/PlayMode/Presentation/TabletopPrototypeInteractionSmokeTests.cs` |
-| PR-008 | Cards can flip, rotate, stack, and transfer | Interaction + Core Data | M2, M3 | M2 covers rotation and Card flipping through Commands/Use Cases and integrated Play Mode tests; stack and transfer remain M3: `Assets/ConsoleCards/Runtime/Application/Commands/`, `Assets/ConsoleCards/Runtime/Application/UseCases/`, `Assets/ConsoleCards/Presentation/Input/`, `Assets/ConsoleCards/Tests/PlayMode/Presentation/` |
-| PR-009 | Deck draw, move, shuffle, split/merge | Interaction + Core Data | M3 | Unit and Play Mode tests |
+| PR-008 | Cards can flip, rotate, stack, and transfer | Interaction + Core Data | M2, M3 | Rotation, flip, stack, and transfer source exists under `Assets/ConsoleCards/Runtime/Application/` and `Assets/ConsoleCards/Presentation/`; current M3 verification evidence is not recorded by this documentation pass |
+| PR-009 | Deck draw, move, shuffle, split/merge | Interaction + Core Data | M3 | Commands, use cases, prototype Views, context controls, and lifecycle source exist; current M3 verification evidence remains to be updated |
 | PR-010 | Cards, Pawns, and basic Tokens | Core Data + Tabletop Objects | M0, M2 | Explicit state and View coverage, prototype prefabs/materials/layer, and scene integration: `Assets/ConsoleCards/Runtime/Core/Domain/`, `Assets/ConsoleCards/Presentation/Views/`, `Assets/ConsoleCards/Content/Prefabs/Prototype/`, `Assets/ConsoleCards/Presentation/Scenes/TabletopPrototype.unity` |
 | PR-011 | Optional Play Areas | Play Area Architecture | M4 | Template load and placement tests |
 | PR-012 | Rectangular Grid | Play Area Architecture | M4 | Grid suggestion/snap tests |
 | PR-013 | Side-scroller Play Area | Play Area Architecture | M4 | Layout continuation test |
 | PR-014 | Game Templates are data, not hardcoded Games | Game Template Architecture | M4 | Template loading without Platform changes |
 | PR-015 | Empty Table workflow | Game Template Architecture | M4 | Empty Table load test |
-| PR-016 | Official Game Templates later | Game Template Architecture | Post-M8 | Future content acceptance |
+| PR-016 | Official Game Templates: Trap Door then Super Leroy Sisters | Game Template Architecture | G1, G2 | End-to-end approved minimum playable acceptance for each separate Game Template |
 | PR-017 | Custom Template direction not blocked | Game Template Architecture | Architectural only | Review/ADR; no editor in Foundation |
 | PR-018 | Freedom by default | Policy Architecture | M2-M4 | M2 preserves free local manipulation while enforcing technical invariants, local interaction locks, and deterministic routing; no Game rules added: `Assets/ConsoleCards/Presentation/Interaction/`, `Assets/ConsoleCards/Presentation/Input/` |
 | PR-019 | Future restrictions through Policies | Policy Architecture | Foundation contracts; later implementation | Policy composition tests |
@@ -32,6 +35,16 @@
 | PR-025 | Controlled host-loss handling | Multiplayer Architecture | M7 | Host-loss manual/automated test |
 | PR-026 | Host migration only if approved | Multiplayer Architecture | Conditional M7 | Technology-specific migration tests |
 | PR-027 | Codex does not invent missing requirements | AGENTS.md | All | Prompt/report audit |
+| PR-028 | Table size remains stable while Seats reposition for Player count | Play Area Architecture | M4 | Standard four-Player, eight-Player, compact four-Player, and intermediate-count layout tests |
+| PR-029 | Core gameplay remains centered and required interactive areas are visible by default | Play Area + Game Templates + Camera | M4, M4.1 | Layout/framing acceptance across supported Player Layouts and both official Games |
+| PR-030 | Marquee multi-Card selection with clear highlights | Interaction Design | M4 | Selection-boundary, highlight, cancel, and collection-state tests; LDR-010-LDR-011 |
+| PR-031 | Live landing indicators for one Card and selected Card groups | Interaction + Play Areas | M4 | Tabletop, Zone, Slot, valid/invalid, cancel, and group-placement tests; LDR-012-LDR-013 |
+| PR-032 | Large hideable/reopenable high-stakes Card-choice UI | Presentation + Game Templates | M4.1 | Legibility, hide/reopen, input isolation, candidate selection, and confirmation tests; LDR-014-LDR-016 |
+| PR-033 | Hand, personal Play Area, and individual Card visibility are independent | Policy + Play Areas + Multiplayer | M4, M7 | Policy composition and unauthorized-delivery tests; LDR-017-LDR-021 |
+| PR-034 | Console is universal and Game Board is Game-specific | Hands/Consoles + Play Areas + Game Templates | M4, M4.1, G1, G2 | Load distinct Game Boards with unchanged universal Console contract; LDR-025-LDR-027 |
+| PR-035 | Trap Door minimum playable Game Template | Game-specific content | G1 | Approved end-to-end flow after OD-018 resolution; LDR-028-LDR-030 |
+| PR-036 | Super Leroy Sisters minimum playable Game Template | Game-specific content | G2 | Approved end-to-end flow after OD-019 resolution; LDR-031-LDR-033 |
+| PR-037 | Phase 1 closes with both official Games playable | Roadmap + Acceptance | P1 | Approved acceptance after OD-020 resolution |
 
 ## M2 Implementation Evidence
 

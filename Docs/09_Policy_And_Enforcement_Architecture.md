@@ -1,7 +1,8 @@
 # Console Cards — Policy and Enforcement Architecture
 
 **Document ID:** 09_Policy_And_Enforcement_Architecture  
-**Version:** 1.0 Draft  
+**Version:** 1.1
+
 **Status:** Approved
 
 > **Contract note:** Code blocks, type names, interfaces, field lists, and diagrams in this document are illustrative unless explicitly labelled **Approved Contract**. Codex must not treat illustrative examples as fixed public APIs.
@@ -92,10 +93,24 @@ Controls:
 - Definition data distribution.
 - Face visibility.
 - Hand privacy.
+- Personal Play Area privacy.
+- Individual Card identity/face visibility.
+- Limited awareness views of other Players' tools and resources.
 - Hidden Containers.
 - Authority-only information.
 
 Visibility Policy is a security boundary, not only a visual preference.
+
+Hand visibility, personal Play Area visibility, and individual Card visibility are separate policy subjects. Changing one must not implicitly change either of the others.
+
+Required independent outcomes include:
+
+- A Player's Hand may be hidden while their personal Play Area remains visible.
+- A Player's personal Play Area may be hidden without changing Hand visibility.
+- A Card in a shared Play Area may conceal its identity through its accepted face/visibility state without hiding the Card body or the entire shared Play Area.
+- A Game Template may allow limited awareness of another Player's tools without disclosing full private details.
+
+The exact data visible in a limited awareness view and the audience semantics for face-down Cards remain open decisions. Presentation hiding alone is not sufficient; unauthorized clients must not receive protected identity data once multiplayer visibility filtering is implemented.
 
 ### 4.5 Draw Policy
 
@@ -217,6 +232,8 @@ Do not store executable arbitrary expressions in the first version.
 - Game Rules: Free.
 - Placement: Optional/Strong snapping depending on target.
 - Hand visibility: Restricted to owner.
+- Personal Play Area visibility: Explicit per Play Area; no implicit inheritance from Hand visibility.
+- Individual Card visibility: Explicit face/identity state independent of Hand and personal Play Area visibility.
 - Object interaction: Free unless locked or conflicting.
 - Setup objects: Host may lock.
 - Console slots: Structural capacity may apply.
