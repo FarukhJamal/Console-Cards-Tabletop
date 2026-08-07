@@ -1,6 +1,6 @@
 # Console Cards — Open Decisions
 
-**Version:** 1.2
+**Version:** 1.3
 
 **Status:** Approved with Open Decisions  
 **Purpose:** Record resolved and deferred decisions so Codex does not infer them.
@@ -67,7 +67,7 @@ See `TECHNICAL_BASELINE.md`.
 
 **Status:** Resolved
 
-**Decision:** Trap Door is produced first, followed by Super Leroy Sisters. Both follow the M4 Play Area/player-layout foundation and M4.1 minimum Game Template support.
+**Decision:** Trap Door is produced first, followed by Super Leroy Sisters. Both follow the M4 Player Layout + Central Play Area foundation and M4.1 minimum Game Template support.
 
 ### OD-013 - Official Game Name
 
@@ -97,27 +97,31 @@ See `TECHNICAL_BASELINE.md`.
 
 ### OD-014 - Player Layout Mapping
 
-**Status:** Milestone Blocking for M4
+**Status:** Deferred for unresolved mappings; confirmed M4 presets are unblocked
 
-**Question:** How are Seats assigned and oriented for one to three and five to seven Players, and when does a four-Player Game Template select the standard versus compact four-Player layout?
+**Authorized M4 scope:** Implement the Player Layout model with structural support for one to eight occupied Seats and authored definitions for standard four-Player, compact four-Player, and eight-Player layouts only. The table remains fixed in size, occupied Seats use authored placement around the centered core gameplay area, and the universal Console remains separate from the Game-specific Game Board.
 
-**Known requirements:** Support one to eight Players; do not enlarge the table; reposition smaller groups toward the center; provide standard four-Player, eight-Player, and compact four-Player layouts.
+**Remaining question:** How are Seats assigned and oriented for one to three and five to seven Players, and when does a four-Player Game Template select the standard versus compact four-Player layout?
+
+**Rule:** The unresolved mappings do not block implementation of the three confirmed presets. Do not invent or imply layouts for the unresolved Player counts.
 
 ### OD-015 - Visibility Audience and Limited Awareness
 
-**Status:** Milestone Blocking for M4 visibility model; network delivery deferred to M7
+**Status:** Milestone Blocking for P1 closure; network delivery deferred to M7
 
 **Question:** For Hand, personal Play Area, and individual face-down Card visibility, which audiences receive full identity, public back, count-only, silhouette, or no information? What exactly is the permitted limited awareness of other Players' tools/resources?
 
-**Rule:** These three visibility subjects remain independently configurable, and Presentation hiding alone is not a security boundary.
+**Rule:** These three visibility subjects remain independently configurable, and Presentation hiding alone is not a security boundary. This decision does not block the M4 Player Layout + Central Play Area foundation. Complete the required local model/configuration before Phase 1 closure unless an approved Game requires a defined subset earlier.
 
 ### OD-016 - Marquee Selection and Group Landing Contract
 
-**Status:** Milestone Blocking for M4 interaction completion
+**Status:** Milestone Blocking for P1 closure
 
 **Question:** Does marquee inclusion use Card center, any overlap, or a threshold; how are stacked/contained Cards treated; and how does a selected group preserve spacing when a destination cannot accept the whole group?
 
 **Known requirements:** Click-hold-drag creates a marquee; every included Card highlights; dragging shows a live group landing indicator; accepted mutation remains atomic.
+
+**Rule:** This decision does not block the M4 Player Layout + Central Play Area foundation. Complete marquee selection and single/group landing indicators before Phase 1 closure unless an approved Game requires a defined subset earlier.
 
 ### OD-017 - High-Stakes Card-Choice Contract
 
@@ -157,9 +161,9 @@ See `TECHNICAL_BASELINE.md`.
 - **M1:** Unblocked, with large-coordinate strategy intentionally evaluated during M1.
 - **M2:** Unblocked using the approved prototype card dimensions.
 - **M3:** No open design decision blocks the current prototype feature set; closure verification is tracked separately.
-- **M4:** Blocked by OD-014, OD-015, and OD-016 at implementation start.
+- **M4:** Unblocked for the confirmed standard four-Player, compact four-Player, and eight-Player presets plus the central Play Area foundation. OD-014 retains unresolved mappings without blocking this scope.
 - **M4.1:** Blocked by OD-017 at implementation start.
 - **G1:** Blocked by OD-018.
 - **G2:** Blocked by OD-019.
-- **P1:** Blocked by OD-020.
+- **P1:** Blocked by OD-015, OD-016, and OD-020.
 - **M6/M7:** Blocked only by OD-009 and OD-010 at their planned decision point.

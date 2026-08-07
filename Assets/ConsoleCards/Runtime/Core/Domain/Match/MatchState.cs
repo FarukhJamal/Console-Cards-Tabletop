@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using ConsoleCards.Core.Domain.Consoles;
 using ConsoleCards.Core.Domain.Containers;
+using ConsoleCards.Core.Domain.PlayAreas;
 using ConsoleCards.Core.Domain.Seats;
 using ConsoleCards.Core.Identifiers;
 
@@ -16,12 +17,14 @@ namespace ConsoleCards.Core.Domain.Match
         private readonly Dictionary<ContainerId, ContainerState> containers;
         private readonly Dictionary<ContainerId, ContainerPlacementState> containerPlacements;
         private readonly Dictionary<SeatId, SeatState> seats;
+        private readonly Dictionary<PlayAreaId, PlayAreaState> playAreas;
         private readonly ReadOnlyDictionary<TabletopObjectId, CardInstanceState> readOnlyCards;
         private readonly ReadOnlyDictionary<TabletopObjectId, PawnState> readOnlyPawns;
         private readonly ReadOnlyDictionary<TabletopObjectId, TokenState> readOnlyTokens;
         private readonly ReadOnlyDictionary<ContainerId, ContainerState> readOnlyContainers;
         private readonly ReadOnlyDictionary<ContainerId, ContainerPlacementState> readOnlyContainerPlacements;
         private readonly ReadOnlyDictionary<SeatId, SeatState> readOnlySeats;
+        private readonly ReadOnlyDictionary<PlayAreaId, PlayAreaState> readOnlyPlayAreas;
 
         public MatchState(
             MatchId id,
@@ -78,6 +81,31 @@ namespace ConsoleCards.Core.Domain.Match
             IEnumerable<ContainerState> containers,
             IEnumerable<SeatState> seats,
             IEnumerable<ContainerPlacementState> containerPlacements)
+            : this(
+                id,
+                gameTemplateId,
+                revision,
+                cards,
+                pawns,
+                tokens,
+                containers,
+                seats,
+                containerPlacements,
+                Array.Empty<PlayAreaState>())
+        {
+        }
+
+        public MatchState(
+            MatchId id,
+            GameTemplateId gameTemplateId,
+            long revision,
+            IEnumerable<CardInstanceState> cards,
+            IEnumerable<PawnState> pawns,
+            IEnumerable<TokenState> tokens,
+            IEnumerable<ContainerState> containers,
+            IEnumerable<SeatState> seats,
+            IEnumerable<ContainerPlacementState> containerPlacements,
+            IEnumerable<PlayAreaState> playAreas)
         {
             if (id.IsEmpty)
             {
@@ -100,6 +128,7 @@ namespace ConsoleCards.Core.Domain.Match
             this.containers = CopyContainers(containers);
             this.containerPlacements = CopyContainerPlacements(containerPlacements);
             this.seats = CopySeats(seats);
+            this.playAreas = CopyPlayAreas(playAreas);
 
             ValidateObjectContainerConsistency();
             ValidateContainerPlacementConsistency();
@@ -111,6 +140,7 @@ namespace ConsoleCards.Core.Domain.Match
             readOnlyContainers = new ReadOnlyDictionary<ContainerId, ContainerState>(this.containers);
             readOnlyContainerPlacements = new ReadOnlyDictionary<ContainerId, ContainerPlacementState>(this.containerPlacements);
             readOnlySeats = new ReadOnlyDictionary<SeatId, SeatState>(this.seats);
+            readOnlyPlayAreas = new ReadOnlyDictionary<PlayAreaId, PlayAreaState>(this.playAreas);
         }
 
         public MatchId Id { get; }
@@ -132,6 +162,8 @@ namespace ConsoleCards.Core.Domain.Match
         public IReadOnlyDictionary<ContainerId, ContainerPlacementState> ContainerPlacements => readOnlyContainerPlacements;
 
         public IReadOnlyDictionary<SeatId, SeatState> Seats => readOnlySeats;
+
+        public IReadOnlyDictionary<PlayAreaId, PlayAreaState> PlayAreas => readOnlyPlayAreas;
 
         public bool ContainsObject(TabletopObjectId objectId)
         {
@@ -376,6 +408,16 @@ namespace ConsoleCards.Core.Domain.Match
             throw new KeyNotFoundException("Seat was not found.");
         }
 
+        public PlayAreaState GetPlayArea(PlayAreaId playAreaId)
+        {
+            if (playAreas.TryGetValue(playAreaId, out PlayAreaState playArea))
+            {
+                return playArea;
+            }
+
+            throw new KeyNotFoundException("Play Area was not found.");
+        }
+
         public long AdvanceRevision()
         {
             Revision = checked(Revision + 1);
@@ -572,6 +614,33 @@ namespace ConsoleCards.Core.Domain.Match
             }
 
             return copiedSeats;
+        }
+
+        private static Dictionary<PlayAreaId, PlayAreaState> CopyPlayAreas(IEnumerable<PlayAreaState> playAreas)
+        {
+            if (playAreas == null)
+            {
+                throw new ArgumentNullException(nameof(playAreas));
+            }
+
+            Dictionary<PlayAreaId, PlayAreaState> copiedPlayAreas = new Dictionary<PlayAreaId, PlayAreaState>();
+
+            foreach (PlayAreaState playArea in playAreas)
+            {
+                if (playArea == null)
+                {
+                    throw new ArgumentException("Play Areas cannot contain null items.", nameof(playAreas));
+                }
+
+                if (copiedPlayAreas.ContainsKey(playArea.Id))
+                {
+                    throw new ArgumentException("Play Areas cannot contain duplicate Play Area IDs.", nameof(playAreas));
+                }
+
+                copiedPlayAreas.Add(playArea.Id, playArea);
+            }
+
+            return copiedPlayAreas;
         }
 
         private static void AddObjectId(

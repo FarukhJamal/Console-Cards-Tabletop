@@ -1,7 +1,7 @@
 # Console Cards — Play Area Architecture
 
 **Document ID:** 07_Play_Area_Architecture  
-**Version:** 1.1
+**Version:** 1.2
 
 **Status:** Approved
 
@@ -277,15 +277,16 @@ Play Areas persist:
 
 Visual caches are not persisted.
 
-## 19. Initial Implementation Order
+## 19. Approved Implementation Order
 
-1. Player Layout model and standard four-Player, eight-Player, and compact four-Player arrangements.
-2. Central Game Board focus bounds and default framing.
-3. Freeform table placement.
-4. Generic Zone and Slot.
-5. Rectangular Grid.
-6. Side-Scroller Play Area required by Super Leroy Sisters.
-7. Independent personal Play Area visibility configuration.
-8. Tile-built or Track layout only when an approved Game Template requires it.
+1. M4 Player Layout model with structural one-to-eight-Player support and only the confirmed standard four-Player, compact four-Player, and eight-Player authored arrangements.
+2. M4 central Play Area stable identity, bounds, and focus foundation, separate from the universal Console.
+3. M4.1 minimum Game Template support and selection among supported authored Player Layout definitions.
+4. Trap Door playable with only its approved Game-specific Board requirements.
+5. Super Leroy Sisters playable, including its required Side-Scroller Play Area.
+6. Remaining shared Phase 1 Play Area capabilities, including Freeform placement, generic Zone/Slot, Rectangular Grid, placement suggestions, snap bypass, and independent personal Play Area visibility configuration.
+7. Tile-built or Track layout only when an approved Game Template requires it.
+
+Mappings for one to three and five to seven Players remain unresolved under OD-014 and must not be invented. OD-015 visibility and OD-016 marquee/group-landing requirements remain required before Phase 1 closure but do not block the M4 foundation unless an approved Game requires a defined subset earlier.
 
 Do not implement every future Play Area before a template requires it.

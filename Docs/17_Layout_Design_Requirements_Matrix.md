@@ -1,7 +1,7 @@
 # Console Cards - Layout Design Requirements Matrix
 
 **Document ID:** 17_Layout_Design_Requirements_Matrix  
-**Version:** 1.0  
+**Version:** 1.1
 **Status:** Approved with Open Decisions  
 **Authoritative source:** `Consolecards_LayoutRef_doc.pdf`, title "Game Design Notes", pages 1-6, supplied 2026-08-07  
 **Purpose:** Preserve the PDF's design requirements, distinguish Platform requirements from Game-specific content, and trace each requirement to current implementation and planned delivery.
@@ -26,34 +26,34 @@
 
 | ID | Requirement | Scope | Current implementation status | Planned milestone | Source/page | Unresolved decision |
 |---|---|---|---|---|---|---|
-| LDR-001 | Support 1-8 Players and corresponding Seats. Four Players are the default presentation. | Platform-wide | **Partial:** `SeatState` and stable Seat IDs exist, but the prototype constructs one local Seat and no 1-8 Player layout controller exists. | M4; network occupancy later | PDF p.1 | OD-014 |
-| LDR-002 | Provide eight available Seat positions around the table without enlarging the table as Player count increases. | Platform-wide | **Missing:** M1 provides stable tabletop coordinates and camera-local surface coverage, but no eight-position Seat layout exists. | M4 | PDF p.1 | OD-014 |
-| LDR-003 | Reposition occupied Seats toward the center for smaller Player counts instead of leaving Players on distant edge positions. | Platform-wide | **Missing** | M4 | PDF pp.1, 4 | OD-014 |
-| LDR-004 | Support a standard 4-Player layout, an 8-Player layout, and a compact/alternate 4-Player layout. | Platform-wide layout capability; Template-selected use | **Missing** | M4 | PDF p.4 | OD-014 |
-| LDR-005 | Show other Players' general presence and position around the table so turn/activity context is legible. | Platform-wide | **Missing:** no multiplayer presence presentation exists. | M4 layout foundation; multiplayer delivery later | PDF pp.1, 3 | Exact presence and activity cues are not specified. |
-| LDR-006 | By default, frame all important usable and interactable areas without hiding required play off-screen. | Platform-wide; evaluated per Game Template | **Partial:** camera pan, zoom, bookmarks, and visibility evaluation exist; adaptive whole-layout framing does not. | M4, M4.1 | PDF p.1 | Template-specific framing thresholds remain to be authored. |
+| LDR-001 | Support 1-8 Players and corresponding Seats. Four Players are the default presentation. | Platform-wide | **Partial:** `SeatState` and stable Seat IDs exist, but the prototype constructs one local Seat and no 1-8 Player layout controller exists. | M4 structural model and confirmed presets; network occupancy later | PDF p.1 | OD-014 retains the unconfirmed Player-count mappings. |
+| LDR-002 | Provide eight available Seat positions around the table without enlarging the table as Player count increases. | Platform-wide | **Missing:** M1 provides stable tabletop coordinates and camera-local surface coverage, but no eight-position Seat layout exists. | M4 confirmed eight-Player preset | PDF p.1 | OD-014 retains only the unconfirmed Player-count mappings. |
+| LDR-003 | Reposition occupied Seats toward the center for smaller Player counts instead of leaving Players on distant edge positions. | Platform-wide | **Missing** | M4 compact four-Player preset; other smaller-count mappings remain deferred | PDF pp.1, 4 | OD-014 |
+| LDR-004 | Support a standard 4-Player layout, an 8-Player layout, and a compact/alternate 4-Player layout. | Platform-wide layout capability; Template-selected use | **Missing** | M4 confirmed presets | PDF p.4 | OD-014 retains the future selection rule and unconfirmed mappings. |
+| LDR-005 | Show other Players' general presence and position around the table so turn/activity context is legible. | Platform-wide | **Missing:** no multiplayer presence presentation exists. | M4 structural Seat positions; presence delivery later | PDF pp.1, 3 | Exact presence and activity cues are not specified. |
+| LDR-006 | By default, frame all important usable and interactable areas without hiding required play off-screen. | Platform-wide; evaluated per Game Template | **Partial:** camera pan, zoom, bookmarks, and visibility evaluation exist; adaptive whole-layout framing does not. | M4 central focus region; M4.1 Template-specific framing | PDF p.1 | Template-specific framing thresholds remain to be authored. |
 
 ## 3. Card Interaction
 
 | ID | Requirement | Scope | Current implementation status | Planned milestone | Source/page | Unresolved decision |
 |---|---|---|---|---|---|---|
 | LDR-007 | Cards follow the pointer smoothly with controlled physical feel rather than harsh instantaneous snapping. | Platform-wide | **Implemented for the current prototype:** Card drag preview and interruptible Presentation transitions exist. This is controlled movement, not physics-authoritative simulation. | Maintain from M2-M3; acceptance review at P1 | PDF p.1 | None. |
-| LDR-008 | Cards support natural free-form drag and drop on the tabletop, not only fixed-slot movement. | Platform-wide | **Implemented for single Cards:** tabletop movement and contained-Card transfer to tabletop/Containers exist. | Maintain from M2-M3; expand for groups in M4 | PDF p.1 | Group manipulation behavior is OD-016. |
+| LDR-008 | Cards support natural free-form drag and drop on the tabletop, not only fixed-slot movement. | Platform-wide | **Implemented for single Cards:** tabletop movement and contained-Card transfer to tabletop/Containers exist. | Maintain from M2-M3; expand for groups before P1 closure unless required earlier | PDF p.1 | Group manipulation behavior is OD-016. |
 
 ## 4. Selection and Multi-Selection
 
 | ID | Requirement | Scope | Current implementation status | Planned milestone | Source/page | Unresolved decision |
 |---|---|---|---|---|---|---|
-| LDR-009 | A hovered, selected, or held Card has clear visual feedback. | Platform-wide | **Partial:** one hovered and one selected View are tracked, and authored selection highlights exist; a complete distinct hover/held visual contract is not documented or generalized. | M4 interaction completion | PDF p.2 | Exact hover versus selected visual treatment remains Presentation design. |
-| LDR-010 | Click-hold-drag on empty space creates a marquee selection box that selects Cards inside it. | Platform-wide | **Missing:** current selection state stores one primary selected View. | M4 interaction completion | PDF p.2 | OD-016 |
-| LDR-011 | Every Card in a multi-selection has an obvious selected highlight. | Platform-wide | **Missing:** single-selection visuals exist; collection selection does not. | M4 interaction completion | PDF p.2 | OD-016 |
+| LDR-009 | A hovered, selected, or held Card has clear visual feedback. | Platform-wide | **Partial:** one hovered and one selected View are tracked, and authored selection highlights exist; a complete distinct hover/held visual contract is not documented or generalized. | Remaining shared requirements before P1 closure | PDF p.2 | Exact hover versus selected visual treatment remains Presentation design. |
+| LDR-010 | Click-hold-drag on empty space creates a marquee selection box that selects Cards inside it. | Platform-wide | **Missing:** current selection state stores one primary selected View. | Remaining shared requirements before P1 closure; earlier only if a Game requires it | PDF p.2 | OD-016 |
+| LDR-011 | Every Card in a multi-selection has an obvious selected highlight. | Platform-wide | **Missing:** single-selection visuals exist; collection selection does not. | Remaining shared requirements before P1 closure; earlier only if a Game requires it | PDF p.2 | OD-016 |
 
 ## 5. Drop Indicators
 
 | ID | Requirement | Scope | Current implementation status | Planned milestone | Source/page | Unresolved decision |
 |---|---|---|---|---|---|---|
-| LDR-012 | While dragging, show a live landing indicator that previews where the Card will land before release. | Platform-wide | **Partial:** the dragged Card previews pointer position and Containers show valid/source/invalid feedback; there is no explicit generalized landing indicator for exact tabletop or Play Area placement. | M4 interaction and placement completion | PDF p.2 | OD-016 |
-| LDR-013 | A dragged group receives a live landing indicator for the group, not only the primary Card. | Platform-wide | **Missing** | M4 interaction and placement completion | PDF p.2 | OD-016 |
+| LDR-012 | While dragging, show a live landing indicator that previews where the Card will land before release. | Platform-wide | **Partial:** the dragged Card previews pointer position and Containers show valid/source/invalid feedback; there is no explicit generalized landing indicator for exact tabletop or Play Area placement. | Remaining shared requirements before P1 closure; earlier only if a Game requires it | PDF p.2 | OD-016 |
+| LDR-013 | A dragged group receives a live landing indicator for the group, not only the primary Card. | Platform-wide | **Missing** | Remaining shared requirements before P1 closure; earlier only if a Game requires it | PDF p.2 | OD-016 |
 
 ## 6. Card-Choice UI
 
@@ -67,11 +67,11 @@
 
 | ID | Requirement | Scope | Current implementation status | Planned milestone | Source/page | Unresolved decision |
 |---|---|---|---|---|---|---|
-| LDR-017 | Hand visibility is controlled separately from personal Play Area visibility and individual Card visibility. | Platform-wide security and Presentation | **Partial:** `ObjectVisibility` and Owner-only Hand Containers exist; personal Play Area visibility and complete audience filtering do not. | M4 model; multiplayer enforcement later | PDF pp.3-4 | OD-015 |
-| LDR-018 | A Player can hide their Hand from other Players without necessarily hiding their personal Play Area. | Platform-wide | **Partial:** the prototype marks the local Hand Owner-only, but there is no multiplayer data filtering or user-facing independent control. | M4 model; multiplayer enforcement later | PDF p.3 | OD-015 |
-| LDR-019 | A Player can hide their personal Play Area independently from their Hand. | Platform-wide | **Missing:** Play Area Runtime State and visibility controls are not implemented. | M4; multiplayer enforcement later | PDF p.3 | OD-015 |
-| LDR-020 | An individual Card in a shared Play Area can be turned face-down to conceal its identity independently of Hand and Play Area visibility. | Platform-wide | **Partial:** Card face state and Flip use case exist, but shared-area visibility delivery and policy semantics are incomplete. | M4 model; multiplayer enforcement later | PDF p.4 | OD-015 |
-| LDR-021 | A Player sees their own tools/resources and receives only a limited awareness view of other Players' tools, while central shared play remains prominent. | Platform-wide with Game Template policy/configuration | **Missing** | M4 model; multiplayer enforcement later | PDF p.5 | OD-015 defines what limited awareness may reveal. |
+| LDR-017 | Hand visibility is controlled separately from personal Play Area visibility and individual Card visibility. | Platform-wide security and Presentation | **Partial:** `ObjectVisibility` and Owner-only Hand Containers exist; personal Play Area visibility and complete audience filtering do not. | Remaining shared requirements before P1 closure; multiplayer enforcement M7 | PDF pp.3-4 | OD-015 |
+| LDR-018 | A Player can hide their Hand from other Players without necessarily hiding their personal Play Area. | Platform-wide | **Partial:** the prototype marks the local Hand Owner-only, but there is no multiplayer data filtering or user-facing independent control. | Remaining shared requirements before P1 closure; multiplayer enforcement M7 | PDF p.3 | OD-015 |
+| LDR-019 | A Player can hide their personal Play Area independently from their Hand. | Platform-wide | **Missing:** Play Area Runtime State and visibility controls are not implemented. | Remaining shared requirements before P1 closure; multiplayer enforcement M7 | PDF p.3 | OD-015 |
+| LDR-020 | An individual Card in a shared Play Area can be turned face-down to conceal its identity independently of Hand and Play Area visibility. | Platform-wide | **Partial:** Card face state and Flip use case exist, but shared-area visibility delivery and policy semantics are incomplete. | Remaining shared requirements before P1 closure; multiplayer enforcement M7 | PDF p.4 | OD-015 |
+| LDR-021 | A Player sees their own tools/resources and receives only a limited awareness view of other Players' tools, while central shared play remains prominent. | Platform-wide with Game Template policy/configuration | **Missing** | Remaining shared requirements before P1 closure; multiplayer enforcement M7 | PDF p.5 | OD-015 defines what limited awareness may reveal. |
 
 ## 8. Interchangeable Layouts
 
@@ -101,7 +101,7 @@
 
 | ID | Requirement | Scope | Current implementation status | Planned milestone | Source/page | Unresolved decision |
 |---|---|---|---|---|---|---|
-| LDR-031 | Super Leroy Sisters uses a side-scrolling level made from Cards generated by a Level Deck, with a meeple moving Card by Card and new sections revealed as progress is made. | Game-specific: Super Leroy Sisters | **Missing:** generic Cards, Deck, Pawn/meeple, and interactions are reusable; the Side-Scroller Play Area and Game content are absent. | M4 side-scroller foundation; G2 content | PDF p.6 | OD-019 |
+| LDR-031 | Super Leroy Sisters uses a side-scrolling level made from Cards generated by a Level Deck, with a meeple moving Card by Card and new sections revealed as progress is made. | Game-specific: Super Leroy Sisters | **Missing:** generic Cards, Deck, Pawn/meeple, and interactions are reusable; the Side-Scroller Play Area and Game content are absent. | G2 | PDF p.6 | OD-019 |
 | LDR-032 | Super Leroy Sisters resolves obstacles with Button Cards and Move Cards. | Game-specific: Super Leroy Sisters | **Missing** | G2 | PDF p.6 | OD-019 |
 | LDR-033 | Super Leroy Sisters' stated flow is: draw Level Card, place it into the level, move Player, encounter obstacle, play Button Cards/Move Card, resolve obstacle, continue to the next Card. | Game-specific: Super Leroy Sisters | **Missing** | G2 | PDF p.6 | OD-019; the PDF does not define setup, card-generation rules, obstacle formulas, completion, or failure rules. |
 

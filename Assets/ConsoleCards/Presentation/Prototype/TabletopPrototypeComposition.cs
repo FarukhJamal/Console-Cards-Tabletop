@@ -9,6 +9,8 @@ using ConsoleCards.Core.Domain.Cards;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Consoles;
 using ConsoleCards.Core.Domain.Match;
+using ConsoleCards.Core.Domain.PlayAreas;
+using ConsoleCards.Core.Domain.PlayerLayouts;
 using ConsoleCards.Core.Domain.Seats;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Core.Results;
@@ -27,6 +29,7 @@ namespace ConsoleCards.Presentation.Prototype
     {
         private const int TotalCardCount = 16;
         private const int PrototypeConsoleSlotCount = 3;
+        private const int PrototypePlayerLayoutSeatIndex = 0;
         private const int ShuffleSeed = 123;
         private const string ButtonUpLabel = "\u2191";
         private const string ButtonDownLabel = "\u2193";
@@ -102,6 +105,9 @@ namespace ConsoleCards.Presentation.Prototype
         private bool disablesRepeatedStartAfterFailure;
 
         private MatchState matchState;
+        private PlayerLayoutDefinition playerLayout;
+        private PlayerSeatLayoutEntry localSeatLayout;
+        private PlayAreaId centralPlayAreaId;
         private PlayerId localPlayerId;
         private InteractionOwnerId interactionOwnerId;
         private CardInstanceState cardState;
@@ -166,6 +172,14 @@ namespace ConsoleCards.Presentation.Prototype
         public bool IsInitialized { get; private set; }
 
         public MatchState MatchState => matchState;
+
+        public PlayerLayoutDefinition PlayerLayout => playerLayout;
+
+        public PlayerSeatLayoutEntry LocalSeatLayout => localSeatLayout;
+
+        public PlayAreaState CentralPlayArea => matchState != null && !centralPlayAreaId.IsEmpty
+            ? matchState.GetPlayArea(centralPlayAreaId)
+            : null;
 
         public PlayerId LocalPlayerId => localPlayerId;
 
@@ -404,6 +418,9 @@ namespace ConsoleCards.Presentation.Prototype
             ReleaseRuntimeCardInstances();
 
             matchState = null;
+            playerLayout = null;
+            localSeatLayout = null;
+            centralPlayAreaId = PlayAreaId.Empty;
             localPlayerId = PlayerId.Empty;
             interactionOwnerId = InteractionOwnerId.Empty;
             localSeatId = SeatId.Empty;
@@ -1487,6 +1504,13 @@ namespace ConsoleCards.Presentation.Prototype
             interactionOwnerId = InteractionOwnerId.New();
             localSeatId = SeatId.New();
             coordinateConverter = new TabletopCoordinateConverter(worldUnitsPerTableUnit, tabletopHeight, 0f, 0f);
+            playerLayout = PlayerLayoutPresets.StandardFourPlayer;
+            if (!playerLayout.TryGetSeat(PrototypePlayerLayoutSeatIndex, out localSeatLayout))
+            {
+                throw new InvalidOperationException("The prototype Player Layout does not contain its configured Seat entry.");
+            }
+
+            ProjectPrototypePlayerLayout(localSeatLayout);
             CaptureSceneOwnedInitialPoses();
 
             deckContainerId = ContainerId.New();
@@ -1510,11 +1534,13 @@ namespace ConsoleCards.Presentation.Prototype
             ConsoleState console = new ConsoleState(localSeatId, new[] { slotAId, slotBId, slotCId });
             SeatState seat = new SeatState(
                 localSeatId,
-                new TabletopPose(new TableCoordinate(0d, -4d), 0f, 0, 0),
+                localSeatLayout.PlayerZonePose,
                 handContainerId,
                 console,
                 localPlayerId,
                 SeatStatus.Occupied);
+            centralPlayAreaId = PlayAreaId.New();
+            PlayAreaState centralPlayArea = CreatePrototypeCentralPlayArea(centralPlayAreaId);
 
             List<CardInstanceState> cards = CreateCards();
             PawnState createdPawnState = CreatePawnState();
@@ -1538,11 +1564,36 @@ namespace ConsoleCards.Presentation.Prototype
                     new ContainerPlacementState(stackAContainerId, sceneStackAInitialPose),
                     new ContainerPlacementState(stackBContainerId, sceneStackBInitialPose),
                     new ContainerPlacementState(discardContainerId, sceneDiscardInitialPose),
-                });
+                },
+                new[] { centralPlayArea });
 
             cardState = cards[0];
             pawnState = createdPawnState;
             tokenState = createdTokenState;
+        }
+
+        private void ProjectPrototypePlayerLayout(PlayerSeatLayoutEntry seatLayout)
+        {
+            ApplyAuthoredPose(sceneHandVisual.transform, seatLayout.HandAnchorPose);
+            ApplyAuthoredPose(sceneConsoleView.transform, seatLayout.ConsoleAnchorPose);
+        }
+
+        private void ApplyAuthoredPose(Transform target, TabletopPose pose)
+        {
+            target.SetPositionAndRotation(
+                coordinateConverter.ToWorldPosition(pose),
+                coordinateConverter.ToWorldRotation(pose));
+        }
+
+        private static PlayAreaState CreatePrototypeCentralPlayArea(PlayAreaId playAreaId)
+        {
+            TabletopBounds bounds = new TabletopBounds(
+                new TableCoordinate(-5.5d, -1.25d),
+                new TableCoordinate(5.5d, 3.75d));
+            TabletopBounds focusRegion = new TabletopBounds(
+                new TableCoordinate(-2.5d, -0.5d),
+                new TableCoordinate(2.5d, 3d));
+            return new PlayAreaState(playAreaId, bounds, focusRegion);
         }
 
         private List<CardInstanceState> CreateCards()

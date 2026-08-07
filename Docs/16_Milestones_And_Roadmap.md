@@ -1,7 +1,7 @@
 # Console Cards — Milestones and Roadmap
 
 **Document ID:** 16_Milestones_And_Roadmap  
-**Version:** 1.2
+**Version:** 1.3
 
 **Status:** Approved
 **Planning basis:** One developer, approximately 30–35 focused hours per week.
@@ -158,41 +158,43 @@ Exit:
 
 The approved next-work order is:
 
-> **M4 Play Area/player-layout foundation -> M4.1 minimum Game Template support -> G1 Trap Door playable -> G2 Super Leroy Sisters playable -> P1 Phase 1 closure with both Games playable.**
+> **M4 Player Layout + Central Play Area foundation -> M4.1 minimum Game Template support -> G1 Trap Door playable -> G2 Super Leroy Sisters playable -> P1 remaining Phase 1 shared requirements and closure with both Games playable.**
 
 Do not combine these gates into one broad implementation task. Each gate requires its own tests, manual checks, implementation report, and rollback point.
 
-## 8. M4 - Play Area and Player-Layout Foundation
+## 8. M4 - Player Layout + Central Play Area Foundation
 
 Previous estimates are obsolete because the authoritative layout requirements expand M4. Re-estimate before implementation.
 
 Deliver:
 
-- One-to-eight-Player layout model around a stable central play space.
-- Standard four-Player, eight-Player, and compact four-Player layouts.
-- Seat repositioning toward the center for smaller Player counts.
-- Core Game Board focus kept central without enlarging the table.
-- Freeform Play Area.
-- Generic Zone and Slot.
-- Rectangular Grid.
-- Side-Scroller Play Area.
-- Placement suggestions and snap bypass.
-- Marquee Card selection with clear selected-collection feedback.
-- Live landing indicators for one Card and a selected Card group.
-- Separate Hand, personal Play Area, and individual Card visibility model.
-- Default framing that keeps required interactive areas visible.
+- A Unity-free Player Layout model structurally capable of representing one to eight occupied Seats around a fixed-size table.
+- Authored Player Layout definitions for the currently confirmed presets only: standard four-Player, compact four-Player, and eight-Player.
+- Per-Seat authored placement for the Seat/player zone, Hand anchor, universal Console anchor, and facing toward the central Game Board.
+- Adaptive seating through authored layouts without enlarging the table or moving core gameplay away from the center.
+- A Game-independent central Play Area foundation with stable identity, bounds, and a focus region.
+- An explicit boundary between the universal Console and the Game-specific central Game Board/Play Areas.
+- Narrow Presentation projection of a selected supported Player Layout around the existing fixed tabletop.
+
+The model may validate and represent one to eight occupied Seats, but M4 must not invent authored layouts for one to three or five to seven Players. Selection between standard and compact four-Player layouts remains configuration owned by a future Game Template or host setup.
 
 Exclude:
 
+- Authored mappings for one to three and five to seven Players while OD-014 remains unresolved.
 - Game Template loading.
+- Play Area strategies beyond the central identity/bounds/focus foundation, including Freeform, generic Zone/Slot, Rectangular Grid, and Side-Scroller behavior unless required by a later approved Game milestone.
+- Placement suggestions and snap bypass.
+- Marquee selection, group selection, and single/group landing indicators; these remain Phase 1 requirements governed by OD-016.
+- Independent Hand, personal Play Area, and individual Card visibility configuration; this remains a Phase 1 requirement governed by OD-015.
 - Trap Door or Super Leroy Sisters content/rules.
 - Networking enforcement of visibility.
 - Player-facing custom Template editor.
 
 Exit:
 
-- The Platform can present the required Player Layouts and Game Board layout primitives without Game-specific conditions.
-- Single and grouped Card placement communicates the accepted landing arrangement before release.
+- The Player Layout model supports one to eight occupied Seats structurally and presents the three confirmed authored presets without Game-specific conditions.
+- The table remains fixed in size, core gameplay remains centered, and the central Play Area is distinct from every universal Console.
+- No unresolved Player-count mapping is represented as implemented.
 
 ## 9. M4.1 - Minimum Game Template Support
 
@@ -201,7 +203,7 @@ Deliver only the Template support required for Empty Table, Trap Door, and Super
 - Local Game Template schema.
 - Empty Table Template.
 - Stable content references and minimum local content resolution.
-- Player Layout selection for one to eight Players.
+- Player Layout selection from supported authored definitions, with structural one-to-eight-Player validation and no invented mappings for unresolved Player counts.
 - Universal Console configuration separate from Game-specific Game Board/Play Area content.
 - Template validation and atomic Match creation.
 - Initial in-memory Match baseline and reset behavior.
@@ -258,12 +260,16 @@ Exit:
 
 ## 12. P1 - Phase 1 Closure
 
-Prerequisite: resolve OD-020.
+Prerequisite: resolve OD-015, OD-016, and OD-020.
 
 Deliver:
 
+- Remaining shared Phase 1 capabilities not required earlier by an approved Game, including Freeform Play Area support, generic Zone/Slot support, Rectangular Grid support, placement suggestions, and snap bypass.
+- Marquee Card selection with clear selected-collection feedback.
+- Live landing indicators for one Card and a selected Card group.
+- Separate Hand, personal Play Area, and individual Card visibility configuration; secure network delivery remains M7.
 - Regression and interaction pass across Empty Table, Trap Door, and Super Leroy Sisters.
-- Verification of one-to-eight Seat layout capability, including standard four-Player, eight-Player, and compact four-Player layouts.
+- Verification of structural one-to-eight Seat capability and the standard four-Player, eight-Player, and compact four-Player authored layouts. Unresolved Player-count mappings must not be claimed as implemented.
 - Verification that the table does not grow and core gameplay remains centered.
 - Verification of marquee selection, landing indicators, independent visibility configuration, and high-stakes Card-choice UI.
 - Documentation reconciliation and requirements traceability closure.
@@ -315,6 +321,8 @@ These remain planned Platform work but are not on the immediate Phase 1 critical
 - Basic Tokens are included in M2.
 - Runtime serialization is not included in M0.
 - M4 supplies Player Layout and Play Area capability; Game Templates decide which supported layout a Game uses.
+- M4 is authorized to implement only the confirmed standard four-Player, compact four-Player, and eight-Player authored layouts. OD-014 retains the missing one-to-three and five-to-seven mappings without blocking that confirmed work.
+- OD-015 visibility work and OD-016 marquee/group-landing work remain required before Phase 1 closure but do not block the M4 foundation. An approved Game may pull a necessary subset earlier.
 - Trap Door and Super Leroy Sisters are separate Game-specific Board types and Game Templates.
 - Phase 1 requires minimum playable versions of both Games, not invented rules, full automation, or production-complete content.
 - Reconnection and Seat restoration remain M7 requirements.
