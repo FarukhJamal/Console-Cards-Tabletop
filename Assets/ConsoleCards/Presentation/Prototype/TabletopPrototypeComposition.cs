@@ -32,6 +32,7 @@ namespace ConsoleCards.Presentation.Prototype
         private const string ButtonDownLabel = "\u2193";
         private const string ButtonLeftLabel = "\u2190";
         private const string ButtonRightLabel = "\u2192";
+        private const float ContextMenuWidth = 240f;
         private static readonly Rect PrototypeControlsPanelRect = new Rect(16f, 330f, 280f, 390f);
 
         [SerializeField] internal UnityCamera targetCamera;
@@ -73,6 +74,7 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal float magneticDistance = 0.8f;
         [SerializeField] internal float feedbackDuration = 0.18f;
         [SerializeField] internal float shuffleCompression = 0.06f;
+        [SerializeField] internal bool showDeveloperControls;
 
         private readonly List<RuntimeCardInstance> runtimeCardInstances = new List<RuntimeCardInstance>();
         private readonly List<GameObject> runtimeOwnedStackRoots = new List<GameObject>();
@@ -92,6 +94,7 @@ namespace ConsoleCards.Presentation.Prototype
         private bool cameraRoutingConfiguredByComposition;
         private bool frameCoordinatorEnabledByComposition;
         private bool controlsPanelInputBlockConfiguredByComposition;
+        private bool prototypeUiInputConfiguredByComposition;
         private bool objectAdapterInitializedByComposition;
         private bool cardViewBoundByComposition;
         private bool pawnViewBoundByComposition;
@@ -144,6 +147,13 @@ namespace ConsoleCards.Presentation.Prototype
         private string operationMessage = "M3 prototype ready.";
         private float operationMessageUntil;
         private float feedbackHoldUntil;
+        private PrototypeContextMenuMode contextMenuMode;
+        private Rect contextMenuRect;
+        private Vector2 contextMenuAnchorGuiPosition;
+        private Vector2 contextMenuScrollPosition;
+        private CardView contextMenuCardView;
+        private ContainerId contextMenuContainerId;
+        private int selectedDrawCount = 1;
 
         private DeckView deckView;
         private HandView handView;
@@ -257,8 +267,16 @@ namespace ConsoleCards.Presentation.Prototype
                 RefreshCardContentVisibility();
                 ConfigureDropTargets();
                 BuildInteractionGraph();
-                inputFrameCoordinator.ConfigureObjectInputBlockingGuiRect(ControlsPanelScreenRect);
-                controlsPanelInputBlockConfiguredByComposition = true;
+                inputFrameCoordinator.ConfigurePrototypeUiInput(
+                    HandleSecondaryPointerPressed,
+                    CloseContextMenu);
+                prototypeUiInputConfiguredByComposition = true;
+                if (showDeveloperControls)
+                {
+                    inputFrameCoordinator.ConfigureObjectInputBlockingGuiRect(ControlsPanelScreenRect);
+                    controlsPanelInputBlockConfiguredByComposition = true;
+                }
+
                 inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
                 inputFrameCoordinator.enabled = true;
                 frameCoordinatorEnabledByComposition = true;
@@ -270,7 +288,7 @@ namespace ConsoleCards.Presentation.Prototype
                 }
 
                 selectionPresenter.Refresh();
-                ShowMessage("M3.18 prototype ready.");
+                ShowMessage("M3.19 prototype ready.");
                 IsInitialized = true;
             }
             catch
@@ -291,6 +309,15 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             frameCoordinatorEnabledByComposition = false;
+
+            CloseContextMenu();
+
+            if (prototypeUiInputConfiguredByComposition && inputFrameCoordinator != null)
+            {
+                inputFrameCoordinator.ClearPrototypeUiInput();
+            }
+
+            prototypeUiInputConfiguredByComposition = false;
 
             if (controlsPanelInputBlockConfiguredByComposition && inputFrameCoordinator != null)
             {
@@ -426,6 +453,10 @@ namespace ConsoleCards.Presentation.Prototype
             stackViewsByContainerId.Clear();
             feedbackTargetsByContainerId.Clear();
             feedbackHoldUntil = 0f;
+            contextMenuMode = PrototypeContextMenuMode.None;
+            contextMenuCardView = null;
+            contextMenuContainerId = ContainerId.Empty;
+            selectedDrawCount = 1;
             IsInitialized = false;
         }
 
@@ -538,6 +569,25 @@ namespace ConsoleCards.Presentation.Prototype
         {
             EnsureInitialized();
             if (!TryResolveSplitSource(out ContainerState source, out StackRuntimeView sourceView))
+            {
+                ShowMessage("Split unavailable.");
+                return SplitStackResult.Failure(CommandResultStatus.Rejected, SplitStackError.SourceStackTooSmall);
+            }
+
+            return SplitStack(source, sourceView);
+        }
+
+        private SplitStackResult SplitStack(ContainerState source, StackRuntimeView sourceView)
+        {
+            EnsureInitialized();
+            if (source == null
+                || sourceView == null
+                || source.Kind != ContainerKind.Stack
+                || source.Count < 2
+                || !matchState.Containers.TryGetValue(source.Id, out ContainerState authoritativeSource)
+                || !ReferenceEquals(authoritativeSource, source)
+                || !stackViewsByContainerId.TryGetValue(source.Id, out StackRuntimeView authoritativeView)
+                || !ReferenceEquals(authoritativeView, sourceView))
             {
                 ShowMessage("Split unavailable.");
                 return SplitStackResult.Failure(CommandResultStatus.Rejected, SplitStackError.SourceStackTooSmall);
@@ -707,6 +757,12 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
+            DrawPlayerContextMenu();
+            if (!showDeveloperControls)
+            {
+                return;
+            }
+
             GUILayout.BeginArea(ControlsPanelScreenRect, GUI.skin.box);
             GUILayout.Label("M3 Prototype Controls");
             GUILayout.Space(4f);
@@ -779,6 +835,428 @@ namespace ConsoleCards.Presentation.Prototype
             GUILayout.Space(6f);
             GUILayout.Label(CurrentStatusText());
             GUILayout.EndArea();
+        }
+
+        private void HandleSecondaryPointerPressed(Vector2 screenPosition)
+        {
+            if (!IsInitialized || (interactionRouter != null && interactionRouter.HasActiveInteraction))
+            {
+                return;
+            }
+
+            CloseContextMenu();
+            if (hitResolver.TryResolve(screenPosition, out TabletopObjectView objectView)
+                && objectView is CardView hitCard
+                && TryOpenCardContextMenu(hitCard, screenPosition))
+            {
+                return;
+            }
+
+            if (!dropTargetResolver.TryResolve(screenPosition, out CardDropTarget target)
+                || target.Kind != CardDropTargetKind.Container
+                || !matchState.Containers.TryGetValue(target.ContainerId, out ContainerState container))
+            {
+                return;
+            }
+
+            if (container.Kind == ContainerKind.Deck)
+            {
+                OpenContextMenu(PrototypeContextMenuMode.Deck, screenPosition, null, container.Id);
+            }
+            else if (container.Kind == ContainerKind.Stack
+                && stackViewsByContainerId.ContainsKey(container.Id))
+            {
+                OpenContextMenu(PrototypeContextMenuMode.Stack, screenPosition, null, container.Id);
+            }
+        }
+
+        private bool TryOpenCardContextMenu(CardView hitCard, Vector2 screenPosition)
+        {
+            if (hitCard == null || !hitCard.IsBound || hitCard.CardState == null)
+            {
+                return false;
+            }
+
+            ContainerId containerId = hitCard.CardState.BaseState.ContainerId;
+            if (containerId.IsEmpty)
+            {
+                selectionState.Select(hitCard);
+                selectionPresenter.Refresh();
+                OpenContextMenu(PrototypeContextMenuMode.TabletopCard, screenPosition, hitCard, ContainerId.Empty);
+                return true;
+            }
+
+            if (!matchState.Containers.TryGetValue(containerId, out ContainerState container))
+            {
+                return false;
+            }
+
+            if (container.Kind == ContainerKind.Deck)
+            {
+                OpenContextMenu(PrototypeContextMenuMode.Deck, screenPosition, null, containerId);
+                return true;
+            }
+
+            if (container.Kind == ContainerKind.Stack
+                && stackViewsByContainerId.ContainsKey(containerId))
+            {
+                selectionState.Select(hitCard);
+                selectionPresenter.Refresh();
+                OpenContextMenu(PrototypeContextMenuMode.StackCard, screenPosition, hitCard, containerId);
+                return true;
+            }
+
+            return false;
+        }
+
+        private void OpenContextMenu(
+            PrototypeContextMenuMode mode,
+            Vector2 screenPosition,
+            CardView card,
+            ContainerId containerId)
+        {
+            contextMenuAnchorGuiPosition = new Vector2(
+                screenPosition.x,
+                Screen.height - screenPosition.y);
+            contextMenuCardView = card;
+            contextMenuContainerId = containerId;
+            contextMenuScrollPosition = Vector2.zero;
+            if (mode == PrototypeContextMenuMode.Deck)
+            {
+                selectedDrawCount = Mathf.Clamp(selectedDrawCount, 1, Math.Max(1, AvailableDrawableCount()));
+            }
+
+            SetContextMenuMode(mode);
+        }
+
+        private void SetContextMenuMode(PrototypeContextMenuMode mode)
+        {
+            contextMenuMode = mode;
+            if (mode == PrototypeContextMenuMode.None)
+            {
+                inputFrameCoordinator?.ClearTransientObjectInputBlockingGuiRect();
+                return;
+            }
+
+            float height = ContextMenuHeight(mode);
+            float x = Mathf.Clamp(
+                contextMenuAnchorGuiPosition.x + 8f,
+                0f,
+                Mathf.Max(0f, Screen.width - ContextMenuWidth));
+            float y = Mathf.Clamp(
+                contextMenuAnchorGuiPosition.y + 8f,
+                0f,
+                Mathf.Max(0f, Screen.height - height));
+            contextMenuRect = new Rect(x, y, ContextMenuWidth, height);
+            inputFrameCoordinator?.SetTransientObjectInputBlockingGuiRect(contextMenuRect);
+        }
+
+        private void CloseContextMenu()
+        {
+            contextMenuMode = PrototypeContextMenuMode.None;
+            contextMenuCardView = null;
+            contextMenuContainerId = ContainerId.Empty;
+            contextMenuScrollPosition = Vector2.zero;
+            inputFrameCoordinator?.ClearTransientObjectInputBlockingGuiRect();
+        }
+
+        private void DrawPlayerContextMenu()
+        {
+            PrototypeContextMenuMode mode = contextMenuMode;
+            if (mode == PrototypeContextMenuMode.None)
+            {
+                return;
+            }
+
+            GUILayout.BeginArea(contextMenuRect, GUI.skin.box);
+            switch (mode)
+            {
+                case PrototypeContextMenuMode.Deck:
+                    DrawDeckContextMenu();
+                    break;
+                case PrototypeContextMenuMode.DrawCards:
+                    DrawCardCountSelector();
+                    break;
+                case PrototypeContextMenuMode.TabletopCard:
+                    DrawTabletopCardContextMenu();
+                    break;
+                case PrototypeContextMenuMode.StackCard:
+                    DrawStackCardContextMenu();
+                    break;
+                case PrototypeContextMenuMode.Stack:
+                    DrawStackContextMenu();
+                    break;
+                case PrototypeContextMenuMode.MergeDestination:
+                    DrawMergeDestinationMenu();
+                    break;
+                default:
+                    CloseContextMenu();
+                    break;
+            }
+
+            GUILayout.EndArea();
+        }
+
+        private void DrawDeckContextMenu()
+        {
+            GUILayout.Label("DECK");
+            int availableCount = AvailableDrawableCount();
+            bool previousEnabled = GUI.enabled;
+            GUI.enabled = previousEnabled && availableCount > 0;
+            if (GUILayout.Button("Draw 1"))
+            {
+                DrawCardsResult result = DrawCards(1);
+                if (result.Succeeded)
+                {
+                    CloseContextMenu();
+                }
+            }
+
+            if (GUILayout.Button("Draw Cards..."))
+            {
+                selectedDrawCount = Mathf.Clamp(selectedDrawCount, 1, availableCount);
+                SetContextMenuMode(PrototypeContextMenuMode.DrawCards);
+            }
+
+            GUI.enabled = previousEnabled;
+            if (GUILayout.Button("Shuffle"))
+            {
+                ShuffleDeckResult result = ShuffleDeck();
+                if (result.Succeeded)
+                {
+                    CloseContextMenu();
+                }
+            }
+        }
+
+        private void DrawCardCountSelector()
+        {
+            GUILayout.Label("DRAW CARDS");
+            int availableCount = AvailableDrawableCount();
+            if (availableCount <= 0)
+            {
+                GUILayout.Label("Deck is empty.");
+                if (GUILayout.Button("Cancel"))
+                {
+                    CloseContextMenu();
+                }
+
+                return;
+            }
+
+            selectedDrawCount = Mathf.Clamp(selectedDrawCount, 1, availableCount);
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("-", GUILayout.Width(44f)))
+            {
+                selectedDrawCount = Mathf.Max(1, selectedDrawCount - 1);
+            }
+
+            GUILayout.Label(selectedDrawCount.ToString(), GUILayout.ExpandWidth(true));
+            if (GUILayout.Button("+", GUILayout.Width(44f)))
+            {
+                selectedDrawCount = Mathf.Min(availableCount, selectedDrawCount + 1);
+            }
+
+            GUILayout.EndHorizontal();
+            GUILayout.Label($"Available: {availableCount}");
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Draw"))
+            {
+                int count = Mathf.Clamp(selectedDrawCount, 1, availableCount);
+                DrawCardsResult result = DrawCards(count);
+                if (result.Succeeded)
+                {
+                    CloseContextMenu();
+                }
+            }
+
+            if (GUILayout.Button("Cancel"))
+            {
+                CloseContextMenu();
+            }
+
+            GUILayout.EndHorizontal();
+        }
+
+        private void DrawTabletopCardContextMenu()
+        {
+            GUILayout.Label("CARD");
+            if (!IsCurrentContextCardInContainer(ContainerId.Empty))
+            {
+                GUILayout.Label("Card unavailable.");
+                return;
+            }
+
+            if (GUILayout.Button("Flip"))
+            {
+                FlipInteractionResult result = flipCoordinator.Flip(contextMenuCardView);
+                ShowMessage(result.Succeeded ? "Card flipped." : $"Flip rejected: {result.Status}.");
+                if (result.Succeeded)
+                {
+                    CloseContextMenu();
+                }
+            }
+        }
+
+        private void DrawStackCardContextMenu()
+        {
+            GUILayout.Label("CARD");
+            if (!IsCurrentContextCardInContainer(contextMenuContainerId)
+                || !matchState.Containers.TryGetValue(contextMenuContainerId, out ContainerState container)
+                || container.Kind != ContainerKind.Stack)
+            {
+                GUILayout.Label("Card unavailable.");
+                return;
+            }
+
+            int index = container.IndexOf(contextMenuCardView.ObjectId);
+            if (index < container.Count - 1 && GUILayout.Button("Move Up"))
+            {
+                ReorderContainerResult result = MoveCardInContainer(contextMenuCardView, container.Id, 1);
+                if (result.Succeeded)
+                {
+                    CloseContextMenu();
+                }
+            }
+
+            if (index > 0 && GUILayout.Button("Move Down"))
+            {
+                ReorderContainerResult result = MoveCardInContainer(contextMenuCardView, container.Id, -1);
+                if (result.Succeeded)
+                {
+                    CloseContextMenu();
+                }
+            }
+        }
+
+        private void DrawStackContextMenu()
+        {
+            GUILayout.Label("STACK");
+            if (!TryGetContextStack(out ContainerState stack, out StackRuntimeView stackView))
+            {
+                GUILayout.Label("Stack unavailable.");
+                return;
+            }
+
+            if (stack.Count >= 2 && GUILayout.Button("Split Stack"))
+            {
+                SplitStackResult result = SplitStack(stack, stackView);
+                if (result.Succeeded)
+                {
+                    CloseContextMenu();
+                }
+            }
+
+            if (HasValidMergeDestination(stack.Id) && GUILayout.Button("Merge Into..."))
+            {
+                SetContextMenuMode(PrototypeContextMenuMode.MergeDestination);
+            }
+        }
+
+        private void DrawMergeDestinationMenu()
+        {
+            GUILayout.Label("MERGE INTO");
+            if (!TryGetContextStack(out ContainerState source, out _))
+            {
+                GUILayout.Label("Stack unavailable.");
+                return;
+            }
+
+            contextMenuScrollPosition = GUILayout.BeginScrollView(contextMenuScrollPosition);
+            foreach (KeyValuePair<ContainerId, StackRuntimeView> pair in stackViewsByContainerId)
+            {
+                if (!IsValidMergeDestination(source.Id, pair.Key, pair.Value))
+                {
+                    continue;
+                }
+
+                string label = pair.Value.Visual != null && pair.Value.Visual.Label != null
+                    ? pair.Value.Visual.Label.text
+                    : "Stack";
+                if (GUILayout.Button(label))
+                {
+                    MergeStacksResult result = MergeStacks(source.Id, pair.Key);
+                    if (result.Succeeded)
+                    {
+                        CloseContextMenu();
+                    }
+
+                    break;
+                }
+            }
+
+            GUILayout.EndScrollView();
+            if (GUILayout.Button("Back"))
+            {
+                SetContextMenuMode(PrototypeContextMenuMode.Stack);
+            }
+        }
+
+        private bool IsCurrentContextCardInContainer(ContainerId containerId)
+        {
+            return contextMenuCardView != null
+                && contextMenuCardView.IsBound
+                && contextMenuCardView.CardState != null
+                && contextMenuCardView.CardState.BaseState.ContainerId == containerId;
+        }
+
+        private bool TryGetContextStack(out ContainerState stack, out StackRuntimeView stackView)
+        {
+            stack = null;
+            stackView = null;
+            return !contextMenuContainerId.IsEmpty
+                && matchState.Containers.TryGetValue(contextMenuContainerId, out stack)
+                && stack.Kind == ContainerKind.Stack
+                && stackViewsByContainerId.TryGetValue(contextMenuContainerId, out stackView)
+                && stackView.View != null
+                && stackView.View.IsBound;
+        }
+
+        private bool HasValidMergeDestination(ContainerId sourceId)
+        {
+            foreach (KeyValuePair<ContainerId, StackRuntimeView> pair in stackViewsByContainerId)
+            {
+                if (IsValidMergeDestination(sourceId, pair.Key, pair.Value))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool IsValidMergeDestination(
+            ContainerId sourceId,
+            ContainerId destinationId,
+            StackRuntimeView destinationView)
+        {
+            return destinationId != sourceId
+                && destinationView != null
+                && destinationView.View != null
+                && destinationView.View.IsBound
+                && matchState.Containers.TryGetValue(destinationId, out ContainerState destination)
+                && destination.Kind == ContainerKind.Stack;
+        }
+
+        private float ContextMenuHeight(PrototypeContextMenuMode mode)
+        {
+            switch (mode)
+            {
+                case PrototypeContextMenuMode.Deck:
+                    return 145f;
+                case PrototypeContextMenuMode.DrawCards:
+                    return 155f;
+                case PrototypeContextMenuMode.TabletopCard:
+                    return 90f;
+                case PrototypeContextMenuMode.StackCard:
+                    return 120f;
+                case PrototypeContextMenuMode.Stack:
+                    return 120f;
+                case PrototypeContextMenuMode.MergeDestination:
+                    return Mathf.Min(320f, 82f + (stackViewsByContainerId.Count * 28f));
+                default:
+                    return 90f;
+            }
         }
 
         private void ValidateConfiguration()
@@ -880,7 +1358,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             prototypeStackPrefab.ValidateReferences();
-            prototypeStackPrefab.GetView<StackView>();
+            ValidateStackLayoutAnchor(prototypeStackPrefab);
 
             DeckView resolvedDeckView = sceneDeckVisual.GetView<DeckView>();
             StackView resolvedStackAView = sceneStackAVisual.GetView<StackView>();
@@ -893,6 +1371,9 @@ namespace ConsoleCards.Presentation.Prototype
                 throw new InvalidOperationException(
                     "TabletopPrototypeComposition requires distinct scene-owned Stack A and Stack B Views.");
             }
+
+            ValidateStackLayoutAnchor(sceneStackAVisual);
+            ValidateStackLayoutAnchor(sceneStackBVisual);
 
             if (!ReferenceEquals(resolvedHandView.LayoutAnchor, sceneHandVisual.LayoutAnchor)
                 || ReferenceEquals(resolvedHandView.transform, sceneHandVisual.LayoutAnchor))
@@ -1241,6 +1722,7 @@ namespace ConsoleCards.Presentation.Prototype
                 stackRuntimeView.View.Bind(
                     stackRuntimeView.Container,
                     stackRuntimeView.Placement,
+                    stackRuntimeView.Visual.LayoutAnchor,
                     coordinateConverter,
                     cardViews);
             }
@@ -1332,7 +1814,9 @@ namespace ConsoleCards.Presentation.Prototype
                 transferCoordinator,
                 layoutViewLookup,
                 this,
-                magneticDistance);
+                magneticDistance,
+                handView,
+                ReorderHandCardFromDrag);
             moveCoordinator = new TabletopMoveInteractionCoordinator(
                 matchState,
                 localPlayerId,
@@ -1479,7 +1963,7 @@ namespace ConsoleCards.Presentation.Prototype
                 return ReorderContainerResult.Failure(CommandResultStatus.Rejected, ReorderContainerError.ContainerMissing);
             }
 
-            return MoveSelectedCardInContainer(containerId, delta);
+            return MoveCardInContainer(selectedCard, containerId, delta);
         }
 
         private ReorderContainerResult MoveSelectedCardInContainer(ContainerId containerId, int delta)
@@ -1492,15 +1976,63 @@ namespace ConsoleCards.Presentation.Prototype
                 return ReorderContainerResult.Failure(CommandResultStatus.Rejected, ReorderContainerError.ObjectMissing);
             }
 
-            if (selectedCard.CardState.BaseState.ContainerId != containerId)
+            return MoveCardInContainer(selectedCard, containerId, delta);
+        }
+
+        private ReorderContainerResult MoveCardInContainer(
+            CardView card,
+            ContainerId containerId,
+            int delta)
+        {
+            EnsureInitialized();
+            if (card == null || card.CardState == null)
             {
-                ShowMessage("Selected Card is not in that Container.");
+                ShowMessage("Card is unavailable.");
+                return ReorderContainerResult.Failure(CommandResultStatus.Rejected, ReorderContainerError.ObjectMissing);
+            }
+
+            if (card.CardState.BaseState.ContainerId != containerId)
+            {
+                ShowMessage("Card is not in that Container.");
                 return ReorderContainerResult.Failure(CommandResultStatus.Rejected, ReorderContainerError.ObjectContainerMismatch);
             }
 
             ContainerState container = matchState.GetContainer(containerId);
-            int fromIndex = container.IndexOf(selectedCard.ObjectId);
+            int fromIndex = container.IndexOf(card.ObjectId);
             int toIndex = Mathf.Clamp(fromIndex + delta, 0, container.Count - 1);
+            return ReorderCardInContainer(card, container, fromIndex, toIndex);
+        }
+
+        private ReorderContainerResult ReorderHandCardFromDrag(CardView card, int targetIndex)
+        {
+            EnsureInitialized();
+            if (card == null
+                || card.CardState == null
+                || card.CardState.BaseState.ContainerId != handContainerId)
+            {
+                ShowMessage("Hand Card is unavailable.");
+                return ReorderContainerResult.Failure(CommandResultStatus.Rejected, ReorderContainerError.ObjectContainerMismatch);
+            }
+
+            ContainerState hand = matchState.GetContainer(handContainerId);
+            int fromIndex = hand.IndexOf(card.ObjectId);
+            int toIndex = Mathf.Clamp(targetIndex, 0, hand.Count - 1);
+            return ReorderCardInContainer(card, hand, fromIndex, toIndex);
+        }
+
+        private ReorderContainerResult ReorderCardInContainer(
+            CardView card,
+            ContainerState container,
+            int fromIndex,
+            int toIndex)
+        {
+            ContainerId containerId = container.Id;
+            if (fromIndex < 0)
+            {
+                ShowMessage("Card is not in that Container.");
+                return ReorderContainerResult.Failure(CommandResultStatus.Rejected, ReorderContainerError.ObjectMissing);
+            }
+
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(containerId);
             ReorderContainerResult result = new ReorderContainerUseCase().Execute(
@@ -1508,7 +2040,7 @@ namespace ConsoleCards.Presentation.Prototype
                 new ReorderContainerCommand(
                     CreateCommandContext(),
                     containerId,
-                    selectedCard.ObjectId,
+                    card.ObjectId,
                     fromIndex,
                     toIndex));
 
@@ -1807,7 +2339,7 @@ namespace ConsoleCards.Presentation.Prototype
             visual.ValidateReferences();
             StackView view = visual.GetView<StackView>();
             visual.Label.text = name;
-            view.Bind(container, placement, coordinateConverter, cardViews);
+            view.Bind(container, placement, visual.LayoutAnchor, coordinateConverter, cardViews);
             StackRuntimeView stackRuntimeView = new StackRuntimeView(
                 StackViewOwnership.RuntimeOwned,
                 root,
@@ -1940,6 +2472,21 @@ namespace ConsoleCards.Presentation.Prototype
                 : 0;
         }
 
+        private int AvailableDrawableCount()
+        {
+            if (matchState == null
+                || !matchState.Containers.TryGetValue(deckContainerId, out ContainerState deck)
+                || !matchState.Containers.TryGetValue(handContainerId, out ContainerState hand))
+            {
+                return 0;
+            }
+
+            int handSpace = hand.Capacity == 0
+                ? deck.Count
+                : Math.Max(0, hand.Capacity - hand.Count);
+            return Math.Min(deck.Count, handSpace);
+        }
+
         private void ShowMessage(string message)
         {
             operationMessage = message;
@@ -2048,6 +2595,16 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 throw new InvalidOperationException(
                     $"TabletopPrototypeComposition requires scene {visual.name} drop target to begin unconfigured.");
+            }
+        }
+
+        private static void ValidateStackLayoutAnchor(PrototypeFixedContainerVisual visual)
+        {
+            visual.GetView<StackView>();
+            if (ReferenceEquals(visual.LayoutAnchor, visual.transform))
+            {
+                throw new InvalidOperationException(
+                    $"Stack {visual.name} requires a distinct authored Card layout anchor.");
             }
         }
 
@@ -2524,6 +3081,17 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 throw new ArgumentOutOfRangeException(name);
             }
+        }
+
+        private enum PrototypeContextMenuMode
+        {
+            None,
+            Deck,
+            DrawCards,
+            TabletopCard,
+            StackCard,
+            Stack,
+            MergeDestination,
         }
 
         private enum StackViewOwnership

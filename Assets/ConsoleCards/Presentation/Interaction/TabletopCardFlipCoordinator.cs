@@ -71,6 +71,20 @@ namespace ConsoleCards.Presentation.Interaction
                 return FlipInteractionResult.SelectionNotCard();
             }
 
+            return Flip(cardView);
+        }
+
+        internal FlipInteractionResult Flip(CardView cardView)
+        {
+            if (cardView == null
+                || !cardView.isActiveAndEnabled
+                || !cardView.IsBound
+                || cardView.CardState == null
+                || cardView.BoundState == null)
+            {
+                return FlipInteractionResult.SelectionUnavailable();
+            }
+
             if (cardView.IsPreviewing)
             {
                 throw new InvalidOperationException("Selected card is already in a temporary preview state.");

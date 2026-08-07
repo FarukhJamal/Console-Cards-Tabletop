@@ -1,4 +1,5 @@
 using System;
+using ConsoleCards.Application.Results;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Containers;
@@ -20,11 +21,15 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly ContainerLayoutViewLookup layoutViewLookup;
         private readonly IContainedCardDragFeedback feedback;
         private readonly float magneticDistance;
+        private readonly HandView handView;
+        private readonly Func<CardView, int, ReorderContainerResult> reorderHandCard;
 
         private CardView activeCardView;
         private ContainerId sourceContainerId;
         private IContainerLayoutView sourceLayoutView;
         private bool releasesLockOnCompletion;
+        private bool handReorderPreviewActive;
+        private int handReorderTargetIndex = -1;
 
         public ContainedCardDragCoordinator(
             InteractionOwnerId interactionOwnerId,
@@ -73,6 +78,8 @@ namespace ConsoleCards.Presentation.Interaction
             this.layoutViewLookup = layoutViewLookup ?? throw new ArgumentNullException(nameof(layoutViewLookup));
             this.feedback = feedback;
             magneticDistance = 0f;
+            handView = null;
+            reorderHandCard = null;
 
             if (stateMachine.Phase != TabletopInteractionPhase.Idle)
             {
@@ -125,6 +132,35 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             this.magneticDistance = magneticDistance;
+        }
+
+        internal ContainedCardDragCoordinator(
+            InteractionOwnerId interactionOwnerId,
+            LocalInteractionLockService lockService,
+            TabletopInteractionStateMachine stateMachine,
+            TabletopDragPreviewSession previewSession,
+            TabletopPointerProjector pointerProjector,
+            CardDropTargetResolver dropTargetResolver,
+            CardTransferInteractionCoordinator transferCoordinator,
+            ContainerLayoutViewLookup layoutViewLookup,
+            IContainedCardDragFeedback feedback,
+            float magneticDistance,
+            HandView handView,
+            Func<CardView, int, ReorderContainerResult> reorderHandCard)
+            : this(
+                interactionOwnerId,
+                lockService,
+                stateMachine,
+                previewSession,
+                pointerProjector,
+                dropTargetResolver,
+                transferCoordinator,
+                layoutViewLookup,
+                feedback,
+                magneticDistance)
+        {
+            this.handView = handView ?? throw new ArgumentNullException(nameof(handView));
+            this.reorderHandCard = reorderHandCard ?? throw new ArgumentNullException(nameof(reorderHandCard));
         }
 
         public InteractionOwnerId InteractionOwnerId { get; }
@@ -217,6 +253,7 @@ namespace ConsoleCards.Presentation.Interaction
                 acceptedPose.Layer,
                 acceptedPose.LocalOrder);
             previewSession.UpdatePose(ApplyStackMagnetism(previewPose, screenPosition));
+            UpdateHandReorderPreview(view, coordinate, screenPosition);
             UpdateFeedback(screenPosition);
         }
 
@@ -270,6 +307,11 @@ namespace ConsoleCards.Presentation.Interaction
 
                 if (target.Kind == CardDropTargetKind.Container && target.ContainerId == sourceContainerId)
                 {
+                    if (TryCompleteHandReorder(view, screenPosition, out ContainedCardDragReleaseResult reorderResult))
+                    {
+                        return reorderResult;
+                    }
+
                     TabletopTransformSnapshot start = EndPresentationWithoutReconcile(view);
                     RestoreSourceLayout();
                     previewSession.AnimateReturnFrom(view, start);
@@ -484,6 +526,93 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             sourceLayoutView.ApplyAcceptedLayout();
+            handReorderPreviewActive = false;
+            handReorderTargetIndex = -1;
+        }
+
+        private void UpdateHandReorderPreview(
+            CardView view,
+            TableCoordinate pointerCoordinate,
+            Vector2 screenPosition)
+        {
+            if (handView == null
+                || reorderHandCard == null
+                || !ReferenceEquals(sourceLayoutView, handView)
+                || !dropTargetResolver.TryResolve(screenPosition, out CardDropTarget target)
+                || target.Kind != CardDropTargetKind.Container
+                || target.ContainerId != sourceContainerId
+                || !handView.TryGetReorderTargetIndex(view, pointerCoordinate, out int targetIndex))
+            {
+                ClearHandReorderPreview(view);
+                return;
+            }
+
+            if (!handReorderPreviewActive || handReorderTargetIndex != targetIndex)
+            {
+                handView.ApplyReorderPreview(view, targetIndex);
+            }
+
+            handReorderPreviewActive = true;
+            handReorderTargetIndex = targetIndex;
+        }
+
+        private void ClearHandReorderPreview(CardView view)
+        {
+            if (!handReorderPreviewActive || handView == null || !handView.IsBound)
+            {
+                handReorderPreviewActive = false;
+                handReorderTargetIndex = -1;
+                return;
+            }
+
+            handView.ClearReorderPreview(view);
+            handReorderPreviewActive = false;
+            handReorderTargetIndex = -1;
+        }
+
+        private bool TryCompleteHandReorder(
+            CardView view,
+            Vector2 screenPosition,
+            out ContainedCardDragReleaseResult releaseResult)
+        {
+            releaseResult = default;
+            if (handView == null
+                || reorderHandCard == null
+                || !ReferenceEquals(sourceLayoutView, handView)
+                || !pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate)
+                || !handView.TryGetReorderTargetIndex(view, coordinate, out int targetIndex))
+            {
+                return false;
+            }
+
+            TabletopTransformSnapshot start = EndPresentationWithoutReconcile(view);
+            int currentIndex = handView.ContainerState.IndexOf(view.ObjectId);
+            if (targetIndex == currentIndex)
+            {
+                RestoreSourceLayout();
+                previewSession.AnimateReturnFrom(view, start);
+                stateMachine.BeginCancellation();
+                stateMachine.CompleteCancellation();
+                releaseResult = ContainedCardDragReleaseResult.SameSource();
+                return true;
+            }
+
+            ReorderContainerResult result = reorderHandCard(view, targetIndex);
+            if (result.Succeeded)
+            {
+                stateMachine.CompleteAcceptance();
+                releaseResult = ContainedCardDragReleaseResult.HandReordered();
+            }
+            else
+            {
+                stateMachine.BeginCancellation();
+                stateMachine.CompleteCancellation();
+                releaseResult = ContainedCardDragReleaseResult.Cancelled();
+            }
+
+            handReorderPreviewActive = false;
+            handReorderTargetIndex = -1;
+            return true;
         }
 
         private TabletopTransformSnapshot EndPresentationWithoutReconcile(CardView view)
@@ -593,6 +722,8 @@ namespace ConsoleCards.Presentation.Interaction
             sourceContainerId = ContainerId.Empty;
             sourceLayoutView = null;
             releasesLockOnCompletion = false;
+            handReorderPreviewActive = false;
+            handReorderTargetIndex = -1;
         }
 
         private CardView GetActiveCardView()

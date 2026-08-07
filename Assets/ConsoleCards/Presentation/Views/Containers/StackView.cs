@@ -17,6 +17,7 @@ namespace ConsoleCards.Presentation.Views.Containers
         private readonly List<CardView> layoutAppliedCards = new List<CardView>();
         private ContainerState containerState;
         private ContainerPlacementState placementState;
+        private Transform layoutAnchor;
         private TabletopCoordinateConverter converter;
         private bool isBound;
 
@@ -56,18 +57,46 @@ namespace ConsoleCards.Presentation.Views.Containers
             TabletopCoordinateConverter coordinateConverter,
             IReadOnlyList<CardView> cardViews)
         {
+            Bind(container, placement, transform, coordinateConverter, cardViews);
+        }
+
+        public void Bind(
+            ContainerState container,
+            ContainerPlacementState placement,
+            Transform authoredLayoutAnchor,
+            TabletopCoordinateConverter coordinateConverter,
+            IReadOnlyList<CardView> cardViews)
+        {
             ContainerViewBinding.ValidateContainer(container, ContainerKind.Stack);
             ContainerViewBinding.ValidatePlacement(container, placement);
             ContainerViewBinding.ValidateConverter(coordinateConverter);
+            if (authoredLayoutAnchor == null)
+            {
+                throw new ArgumentNullException(nameof(authoredLayoutAnchor));
+            }
+
+            if (authoredLayoutAnchor != transform && !authoredLayoutAnchor.IsChildOf(transform))
+            {
+                throw new ArgumentException(
+                    "Stack layout anchor must belong to the Stack hierarchy.",
+                    nameof(authoredLayoutAnchor));
+            }
+
             ContainerViewBinding.ValidateFiniteNonNegative(verticalOffset, nameof(verticalOffset));
             ContainerViewBinding.ValidateFiniteNonNegative(tableOffsetPerCard, nameof(tableOffsetPerCard));
             Dictionary<TabletopObjectId, CardView> lookup = ContainerViewBinding.BuildLookup(cardViews);
             List<CardView> resolvedCards = ContainerViewBinding.ResolveOrderedCards(container, lookup);
-            List<CardLayoutPlan> plan = BuildLayoutPlan(placement, resolvedCards);
+            SetPlacementTransform(placement, coordinateConverter);
+            List<CardLayoutPlan> plan = BuildLayoutPlan(
+                placement,
+                authoredLayoutAnchor,
+                coordinateConverter,
+                resolvedCards);
 
             ContainerViewBinding.ClearAppliedCards(layoutAppliedCards);
             containerState = container;
             placementState = placement;
+            layoutAnchor = authoredLayoutAnchor;
             converter = coordinateConverter;
             suppliedCardViews.Clear();
             suppliedCardViews.AddRange(cardViews);
@@ -81,7 +110,12 @@ namespace ConsoleCards.Presentation.Views.Containers
 
             Dictionary<TabletopObjectId, CardView> lookup = ContainerViewBinding.BuildLookup(suppliedCardViews);
             List<CardView> resolvedCards = ContainerViewBinding.ResolveOrderedCards(containerState, lookup);
-            List<CardLayoutPlan> plan = BuildLayoutPlan(placementState, resolvedCards);
+            SetPlacementTransform(placementState, converter);
+            List<CardLayoutPlan> plan = BuildLayoutPlan(
+                placementState,
+                layoutAnchor,
+                converter,
+                resolvedCards);
 
             ApplyPlan(plan);
         }
@@ -91,6 +125,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             ContainerViewBinding.ClearAppliedCards(layoutAppliedCards);
             containerState = null;
             placementState = null;
+            layoutAnchor = null;
             converter = null;
             suppliedCardViews.Clear();
             VisibleCardCount = 0;
@@ -99,19 +134,27 @@ namespace ConsoleCards.Presentation.Views.Containers
 
         private List<CardLayoutPlan> BuildLayoutPlan(
             ContainerPlacementState placement,
+            Transform authoredLayoutAnchor,
+            TabletopCoordinateConverter coordinateConverter,
             IReadOnlyList<CardView> orderedCards)
         {
             List<CardLayoutPlan> plan = new List<CardLayoutPlan>(orderedCards.Count);
+            Vector3 placementWorldPosition = coordinateConverter.ToWorldPosition(placement.Pose);
+            TableCoordinate anchorCoordinate = coordinateConverter.ToTableCoordinate(authoredLayoutAnchor.position);
+            float anchorWorldUpOffset = authoredLayoutAnchor.position.y - placementWorldPosition.y;
             for (int i = 0; i < orderedCards.Count; i++)
             {
                 TableCoordinate coordinate = new TableCoordinate(
-                    placement.Pose.Position.X + (i * tableOffsetPerCard),
-                    placement.Pose.Position.Y + (i * tableOffsetPerCard));
+                    anchorCoordinate.X + (i * tableOffsetPerCard),
+                    anchorCoordinate.Y + (i * tableOffsetPerCard));
                 TabletopPose pose = ContainerViewBinding.CreatePose(
                     coordinate,
                     placement.Pose.RotationDegrees,
                     placement.Pose);
-                plan.Add(new CardLayoutPlan(orderedCards[i], pose, i * verticalOffset));
+                plan.Add(new CardLayoutPlan(
+                    orderedCards[i],
+                    pose,
+                    anchorWorldUpOffset + (i * verticalOffset)));
             }
 
             return plan;
@@ -119,11 +162,17 @@ namespace ConsoleCards.Presentation.Views.Containers
 
         private void ApplyPlan(IReadOnlyList<CardLayoutPlan> plan)
         {
-            transform.SetPositionAndRotation(
-                converter.ToWorldPosition(placementState.Pose),
-                converter.ToWorldRotation(placementState.Pose));
             ContainerViewBinding.ApplyPlan(plan, layoutAppliedCards, containerState.Id);
             VisibleCardCount = plan.Count;
+        }
+
+        private void SetPlacementTransform(
+            ContainerPlacementState placement,
+            TabletopCoordinateConverter coordinateConverter)
+        {
+            transform.SetPositionAndRotation(
+                coordinateConverter.ToWorldPosition(placement.Pose),
+                coordinateConverter.ToWorldRotation(placement.Pose));
         }
 
         private void EnsureBound()

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Presentation.Coordinates;
@@ -105,6 +106,72 @@ namespace ConsoleCards.Presentation.Views.Containers
             ApplyPlan(plan);
         }
 
+        internal bool TryGetReorderTargetIndex(
+            CardView movingCard,
+            TableCoordinate pointerCoordinate,
+            out int targetIndex)
+        {
+            EnsureBound();
+            targetIndex = -1;
+            if (movingCard == null
+                || !movingCard.IsBound
+                || movingCard.CardState == null
+                || movingCard.CardState.BaseState.ContainerId != containerState.Id)
+            {
+                return false;
+            }
+
+            int currentIndex = containerState.IndexOf(movingCard.ObjectId);
+            if (currentIndex < 0)
+            {
+                return false;
+            }
+
+            if (containerState.Count <= 1 || horizontalSpacing <= 0f)
+            {
+                targetIndex = currentIndex;
+                return true;
+            }
+
+            Vector3 pointerWorldPosition = converter.ToWorldPosition(pointerCoordinate);
+            float localPointerX = layoutAnchor.InverseTransformPoint(pointerWorldPosition).x;
+            float center = (containerState.Count - 1) * 0.5f;
+            targetIndex = Mathf.Clamp(
+                Mathf.RoundToInt((localPointerX / horizontalSpacing) + center),
+                0,
+                containerState.Count - 1);
+            return true;
+        }
+
+        internal void ApplyReorderPreview(CardView movingCard, int targetIndex)
+        {
+            EnsureBound();
+            Dictionary<TabletopObjectId, CardView> lookup = ContainerViewBinding.BuildLookup(suppliedCardViews);
+            List<CardView> previewOrder = ContainerViewBinding.ResolveOrderedCards(containerState, lookup);
+            int currentIndex = containerState.IndexOf(movingCard.ObjectId);
+            if (currentIndex < 0)
+            {
+                throw new InvalidOperationException("Hand reorder preview Card is not a Hand member.");
+            }
+
+            targetIndex = Mathf.Clamp(targetIndex, 0, previewOrder.Count - 1);
+            previewOrder.RemoveAt(currentIndex);
+            previewOrder.Insert(targetIndex, movingCard);
+            ApplyPlanExceptMovingCard(
+                BuildLayoutPlan(layoutAnchor, converter, previewOrder),
+                movingCard);
+        }
+
+        internal void ClearReorderPreview(CardView movingCard)
+        {
+            EnsureBound();
+            Dictionary<TabletopObjectId, CardView> lookup = ContainerViewBinding.BuildLookup(suppliedCardViews);
+            List<CardView> authoritativeOrder = ContainerViewBinding.ResolveOrderedCards(containerState, lookup);
+            ApplyPlanExceptMovingCard(
+                BuildLayoutPlan(layoutAnchor, converter, authoritativeOrder),
+                movingCard);
+        }
+
         public void Unbind()
         {
             ContainerViewBinding.ClearAppliedCards(layoutAppliedCards);
@@ -141,6 +208,21 @@ namespace ConsoleCards.Presentation.Views.Containers
             transform.SetPositionAndRotation(layoutAnchor.position, layoutAnchor.rotation);
             ContainerViewBinding.ApplyPlan(plan, layoutAppliedCards, containerState.Id);
             VisibleCardCount = plan.Count;
+        }
+
+        private void ApplyPlanExceptMovingCard(
+            IReadOnlyList<CardLayoutPlan> plan,
+            CardView movingCard)
+        {
+            transform.SetPositionAndRotation(layoutAnchor.position, layoutAnchor.rotation);
+            for (int i = 0; i < plan.Count; i++)
+            {
+                CardLayoutPlan item = plan[i];
+                if (!ReferenceEquals(item.CardView, movingCard))
+                {
+                    item.CardView.ApplyContainerLayoutPose(item.Pose, item.AdditionalWorldHeight);
+                }
+            }
         }
 
         private float CalculateFanRotation(float centeredIndex, int count)

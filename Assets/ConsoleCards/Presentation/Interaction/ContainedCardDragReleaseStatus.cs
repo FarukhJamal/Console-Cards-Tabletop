@@ -8,6 +8,7 @@ namespace ConsoleCards.Presentation.Interaction
         NoTarget,
         SameSource,
         ProjectionFailed,
-        Cancelled
+        Cancelled,
+        HandReordered
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using ConsoleCards.Presentation.Interaction;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace ConsoleCards.Presentation.Input
 {
@@ -12,8 +13,12 @@ namespace ConsoleCards.Presentation.Input
         private bool isInitialized;
         private bool isAttached;
         private bool hasObjectInputBlockingGuiRect;
+        private bool hasTransientObjectInputBlockingGuiRect;
         private bool suppressObjectPointerUntilRelease;
         private Rect objectInputBlockingGuiRect;
+        private Rect transientObjectInputBlockingGuiRect;
+        private Action<Vector2> secondaryPointerPressed;
+        private Action dismissTransientUi;
         private TabletopSelectionPresenter selectionPresenter;
 
         public bool IsInitialized => isInitialized;
@@ -44,6 +49,42 @@ namespace ConsoleCards.Presentation.Input
             objectInputBlockingGuiRect = default;
             hasObjectInputBlockingGuiRect = false;
             suppressObjectPointerUntilRelease = false;
+        }
+
+        internal void ConfigurePrototypeUiInput(
+            Action<Vector2> secondaryPointerPressedHandler,
+            Action dismissTransientUiHandler)
+        {
+            if (secondaryPointerPressed != null || dismissTransientUi != null)
+            {
+                throw new InvalidOperationException(
+                    "TabletopInputFrameCoordinator already has prototype UI input handlers.");
+            }
+
+            secondaryPointerPressed = secondaryPointerPressedHandler
+                ?? throw new ArgumentNullException(nameof(secondaryPointerPressedHandler));
+            dismissTransientUi = dismissTransientUiHandler
+                ?? throw new ArgumentNullException(nameof(dismissTransientUiHandler));
+        }
+
+        internal void ClearPrototypeUiInput()
+        {
+            ClearTransientObjectInputBlockingGuiRect();
+            suppressObjectPointerUntilRelease = false;
+            secondaryPointerPressed = null;
+            dismissTransientUi = null;
+        }
+
+        internal void SetTransientObjectInputBlockingGuiRect(Rect guiRect)
+        {
+            transientObjectInputBlockingGuiRect = guiRect;
+            hasTransientObjectInputBlockingGuiRect = true;
+        }
+
+        internal void ClearTransientObjectInputBlockingGuiRect()
+        {
+            transientObjectInputBlockingGuiRect = default;
+            hasTransientObjectInputBlockingGuiRect = false;
         }
 
         public void ConfigureSelectionPresenter(TabletopSelectionPresenter presenter)
@@ -122,6 +163,16 @@ namespace ConsoleCards.Presentation.Input
                 out float rotateDelta,
                 out bool flipPressedThisFrame);
 
+            bool secondaryPressedThisFrame = Mouse.current != null
+                && Mouse.current.rightButton.wasPressedThisFrame;
+            if (secondaryPressedThisFrame
+                && secondaryPointerPressed != null
+                && !HasActiveObjectInteraction()
+                && !IsInsideObjectInputBlockingGuiRect(screenPosition))
+            {
+                secondaryPointerPressed(screenPosition);
+            }
+
             ApplyInputFrame(new TabletopInputFrame(
                 keyboardPan,
                 dragHeld,
@@ -149,14 +200,31 @@ namespace ConsoleCards.Presentation.Input
             }
 
             bool suppressScrollForPointerTransition = frame.HasPointerTransition;
-            float effectiveRotateDelta = frame.HasPointerTransition ? 0f : frame.RotateDelta;
-            bool effectiveFlipPressedThisFrame = frame.HasPointerTransition
+            if (hasTransientObjectInputBlockingGuiRect
+                && frame.SelectPressedThisFrame
+                && !IsInsideTransientObjectInputBlockingGuiRect(frame.ScreenPosition))
+            {
+                dismissTransientUi?.Invoke();
+            }
+
+            bool consumesCancelForTransientUi = hasTransientObjectInputBlockingGuiRect
+                && frame.CancelPressedThisFrame;
+            if (consumesCancelForTransientUi)
+            {
+                dismissTransientUi?.Invoke();
+            }
+
+            bool pointerInsideBlockedUi = IsInsideObjectInputBlockingGuiRect(frame.ScreenPosition);
+            float effectiveRotateDelta = frame.HasPointerTransition || pointerInsideBlockedUi
+                ? 0f
+                : frame.RotateDelta;
+            bool effectiveFlipPressedThisFrame = frame.HasPointerTransition || pointerInsideBlockedUi
                 ? false
                 : frame.FlipPressedThisFrame;
 
             if (frame.SelectPressedThisFrame
                 && !HasActiveObjectInteraction()
-                && IsInsideObjectInputBlockingGuiRect(frame.ScreenPosition))
+                && pointerInsideBlockedUi)
             {
                 suppressObjectPointerUntilRelease = true;
             }
@@ -182,7 +250,7 @@ namespace ConsoleCards.Presentation.Input
                 effectiveSelectPressedThisFrame,
                 effectiveSelectHeld,
                 effectiveSelectReleasedThisFrame,
-                frame.CancelPressedThisFrame,
+                frame.CancelPressedThisFrame && !consumesCancelForTransientUi,
                 effectiveRotateDelta,
                 effectiveFlipPressedThisFrame);
 
@@ -191,7 +259,9 @@ namespace ConsoleCards.Presentation.Input
                 selectionPresenter.Refresh();
             }
 
-            float effectiveScroll = suppressScrollForPointerTransition ? 0f : frame.ScrollDelta;
+            float effectiveScroll = suppressScrollForPointerTransition || pointerInsideBlockedUi
+                ? 0f
+                : frame.ScrollDelta;
             cameraInputAdapter.ApplyInputFrame(
                 frame.KeyboardPan,
                 frame.DragHeld,
@@ -215,15 +285,21 @@ namespace ConsoleCards.Presentation.Input
 
         private bool IsInsideObjectInputBlockingGuiRect(Vector2 screenPosition)
         {
-            if (!hasObjectInputBlockingGuiRect)
-            {
-                return false;
-            }
+            Vector2 guiPosition = ToGuiPosition(screenPosition);
+            return (hasObjectInputBlockingGuiRect && objectInputBlockingGuiRect.Contains(guiPosition))
+                || (hasTransientObjectInputBlockingGuiRect
+                    && transientObjectInputBlockingGuiRect.Contains(guiPosition));
+        }
 
-            Vector2 guiPosition = new Vector2(
-                screenPosition.x,
-                Screen.height - screenPosition.y);
-            return objectInputBlockingGuiRect.Contains(guiPosition);
+        private bool IsInsideTransientObjectInputBlockingGuiRect(Vector2 screenPosition)
+        {
+            return hasTransientObjectInputBlockingGuiRect
+                && transientObjectInputBlockingGuiRect.Contains(ToGuiPosition(screenPosition));
+        }
+
+        private static Vector2 ToGuiPosition(Vector2 screenPosition)
+        {
+            return new Vector2(screenPosition.x, Screen.height - screenPosition.y);
         }
 
         private void AttachAdapters()

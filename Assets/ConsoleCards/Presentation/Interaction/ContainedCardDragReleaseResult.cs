@@ -29,6 +29,11 @@ namespace ConsoleCards.Presentation.Interaction
             return NotAttempted(ContainedCardDragReleaseStatus.ClickReleased, true);
         }
 
+        public static ContainedCardDragReleaseResult HandReordered()
+        {
+            return NotAttempted(ContainedCardDragReleaseStatus.HandReordered, true);
+        }
+
         public static ContainedCardDragReleaseResult NoTarget()
         {
             return NotAttempted(ContainedCardDragReleaseStatus.NoTarget, true);
