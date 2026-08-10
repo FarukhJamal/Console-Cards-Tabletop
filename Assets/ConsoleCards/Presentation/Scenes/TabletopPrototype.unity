@@ -725,6 +725,7 @@ MonoBehaviour:
   feedbackDuration: 0.18
   shuffleCompression: 0.06
   floorCardVisualScale: 0.62
+  showDeveloperControls: 0
 --- !u!1 &2100000020
 GameObject:
   m_ObjectHideFlags: 0

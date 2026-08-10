@@ -31,6 +31,13 @@ namespace ConsoleCards.Presentation.Prototype
         private const int PrototypePlayerLayoutSeatIndex = 0;
         private const int ShuffleSeed = 123;
         private const float ContextMenuWidth = 240f;
+        private const float TrapFloorCoinVisualScale = 0.34f;
+        private const float TrapFloorFloorLabelCharacterSize = 0.16f;
+        private const float TrapFloorCardLabelCharacterSize = 0.18f;
+        private const float TrapFloorCardBackLabelCharacterSize = 0.14f;
+        private const float TrapFloorContainerLabelCharacterSize = 0.1f;
+        private const int TrapFloorCardLabelFontSize = 64;
+        private const int TrapFloorContainerLabelFontSize = 48;
         private static readonly Rect PrototypeControlsPanelRect = new Rect(16f, 330f, 280f, 390f);
 
         [SerializeField] internal UnityCamera targetCamera;
@@ -281,6 +288,7 @@ namespace ConsoleCards.Presentation.Prototype
                 presentationTransitions = new TabletopPresentationTransitionController();
                 ReactivateSceneOwnedObjectViews();
                 BuildRuntimeGraph();
+                ProjectTrapFloorCameraBookmark();
                 BindObjectViews();
                 BuildContainerViews();
                 BindContainerViews();
@@ -1604,8 +1612,27 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ProjectPrototypePlayerLayout(PlayerSeatLayoutEntry seatLayout)
         {
-            ApplyAuthoredPose(sceneHandVisual.transform, seatLayout.HandAnchorPose);
-            ApplyAuthoredPose(sceneConsoleView.transform, seatLayout.ConsoleAnchorPose);
+            ApplyAuthoredPose(
+                sceneHandVisual.transform,
+                TrapFloorTemplateFactory.GetHandPose(seatLayout));
+            ApplyAuthoredPose(
+                sceneConsoleView.transform,
+                TrapFloorTemplateFactory.GetConsolePose(seatLayout));
+        }
+
+        private void ProjectTrapFloorCameraBookmark()
+        {
+            IReadOnlyList<GameTemplateCameraBookmarkDefinition> bookmarks =
+                prototypeTemplateContext.Session.CameraBookmarks;
+            if (bookmarks.Count == 0)
+            {
+                return;
+            }
+
+            GameTemplateCameraBookmarkDefinition bookmark = bookmarks[0];
+            cameraInputAdapter.CameraController.Focus(
+                bookmark.FocusCoordinate,
+                bookmark.OrthographicSize);
         }
 
         private void ApplyAuthoredPose(Transform target, TabletopPose pose)
@@ -1721,8 +1748,8 @@ namespace ConsoleCards.Presentation.Prototype
         {
             ConfigureCardVisuals(
                 looseCardVisualReferences,
-                labelsByCardId[cardState.BaseState.Id],
-                IsButtonCard(cardState));
+                cardState,
+                labelsByCardId[cardState.BaseState.Id]);
             cardSelectionVisual.SetSelected(false);
             cardView.Bind(cardState, coordinateConverter);
             cardViewBoundByComposition = true;
@@ -1765,6 +1792,7 @@ namespace ConsoleCards.Presentation.Prototype
 
             tokenSelectionVisual.SetSelected(false);
             tokenView.Bind(tokenState, coordinateConverter);
+            tokenView.transform.localScale = Vector3.one * TrapFloorCoinVisualScale;
             tokenViewBoundByComposition = true;
             tokenViews.Add(tokenView);
             tokenSelectionVisuals.Add(tokenSelectionVisual);
@@ -1797,6 +1825,7 @@ namespace ConsoleCards.Presentation.Prototype
                 TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[playerIndex];
                 RuntimeDeckInstance controllerDeck = CreateRuntimeDeckInstance(
                     $"Player {playerIndex + 1} Controller Deck",
+                    $"P{playerIndex + 1} CTRL",
                     player.ControllerDeckId);
                 runtimeDeckInstances.Add(controllerDeck);
                 controllerDeckViews.Add(controllerDeck.View);
@@ -1888,8 +1917,9 @@ namespace ConsoleCards.Presentation.Prototype
                     cardViews);
             }
 
-            sceneDeckVisual.Label.text = "FLOORMASTER";
-            sceneDiscardPileVisual.Label.text = "FM DISCARD";
+            ConfigureContainerLabel(sceneDeckVisual.Label, "FM DECK");
+            ConfigureContainerLabel(sceneDiscardPileVisual.Label, "FM DISC");
+            ConfigureContainerLabel(sceneHandVisual.Label, "HAND");
             RebuildLayoutViewCollection();
         }
 
@@ -2482,7 +2512,7 @@ namespace ConsoleCards.Presentation.Prototype
             selectionVisual = createdVisualReferences.SelectionVisual;
             runtimeCardInstance.SetReferences(createdView, selectionVisual, createdVisualReferences);
             selectionVisual.SetSelected(false);
-            ConfigureCardVisuals(createdVisualReferences, label, IsButtonCard(card));
+            ConfigureCardVisuals(createdVisualReferences, card, label);
             createdView.Bind(card, coordinateConverter);
             if (trapFloorTemplate.IsFloorCard(card.BaseState.Id))
             {
@@ -2517,17 +2547,21 @@ namespace ConsoleCards.Presentation.Prototype
             ValidateRuntimeSelectionVisual(createdView, selectionVisual);
             selectionVisual.SetSelected(false);
             createdView.Bind(token, coordinateConverter);
+            createdView.transform.localScale = Vector3.one * TrapFloorCoinVisualScale;
             runtimeTokenInstances.Add(new RuntimeObjectInstance(root, createdView, selectionVisual));
             return createdView;
         }
 
-        private RuntimeDeckInstance CreateRuntimeDeckInstance(string name, ContainerId containerId)
+        private RuntimeDeckInstance CreateRuntimeDeckInstance(
+            string name,
+            string displayLabel,
+            ContainerId containerId)
         {
             PrototypeFixedContainerVisual visual = Instantiate(prototypeDeckPrefab);
             GameObject root = PrepareRuntimeRoot(visual.gameObject, name);
             visual.ValidateReferences();
             DeckView view = visual.GetView<DeckView>();
-            visual.Label.text = name.Replace("Player ", "P").Replace(" Controller Deck", " CTRL");
+            ConfigureContainerLabel(visual.Label, displayLabel);
             visual.DropTarget.ClearConfiguration();
             visual.DropTarget.enabled = false;
             visual.TargetCollider.enabled = false;
@@ -2544,7 +2578,9 @@ namespace ConsoleCards.Presentation.Prototype
                 throw new InvalidOperationException("Trap Floor Console references a missing Player Layout Seat.");
             }
 
-            ApplyAuthoredPose(root.transform, seatLayout.ConsoleAnchorPose);
+            ApplyAuthoredPose(
+                root.transform,
+                TrapFloorTemplateFactory.GetConsolePose(seatLayout));
             ConsoleSlotView[] slotViews = view.GetComponentsInChildren<ConsoleSlotView>(true);
             if (slotViews.Length != PrototypeConsoleSlotCount)
             {
@@ -2589,16 +2625,51 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ConfigureCardVisuals(
             PrototypeCardVisualReferences visualReferences,
-            string label,
-            bool isButtonCard)
+            CardInstanceState card,
+            string label)
         {
+            bool isButtonCard = IsButtonCard(card);
             ApplyCardColor(
                 visualReferences.FaceUpRenderer,
                 isButtonCard
                     ? new Color(0.58f, 0.88f, 0.82f)
                     : new Color(0.95f, 0.88f, 0.42f));
             ApplyCardColor(visualReferences.FaceDownRenderer, new Color(0.10f, 0.19f, 0.42f));
-            visualReferences.FrontLabel.text = label;
+            ConfigurePrototypeLabel(
+                visualReferences.FrontLabel,
+                label,
+                trapFloorTemplate.IsFloorCard(card.BaseState.Id)
+                    ? TrapFloorFloorLabelCharacterSize
+                    : TrapFloorCardLabelCharacterSize,
+                TrapFloorCardLabelFontSize);
+            ConfigurePrototypeLabel(
+                visualReferences.BackLabel,
+                visualReferences.BackLabel.text,
+                TrapFloorCardBackLabelCharacterSize,
+                TrapFloorCardLabelFontSize);
+        }
+
+        private static void ConfigureContainerLabel(TextMesh label, string text)
+        {
+            ConfigurePrototypeLabel(
+                label,
+                text,
+                TrapFloorContainerLabelCharacterSize,
+                TrapFloorContainerLabelFontSize);
+        }
+
+        private static void ConfigurePrototypeLabel(
+            TextMesh label,
+            string text,
+            float characterSize,
+            int fontSize)
+        {
+            label.text = text;
+            label.characterSize = characterSize;
+            label.fontSize = fontSize;
+            label.anchor = TextAnchor.MiddleCenter;
+            label.alignment = TextAlignment.Center;
+            label.lineSpacing = 0.8f;
         }
 
         private static void ApplyCardColor(Renderer renderer, Color color)

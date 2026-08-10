@@ -30,6 +30,16 @@ namespace ConsoleCards.Games.TrapFloor
 
         private const double FloorColumnSpacing = 0.72d;
         private const double FloorRowSpacing = 1.0d;
+        private const double PlayerConsoleRadius = 6.1d;
+        private const double PlayerHandRadius = 4.15d;
+        private const double ControllerDeckOffset = 3.2d;
+        private const double FloormasterSupportX = 3.2d;
+        private const double FloormasterDeckY = 1.15d;
+        private const double FloormasterDiscardY = -1.15d;
+        private const double SharedCoinSupplyX = -4.5d;
+        private const double SharedCoinSupplyY = -1.08d;
+        private const double SharedCoinSpacing = 0.24d;
+        private const float PrototypeCameraOrthographicSize = 7.35f;
 
         public static TrapFloorTemplateDefinition CreateStandardFourPlayer()
         {
@@ -86,11 +96,19 @@ namespace ConsoleCards.Games.TrapFloor
             containers.Add(CreatePlacedContainer(
                 floormasterDeckId,
                 ContainerKind.Deck,
-                new TabletopPose(new TableCoordinate(2.85d, 0d), 0f, 0, 0)));
+                new TabletopPose(
+                    new TableCoordinate(FloormasterSupportX, FloormasterDeckY),
+                    0f,
+                    0,
+                    0)));
             containers.Add(CreatePlacedContainer(
                 floormasterDiscardId,
                 ContainerKind.DiscardPile,
-                new TabletopPose(new TableCoordinate(4.15d, 0d), 0f, 0, 0)));
+                new TabletopPose(
+                    new TableCoordinate(FloormasterSupportX, FloormasterDiscardY),
+                    0f,
+                    0,
+                    0)));
             containers.Add(CreateContainer(
                 sharedCoinSupplyId,
                 ContainerKind.Generic,
@@ -140,7 +158,9 @@ namespace ConsoleCards.Games.TrapFloor
                     coinDefinitionId,
                     TabletopObjectKind.Token,
                     new TabletopPose(
-                        new TableCoordinate(-3.95d + (column * 0.18d), -1.0d + (row * 0.22d)),
+                        new TableCoordinate(
+                            SharedCoinSupplyX + (column * SharedCoinSpacing),
+                            SharedCoinSupplyY + (row * SharedCoinSpacing)),
                         0f,
                         0,
                         i),
@@ -176,7 +196,10 @@ namespace ConsoleCards.Games.TrapFloor
                 },
                 new[]
                 {
-                    new GameTemplateCameraBookmarkDefinition("Trap Floor Board", boardFocus.Center, 5.25f),
+                    new GameTemplateCameraBookmarkDefinition(
+                        "Trap Floor Tabletop",
+                        boardFocus.Center,
+                        PrototypeCameraOrthographicSize),
                 });
             GameTemplateContentCatalog catalog = new GameTemplateContentCatalog(
                 objectDefinitions,
@@ -264,7 +287,11 @@ namespace ConsoleCards.Games.TrapFloor
                     objectId,
                     definitionId,
                     TabletopObjectKind.Card,
-                    new TabletopPose(new TableCoordinate(2.85d, 0d), 0f, 0, i),
+                    new TabletopPose(
+                        new TableCoordinate(FloormasterSupportX, FloormasterDeckY),
+                        0f,
+                        0,
+                        i),
                     SeatId.Empty,
                     ObjectVisibility.Public,
                     false,
@@ -325,7 +352,9 @@ namespace ConsoleCards.Games.TrapFloor
                     1));
             }
 
-            TabletopPose controllerDeckPose = OffsetBesideConsole(layoutSeat.ConsoleAnchorPose, 2.95d);
+            TabletopPose controllerDeckPose = OffsetBesideConsole(
+                GetConsolePose(layoutSeat),
+                ControllerDeckOffset);
             containers.Add(new GameTemplateContainerDefinition(
                 controllerDeckId,
                 ContainerKind.Deck,
@@ -420,6 +449,46 @@ namespace ConsoleCards.Games.TrapFloor
                 0f,
                 layer,
                 localOrder);
+        }
+
+        public static TabletopPose GetConsolePose(PlayerSeatLayoutEntry layoutSeat)
+        {
+            if (layoutSeat == null)
+            {
+                throw new ArgumentNullException(nameof(layoutSeat));
+            }
+
+            return ProjectToRadius(layoutSeat.ConsoleAnchorPose, PlayerConsoleRadius);
+        }
+
+        public static TabletopPose GetHandPose(PlayerSeatLayoutEntry layoutSeat)
+        {
+            if (layoutSeat == null)
+            {
+                throw new ArgumentNullException(nameof(layoutSeat));
+            }
+
+            return ProjectToRadius(layoutSeat.HandAnchorPose, PlayerHandRadius);
+        }
+
+        private static TabletopPose ProjectToRadius(TabletopPose pose, double radius)
+        {
+            double sourceRadius = Math.Sqrt(
+                (pose.Position.X * pose.Position.X)
+                + (pose.Position.Y * pose.Position.Y));
+            if (sourceRadius <= 0d)
+            {
+                throw new ArgumentException(
+                    "Trap Floor player-area anchors must be offset from the Board center.",
+                    nameof(pose));
+            }
+
+            double scale = radius / sourceRadius;
+            return new TabletopPose(
+                new TableCoordinate(pose.Position.X * scale, pose.Position.Y * scale),
+                pose.RotationDegrees,
+                pose.Layer,
+                pose.LocalOrder);
         }
 
         private static TabletopPose OffsetBesideConsole(TabletopPose consolePose, double distance)
