@@ -1,6 +1,6 @@
 # Console Cards — Requirements Traceability
 
-**Version:** 1.2
+**Version:** 1.3
 
 **Status:** Approved
 
@@ -39,12 +39,12 @@ The page-level source, scope, repository status, milestone, and unresolved-decis
 | PR-029 | Core gameplay remains centered and required interactive areas are visible by default | Play Area + Game Templates + Camera | M4, M4.1 | Layout/framing acceptance across supported Player Layouts and both official Games |
 | PR-030 | Marquee multi-Card selection with clear highlights | Interaction Design | Remaining shared requirements before P1 closure unless required earlier | Selection-boundary, highlight, cancel, and collection-state tests; LDR-010-LDR-011 |
 | PR-031 | Live landing indicators for one Card and selected Card groups | Interaction + Play Areas | Remaining shared requirements before P1 closure unless required earlier | Tabletop, Zone, Slot, valid/invalid, cancel, and group-placement tests; LDR-012-LDR-013 |
-| PR-032 | Large hideable/reopenable high-stakes Card-choice UI | Presentation + Game Templates | M4.1 | Legibility, hide/reopen, input isolation, candidate selection, and confirmation tests; LDR-014-LDR-016 |
+| PR-032 | Large hideable/reopenable high-stakes Card-choice UI | Presentation + Game Templates | Remaining shared requirements before P1 closure unless a concrete Game requires it earlier | Legibility, hide/reopen, input isolation, candidate selection, and confirmation tests; LDR-014-LDR-016; OD-017 |
 | PR-033 | Hand, personal Play Area, and individual Card visibility are independent | Policy + Play Areas + Multiplayer | Remaining shared requirements before P1 closure; secure delivery M7 | Policy composition and unauthorized-delivery tests; LDR-017-LDR-021 |
 | PR-034 | Console is universal and Game Board is Game-specific | Hands/Consoles + Play Areas + Game Templates | M4, M4.1, G1, G2 | Load distinct Game Boards with unchanged universal Console contract; LDR-025-LDR-027 |
 | PR-035 | Trap Door minimum playable Game Template | Game-specific content | G1 | Approved end-to-end flow after OD-018 resolution; LDR-028-LDR-030 |
 | PR-036 | Super Leroy Sisters minimum playable Game Template | Game-specific content | G2 | Approved end-to-end flow after OD-019 resolution; LDR-031-LDR-033 |
-| PR-037 | Phase 1 closes after both official Games are playable and remaining shared requirements are complete | Roadmap + Acceptance | P1 | Approved acceptance after OD-015, OD-016, and OD-020 resolution |
+| PR-037 | Phase 1 closes after both official Games are playable and remaining shared requirements are complete | Roadmap + Acceptance | P1 | Approved acceptance after OD-015, OD-016, OD-017, and OD-020 resolution |
 
 ## M2 Implementation Evidence
 

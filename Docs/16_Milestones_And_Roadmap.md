@@ -1,7 +1,7 @@
 # Console Cards — Milestones and Roadmap
 
 **Document ID:** 16_Milestones_And_Roadmap  
-**Version:** 1.3
+**Version:** 1.4
 
 **Status:** Approved
 **Planning basis:** One developer, approximately 30–35 focused hours per week.
@@ -198,17 +198,16 @@ Exit:
 
 ## 9. M4.1 - Minimum Game Template Support
 
-Deliver only the Template support required for Empty Table, Trap Door, and Super Leroy Sisters:
+Deliver only the minimum local Template pipeline needed to prepare later Empty Table, Trap Door, and Super Leroy Sisters content:
 
-- Local Game Template schema.
-- Empty Table Template.
-- Stable content references and minimum local content resolution.
-- Player Layout selection from supported authored definitions, with structural one-to-eight-Player validation and no invented mappings for unresolved Player counts.
-- Universal Console configuration separate from Game-specific Game Board/Play Area content.
-- Template validation and atomic Match creation.
-- Initial in-memory Match baseline and reset behavior.
-- Default Camera focus and required-area framing.
-- Large, central, readable Card-choice UI with hide/reopen and explicit selection/confirmation feedback.
+- A Unity-free Game Template schema for starting setup, content, and layout.
+- Template validation.
+- Minimum local content resolution.
+- Atomic `MatchState` construction from a valid Template, with clear failure and no partial Match creation.
+- An initial in-memory reset baseline created from the valid Template setup.
+- Minimal prototype bootstrap integration without broadly replacing the existing prototype composition.
+
+The schema preserves the approved boundaries: the Console is universal, the Game Board and Play Areas are Game-specific Template content, and a Game Template defines starting setup/content/layout rather than gameplay rules.
 
 Exclude:
 
@@ -216,11 +215,14 @@ Exclude:
 - Workshop/content sharing.
 - Persistence beyond the minimum Initial Snapshot/reset contract.
 - Generic Game-rule scripting.
+- Trap Door or Super Leroy Sisters content and gameplay rules.
+- High-stakes Card-choice UI; OD-017 governs that remaining shared Phase 1 requirement unless a concrete Game implementation proves it is required earlier.
 
 Exit:
 
-- Empty Table and representative Trap Door/Super Leroy Sisters setup data can load without modifying Platform code.
-- The same universal Console loads with distinct Game-specific central Boards.
+- A valid local Template constructs one complete authoritative `MatchState`; invalid input fails without exposing a partial Match.
+- Reset restores the initial in-memory baseline produced from the Template setup.
+- The prototype can exercise the minimum Template bootstrap while retaining the universal Console/Game-specific Game Board boundary.
 
 ## 10. G1 - Trap Door Playable
 
@@ -260,7 +262,7 @@ Exit:
 
 ## 12. P1 - Phase 1 Closure
 
-Prerequisite: resolve OD-015, OD-016, and OD-020.
+Prerequisite: resolve OD-015, OD-016, OD-017, and OD-020.
 
 Deliver:
 
@@ -268,6 +270,7 @@ Deliver:
 - Marquee Card selection with clear selected-collection feedback.
 - Live landing indicators for one Card and a selected Card group.
 - Separate Hand, personal Play Area, and individual Card visibility configuration; secure network delivery remains M7.
+- Large, central, readable high-stakes Card-choice UI with hide/reopen and explicit hover, selection, confirmation, and registered-choice feedback.
 - Regression and interaction pass across Empty Table, Trap Door, and Super Leroy Sisters.
 - Verification of structural one-to-eight Seat capability and the standard four-Player, eight-Player, and compact four-Player authored layouts. Unresolved Player-count mappings must not be claimed as implemented.
 - Verification that the table does not grow and core gameplay remains centered.

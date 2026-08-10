@@ -1,7 +1,7 @@
 # Console Cards - Layout Design Requirements Matrix
 
 **Document ID:** 17_Layout_Design_Requirements_Matrix  
-**Version:** 1.1
+**Version:** 1.2
 **Status:** Approved with Open Decisions  
 **Authoritative source:** `Consolecards_LayoutRef_doc.pdf`, title "Game Design Notes", pages 1-6, supplied 2026-08-07  
 **Purpose:** Preserve the PDF's design requirements, distinguish Platform requirements from Game-specific content, and trace each requirement to current implementation and planned delivery.
@@ -59,9 +59,9 @@
 
 | ID | Requirement | Scope | Current implementation status | Planned milestone | Source/page | Unresolved decision |
 |---|---|---|---|---|---|---|
-| LDR-014 | High-stakes choices between Cards use a large, central, readable UI rather than a minor popup. | Platform-wide Presentation capability; invoked by a Game | **Missing:** current OnGUI prototype menus are action controls, not a high-stakes Card-choice flow. | M4.1; first Game use in G1 | PDF p.2 | OD-017 |
-| LDR-015 | The choice UI can be hidden temporarily to inspect the Board and reopened without losing the pending choice. | Platform-wide Presentation capability | **Missing** | M4.1 | PDF pp.2-3 | OD-017 |
-| LDR-016 | Hover, candidate selection, confirmation, and registered-choice states provide clear feedback. | Platform-wide Presentation capability | **Missing** | M4.1 | PDF p.3 | OD-017 |
+| LDR-014 | High-stakes choices between Cards use a large, central, readable UI rather than a minor popup. | Platform-wide Presentation capability; invoked by a Game | **Missing:** current OnGUI prototype menus are action controls, not a high-stakes Card-choice flow. | Remaining shared requirements before P1 closure; earlier only if a concrete Game implementation proves it is required | PDF p.2 | OD-017 |
+| LDR-015 | The choice UI can be hidden temporarily to inspect the Board and reopened without losing the pending choice. | Platform-wide Presentation capability | **Missing** | Remaining shared requirements before P1 closure; earlier only if a concrete Game implementation proves it is required | PDF pp.2-3 | OD-017 |
+| LDR-016 | Hover, candidate selection, confirmation, and registered-choice states provide clear feedback. | Platform-wide Presentation capability | **Missing** | Remaining shared requirements before P1 closure; earlier only if a concrete Game implementation proves it is required | PDF p.3 | OD-017 |
 
 ## 7. Visibility
 

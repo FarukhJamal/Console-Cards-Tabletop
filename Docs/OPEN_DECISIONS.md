@@ -1,6 +1,6 @@
 # Console Cards — Open Decisions
 
-**Version:** 1.3
+**Version:** 1.4
 
 **Status:** Approved with Open Decisions  
 **Purpose:** Record resolved and deferred decisions so Codex does not infer them.
@@ -125,11 +125,13 @@ See `TECHNICAL_BASELINE.md`.
 
 ### OD-017 - High-Stakes Card-Choice Contract
 
-**Status:** Milestone Blocking for M4.1
+**Status:** Milestone Blocking for P1 closure unless a concrete Game requires it earlier
 
 **Question:** What minimum candidate data, confirmation/cancellation behavior, reopen affordance, and Game-facing request/result contract are required?
 
 **Known requirements:** The UI is large and readable, hideable/reopenable, preserves the pending choice, and gives hover, selection, confirmation, and registered-choice feedback.
+
+**Rule:** OD-017 does not block M4.1 minimum Game Template support. Complete the high-stakes Card-choice UI before Phase 1 closure unless a concrete Trap Door or Super Leroy Sisters implementation proves that the contract is required for that Game's approved playable flow, in which case resolve it before that dependency is implemented.
 
 ### OD-018 - Trap Door Minimum Playable Rules
 
@@ -162,8 +164,8 @@ See `TECHNICAL_BASELINE.md`.
 - **M2:** Unblocked using the approved prototype card dimensions.
 - **M3:** No open design decision blocks the current prototype feature set; closure verification is tracked separately.
 - **M4:** Unblocked for the confirmed standard four-Player, compact four-Player, and eight-Player presets plus the central Play Area foundation. OD-014 retains unresolved mappings without blocking this scope.
-- **M4.1:** Blocked by OD-017 at implementation start.
+- **M4.1:** Unblocked for minimum Game Template schema, validation, minimum content resolution, atomic MatchState construction, initial in-memory reset baseline, and minimal prototype bootstrap integration.
 - **G1:** Blocked by OD-018.
 - **G2:** Blocked by OD-019.
-- **P1:** Blocked by OD-015, OD-016, and OD-020.
+- **P1:** Blocked by OD-015, OD-016, OD-017, and OD-020.
 - **M6/M7:** Blocked only by OD-009 and OD-010 at their planned decision point.

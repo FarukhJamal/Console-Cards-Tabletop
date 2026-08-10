@@ -1,11 +1,8 @@
 {
-  "name": "ConsoleCards.Presentation",
-  "rootNamespace": "ConsoleCards.Presentation",
+  "name": "ConsoleCards.GameTemplates",
+  "rootNamespace": "ConsoleCards.GameTemplates",
   "references": [
-    "ConsoleCards.Core",
-    "ConsoleCards.Application",
-    "ConsoleCards.GameTemplates",
-    "Unity.InputSystem"
+    "ConsoleCards.Core"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
@@ -15,5 +12,5 @@
   "autoReferenced": true,
   "defineConstraints": [],
   "versionDefines": [],
-  "noEngineReferences": false
+  "noEngineReferences": true
 }

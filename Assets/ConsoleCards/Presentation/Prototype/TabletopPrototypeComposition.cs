@@ -11,9 +11,8 @@ using ConsoleCards.Core.Domain.Consoles;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Domain.PlayAreas;
 using ConsoleCards.Core.Domain.PlayerLayouts;
-using ConsoleCards.Core.Domain.Seats;
 using ConsoleCards.Core.Identifiers;
-using ConsoleCards.Core.Results;
+using ConsoleCards.GameTemplates;
 using ConsoleCards.Presentation.Coordinates;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
@@ -105,6 +104,7 @@ namespace ConsoleCards.Presentation.Prototype
         private bool disablesRepeatedStartAfterFailure;
 
         private MatchState matchState;
+        private PrototypeTemplateContext prototypeTemplateContext;
         private PlayerLayoutDefinition playerLayout;
         private PlayerSeatLayoutEntry localSeatLayout;
         private PlayAreaId centralPlayAreaId;
@@ -315,6 +315,11 @@ namespace ConsoleCards.Presentation.Prototype
 
         public void Shutdown()
         {
+            Shutdown(false);
+        }
+
+        private void Shutdown(bool preserveTemplateContext)
+        {
             ClearFeedback();
 
             if (frameCoordinatorEnabledByComposition && inputFrameCoordinator != null)
@@ -474,6 +479,11 @@ namespace ConsoleCards.Presentation.Prototype
             contextMenuCardView = null;
             contextMenuContainerId = ContainerId.Empty;
             selectedDrawCount = 1;
+            if (!preserveTemplateContext)
+            {
+                prototypeTemplateContext = null;
+            }
+
             IsInitialized = false;
         }
 
@@ -663,7 +673,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         public void ResetPrototype()
         {
-            Shutdown();
+            Shutdown(true);
             disablesRepeatedStartAfterFailure = false;
             Initialize();
         }
@@ -1500,10 +1510,16 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void BuildRuntimeGraph()
         {
-            localPlayerId = PlayerId.New();
             interactionOwnerId = InteractionOwnerId.New();
-            localSeatId = SeatId.New();
             coordinateConverter = new TabletopCoordinateConverter(worldUnitsPerTableUnit, tabletopHeight, 0f, 0f);
+
+            if (prototypeTemplateContext != null)
+            {
+                RestorePrototypeTemplateContext(true);
+                ProjectPrototypePlayerLayout(localSeatLayout);
+                return;
+            }
+
             playerLayout = PlayerLayoutPresets.StandardFourPlayer;
             if (!playerLayout.TryGetSeat(PrototypePlayerLayoutSeatIndex, out localSeatLayout))
             {
@@ -1512,6 +1528,15 @@ namespace ConsoleCards.Presentation.Prototype
 
             ProjectPrototypePlayerLayout(localSeatLayout);
             CaptureSceneOwnedInitialPoses();
+
+            prototypeTemplateContext = CreatePrototypeTemplateContext();
+            RestorePrototypeTemplateContext(false);
+        }
+
+        private PrototypeTemplateContext CreatePrototypeTemplateContext()
+        {
+            localPlayerId = PlayerId.New();
+            localSeatId = SeatId.New();
 
             deckContainerId = ContainerId.New();
             handContainerId = ContainerId.New();
@@ -1522,54 +1547,213 @@ namespace ConsoleCards.Presentation.Prototype
             ContainerId slotAId = ContainerId.New();
             ContainerId slotBId = ContainerId.New();
             ContainerId slotCId = ContainerId.New();
-
-            ContainerState deck = new ContainerState(deckContainerId, ContainerKind.Deck, SeatId.Empty, ObjectVisibility.Public, 0);
-            ContainerState hand = new ContainerState(handContainerId, ContainerKind.Hand, localSeatId, ObjectVisibility.OwnerOnly, 10);
-            ContainerState stackA = new ContainerState(stackAContainerId, ContainerKind.Stack, SeatId.Empty, ObjectVisibility.Public, 0);
-            ContainerState stackB = new ContainerState(stackBContainerId, ContainerKind.Stack, SeatId.Empty, ObjectVisibility.Public, 0);
-            ContainerState discard = new ContainerState(discardContainerId, ContainerKind.DiscardPile, SeatId.Empty, ObjectVisibility.Public, 0);
-            ContainerState slotA = new ContainerState(slotAId, ContainerKind.ConsoleSlot, localSeatId, ObjectVisibility.Public, 1);
-            ContainerState slotB = new ContainerState(slotBId, ContainerKind.ConsoleSlot, localSeatId, ObjectVisibility.Public, 1);
-            ContainerState slotC = new ContainerState(slotCId, ContainerKind.ConsoleSlot, localSeatId, ObjectVisibility.Public, 1);
-            ConsoleState console = new ConsoleState(localSeatId, new[] { slotAId, slotBId, slotCId });
-            SeatState seat = new SeatState(
-                localSeatId,
-                localSeatLayout.PlayerZonePose,
-                handContainerId,
-                console,
-                localPlayerId,
-                SeatStatus.Occupied);
             centralPlayAreaId = PlayAreaId.New();
-            PlayAreaState centralPlayArea = CreatePrototypeCentralPlayArea(centralPlayAreaId);
 
-            List<CardInstanceState> cards = CreateCards();
-            PawnState createdPawnState = CreatePawnState();
-            TokenState createdTokenState = CreateTokenState();
+            List<PlayerId> activePlayerIds = new List<PlayerId>(playerLayout.OccupiedSeatCount);
+            List<GameTemplateSeatDefinition> seatDefinitions =
+                new List<GameTemplateSeatDefinition>(playerLayout.OccupiedSeatCount);
+            List<GameTemplateContainerDefinition> containerDefinitions =
+                new List<GameTemplateContainerDefinition>();
 
-            ContainerTransferService transferService = new ContainerTransferService();
-            PlaceInitialCards(transferService, cards, deck, stackA, stackB);
+            for (int seatIndex = 0; seatIndex < playerLayout.OccupiedSeatCount; seatIndex++)
+            {
+                SeatId seatId = seatIndex == PrototypePlayerLayoutSeatIndex
+                    ? localSeatId
+                    : SeatId.New();
+                PlayerId playerId = seatIndex == PrototypePlayerLayoutSeatIndex
+                    ? localPlayerId
+                    : PlayerId.New();
+                ContainerId seatHandId = seatIndex == PrototypePlayerLayoutSeatIndex
+                    ? handContainerId
+                    : ContainerId.New();
+                ContainerId[] slotIds = seatIndex == PrototypePlayerLayoutSeatIndex
+                    ? new[] { slotAId, slotBId, slotCId }
+                    : new[] { ContainerId.New(), ContainerId.New(), ContainerId.New() };
 
-            matchState = new MatchState(
-                MatchId.New(),
-                GameTemplateId.Empty,
-                0,
-                cards,
-                new[] { createdPawnState },
-                new[] { createdTokenState },
-                new[] { deck, hand, stackA, stackB, discard, slotA, slotB, slotC },
-                new[] { seat },
+                activePlayerIds.Add(playerId);
+                seatDefinitions.Add(new GameTemplateSeatDefinition(
+                    seatId,
+                    seatIndex,
+                    seatHandId,
+                    slotIds));
+                containerDefinitions.Add(CreateTemplateContainer(
+                    seatHandId,
+                    ContainerKind.Hand,
+                    seatId,
+                    ObjectVisibility.OwnerOnly,
+                    10));
+                for (int slotIndex = 0; slotIndex < slotIds.Length; slotIndex++)
+                {
+                    containerDefinitions.Add(CreateTemplateContainer(
+                        slotIds[slotIndex],
+                        ContainerKind.ConsoleSlot,
+                        seatId,
+                        ObjectVisibility.Public,
+                        1));
+                }
+            }
+
+            containerDefinitions.Add(CreatePlacedTemplateContainer(
+                deckContainerId,
+                ContainerKind.Deck,
+                sceneDeckInitialPose));
+            containerDefinitions.Add(CreatePlacedTemplateContainer(
+                stackAContainerId,
+                ContainerKind.Stack,
+                sceneStackAInitialPose));
+            containerDefinitions.Add(CreatePlacedTemplateContainer(
+                stackBContainerId,
+                ContainerKind.Stack,
+                sceneStackBInitialPose));
+            containerDefinitions.Add(CreatePlacedTemplateContainer(
+                discardContainerId,
+                ContainerKind.DiscardPile,
+                sceneDiscardInitialPose));
+
+            string[] labels = CreatePrototypeCardLabels();
+            ButtonCardKind?[] buttonKinds = CreatePrototypeButtonKinds();
+            List<GameTemplateObjectDefinition> objectDefinitions =
+                new List<GameTemplateObjectDefinition>(TotalCardCount + 2);
+            List<GameTemplateObjectInstanceDefinition> objectInstances =
+                new List<GameTemplateObjectInstanceDefinition>(TotalCardCount + 2);
+            List<TabletopObjectId> cardIds = new List<TabletopObjectId>(TotalCardCount);
+            Dictionary<TabletopObjectId, string> templateLabels = new Dictionary<TabletopObjectId, string>();
+            Dictionary<ObjectDefinitionId, ButtonCardDefinition> templateButtonDefinitions =
+                new Dictionary<ObjectDefinitionId, ButtonCardDefinition>();
+
+            for (int i = 0; i < TotalCardCount; i++)
+            {
+                ObjectDefinitionId definitionId = ObjectDefinitionId.New();
+                TabletopObjectId objectId = TabletopObjectId.New();
+                TabletopPose pose = i == 0
+                    ? sceneLooseCardInitialPose
+                    : new TabletopPose(new TableCoordinate(-3d + (i * 0.2d), -1.5d), 0f, 0, 0);
+                objectDefinitions.Add(new GameTemplateObjectDefinition(
+                    definitionId,
+                    TabletopObjectKind.Card,
+                    labels[i]));
+                objectInstances.Add(new GameTemplateObjectInstanceDefinition(
+                    objectId,
+                    definitionId,
+                    TabletopObjectKind.Card,
+                    pose,
+                    SeatId.Empty,
+                    ObjectVisibility.Public,
+                    false,
+                    CardFace.FaceUp));
+                cardIds.Add(objectId);
+                templateLabels.Add(objectId, labels[i]);
+                if (buttonKinds[i].HasValue)
+                {
+                    templateButtonDefinitions.Add(
+                        definitionId,
+                        new ButtonCardDefinition(definitionId, buttonKinds[i].Value));
+                }
+            }
+
+            ObjectDefinitionId pawnDefinitionId = ObjectDefinitionId.New();
+            TabletopObjectId pawnId = TabletopObjectId.New();
+            objectDefinitions.Add(new GameTemplateObjectDefinition(
+                pawnDefinitionId,
+                TabletopObjectKind.Pawn,
+                "Prototype Pawn"));
+            objectInstances.Add(new GameTemplateObjectInstanceDefinition(
+                pawnId,
+                pawnDefinitionId,
+                TabletopObjectKind.Pawn,
+                scenePawnInitialPose,
+                SeatId.Empty,
+                ObjectVisibility.Public,
+                false,
+                CardFace.FaceUp));
+
+            ObjectDefinitionId tokenDefinitionId = ObjectDefinitionId.New();
+            TabletopObjectId tokenId = TabletopObjectId.New();
+            objectDefinitions.Add(new GameTemplateObjectDefinition(
+                tokenDefinitionId,
+                TabletopObjectKind.Token,
+                "Prototype Token"));
+            objectInstances.Add(new GameTemplateObjectInstanceDefinition(
+                tokenId,
+                tokenDefinitionId,
+                TabletopObjectKind.Token,
+                sceneTokenInitialPose,
+                SeatId.Empty,
+                ObjectVisibility.Public,
+                false,
+                CardFace.FaceUp));
+
+            List<TabletopObjectId> deckCardIds = new List<TabletopObjectId>();
+            for (int i = 4; i < cardIds.Count; i++)
+            {
+                deckCardIds.Add(cardIds[i]);
+            }
+
+            TabletopBounds centralBounds = CreatePrototypeCentralBounds();
+            TabletopBounds centralFocusRegion = CreatePrototypeCentralFocusRegion();
+            GameTemplate template = new GameTemplate(
+                GameTemplateId.New(),
+                GameTemplate.CurrentSchemaVersion,
+                "Tabletop Prototype",
+                "Local prototype setup used to exercise the minimum Game Template bootstrap.",
+                playerLayout.Id,
+                playerLayout.OccupiedSeatCount,
+                seatDefinitions,
+                containerDefinitions,
+                objectInstances,
                 new[]
                 {
-                    new ContainerPlacementState(deckContainerId, sceneDeckInitialPose),
-                    new ContainerPlacementState(stackAContainerId, sceneStackAInitialPose),
-                    new ContainerPlacementState(stackBContainerId, sceneStackBInitialPose),
-                    new ContainerPlacementState(discardContainerId, sceneDiscardInitialPose),
+                    new GameTemplateContainerMembership(stackAContainerId, new[] { cardIds[1], cardIds[2] }),
+                    new GameTemplateContainerMembership(stackBContainerId, new[] { cardIds[3] }),
+                    new GameTemplateContainerMembership(deckContainerId, deckCardIds),
                 },
-                new[] { centralPlayArea });
+                new[]
+                {
+                    new GameTemplatePlayAreaDefinition(
+                        centralPlayAreaId,
+                        centralBounds,
+                        centralFocusRegion),
+                },
+                new[]
+                {
+                    new GameTemplateCameraBookmarkDefinition(
+                        "Central Play Area",
+                        centralFocusRegion.Center,
+                        targetCamera.orthographicSize),
+                });
+            GameTemplateContentCatalog content = new GameTemplateContentCatalog(
+                objectDefinitions,
+                new[]
+                {
+                    PlayerLayoutPresets.StandardFourPlayer,
+                    PlayerLayoutPresets.CompactFourPlayer,
+                    PlayerLayoutPresets.EightPlayer,
+                });
+            GameTemplateMatchBuildResult buildResult = new GameTemplateMatchFactory().TryCreate(
+                template,
+                content,
+                activePlayerIds,
+                MatchId.New());
+            if (!buildResult.Succeeded)
+            {
+                throw new InvalidOperationException(FormatTemplateBuildFailure(buildResult.Issues));
+            }
 
-            cardState = cards[0];
-            pawnState = createdPawnState;
-            tokenState = createdTokenState;
+            return new PrototypeTemplateContext(
+                buildResult.Session,
+                localPlayerId,
+                localSeatId,
+                deckContainerId,
+                handContainerId,
+                discardContainerId,
+                stackAContainerId,
+                stackBContainerId,
+                centralPlayAreaId,
+                cardIds[0],
+                pawnId,
+                tokenId,
+                templateLabels,
+                templateButtonDefinitions);
         }
 
         private void ProjectPrototypePlayerLayout(PlayerSeatLayoutEntry seatLayout)
@@ -1585,21 +1769,91 @@ namespace ConsoleCards.Presentation.Prototype
                 coordinateConverter.ToWorldRotation(pose));
         }
 
-        private static PlayAreaState CreatePrototypeCentralPlayArea(PlayAreaId playAreaId)
+        private void RestorePrototypeTemplateContext(bool restoreInitialBaseline)
         {
-            TabletopBounds bounds = new TabletopBounds(
-                new TableCoordinate(-5.5d, -1.25d),
-                new TableCoordinate(5.5d, 3.75d));
-            TabletopBounds focusRegion = new TabletopBounds(
-                new TableCoordinate(-2.5d, -0.5d),
-                new TableCoordinate(2.5d, 3d));
-            return new PlayAreaState(playAreaId, bounds, focusRegion);
+            PrototypeTemplateContext context = prototypeTemplateContext;
+            matchState = restoreInitialBaseline
+                ? context.Session.Reset()
+                : context.Session.CurrentMatch;
+            playerLayout = context.Session.PlayerLayout;
+            if (!playerLayout.TryGetSeat(PrototypePlayerLayoutSeatIndex, out localSeatLayout))
+            {
+                throw new InvalidOperationException("The prototype Template Player Layout is missing its local Seat entry.");
+            }
+
+            localPlayerId = context.LocalPlayerId;
+            localSeatId = context.LocalSeatId;
+            deckContainerId = context.DeckContainerId;
+            handContainerId = context.HandContainerId;
+            discardContainerId = context.DiscardContainerId;
+            stackAContainerId = context.StackAContainerId;
+            stackBContainerId = context.StackBContainerId;
+            primaryStackContainerId = stackAContainerId;
+            centralPlayAreaId = context.CentralPlayAreaId;
+            cardState = matchState.Cards[context.LooseCardId];
+            pawnState = matchState.Pawns[context.PawnId];
+            tokenState = matchState.Tokens[context.TokenId];
+
+            foreach (KeyValuePair<TabletopObjectId, string> label in context.LabelsByCardId)
+            {
+                labelsByCardId.Add(label.Key, label.Value);
+            }
+
+            foreach (KeyValuePair<ObjectDefinitionId, ButtonCardDefinition> definition in context.ButtonDefinitions)
+            {
+                buttonDefinitions.Add(definition.Key, definition.Value);
+            }
         }
 
-        private List<CardInstanceState> CreateCards()
+        private static GameTemplateContainerDefinition CreateTemplateContainer(
+            ContainerId id,
+            ContainerKind kind,
+            SeatId ownerSeatId,
+            ObjectVisibility visibility,
+            int capacity)
         {
-            List<CardInstanceState> cards = new List<CardInstanceState>(TotalCardCount);
-            string[] labels =
+            return new GameTemplateContainerDefinition(
+                id,
+                kind,
+                ownerSeatId,
+                visibility,
+                capacity,
+                false,
+                TabletopPose.Default);
+        }
+
+        private static GameTemplateContainerDefinition CreatePlacedTemplateContainer(
+            ContainerId id,
+            ContainerKind kind,
+            TabletopPose pose)
+        {
+            return new GameTemplateContainerDefinition(
+                id,
+                kind,
+                SeatId.Empty,
+                ObjectVisibility.Public,
+                0,
+                true,
+                pose);
+        }
+
+        private static TabletopBounds CreatePrototypeCentralBounds()
+        {
+            return new TabletopBounds(
+                new TableCoordinate(-5.5d, -1.25d),
+                new TableCoordinate(5.5d, 3.75d));
+        }
+
+        private static TabletopBounds CreatePrototypeCentralFocusRegion()
+        {
+            return new TabletopBounds(
+                new TableCoordinate(-2.5d, -0.5d),
+                new TableCoordinate(2.5d, 3d));
+        }
+
+        private static string[] CreatePrototypeCardLabels()
+        {
+            return new[]
             {
                 "1",
                 "2",
@@ -1618,7 +1872,11 @@ namespace ConsoleCards.Presentation.Prototype
                 ButtonLeftLabel,
                 ButtonRightLabel,
             };
-            ButtonCardKind?[] buttonKinds =
+        }
+
+        private static ButtonCardKind?[] CreatePrototypeButtonKinds()
+        {
+            return new ButtonCardKind?[]
             {
                 null,
                 null,
@@ -1637,57 +1895,18 @@ namespace ConsoleCards.Presentation.Prototype
                 ButtonCardKind.Left,
                 ButtonCardKind.Right,
             };
-
-            for (int i = 0; i < TotalCardCount; i++)
-            {
-                ObjectDefinitionId definitionId = ObjectDefinitionId.New();
-                TabletopPose pose = i == 0
-                    ? sceneLooseCardInitialPose
-                    : new TabletopPose(new TableCoordinate(-3d + (i * 0.2d), -1.5d), 0f, 0, 0);
-                CardInstanceState card = new CardInstanceState(
-                    CreateBaseState(
-                        TabletopObjectKind.Card,
-                        definitionId,
-                        pose),
-                    CardFace.FaceUp);
-                cards.Add(card);
-                labelsByCardId.Add(card.BaseState.Id, labels[i]);
-                if (buttonKinds[i].HasValue)
-                {
-                    buttonDefinitions.Add(definitionId, new ButtonCardDefinition(definitionId, buttonKinds[i].Value));
-                }
-            }
-
-            return cards;
         }
 
-        private static void PlaceInitialCards(
-            ContainerTransferService transferService,
-            IReadOnlyList<CardInstanceState> cards,
-            ContainerState deck,
-            ContainerState stackA,
-            ContainerState stackB)
+        private static string FormatTemplateBuildFailure(
+            IReadOnlyList<GameTemplateValidationIssue> issues)
         {
-            Place(transferService, cards[1], stackA);
-            Place(transferService, cards[2], stackA);
-            Place(transferService, cards[3], stackB);
-
-            for (int i = 4; i < cards.Count; i++)
+            string message = "Prototype Game Template construction failed.";
+            for (int i = 0; i < issues.Count; i++)
             {
-                Place(transferService, cards[i], deck);
+                message += $" {issues[i]}";
             }
-        }
 
-        private static void Place(
-            ContainerTransferService transferService,
-            CardInstanceState card,
-            ContainerState destination)
-        {
-            ContainerTransferResult result = transferService.PlaceIntoContainer(card.BaseState, destination);
-            if (!result.Succeeded)
-            {
-                throw new InvalidOperationException($"Initial card placement failed: {result.Error}.");
-            }
+            return message;
         }
 
         private void BindObjectViews()
@@ -2423,24 +2642,6 @@ namespace ConsoleCards.Presentation.Prototype
             return buttonDefinitions.ContainsKey(card.BaseState.DefinitionId);
         }
 
-        private PawnState CreatePawnState()
-        {
-            return new PawnState(
-                CreateBaseState(
-                    TabletopObjectKind.Pawn,
-                    ObjectDefinitionId.New(),
-                    scenePawnInitialPose));
-        }
-
-        private TokenState CreateTokenState()
-        {
-            return new TokenState(
-                CreateBaseState(
-                    TabletopObjectKind.Token,
-                    ObjectDefinitionId.New(),
-                    sceneTokenInitialPose));
-        }
-
         private void CaptureSceneOwnedInitialPoses()
         {
             if (sceneOwnedInitialPosesCaptured)
@@ -2470,22 +2671,6 @@ namespace ConsoleCards.Presentation.Prototype
                 authoredTransform.eulerAngles.y,
                 0,
                 0);
-        }
-
-        private static TabletopObjectState CreateBaseState(
-            TabletopObjectKind kind,
-            ObjectDefinitionId definitionId,
-            TabletopPose pose)
-        {
-            return new TabletopObjectState(
-                TabletopObjectId.New(),
-                definitionId,
-                kind,
-                pose,
-                ContainerId.Empty,
-                PlayerId.Empty,
-                ObjectVisibility.Public,
-                false);
         }
 
         private ContainerId CreateDeterministicDynamicStackId(int sequence)
@@ -3149,6 +3334,68 @@ namespace ConsoleCards.Presentation.Prototype
         {
             SceneOwned,
             RuntimeOwned,
+        }
+
+        private sealed class PrototypeTemplateContext
+        {
+            private readonly Dictionary<TabletopObjectId, string> labelsByCardId;
+            private readonly Dictionary<ObjectDefinitionId, ButtonCardDefinition> buttonDefinitions;
+
+            public PrototypeTemplateContext(
+                GameTemplateMatchSession session,
+                PlayerId localPlayerId,
+                SeatId localSeatId,
+                ContainerId deckContainerId,
+                ContainerId handContainerId,
+                ContainerId discardContainerId,
+                ContainerId stackAContainerId,
+                ContainerId stackBContainerId,
+                PlayAreaId centralPlayAreaId,
+                TabletopObjectId looseCardId,
+                TabletopObjectId pawnId,
+                TabletopObjectId tokenId,
+                IReadOnlyDictionary<TabletopObjectId, string> labelsByCardId,
+                IReadOnlyDictionary<ObjectDefinitionId, ButtonCardDefinition> buttonDefinitions)
+            {
+                Session = session ?? throw new ArgumentNullException(nameof(session));
+                LocalPlayerId = localPlayerId;
+                LocalSeatId = localSeatId;
+                DeckContainerId = deckContainerId;
+                HandContainerId = handContainerId;
+                DiscardContainerId = discardContainerId;
+                StackAContainerId = stackAContainerId;
+                StackBContainerId = stackBContainerId;
+                CentralPlayAreaId = centralPlayAreaId;
+                LooseCardId = looseCardId;
+                PawnId = pawnId;
+                TokenId = tokenId;
+                this.labelsByCardId = new Dictionary<TabletopObjectId, string>();
+                foreach (KeyValuePair<TabletopObjectId, string> label in labelsByCardId)
+                {
+                    this.labelsByCardId.Add(label.Key, label.Value);
+                }
+
+                this.buttonDefinitions = new Dictionary<ObjectDefinitionId, ButtonCardDefinition>();
+                foreach (KeyValuePair<ObjectDefinitionId, ButtonCardDefinition> definition in buttonDefinitions)
+                {
+                    this.buttonDefinitions.Add(definition.Key, definition.Value);
+                }
+            }
+
+            public GameTemplateMatchSession Session { get; }
+            public PlayerId LocalPlayerId { get; }
+            public SeatId LocalSeatId { get; }
+            public ContainerId DeckContainerId { get; }
+            public ContainerId HandContainerId { get; }
+            public ContainerId DiscardContainerId { get; }
+            public ContainerId StackAContainerId { get; }
+            public ContainerId StackBContainerId { get; }
+            public PlayAreaId CentralPlayAreaId { get; }
+            public TabletopObjectId LooseCardId { get; }
+            public TabletopObjectId PawnId { get; }
+            public TabletopObjectId TokenId { get; }
+            public IReadOnlyDictionary<TabletopObjectId, string> LabelsByCardId => labelsByCardId;
+            public IReadOnlyDictionary<ObjectDefinitionId, ButtonCardDefinition> ButtonDefinitions => buttonDefinitions;
         }
 
         private sealed class RuntimeCardInstance
