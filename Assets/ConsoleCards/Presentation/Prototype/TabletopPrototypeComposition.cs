@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ConsoleCards.Application.Commands;
+using ConsoleCards.Application.Random;
 using ConsoleCards.Application.Results;
 using ConsoleCards.Application.UseCases;
 using ConsoleCards.Core.Coordinates;
@@ -29,8 +30,11 @@ namespace ConsoleCards.Presentation.Prototype
     {
         private const int PrototypeConsoleSlotCount = TrapFloorTemplateFactory.ConsoleSlotCountPerPlayer;
         private const int PrototypePlayerLayoutSeatIndex = 0;
+        private const int PrototypeFloorfallRoundNumber = 1;
         private const int ShuffleSeed = 123;
         private const float ContextMenuWidth = 240f;
+        private const float FloorfallStatusWidth = 280f;
+        private const float FloorfallStatusHeight = 78f;
         private const float TrapFloorCoinVisualScale = 0.34f;
         private const float TrapFloorFloorLabelCharacterSize = 0.16f;
         private const float TrapFloorCardLabelCharacterSize = 0.18f;
@@ -126,6 +130,9 @@ namespace ConsoleCards.Presentation.Prototype
         private MatchState matchState;
         private PrototypeTemplateContext prototypeTemplateContext;
         private TrapFloorTemplateDefinition trapFloorTemplate;
+        private TrapFloorFloorfallState floorfallState;
+        private TrapFloorFloorfallService floorfallService;
+        private TrapFloorFloorfallTargetPresenter floorfallTargetPresenter;
         private PlayerLayoutDefinition playerLayout;
         private PlayerSeatLayoutEntry localSeatLayout;
         private PlayAreaId centralPlayAreaId;
@@ -185,6 +192,8 @@ namespace ConsoleCards.Presentation.Prototype
         public bool IsInitialized { get; private set; }
 
         public MatchState MatchState => matchState;
+
+        public TrapFloorFloorfallState FloorfallState => floorfallState;
 
         public PlayerLayoutDefinition PlayerLayout => playerLayout;
 
@@ -288,6 +297,7 @@ namespace ConsoleCards.Presentation.Prototype
                 presentationTransitions = new TabletopPresentationTransitionController();
                 ReactivateSceneOwnedObjectViews();
                 BuildRuntimeGraph();
+                BuildFloorfallRuntime();
                 ProjectTrapFloorCameraBookmark();
                 BindObjectViews();
                 BuildContainerViews();
@@ -335,6 +345,8 @@ namespace ConsoleCards.Presentation.Prototype
         private void Shutdown(bool preserveTemplateContext)
         {
             ClearFeedback();
+            floorfallTargetPresenter?.Clear();
+            floorfallState?.Clear();
 
             if (frameCoordinatorEnabledByComposition && inputFrameCoordinator != null)
             {
@@ -442,6 +454,9 @@ namespace ConsoleCards.Presentation.Prototype
 
             matchState = null;
             trapFloorTemplate = null;
+            floorfallState = null;
+            floorfallService = null;
+            floorfallTargetPresenter = null;
             playerLayout = null;
             localSeatLayout = null;
             centralPlayAreaId = PlayAreaId.Empty;
@@ -708,6 +723,17 @@ namespace ConsoleCards.Presentation.Prototype
             Initialize();
         }
 
+        public TrapFloorFloorfallTarget TriggerFloorfall()
+        {
+            EnsureInitialized();
+            TrapFloorFloorfallTarget target = floorfallService.RollAndResolve(
+                new TrapFloorFloorfallContext(PrototypeFloorfallRoundNumber));
+            floorfallTargetPresenter.Show(target.FloorCardId);
+            ShowMessage(
+                $"Floorfall: X {target.XAxisRoll.Value}, Y {target.YAxisRoll.Value} -> {target.Coordinate}.");
+            return target;
+        }
+
         void IContainedCardDragFeedback.Begin(ContainerId sourceContainerId)
         {
             sourceFeedbackContainerId = sourceContainerId;
@@ -814,6 +840,7 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
+            DrawFloorfallStatus();
             DrawPlayerContextMenu();
             if (!showDeveloperControls)
             {
@@ -934,6 +961,16 @@ namespace ConsoleCards.Presentation.Prototype
                 return false;
             }
 
+            if (trapFloorTemplate.IsFloorCard(hitCard.ObjectId))
+            {
+                OpenContextMenu(
+                    PrototypeContextMenuMode.FloorCard,
+                    screenPosition,
+                    hitCard,
+                    ContainerId.Empty);
+                return true;
+            }
+
             ContainerId containerId = hitCard.CardState.BaseState.ContainerId;
             if (containerId.IsEmpty)
             {
@@ -1036,6 +1073,9 @@ namespace ConsoleCards.Presentation.Prototype
                     break;
                 case PrototypeContextMenuMode.TabletopCard:
                     DrawTabletopCardContextMenu();
+                    break;
+                case PrototypeContextMenuMode.FloorCard:
+                    DrawFloorCardContextMenu();
                     break;
                 case PrototypeContextMenuMode.StackCard:
                     DrawStackCardContextMenu();
@@ -1152,6 +1192,27 @@ namespace ConsoleCards.Presentation.Prototype
                 {
                     CloseContextMenu();
                 }
+            }
+        }
+
+        private void DrawFloorCardContextMenu()
+        {
+            if (contextMenuCardView == null
+                || !contextMenuCardView.IsBound
+                || !trapFloorTemplate.TryGetFloorCoordinate(
+                    contextMenuCardView.ObjectId,
+                    out TrapFloorCoordinate coordinate))
+            {
+                GUILayout.Label("FLOOR CARD");
+                GUILayout.Label("Floor Card unavailable.");
+                return;
+            }
+
+            GUILayout.Label($"FLOOR {coordinate}");
+            if (GUILayout.Button("Roll Floorfall"))
+            {
+                TriggerFloorfall();
+                CloseContextMenu();
             }
         }
 
@@ -1304,6 +1365,8 @@ namespace ConsoleCards.Presentation.Prototype
                 case PrototypeContextMenuMode.DrawCards:
                     return 155f;
                 case PrototypeContextMenuMode.TabletopCard:
+                    return 90f;
+                case PrototypeContextMenuMode.FloorCard:
                     return 90f;
                 case PrototypeContextMenuMode.StackCard:
                     return 120f;
@@ -1566,6 +1629,16 @@ namespace ConsoleCards.Presentation.Prototype
             ProjectPrototypePlayerLayout(localSeatLayout);
             prototypeTemplateContext = CreatePrototypeTemplateContext();
             RestorePrototypeTemplateContext(false);
+        }
+
+        private void BuildFloorfallRuntime()
+        {
+            floorfallState = new TrapFloorFloorfallState();
+            floorfallService = new TrapFloorFloorfallService(
+                trapFloorTemplate,
+                new SystemRandomValueSource(),
+                floorfallState);
+            floorfallTargetPresenter = new TrapFloorFloorfallTargetPresenter();
         }
 
         private PrototypeTemplateContext CreatePrototypeTemplateContext()
@@ -2517,6 +2590,9 @@ namespace ConsoleCards.Presentation.Prototype
             if (trapFloorTemplate.IsFloorCard(card.BaseState.Id))
             {
                 clone.transform.localScale = Vector3.one * floorCardVisualScale;
+                floorfallTargetPresenter.Register(
+                    card.BaseState.Id,
+                    createdVisualReferences.FaceUpRenderer);
             }
 
             cardVisualReferences.Add(createdVisualReferences);
@@ -2767,6 +2843,27 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             return $"Deck {ContainerCount(deckContainerId)} | Hand {ContainerCount(handContainerId)} | Discard {ContainerCount(discardContainerId)}";
+        }
+
+        private void DrawFloorfallStatus()
+        {
+            if (floorfallState == null || !floorfallState.CurrentTarget.HasValue)
+            {
+                return;
+            }
+
+            TrapFloorFloorfallTarget target = floorfallState.CurrentTarget.Value;
+            Rect statusRect = new Rect(
+                Mathf.Max(0f, Screen.width - FloorfallStatusWidth - 16f),
+                16f,
+                FloorfallStatusWidth,
+                FloorfallStatusHeight);
+            GUILayout.BeginArea(statusRect, GUI.skin.box);
+            GUILayout.Label("FLOORFALL TARGET");
+            GUILayout.Label(
+                $"Die 1 / X: {target.XAxisRoll.Value}   Die 2 / Y: {target.YAxisRoll.Value}");
+            GUILayout.Label($"Coordinate: {target.Coordinate}");
+            GUILayout.EndArea();
         }
 
         private int ContainerCount(ContainerId containerId)
@@ -3503,6 +3600,7 @@ namespace ConsoleCards.Presentation.Prototype
             Deck,
             DrawCards,
             TabletopCard,
+            FloorCard,
             StackCard,
             Stack,
             MergeDestination,
