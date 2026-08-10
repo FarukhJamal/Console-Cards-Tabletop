@@ -1,7 +1,7 @@
 # Console Cards — Non-Goals
 
 **Document ID:** 15_Non_Goals  
-**Version:** 1.1
+**Version:** 1.2
 
 **Status:** Approved
 
@@ -13,13 +13,13 @@ A Non-Goal may become a future milestone only through explicit approval and road
 
 ## 2. Foundation Non-Goals
 
-Phase 1 now includes minimum playable Trap Door and Super Leroy Sisters Game Templates after the shared M4 foundations. This does not authorize unstated Game Rules, full automation, or production-complete content.
+Phase 1 includes minimum playable Trap Floor and Super Leroy Sisters Game Templates after the shared M4 foundations. This does not authorize unstated Game Rules, full automation, or production-complete content.
 
 The initial foundation is not building:
 
-- Trap Door content or rules beyond the approved minimum playable flow.
+- Trap Floor content or rules beyond the approved minimum playable flow.
 - Super Leroy Sisters content or rules beyond the approved minimum playable flow.
-- Full Game-rule automation for Trap Door or Super Leroy Sisters.
+- Full Game-rule automation for Trap Floor or Super Leroy Sisters.
 - Automated Game-rule validation.
 - Automatic victory detection.
 - Universal turn enforcement.

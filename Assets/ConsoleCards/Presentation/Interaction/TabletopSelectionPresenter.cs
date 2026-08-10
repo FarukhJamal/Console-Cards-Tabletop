@@ -27,6 +27,19 @@ namespace ConsoleCards.Presentation.Interaction
             IReadOnlyList<TabletopSelectionVisual> cardSelectionVisuals,
             TabletopSelectionVisual pawnSelectionVisual,
             TabletopSelectionVisual tokenSelectionVisual)
+            : this(
+                selectionState,
+                cardSelectionVisuals,
+                CreateSingleSelectionVisualList(pawnSelectionVisual),
+                CreateSingleSelectionVisualList(tokenSelectionVisual))
+        {
+        }
+
+        public TabletopSelectionPresenter(
+            TabletopSelectionState selectionState,
+            IReadOnlyList<TabletopSelectionVisual> cardSelectionVisuals,
+            IReadOnlyList<TabletopSelectionVisual> pawnSelectionVisuals,
+            IReadOnlyList<TabletopSelectionVisual> tokenSelectionVisuals)
         {
             if (selectionState == null)
             {
@@ -38,27 +51,29 @@ namespace ConsoleCards.Presentation.Interaction
                 throw new ArgumentNullException(nameof(cardSelectionVisuals));
             }
 
-            if (pawnSelectionVisual == null)
+            if (pawnSelectionVisuals == null)
             {
-                throw new ArgumentNullException(nameof(pawnSelectionVisual));
+                throw new ArgumentNullException(nameof(pawnSelectionVisuals));
             }
 
-            if (tokenSelectionVisual == null)
+            if (tokenSelectionVisuals == null)
             {
-                throw new ArgumentNullException(nameof(tokenSelectionVisual));
+                throw new ArgumentNullException(nameof(tokenSelectionVisuals));
             }
 
-            ValidateCardVisuals(cardSelectionVisuals);
-            ValidateConfiguredVisual(pawnSelectionVisual, nameof(pawnSelectionVisual));
-            ValidateConfiguredVisual(tokenSelectionVisual, nameof(tokenSelectionVisual));
-            ValidateDistinctVisuals(cardSelectionVisuals, pawnSelectionVisual, tokenSelectionVisual);
-            ValidateDistinctViewTargets(cardSelectionVisuals, pawnSelectionVisual, tokenSelectionVisual);
+            ValidateSelectionVisuals(cardSelectionVisuals, nameof(cardSelectionVisuals));
+            ValidateSelectionVisuals(pawnSelectionVisuals, nameof(pawnSelectionVisuals));
+            ValidateSelectionVisuals(tokenSelectionVisuals, nameof(tokenSelectionVisuals));
+            ValidateDistinctVisuals(cardSelectionVisuals, pawnSelectionVisuals, tokenSelectionVisuals);
+            ValidateDistinctViewTargets(cardSelectionVisuals, pawnSelectionVisuals, tokenSelectionVisuals);
 
             SelectionState = selectionState;
             CardSelectionVisual = cardSelectionVisuals[0];
             CardSelectionVisuals = new List<TabletopSelectionVisual>(cardSelectionVisuals).AsReadOnly();
-            PawnSelectionVisual = pawnSelectionVisual;
-            TokenSelectionVisual = tokenSelectionVisual;
+            PawnSelectionVisual = pawnSelectionVisuals[0];
+            PawnSelectionVisuals = new List<TabletopSelectionVisual>(pawnSelectionVisuals).AsReadOnly();
+            TokenSelectionVisual = tokenSelectionVisuals[0];
+            TokenSelectionVisuals = new List<TabletopSelectionVisual>(tokenSelectionVisuals).AsReadOnly();
         }
 
         public TabletopSelectionState SelectionState { get; }
@@ -69,7 +84,11 @@ namespace ConsoleCards.Presentation.Interaction
 
         public TabletopSelectionVisual PawnSelectionVisual { get; }
 
+        public IReadOnlyList<TabletopSelectionVisual> PawnSelectionVisuals { get; }
+
         public TabletopSelectionVisual TokenSelectionVisual { get; }
+
+        public IReadOnlyList<TabletopSelectionVisual> TokenSelectionVisuals { get; }
 
         private static IReadOnlyList<TabletopSelectionVisual> CreateSingleCardSelectionVisualList(
             TabletopSelectionVisual cardSelectionVisual)
@@ -80,6 +99,17 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             return new[] { cardSelectionVisual };
+        }
+
+        private static IReadOnlyList<TabletopSelectionVisual> CreateSingleSelectionVisualList(
+            TabletopSelectionVisual selectionVisual)
+        {
+            if (selectionVisual == null)
+            {
+                throw new ArgumentNullException(nameof(selectionVisual));
+            }
+
+            return new[] { selectionVisual };
         }
 
         public void Refresh()
@@ -93,8 +123,8 @@ namespace ConsoleCards.Presentation.Interaction
                 cardSelectionVisual.SetSelected(ReferenceEquals(cardSelectionVisual.ObjectView, selectedView));
             }
 
-            PawnSelectionVisual.SetSelected(ReferenceEquals(PawnSelectionVisual.ObjectView, selectedView));
-            TokenSelectionVisual.SetSelected(ReferenceEquals(TokenSelectionVisual.ObjectView, selectedView));
+            SetSelected(PawnSelectionVisuals, selectedView);
+            SetSelected(TokenSelectionVisuals, selectedView);
         }
 
         public void Clear()
@@ -104,25 +134,46 @@ namespace ConsoleCards.Presentation.Interaction
                 CardSelectionVisuals[i].SetSelected(false);
             }
 
-            PawnSelectionVisual.SetSelected(false);
-            TokenSelectionVisual.SetSelected(false);
+            ClearSelection(PawnSelectionVisuals);
+            ClearSelection(TokenSelectionVisuals);
         }
 
-        private static void ValidateCardVisuals(IReadOnlyList<TabletopSelectionVisual> cardSelectionVisuals)
+        private static void SetSelected(
+            IReadOnlyList<TabletopSelectionVisual> selectionVisuals,
+            TabletopObjectView selectedView)
         {
-            if (cardSelectionVisuals.Count == 0)
+            for (int i = 0; i < selectionVisuals.Count; i++)
             {
-                throw new ArgumentException("At least one Card selection visual is required.", nameof(cardSelectionVisuals));
+                TabletopSelectionVisual selectionVisual = selectionVisuals[i];
+                selectionVisual.SetSelected(ReferenceEquals(selectionVisual.ObjectView, selectedView));
+            }
+        }
+
+        private static void ClearSelection(IReadOnlyList<TabletopSelectionVisual> selectionVisuals)
+        {
+            for (int i = 0; i < selectionVisuals.Count; i++)
+            {
+                selectionVisuals[i].SetSelected(false);
+            }
+        }
+
+        private static void ValidateSelectionVisuals(
+            IReadOnlyList<TabletopSelectionVisual> selectionVisuals,
+            string parameterName)
+        {
+            if (selectionVisuals.Count == 0)
+            {
+                throw new ArgumentException("At least one selection visual is required.", parameterName);
             }
 
-            for (int i = 0; i < cardSelectionVisuals.Count; i++)
+            for (int i = 0; i < selectionVisuals.Count; i++)
             {
-                if (cardSelectionVisuals[i] == null)
+                if (selectionVisuals[i] == null)
                 {
-                    throw new ArgumentException("Card selection visual collection cannot contain null entries.", nameof(cardSelectionVisuals));
+                    throw new ArgumentException("Selection visual collections cannot contain null entries.", parameterName);
                 }
 
-                ValidateConfiguredVisual(cardSelectionVisuals[i], nameof(cardSelectionVisuals));
+                ValidateConfiguredVisual(selectionVisuals[i], parameterName);
             }
         }
 
@@ -138,41 +189,49 @@ namespace ConsoleCards.Presentation.Interaction
 
         private static void ValidateDistinctVisuals(
             IReadOnlyList<TabletopSelectionVisual> cardSelectionVisuals,
-            TabletopSelectionVisual pawnSelectionVisual,
-            TabletopSelectionVisual tokenSelectionVisual)
+            IReadOnlyList<TabletopSelectionVisual> pawnSelectionVisuals,
+            IReadOnlyList<TabletopSelectionVisual> tokenSelectionVisuals)
         {
             HashSet<TabletopSelectionVisual> seen = new HashSet<TabletopSelectionVisual>();
-            for (int i = 0; i < cardSelectionVisuals.Count; i++)
+            AddDistinct(cardSelectionVisuals, seen);
+            AddDistinct(pawnSelectionVisuals, seen);
+            AddDistinct(tokenSelectionVisuals, seen);
+        }
+
+        private static void AddDistinct(
+            IReadOnlyList<TabletopSelectionVisual> selectionVisuals,
+            ISet<TabletopSelectionVisual> seen)
+        {
+            for (int i = 0; i < selectionVisuals.Count; i++)
             {
-                if (!seen.Add(cardSelectionVisuals[i]))
+                if (!seen.Add(selectionVisuals[i]))
                 {
                     throw new ArgumentException("Selection visuals must be different components.");
                 }
-            }
-
-            if (!seen.Add(pawnSelectionVisual) || !seen.Add(tokenSelectionVisual))
-            {
-                throw new ArgumentException("Selection visuals must be different components.");
             }
         }
 
         private static void ValidateDistinctViewTargets(
             IReadOnlyList<TabletopSelectionVisual> cardSelectionVisuals,
-            TabletopSelectionVisual pawnSelectionVisual,
-            TabletopSelectionVisual tokenSelectionVisual)
+            IReadOnlyList<TabletopSelectionVisual> pawnSelectionVisuals,
+            IReadOnlyList<TabletopSelectionVisual> tokenSelectionVisuals)
         {
             HashSet<TabletopObjectView> seen = new HashSet<TabletopObjectView>();
-            for (int i = 0; i < cardSelectionVisuals.Count; i++)
+            AddDistinctViewTargets(cardSelectionVisuals, seen);
+            AddDistinctViewTargets(pawnSelectionVisuals, seen);
+            AddDistinctViewTargets(tokenSelectionVisuals, seen);
+        }
+
+        private static void AddDistinctViewTargets(
+            IReadOnlyList<TabletopSelectionVisual> selectionVisuals,
+            ISet<TabletopObjectView> seen)
+        {
+            for (int i = 0; i < selectionVisuals.Count; i++)
             {
-                if (!seen.Add(cardSelectionVisuals[i].ObjectView))
+                if (!seen.Add(selectionVisuals[i].ObjectView))
                 {
                     throw new ArgumentException("Selection visuals must target different TabletopObjectView instances.");
                 }
-            }
-
-            if (!seen.Add(pawnSelectionVisual.ObjectView) || !seen.Add(tokenSelectionVisual.ObjectView))
-            {
-                throw new ArgumentException("Selection visuals must target different TabletopObjectView instances.");
             }
         }
     }

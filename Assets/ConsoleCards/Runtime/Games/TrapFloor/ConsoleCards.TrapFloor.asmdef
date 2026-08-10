@@ -1,12 +1,9 @@
 {
-  "name": "ConsoleCards.Presentation",
-  "rootNamespace": "ConsoleCards.Presentation",
+  "name": "ConsoleCards.TrapFloor",
+  "rootNamespace": "ConsoleCards.Games.TrapFloor",
   "references": [
     "ConsoleCards.Core",
-    "ConsoleCards.Application",
-    "ConsoleCards.GameTemplates",
-    "ConsoleCards.TrapFloor",
-    "Unity.InputSystem"
+    "ConsoleCards.GameTemplates"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
@@ -16,5 +13,5 @@
   "autoReferenced": true,
   "defineConstraints": [],
   "versionDefines": [],
-  "noEngineReferences": false
+  "noEngineReferences": true
 }

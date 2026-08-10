@@ -679,6 +679,10 @@ MonoBehaviour:
   objectInputAdapter: {fileID: 2100000022}
   inputFrameCoordinator: {fileID: 2100000023}
   prototypeCardPrefab: {fileID: 114102, guid: f3dcc30c78f848c587e75bb31bc47e3b, type: 3}
+  prototypePawnPrefab: {fileID: 114100, guid: 5239af82a047422eb755f790bbe5daea, type: 3}
+  prototypeTokenPrefab: {fileID: 114100, guid: 2f85d772fd64424baa3eeb27b542f608, type: 3}
+  prototypeDeckPrefab: {fileID: 114102, guid: e81b395902c476d7f8192a3b4c5d6e78, type: 3}
+  prototypeConsolePrefab: {fileID: 114100, guid: e2283b6fd55d32c2417eb33679d3bb2b, type: 3}
   cardView: {fileID: 2100000102}
   pawnView: {fileID: 2100000202}
   tokenView: {fileID: 2100000302}
@@ -720,6 +724,7 @@ MonoBehaviour:
   magneticDistance: 0.8
   feedbackDuration: 0.18
   shuffleCompression: 0.06
+  floorCardVisualScale: 0.62
 --- !u!1 &2100000020
 GameObject:
   m_ObjectHideFlags: 0

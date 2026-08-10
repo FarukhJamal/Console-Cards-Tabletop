@@ -4,15 +4,17 @@ Console Cards is a multiplayer, top-down virtual tabletop Platform centered arou
 
 ## Current Status
 
-**M0, M1, and M2 are formally complete. The current local prototype also contains the M3 Deck, Stack, Hand, Discard, and Console feature set; current M3 closure verification evidence has not yet been added to the roadmap.**
+**M0 through M4.1 are implemented. The current local prototype contains the M3 Deck, Stack, Hand, Discard, and Console feature set plus the M4 Player Layout/central Play Area foundation and M4.1 minimum Game Template pipeline; current M3 closure verification evidence remains separately tracked.**
 
 - M0 completed the Core/Application foundation.
 - M1 completed the tabletop visual and Camera foundation.
 - M2 completed generic Card, Pawn, and Token interaction in the local Tabletop prototype.
+- M4 added the Unity-free Player Layout and central Play Area foundation.
+- M4.1 added the minimum Game Template schema, validation, atomic Match construction, and in-memory reset baseline.
 
 The current prototype supports explicit Card, Pawn, and Token Views; selection with visible local feedback; mathematical tabletop pointer projection; collider-based object selection; drag preview; accepted movement; cancel/rollback; rotation; Card flipping; Deck draw/shuffle; Stack merge/split; Hand reorder; Discard and Console Slot transfer; local interaction locks; orthographic Camera pan/zoom; prototype composition; and an integrated `TabletopPrototype` scene.
 
-The next delivery sequence is M4 Play Area/player-layout foundation, M4.1 minimum Game Template support, Trap Door playable, Super Leroy Sisters playable, then Phase 1 closure with both Games playable.
+The next delivery sequence is Trap Floor playable, Super Leroy Sisters playable, then remaining shared Phase 1 requirements and closure with both Games playable. The approved Trap Floor direction is defined in `Docs/18_Trap_Floor_Game_Requirements.md`.
 
 ## Approved Technical Baseline
 

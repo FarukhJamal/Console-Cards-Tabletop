@@ -1,7 +1,7 @@
 # Console Cards — Game Template Architecture
 
 **Document ID:** 08_Game_Template_Architecture  
-**Version:** 1.1
+**Version:** 1.2
 
 **Status:** Approved
 
@@ -111,7 +111,7 @@ They may be duplicated but should not be overwritten directly by user changes.
 
 The approved Phase 1 production order is:
 
-1. Trap Door.
+1. Trap Floor.
 2. Super Leroy Sisters.
 
 Each is a separate official Game Template and Game-specific Board type. Their Game content must not be embedded in universal Platform modules.
@@ -239,10 +239,10 @@ Disallowed without a separate secure system:
 
 Implement:
 
-- Minimum local official/empty Template format required to load Trap Door and Super Leroy Sisters without Platform code changes.
+- Minimum local official/empty Template format required to load Trap Floor and Super Leroy Sisters without Platform code changes.
 - Validation.
 - Template loading.
-- Player Layout selection for one to eight Players, including standard four-Player, eight-Player, and compact four-Player layouts.
+- Player Layout data structurally capable of one to eight Players, with authored selection limited to the confirmed standard four-Player, eight-Player, and compact four-Player layouts until OD-014 resolves the remaining mappings.
 - Universal Console configuration separate from Game-specific Game Board and Play Area content.
 - Initial Snapshot creation.
 - Reset.

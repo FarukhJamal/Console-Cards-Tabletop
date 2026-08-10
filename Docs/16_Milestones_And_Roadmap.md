@@ -1,7 +1,7 @@
 # Console Cards — Milestones and Roadmap
 
 **Document ID:** 16_Milestones_And_Roadmap  
-**Version:** 1.4
+**Version:** 1.5
 
 **Status:** Approved
 **Planning basis:** One developer, approximately 30–35 focused hours per week.
@@ -158,11 +158,13 @@ Exit:
 
 The approved next-work order is:
 
-> **M4 Player Layout + Central Play Area foundation -> M4.1 minimum Game Template support -> G1 Trap Door playable -> G2 Super Leroy Sisters playable -> P1 remaining Phase 1 shared requirements and closure with both Games playable.**
+> **M4 Player Layout + Central Play Area foundation -> M4.1 minimum Game Template support -> G1 Trap Floor playable -> G2 Super Leroy Sisters playable -> P1 remaining Phase 1 shared requirements and closure with both Games playable.**
 
 Do not combine these gates into one broad implementation task. Each gate requires its own tests, manual checks, implementation report, and rollback point.
 
 ## 8. M4 - Player Layout + Central Play Area Foundation
+
+**Status:** Complete
 
 Previous estimates are obsolete because the authoritative layout requirements expand M4. Re-estimate before implementation.
 
@@ -186,7 +188,7 @@ Exclude:
 - Placement suggestions and snap bypass.
 - Marquee selection, group selection, and single/group landing indicators; these remain Phase 1 requirements governed by OD-016.
 - Independent Hand, personal Play Area, and individual Card visibility configuration; this remains a Phase 1 requirement governed by OD-015.
-- Trap Door or Super Leroy Sisters content/rules.
+- Trap Floor or Super Leroy Sisters content/rules.
 - Networking enforcement of visibility.
 - Player-facing custom Template editor.
 
@@ -198,7 +200,9 @@ Exit:
 
 ## 9. M4.1 - Minimum Game Template Support
 
-Deliver only the minimum local Template pipeline needed to prepare later Empty Table, Trap Door, and Super Leroy Sisters content:
+**Status:** Complete
+
+Deliver only the minimum local Template pipeline needed to prepare later Empty Table, Trap Floor, and Super Leroy Sisters content:
 
 - A Unity-free Game Template schema for starting setup, content, and layout.
 - Template validation.
@@ -215,7 +219,7 @@ Exclude:
 - Workshop/content sharing.
 - Persistence beyond the minimum Initial Snapshot/reset contract.
 - Generic Game-rule scripting.
-- Trap Door or Super Leroy Sisters content and gameplay rules.
+- Trap Floor or Super Leroy Sisters content and gameplay rules.
 - High-stakes Card-choice UI; OD-017 governs that remaining shared Phase 1 requirement unless a concrete Game implementation proves it is required earlier.
 
 Exit:
@@ -224,24 +228,33 @@ Exit:
 - Reset restores the initial in-memory baseline produced from the Template setup.
 - The prototype can exercise the minimum Template bootstrap while retaining the universal Console/Game-specific Game Board boundary.
 
-## 10. G1 - Trap Door Playable
+## 10. G1 - Trap Floor Playable
 
-Prerequisite: resolve OD-018. Do not infer missing Game Rules from the layout reference.
+**Authority:** `18_Trap_Floor_Game_Requirements.md`
+**Prerequisite:** M4 and M4.1 are complete. Resolve the remaining two- and three-Player layout mappings under OD-014 and the dependent Game-rule/content decisions under OD-018 before claiming the complete two-to-four-Player playable scope. Do not infer missing rules.
 
-Deliver the approved minimum playable Trap Door Game Template using:
+Deliver the approved minimum playable Trap Floor Game Template and Game-specific rule/content layer using:
 
-- A Card-based level built from Level Cards.
-- A Trap Door-specific dungeon/room Game Board.
-- A meeple representing Player position.
-- 2d6 randomization.
-- Button Cards and Move Cards.
-- The stated flow: reveal Level Card, view obstacle, play Button Cards/Move Card, resolve Card, move Player, reveal next Card.
-- Only approved obstacle/content definitions.
-- A human-readable Rulebook for all decisions not automated.
+- Two-to-four-Player setup while preserving the wider Platform's independent one-to-eight-Player capability.
+- A fixed central Game Board/Play Area made from 36 Floor Cards in a `6 x 6` coordinate grid.
+- `2d6` Floorfall resolution where die 1 selects X and die 2 selects Y, including the round 1 starting-corner reroll.
+- A separate 36-Card Floormaster's Deck containing 14 Trap Cards, 14 Coin Cards, and 8 Item Cards; draw from the left, discard to the right, and reshuffle when exhausted.
+- One universal Console per Player with the approved Avatar, Rule, Mode, and Item Card Slot setup; a separate Controller Deck beside each Console; and one Pawn/meeple per Player beginning on a corner Floor Card.
+- A shared pool of 50 wooden coin cubes, with acquired coins stored on Player Consoles and spent coins returned to the pool.
+- The 10-round `Start -> Search -> Trigger -> Floorfall -> End` loop.
+- Easy Mode with one Floorfall and the approved all-for-one elimination consequence.
+- Hard Mode with two Floorfalls and the approved one-for-all elimination consequence.
+- The currently approved exactly-50-coins-within-10-rounds win conditions.
+- Controller Cards, Skill Cards, and universal A/B/X/Y Button inputs as distinct concepts pending OD-018 resolution of their exact structural relationship and content.
+- Only approved Trap, Coin, Item, Avatar, Controller, and Skill content; unresolved definitions must be decided rather than invented.
+- A human-readable Rulebook for all player-facing decisions not automated.
+
+Do not add a sequential Level Deck, dungeon/room reveal progression, enemies, keys, or exits. Those belong to the superseded Trap Door concept.
 
 Exit:
 
-- A Player can complete the approved minimum Trap Door playthrough end-to-end using authoritative Runtime State and existing Platform use cases.
+- Two to four Players can complete the approved 10-round Trap Floor flow end-to-end using authoritative Runtime State and existing Platform use cases.
+- Both Easy and Hard mode consequences and win conditions are represented according to the approved contract.
 
 ## 11. G2 - Super Leroy Sisters Playable
 
@@ -271,7 +284,7 @@ Deliver:
 - Live landing indicators for one Card and a selected Card group.
 - Separate Hand, personal Play Area, and individual Card visibility configuration; secure network delivery remains M7.
 - Large, central, readable high-stakes Card-choice UI with hide/reopen and explicit hover, selection, confirmation, and registered-choice feedback.
-- Regression and interaction pass across Empty Table, Trap Door, and Super Leroy Sisters.
+- Regression and interaction pass across Empty Table, Trap Floor, and Super Leroy Sisters.
 - Verification of structural one-to-eight Seat capability and the standard four-Player, eight-Player, and compact four-Player authored layouts. Unresolved Player-count mappings must not be claimed as implemented.
 - Verification that the table does not grow and core gameplay remains centered.
 - Verification of marquee selection, landing indicators, independent visibility configuration, and high-stakes Card-choice UI.
@@ -281,7 +294,7 @@ Deliver:
 
 Exit:
 
-- Trap Door and Super Leroy Sisters both meet their approved minimum playable criteria.
+- Trap Floor and Super Leroy Sisters both meet their approved minimum playable criteria.
 - Missing or deferred requirements remain explicitly marked and are not represented as implemented.
 
 ## 13. Post-Phase 1 Platform Milestones
@@ -326,7 +339,7 @@ These remain planned Platform work but are not on the immediate Phase 1 critical
 - M4 supplies Player Layout and Play Area capability; Game Templates decide which supported layout a Game uses.
 - M4 is authorized to implement only the confirmed standard four-Player, compact four-Player, and eight-Player authored layouts. OD-014 retains the missing one-to-three and five-to-seven mappings without blocking that confirmed work.
 - OD-015 visibility work and OD-016 marquee/group-landing work remain required before Phase 1 closure but do not block the M4 foundation. An approved Game may pull a necessary subset earlier.
-- Trap Door and Super Leroy Sisters are separate Game-specific Board types and Game Templates.
+- Trap Floor and Super Leroy Sisters are separate Game-specific Board types and Game Templates.
 - Phase 1 requires minimum playable versions of both Games, not invented rules, full automation, or production-complete content.
 - Reconnection and Seat restoration remain M7 requirements.
 - Host migration remains conditional.

@@ -1,7 +1,7 @@
 # Console Cards — Product Vision
 
 **Document ID:** 00_Product_Vision  
-**Version:** 1.1
+**Version:** 1.2
 
 **Status:** Approved
 **Purpose:** Define what Console Cards is, what experience it must create, and which product boundaries must remain stable before architecture and implementation begin.
@@ -369,14 +369,14 @@ The initial architecture must avoid blocking it, but the first implementation sh
 
 ## 12. Official Games
 
-Official games such as Trap Door and Super Leroy Sisters are delivered as separate Game Templates and Game-specific Board content after the shared Play Area and minimum Game Template foundations exist.
+Official games such as Trap Floor and Super Leroy Sisters are delivered as separate Game Templates and Game-specific Board content after the shared Play Area and minimum Game Template foundations exist. Trap Floor's approved Game-specific contract is defined in `18_Trap_Floor_Game_Requirements.md`.
 
 They are validation cases and content packages, not architectural foundations.
 
 The Platform must not contain hardcoded checks such as:
 
 - `if currentGame is SuperLeroySisters`
-- `if currentGame is TrapDoor`
+- `if currentGame is TrapFloor`
 
 Instead, those games should be represented through combinations of:
 
@@ -463,7 +463,7 @@ The first foundation should not attempt to deliver:
 - Production economy.
 - Cosmetic store.
 - Voice chat.
-- Production-complete or fully automated official Games beyond the approved minimum playable Trap Door and Super Leroy Sisters scope.
+- Production-complete or fully automated official Games beyond the approved minimum playable Trap Floor and Super Leroy Sisters scope.
 
 ---
 
@@ -481,7 +481,7 @@ The foundation is successful when a group can:
 8. Reset or restore the session reliably.
 9. Load a different Game Template without changing the universal foundation.
 10. Keep the universal Console stable while loading a Game-specific central Game Board and Player layout.
-11. Play the approved minimum Trap Door and Super Leroy Sisters flows using their separate Game-specific Boards.
+11. Play the approved minimum Trap Floor and Super Leroy Sisters flows using their separate Game-specific Boards.
 
 ---
 

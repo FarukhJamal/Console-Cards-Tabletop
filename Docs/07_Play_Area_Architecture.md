@@ -1,7 +1,7 @@
 # Console Cards — Play Area Architecture
 
 **Document ID:** 07_Play_Area_Architecture  
-**Version:** 1.2
+**Version:** 1.3
 
 **Status:** Approved
 
@@ -282,7 +282,7 @@ Visual caches are not persisted.
 1. M4 Player Layout model with structural one-to-eight-Player support and only the confirmed standard four-Player, compact four-Player, and eight-Player authored arrangements.
 2. M4 central Play Area stable identity, bounds, and focus foundation, separate from the universal Console.
 3. M4.1 minimum Game Template support and selection among supported authored Player Layout definitions.
-4. Trap Door playable with only its approved Game-specific Board requirements.
+4. Trap Floor playable with its approved fixed `6 x 6` Floor Card Game Board requirements from `18_Trap_Floor_Game_Requirements.md`.
 5. Super Leroy Sisters playable, including its required Side-Scroller Play Area.
 6. Remaining shared Phase 1 Play Area capabilities, including Freeform placement, generic Zone/Slot, Rectangular Grid, placement suggestions, snap bypass, and independent personal Play Area visibility configuration.
 7. Tile-built or Track layout only when an approved Game Template requires it.

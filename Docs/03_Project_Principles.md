@@ -1,7 +1,8 @@
 # Console Cards — Project Principles
 
 **Document ID:** 03_Project_Principles  
-**Version:** 1.0 Draft  
+**Version:** 1.1
+
 **Status:** Approved
 **Depends on:** `00_Product_Vision.md`, `02_Terminology.md`
 
@@ -23,7 +24,7 @@ Future restrictions must be added through explicit Policies. They must not requi
 
 The Platform must remain independent of any specific Game Template.
 
-Trap Door, Super Leroy Sisters, and future Games are content and validation cases. They must not introduce conditional logic into universal systems.
+Trap Floor, Super Leroy Sisters, and future Games are content and validation cases. They must not introduce conditional logic into universal systems.
 
 Forbidden pattern:
 

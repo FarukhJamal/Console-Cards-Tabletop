@@ -1,7 +1,7 @@
 # Console Cards — Architecture Decisions
 
 **Document ID:** 04_Architecture_Decisions  
-**Version:** 1.1
+**Version:** 1.2
 
 **Status:** Approved with Open Decisions
 
@@ -82,7 +82,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 
 **Consequences:**
 
-- Trap Door and Super Leroy Sisters do not define Platform code.
+- Trap Floor and Super Leroy Sisters do not define Platform code.
 - Optional automated rule modules may be added later.
 - A Game Template is not a Unity scene.
 
@@ -330,7 +330,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 
 **Consequences:**
 
-- Trap Door and Super Leroy Sisters use separate Game-specific Boards.
+- Trap Floor and Super Leroy Sisters use separate Game-specific Boards.
 - Game Templates may configure Console contents without replacing the Console contract.
 - The Platform must not force one reference screenshot, Grid, or Board layout onto every Game.
 - Game Board content must not introduce Game-specific dependencies into universal Console modules.

@@ -1,18 +1,18 @@
 # Console Cards - Layout Design Requirements Matrix
 
 **Document ID:** 17_Layout_Design_Requirements_Matrix  
-**Version:** 1.2
+**Version:** 1.3
 **Status:** Approved with Open Decisions  
-**Authoritative source:** `Consolecards_LayoutRef_doc.pdf`, title "Game Design Notes", pages 1-6, supplied 2026-08-07  
-**Purpose:** Preserve the PDF's design requirements, distinguish Platform requirements from Game-specific content, and trace each requirement to current implementation and planned delivery.
+**Authoritative sources:** `Consolecards_LayoutRef_doc.pdf`, title "Game Design Notes", pages 1-6, supplied 2026-08-07; and the approved Trap Floor correction in `18_Trap_Floor_Game_Requirements.md`
+**Purpose:** Preserve the approved design requirements, distinguish Platform requirements from Game-specific content, and trace each requirement to current implementation and planned delivery.
 
 ## 1. Interpretation Rules
 
-- The source PDF is an authoritative design-requirements source.
+- The source PDF is an authoritative design-requirements source except where the later approved Trap Floor direction explicitly supersedes its obsolete Trap Door example.
 - Reference screenshots communicate interaction or layout principles. They are not exact layouts that every Game Template must reproduce.
 - "Physical" Card movement means smooth, controlled, natural Presentation behavior. It does not require physics-authoritative Runtime State or unrestricted physical simulation.
 - `Console` means the universal personal Console system. `Game Board` means the Game-specific central Board and associated Play Areas.
-- Trap Door and Super Leroy Sisters are separate Game-specific Board types and content packages. Their brief examples do not supply complete Game Rules.
+- Trap Floor and Super Leroy Sisters are separate Game-specific Board types and content packages. Trap Floor is governed by `18_Trap_Floor_Game_Requirements.md`; unresolved details remain open rather than inheriting obsolete Trap Door rules.
 - Runtime State remains authoritative. A requirement marked `Partial` or `Missing` is not implemented merely because an architectural extension point exists.
 
 ### Status values
@@ -26,12 +26,12 @@
 
 | ID | Requirement | Scope | Current implementation status | Planned milestone | Source/page | Unresolved decision |
 |---|---|---|---|---|---|---|
-| LDR-001 | Support 1-8 Players and corresponding Seats. Four Players are the default presentation. | Platform-wide | **Partial:** `SeatState` and stable Seat IDs exist, but the prototype constructs one local Seat and no 1-8 Player layout controller exists. | M4 structural model and confirmed presets; network occupancy later | PDF p.1 | OD-014 retains the unconfirmed Player-count mappings. |
-| LDR-002 | Provide eight available Seat positions around the table without enlarging the table as Player count increases. | Platform-wide | **Missing:** M1 provides stable tabletop coordinates and camera-local surface coverage, but no eight-position Seat layout exists. | M4 confirmed eight-Player preset | PDF p.1 | OD-014 retains only the unconfirmed Player-count mappings. |
-| LDR-003 | Reposition occupied Seats toward the center for smaller Player counts instead of leaving Players on distant edge positions. | Platform-wide | **Missing** | M4 compact four-Player preset; other smaller-count mappings remain deferred | PDF pp.1, 4 | OD-014 |
-| LDR-004 | Support a standard 4-Player layout, an 8-Player layout, and a compact/alternate 4-Player layout. | Platform-wide layout capability; Template-selected use | **Missing** | M4 confirmed presets | PDF p.4 | OD-014 retains the future selection rule and unconfirmed mappings. |
-| LDR-005 | Show other Players' general presence and position around the table so turn/activity context is legible. | Platform-wide | **Missing:** no multiplayer presence presentation exists. | M4 structural Seat positions; presence delivery later | PDF pp.1, 3 | Exact presence and activity cues are not specified. |
-| LDR-006 | By default, frame all important usable and interactable areas without hiding required play off-screen. | Platform-wide; evaluated per Game Template | **Partial:** camera pan, zoom, bookmarks, and visibility evaluation exist; adaptive whole-layout framing does not. | M4 central focus region; M4.1 Template-specific framing | PDF p.1 | Template-specific framing thresholds remain to be authored. |
+| LDR-001 | Support 1-8 Players and corresponding Seats. Four Players are the default presentation. | Platform-wide | **Partial:** Unity-free Player Layout data supports 1-8 structurally and Match setup supports Seats; authored 1-3 and 5-7 layouts and multiplayer occupancy remain unresolved. | M4 complete for structural model/confirmed presets; remaining mappings OD-014; network occupancy later | PDF p.1 | OD-014 retains the unconfirmed Player-count mappings. |
+| LDR-002 | Provide eight available Seat positions around the table without enlarging the table as Player count increases. | Platform-wide | **Implemented for the confirmed preset:** the authored eight-Player definition uses the fixed table and central Play Area. | M4 complete | PDF p.1 | OD-014 retains only the unconfirmed Player-count mappings. |
+| LDR-003 | Reposition occupied Seats toward the center for smaller Player counts instead of leaving Players on distant edge positions. | Platform-wide | **Partial:** compact four-Player placement is authored; smaller 1-3 and 5-7 mappings are not. | M4 complete for compact four-Player; remaining mappings deferred | PDF pp.1, 4 | OD-014 |
+| LDR-004 | Support a standard 4-Player layout, an 8-Player layout, and a compact/alternate 4-Player layout. | Platform-wide layout capability; Template-selected use | **Implemented:** all three confirmed definitions exist and a Game Template selects a PlayerLayoutId. | M4/M4.1 complete | PDF p.4 | OD-014 retains the future host-selection rule and unconfirmed mappings. |
+| LDR-005 | Show other Players' general presence and position around the table so turn/activity context is legible. | Platform-wide | **Partial:** authored Seat/player-zone positions exist; multiplayer presence/activity presentation does not. | M4 structural positions complete; presence delivery later | PDF pp.1, 3 | Exact presence and activity cues are not specified. |
+| LDR-006 | By default, frame all important usable and interactable areas without hiding required play off-screen. | Platform-wide; evaluated per Game Template | **Partial:** central focus/bounds and in-memory camera bookmark data exist; adaptive whole-layout framing and Game-specific acceptance remain. | M4/M4.1 foundation complete; validate in G1/G2 | PDF p.1 | Template-specific framing thresholds remain to be authored. |
 
 ## 3. Card Interaction
 
@@ -77,25 +77,31 @@
 
 | ID | Requirement | Scope | Current implementation status | Planned milestone | Source/page | Unresolved decision |
 |---|---|---|---|---|---|---|
-| LDR-022 | Table layout varies by Game and Player count; no reference screenshot is a universal fixed layout. | Platform-wide architecture; Game-specific configuration | **Architecture only:** Game Templates and Play Areas are documented but not implemented; the prototype layout is hardcoded composition. | M4, M4.1 | PDF pp.3-4 | None. |
-| LDR-023 | Keep the current Game's core action centered and arrange personal tools, resources, and controls around that center. | Platform-wide layout principle; Template-specific realization | **Missing as a configurable layout system** | M4, M4.1 | PDF pp.4-5 | The core focus region is authored per Game Template. |
-| LDR-024 | Preserve the same table scale/readability while switching among supported Player layouts. | Platform-wide | **Missing:** camera controls exist; Player-layout-aware framing and validation do not. | M4 | PDF pp.1, 4-5 | OD-014 |
+| LDR-022 | Table layout varies by Game and Player count; no reference screenshot is a universal fixed layout. | Platform-wide architecture; Game-specific configuration | **Partial:** Player Layout definitions, Play Area state, and Game Template layout references exist; official Game layouts are not yet authored. | M4/M4.1 foundation complete; G1/G2 content | PDF pp.3-4 | None. |
+| LDR-023 | Keep the current Game's core action centered and arrange personal tools, resources, and controls around that center. | Platform-wide layout principle; Template-specific realization | **Partial:** authored Seat/Hand/Console poses surround a fixed central Play Area focus; official Game-specific realization remains. | M4/M4.1 foundation complete; validate in G1/G2 | PDF pp.4-5 | The core focus region is authored per Game Template. |
+| LDR-024 | Preserve the same table scale/readability while switching among supported Player layouts. | Platform-wide | **Implemented for the three confirmed authored layouts at the data/projection foundation;** Game-specific visual acceptance remains. | M4 complete; validate in G1/G2 | PDF pp.1, 4-5 | OD-014 |
 
 ## 9. Universal Console vs Game-Specific Game Board
 
 | ID | Requirement | Scope | Current implementation status | Planned milestone | Source/page | Unresolved decision |
 |---|---|---|---|---|---|---|
-| LDR-025 | The Console is universal: Players learn one persistent personal interaction/storage system reused across Games. | Platform-wide | **Partial:** Console/Slot Runtime State, Views, transfer, and prototype interactions exist; reuse across loaded Game Templates is not implemented. | M4.1; validate in G1 and G2 | PDF pp.5-6 | Templates may configure Console contents without replacing the universal Console contract. |
-| LDR-026 | The central Game Board is separate from the Console and is defined by the loaded Game. | Platform-wide boundary; Game-specific content | **Architecture only:** Board/Play Area distinction is documented; no Game Board loading exists. | M4, M4.1 | PDF pp.5-6 | None. |
-| LDR-027 | Each Game may provide its own Board layout and mechanics; the Platform must not force one grid or Board type. | Platform-wide extension rule | **Architecture only:** optional Play Area strategies are documented; runtime implementation is missing. | M4, M4.1 | PDF p.6 | Implement only Board types required by approved Games. |
+| LDR-025 | The Console is universal: Players learn one persistent personal interaction/storage system reused across Games. | Platform-wide | **Partial:** Console/Slot Runtime State, Views, transfer, prototype interactions, and Template setup data exist; reuse must be validated with both official Games. | M4.1 foundation complete; validate in G1 and G2 | PDF pp.5-6 | Templates may configure Console contents without replacing the universal Console contract. |
+| LDR-026 | The central Game Board is separate from the Console and is defined by the loaded Game. | Platform-wide boundary; Game-specific content | **Partial:** stable Play Area identity/bounds/focus and Template Play Area definitions exist; official Game Board content does not. | M4/M4.1 foundation complete; G1/G2 content | PDF pp.5-6 | None. |
+| LDR-027 | Each Game may provide its own Board layout and mechanics; the Platform must not force one grid or Board type. | Platform-wide extension rule | **Architecture only for strategies:** the Game Template/Play Area boundary exists, but the Trap Floor grid and Super Leroy Sisters Side-Scroller are not implemented. | G1, G2 | PDF p.6 | Implement only Board types required by approved Games. |
 
-## 10. Trap Door
+## 10. Trap Floor
 
 | ID | Requirement | Scope | Current implementation status | Planned milestone | Source/page | Unresolved decision |
 |---|---|---|---|---|---|---|
-| LDR-028 | Trap Door uses a Card-based level built from Level Cards, a meeple for Player position, 2d6 randomization, and Button Cards/Move Cards to resolve obstacles such as traps, enemies, keys, exits, and rewards. | Game-specific: Trap Door | **Missing:** generic Cards, Button Card definitions, Pawn/meeple state, Containers, and interactions are reusable, but no Trap Door content or rules exist. | G1 | PDF p.5 | OD-018 |
-| LDR-029 | Trap Door's stated flow is: reveal Level Card, view obstacle, play Button Cards/Move Card, resolve Card, move Player, reveal next Card. | Game-specific: Trap Door | **Missing** | G1 | PDF p.5 | OD-018; the PDF does not define resolution formulas, setup, completion, or failure rules. |
-| LDR-030 | Trap Door uses its own dungeon/room-style central Game Board, distinct from the universal Console. | Game-specific: Trap Door | **Missing** | M4 foundation; G1 content | PDF p.6 | OD-018 |
+| LDR-028 | Trap Floor supports 2-4 Players while the wider Platform retains independent structural support for 1-8. | Game-specific: Trap Floor | **Partial:** required Player count is representable by Game Templates and four-Player layouts exist; authored two- and three-Player mappings do not. | G1 | Trap Floor requirements §§2-3 | OD-014 for two- and three-Player Seat mappings. |
+| LDR-029 | The Trap Floor Game Board is 36 Floor Cards in a fixed `6 x 6` X/Y coordinate grid. Floor Cards are not a drawable sequential Level Deck. | Game-specific: Trap Floor | **Missing:** central Play Area identity/bounds and generic Cards exist; Rectangular Grid behavior and Trap Floor Board content do not. | G1 | Trap Floor requirements §4 | Exact Floor Card visual design remains OD-018. |
+| LDR-030 | Floorfall uses `2d6`: die 1 selects X, die 2 selects Y, and the resulting Floor Card collapses; in round 1, reroll a result that hits a starting corner. | Game-specific: Trap Floor | **Missing:** no dice or Trap Floor rule layer exists. | G1 | Trap Floor requirements §4 | Exact collapsed-tile behavior beyond documented consequences remains OD-018. |
+| LDR-034 | The Floormaster's Deck contains 36 Cards: 14 Trap, 14 Coin, and 8 Item; draw left, discard right, and reshuffle when exhausted. | Game-specific: Trap Floor | **Partial:** generic Deck, draw, discard, and shuffle mechanics exist; Trap Floor definitions and exhaustion flow do not. | G1 | Trap Floor requirements §5 | Detailed Trap/Coin/Item contents remain OD-018. |
+| LDR-035 | Each Player uses the universal Console with Avatar in Main, Rule then Mode in Bottom Slots, up to three Items in Top Slots, a Controller Deck beside the Console, and a Pawn/meeple beginning on a corner Floor Card. | Game-specific setup using Platform Console | **Partial:** generic Console Slots, Decks, Cards, Pawns, Seats, and Template setup exist; Trap Floor content/setup does not. | G1 | Trap Floor requirements §6 | Avatar details, Controller Deck content/costs, and two-/three-Player layouts remain open. |
+| LDR-036 | A shared pool contains 50 wooden coin cubes; acquired coins are stored on Player Consoles and spent coins return to the pool. | Game-specific: Trap Floor | **Partial:** generic Token State exists; shared pool/Console coin storage behavior does not. | G1 | Trap Floor requirements §7 | Coin Card details remain OD-018. |
+| LDR-037 | Trap Floor lasts 10 rounds using `Start -> Search -> Trigger -> Floorfall -> End`; Search draws one Floormaster Card, Trigger resolves it immediately, and Hard Mode performs two Floorfalls. | Game-specific: Trap Floor | **Missing:** Game-rule/round flow does not exist. | G1 | Trap Floor requirements §8 | Detailed Card effects remain OD-018. |
+| LDR-038 | Easy uses one Floorfall and all-for-one elimination; Hard uses two Floorfalls and one-for-all elimination. The documented win condition for each is exactly 50 group/survivor coins within 10 rounds. | Game-specific: Trap Floor | **Missing** | G1 | Trap Floor requirements §9 | Detailed elimination/collapsed-tile interactions remain OD-018. |
+| LDR-039 | Controller Cards, Skill Cards, and universal A/B/X/Y Button inputs are distinct concepts. Search uses A/B/X/Y; Careful Search uses A+B+X+Y; documented Dodge costs X+Y+B and permits escape to one of eight adjacent tiles. | Game-specific content using universal inputs | **Partial:** universal Button Card definitions exist; Controller/Skill structures and Trap Floor costs/content do not. | G1 | Trap Floor requirements §10 | Exact Controller/Skill distinction, deck composition, costs, and Skill content remain OD-018. |
 
 ## 11. Super Leroy Sisters
 
@@ -112,5 +118,7 @@ The status column was assessed from the current repository without running Unity
 - M0 Core Runtime State, IDs, Seats, Containers, Cards, Pawns, Tokens, Consoles, and visibility enum under `Assets/ConsoleCards/Runtime/Core/`.
 - M1 Camera, tabletop coordinate conversion, surface proxy, and visibility evaluation under `Assets/ConsoleCards/Presentation/Camera/`, `Coordinates/`, and `TableSurface/`.
 - M2-M3 selection, drag preview, movement, Card transfer, drop-target feedback, natural Hand reorder, Deck/Stack/Discard/Hand/Console Views, and existing Application use cases under `Assets/ConsoleCards/Presentation/` and `Assets/ConsoleCards/Runtime/Application/`.
-- No `PlayAreaState` implementation, Game Template loader, marquee collection selection, high-stakes Card-choice UI, Trap Door package, or Super Leroy Sisters package was found.
+- M4 Player Layout definitions and central Play Area state exist under `Assets/ConsoleCards/Runtime/Core/`.
+- M4.1 Game Template schema, validation, local content resolution, atomic Match construction, and in-memory reset baseline exist under `Assets/ConsoleCards/Runtime/GameTemplates/`.
+- No marquee collection selection, high-stakes Card-choice UI, Trap Floor package, or Super Leroy Sisters package was found.
 

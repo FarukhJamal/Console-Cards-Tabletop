@@ -1,10 +1,10 @@
 # Console Cards — Requirements Traceability
 
-**Version:** 1.3
+**Version:** 1.4
 
 **Status:** Approved
 
-The page-level source, scope, repository status, milestone, and unresolved-decision trace for `Consolecards_LayoutRef_doc.pdf` is maintained in `17_Layout_Design_Requirements_Matrix.md`.
+The source, scope, repository status, milestone, and unresolved-decision trace for `Consolecards_LayoutRef_doc.pdf` and the later approved Trap Floor correction in `18_Trap_Floor_Game_Requirements.md` is maintained in `17_Layout_Design_Requirements_Matrix.md`.
 
 | ID | Requirement | Architecture Owner | Planned Milestone | Evidence |
 |---|---|---|---|---|
@@ -23,7 +23,7 @@ The page-level source, scope, repository status, milestone, and unresolved-decis
 | PR-013 | Side-scroller Play Area | Play Area Architecture | G2 | Layout continuation test |
 | PR-014 | Game Templates are data, not hardcoded Games | Game Template Architecture | M4.1 | Template loading without Platform changes |
 | PR-015 | Empty Table workflow | Game Template Architecture | M4.1 | Empty Table load test |
-| PR-016 | Official Game Templates: Trap Door then Super Leroy Sisters | Game Template Architecture | G1, G2 | End-to-end approved minimum playable acceptance for each separate Game Template |
+| PR-016 | Official Game Templates: Trap Floor then Super Leroy Sisters | Game Template Architecture | G1, G2 | End-to-end approved minimum playable acceptance for each separate Game Template |
 | PR-017 | Custom Template direction not blocked | Game Template Architecture | Architectural only | Review/ADR; no editor in Foundation |
 | PR-018 | Freedom by default | Policy Architecture | M2-M4 | M2 preserves free local manipulation while enforcing technical invariants, local interaction locks, and deterministic routing; no Game rules added: `Assets/ConsoleCards/Presentation/Interaction/`, `Assets/ConsoleCards/Presentation/Input/` |
 | PR-019 | Future restrictions through Policies | Policy Architecture | Foundation contracts; later implementation | Policy composition tests |
@@ -42,7 +42,7 @@ The page-level source, scope, repository status, milestone, and unresolved-decis
 | PR-032 | Large hideable/reopenable high-stakes Card-choice UI | Presentation + Game Templates | Remaining shared requirements before P1 closure unless a concrete Game requires it earlier | Legibility, hide/reopen, input isolation, candidate selection, and confirmation tests; LDR-014-LDR-016; OD-017 |
 | PR-033 | Hand, personal Play Area, and individual Card visibility are independent | Policy + Play Areas + Multiplayer | Remaining shared requirements before P1 closure; secure delivery M7 | Policy composition and unauthorized-delivery tests; LDR-017-LDR-021 |
 | PR-034 | Console is universal and Game Board is Game-specific | Hands/Consoles + Play Areas + Game Templates | M4, M4.1, G1, G2 | Load distinct Game Boards with unchanged universal Console contract; LDR-025-LDR-027 |
-| PR-035 | Trap Door minimum playable Game Template | Game-specific content | G1 | Approved end-to-end flow after OD-018 resolution; LDR-028-LDR-030 |
+| PR-035 | Trap Floor minimum playable Game Template and rule/content layer | Game-specific content | G1 | Approved 2-4 Player setup, fixed 36-Card `6 x 6` Board, X/Y `2d6` Floorfall, 36-Card Floormaster Deck, universal Console setup, shared coins, 10-round flow, Easy/Hard modes, and distinct Controller/Skill/Button concepts; complete after OD-014/OD-018 dependencies are resolved; LDR-028-LDR-030 and LDR-034-LDR-039 |
 | PR-036 | Super Leroy Sisters minimum playable Game Template | Game-specific content | G2 | Approved end-to-end flow after OD-019 resolution; LDR-031-LDR-033 |
 | PR-037 | Phase 1 closes after both official Games are playable and remaining shared requirements are complete | Roadmap + Acceptance | P1 | Approved acceptance after OD-015, OD-016, OD-017, and OD-020 resolution |
 

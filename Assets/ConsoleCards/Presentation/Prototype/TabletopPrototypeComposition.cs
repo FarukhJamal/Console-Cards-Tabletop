@@ -13,6 +13,7 @@ using ConsoleCards.Core.Domain.PlayAreas;
 using ConsoleCards.Core.Domain.PlayerLayouts;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates;
+using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Coordinates;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
@@ -26,14 +27,9 @@ namespace ConsoleCards.Presentation.Prototype
 {
     public sealed class TabletopPrototypeComposition : MonoBehaviour, IContainedCardDragFeedback
     {
-        private const int TotalCardCount = 16;
-        private const int PrototypeConsoleSlotCount = 3;
+        private const int PrototypeConsoleSlotCount = TrapFloorTemplateFactory.ConsoleSlotCountPerPlayer;
         private const int PrototypePlayerLayoutSeatIndex = 0;
         private const int ShuffleSeed = 123;
-        private const string ButtonUpLabel = "\u2191";
-        private const string ButtonDownLabel = "\u2193";
-        private const string ButtonLeftLabel = "\u2190";
-        private const string ButtonRightLabel = "\u2192";
         private const float ContextMenuWidth = 240f;
         private static readonly Rect PrototypeControlsPanelRect = new Rect(16f, 330f, 280f, 390f);
 
@@ -42,6 +38,10 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal TabletopObjectInputAdapter objectInputAdapter;
         [SerializeField] internal TabletopInputFrameCoordinator inputFrameCoordinator;
         [SerializeField] internal PrototypeCardVisualReferences prototypeCardPrefab;
+        [SerializeField] internal PawnView prototypePawnPrefab;
+        [SerializeField] internal TokenView prototypeTokenPrefab;
+        [SerializeField] internal PrototypeFixedContainerVisual prototypeDeckPrefab;
+        [SerializeField] internal ConsoleView prototypeConsolePrefab;
         [SerializeField] internal CardView cardView;
         [SerializeField] internal PawnView pawnView;
         [SerializeField] internal TokenView tokenView;
@@ -76,14 +76,25 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal float magneticDistance = 0.8f;
         [SerializeField] internal float feedbackDuration = 0.18f;
         [SerializeField] internal float shuffleCompression = 0.06f;
+        [SerializeField] internal float floorCardVisualScale = 0.62f;
         [SerializeField] internal bool showDeveloperControls;
 
         private readonly List<RuntimeCardInstance> runtimeCardInstances = new List<RuntimeCardInstance>();
+        private readonly List<RuntimeObjectInstance> runtimePawnInstances = new List<RuntimeObjectInstance>();
+        private readonly List<RuntimeObjectInstance> runtimeTokenInstances = new List<RuntimeObjectInstance>();
+        private readonly List<RuntimeDeckInstance> runtimeDeckInstances = new List<RuntimeDeckInstance>();
+        private readonly List<RuntimeConsoleInstance> runtimeConsoleInstances = new List<RuntimeConsoleInstance>();
         private readonly List<GameObject> runtimeOwnedStackRoots = new List<GameObject>();
         private readonly List<CardView> cardViews = new List<CardView>();
         private readonly List<PrototypeCardVisualReferences> cardVisualReferences =
             new List<PrototypeCardVisualReferences>();
         private readonly List<TabletopSelectionVisual> cardSelectionVisuals = new List<TabletopSelectionVisual>();
+        private readonly List<TabletopSelectionVisual> pawnSelectionVisuals = new List<TabletopSelectionVisual>();
+        private readonly List<TabletopSelectionVisual> tokenSelectionVisuals = new List<TabletopSelectionVisual>();
+        private readonly List<PawnView> pawnViews = new List<PawnView>();
+        private readonly List<TokenView> tokenViews = new List<TokenView>();
+        private readonly List<DeckView> controllerDeckViews = new List<DeckView>();
+        private readonly List<ConsoleView> playerConsoleViews = new List<ConsoleView>();
         private readonly List<IContainerLayoutView> layoutViews = new List<IContainerLayoutView>();
         private readonly Dictionary<TabletopObjectId, string> labelsByCardId = new Dictionary<TabletopObjectId, string>();
         private readonly Dictionary<ObjectDefinitionId, ButtonCardDefinition> buttonDefinitions =
@@ -92,6 +103,8 @@ namespace ConsoleCards.Presentation.Prototype
             new Dictionary<ContainerId, StackRuntimeView>();
         private readonly Dictionary<ContainerId, ContainerFeedbackTarget> feedbackTargetsByContainerId =
             new Dictionary<ContainerId, ContainerFeedbackTarget>();
+        private readonly Dictionary<ContainerId, PrototypeConsoleSlotVisual> consoleSlotVisualsByContainerId =
+            new Dictionary<ContainerId, PrototypeConsoleSlotVisual>();
 
         private bool cameraRoutingConfiguredByComposition;
         private bool frameCoordinatorEnabledByComposition;
@@ -105,6 +118,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private MatchState matchState;
         private PrototypeTemplateContext prototypeTemplateContext;
+        private TrapFloorTemplateDefinition trapFloorTemplate;
         private PlayerLayoutDefinition playerLayout;
         private PlayerSeatLayoutEntry localSeatLayout;
         private PlayAreaId centralPlayAreaId;
@@ -114,14 +128,6 @@ namespace ConsoleCards.Presentation.Prototype
         private PawnState pawnState;
         private TokenState tokenState;
         private PrototypeCardVisualReferences looseCardVisualReferences;
-        private bool sceneOwnedInitialPosesCaptured;
-        private TabletopPose sceneLooseCardInitialPose;
-        private TabletopPose scenePawnInitialPose;
-        private TabletopPose sceneTokenInitialPose;
-        private TabletopPose sceneDeckInitialPose;
-        private TabletopPose sceneStackAInitialPose;
-        private TabletopPose sceneStackBInitialPose;
-        private TabletopPose sceneDiscardInitialPose;
         private TabletopCoordinateConverter coordinateConverter;
         private TabletopSelectionState selectionState;
         private TabletopObjectHitResolver hitResolver;
@@ -150,7 +156,7 @@ namespace ConsoleCards.Presentation.Prototype
         private ContainerId primaryStackContainerId;
         private ContainerId sourceFeedbackContainerId;
         private int dynamicStackSequence;
-        private string operationMessage = "M3 prototype ready.";
+        private string operationMessage = "Trap Floor tabletop ready.";
         private float operationMessageUntil;
         private float feedbackHoldUntil;
         private PrototypeContextMenuMode contextMenuMode;
@@ -302,7 +308,7 @@ namespace ConsoleCards.Presentation.Prototype
                 }
 
                 selectionPresenter.Refresh();
-                ShowMessage("M3.19 prototype ready.");
+                ShowMessage("Trap Floor tabletop foundation ready.");
                 IsInitialized = true;
             }
             catch
@@ -420,9 +426,14 @@ namespace ConsoleCards.Presentation.Prototype
 
             ReleaseAllStackViews();
             ReleaseSceneOwnedFixedContainerViews();
+            ReleaseRuntimeDeckInstances();
+            ReleaseRuntimeConsoleInstances();
+            ReleaseRuntimeObjectInstances(runtimePawnInstances, pawnViews, pawnSelectionVisuals);
+            ReleaseRuntimeObjectInstances(runtimeTokenInstances, tokenViews, tokenSelectionVisuals);
             ReleaseRuntimeCardInstances();
 
             matchState = null;
+            trapFloorTemplate = null;
             playerLayout = null;
             localSeatLayout = null;
             centralPlayAreaId = PlayAreaId.Empty;
@@ -465,7 +476,17 @@ namespace ConsoleCards.Presentation.Prototype
             cardVisualReferences.Clear();
             cardSelectionVisuals.Clear();
             runtimeCardInstances.Clear();
+            runtimePawnInstances.Clear();
+            runtimeTokenInstances.Clear();
+            runtimeDeckInstances.Clear();
+            runtimeConsoleInstances.Clear();
             runtimeOwnedStackRoots.Clear();
+            pawnViews.Clear();
+            tokenViews.Clear();
+            pawnSelectionVisuals.Clear();
+            tokenSelectionVisuals.Clear();
+            controllerDeckViews.Clear();
+            playerConsoleViews.Clear();
             consoleSlotViews.Clear();
             resolvedSceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
             resolvedSceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
@@ -474,6 +495,7 @@ namespace ConsoleCards.Presentation.Prototype
             buttonDefinitions.Clear();
             stackViewsByContainerId.Clear();
             feedbackTargetsByContainerId.Clear();
+            consoleSlotVisualsByContainerId.Clear();
             feedbackHoldUntil = 0f;
             contextMenuMode = PrototypeContextMenuMode.None;
             contextMenuCardView = null;
@@ -791,7 +813,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             GUILayout.BeginArea(ControlsPanelScreenRect, GUI.skin.box);
-            GUILayout.Label("M3 Prototype Controls");
+            GUILayout.Label("Trap Floor Prototype Controls");
             GUILayout.Space(4f);
             if (GUILayout.Button("Shuffle Deck"))
             {
@@ -886,7 +908,7 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            if (container.Kind == ContainerKind.Deck)
+            if (container.Kind == ContainerKind.Deck && container.Id == deckContainerId)
             {
                 OpenContextMenu(PrototypeContextMenuMode.Deck, screenPosition, null, container.Id);
             }
@@ -918,7 +940,7 @@ namespace ConsoleCards.Presentation.Prototype
                 return false;
             }
 
-            if (container.Kind == ContainerKind.Deck)
+            if (container.Kind == ContainerKind.Deck && container.Id == deckContainerId)
             {
                 OpenContextMenu(PrototypeContextMenuMode.Deck, screenPosition, null, containerId);
                 return true;
@@ -1293,6 +1315,10 @@ namespace ConsoleCards.Presentation.Prototype
             RequireReference(objectInputAdapter, nameof(objectInputAdapter));
             RequireReference(inputFrameCoordinator, nameof(inputFrameCoordinator));
             RequireReference(prototypeCardPrefab, nameof(prototypeCardPrefab));
+            RequireReference(prototypePawnPrefab, nameof(prototypePawnPrefab));
+            RequireReference(prototypeTokenPrefab, nameof(prototypeTokenPrefab));
+            RequireReference(prototypeDeckPrefab, nameof(prototypeDeckPrefab));
+            RequireReference(prototypeConsolePrefab, nameof(prototypeConsolePrefab));
             RequireReference(cardView, nameof(cardView));
             RequireReference(pawnView, nameof(pawnView));
             RequireReference(tokenView, nameof(tokenView));
@@ -1324,9 +1350,11 @@ namespace ConsoleCards.Presentation.Prototype
             ValidateFiniteGreaterThanOrEqualToZero(magneticDistance, nameof(magneticDistance));
             ValidateFiniteGreaterThanOrEqualToZero(feedbackDuration, nameof(feedbackDuration));
             ValidateFiniteGreaterThanOrEqualToZero(shuffleCompression, nameof(shuffleCompression));
+            ValidateFiniteGreaterThanZero(floorCardVisualScale, nameof(floorCardVisualScale));
             ValidateDistinctViews();
             ValidateSelectionPresentationReferences();
             ValidateCardPrefabReferences();
+            ValidateTrapFloorPrefabReferences();
             ValidatePreInitializationState();
         }
 
@@ -1520,218 +1548,33 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            playerLayout = PlayerLayoutPresets.StandardFourPlayer;
+            trapFloorTemplate = TrapFloorTemplateFactory.CreateStandardFourPlayer();
+            playerLayout = trapFloorTemplate.PlayerLayout;
             if (!playerLayout.TryGetSeat(PrototypePlayerLayoutSeatIndex, out localSeatLayout))
             {
-                throw new InvalidOperationException("The prototype Player Layout does not contain its configured Seat entry.");
+                throw new InvalidOperationException("The Trap Floor Player Layout does not contain its configured local Seat entry.");
             }
 
             ProjectPrototypePlayerLayout(localSeatLayout);
-            CaptureSceneOwnedInitialPoses();
-
             prototypeTemplateContext = CreatePrototypeTemplateContext();
             RestorePrototypeTemplateContext(false);
         }
 
         private PrototypeTemplateContext CreatePrototypeTemplateContext()
         {
+            TrapFloorTemplateDefinition templateDefinition = trapFloorTemplate
+                ?? throw new InvalidOperationException("Trap Floor Template content must be created before Match construction.");
             localPlayerId = PlayerId.New();
-            localSeatId = SeatId.New();
-
-            deckContainerId = ContainerId.New();
-            handContainerId = ContainerId.New();
-            discardContainerId = ContainerId.New();
-            stackAContainerId = ContainerId.New();
-            stackBContainerId = ContainerId.New();
-            primaryStackContainerId = stackAContainerId;
-            ContainerId slotAId = ContainerId.New();
-            ContainerId slotBId = ContainerId.New();
-            ContainerId slotCId = ContainerId.New();
-            centralPlayAreaId = PlayAreaId.New();
-
-            List<PlayerId> activePlayerIds = new List<PlayerId>(playerLayout.OccupiedSeatCount);
-            List<GameTemplateSeatDefinition> seatDefinitions =
-                new List<GameTemplateSeatDefinition>(playerLayout.OccupiedSeatCount);
-            List<GameTemplateContainerDefinition> containerDefinitions =
-                new List<GameTemplateContainerDefinition>();
-
-            for (int seatIndex = 0; seatIndex < playerLayout.OccupiedSeatCount; seatIndex++)
+            List<PlayerId> activePlayerIds = new List<PlayerId>(TrapFloorTemplateFactory.PrototypePlayerCount)
             {
-                SeatId seatId = seatIndex == PrototypePlayerLayoutSeatIndex
-                    ? localSeatId
-                    : SeatId.New();
-                PlayerId playerId = seatIndex == PrototypePlayerLayoutSeatIndex
-                    ? localPlayerId
-                    : PlayerId.New();
-                ContainerId seatHandId = seatIndex == PrototypePlayerLayoutSeatIndex
-                    ? handContainerId
-                    : ContainerId.New();
-                ContainerId[] slotIds = seatIndex == PrototypePlayerLayoutSeatIndex
-                    ? new[] { slotAId, slotBId, slotCId }
-                    : new[] { ContainerId.New(), ContainerId.New(), ContainerId.New() };
-
-                activePlayerIds.Add(playerId);
-                seatDefinitions.Add(new GameTemplateSeatDefinition(
-                    seatId,
-                    seatIndex,
-                    seatHandId,
-                    slotIds));
-                containerDefinitions.Add(CreateTemplateContainer(
-                    seatHandId,
-                    ContainerKind.Hand,
-                    seatId,
-                    ObjectVisibility.OwnerOnly,
-                    10));
-                for (int slotIndex = 0; slotIndex < slotIds.Length; slotIndex++)
-                {
-                    containerDefinitions.Add(CreateTemplateContainer(
-                        slotIds[slotIndex],
-                        ContainerKind.ConsoleSlot,
-                        seatId,
-                        ObjectVisibility.Public,
-                        1));
-                }
+                localPlayerId,
+            };
+            for (int i = 1; i < TrapFloorTemplateFactory.PrototypePlayerCount; i++)
+            {
+                activePlayerIds.Add(PlayerId.New());
             }
 
-            containerDefinitions.Add(CreatePlacedTemplateContainer(
-                deckContainerId,
-                ContainerKind.Deck,
-                sceneDeckInitialPose));
-            containerDefinitions.Add(CreatePlacedTemplateContainer(
-                stackAContainerId,
-                ContainerKind.Stack,
-                sceneStackAInitialPose));
-            containerDefinitions.Add(CreatePlacedTemplateContainer(
-                stackBContainerId,
-                ContainerKind.Stack,
-                sceneStackBInitialPose));
-            containerDefinitions.Add(CreatePlacedTemplateContainer(
-                discardContainerId,
-                ContainerKind.DiscardPile,
-                sceneDiscardInitialPose));
-
-            string[] labels = CreatePrototypeCardLabels();
-            ButtonCardKind?[] buttonKinds = CreatePrototypeButtonKinds();
-            List<GameTemplateObjectDefinition> objectDefinitions =
-                new List<GameTemplateObjectDefinition>(TotalCardCount + 2);
-            List<GameTemplateObjectInstanceDefinition> objectInstances =
-                new List<GameTemplateObjectInstanceDefinition>(TotalCardCount + 2);
-            List<TabletopObjectId> cardIds = new List<TabletopObjectId>(TotalCardCount);
-            Dictionary<TabletopObjectId, string> templateLabels = new Dictionary<TabletopObjectId, string>();
-            Dictionary<ObjectDefinitionId, ButtonCardDefinition> templateButtonDefinitions =
-                new Dictionary<ObjectDefinitionId, ButtonCardDefinition>();
-
-            for (int i = 0; i < TotalCardCount; i++)
-            {
-                ObjectDefinitionId definitionId = ObjectDefinitionId.New();
-                TabletopObjectId objectId = TabletopObjectId.New();
-                TabletopPose pose = i == 0
-                    ? sceneLooseCardInitialPose
-                    : new TabletopPose(new TableCoordinate(-3d + (i * 0.2d), -1.5d), 0f, 0, 0);
-                objectDefinitions.Add(new GameTemplateObjectDefinition(
-                    definitionId,
-                    TabletopObjectKind.Card,
-                    labels[i]));
-                objectInstances.Add(new GameTemplateObjectInstanceDefinition(
-                    objectId,
-                    definitionId,
-                    TabletopObjectKind.Card,
-                    pose,
-                    SeatId.Empty,
-                    ObjectVisibility.Public,
-                    false,
-                    CardFace.FaceUp));
-                cardIds.Add(objectId);
-                templateLabels.Add(objectId, labels[i]);
-                if (buttonKinds[i].HasValue)
-                {
-                    templateButtonDefinitions.Add(
-                        definitionId,
-                        new ButtonCardDefinition(definitionId, buttonKinds[i].Value));
-                }
-            }
-
-            ObjectDefinitionId pawnDefinitionId = ObjectDefinitionId.New();
-            TabletopObjectId pawnId = TabletopObjectId.New();
-            objectDefinitions.Add(new GameTemplateObjectDefinition(
-                pawnDefinitionId,
-                TabletopObjectKind.Pawn,
-                "Prototype Pawn"));
-            objectInstances.Add(new GameTemplateObjectInstanceDefinition(
-                pawnId,
-                pawnDefinitionId,
-                TabletopObjectKind.Pawn,
-                scenePawnInitialPose,
-                SeatId.Empty,
-                ObjectVisibility.Public,
-                false,
-                CardFace.FaceUp));
-
-            ObjectDefinitionId tokenDefinitionId = ObjectDefinitionId.New();
-            TabletopObjectId tokenId = TabletopObjectId.New();
-            objectDefinitions.Add(new GameTemplateObjectDefinition(
-                tokenDefinitionId,
-                TabletopObjectKind.Token,
-                "Prototype Token"));
-            objectInstances.Add(new GameTemplateObjectInstanceDefinition(
-                tokenId,
-                tokenDefinitionId,
-                TabletopObjectKind.Token,
-                sceneTokenInitialPose,
-                SeatId.Empty,
-                ObjectVisibility.Public,
-                false,
-                CardFace.FaceUp));
-
-            List<TabletopObjectId> deckCardIds = new List<TabletopObjectId>();
-            for (int i = 4; i < cardIds.Count; i++)
-            {
-                deckCardIds.Add(cardIds[i]);
-            }
-
-            TabletopBounds centralBounds = CreatePrototypeCentralBounds();
-            TabletopBounds centralFocusRegion = CreatePrototypeCentralFocusRegion();
-            GameTemplate template = new GameTemplate(
-                GameTemplateId.New(),
-                GameTemplate.CurrentSchemaVersion,
-                "Tabletop Prototype",
-                "Local prototype setup used to exercise the minimum Game Template bootstrap.",
-                playerLayout.Id,
-                playerLayout.OccupiedSeatCount,
-                seatDefinitions,
-                containerDefinitions,
-                objectInstances,
-                new[]
-                {
-                    new GameTemplateContainerMembership(stackAContainerId, new[] { cardIds[1], cardIds[2] }),
-                    new GameTemplateContainerMembership(stackBContainerId, new[] { cardIds[3] }),
-                    new GameTemplateContainerMembership(deckContainerId, deckCardIds),
-                },
-                new[]
-                {
-                    new GameTemplatePlayAreaDefinition(
-                        centralPlayAreaId,
-                        centralBounds,
-                        centralFocusRegion),
-                },
-                new[]
-                {
-                    new GameTemplateCameraBookmarkDefinition(
-                        "Central Play Area",
-                        centralFocusRegion.Center,
-                        targetCamera.orthographicSize),
-                });
-            GameTemplateContentCatalog content = new GameTemplateContentCatalog(
-                objectDefinitions,
-                new[]
-                {
-                    PlayerLayoutPresets.StandardFourPlayer,
-                    PlayerLayoutPresets.CompactFourPlayer,
-                    PlayerLayoutPresets.EightPlayer,
-                });
-            GameTemplateMatchBuildResult buildResult = new GameTemplateMatchFactory().TryCreate(
-                template,
-                content,
+            GameTemplateMatchBuildResult buildResult = templateDefinition.TryCreateMatch(
                 activePlayerIds,
                 MatchId.New());
             if (!buildResult.Succeeded)
@@ -1739,21 +1582,24 @@ namespace ConsoleCards.Presentation.Prototype
                 throw new InvalidOperationException(FormatTemplateBuildFailure(buildResult.Issues));
             }
 
+            TrapFloorPlayerSetupDefinition localPlayer =
+                templateDefinition.Players[PrototypePlayerLayoutSeatIndex];
             return new PrototypeTemplateContext(
                 buildResult.Session,
+                templateDefinition,
                 localPlayerId,
-                localSeatId,
-                deckContainerId,
-                handContainerId,
-                discardContainerId,
-                stackAContainerId,
-                stackBContainerId,
-                centralPlayAreaId,
-                cardIds[0],
-                pawnId,
-                tokenId,
-                templateLabels,
-                templateButtonDefinitions);
+                localPlayer.SeatId,
+                templateDefinition.FloormasterDeckId,
+                localPlayer.HandContainerId,
+                templateDefinition.FloormasterDiscardId,
+                ContainerId.Empty,
+                ContainerId.Empty,
+                templateDefinition.BoardPlayAreaId,
+                localPlayer.AvatarCardId,
+                localPlayer.PawnId,
+                templateDefinition.CoinTokenIds[0],
+                templateDefinition.CardLabels,
+                new Dictionary<ObjectDefinitionId, ButtonCardDefinition>());
         }
 
         private void ProjectPrototypePlayerLayout(PlayerSeatLayoutEntry seatLayout)
@@ -1776,6 +1622,7 @@ namespace ConsoleCards.Presentation.Prototype
                 ? context.Session.Reset()
                 : context.Session.CurrentMatch;
             playerLayout = context.Session.PlayerLayout;
+            trapFloorTemplate = context.TrapFloorTemplate;
             if (!playerLayout.TryGetSeat(PrototypePlayerLayoutSeatIndex, out localSeatLayout))
             {
                 throw new InvalidOperationException("The prototype Template Player Layout is missing its local Seat entry.");
@@ -1805,102 +1652,63 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
-        private static GameTemplateContainerDefinition CreateTemplateContainer(
-            ContainerId id,
-            ContainerKind kind,
-            SeatId ownerSeatId,
-            ObjectVisibility visibility,
-            int capacity)
+        private void ValidateTrapFloorPrefabReferences()
         {
-            return new GameTemplateContainerDefinition(
-                id,
-                kind,
-                ownerSeatId,
-                visibility,
-                capacity,
-                false,
-                TabletopPose.Default);
-        }
+            ValidateObjectPrefab(prototypePawnPrefab, nameof(prototypePawnPrefab));
+            ValidateObjectPrefab(prototypeTokenPrefab, nameof(prototypeTokenPrefab));
 
-        private static GameTemplateContainerDefinition CreatePlacedTemplateContainer(
-            ContainerId id,
-            ContainerKind kind,
-            TabletopPose pose)
-        {
-            return new GameTemplateContainerDefinition(
-                id,
-                kind,
-                SeatId.Empty,
-                ObjectVisibility.Public,
-                0,
-                true,
-                pose);
-        }
-
-        private static TabletopBounds CreatePrototypeCentralBounds()
-        {
-            return new TabletopBounds(
-                new TableCoordinate(-5.5d, -1.25d),
-                new TableCoordinate(5.5d, 3.75d));
-        }
-
-        private static TabletopBounds CreatePrototypeCentralFocusRegion()
-        {
-            return new TabletopBounds(
-                new TableCoordinate(-2.5d, -0.5d),
-                new TableCoordinate(2.5d, 3d));
-        }
-
-        private static string[] CreatePrototypeCardLabels()
-        {
-            return new[]
+            if (prototypeDeckPrefab.gameObject.scene.IsValid())
             {
-                "1",
-                "2",
-                "3",
-                "4",
-                "5",
-                "6",
-                "7",
-                "8",
-                "A",
-                "B",
-                "X",
-                "Y",
-                ButtonUpLabel,
-                ButtonDownLabel,
-                ButtonLeftLabel,
-                ButtonRightLabel,
-            };
+                throw new InvalidOperationException(
+                    "TabletopPrototypeComposition requires prototypeDeckPrefab to reference a prefab asset.");
+            }
+
+            prototypeDeckPrefab.ValidateReferences();
+            prototypeDeckPrefab.GetView<DeckView>();
+
+            if (prototypeConsolePrefab.gameObject.scene.IsValid())
+            {
+                throw new InvalidOperationException(
+                    "TabletopPrototypeComposition requires prototypeConsolePrefab to reference a prefab asset.");
+            }
+
+            ConsoleSlotView[] slotViews = prototypeConsolePrefab.GetComponentsInChildren<ConsoleSlotView>(true);
+            if (slotViews.Length != PrototypeConsoleSlotCount)
+            {
+                throw new InvalidOperationException(
+                    $"The prototype Console prefab requires exactly {PrototypeConsoleSlotCount} Console Slots.");
+            }
+
+            for (int i = 0; i < slotViews.Length; i++)
+            {
+                PrototypeConsoleSlotVisual slotVisual = slotViews[i].GetComponent<PrototypeConsoleSlotVisual>();
+                RequireReference(slotVisual, $"PrototypeConsoleSlotVisual on prefab Slot {i}");
+                slotVisual.ValidateReferences();
+            }
         }
 
-        private static ButtonCardKind?[] CreatePrototypeButtonKinds()
+        private static void ValidateObjectPrefab(TabletopObjectView objectView, string fieldName)
         {
-            return new ButtonCardKind?[]
+            if (objectView.gameObject.scene.IsValid())
             {
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                ButtonCardKind.A,
-                ButtonCardKind.B,
-                ButtonCardKind.X,
-                ButtonCardKind.Y,
-                ButtonCardKind.Up,
-                ButtonCardKind.Down,
-                ButtonCardKind.Left,
-                ButtonCardKind.Right,
-            };
+                throw new InvalidOperationException(
+                    $"TabletopPrototypeComposition requires {fieldName} to reference a prefab asset.");
+            }
+
+            TabletopSelectionVisual selectionVisual = objectView.GetComponent<TabletopSelectionVisual>();
+            if (selectionVisual == null
+                || !selectionVisual.IsConfigured
+                || !ReferenceEquals(selectionVisual.ObjectView, objectView))
+            {
+                throw new InvalidOperationException(
+                    $"TabletopPrototypeComposition requires {fieldName} to own an explicit selection visual.");
+            }
         }
 
         private static string FormatTemplateBuildFailure(
             IReadOnlyList<GameTemplateValidationIssue> issues)
         {
-            string message = "Prototype Game Template construction failed.";
+            string message = "Trap Floor Game Template construction failed.";
             for (int i = 0; i < issues.Count; i++)
             {
                 message += $" {issues[i]}";
@@ -1940,27 +1748,79 @@ namespace ConsoleCards.Presentation.Prototype
             pawnSelectionVisual.SetSelected(false);
             pawnView.Bind(pawnState, coordinateConverter);
             pawnViewBoundByComposition = true;
+            pawnViews.Add(pawnView);
+            pawnSelectionVisuals.Add(pawnSelectionVisual);
+
+            foreach (PawnState pawn in matchState.Pawns.Values)
+            {
+                if (ReferenceEquals(pawn, pawnState))
+                {
+                    continue;
+                }
+
+                PawnView createdPawnView = CreatePawnView(pawn, out TabletopSelectionVisual createdSelectionVisual);
+                pawnViews.Add(createdPawnView);
+                pawnSelectionVisuals.Add(createdSelectionVisual);
+            }
+
             tokenSelectionVisual.SetSelected(false);
             tokenView.Bind(tokenState, coordinateConverter);
             tokenViewBoundByComposition = true;
+            tokenViews.Add(tokenView);
+            tokenSelectionVisuals.Add(tokenSelectionVisual);
+
+            foreach (TokenState token in matchState.Tokens.Values)
+            {
+                if (ReferenceEquals(token, tokenState))
+                {
+                    continue;
+                }
+
+                TokenView createdTokenView = CreateTokenView(token, out TabletopSelectionVisual createdSelectionVisual);
+                tokenViews.Add(createdTokenView);
+                tokenSelectionVisuals.Add(createdSelectionVisual);
+            }
         }
 
         private void BuildContainerViews()
         {
             deckView = sceneDeckVisual.GetView<DeckView>();
             handView = sceneHandVisual.GetView<HandView>();
-            StackRuntimeView stackA = CreateSceneOwnedStackView(
-                sceneStackAVisual,
-                matchState.GetContainer(stackAContainerId),
-                matchState.ContainerPlacements[stackAContainerId]);
-            StackRuntimeView stackB = CreateSceneOwnedStackView(
-                sceneStackBVisual,
-                matchState.GetContainer(stackBContainerId),
-                matchState.ContainerPlacements[stackBContainerId]);
-            stackViewsByContainerId.Add(stackAContainerId, stackA);
-            stackViewsByContainerId.Add(stackBContainerId, stackB);
+            DeactivateUnusedSceneStack(sceneStackAVisual);
+            DeactivateUnusedSceneStack(sceneStackBVisual);
             discardPileView = sceneDiscardPileVisual.GetView<DiscardPileView>();
             consoleView = sceneConsoleView;
+            playerConsoleViews.Add(consoleView);
+
+            for (int playerIndex = 0; playerIndex < trapFloorTemplate.Players.Count; playerIndex++)
+            {
+                TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[playerIndex];
+                RuntimeDeckInstance controllerDeck = CreateRuntimeDeckInstance(
+                    $"Player {playerIndex + 1} Controller Deck",
+                    player.ControllerDeckId);
+                runtimeDeckInstances.Add(controllerDeck);
+                controllerDeckViews.Add(controllerDeck.View);
+
+                if (playerIndex == PrototypePlayerLayoutSeatIndex)
+                {
+                    continue;
+                }
+
+                RuntimeConsoleInstance playerConsole = CreateRuntimeConsoleInstance(
+                    $"Player {playerIndex + 1} Console",
+                    player.LayoutSeatIndex);
+                runtimeConsoleInstances.Add(playerConsole);
+                playerConsoleViews.Add(playerConsole.View);
+            }
+        }
+
+        private static void DeactivateUnusedSceneStack(PrototypeFixedContainerVisual visual)
+        {
+            visual.DropTarget.ClearConfiguration();
+            visual.DropTarget.enabled = false;
+            visual.TargetCollider.enabled = false;
+            visual.ClearFeedback();
+            visual.gameObject.SetActive(false);
         }
 
         private static StackRuntimeView CreateSceneOwnedStackView(
@@ -2000,17 +1860,63 @@ namespace ConsoleCards.Presentation.Prototype
             discardPileView.Bind(discard, matchState.ContainerPlacements[discardContainerId], coordinateConverter, cardViews);
 
             consoleSlotViews.Clear();
-            ConsoleState runtimeConsole = matchState.GetSeat(localSeatId).Console;
+            BindConsole(
+                consoleView,
+                matchState.GetSeat(localSeatId).Console,
+                resolvedSceneConsoleSlotViews,
+                resolvedSceneConsoleSlotVisuals);
+
+            for (int i = 0; i < runtimeConsoleInstances.Count; i++)
+            {
+                RuntimeConsoleInstance instance = runtimeConsoleInstances[i];
+                TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[instance.LayoutSeatIndex];
+                BindConsole(
+                    instance.View,
+                    matchState.GetSeat(player.SeatId).Console,
+                    instance.SlotViews,
+                    instance.SlotVisuals);
+            }
+
+            for (int i = 0; i < runtimeDeckInstances.Count; i++)
+            {
+                RuntimeDeckInstance instance = runtimeDeckInstances[i];
+                ContainerState controllerDeck = matchState.GetContainer(instance.ContainerId);
+                instance.View.Bind(
+                    controllerDeck,
+                    matchState.ContainerPlacements[instance.ContainerId],
+                    coordinateConverter,
+                    cardViews);
+            }
+
+            sceneDeckVisual.Label.text = "FLOORMASTER";
+            sceneDiscardPileVisual.Label.text = "FM DISCARD";
+            RebuildLayoutViewCollection();
+        }
+
+        private void BindConsole(
+            ConsoleView targetConsole,
+            ConsoleState runtimeConsole,
+            IReadOnlyList<ConsoleSlotView> slotViews,
+            IReadOnlyList<PrototypeConsoleSlotVisual> slotVisuals)
+        {
+            if (slotViews.Count != runtimeConsole.SlotCount || slotVisuals.Count != runtimeConsole.SlotCount)
+            {
+                throw new InvalidOperationException("Trap Floor Console presentation does not match its Runtime Slot count.");
+            }
+
+            List<ConsoleSlotView> orderedSlots = new List<ConsoleSlotView>(runtimeConsole.SlotCount);
             for (int i = 0; i < runtimeConsole.SlotCount; i++)
             {
                 ContainerState slot = matchState.GetContainer(runtimeConsole.SlotContainerIds[i]);
-                ConsoleSlotView slotView = resolvedSceneConsoleSlotViews[i];
-                slotView.Bind(slot, resolvedSceneConsoleSlotVisuals[i].LayoutAnchor, coordinateConverter, cardViews);
+                ConsoleSlotView slotView = slotViews[i];
+                PrototypeConsoleSlotVisual slotVisual = slotVisuals[i];
+                slotView.Bind(slot, slotVisual.LayoutAnchor, coordinateConverter, cardViews);
                 consoleSlotViews.Add(slotView);
+                consoleSlotVisualsByContainerId.Add(slot.Id, slotVisual);
+                orderedSlots.Add(slotView);
             }
 
-            consoleView.Bind(runtimeConsole, consoleView.LayoutAnchor, consoleSlotViews);
-            RebuildLayoutViewCollection();
+            targetConsole.Bind(runtimeConsole, targetConsole.LayoutAnchor, orderedSlots);
         }
 
         private void ConfigureDropTargets()
@@ -2025,7 +1931,7 @@ namespace ConsoleCards.Presentation.Prototype
             ConfigureFixedContainer(sceneDiscardPileVisual, discardPileView);
             for (int i = 0; i < consoleSlotViews.Count; i++)
             {
-                ConfigureSceneConsoleSlot(i);
+                ConfigureConsoleSlot(consoleSlotViews[i]);
             }
         }
 
@@ -2054,8 +1960,8 @@ namespace ConsoleCards.Presentation.Prototype
             selectionPresenter = new TabletopSelectionPresenter(
                 selectionState,
                 cardSelectionVisuals,
-                pawnSelectionVisual,
-                tokenSelectionVisual);
+                pawnSelectionVisuals,
+                tokenSelectionVisuals);
         }
 
         private void RebuildInteractionDependencies()
@@ -2187,6 +2093,14 @@ namespace ConsoleCards.Presentation.Prototype
             if (deckView != null && deckView.IsBound)
             {
                 layoutViews.Add(deckView);
+            }
+
+            for (int i = 0; i < controllerDeckViews.Count; i++)
+            {
+                if (controllerDeckViews[i] != null && controllerDeckViews[i].IsBound)
+                {
+                    layoutViews.Add(controllerDeckViews[i]);
+                }
             }
 
             if (handView != null && handView.IsBound)
@@ -2444,6 +2358,14 @@ namespace ConsoleCards.Presentation.Prototype
             }
             else
             {
+                for (int i = 0; i < controllerDeckViews.Count; i++)
+                {
+                    if (controllerDeckViews[i].ContainerId == containerId)
+                    {
+                        controllerDeckViews[i].ApplyAcceptedLayout();
+                    }
+                }
+
                 for (int i = 0; i < consoleSlotViews.Count; i++)
                 {
                     if (consoleSlotViews[i].ContainerId == containerId)
@@ -2562,8 +2484,107 @@ namespace ConsoleCards.Presentation.Prototype
             selectionVisual.SetSelected(false);
             ConfigureCardVisuals(createdVisualReferences, label, IsButtonCard(card));
             createdView.Bind(card, coordinateConverter);
+            if (trapFloorTemplate.IsFloorCard(card.BaseState.Id))
+            {
+                clone.transform.localScale = Vector3.one * floorCardVisualScale;
+            }
+
             cardVisualReferences.Add(createdVisualReferences);
             return createdView;
+        }
+
+        private PawnView CreatePawnView(
+            PawnState pawn,
+            out TabletopSelectionVisual selectionVisual)
+        {
+            PawnView createdView = Instantiate(prototypePawnPrefab);
+            GameObject root = PrepareRuntimeRoot(createdView.gameObject, "Trap Floor Pawn");
+            selectionVisual = createdView.GetComponent<TabletopSelectionVisual>();
+            ValidateRuntimeSelectionVisual(createdView, selectionVisual);
+            selectionVisual.SetSelected(false);
+            createdView.Bind(pawn, coordinateConverter);
+            runtimePawnInstances.Add(new RuntimeObjectInstance(root, createdView, selectionVisual));
+            return createdView;
+        }
+
+        private TokenView CreateTokenView(
+            TokenState token,
+            out TabletopSelectionVisual selectionVisual)
+        {
+            TokenView createdView = Instantiate(prototypeTokenPrefab);
+            GameObject root = PrepareRuntimeRoot(createdView.gameObject, "Trap Floor Coin");
+            selectionVisual = createdView.GetComponent<TabletopSelectionVisual>();
+            ValidateRuntimeSelectionVisual(createdView, selectionVisual);
+            selectionVisual.SetSelected(false);
+            createdView.Bind(token, coordinateConverter);
+            runtimeTokenInstances.Add(new RuntimeObjectInstance(root, createdView, selectionVisual));
+            return createdView;
+        }
+
+        private RuntimeDeckInstance CreateRuntimeDeckInstance(string name, ContainerId containerId)
+        {
+            PrototypeFixedContainerVisual visual = Instantiate(prototypeDeckPrefab);
+            GameObject root = PrepareRuntimeRoot(visual.gameObject, name);
+            visual.ValidateReferences();
+            DeckView view = visual.GetView<DeckView>();
+            visual.Label.text = name.Replace("Player ", "P").Replace(" Controller Deck", " CTRL");
+            visual.DropTarget.ClearConfiguration();
+            visual.DropTarget.enabled = false;
+            visual.TargetCollider.enabled = false;
+            visual.ClearFeedback();
+            return new RuntimeDeckInstance(root, visual, view, containerId);
+        }
+
+        private RuntimeConsoleInstance CreateRuntimeConsoleInstance(string name, int layoutSeatIndex)
+        {
+            ConsoleView view = Instantiate(prototypeConsolePrefab);
+            GameObject root = PrepareRuntimeRoot(view.gameObject, name);
+            if (!playerLayout.TryGetSeat(layoutSeatIndex, out PlayerSeatLayoutEntry seatLayout))
+            {
+                throw new InvalidOperationException("Trap Floor Console references a missing Player Layout Seat.");
+            }
+
+            ApplyAuthoredPose(root.transform, seatLayout.ConsoleAnchorPose);
+            ConsoleSlotView[] slotViews = view.GetComponentsInChildren<ConsoleSlotView>(true);
+            if (slotViews.Length != PrototypeConsoleSlotCount)
+            {
+                throw new InvalidOperationException(
+                    $"Runtime Trap Floor Consoles require exactly {PrototypeConsoleSlotCount} Slots.");
+            }
+
+            Array.Sort(slotViews, (left, right) => left.transform.GetSiblingIndex().CompareTo(right.transform.GetSiblingIndex()));
+            PrototypeConsoleSlotVisual[] slotVisuals = new PrototypeConsoleSlotVisual[slotViews.Length];
+            for (int i = 0; i < slotViews.Length; i++)
+            {
+                slotVisuals[i] = slotViews[i].GetComponent<PrototypeConsoleSlotVisual>();
+                RequireReference(slotVisuals[i], $"Runtime Console Slot visual {i}");
+                slotVisuals[i].ValidateReferences();
+            }
+
+            return new RuntimeConsoleInstance(root, view, layoutSeatIndex, slotViews, slotVisuals);
+        }
+
+        private GameObject PrepareRuntimeRoot(GameObject root, string name)
+        {
+            if (root.scene != gameObject.scene)
+            {
+                SceneManager.MoveGameObjectToScene(root, gameObject.scene);
+            }
+
+            root.name = name;
+            return root;
+        }
+
+        private static void ValidateRuntimeSelectionVisual(
+            TabletopObjectView view,
+            TabletopSelectionVisual selectionVisual)
+        {
+            if (selectionVisual == null
+                || !selectionVisual.IsConfigured
+                || !ReferenceEquals(selectionVisual.ObjectView, view))
+            {
+                throw new InvalidOperationException("A runtime Tabletop Object prefab has invalid selection references.");
+            }
         }
 
         private void ConfigureCardVisuals(
@@ -2628,11 +2649,18 @@ namespace ConsoleCards.Presentation.Prototype
             stackRuntimeView.DropTarget = stackRuntimeView.Visual.DropTarget;
         }
 
-        private void ConfigureSceneConsoleSlot(int index)
+        private void ConfigureConsoleSlot(ConsoleSlotView slotView)
         {
-            ConsoleSlotView slotView = consoleSlotViews[index];
-            PrototypeConsoleSlotVisual slotVisual = resolvedSceneConsoleSlotVisuals[index];
+            if (!consoleSlotVisualsByContainerId.TryGetValue(
+                    slotView.ContainerId,
+                    out PrototypeConsoleSlotVisual slotVisual))
+            {
+                throw new InvalidOperationException("A bound Console Slot is missing its authored visual references.");
+            }
+
             slotVisual.DropTarget.Configure(slotView, slotVisual.TargetCollider);
+            slotVisual.DropTarget.enabled = true;
+            slotVisual.TargetCollider.enabled = true;
             slotVisual.ClearFeedback();
             feedbackTargetsByContainerId[slotView.ContainerId] = new ContainerFeedbackTarget(slotVisual);
         }
@@ -2640,37 +2668,6 @@ namespace ConsoleCards.Presentation.Prototype
         private bool IsButtonCard(CardInstanceState card)
         {
             return buttonDefinitions.ContainsKey(card.BaseState.DefinitionId);
-        }
-
-        private void CaptureSceneOwnedInitialPoses()
-        {
-            if (sceneOwnedInitialPosesCaptured)
-            {
-                return;
-            }
-
-            sceneLooseCardInitialPose = CreateSceneAuthoredPose(cardView);
-            scenePawnInitialPose = CreateSceneAuthoredPose(pawnView);
-            sceneTokenInitialPose = CreateSceneAuthoredPose(tokenView);
-            sceneDeckInitialPose = CreateSceneAuthoredPose(sceneDeckVisual.transform);
-            sceneStackAInitialPose = CreateSceneAuthoredPose(sceneStackAVisual.transform);
-            sceneStackBInitialPose = CreateSceneAuthoredPose(sceneStackBVisual.transform);
-            sceneDiscardInitialPose = CreateSceneAuthoredPose(sceneDiscardPileVisual.transform);
-            sceneOwnedInitialPosesCaptured = true;
-        }
-
-        private TabletopPose CreateSceneAuthoredPose(TabletopObjectView view)
-        {
-            return CreateSceneAuthoredPose(view.transform);
-        }
-
-        private TabletopPose CreateSceneAuthoredPose(Transform authoredTransform)
-        {
-            return new TabletopPose(
-                coordinateConverter.ToTableCoordinate(authoredTransform.position),
-                authoredTransform.eulerAngles.y,
-                0,
-                0);
         }
 
         private ContainerId CreateDeterministicDynamicStackId(int sequence)
@@ -2942,6 +2939,116 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 throw new InvalidOperationException(
                     $"Unsupported fixed container View type {view.GetType().Name}.");
+            }
+        }
+
+        private void ReleaseRuntimeDeckInstances()
+        {
+            while (runtimeDeckInstances.Count > 0)
+            {
+                int lastIndex = runtimeDeckInstances.Count - 1;
+                RuntimeDeckInstance instance = runtimeDeckInstances[lastIndex];
+                GameObject root = instance.Root;
+                PrototypeFixedContainerVisual visual = instance.Visual;
+                DeckView view = instance.View;
+                DisableRuntimeInteraction(root);
+                if (visual != null)
+                {
+                    visual.DropTarget.ClearConfiguration();
+                    visual.ClearFeedback();
+                }
+
+                if (view != null && view.IsBound)
+                {
+                    view.Unbind();
+                }
+
+                controllerDeckViews.Remove(view);
+                layoutViews.Remove(view);
+                runtimeDeckInstances.RemoveAt(lastIndex);
+                instance.ClearReferences();
+                DestroyRuntimeOwnedGameObject(root);
+            }
+        }
+
+        private void ReleaseRuntimeConsoleInstances()
+        {
+            while (runtimeConsoleInstances.Count > 0)
+            {
+                int lastIndex = runtimeConsoleInstances.Count - 1;
+                RuntimeConsoleInstance instance = runtimeConsoleInstances[lastIndex];
+                GameObject root = instance.Root;
+                for (int i = 0; i < instance.SlotViews.Length; i++)
+                {
+                    ConsoleSlotView slotView = instance.SlotViews[i];
+                    PrototypeConsoleSlotVisual slotVisual = instance.SlotVisuals[i];
+                    if (slotVisual != null)
+                    {
+                        slotVisual.DropTarget.ClearConfiguration();
+                        slotVisual.DropTarget.enabled = false;
+                        slotVisual.TargetCollider.enabled = false;
+                        slotVisual.ClearFeedback();
+                    }
+
+                    if (slotView != null && slotView.IsBound)
+                    {
+                        slotView.Unbind();
+                    }
+
+                    if (slotView != null)
+                    {
+                        consoleSlotViews.Remove(slotView);
+                        layoutViews.Remove(slotView);
+                    }
+                }
+
+                if (instance.View != null && instance.View.IsBound)
+                {
+                    instance.View.Unbind();
+                }
+
+                playerConsoleViews.Remove(instance.View);
+                runtimeConsoleInstances.RemoveAt(lastIndex);
+                instance.ClearReferences();
+                DisableRuntimeInteraction(root);
+                DestroyRuntimeOwnedGameObject(root);
+            }
+        }
+
+        private void ReleaseRuntimeObjectInstances<TView>(
+            List<RuntimeObjectInstance> instances,
+            List<TView> views,
+            List<TabletopSelectionVisual> selectionVisuals)
+            where TView : TabletopObjectView
+        {
+            while (instances.Count > 0)
+            {
+                int lastIndex = instances.Count - 1;
+                RuntimeObjectInstance instance = instances[lastIndex];
+                GameObject root = instance.Root;
+                TabletopObjectView view = instance.View;
+                TabletopSelectionVisual selectionVisual = instance.SelectionVisual;
+                DisableRuntimeInteraction(root);
+                selectionVisual?.SetSelected(false);
+                if (view != null && view.IsBound)
+                {
+                    view.Unbind();
+                }
+
+                if (view is TView typedView)
+                {
+                    views.Remove(typedView);
+                }
+
+                selectionVisuals.Remove(selectionVisual);
+                if (view != null)
+                {
+                    presentationTransitions?.Forget(view.transform);
+                }
+
+                instances.RemoveAt(lastIndex);
+                instance.ClearReferences();
+                DestroyRuntimeOwnedGameObject(root);
             }
         }
 
@@ -3343,6 +3450,7 @@ namespace ConsoleCards.Presentation.Prototype
 
             public PrototypeTemplateContext(
                 GameTemplateMatchSession session,
+                TrapFloorTemplateDefinition trapFloorTemplate,
                 PlayerId localPlayerId,
                 SeatId localSeatId,
                 ContainerId deckContainerId,
@@ -3358,6 +3466,7 @@ namespace ConsoleCards.Presentation.Prototype
                 IReadOnlyDictionary<ObjectDefinitionId, ButtonCardDefinition> buttonDefinitions)
             {
                 Session = session ?? throw new ArgumentNullException(nameof(session));
+                TrapFloorTemplate = trapFloorTemplate ?? throw new ArgumentNullException(nameof(trapFloorTemplate));
                 LocalPlayerId = localPlayerId;
                 LocalSeatId = localSeatId;
                 DeckContainerId = deckContainerId;
@@ -3383,6 +3492,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             public GameTemplateMatchSession Session { get; }
+            public TrapFloorTemplateDefinition TrapFloorTemplate { get; }
             public PlayerId LocalPlayerId { get; }
             public SeatId LocalSeatId { get; }
             public ContainerId DeckContainerId { get; }
@@ -3429,6 +3539,88 @@ namespace ConsoleCards.Presentation.Prototype
                 View = null;
                 SelectionVisual = null;
                 VisualReferences = null;
+            }
+        }
+
+        private sealed class RuntimeObjectInstance
+        {
+            public RuntimeObjectInstance(
+                GameObject root,
+                TabletopObjectView view,
+                TabletopSelectionVisual selectionVisual)
+            {
+                Root = root;
+                View = view;
+                SelectionVisual = selectionVisual;
+            }
+
+            public GameObject Root { get; private set; }
+            public TabletopObjectView View { get; private set; }
+            public TabletopSelectionVisual SelectionVisual { get; private set; }
+
+            public void ClearReferences()
+            {
+                Root = null;
+                View = null;
+                SelectionVisual = null;
+            }
+        }
+
+        private sealed class RuntimeDeckInstance
+        {
+            public RuntimeDeckInstance(
+                GameObject root,
+                PrototypeFixedContainerVisual visual,
+                DeckView view,
+                ContainerId containerId)
+            {
+                Root = root;
+                Visual = visual;
+                View = view;
+                ContainerId = containerId;
+            }
+
+            public GameObject Root { get; private set; }
+            public PrototypeFixedContainerVisual Visual { get; private set; }
+            public DeckView View { get; private set; }
+            public ContainerId ContainerId { get; }
+
+            public void ClearReferences()
+            {
+                Root = null;
+                Visual = null;
+                View = null;
+            }
+        }
+
+        private sealed class RuntimeConsoleInstance
+        {
+            public RuntimeConsoleInstance(
+                GameObject root,
+                ConsoleView view,
+                int layoutSeatIndex,
+                ConsoleSlotView[] slotViews,
+                PrototypeConsoleSlotVisual[] slotVisuals)
+            {
+                Root = root;
+                View = view;
+                LayoutSeatIndex = layoutSeatIndex;
+                SlotViews = slotViews;
+                SlotVisuals = slotVisuals;
+            }
+
+            public GameObject Root { get; private set; }
+            public ConsoleView View { get; private set; }
+            public int LayoutSeatIndex { get; }
+            public ConsoleSlotView[] SlotViews { get; private set; }
+            public PrototypeConsoleSlotVisual[] SlotVisuals { get; private set; }
+
+            public void ClearReferences()
+            {
+                Root = null;
+                View = null;
+                SlotViews = Array.Empty<ConsoleSlotView>();
+                SlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
             }
         }
 

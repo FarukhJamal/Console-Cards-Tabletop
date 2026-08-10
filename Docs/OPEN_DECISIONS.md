@@ -1,6 +1,6 @@
 # Console Cards — Open Decisions
 
-**Version:** 1.4
+**Version:** 1.5
 
 **Status:** Approved with Open Decisions  
 **Purpose:** Record resolved and deferred decisions so Codex does not infer them.
@@ -67,13 +67,13 @@ See `TECHNICAL_BASELINE.md`.
 
 **Status:** Resolved
 
-**Decision:** Trap Door is produced first, followed by Super Leroy Sisters. Both follow the M4 Player Layout + Central Play Area foundation and M4.1 minimum Game Template support.
+**Decision:** Trap Floor is produced first, followed by Super Leroy Sisters. Both follow the completed M4 Player Layout + Central Play Area foundation and M4.1 minimum Game Template support.
 
 ### OD-013 - Official Game Name
 
 **Status:** Resolved
 
-**Decision:** Use **Trap Door**. Earlier documentation references to **Trap Floor** were stale and are superseded by the authoritative layout requirements.
+**Decision:** Use **Trap Floor**. **Trap Door** is obsolete terminology. Its sequential Level Deck, dungeon/room progression, enemy, key, and exit concepts are superseded and must not be treated as Trap Floor authority. See `18_Trap_Floor_Game_Requirements.md`.
 
 ## Deferred and Milestone-Blocking Decisions
 
@@ -103,7 +103,7 @@ See `TECHNICAL_BASELINE.md`.
 
 **Remaining question:** How are Seats assigned and oriented for one to three and five to seven Players, and when does a four-Player Game Template select the standard versus compact four-Player layout?
 
-**Rule:** The unresolved mappings do not block implementation of the three confirmed presets. Do not invent or imply layouts for the unresolved Player counts.
+**Rule:** The unresolved mappings do not block implementation of the three confirmed presets. Do not invent or imply layouts for the unresolved Player counts. Trap Floor's approved two-to-four-Player range means its complete G1 acceptance cannot claim two- or three-Player support until those authored mappings are resolved.
 
 ### OD-015 - Visibility Audience and Limited Awareness
 
@@ -131,15 +131,27 @@ See `TECHNICAL_BASELINE.md`.
 
 **Known requirements:** The UI is large and readable, hideable/reopenable, preserves the pending choice, and gives hover, selection, confirmation, and registered-choice feedback.
 
-**Rule:** OD-017 does not block M4.1 minimum Game Template support. Complete the high-stakes Card-choice UI before Phase 1 closure unless a concrete Trap Door or Super Leroy Sisters implementation proves that the contract is required for that Game's approved playable flow, in which case resolve it before that dependency is implemented.
+**Rule:** OD-017 does not block M4.1 minimum Game Template support. Complete the high-stakes Card-choice UI before Phase 1 closure unless a concrete Trap Floor or Super Leroy Sisters implementation proves that the contract is required for that Game's approved playable flow, in which case resolve it before that dependency is implemented.
 
-### OD-018 - Trap Door Minimum Playable Rules
+### OD-018 - Trap Floor Remaining Game Rules and Content
 
 **Status:** Milestone Blocking for G1
 
-**Question:** Define supported Player count, starting setup, Board dimensions/layout, Level Deck contents, 2d6 resolution, Button Card/Move Card effects, obstacle outcomes, progression, completion, and failure conditions.
+**Resolved direction:** `18_Trap_Floor_Game_Requirements.md` approves the two-to-four-Player range; fixed 36-Card `6 x 6` Floor Card Board; X/Y `2d6` Floorfall with the round 1 corner reroll; 36-Card Floormaster's Deck composition and draw/discard/reshuffle direction; universal Console setup; Controller Decks; corner-starting meeples; shared 50-coin pool; 10-round five-step loop; Easy/Hard Floorfall and elimination differences; documented exactly-50-coin win conditions; and the currently stated Button input examples.
 
-**Known requirements only:** Card-built level, meeple position, 2d6, stated obstacle examples, and the reveal-to-resolve flow in `17_Layout_Design_Requirements_Matrix.md`.
+**Remaining questions:**
+
+- Exact Floor Card visual design.
+- Exact collapsed-tile behavior beyond the documented consequences.
+- Complete Controller Deck list/count and exact Controller Card costs.
+- Exact distinction between Controller Cards and Skill Cards.
+- Skill Card count/content.
+- Whether movement is orthogonal-only or allows diagonals.
+- What happens when multiple meeples occupy the same Floor Card.
+- Detailed Avatar abilities/move speeds where not already specified.
+- Detailed Trap/Coin/Item Card contents beyond the approved categories/fields.
+
+**Rule:** Do not add enemies, keys, exits, or a sequential Level Deck. Do not merge Controller Cards, Skill Cards, and Button inputs into one system. Resolve each remaining dependency before implementing the affected G1 rule/content; do not infer it from the obsolete Trap Door concept.
 
 ### OD-019 - Super Leroy Sisters Minimum Playable Rules
 
@@ -163,9 +175,9 @@ See `TECHNICAL_BASELINE.md`.
 - **M1:** Unblocked, with large-coordinate strategy intentionally evaluated during M1.
 - **M2:** Unblocked using the approved prototype card dimensions.
 - **M3:** No open design decision blocks the current prototype feature set; closure verification is tracked separately.
-- **M4:** Unblocked for the confirmed standard four-Player, compact four-Player, and eight-Player presets plus the central Play Area foundation. OD-014 retains unresolved mappings without blocking this scope.
-- **M4.1:** Unblocked for minimum Game Template schema, validation, minimum content resolution, atomic MatchState construction, initial in-memory reset baseline, and minimal prototype bootstrap integration.
-- **G1:** Blocked by OD-018.
+- **M4:** Complete for the confirmed standard four-Player, compact four-Player, and eight-Player presets plus the central Play Area foundation. OD-014 retains unresolved mappings.
+- **M4.1:** Complete for minimum Game Template schema, validation, minimum content resolution, atomic MatchState construction, initial in-memory reset baseline, and minimal prototype bootstrap integration.
+- **G1:** M4/M4.1 prerequisites are complete; full two-to-four-Player acceptance remains blocked by OD-014's two-/three-Player mappings and OD-018's unresolved dependent Game rules/content.
 - **G2:** Blocked by OD-019.
 - **P1:** Blocked by OD-015, OD-016, OD-017, and OD-020.
 - **M6/M7:** Blocked only by OD-009 and OD-010 at their planned decision point.

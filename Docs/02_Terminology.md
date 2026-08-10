@@ -1,7 +1,7 @@
 # Console Cards — Terminology
 
 **Document ID:** 02_Terminology  
-**Version:** 1.1
+**Version:** 1.2
 
 **Status:** Approved
 **Depends on:** `00_Product_Vision.md`  
@@ -79,7 +79,7 @@ The Platform owns universal functionality such as:
 - Multiplayer synchronization.
 
 **Important distinction:**  
-The Platform does not know the rules of Trap Door, Super Leroy Sisters, or any other specific Game unless a future optional Game-specific module is explicitly added.
+The Platform does not know the rules of Trap Floor, Super Leroy Sisters, or any other specific Game unless a future optional Game-specific module is explicitly added.
 
 ---
 

@@ -1,8 +1,8 @@
 # Console Cards Documentation Index
 
-**Pack version:** 1.3 Approved Baseline
+**Pack version:** 1.4 Approved Baseline
 
-**Implementation status:** M0-M2 formally complete; current M3 prototype feature set present; M4 is next
+**Implementation status:** M0-M4.1 implemented; Trap Floor is the next approved Game milestone
 
 ## Approval Rule
 
@@ -15,7 +15,8 @@ All code and type examples are illustrative unless explicitly labelled `Approved
 | Order | File | Purpose | Status |
 |---:|---|---|---|
 | 1 | `Docs/00_Product_Vision.md` | Product identity and requirement horizons | Approved |
-| 1a | `Docs/17_Layout_Design_Requirements_Matrix.md` | Authoritative PDF-derived layout/design requirements and implementation trace | Approved with Open Decisions |
+| 1a | `Docs/17_Layout_Design_Requirements_Matrix.md` | Authoritative layout/design requirements and implementation trace | Approved with Open Decisions |
+| 1b | `Docs/18_Trap_Floor_Game_Requirements.md` | Authoritative Trap Floor setup, Board, flow, modes, and unresolved Game-specific details | Approved with Open Decisions |
 | 2 | `Docs/02_Terminology.md` | Canonical vocabulary | Approved |
 | 3 | `Docs/03_Project_Principles.md` | Decision principles | Approved |
 | 4 | `Docs/01_Platform_Architecture.md` | Layered architecture and boundaries | Approved with Open Decisions |
@@ -40,16 +41,17 @@ All code and type examples are illustrative unless explicitly labelled `Approved
 |---|---|
 | `Docs/OPEN_DECISIONS.md` | Implementation-blocking and deferred decisions |
 | `Docs/REQUIREMENTS_TRACEABILITY.md` | Requirement-to-milestone/test mapping |
-| `Docs/17_Layout_Design_Requirements_Matrix.md` | Canonical PDF-derived layout/design requirements, status, milestone, page, and open-decision matrix |
+| `Docs/17_Layout_Design_Requirements_Matrix.md` | Canonical layout/design requirements, status, milestone, source, and open-decision matrix |
+| `Docs/18_Trap_Floor_Game_Requirements.md` | Canonical approved Trap Floor direction and supersession of obsolete Trap Door material |
 | `Docs/AUDIT_RESOLUTION_v1.1.md` | v1.0 audit correction record |
 | `CHANGELOG.md` | Pack history |
 | `README.md` | Repository entry point |
 
 ## Current Decision State
 
-The official Game production order is resolved: Trap Door, then Super Leroy Sisters.
+The official Game production order is resolved: Trap Floor, then Super Leroy Sisters.
 
-M4 implementation is blocked until the Player Layout, visibility, and marquee/group-landing contracts are resolved. M4.1 and both official Game gates have their own recorded blockers.
+M4 Player Layout + Central Play Area and M4.1 minimum Game Template support are implemented. Trap Floor is next; its complete two-to-four-Player acceptance remains gated by the unresolved dependencies recorded under OD-014 and OD-018. Super Leroy Sisters retains OD-019, and Phase 1 closure retains OD-015, OD-016, OD-017, and OD-020.
 
 Deferred until M6:
 
