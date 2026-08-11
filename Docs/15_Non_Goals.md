@@ -1,7 +1,7 @@
 # Console Cards — Non-Goals
 
 **Document ID:** 15_Non_Goals  
-**Version:** 1.2
+**Version:** 1.3
 
 **Status:** Approved
 
@@ -13,7 +13,7 @@ A Non-Goal may become a future milestone only through explicit approval and road
 
 ## 2. Foundation Non-Goals
 
-Phase 1 includes minimum playable Trap Floor and Super Leroy Sisters Game Templates after the shared M4 foundations. This does not authorize unstated Game Rules, full automation, or production-complete content.
+Phase 1 includes minimum manually playable Trap Floor and Super Leroy Sisters Game Templates after the shared M4 foundations. This does not authorize unstated Game Rules, full automation, or production-complete content. Playable means Players can use readable instructions and generic physical tabletop capabilities; it does not mean the Platform comprehensively understands the Game.
 
 The initial foundation is not building:
 
@@ -22,6 +22,11 @@ The initial foundation is not building:
 - Full Game-rule automation for Trap Floor or Super Leroy Sisters.
 - Automated Game-rule validation.
 - Automatic victory detection.
+- Mandatory coded Trap/Coin/Item effect execution.
+- Automatic Pawn movement legality.
+- Coded Trap Floor coin-cost/reward enforcement.
+- Automatic elimination or survival evaluation.
+- Mandatory round/phase orchestration for official Game play.
 - Universal turn enforcement.
 - Anti-cheat suitable for ranked play.
 - Public matchmaking.
@@ -68,6 +73,7 @@ The initial foundation is not building:
 The foundation is not intended to become:
 
 - A generic engine for every tabletop game before real requirements exist.
+- A comprehensive generic rules engine that must understand every legal or illegal Game action.
 - A microservice architecture.
 - A custom ECS.
 - A reflection-heavy dependency framework.
@@ -115,6 +121,8 @@ Before the networking Architecture Decision, do not implement:
 - Architecture drift.
 
 The foundation must be small, not careless.
+
+Player-enforced rules do not weaken authoritative state. Freeform Actions still preserve actor context, Match revisions, Container membership, visibility/ownership requirements, and other Technical Invariants.
 
 "Full physical simulation" does not exclude the required smooth, controlled physical feel for Card dragging, Presentation transitions, or live landing indicators. Runtime State remains authoritative.
 

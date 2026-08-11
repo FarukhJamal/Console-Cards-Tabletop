@@ -1,7 +1,7 @@
 # Console Cards — Game Template Architecture
 
 **Document ID:** 08_Game_Template_Architecture  
-**Version:** 1.3
+**Version:** 1.4
 
 **Status:** Approved
 
@@ -9,9 +9,9 @@
 
 ## 1. Purpose
 
-A Game Template prepares a table without hardcoding a complete Game into the Platform.
+A Game Template prepares the physical table without hardcoding a complete Game into the Platform.
 
-It is a reusable starting configuration, not a running Match.
+It is a reusable starting configuration, not a running Match or a rules engine. Loading it does not imply automatic execution of the Game Rules. Players use the Platform's generic physical capabilities and readable Game content to play; optional Game-specific assistance remains separate.
 
 ## 2. Template Categories and Alternate Entry
 

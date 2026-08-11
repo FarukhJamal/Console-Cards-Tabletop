@@ -1,7 +1,7 @@
 # Console Cards — Platform Architecture
 
 **Document ID:** 01_Platform_Architecture  
-**Version:** 1.2
+**Version:** 1.3
 
 **Status:** Approved with Open Decisions
 **Depends on:** `00_Product_Vision.md`, `02_Terminology.md`, `03_Project_Principles.md`
@@ -153,7 +153,7 @@ Player/Actor Input
 → Persistence/Network Notification
 ```
 
-A freeform action may pass Policy evaluation automatically, but it still uses the same pipeline.
+A Freeform Action may pass Game-rule Policy evaluation automatically, but it still uses the same pipeline for actor context, Technical Invariants, authoritative mutation, revisioning, and synchronization. Passing through the pipeline does not require comprehensive Game-rule legality validation.
 
 ## 6. Module Responsibilities
 
@@ -290,7 +290,7 @@ Owns:
 - Default Policies.
 - Initial Snapshot generation.
 
-A Game Template is content, not a running Match.
+A Game Template is content, not a running Match or a rules engine.
 
 A Game Template is selected explicitly through Session Entry. It may instantiate generic component types, but it does not own or redefine those types. Empty/Custom Table entry remains valid without a Game-specific Board or Game-specific rules.
 
@@ -346,11 +346,11 @@ New extension points require demonstrated need.
 
 Multi-step operations are atomic.
 
-Example Move Card purchase:
+Example atomic multi-Card transfer:
 
-1. Validate cost cards exist.
-2. Validate Move Card exists.
-3. Validate target Console destination.
+1. Validate the requested Card Instances exist.
+2. Validate their current Container membership.
+3. Validate the target Container destination.
 4. Prepare all mutations.
 5. Commit as one transaction.
 6. Emit events.
@@ -375,11 +375,11 @@ Avoid unrestricted string event buses.
 
 ## 10. Game-Specific Automation
 
-The first Platform does not require Game-specific code modules.
+The Platform does not require Game-specific code modules in order to provide Freeform Actions. Game Rules are primarily interpreted and enforced by Players.
 
-Future automation may use optional modules that depend on Platform contracts.
+Optional Game-specific modules may provide Assisted Actions such as target highlighting, reference/status displays, known setup assistance, or prototype lifecycle orchestration. Those modules depend on Platform contracts; the Platform must not depend on them.
 
-The Platform must not depend on those modules.
+Assisted Actions must remain additive. They must not replace or disable the generic physical manipulation beneath them. Players may continue manually when assistance is disabled, when house rules alter the official setup, or when an optional module can no longer recognize the altered state. The module may decline cleanly rather than guessing.
 
 ## 11. Networking Boundary
 
@@ -390,6 +390,8 @@ Networking adapters translate:
 - Actor-identified Player requests into Commands.
 - Accepted Commands or Snapshots into synchronized messages.
 - Connection identity into stable Player ID bindings.
+
+Multiplayer fundamentally synchronizes accepted physical tabletop facts such as an identified Player moving a Card or Pawn, a Die accepting a result, a Card flipping, a Deck shuffling, or an Object Instance transferring between Containers. The networking layer does not need to reproduce a comprehensive Game-specific rules engine. Host/server authority may enforce permissions and Technical Invariants while Game-rule legality remains player-enforced unless a specific optional module implements assistance.
 
 The final networking vendor is selected later through an Architecture Decision.
 

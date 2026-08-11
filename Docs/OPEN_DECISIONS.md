@@ -1,6 +1,6 @@
 # Console Cards — Open Decisions
 
-**Version:** 1.6
+**Version:** 1.7
 
 **Status:** Approved with Open Decisions  
 **Purpose:** Record resolved and deferred decisions so Codex does not infer them.
@@ -67,7 +67,7 @@ See `TECHNICAL_BASELINE.md`.
 
 **Status:** Resolved
 
-**Decision:** Trap Floor is produced first, followed by Super Leroy Sisters. Both follow the completed M4 Player Layout + Central Play Area foundation and M4.1 minimum Game Template support. The shared Session Entry + Component Toolbox Foundation is implemented inside G1 after the existing Trap Floor tabletop/Floorfall foundations and before deeper Trap Floor automation; this does not renumber completed milestones.
+**Decision:** Trap Floor is produced first, followed by Super Leroy Sisters. Completed milestone history is preserved: M4 Player Layout + Central Play Area, M4.1 minimum Game Template support, Trap Floor tabletop/Floorfall foundations, Session Entry + Component Toolbox, generic Dice, Floormaster lifecycle assistance, and prototype round/phase orchestration. The next priority is completing Trap Floor as a manually playable Game Template, then a dedicated Trap Floor polishing pass, then Super Leroy Sisters playable work and remaining shared Phase 1 closure. Deeper Trap Floor rules-engine automation is not a prerequisite.
 
 ### OD-013 - Official Game Name
 
@@ -103,7 +103,7 @@ See `TECHNICAL_BASELINE.md`.
 
 **Remaining question:** How are Seats assigned and oriented for one to three and five to seven Players, and when does a four-Player Game Template select the standard versus compact four-Player layout?
 
-**Rule:** The unresolved mappings do not block implementation of the three confirmed presets. Do not invent or imply layouts for the unresolved Player counts. Trap Floor's approved two-to-four-Player range means its complete G1 acceptance cannot claim two- or three-Player support until those authored mappings are resolved.
+**Rule:** The unresolved mappings do not block implementation of the three confirmed presets. Do not invent or imply layouts for the unresolved Player counts. Trap Floor may reach manually playable acceptance using an authored and verified layout, but it cannot claim two- or three-Player layout support until those mappings are resolved.
 
 ### OD-015 - Visibility Audience and Limited Awareness
 
@@ -135,7 +135,7 @@ See `TECHNICAL_BASELINE.md`.
 
 ### OD-018 - Trap Floor Remaining Game Rules and Content
 
-**Status:** Milestone Blocking for G1
+**Status:** Deferred where details remain unresolved; blocks only missing readable content or physical setup required for a claimed G1 play configuration, not comprehensive automation
 
 **Resolved direction:** `18_Trap_Floor_Game_Requirements.md` approves the two-to-four-Player range; fixed 36-Card `6 x 6` Floor Card Board; X/Y `2d6` Floorfall with the round 1 corner reroll; 36-Card Floormaster's Deck composition and draw/discard/reshuffle direction; universal Console setup; Controller Decks; corner-starting meeples; shared 50-coin pool; 10-round five-step loop; Easy/Hard Floorfall and elimination differences; documented exactly-50-coin win conditions; and the currently stated Button input examples.
 
@@ -151,7 +151,7 @@ See `TECHNICAL_BASELINE.md`.
 - Detailed Avatar abilities/move speeds where not already specified.
 - Detailed Trap/Coin/Item Card contents beyond the approved categories/fields.
 
-**Rule:** Do not add enemies, keys, exits, or a sequential Level Deck. Do not merge Controller Cards, Skill Cards, and Button inputs into one system. Resolve each remaining dependency before implementing the affected G1 rule/content; do not infer it from the obsolete Trap Door concept.
+**Rule:** Do not add enemies, keys, exits, or a sequential Level Deck. Do not merge Controller Cards, Skill Cards, and Button inputs into one system. Resolve a remaining dependency before authoring the affected readable Game content, physical setup, or optional assistance; do not infer it from the obsolete Trap Door concept. Missing coded Trap/Coin/Item effects, economy, movement legality, elimination, win/loss, or comprehensive round enforcement do not by themselves block manually playable G1 acceptance.
 
 ### OD-019 - Super Leroy Sisters Minimum Playable Rules
 
@@ -163,11 +163,15 @@ See `TECHNICAL_BASELINE.md`.
 
 ### OD-020 - Phase 1 Playable Acceptance
 
-**Status:** Milestone Blocking for P1
+**Status:** Trap Floor criteria resolved; Super Leroy Sisters criteria remain Milestone Blocking for P1
 
-**Question:** What content quantity, session length, supported Player configurations, completion/failure demonstration, and known-issue threshold define "playable" for each official Game?
+**Resolved Trap Floor criteria:** Trap Floor is playable when its approved Template loads; its `6 x 6` Board and required physical Components are present/readable; Players can manually manipulate the required Cards, Decks, Dice, Pawns, Tokens, Consoles, Slots, and discard areas; enough Game content/instructions are readable to know what to do; required generic physical actions work; reset/session behavior is coherent; and optional assistance does not prevent manual play.
 
-**Rule:** P1 cannot close merely because both Templates load; each must complete its approved end-to-end minimum flow.
+Trap Floor playable acceptance does not require automated Card effects, coded economy, movement legality, elimination, win/loss, or comprehensive round-rule enforcement. Any Player-count claim must be limited to authored and verified layouts.
+
+**Remaining question:** Define equivalent content quantity, supported Player configurations, completion/failure demonstration, and known-issue threshold for Super Leroy Sisters.
+
+**Rule:** P1 cannot close merely because both Templates load; each must support its approved end-to-end minimum flow through readable instructions and physical tabletop actions. Comprehensive Game-rule automation is not required.
 
 ## Current Gate
 
@@ -177,7 +181,7 @@ See `TECHNICAL_BASELINE.md`.
 - **M3:** No open design decision blocks the current prototype feature set; closure verification is tracked separately.
 - **M4:** Complete for the confirmed standard four-Player, compact four-Player, and eight-Player presets plus the central Play Area foundation. OD-014 retains unresolved mappings.
 - **M4.1:** Complete for minimum Game Template schema, validation, minimum content resolution, atomic MatchState construction, initial in-memory reset baseline, and minimal prototype bootstrap integration.
-- **G1:** M4/M4.1 and the Trap Floor tabletop/Floorfall targeting foundations are complete. The Session Entry + Component Toolbox Foundation is the next unblocked shared slice. Full two-to-four-Player acceptance remains blocked by OD-014's two-/three-Player mappings and OD-018's unresolved dependent Game rules/content.
+- **G1:** M4/M4.1, Trap Floor tabletop/Floorfall targeting, Session Entry + Component Toolbox, generic Dice, Floormaster lifecycle assistance, and prototype round/phase orchestration are complete foundations. Next, complete the manually playable criteria and then the dedicated Trap Floor polishing pass. OD-014 limits Player-count claims; OD-018 blocks only missing readable content/physical setup for the claimed configuration, not absent rules automation.
 - **G2:** Blocked by OD-019.
-- **P1:** Blocked by OD-015, OD-016, OD-017, and OD-020.
+- **P1:** Blocked by OD-015, OD-016, OD-017, and the unresolved Super Leroy Sisters portion of OD-020.
 - **M6/M7:** Blocked only by OD-009 and OD-010 at their planned decision point.

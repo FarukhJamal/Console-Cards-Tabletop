@@ -1,7 +1,7 @@
 # Console Cards — Terminology
 
 **Document ID:** 02_Terminology  
-**Version:** 1.3
+**Version:** 1.4
 
 **Status:** Approved
 **Depends on:** `00_Product_Vision.md`  
@@ -79,7 +79,7 @@ The Platform owns universal functionality such as:
 - Multiplayer synchronization.
 
 **Important distinction:**  
-The Platform does not know the rules of Trap Floor, Super Leroy Sisters, or any other specific Game unless a future optional Game-specific module is explicitly added.
+The Platform provides generic physical tabletop capabilities without needing to know the rules of Trap Floor, Super Leroy Sisters, or any other specific Game. An optional Game-specific assistance module may interpret a known setup, but it does not own or replace those generic capabilities.
 
 ---
 
@@ -129,6 +129,8 @@ It is not automatically:
 - A Unity scene.
 - A Match.
 - A network session.
+
+Loading a Game Template prepares the physical starting state. It does not imply automatic execution or comprehensive enforcement of the Game Rules.
 
 ### Game Template categories and Empty/Custom entry
 
@@ -614,6 +616,17 @@ A Tabletop Object has a stable instance identity and runtime state.
 
 ---
 
+## 6.1.1 Tabletop Component
+
+**Definition:**
+The player-facing collective term for a physical tabletop piece or physicalized organizational structure that Players can place, use, or manipulate.
+
+Examples include Cards, Decks, Stacks, Dice, Pawns, Tokens, Boards, Hands, Consoles, Slots, and discard piles. Use the more precise technical term, such as `Tabletop Object` or `Container`, when architecture or state ownership matters.
+
+**Preferred short form:** `Component` when the tabletop context is clear.
+
+---
+
 ## 6.2 Object Definition
 
 **Definition:**  
@@ -973,6 +986,31 @@ Direct player control of an object’s pose or state, such as moving, rotating, 
 
 ---
 
+## 8.6.1 Freeform Action
+
+**Definition:**
+A Player action that directly manipulates a physical tabletop Component without requiring a Game-specific rule module to decide whether the Game permits it.
+
+Examples:
+
+- Dragging a Pawn.
+- Drawing, moving, flipping, or discarding a Card.
+- Rolling or repositioning a Die.
+- Moving coin or resource Tokens.
+
+A Freeform Action still uses authoritative Runtime State and must satisfy Technical Invariants.
+
+---
+
+## 8.6.2 Assisted Action
+
+**Definition:**
+An optional Game-specific operation that interprets, guides, or helps with play using known Game content or state.
+
+For example, Trap Floor assistance may interpret its two official d6 and highlight the identified Floor Card. An Assisted Action must not disable the underlying Freeform Actions and may fail cleanly when Players modify the setup beyond what it understands.
+
+---
+
 ## 8.7 Command
 
 **Definition:**  
@@ -1090,7 +1128,7 @@ Examples:
 - Take turns clockwise.
 - Discard a Move Card after use.
 
-Game Rules are initially followed socially unless a Policy or future rule module enforces them.
+Game Rules are primarily interpreted and enforced socially by Players. A specific Policy or optional Game assistance module may guide or enforce an implemented subset, but comprehensive automation is not the default Platform responsibility.
 
 ---
 
@@ -1318,6 +1356,7 @@ These pairs must not be treated as interchangeable.
 | Deck | Stack | Configured ordered draw collection vs. general pile |
 | Hand | Console | Private card collection vs. personal storage/interface area |
 | Command | Domain Event | Requested action vs. completed state change |
+| Freeform Action | Assisted Action | Direct generic physical manipulation vs. optional Game-specific interpretation/convenience |
 | View | Runtime State | Visual representation vs. authoritative data |
 | Game Rule | Technical Invariant | Social/configurable rule vs. mandatory state integrity |
 | Snapping | Placement Enforcement | Suggested alignment vs. blocking invalid placement |

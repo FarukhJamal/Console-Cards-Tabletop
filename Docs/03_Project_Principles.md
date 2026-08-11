@@ -1,7 +1,7 @@
 # Console Cards — Project Principles
 
 **Document ID:** 03_Project_Principles  
-**Version:** 1.2
+**Version:** 1.3
 
 **Status:** Approved
 **Depends on:** `00_Product_Vision.md`, `02_Terminology.md`
@@ -16,9 +16,9 @@ These principles guide product, design, architecture, implementation, testing, a
 
 ### 2.1 Freedom by default, enforcement by configuration
 
-The first builds must feel like a physical tabletop. Players may move objects, use house rules, and resolve legality socially.
+Console Cards is primarily a freeform Virtual Tabletop, not a generic rules engine. It must feel like people playing around a physical table: Players read the rules, decide what action is required, manipulate the Components, and resolve legality or cheating socially.
 
-Future restrictions must be added through explicit Policies. They must not require the foundation to be rewritten.
+Future restrictions must be added through explicit Policies. Optional Game-specific assistance may help interpret known Game state, but neither restrictions nor assistance make comprehensive Game-rule automation the default.
 
 ### 2.2 Platform before individual Games
 
@@ -49,7 +49,7 @@ ScriptableObjects may store definitions and editor configuration. They must not 
 
 ### 2.5 Meaningful changes use Commands
 
-Drawing, moving, flipping, shuffling, stacking, transferring, placing, and resetting are represented as Commands.
+Drawing, moving, flipping, shuffling, stacking, transferring, placing, and resetting are represented as Commands. These authoritative paths protect state consistency and actor context; they do not imply that the Platform validates every Game Rule governing the action.
 
 Commands create a consistent path for:
 
@@ -181,7 +181,7 @@ Do not silently ignore invalid Commands. Do not claim success when only part of 
 
 ### 2.19 Atomic operations remain atomic
 
-Operations such as purchasing a Move Card must either complete fully or leave state unchanged.
+Multi-step authoritative operations, such as transferring a selected Card group between Containers, must either complete fully or leave state unchanged.
 
 Partial mutation is unacceptable.
 
@@ -204,6 +204,14 @@ Players may add, remove, or substitute generic components for house rules. Offic
 ### 2.23 Player actions preserve actor context
 
 Player-initiated state changes flow from an actor-aware request or Command through authoritative validation and mutation. Local Presentation must not assume Seat 0 is always the local Player, that every action has the same actor, or that a MonoBehaviour may bypass the Application boundary. This is a multiplayer-ready constraint, not authorization to implement networking early.
+
+### 2.24 Generic physical actions do not require Game automation
+
+The Platform owns the reusable physical capabilities needed to manipulate Cards, Decks, Stacks, Containers, Dice, Pawns, Tokens, Consoles, Slots, Boards, and toolbox-created Components. A Player may use those capabilities directly in any phase or house-rule state unless an approved Policy explicitly restricts them.
+
+### 2.25 Game-specific automation is optional assistance
+
+Game-specific automation may highlight, calculate, display reference information, or assist a known setup or lifecycle. It must not become the only way to play, disable underlying freeform manipulation, or turn Platform primitives into Game-owned actions. If altered official content becomes unrecognizable, assistance may fail clearly while manual interaction remains available.
 
 ## 3. Decision Priority
 

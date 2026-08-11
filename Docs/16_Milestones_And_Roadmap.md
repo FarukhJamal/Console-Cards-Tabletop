@@ -1,7 +1,7 @@
 # Console Cards — Milestones and Roadmap
 
 **Document ID:** 16_Milestones_And_Roadmap  
-**Version:** 1.6
+**Version:** 1.7
 
 **Status:** Approved
 **Planning basis:** One developer, approximately 30–35 focused hours per week.
@@ -156,9 +156,11 @@ Exit:
 
 ## 7. Immediate Phase 1 Delivery Sequence
 
-The approved next-work order is:
+The approved delivery direction is:
 
-> **M4 Player Layout + Central Play Area foundation (complete) -> M4.1 minimum Game Template support (complete) -> Trap Floor tabletop/Floorfall foundations (complete) -> Session Entry + Component Toolbox Foundation -> continue G1 Trap Floor playable -> G2 Super Leroy Sisters playable -> P1 remaining Phase 1 shared requirements and closure with both Games playable.**
+> **Completed shared foundations -> finish the shared physical tabletop capabilities Trap Floor needs -> G1 Trap Floor manually playable -> Trap Floor polishing pass -> G2 Super Leroy Sisters manually playable -> P1 remaining shared Phase 1 work and closure -> future persistence/multiplayer milestones.**
+
+Completed history is preserved: M4 Player Layout + Central Play Area, M4.1 minimum Game Template support, Trap Floor tabletop/Floorfall targeting, Session Entry, Empty/Custom Table, Component Toolbox, generic Dice, Floormaster Search lifecycle assistance, and prototype round/phase orchestration. The assisted Trap Floor systems are retained as optional/prototype infrastructure; deeper rules-engine work is not a prerequisite for G1.
 
 Do not combine these gates into one broad implementation task. Each gate requires its own tests, manual checks, implementation report, and rollback point.
 
@@ -231,61 +233,70 @@ Exit:
 ## 10. G1 - Trap Floor Playable
 
 **Authority:** `18_Trap_Floor_Game_Requirements.md`
-**Prerequisite:** M4 and M4.1 are complete. Resolve the remaining two- and three-Player layout mappings under OD-014 and the dependent Game-rule/content decisions under OD-018 before claiming the complete two-to-four-Player playable scope. Do not infer missing rules.
+**Prerequisite:** M4 and M4.1 are complete. OD-014 still governs which Player-count layouts may be claimed as supported. OD-018 must resolve any missing readable content or physical Component definition needed for Players to know what to do, but it does not require coded execution of those rules. Do not infer missing rules.
 
-**Current status:** The Template-driven Trap Floor tabletop foundation and the authoritative `2d6` Floorfall targeting foundation are implemented. Permanent collapse consequences and the remaining playable Game flow are incomplete.
+**Current status:** The Template-driven tabletop, `6 x 6` Board, authoritative physical `2d6`, Floorfall targeting assistance, Session Entry, Empty/Custom Table, Component Toolbox, Floormaster Search lifecycle assistance, and prototype round/phase orchestration are implemented foundations. Search lifecycle and round orchestration are optional/prototype assistance rather than required core play.
 
-### Immediate Shared Prerequisite - Session Entry + Component Toolbox Foundation
+### Completed Shared Foundation
 
-Complete this shared Platform slice before deeper Trap Floor automation:
+The completed Session Entry + Component Toolbox Foundation provides:
 
-- Present an explicit local entry choice between Empty/Custom Table and available Game Templates.
-- Offer Trap Floor as the first concrete selectable Game Template; do not automatically force it when Play begins.
-- Construct authoritative Match/session state only after the choice is validated.
-- Support a legitimate Empty/Custom Table with no mandatory Game-specific Board or Game-specific rules.
-- Provide an in-session Platform component toolbox for Card, Deck, Stack/pile, Pawn/meeple, Token/counter, and Die.
-- Create toolbox pieces as authoritative Runtime State with stable identity, normal pose/container integration, and Presentation projection.
-- Add first-class generic Die support with common initial options d4, d6, d8, d10, d12, and d20.
-- Expose Roll through the normal object interaction; a context-menu action is sufficient for this slice.
-- Route Roll through actor-aware request/Command, authoritative validation and RNG, accepted Die Runtime State, then Presentation-only tumble/settle feedback.
-- Represent Trap Floor's two d6 through the same generic Die component used by the toolbox.
-- Preserve actor/Player context at new request boundaries without adding networking infrastructure or assuming Seat 0 is permanently local.
+- explicit selection of Empty/Custom Table or an available Game Template before Match construction;
+- authoritative toolbox-created Card, Deck, Stack/pile, Pawn/meeple, Token/counter, and Die instances;
+- first-class generic Dice and actor-aware authoritative Roll;
+- Trap Floor's two d6 through the same generic Die capability; and
+- actor/revision boundaries suitable for later multiplayer without assuming Seat 0 is the permanent actor.
 
-Exclude from this shared prerequisite:
+This history remains complete. It does not make assisted Trap Floor automation mandatory.
 
-- Production Session Entry/toolbox styling.
-- Template editor, custom-game save/load, Workshop, persistence, networking, lobby/Relay, or a permission framework.
-- Production dice physics or a custom-die editor.
-- Trap Floor rule progression beyond already implemented foundations.
+### G1 Delivery Focus
 
-Deliver the approved minimum playable Trap Floor Game Template and Game-specific rule/content layer using:
+Complete Trap Floor as a manually playable Game Template by prioritizing the shared physical capabilities and readable Game content needed for Players to carry out the rules themselves:
 
-- Two-to-four-Player setup while preserving the wider Platform's independent one-to-eight-Player capability.
-- A fixed central Game Board/Play Area made from 36 Floor Cards in a `6 x 6` coordinate grid.
-- `2d6` Floorfall resolution where die 1 selects X and die 2 selects Y, including the round 1 starting-corner reroll.
-- A separate 36-Card Floormaster's Deck containing 14 Trap Cards, 14 Coin Cards, and 8 Item Cards; draw from the left, discard to the right, and reshuffle when exhausted.
-- One universal Console per Player with the approved Avatar, Rule, Mode, and Item Card Slot setup; a separate Controller Deck beside each Console; and one Pawn/meeple per Player beginning on a corner Floor Card.
-- A shared pool of 50 wooden coin cubes, with acquired coins stored on Player Consoles and spent coins returned to the pool.
-- The 10-round `Start -> Search -> Trigger -> Floorfall -> End` loop.
-- Easy Mode with one Floorfall and the approved all-for-one elimination consequence.
-- Hard Mode with two Floorfalls and the approved one-for-all elimination consequence.
-- The currently approved exactly-50-coins-within-10-rounds win conditions.
-- Controller Cards, Skill Cards, and universal A/B/X/Y Button inputs as distinct concepts pending OD-018 resolution of their exact structural relationship and content.
-- Only approved Trap, Coin, Item, Avatar, Controller, and Skill content; unresolved definitions must be decided rather than invented.
-- A human-readable Rulebook for all player-facing decisions not automated.
+- Load the approved starting Template exactly once through Session Entry.
+- Present the fixed `6 x 6` Floor Card Board and required physical Components readably.
+- Preserve the separate 36-Card Floormaster's Deck composition of 14 Trap, 14 Coin, and 8 Item Cards, with draw-left, discard-right, and exhaustion reshuffle as Player-facing rules.
+- Present the universal Console/Slot setup, Controller Decks, Pawns, shared 50-coin supply, two d6, Rule Cards, Avatar Cards, Mode Cards, Item Slots, and starting poses required by the approved setup.
+- Ensure Players can manually draw, shuffle, flip, reorder, stack, transfer, discard, move Pawns/Tokens/coins, roll/reposition Dice, and move Cards among Hands, table, Consoles, Slots, Decks, Stacks, and other Containers as Trap Floor requires.
+- Provide enough readable Game content and instructions for Players to perform the 10-round `Start -> Search -> Trigger -> Floorfall -> End` loop and apply the approved Easy/Hard, cost, effect, elimination, and win/loss rules socially.
+- Keep Reset and Session Entry/exit behavior coherent.
+- Ensure optional assistance never prevents manual play, including after house-rule modification or Component substitution.
+
+The detailed Game Rules remain the intended Trap Floor design, but automatic execution is not G1 scope. Floorfall targeting may remain optional assistance. The Floormaster lifecycle may remain optional/prototype assistance. Prototype round/phase orchestration may remain experimental optional infrastructure.
+
+G1 does **not** require:
+
+- full automated Trap, Coin, or Item effects;
+- coded Controller Card or coin economy validation;
+- automatic movement legality;
+- automatic elimination or survival calculation;
+- automatic win/loss evaluation;
+- comprehensive round/phase enforcement; or
+- extending the existing prototypes into a complete Trap Floor rules engine.
 
 Do not add a sequential Level Deck, dungeon/room reveal progression, enemies, keys, or exits. Those belong to the superseded Trap Door concept.
 
 Exit:
 
-- Two to four Players can complete the approved 10-round Trap Floor flow end-to-end using authoritative Runtime State and existing Platform use cases.
-- Both Easy and Hard mode consequences and win conditions are represented according to the approved contract.
+1. The approved starting Trap Floor Template loads correctly.
+2. The `6 x 6` Board and required physical Components are present and readable.
+3. Players can manipulate the required Cards, Decks, Dice, Pawns, Tokens, Consoles, Slots, and discard areas manually.
+4. Players can read enough Game content and instructions to know what actions to perform.
+5. Generic physical actions required by Trap Floor are functional.
+6. Reset and session behavior are coherent.
+7. Optional assistance does not prevent manual play.
+
+Any playable claim must name the Player layouts actually verified. OD-014 prevents claiming unresolved two- and three-Player layout support, but does not turn comprehensive Game-rule automation into a prerequisite.
+
+### Trap Floor Polishing Pass
+
+After G1 reaches the manually playable exit criteria, perform a dedicated Trap Floor polishing pass before moving deeper into subsequent Game content. Focus on readability, layout, interaction clarity, status/reference presentation, reset/session coherence, and defects found during manual play. Do not use polishing as a reason to require a comprehensive rules engine.
 
 ## 11. G2 - Super Leroy Sisters Playable
 
 Prerequisite: resolve OD-019. Do not infer missing Game Rules from the layout reference.
 
-Deliver the approved minimum playable Super Leroy Sisters Game Template using:
+Deliver the approved minimum manually playable Super Leroy Sisters Game Template using:
 
 - A Side-Scroller Play Area made from Level Cards generated by a Level Deck.
 - A meeple moving Card by Card.
@@ -294,9 +305,11 @@ Deliver the approved minimum playable Super Leroy Sisters Game Template using:
 - The stated flow: draw Level Card, place it into the level, move Player, encounter obstacle, play Button Cards/Move Card, resolve obstacle, continue to the next Card.
 - A human-readable Rulebook for all decisions not automated.
 
+As with Trap Floor, Game-specific automation is optional assistance. G2 must prioritize readable content and the shared physical tabletop capabilities needed for Players to perform the approved flow; it does not require comprehensive coded rule enforcement.
+
 Exit:
 
-- A Player can complete the approved minimum Super Leroy Sisters playthrough end-to-end without adding Game-specific conditions to Platform modules.
+- A Player can complete the approved minimum Super Leroy Sisters playthrough end-to-end through readable instructions and physical tabletop manipulation without adding Game-specific conditions to Platform modules.
 
 ## 12. P1 - Phase 1 Closure
 
@@ -366,11 +379,14 @@ These remain planned Platform work but are not on the immediate Phase 1 critical
 - M4 is authorized to implement only the confirmed standard four-Player, compact four-Player, and eight-Player authored layouts. OD-014 retains the missing one-to-three and five-to-seven mappings without blocking that confirmed work.
 - OD-015 visibility work and OD-016 marquee/group-landing work remain required before Phase 1 closure but do not block the M4 foundation. An approved Game may pull a necessary subset earlier.
 - Trap Floor and Super Leroy Sisters are separate Game-specific Board types and Game Templates.
-- The automatic Trap Floor prototype boot is temporary. The Session Entry + Component Toolbox Foundation is the immediate shared prerequisite inside G1 before deeper Trap Floor automation.
+- Session Entry + Component Toolbox, generic Dice, Floormaster lifecycle assistance, and prototype Trap Floor round/phase orchestration preserve their completed implementation history. The latter two remain optional/prototype assistance.
 - Empty/Custom Table is a first-class product path, not a debug mode and not dependent on Game-specific Board or rule content.
 - Template-created and toolbox-created components share authoritative Runtime State; a Game Template owns setup/content/layout, not generic component types.
 - New player-initiated component actions preserve actor context for later authority validation without adding networking before M6/M7.
-- Phase 1 requires minimum playable versions of both Games, not invented rules, full automation, or production-complete content.
+- Phase 1 requires minimum manually playable versions of both Games, not invented rules, full automation, or production-complete content.
+- Generic physical tabletop capabilities take priority over deeper Game-specific rules-engine work.
+- Trap Floor proceeds from manual playable completion into a dedicated polishing pass, then Super Leroy Sisters playable work, then remaining shared Phase 1 closure work.
+- Future multiplayer synchronizes authoritative physical tabletop state and actor actions; it does not require a comprehensive Game-specific rules engine.
 - Reconnection and Seat restoration remain M7 requirements.
 - Host migration remains conditional.
 

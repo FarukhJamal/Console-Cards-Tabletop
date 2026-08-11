@@ -1,6 +1,6 @@
 # Console Cards — Requirements Traceability
 
-**Version:** 1.5
+**Version:** 1.6
 
 **Status:** Approved
 
@@ -23,14 +23,14 @@ The source, scope, repository status, milestone, and unresolved-decision trace f
 | PR-013 | Side-scroller Play Area | Play Area Architecture | G2 | Layout continuation test |
 | PR-014 | Game Templates are data, not hardcoded Games | Game Template Architecture | M4.1 | Template loading without Platform changes |
 | PR-015 | Empty/Custom Table is a first-class Match/session path without mandatory Game-specific Template, Board, or rules | Session Entry + Game Template Architecture | Immediate shared prerequisite inside G1 | Explicit entry and empty-Match construction/reset tests |
-| PR-016 | Official Game Templates: Trap Floor then Super Leroy Sisters | Game Template Architecture | G1, G2 | End-to-end approved minimum playable acceptance for each separate Game Template |
+| PR-016 | Official Game Templates: Trap Floor then Super Leroy Sisters | Game Template Architecture | G1, G2 | End-to-end approved minimum manually playable acceptance for each separate Game Template |
 | PR-017 | Custom Template direction not blocked | Game Template Architecture | Architectural only | Review/ADR; no editor in Foundation |
-| PR-018 | Freedom by default | Policy Architecture | M2-M4 | M2 preserves free local manipulation while enforcing technical invariants, local interaction locks, and deterministic routing; no Game rules added: `Assets/ConsoleCards/Presentation/Interaction/`, `Assets/ConsoleCards/Presentation/Input/` |
+| PR-018 | Console Cards is a freeform Virtual Tabletop; Game Rules are primarily player-enforced | Product Vision + Policy Architecture | M2 onward | Generic physical actions remain available while Technical Invariants, actor context, and authoritative state are preserved; no comprehensive Game-rule engine is required |
 | PR-019 | Future restrictions through Policies | Policy Architecture | Foundation contracts; later implementation | Policy composition tests |
 | PR-020 | Technical Invariants always enforced | Core/Application | M0 onward | Edit Mode invariant tests |
 | PR-021 | Runtime State separate from Views | Platform Architecture | M0-M2 | M2 View/state boundary verified: Runtime State remains authoritative; Transform, highlight roots, Card face roots, and TableSurfaceProxy are Presentation only; `TabletopPrototypeComposition` is prototype-only and not a permanent Bootstrap |
 | PR-022 | Save/load and reset | Persistence Architecture | M4.1 baseline/reset, M5 persistence | Snapshot round-trip/reset tests |
-| PR-023 | Networking remains vendor-neutral before decision | Multiplayer Architecture | M0–M6 | Assembly audit |
+| PR-023 | Networking remains vendor-neutral and synchronizes authoritative physical tabletop state without requiring comprehensive Game-specific rule execution | Multiplayer Architecture | M0–M7 | Assembly audit plus actor-identified move/flip/roll/shuffle/transfer synchronization acceptance |
 | PR-024 | Stable identity and Seat restoration | Multiplayer Architecture | M7 | Reconnect test |
 | PR-025 | Controlled host-loss handling | Multiplayer Architecture | M7 | Host-loss manual/automated test |
 | PR-026 | Host migration only if approved | Multiplayer Architecture | Conditional M7 | Technology-specific migration tests |
@@ -42,13 +42,15 @@ The source, scope, repository status, milestone, and unresolved-decision trace f
 | PR-032 | Large hideable/reopenable high-stakes Card-choice UI | Presentation + Game Templates | Remaining shared requirements before P1 closure unless a concrete Game requires it earlier | Legibility, hide/reopen, input isolation, candidate selection, and confirmation tests; LDR-014-LDR-016; OD-017 |
 | PR-033 | Hand, personal Play Area, and individual Card visibility are independent | Policy + Play Areas + Multiplayer | Remaining shared requirements before P1 closure; secure delivery M7 | Policy composition and unauthorized-delivery tests; LDR-017-LDR-021 |
 | PR-034 | Console is universal and Game Board is Game-specific | Hands/Consoles + Play Areas + Game Templates | M4, M4.1, G1, G2 | Load distinct Game Boards with unchanged universal Console contract; LDR-025-LDR-027 |
-| PR-035 | Trap Floor minimum playable Game Template and rule/content layer | Game-specific content | G1 | Tabletop/Board setup and Floorfall targeting foundations implemented; complete playable acceptance still requires the approved 2-4 Player flow and resolution of OD-014/OD-018 dependencies; LDR-028-LDR-030 and LDR-034-LDR-039 |
-| PR-036 | Super Leroy Sisters minimum playable Game Template | Game-specific content | G2 | Approved end-to-end flow after OD-019 resolution; LDR-031-LDR-033 |
+| PR-035 | Trap Floor minimum manually playable Game Template and readable content | Game-specific content + shared physical capabilities | G1, then Trap Floor polish | Template/Board, physical d6, Floorfall targeting, Floormaster lifecycle, and prototype round orchestration foundations exist. Acceptance uses the seven manual-play criteria in Trap Floor requirements §12; coded effects/economy/movement/elimination/win-loss/round enforcement are not prerequisites; LDR-028-LDR-030 and LDR-034-LDR-039 |
+| PR-036 | Super Leroy Sisters minimum manually playable Game Template | Game-specific content + shared physical capabilities | G2 | Approved readable end-to-end physical flow after OD-019 resolution; comprehensive automation is not required; LDR-031-LDR-033 |
 | PR-037 | Phase 1 closes after both official Games are playable and remaining shared requirements are complete | Roadmap + Acceptance | P1 | Approved acceptance after OD-015, OD-016, OD-017, and OD-020 resolution |
 | PR-038 | Session Entry explicitly chooses Empty/Custom Table or an available Game Template; startup does not force Trap Floor | Bootstrap + Presentation + Game Templates | Immediate shared prerequisite inside G1 | Input-isolated choice UI, no-auto-load, valid selection, and atomic construction tests |
 | PR-039 | In-session component toolbox adds generic authoritative Card, Deck, Stack/pile, Pawn/meeple, Token/counter, and Die instances | Core + Application + Presentation | Immediate shared prerequisite inside G1 | Stable-ID creation, state/view binding, container/pose integration, removal, reset, and house-rule manipulation tests |
 | PR-040 | Dice are first-class physical Tabletop Objects; Roll uses authoritative RNG/state and Presentation-only tumble/settle | Core + Application + Tabletop Objects + Presentation | Immediate shared prerequisite inside G1 | d4/d6/d8/d10/d12/d20 creation, actor-aware Roll, deterministic RNG, state/view reconciliation, and Trap Floor generic-2d6 integration tests |
 | PR-041 | New player-initiated actions preserve actor context and authoritative request boundaries without networking packages | Application + Multiplayer boundary | Immediate shared prerequisite onward; transport remains M6/M7 | No implicit Seat-0/local-user assumptions; request validation and assembly/dependency audit |
+| PR-042 | Game-specific automation is optional assistance and cannot disable underlying Freeform Actions | Optional Game modules + Presentation | G1 onward | Manual play remains possible with assistance disabled or after house-rule setup changes; assistance may fail clearly without blocking generic manipulation |
+| PR-043 | Trap Floor receives a dedicated polishing pass after manually playable completion | Game-specific content + Presentation | Immediately after G1, before G2 | Readability, layout, interaction clarity, status/reference feedback, reset/session coherence, and manual-play defect review |
 
 ## M2 Implementation Evidence
 

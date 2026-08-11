@@ -1,7 +1,7 @@
 # Console Cards — Architecture Decisions
 
 **Document ID:** 04_Architecture_Decisions  
-**Version:** 1.3
+**Version:** 1.4
 
 **Status:** Approved with Open Decisions
 
@@ -84,7 +84,8 @@ This file records accepted or proposed Architecture Decision Records. A decision
 **Consequences:**
 
 - Trap Floor and Super Leroy Sisters do not define Platform code.
-- Optional automated rule modules may be added later.
+- Optional Game-specific assistance modules may be added where they provide demonstrated value; they are not required for a Game Template to be playable.
+- Generic physical tabletop actions remain Platform capabilities and do not move into Game modules.
 - A Game Template is not a Unity scene.
 
 ---
@@ -93,7 +94,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 
 **Status:** Accepted
 
-**Decision:** First builds use Free enforcement for Game Rules while always preserving Technical Invariants.
+**Decision:** Console Cards is primarily a freeform Virtual Tabletop. Game Rules are primarily interpreted and enforced by Players, while the Platform always preserves Technical Invariants.
 
 **Reason:** The intended experience mirrors physical tabletop play.
 
@@ -101,6 +102,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 
 - Invalid-by-rule actions may be allowed.
 - Corrupt state is never allowed.
+- Optional Assisted Actions must not disable the underlying Freeform Actions.
 - Future restrictions are Policies, not foundational rewrites.
 
 ---

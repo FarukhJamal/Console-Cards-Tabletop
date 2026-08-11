@@ -1,7 +1,7 @@
 # Console Cards — Product Vision
 
 **Document ID:** 00_Product_Vision  
-**Version:** 1.3
+**Version:** 1.4
 
 **Status:** Approved
 **Purpose:** Define what Console Cards is, what experience it must create, and which product boundaries must remain stable before architecture and implementation begin.
@@ -18,7 +18,9 @@ Players share a top-down virtual table, use private hands and personal Consoles,
 
 The platform provides the digital table, object interaction, organization tools, visibility, saving, and multiplayer synchronization.
 
-The players provide and follow the rules.
+The players provide, interpret, follow, challenge, and correct the rules.
+
+> **Authoritative product principle:** Console Cards is primarily a freeform Virtual Tabletop, not a generic rules engine. It simulates people playing a physical tabletop game together: the Platform supplies the table and physical capabilities, while Players normally decide what the Game Rules require and enforce those rules socially.
 
 Console Cards has three requirement horizons:
 
@@ -66,7 +68,7 @@ A typical session should allow players to:
 9. Resolve mistakes or disputes socially, as they would in person.
 10. Save or reset the tabletop setup when required.
 
-The software should make physical tabletop actions easier and clearer. It should not initially replace player judgment.
+The software should make physical tabletop actions easier and clearer. It does not need to replace player judgment or determine every legal and illegal move. As at a physical table, Players may question, correct, or reverse an action when the group believes a rule was applied incorrectly.
 
 ---
 
@@ -121,6 +123,8 @@ The Platform provides:
 
 The Platform must not depend on one specific game.
 
+The Platform supplies the ordinary physical capabilities needed to play supported tabletop Games. These capabilities remain available without a Game-specific rule module: Players can place and move Components; draw, shuffle, flip, reorder, stack, and transfer Cards; use Decks, Stacks, Hands, discard piles, Consoles, Slots, and other Containers; move Pawns and Tokens; manipulate coins and resources; roll and reposition Dice; arrange Boards; and add supported generic Components through the toolbox.
+
 ### 4.2 Game Template
 
 A Game Template is a reusable starting configuration.
@@ -146,7 +150,7 @@ A Game Template may be:
 - Fully custom.
 - Empty or minimal.
 
-A template is not the same as hardcoded gameplay logic. It describes how a tabletop session starts.
+A template is not the same as hardcoded gameplay logic. It describes how a tabletop session starts. Loading a Game Template prepares the physical Game but does not imply that Console Cards automatically executes its rules.
 
 ### 4.3 Match
 
@@ -195,6 +199,12 @@ Possible future enforcement levels include:
 - **Enforced:** The platform validates and controls complete game rules where such logic has been implemented.
 
 The first foundation version should use Free mode for game rules while always enforcing technical integrity, such as preventing one object from existing in two locations at the same time.
+
+### 5.1 Freeform and Assisted Actions
+
+A **Freeform Action** is a Player directly manipulating a physical tabletop Component, such as dragging a Pawn, drawing or flipping a Card, moving a Card to a discard pile, rolling a Die, or moving coins. Freeform Actions use authoritative Runtime State and protect Technical Invariants, but they do not require Game-specific legality validation.
+
+An **Assisted Action** is optional Game-specific automation that interprets, guides, or helps perform an action. For example, Trap Floor assistance may interpret its two official d6 as `(3,5)` and highlight Floor Card `(3,5)`. Assistance must not replace or disable the underlying Freeform Actions. It may decline to assist when Players change an official setup beyond what the automation understands.
 
 ---
 
@@ -339,7 +349,7 @@ A toolbox-created component is a first-class authoritative tabletop component wi
 
 ## 10. Physical Tabletop Actions
 
-The platform should eventually allow common physical tabletop actions, including:
+The Platform must provide the common physical tabletop actions required by supported Games. The shared capability set includes:
 
 - Selecting objects.
 - Selecting multiple Cards with a marquee and clearly highlighting every selected Card.
@@ -347,16 +357,23 @@ The platform should eventually allow common physical tabletop actions, including
 - Rotating objects.
 - Flipping double-sided objects.
 - Drawing one or several cards.
+- Drawing Cards manually from Decks.
 - Moving complete decks.
 - Creating and separating stacks.
 - Shuffling decks.
+- Reordering Deck or Stack contents where physical interaction allows.
 - Dealing cards.
 - Passing cards between players.
 - Placing cards into private hands.
+- Moving Cards between Hands, the table, Console Slots, Decks, Stacks, discard piles, and other Containers.
 - Revealing or hiding cards.
 - Moving pieces across boards or Play Areas.
 - Rolling dice.
+- Repositioning Dice after a roll.
 - Moving tokens and counters.
+- Manipulating coin and resource Tokens.
+- Creating supported generic Components through the toolbox.
+- Arranging Game-specific Boards and shared tabletop pieces.
 - Grouping and organizing components.
 - Previewing the exact landing placement of a dragged Card or selected Card group before release.
 - Locking setup objects when needed.
@@ -424,7 +441,9 @@ Instead, those games should be represented through combinations of:
 - Consoles.
 - Rulebooks.
 - Policies.
-- Optional future game-specific modules only where true automation is later required.
+- Optional Game-specific assistance modules where a demonstrated convenience is valuable.
+
+Optional assistance may highlight a target, display reference/status information, or help with a known setup or lifecycle operation. It is additive convenience, not a prerequisite for manual play and not the owner of generic physical actions.
 
 ---
 
@@ -461,6 +480,8 @@ In the first builds, players own:
 - Victory declaration.
 - Manual correction of mistakes.
 - Custom arrangement of the tabletop.
+- Applying written Card costs and effects by physically moving the required Components.
+- Challenging and correcting illegal moves socially.
 
 ---
 
@@ -523,10 +544,10 @@ The foundation is successful when a group can:
 10. Reset or restore the session reliably.
 11. Load a different Game Template without changing the universal foundation.
 12. Keep the universal Console stable while loading a Game-specific central Game Board and Player Layout.
-13. Play the approved minimum Trap Floor and Super Leroy Sisters flows using their separate Game-specific Boards.
+13. Play the approved minimum Trap Floor and Super Leroy Sisters flows manually using their separate Game-specific Boards and readable instructions, without requiring comprehensive Game-rule automation.
 
 ---
 
 ## 17. Product Statement
 
-> **Console Cards is a multiplayer, top-down virtual tabletop platform centered around Button Cards and player Consoles. It allows groups to load official Game Templates, modify them, create custom setups, or use an empty table while following their own rules. The first builds prioritize physical-table freedom, while the architecture preserves the option to introduce assistance and restrictions later through configuration.**
+> **Console Cards is a multiplayer, top-down freeform Virtual Tabletop platform centered around Button Cards and Player Consoles. It allows groups to load official Game Templates, modify them, create custom setups, or use an empty table while interpreting and enforcing their own rules. The Platform synchronizes authoritative physical tabletop state; optional assistance and configured restrictions may be added without replacing manual play.**
