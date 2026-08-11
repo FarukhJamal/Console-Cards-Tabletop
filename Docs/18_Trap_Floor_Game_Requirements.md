@@ -1,7 +1,7 @@
 # Console Cards - Trap Floor Game Requirements
 
 **Document ID:** 18_Trap_Floor_Game_Requirements
-**Version:** 1.0
+**Version:** 1.1
 **Status:** Approved with Open Decisions
 **Authoritative source:** Approved Trap Floor direction supplied 2026-08-10
 **Purpose:** Define the approved minimum Game-specific setup, Board, round flow, modes, and content boundaries for Trap Floor without moving Game Rules into the Platform or generic Game Template schema.
@@ -21,6 +21,8 @@ This document is the authoritative Trap Floor direction. `Consolecards_LayoutRef
 - The Game Template defines starting setup, content, and layout.
 - Game-specific rules remain outside the generic Game Template schema.
 - Runtime State remains authoritative during a Match.
+- Trap Floor is selected through Platform Session Entry and must not be forced automatically at application startup.
+- Trap Floor uses the Platform's generic component types; its Game Template does not own or redefine them.
 - The wider Console Cards Player Layout model remains structurally capable of one to eight Players; Trap Floor itself supports two to four Players.
 - Central gameplay remains the primary visual focus.
 
@@ -40,6 +42,8 @@ The exact authored Seat mappings for two and three Players remain unresolved und
   - die 2 selects the Y-axis coordinate.
 - The resulting coordinate identifies the Floor Card that collapses.
 - During round 1, reroll a Floorfall result that identifies a starting corner.
+- The two d6 are first-class generic Platform Die Object Instances with authoritative values and Tabletop Poses. Trap Floor's Game-specific Floorfall logic interprets them as X and Y; it does not introduce a Trap Floor-specific Die type.
+- The Trap Floor Game Template includes those two generic d6 as starting setup/content; the underlying Die type remains available to Empty/Custom Tables and other Games.
 
 ## 5. Floormaster Deck
 

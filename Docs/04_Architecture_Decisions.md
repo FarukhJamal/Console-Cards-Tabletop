@@ -1,7 +1,7 @@
 # Console Cards — Architecture Decisions
 
 **Document ID:** 04_Architecture_Decisions  
-**Version:** 1.2
+**Version:** 1.3
 
 **Status:** Approved with Open Decisions
 
@@ -67,6 +67,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 **Consequences:**
 
 - Direct state mutation from Views is forbidden.
+- Player-initiated Commands preserve the requesting actor/Player context needed for later authority and permission validation.
 - Continuous drag preview remains local or rate-limited.
 - Final placement is a Command.
 
@@ -236,6 +237,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 - The MVP may use a player host.
 - Dedicated or backend authority remains possible later.
 - Player-host limitations must be documented.
+- Local/offline implementations preserve the same request -> validation -> authoritative mutation boundary without requiring a networking package.
 
 ---
 
@@ -351,3 +353,40 @@ This file records accepted or proposed Architecture Decision Records. A decision
 - Smaller groups move toward the central action rather than occupying distant unused edge positions.
 - Player Layout configuration is separate from Game Board and Play Area configuration.
 - Exact mappings for one to three and five to seven Players remain in `OPEN_DECISIONS.md`.
+
+---
+
+## ADR-022 - Explicit Session Entry and Empty Table
+
+**Status:** Accepted
+
+**Decision:** Application startup presents an explicit choice between an Empty/Custom Table and available Game Templates before constructing a Match. No official Game, including Trap Floor, is automatically selected as permanent product behavior.
+
+**Reason:** Console Cards is the Platform; official Games are selectable content, and freeform/custom tabletop use is a first-class product workflow.
+
+**Consequences:**
+
+- An Empty/Custom Table may construct a valid Match without a Game-specific Board, Game-specific rules, or selected official Game Template.
+- Trap Floor uses the M4.1 Game Template pipeline only after player selection.
+- The current automatic Trap Floor prototype bootstrap is temporary and must be replaced.
+- Final Session Entry UI styling remains deferred.
+
+---
+
+## ADR-023 - Authoritative Toolbox Components and Dice
+
+**Status:** Accepted
+
+**Decision:** Generic components added through the in-session component toolbox become first-class authoritative object/container instances using the existing state and placement architecture. Dice are physical/interactable generic components whose accepted results are determined by authoritative logic, not physics.
+
+**Reason:** Empty/custom games and house rules require reusable pieces that remain compatible with later persistence and host/server-authoritative multiplayer.
+
+**Consequences:**
+
+- Initial toolbox categories are Card, Deck, Stack/pile, Pawn/meeple, Token/counter, and Die.
+- Toolbox-created and Template-created pieces share stable identity and Runtime State contracts.
+- A Die records side count, authoritative current/result value, and Tabletop Pose and has a Presentation View.
+- Initial common Die options are d4, d6, d8, d10, d12, and d20; no custom-die editor is implied.
+- Roll follows actor request -> authoritative validation/RNG/state mutation -> Presentation tumble/settle.
+- Trap Floor's two d6 are generic Platform Dice that its Game-specific Floorfall logic interprets as X and Y.
+- Production physics, networking, persistence, and speculative component categories remain deferred.

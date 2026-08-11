@@ -1,7 +1,7 @@
 # Console Cards — Multiplayer Architecture
 
 **Document ID:** 10_Multiplayer_Architecture  
-**Version:** 1.1
+**Version:** 1.2
 
 **Status:** Approved with Open Decisions
 
@@ -60,6 +60,10 @@ Client Input
 ```
 
 Clients do not directly commit shared state.
+
+This actor/request boundary applies before networking exists. Local/offline Presentation supplies explicit actor/Player context to the Application request; it must not assume Seat 0 is permanently local, that only one Player can interact, or that all requests originate from one implicit user. The initial local actor context may be simple, but it must remain replaceable by future stable Player identity binding.
+
+Toolbox creation, component removal, and Die Roll follow the same boundary as movement, draw, and shuffle. No transport, lobby, Relay, or networking package is required to preserve this shape.
 
 ## 5. Interaction Locking
 

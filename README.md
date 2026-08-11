@@ -4,7 +4,7 @@ Console Cards is a multiplayer, top-down virtual tabletop Platform centered arou
 
 ## Current Status
 
-**M0 through M4.1 are implemented. The current local prototype contains the M3 Deck, Stack, Hand, Discard, and Console feature set plus the M4 Player Layout/central Play Area foundation and M4.1 minimum Game Template pipeline; current M3 closure verification evidence remains separately tracked.**
+**M0 through M4.1 are implemented. The current local prototype also contains the Template-driven Trap Floor tabletop foundation and Floorfall targeting foundation; current M3 closure verification evidence remains separately tracked.**
 
 - M0 completed the Core/Application foundation.
 - M1 completed the tabletop visual and Camera foundation.
@@ -14,7 +14,7 @@ Console Cards is a multiplayer, top-down virtual tabletop Platform centered arou
 
 The current prototype supports explicit Card, Pawn, and Token Views; selection with visible local feedback; mathematical tabletop pointer projection; collider-based object selection; drag preview; accepted movement; cancel/rollback; rotation; Card flipping; Deck draw/shuffle; Stack merge/split; Hand reorder; Discard and Console Slot transfer; local interaction locks; orthographic Camera pan/zoom; prototype composition; and an integrated `TabletopPrototype` scene.
 
-The next delivery sequence is Trap Floor playable, Super Leroy Sisters playable, then remaining shared Phase 1 requirements and closure with both Games playable. The approved Trap Floor direction is defined in `Docs/18_Trap_Floor_Game_Requirements.md`.
+The immediate next slice is the shared **Session Entry + Component Toolbox Foundation**: choose Empty/Custom Table or an available Game Template, stop automatically forcing Trap Floor at Play startup, add authoritative generic tabletop pieces, and promote Dice to first-class objects. Delivery then continues with Trap Floor playable, Super Leroy Sisters playable, and remaining shared Phase 1 closure requirements. The approved Trap Floor direction is defined in `Docs/18_Trap_Floor_Game_Requirements.md`.
 
 ## Approved Technical Baseline
 
@@ -50,7 +50,7 @@ See `DOCUMENTATION_INDEX.md` for the complete hierarchy.
 
 ## Next Action
 
-Resolve the M4-blocking Player Layout, visibility, and marquee/group-landing decisions in `Docs/OPEN_DECISIONS.md`, then begin M4: Play Area and Player-Layout Foundation.
+Implement the approved Session Entry + Component Toolbox Foundation inside G1, then continue the remaining Trap Floor playable flow without resolving deferred Game rules by inference.
 
 ## Networking
 

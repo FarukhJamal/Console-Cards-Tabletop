@@ -1,7 +1,7 @@
 # Console Cards — Project Principles
 
 **Document ID:** 03_Project_Principles  
-**Version:** 1.1
+**Version:** 1.2
 
 **Status:** Approved
 **Depends on:** `00_Product_Vision.md`, `02_Terminology.md`
@@ -190,6 +190,20 @@ Partial mutation is unacceptable.
 Use Unity features where appropriate, but do not allow convenience APIs to collapse architectural boundaries.
 
 Avoid scene searches, static global state, mutable ScriptableObject Match state, and uncontrolled MonoBehaviour-to-MonoBehaviour dependencies.
+
+### 2.21 Session entry is explicit
+
+Application startup must not silently choose an official Game. A Player explicitly selects an Empty/Custom Table or an available Game Template before authoritative Match construction.
+
+### 2.22 Reusable pieces remain authoritative
+
+Generic pieces added through the component toolbox use the same stable identity, Runtime State, interaction, and Presentation projection boundaries as Template-created pieces. A Game Template may arrange component instances but does not own the underlying component types.
+
+Players may add, remove, or substitute generic components for house rules. Official automation may decline to assist when its expected setup has changed, but Platform interaction remains available unless an approved Policy restricts it.
+
+### 2.23 Player actions preserve actor context
+
+Player-initiated state changes flow from an actor-aware request or Command through authoritative validation and mutation. Local Presentation must not assume Seat 0 is always the local Player, that every action has the same actor, or that a MonoBehaviour may bypass the Application boundary. This is a multiplayer-ready constraint, not authorization to implement networking early.
 
 ## 3. Decision Priority
 

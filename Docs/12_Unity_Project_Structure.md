@@ -1,7 +1,7 @@
 # Console Cards — Unity Project Structure
 
 **Document ID:** 12_Unity_Project_Structure  
-**Version:** 1.0 Draft  
+**Version:** 1.1
 **Status:** Approved
 
 > **Contract note:** Code blocks, type names, interfaces, field lists, and diagrams in this document are illustrative unless explicitly labelled **Approved Contract**. Codex must not treat illustrative examples as fixed public APIs.
@@ -132,6 +132,8 @@ Bootstrap/
 
 Bootstrap constructs dependencies and starts the application.
 
+Bootstrap presents or wires Session Entry before Match construction. It must not make an official Game Template part of unconditional application startup.
+
 ## 8. Editor Structure
 
 ```text
@@ -228,14 +230,13 @@ Avoid namespace churn from minor folder rearrangement.
 - Scene flow.
 - No Game Template content.
 
-### Lobby/Session Scene
+### Session Entry UI/Scene
 
-- Session creation/joining.
-- Player membership.
-- Seat selection if required.
-- Template selection.
+- Explicit Empty/Custom Table or Game Template selection.
+- Session/Match construction after validation.
+- Future session creation/joining, Player membership, and Seat selection where required.
 
-May be deferred until multiplayer milestone.
+The final scene/UI split is not prescribed, but explicit local Session Entry cannot be deferred until multiplayer.
 
 ### Tabletop Scene
 
@@ -243,7 +244,9 @@ May be deferred until multiplayer milestone.
 - Local Camera.
 - Universal presentation roots.
 - Interaction surfaces.
+- Platform component toolbox access.
 - No hardcoded official Game layout.
+- No unconditional Trap Floor bootstrap.
 
 ### Content
 

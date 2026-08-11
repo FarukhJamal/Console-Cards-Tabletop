@@ -1,7 +1,7 @@
 # Console Cards — Testing Strategy
 
 **Document ID:** 14_Testing_Strategy  
-**Version:** 1.0 Draft  
+**Version:** 1.1
 **Status:** Approved
 
 > **Contract note:** Code blocks, type names, interfaces, field lists, and diagrams in this document are illustrative unless explicitly labelled **Approved Contract**. Codex must not treat illustrative examples as fixed public APIs.
@@ -109,9 +109,21 @@ Mandatory Technical Invariants:
 - Missing Definition fails.
 - Invalid Container membership fails.
 - Unsupported schema fails.
-- Empty Table Template loads.
+- Session Entry does not construct a Match before a valid choice.
+- Empty/Custom Table constructs without Game-specific Template, Board, or rules.
+- Selecting Trap Floor uses the Game Template pipeline exactly once.
+- Application startup does not force Trap Floor.
 - Initial Snapshot matches template.
 - Reset restores initial state.
+
+## 6.1 Component Toolbox and Dice Tests
+
+- Toolbox-created Card, Deck, Stack/pile, Pawn, Token, and Die receive stable IDs and authoritative Runtime State.
+- Created pieces bind Presentation Views without making GameObjects authoritative.
+- Common d4, d6, d8, d10, d12, and d20 options validate their side counts.
+- Roll preserves actor context, uses injectable authoritative randomness, commits the accepted Die value once, and reconciles Presentation to that value.
+- Trap Floor's X/Y dice use the same generic Die state and Roll path as toolbox d6.
+- Reset and object removal leave no stale View or ownership records.
 
 ## 7. Interaction Tests
 

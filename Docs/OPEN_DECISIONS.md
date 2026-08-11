@@ -1,6 +1,6 @@
 # Console Cards — Open Decisions
 
-**Version:** 1.5
+**Version:** 1.6
 
 **Status:** Approved with Open Decisions  
 **Purpose:** Record resolved and deferred decisions so Codex does not infer them.
@@ -67,7 +67,7 @@ See `TECHNICAL_BASELINE.md`.
 
 **Status:** Resolved
 
-**Decision:** Trap Floor is produced first, followed by Super Leroy Sisters. Both follow the completed M4 Player Layout + Central Play Area foundation and M4.1 minimum Game Template support.
+**Decision:** Trap Floor is produced first, followed by Super Leroy Sisters. Both follow the completed M4 Player Layout + Central Play Area foundation and M4.1 minimum Game Template support. The shared Session Entry + Component Toolbox Foundation is implemented inside G1 after the existing Trap Floor tabletop/Floorfall foundations and before deeper Trap Floor automation; this does not renumber completed milestones.
 
 ### OD-013 - Official Game Name
 
@@ -177,7 +177,7 @@ See `TECHNICAL_BASELINE.md`.
 - **M3:** No open design decision blocks the current prototype feature set; closure verification is tracked separately.
 - **M4:** Complete for the confirmed standard four-Player, compact four-Player, and eight-Player presets plus the central Play Area foundation. OD-014 retains unresolved mappings.
 - **M4.1:** Complete for minimum Game Template schema, validation, minimum content resolution, atomic MatchState construction, initial in-memory reset baseline, and minimal prototype bootstrap integration.
-- **G1:** M4/M4.1 prerequisites are complete; full two-to-four-Player acceptance remains blocked by OD-014's two-/three-Player mappings and OD-018's unresolved dependent Game rules/content.
+- **G1:** M4/M4.1 and the Trap Floor tabletop/Floorfall targeting foundations are complete. The Session Entry + Component Toolbox Foundation is the next unblocked shared slice. Full two-to-four-Player acceptance remains blocked by OD-014's two-/three-Player mappings and OD-018's unresolved dependent Game rules/content.
 - **G2:** Blocked by OD-019.
 - **P1:** Blocked by OD-015, OD-016, OD-017, and OD-020.
 - **M6/M7:** Blocked only by OD-009 and OD-010 at their planned decision point.

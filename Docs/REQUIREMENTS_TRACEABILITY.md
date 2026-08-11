@@ -1,6 +1,6 @@
 # Console Cards — Requirements Traceability
 
-**Version:** 1.4
+**Version:** 1.5
 
 **Status:** Approved
 
@@ -22,7 +22,7 @@ The source, scope, repository status, milestone, and unresolved-decision trace f
 | PR-012 | Rectangular Grid | Play Area Architecture | Remaining shared requirements before P1 closure unless required earlier | Grid suggestion/snap tests |
 | PR-013 | Side-scroller Play Area | Play Area Architecture | G2 | Layout continuation test |
 | PR-014 | Game Templates are data, not hardcoded Games | Game Template Architecture | M4.1 | Template loading without Platform changes |
-| PR-015 | Empty Table workflow | Game Template Architecture | M4.1 | Empty Table load test |
+| PR-015 | Empty/Custom Table is a first-class Match/session path without mandatory Game-specific Template, Board, or rules | Session Entry + Game Template Architecture | Immediate shared prerequisite inside G1 | Explicit entry and empty-Match construction/reset tests |
 | PR-016 | Official Game Templates: Trap Floor then Super Leroy Sisters | Game Template Architecture | G1, G2 | End-to-end approved minimum playable acceptance for each separate Game Template |
 | PR-017 | Custom Template direction not blocked | Game Template Architecture | Architectural only | Review/ADR; no editor in Foundation |
 | PR-018 | Freedom by default | Policy Architecture | M2-M4 | M2 preserves free local manipulation while enforcing technical invariants, local interaction locks, and deterministic routing; no Game rules added: `Assets/ConsoleCards/Presentation/Interaction/`, `Assets/ConsoleCards/Presentation/Input/` |
@@ -42,9 +42,13 @@ The source, scope, repository status, milestone, and unresolved-decision trace f
 | PR-032 | Large hideable/reopenable high-stakes Card-choice UI | Presentation + Game Templates | Remaining shared requirements before P1 closure unless a concrete Game requires it earlier | Legibility, hide/reopen, input isolation, candidate selection, and confirmation tests; LDR-014-LDR-016; OD-017 |
 | PR-033 | Hand, personal Play Area, and individual Card visibility are independent | Policy + Play Areas + Multiplayer | Remaining shared requirements before P1 closure; secure delivery M7 | Policy composition and unauthorized-delivery tests; LDR-017-LDR-021 |
 | PR-034 | Console is universal and Game Board is Game-specific | Hands/Consoles + Play Areas + Game Templates | M4, M4.1, G1, G2 | Load distinct Game Boards with unchanged universal Console contract; LDR-025-LDR-027 |
-| PR-035 | Trap Floor minimum playable Game Template and rule/content layer | Game-specific content | G1 | Approved 2-4 Player setup, fixed 36-Card `6 x 6` Board, X/Y `2d6` Floorfall, 36-Card Floormaster Deck, universal Console setup, shared coins, 10-round flow, Easy/Hard modes, and distinct Controller/Skill/Button concepts; complete after OD-014/OD-018 dependencies are resolved; LDR-028-LDR-030 and LDR-034-LDR-039 |
+| PR-035 | Trap Floor minimum playable Game Template and rule/content layer | Game-specific content | G1 | Tabletop/Board setup and Floorfall targeting foundations implemented; complete playable acceptance still requires the approved 2-4 Player flow and resolution of OD-014/OD-018 dependencies; LDR-028-LDR-030 and LDR-034-LDR-039 |
 | PR-036 | Super Leroy Sisters minimum playable Game Template | Game-specific content | G2 | Approved end-to-end flow after OD-019 resolution; LDR-031-LDR-033 |
 | PR-037 | Phase 1 closes after both official Games are playable and remaining shared requirements are complete | Roadmap + Acceptance | P1 | Approved acceptance after OD-015, OD-016, OD-017, and OD-020 resolution |
+| PR-038 | Session Entry explicitly chooses Empty/Custom Table or an available Game Template; startup does not force Trap Floor | Bootstrap + Presentation + Game Templates | Immediate shared prerequisite inside G1 | Input-isolated choice UI, no-auto-load, valid selection, and atomic construction tests |
+| PR-039 | In-session component toolbox adds generic authoritative Card, Deck, Stack/pile, Pawn/meeple, Token/counter, and Die instances | Core + Application + Presentation | Immediate shared prerequisite inside G1 | Stable-ID creation, state/view binding, container/pose integration, removal, reset, and house-rule manipulation tests |
+| PR-040 | Dice are first-class physical Tabletop Objects; Roll uses authoritative RNG/state and Presentation-only tumble/settle | Core + Application + Tabletop Objects + Presentation | Immediate shared prerequisite inside G1 | d4/d6/d8/d10/d12/d20 creation, actor-aware Roll, deterministic RNG, state/view reconciliation, and Trap Floor generic-2d6 integration tests |
+| PR-041 | New player-initiated actions preserve actor context and authoritative request boundaries without networking packages | Application + Multiplayer boundary | Immediate shared prerequisite onward; transport remains M6/M7 | No implicit Seat-0/local-user assumptions; request validation and assembly/dependency audit |
 
 ## M2 Implementation Evidence
 

@@ -1,7 +1,7 @@
 # Console Cards — Platform Architecture
 
 **Document ID:** 01_Platform_Architecture  
-**Version:** 1.1
+**Version:** 1.2
 
 **Status:** Approved with Open Decisions
 **Depends on:** `00_Product_Vision.md`, `02_Terminology.md`, `03_Project_Principles.md`
@@ -141,9 +141,9 @@ Definitions are immutable during a Match.
 ## 5. State-Change Pipeline
 
 ```text
-Input
-→ Interaction Intent
-→ Command
+Player/Actor Input
+→ Interaction Intent with Actor Context
+→ Request or Command
 → Application Use Case
 → Technical Invariant Check
 → Policy Evaluation
@@ -164,6 +164,7 @@ Owns:
 - Strong identifiers.
 - Coordinates and poses.
 - Object Instance State.
+- Typed Die State and accepted random result where required.
 - Container membership and ordering.
 - Seats and ownership.
 - Match revisions.
@@ -217,6 +218,8 @@ Owns reusable object behavior and configuration for:
 
 Objects are implemented through common state plus capabilities.
 
+The Platform component toolbox creates these as first-class authoritative object/container instances. Template-created and toolbox-created instances use the same Core/Application contracts; only their construction source differs.
+
 ### 6.4 Interaction
 
 Owns:
@@ -232,6 +235,17 @@ Owns:
 - Interaction cancellation.
 - Snap bypass.
 - Object-control requests.
+
+### 6.4.1 Session Entry and Component Toolbox
+
+Owns:
+
+- The explicit pre-Match choice between Empty/Custom Table and available Game Templates.
+- Validation and handoff to authoritative Match/session construction.
+- In-session requests to create supported generic Tabletop Objects.
+- The initial Platform catalog of Card, Deck, Stack/pile, Pawn/meeple, Token/counter, and Die.
+
+Session Entry and toolbox UI remain Presentation concerns, while accepted construction and mutation use Application/Core boundaries. Neither path may create Presentation-only objects that lack authoritative Runtime State.
 
 ### 6.5 Play Areas
 
@@ -278,6 +292,8 @@ Owns:
 
 A Game Template is content, not a running Match.
 
+A Game Template is selected explicitly through Session Entry. It may instantiate generic component types, but it does not own or redefine those types. Empty/Custom Table entry remains valid without a Game-specific Board or Game-specific rules.
+
 ### 6.8 Presentation
 
 Owns:
@@ -308,6 +324,8 @@ Owns technical details behind interfaces:
 Owns dependency composition and startup.
 
 Bootstrap must not become a universal `GameManager`.
+
+Bootstrap must expose Session Entry before Match construction. It must not force Trap Floor or any other Game Template merely because Play begins. After the player selects Empty/Custom Table or a Game Template, Bootstrap wires the validated authoritative Match/session and its Presentation.
 
 ## 7. Core Extension Points
 
@@ -369,11 +387,13 @@ The Domain and Application layers operate without Photon, NGO, or Mirror types.
 
 Networking adapters translate:
 
-- Player requests into Commands.
+- Actor-identified Player requests into Commands.
 - Accepted Commands or Snapshots into synchronized messages.
 - Connection identity into stable Player ID bindings.
 
 The final networking vendor is selected later through an Architecture Decision.
+
+Offline/local implementations still preserve actor context at the request/Application boundary. They must not bake in Seat 0, a single permanent local Player, or direct MonoBehaviour mutation as architectural assumptions.
 
 ## 12. Architecture Guardrails
 

@@ -1,7 +1,7 @@
 # Console Cards — Game Template Architecture
 
 **Document ID:** 08_Game_Template_Architecture  
-**Version:** 1.2
+**Version:** 1.3
 
 **Status:** Approved
 
@@ -13,12 +13,12 @@ A Game Template prepares a table without hardcoding a complete Game into the Pla
 
 It is a reusable starting configuration, not a running Match.
 
-## 2. Template Categories
+## 2. Template Categories and Alternate Entry
 
 - Official Game Template.
 - Modified Game Template.
 - Custom Game Template.
-- Empty Table Template.
+- Empty/Custom Table setup descriptor where an implementation benefits from one; Session Entry does not require it to be Game-specific Template content.
 
 ## 3. Template Contents
 
@@ -49,6 +49,8 @@ GameTemplate
 ```
 
 ## 4. Template Loading
+
+Template loading occurs only after Session Entry explicitly selects a Game Template. Application startup alone must not select Trap Floor or any other Template.
 
 Loading follows an explicit pipeline:
 
@@ -89,16 +91,18 @@ Validation checks:
 
 Warnings may cover non-fatal design concerns.
 
-## 6. Empty Table Template
+## 6. Empty / Custom Table
 
-The Empty Table Template provides:
+Empty/Custom Table is a first-class Session Entry choice. It may use a minimal Platform setup descriptor, but it does not require an official or Game-specific Template. It provides:
 
 - Table Surface.
 - Configurable Seats.
 - Hands.
 - Consoles.
 - Basic object library access.
+- The Platform component toolbox.
 - No mandatory Play Area.
+- No mandatory Game-specific Board or rules.
 - Free Policies.
 
 It is a first-class workflow, not an error case.
@@ -115,6 +119,8 @@ The approved Phase 1 production order is:
 2. Super Leroy Sisters.
 
 Each is a separate official Game Template and Game-specific Board type. Their Game content must not be embedded in universal Platform modules.
+
+Trap Floor is selectable content and is not the permanent application startup state.
 
 ## 7.1 Universal Console and Game-Specific Game Board
 
@@ -192,6 +198,8 @@ After Match creation:
 - Editing a Definition asset must not mutate the live Match.
 - Saving the current table as a new Template is an explicit operation.
 - Reset restores the Initial Snapshot, not a freshly modified source asset.
+- Generic components added through the toolbox become Match-owned authoritative object/container state; they are not retroactively owned by the selected Template.
+- The same generic Card, Deck, Stack/pile, Pawn, Token, and Die types remain available outside official Templates.
 
 ## 14. Future Automation
 
@@ -235,18 +243,27 @@ Disallowed without a separate secure system:
 - Untrusted shaders.
 - Network code.
 
-## 17. Initial Scope
+## 17. Initial Scope and Current Boundary
 
-Implement:
+M4.1 completed:
 
-- Minimum local official/empty Template format required to load Trap Floor and Super Leroy Sisters without Platform code changes.
+- Minimum local official Template format required to load Trap Floor and Super Leroy Sisters without Platform code changes.
 - Validation.
 - Template loading.
 - Player Layout data structurally capable of one to eight Players, with authored selection limited to the confirmed standard four-Player, eight-Player, and compact four-Player layouts until OD-014 resolves the remaining mappings.
 - Universal Console configuration separate from Game-specific Game Board and Play Area content.
 - Initial Snapshot creation.
 - Reset.
-- Save-as-new-template contract.
+- Initial in-memory reset baseline.
+
+The next shared foundation adds:
+
+- Explicit Session Entry selection between Empty/Custom Table and available official Game Templates.
+- Empty/Custom Match construction without mandatory Game-specific Template content.
+- A Platform component toolbox whose created pieces are authoritative Match objects.
+- First-class generic Dice, including the two d6 used by Trap Floor.
+
+This does not add a player-facing Template editor, save-as-new-template implementation, persistence, or Game rules.
 
 Defer:
 

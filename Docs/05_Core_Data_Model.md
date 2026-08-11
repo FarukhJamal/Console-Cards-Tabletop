@@ -1,7 +1,7 @@
 # Console Cards — Core Data Model
 
 **Document ID:** 05_Core_Data_Model  
-**Version:** 1.0 Draft  
+**Version:** 1.1
 **Status:** Approved
 
 > **Contract note:** Code blocks, type names, interfaces, field lists, and diagrams in this document are illustrative unless explicitly labelled **Approved Contract**. Codex must not treat illustrative examples as fixed public APIs.
@@ -137,7 +137,7 @@ Initial typed models:
 - `TokenState`
 - `ContainerState`
 
-Later object types such as Dice, Bags, Miniatures, or Counters add typed state through an approved milestone and Architecture Decision where necessary.
+The Session Entry + Component Toolbox Foundation adds explicit `DieState`. Later object types such as Bags, Miniatures, or specialized Counters add typed state only through an approved milestone and Architecture Decision where necessary.
 
 ## 6. Card State
 
@@ -160,7 +160,7 @@ Canonical face states:
 
 Future multi-face cards require an Architecture Decision.
 
-## 7. Pawn and Token State
+## 7. Pawn, Token, and Die State
 
 ### 7.1 Pawn State
 
@@ -171,6 +171,16 @@ A Pawn uses Base Tabletop Object State plus optional Seat or Player association.
 A basic Token uses Base Tabletop Object State and optional stack/count metadata only when the milestone requires it.
 
 Tokens validate that reusable object handling is not limited to Cards.
+
+### 7.3 Die State
+
+A Die uses Base Tabletop Object State plus:
+
+- side count;
+- authoritative current/result value; and
+- any minimal roll revision/status needed to project an accepted result safely.
+
+Its stable Tabletop Object ID and Tabletop Pose come from Base Tabletop Object State. A Die created by a Game Template and one created by the component toolbox use the same typed Runtime State. Physics orientation or tumble is Presentation-only and cannot choose the accepted value.
 
 ## 8. Containers
 
@@ -399,7 +409,7 @@ A Match may store:
 - Sequence position.
 - Last accepted result.
 
-The authoritative implementation determines the official shuffle or dice result.
+The authoritative implementation determines the official shuffle or Die result. A Player-initiated Roll preserves actor context, validates through the Application boundary, records the accepted value in `DieState`, and only then drives Presentation feedback.
 
 ## 21. Mutation Rules
 
@@ -443,4 +453,4 @@ Implement first:
 
 M0 implements `PlayAreaId` only. `PlayAreaState`, Play Area layout state, Player Layout state, Zones, Slots, Grids, and other Play Area runtime models are deferred to M4 - Play Area and Player-Layout Foundation. Minimum Game Template loading follows in M4.1.
 
-Defer detailed Miniature, Bag, Spinner, and advanced Dice state until a milestone requires them.
+Add the minimum first-class Die State in the Session Entry + Component Toolbox Foundation. Defer custom-face Dice, a custom-die editor, detailed Miniature, Bag, Spinner, and speculative randomizer state until an approved milestone requires them.

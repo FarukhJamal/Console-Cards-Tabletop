@@ -1,7 +1,7 @@
 # Console Cards — Terminology
 
 **Document ID:** 02_Terminology  
-**Version:** 1.2
+**Version:** 1.3
 
 **Status:** Approved
 **Depends on:** `00_Product_Vision.md`  
@@ -130,7 +130,9 @@ It is not automatically:
 - A Match.
 - A network session.
 
-### Game Template categories
+### Game Template categories and Empty/Custom entry
+
+Official, Modified, and Custom Game Templates are Template categories. Empty/Custom Table is the parallel no-Game entry path.
 
 #### Official Game Template
 
@@ -144,9 +146,11 @@ A copy of another Game Template with player or designer changes.
 
 Created from player-selected or user-created content.
 
-#### Empty Table Template
+#### Empty / Custom Table
 
-A minimal Game Template containing only the basic table, seats, hands, Consoles, and required platform objects.
+A legitimate Session Entry choice that creates a Match without a mandatory Game-specific Board, Game-specific rules, or selected official Game Template. It may use a minimal Platform setup descriptor, but the product workflow must not require Game-specific Template content in order for a tabletop Match to exist.
+
+**Preferred player-facing term:** `Empty Table` or `Custom Table` according to context.
 
 **Preferred term:** `Game Template`  
 **Avoid:** preset, game preset, mode preset, level preset.
@@ -158,7 +162,7 @@ A minimal Game Template containing only the basic table, seats, hands, Consoles,
 ## 2.5 Match
 
 **Definition:**  
-A running playable instance created from a Game Template or Empty Table Template.
+A running playable instance created after an explicit Session Entry choice of a Game Template or Empty/Custom Table.
 
 A Match contains mutable runtime state, such as:
 
@@ -173,6 +177,24 @@ A Match contains mutable runtime state, such as:
 
 **Important distinction:**  
 The Game Template describes the starting state. The Match contains the changing live state.
+
+---
+
+### 2.5.1 Session Entry
+
+**Definition:**
+The player-facing choice made before Match construction between an Empty/Custom Table and an available Game Template.
+
+Session Entry resolves and validates the chosen setup, constructs authoritative Runtime State, and only then enters the tabletop. Application startup alone does not select Trap Floor or any other Game.
+
+---
+
+### 2.5.2 Component Toolbox
+
+**Definition:**
+A Platform-owned in-session menu for adding supported generic Tabletop Objects to the current Match.
+
+Toolbox-created pieces have stable IDs and authoritative Object or Container Runtime State as appropriate. The toolbox is available for Empty/Custom Tables, official Game Templates, and house-rule modification; it is not Game-specific content.
 
 ---
 
@@ -770,10 +792,21 @@ A Counter is not always a physical Token.
 ## 6.16 Dice
 
 **Definition:**  
-A randomizable tabletop object with defined faces and outcomes.
+A category of randomizable, physical Tabletop Objects with defined faces and outcomes.
 
 Use `Dice` for the object category.  
-Use `Die` only when referring to exactly one object in grammatical prose.
+Use `Die` for exactly one Object Instance.
+
+A Die has:
+
+- stable object identity;
+- a side count;
+- an authoritative current/result value;
+- a Tabletop Pose;
+- a Presentation View; and
+- normal selection and interaction where appropriate.
+
+A Roll request is authoritative state mutation. Physics, tumble, and settling are Presentation feedback only and must display the accepted result.
 
 ---
 

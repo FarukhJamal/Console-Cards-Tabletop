@@ -1,7 +1,7 @@
 # Console Cards — Milestones and Roadmap
 
 **Document ID:** 16_Milestones_And_Roadmap  
-**Version:** 1.5
+**Version:** 1.6
 
 **Status:** Approved
 **Planning basis:** One developer, approximately 30–35 focused hours per week.
@@ -158,7 +158,7 @@ Exit:
 
 The approved next-work order is:
 
-> **M4 Player Layout + Central Play Area foundation -> M4.1 minimum Game Template support -> G1 Trap Floor playable -> G2 Super Leroy Sisters playable -> P1 remaining Phase 1 shared requirements and closure with both Games playable.**
+> **M4 Player Layout + Central Play Area foundation (complete) -> M4.1 minimum Game Template support (complete) -> Trap Floor tabletop/Floorfall foundations (complete) -> Session Entry + Component Toolbox Foundation -> continue G1 Trap Floor playable -> G2 Super Leroy Sisters playable -> P1 remaining Phase 1 shared requirements and closure with both Games playable.**
 
 Do not combine these gates into one broad implementation task. Each gate requires its own tests, manual checks, implementation report, and rollback point.
 
@@ -202,7 +202,7 @@ Exit:
 
 **Status:** Complete
 
-Deliver only the minimum local Template pipeline needed to prepare later Empty Table, Trap Floor, and Super Leroy Sisters content:
+Deliver only the minimum local Template pipeline needed to prepare later selectable Trap Floor and Super Leroy Sisters content and an Empty/Custom Table session path:
 
 - A Unity-free Game Template schema for starting setup, content, and layout.
 - Template validation.
@@ -232,6 +232,31 @@ Exit:
 
 **Authority:** `18_Trap_Floor_Game_Requirements.md`
 **Prerequisite:** M4 and M4.1 are complete. Resolve the remaining two- and three-Player layout mappings under OD-014 and the dependent Game-rule/content decisions under OD-018 before claiming the complete two-to-four-Player playable scope. Do not infer missing rules.
+
+**Current status:** The Template-driven Trap Floor tabletop foundation and the authoritative `2d6` Floorfall targeting foundation are implemented. Permanent collapse consequences and the remaining playable Game flow are incomplete.
+
+### Immediate Shared Prerequisite - Session Entry + Component Toolbox Foundation
+
+Complete this shared Platform slice before deeper Trap Floor automation:
+
+- Present an explicit local entry choice between Empty/Custom Table and available Game Templates.
+- Offer Trap Floor as the first concrete selectable Game Template; do not automatically force it when Play begins.
+- Construct authoritative Match/session state only after the choice is validated.
+- Support a legitimate Empty/Custom Table with no mandatory Game-specific Board or Game-specific rules.
+- Provide an in-session Platform component toolbox for Card, Deck, Stack/pile, Pawn/meeple, Token/counter, and Die.
+- Create toolbox pieces as authoritative Runtime State with stable identity, normal pose/container integration, and Presentation projection.
+- Add first-class generic Die support with common initial options d4, d6, d8, d10, d12, and d20.
+- Expose Roll through the normal object interaction; a context-menu action is sufficient for this slice.
+- Route Roll through actor-aware request/Command, authoritative validation and RNG, accepted Die Runtime State, then Presentation-only tumble/settle feedback.
+- Represent Trap Floor's two d6 through the same generic Die component used by the toolbox.
+- Preserve actor/Player context at new request boundaries without adding networking infrastructure or assuming Seat 0 is permanently local.
+
+Exclude from this shared prerequisite:
+
+- Production Session Entry/toolbox styling.
+- Template editor, custom-game save/load, Workshop, persistence, networking, lobby/Relay, or a permission framework.
+- Production dice physics or a custom-die editor.
+- Trap Floor rule progression beyond already implemented foundations.
 
 Deliver the approved minimum playable Trap Floor Game Template and Game-specific rule/content layer using:
 
@@ -285,6 +310,7 @@ Deliver:
 - Separate Hand, personal Play Area, and individual Card visibility configuration; secure network delivery remains M7.
 - Large, central, readable high-stakes Card-choice UI with hide/reopen and explicit hover, selection, confirmation, and registered-choice feedback.
 - Regression and interaction pass across Empty Table, Trap Floor, and Super Leroy Sisters.
+- Verification that Session Entry does not auto-load a Game, Empty/Custom Table is a valid Match path, and toolbox-created pieces remain authoritative.
 - Verification of structural one-to-eight Seat capability and the standard four-Player, eight-Player, and compact four-Player authored layouts. Unresolved Player-count mappings must not be claimed as implemented.
 - Verification that the table does not grow and core gameplay remains centered.
 - Verification of marquee selection, landing indicators, independent visibility configuration, and high-stakes Card-choice UI.
@@ -340,6 +366,10 @@ These remain planned Platform work but are not on the immediate Phase 1 critical
 - M4 is authorized to implement only the confirmed standard four-Player, compact four-Player, and eight-Player authored layouts. OD-014 retains the missing one-to-three and five-to-seven mappings without blocking that confirmed work.
 - OD-015 visibility work and OD-016 marquee/group-landing work remain required before Phase 1 closure but do not block the M4 foundation. An approved Game may pull a necessary subset earlier.
 - Trap Floor and Super Leroy Sisters are separate Game-specific Board types and Game Templates.
+- The automatic Trap Floor prototype boot is temporary. The Session Entry + Component Toolbox Foundation is the immediate shared prerequisite inside G1 before deeper Trap Floor automation.
+- Empty/Custom Table is a first-class product path, not a debug mode and not dependent on Game-specific Board or rule content.
+- Template-created and toolbox-created components share authoritative Runtime State; a Game Template owns setup/content/layout, not generic component types.
+- New player-initiated component actions preserve actor context for later authority validation without adding networking before M6/M7.
 - Phase 1 requires minimum playable versions of both Games, not invented rules, full automation, or production-complete content.
 - Reconnection and Seat restoration remain M7 requirements.
 - Host migration remains conditional.

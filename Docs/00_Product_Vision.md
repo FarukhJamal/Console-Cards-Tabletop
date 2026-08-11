@@ -1,7 +1,7 @@
 # Console Cards — Product Vision
 
 **Document ID:** 00_Product_Vision  
-**Version:** 1.2
+**Version:** 1.3
 
 **Status:** Approved
 **Purpose:** Define what Console Cards is, what experience it must create, and which product boundaries must remain stable before architecture and implementation begin.
@@ -24,8 +24,11 @@ Console Cards has three requirement horizons:
 
 ### Foundation Requirements
 
+- Explicit Session Entry between Empty/Custom Table and available Game Templates.
 - Official developer-authored Game Templates.
 - Empty-table sessions where players arrange objects and define the rules socially.
+- An in-session component toolbox whose pieces become authoritative tabletop objects.
+- First-class physical/interactable Dice with authoritative results.
 - Freeform tabletop interaction.
 - Future-compatible Policy boundaries.
 
@@ -52,15 +55,16 @@ The intended experience is the digital equivalent of one to eight friends sittin
 
 A typical session should allow players to:
 
-1. Join a shared table.
-2. Occupy a seat around that table.
-3. Access their private hand and personal Console.
-4. Place or load the cards, decks, pieces, boards, and other objects required for the game.
-5. Read or explain the rules.
-6. Draw, move, rotate, flip, stack, split, reveal, hide, and organize objects.
-7. Play according to the agreed rules.
-8. Resolve mistakes or disputes socially, as they would in person.
-9. Save or reset the tabletop setup when required.
+1. Enter a session and explicitly choose an Empty/Custom Table or an available Game Template.
+2. Join the resulting table.
+3. Occupy a seat around that table.
+4. Access their private hand and personal Console.
+5. Place or load the cards, decks, pieces, boards, and other objects required for the game.
+6. Read or explain the rules.
+7. Draw, move, rotate, flip, stack, split, reveal, hide, and organize objects.
+8. Play according to the agreed rules.
+9. Resolve mistakes or disputes socially, as they would in person.
+10. Save or reset the tabletop setup when required.
 
 The software should make physical tabletop actions easier and clearer. It should not initially replace player judgment.
 
@@ -150,6 +154,15 @@ A Match is a running instance created from a Game Template or an empty table.
 
 During a Match, players may rearrange objects, use house rules, or continue playing freely according to the available policies.
 
+### 4.4 Session Entry
+
+Application startup does not imply a selected Game. Before authoritative Match construction, the player explicitly chooses:
+
+- **Empty / Custom Table**, with no mandatory Game-specific Board or Game-specific rules; or
+- an available **Game Template**, beginning with Trap Floor and later including Super Leroy Sisters.
+
+The chosen setup is then validated and used to construct authoritative Runtime State before the player enters the tabletop. Final UI styling is not defined here.
+
 ---
 
 ## 5. Freedom and Future Restrictions
@@ -165,6 +178,8 @@ Players should generally be able to:
 - Correct accidental actions manually.
 - Use house rules.
 - Play games not understood by the software.
+
+This freedom includes adding or removing generic pieces, using different Dice, creating extra Decks or Stacks, and rearranging official setups for house rules. Optional official Game automation may stop recognizing or assisting a modified setup; that is acceptable. Unless an approved Policy explicitly restricts an action, loss of automation understanding must not make the generic tabletop pieces Presentation-only or prevent free manual manipulation.
 
 However, the architecture must allow restrictions and automated enforcement to be introduced later.
 
@@ -307,6 +322,19 @@ The architecture should use composition and reusable capabilities rather than cr
 
 Not every object category must be completed in the first milestone.
 
+### 9.1 Tabletop Component Toolbox
+
+An active tabletop session provides a Platform-owned component toolbox for adding supported generic pieces. The initial MVP categories are:
+
+- Card.
+- Deck.
+- Stack or pile.
+- Pawn or meeple.
+- Token or counter.
+- Die.
+
+A toolbox-created component is a first-class authoritative tabletop component with stable identity and Runtime State, using Object State or Container State/placement as appropriate to the existing architecture. It is not merely a disposable Presentation GameObject. The same generic component types are available to official Game Templates, Empty/Custom Tables, and house-rule play.
+
 ---
 
 ## 10. Physical Tabletop Actions
@@ -342,6 +370,14 @@ Cards must support natural free-form dragging with smooth controlled Presentatio
 High-stakes Card choices require a large, central, readable selection UI. Players must be able to hide it temporarily to inspect the Board, reopen it without losing the pending choice, and receive clear hover, selection, and confirmation feedback.
 
 Hand visibility, personal Play Area visibility, and individual Card face/identity visibility are separate concerns. Hiding one must not implicitly hide or reveal the others.
+
+### 10.1 Dice Authority
+
+A Die is a physical, interactable Tabletop Object with stable identity, side count, current authoritative value, and Tabletop Pose. Common initial toolbox options include d4, d6, d8, d10, d12, and d20.
+
+Rolling follows the normal authoritative state-change path: a Player requests Roll, the authoritative operation validates the request and chooses the result through the approved random source, Runtime State records that result, and Presentation animates the Die settling on the accepted value. Physics or animation must not determine the authoritative result.
+
+Roll is exposed through the normal player-facing object interaction, with a Die context-menu action acceptable for the initial implementation. This does not prescribe final UI styling.
 
 ---
 
@@ -432,6 +468,8 @@ In the first builds, players own:
 
 The first foundation should focus on:
 
+- Explicit Session Entry without automatic official-Game loading.
+- Empty/Custom Table as a legitimate Match path.
 - Top-down virtual tabletop.
 - One-to-eight-Player seating model.
 - Private hands.
@@ -441,6 +479,8 @@ The first foundation should focus on:
 - Basic boards or Play Areas.
 - Pawns or meeples.
 - Tokens.
+- Dice with authoritative values and Presentation-only roll feedback.
+- A component toolbox for adding supported generic authoritative objects.
 - Optional placement guides.
 - Freeform interaction.
 - Marquee multi-selection and live landing indicators.
@@ -471,17 +511,19 @@ The first foundation should not attempt to deliver:
 
 The foundation is successful when a group can:
 
-1. Enter a shared top-down table.
-2. Occupy configurable seats.
-3. Use private hands and personal Consoles.
-4. Load or arrange cards, decks, pieces, and Play Areas.
-5. Manipulate objects naturally.
-6. Follow their own written or spoken rules.
-7. Complete a tabletop session without the platform needing to understand the game.
-8. Reset or restore the session reliably.
-9. Load a different Game Template without changing the universal foundation.
-10. Keep the universal Console stable while loading a Game-specific central Game Board and Player layout.
-11. Play the approved minimum Trap Floor and Super Leroy Sisters flows using their separate Game-specific Boards.
+1. Explicitly choose an Empty/Custom Table or available Game Template before Match construction.
+2. Enter the resulting shared top-down table.
+3. Occupy configurable seats.
+4. Use private hands and personal Consoles.
+5. Load or arrange cards, decks, pieces, and Play Areas.
+6. Add supported generic components through the toolbox as authoritative tabletop objects.
+7. Manipulate objects and roll first-class Dice naturally.
+8. Follow their own written or spoken rules.
+9. Complete a tabletop session without the Platform needing to understand the Game.
+10. Reset or restore the session reliably.
+11. Load a different Game Template without changing the universal foundation.
+12. Keep the universal Console stable while loading a Game-specific central Game Board and Player Layout.
+13. Play the approved minimum Trap Floor and Super Leroy Sisters flows using their separate Game-specific Boards.
 
 ---
 
