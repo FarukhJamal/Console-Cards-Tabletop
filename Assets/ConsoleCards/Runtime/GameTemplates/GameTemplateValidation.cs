@@ -426,6 +426,23 @@ namespace ConsoleCards.GameTemplates
                 {
                     Add(issues, "CardFaceInvalid", "A Card instance has an invalid initial face.");
                 }
+
+                if (instance.Kind == TabletopObjectKind.Die)
+                {
+                    if (instance.DieSideCount < 2)
+                    {
+                        Add(issues, "DieSideCountInvalid", "A Die instance must have at least two sides.");
+                    }
+                    else if (instance.InitialDieValue < 1
+                        || instance.InitialDieValue > instance.DieSideCount)
+                    {
+                        Add(issues, "DieValueInvalid", "A Die instance value must be within its side count.");
+                    }
+                }
+                else if (instance.DieSideCount != 0 || instance.InitialDieValue != 0)
+                {
+                    Add(issues, "NonDieConfigurationInvalid", "Only Die instances may define Die state.");
+                }
             }
 
             return objects;

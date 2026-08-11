@@ -138,7 +138,8 @@ namespace ConsoleCards.Presentation.Interaction
         {
             return view is CardView
                 || view is PawnView
-                || view is TokenView;
+                || view is TokenView
+                || view is DieView;
         }
 
         private static void ValidateFinite(Vector2 value)

@@ -40,6 +40,21 @@ namespace ConsoleCards.Presentation.Interaction
             IReadOnlyList<TabletopSelectionVisual> cardSelectionVisuals,
             IReadOnlyList<TabletopSelectionVisual> pawnSelectionVisuals,
             IReadOnlyList<TabletopSelectionVisual> tokenSelectionVisuals)
+            : this(
+                selectionState,
+                cardSelectionVisuals,
+                pawnSelectionVisuals,
+                tokenSelectionVisuals,
+                Array.Empty<TabletopSelectionVisual>())
+        {
+        }
+
+        public TabletopSelectionPresenter(
+            TabletopSelectionState selectionState,
+            IReadOnlyList<TabletopSelectionVisual> cardSelectionVisuals,
+            IReadOnlyList<TabletopSelectionVisual> pawnSelectionVisuals,
+            IReadOnlyList<TabletopSelectionVisual> tokenSelectionVisuals,
+            IReadOnlyList<TabletopSelectionVisual> dieSelectionVisuals)
         {
             if (selectionState == null)
             {
@@ -61,11 +76,17 @@ namespace ConsoleCards.Presentation.Interaction
                 throw new ArgumentNullException(nameof(tokenSelectionVisuals));
             }
 
+            if (dieSelectionVisuals == null)
+            {
+                throw new ArgumentNullException(nameof(dieSelectionVisuals));
+            }
+
             ValidateSelectionVisuals(cardSelectionVisuals, nameof(cardSelectionVisuals));
             ValidateSelectionVisuals(pawnSelectionVisuals, nameof(pawnSelectionVisuals));
             ValidateSelectionVisuals(tokenSelectionVisuals, nameof(tokenSelectionVisuals));
-            ValidateDistinctVisuals(cardSelectionVisuals, pawnSelectionVisuals, tokenSelectionVisuals);
-            ValidateDistinctViewTargets(cardSelectionVisuals, pawnSelectionVisuals, tokenSelectionVisuals);
+            ValidateSelectionVisuals(dieSelectionVisuals, nameof(dieSelectionVisuals));
+            ValidateDistinctVisuals(cardSelectionVisuals, pawnSelectionVisuals, tokenSelectionVisuals, dieSelectionVisuals);
+            ValidateDistinctViewTargets(cardSelectionVisuals, pawnSelectionVisuals, tokenSelectionVisuals, dieSelectionVisuals);
 
             SelectionState = selectionState;
             CardSelectionVisual = cardSelectionVisuals.Count > 0
@@ -80,6 +101,10 @@ namespace ConsoleCards.Presentation.Interaction
                 ? tokenSelectionVisuals[0]
                 : null;
             TokenSelectionVisuals = new List<TabletopSelectionVisual>(tokenSelectionVisuals).AsReadOnly();
+            DieSelectionVisual = dieSelectionVisuals.Count > 0
+                ? dieSelectionVisuals[0]
+                : null;
+            DieSelectionVisuals = new List<TabletopSelectionVisual>(dieSelectionVisuals).AsReadOnly();
         }
 
         public TabletopSelectionState SelectionState { get; }
@@ -95,6 +120,10 @@ namespace ConsoleCards.Presentation.Interaction
         public TabletopSelectionVisual TokenSelectionVisual { get; }
 
         public IReadOnlyList<TabletopSelectionVisual> TokenSelectionVisuals { get; }
+
+        public TabletopSelectionVisual DieSelectionVisual { get; }
+
+        public IReadOnlyList<TabletopSelectionVisual> DieSelectionVisuals { get; }
 
         private static IReadOnlyList<TabletopSelectionVisual> CreateSingleCardSelectionVisualList(
             TabletopSelectionVisual cardSelectionVisual)
@@ -131,6 +160,7 @@ namespace ConsoleCards.Presentation.Interaction
 
             SetSelected(PawnSelectionVisuals, selectedView);
             SetSelected(TokenSelectionVisuals, selectedView);
+            SetSelected(DieSelectionVisuals, selectedView);
         }
 
         public void Clear()
@@ -142,6 +172,7 @@ namespace ConsoleCards.Presentation.Interaction
 
             ClearSelection(PawnSelectionVisuals);
             ClearSelection(TokenSelectionVisuals);
+            ClearSelection(DieSelectionVisuals);
         }
 
         private static void SetSelected(
@@ -191,12 +222,14 @@ namespace ConsoleCards.Presentation.Interaction
         private static void ValidateDistinctVisuals(
             IReadOnlyList<TabletopSelectionVisual> cardSelectionVisuals,
             IReadOnlyList<TabletopSelectionVisual> pawnSelectionVisuals,
-            IReadOnlyList<TabletopSelectionVisual> tokenSelectionVisuals)
+            IReadOnlyList<TabletopSelectionVisual> tokenSelectionVisuals,
+            IReadOnlyList<TabletopSelectionVisual> dieSelectionVisuals)
         {
             HashSet<TabletopSelectionVisual> seen = new HashSet<TabletopSelectionVisual>();
             AddDistinct(cardSelectionVisuals, seen);
             AddDistinct(pawnSelectionVisuals, seen);
             AddDistinct(tokenSelectionVisuals, seen);
+            AddDistinct(dieSelectionVisuals, seen);
         }
 
         private static void AddDistinct(
@@ -215,12 +248,14 @@ namespace ConsoleCards.Presentation.Interaction
         private static void ValidateDistinctViewTargets(
             IReadOnlyList<TabletopSelectionVisual> cardSelectionVisuals,
             IReadOnlyList<TabletopSelectionVisual> pawnSelectionVisuals,
-            IReadOnlyList<TabletopSelectionVisual> tokenSelectionVisuals)
+            IReadOnlyList<TabletopSelectionVisual> tokenSelectionVisuals,
+            IReadOnlyList<TabletopSelectionVisual> dieSelectionVisuals)
         {
             HashSet<TabletopObjectView> seen = new HashSet<TabletopObjectView>();
             AddDistinctViewTargets(cardSelectionVisuals, seen);
             AddDistinctViewTargets(pawnSelectionVisuals, seen);
             AddDistinctViewTargets(tokenSelectionVisuals, seen);
+            AddDistinctViewTargets(dieSelectionVisuals, seen);
         }
 
         private static void AddDistinctViewTargets(

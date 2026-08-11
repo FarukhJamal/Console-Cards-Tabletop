@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.PlayerLayouts;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates;
@@ -30,7 +31,9 @@ namespace ConsoleCards.Games.TrapFloor
             IDictionary<TrapFloorCoordinate, TabletopObjectId> floorCardIds,
             IDictionary<TabletopObjectId, string> cardLabels,
             IEnumerable<TrapFloorPlayerSetupDefinition> players,
-            IEnumerable<TabletopObjectId> coinTokenIds)
+            IEnumerable<TabletopObjectId> coinTokenIds,
+            TabletopObjectId floorfallXAxisDieId,
+            TabletopObjectId floorfallYAxisDieId)
         {
             Template = template ?? throw new ArgumentNullException(nameof(template));
             ContentCatalog = contentCatalog ?? throw new ArgumentNullException(nameof(contentCatalog));
@@ -39,6 +42,8 @@ namespace ConsoleCards.Games.TrapFloor
             FloormasterDeckId = floormasterDeckId;
             FloormasterDiscardId = floormasterDiscardId;
             SharedCoinSupplyId = sharedCoinSupplyId;
+            FloorfallXAxisDieId = floorfallXAxisDieId;
+            FloorfallYAxisDieId = floorfallYAxisDieId;
             this.floorCardIds = new ReadOnlyDictionary<TrapFloorCoordinate, TabletopObjectId>(
                 new Dictionary<TrapFloorCoordinate, TabletopObjectId>(floorCardIds));
             this.floorCoordinates = new ReadOnlyDictionary<TabletopObjectId, TrapFloorCoordinate>(
@@ -59,6 +64,38 @@ namespace ConsoleCards.Games.TrapFloor
             {
                 throw new ArgumentException("Trap Floor requires exactly 50 shared coin Tokens.", nameof(coinTokenIds));
             }
+
+            if (FloorfallXAxisDieId.IsEmpty
+                || FloorfallYAxisDieId.IsEmpty
+                || FloorfallXAxisDieId == FloorfallYAxisDieId)
+            {
+                throw new ArgumentException("Trap Floor requires two distinct official Floorfall Die IDs.");
+            }
+
+            bool foundXAxisDie = false;
+            bool foundYAxisDie = false;
+            for (int i = 0; i < Template.Objects.Count; i++)
+            {
+                GameTemplateObjectInstanceDefinition instance = Template.Objects[i];
+                if (instance.Id != FloorfallXAxisDieId && instance.Id != FloorfallYAxisDieId)
+                {
+                    continue;
+                }
+
+                if (instance.Kind != TabletopObjectKind.Die
+                    || instance.DieSideCount != TrapFloorFloorfallService.DieSideCount)
+                {
+                    throw new ArgumentException("Trap Floor official Floorfall objects must be generic d6 Dice.");
+                }
+
+                foundXAxisDie |= instance.Id == FloorfallXAxisDieId;
+                foundYAxisDie |= instance.Id == FloorfallYAxisDieId;
+            }
+
+            if (!foundXAxisDie || !foundYAxisDie)
+            {
+                throw new ArgumentException("Trap Floor Template is missing an associated Floorfall Die.");
+            }
         }
 
         public GameTemplate Template { get; }
@@ -78,6 +115,10 @@ namespace ConsoleCards.Games.TrapFloor
         public ContainerId FloormasterDiscardId { get; }
 
         public ContainerId SharedCoinSupplyId { get; }
+
+        public TabletopObjectId FloorfallXAxisDieId { get; }
+
+        public TabletopObjectId FloorfallYAxisDieId { get; }
 
         public IReadOnlyDictionary<TrapFloorCoordinate, TabletopObjectId> FloorCardIds => floorCardIds;
 

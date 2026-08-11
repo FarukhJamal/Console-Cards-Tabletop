@@ -5,6 +5,7 @@ using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Consoles;
 using ConsoleCards.Core.Domain.Containers;
+using ConsoleCards.Core.Domain.Dice;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Domain.PlayAreas;
 using ConsoleCards.Core.Domain.Seats;
@@ -75,6 +76,11 @@ namespace ConsoleCards.GameTemplates
                 objectSnapshots.Add(ObjectSnapshot.FromObject(token.BaseState));
             }
 
+            foreach (DieState die in matchState.Dice.Values)
+            {
+                objectSnapshots.Add(ObjectSnapshot.FromDie(die));
+            }
+
             List<ContainerSnapshot> containerSnapshots = new List<ContainerSnapshot>(matchState.Containers.Count);
             foreach (ContainerState container in matchState.Containers.Values)
             {
@@ -131,6 +137,7 @@ namespace ConsoleCards.GameTemplates
             List<CardInstanceState> restoredCards = new List<CardInstanceState>();
             List<PawnState> restoredPawns = new List<PawnState>();
             List<TokenState> restoredTokens = new List<TokenState>();
+            List<DieState> restoredDice = new List<DieState>();
             Dictionary<TabletopObjectId, TabletopObjectState> restoredObjectStates =
                 new Dictionary<TabletopObjectId, TabletopObjectState>();
             for (int i = 0; i < objects.Count; i++)
@@ -148,6 +155,12 @@ namespace ConsoleCards.GameTemplates
                         break;
                     case TabletopObjectKind.Token:
                         restoredTokens.Add(new TokenState(baseState));
+                        break;
+                    case TabletopObjectKind.Die:
+                        restoredDice.Add(new DieState(
+                            baseState,
+                            snapshot.DieSideCount,
+                            snapshot.DieValue));
                         break;
                     default:
                         throw new InvalidOperationException("Initial Snapshot contains an unsupported Tabletop Object kind.");
@@ -204,12 +217,17 @@ namespace ConsoleCards.GameTemplates
                 restoredContainers.Values,
                 restoredSeats,
                 restoredPlacements,
-                restoredPlayAreas);
+                restoredPlayAreas,
+                restoredDice);
         }
 
         private sealed class ObjectSnapshot
         {
-            private ObjectSnapshot(TabletopObjectState state, CardFace cardFace)
+            private ObjectSnapshot(
+                TabletopObjectState state,
+                CardFace cardFace,
+                int dieSideCount,
+                int dieValue)
             {
                 Id = state.Id;
                 DefinitionId = state.DefinitionId;
@@ -219,6 +237,8 @@ namespace ConsoleCards.GameTemplates
                 Visibility = state.Visibility;
                 IsUserLocked = state.IsUserLocked;
                 Face = cardFace;
+                DieSideCount = dieSideCount;
+                DieValue = dieValue;
             }
 
             public TabletopObjectId Id { get; }
@@ -229,15 +249,26 @@ namespace ConsoleCards.GameTemplates
             public ObjectVisibility Visibility { get; }
             public bool IsUserLocked { get; }
             public CardFace Face { get; }
+            public int DieSideCount { get; }
+            public int DieValue { get; }
 
             public static ObjectSnapshot FromCard(CardInstanceState card)
             {
-                return new ObjectSnapshot(card.BaseState, card.Face);
+                return new ObjectSnapshot(card.BaseState, card.Face, 0, 0);
             }
 
             public static ObjectSnapshot FromObject(TabletopObjectState state)
             {
-                return new ObjectSnapshot(state, CardFace.FaceUp);
+                return new ObjectSnapshot(state, CardFace.FaceUp, 0, 0);
+            }
+
+            public static ObjectSnapshot FromDie(DieState die)
+            {
+                return new ObjectSnapshot(
+                    die.BaseState,
+                    CardFace.FaceUp,
+                    die.SideCount,
+                    die.CurrentValue);
             }
 
             public TabletopObjectState CreateBaseState()

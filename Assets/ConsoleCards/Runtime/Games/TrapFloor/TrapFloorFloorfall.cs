@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ConsoleCards.Core.Domain.Dice;
+using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Core.Randomness;
 
@@ -132,6 +133,9 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly TrapFloorTemplateDefinition template;
         private readonly IRandomValueSource randomValueSource;
         private readonly TrapFloorFloorfallState state;
+        private readonly MatchState matchState;
+        private readonly DieState xAxisDieState;
+        private readonly DieState yAxisDieState;
         private readonly HashSet<TrapFloorCoordinate> protectedStartingCorners;
         private readonly Die coordinateDie = new Die(DieSideCount);
 
@@ -139,11 +143,41 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorTemplateDefinition template,
             IRandomValueSource randomValueSource,
             TrapFloorFloorfallState state)
+            : this(template, null, randomValueSource, state)
+        {
+        }
+
+        public TrapFloorFloorfallService(
+            TrapFloorTemplateDefinition template,
+            MatchState matchState,
+            IRandomValueSource randomValueSource,
+            TrapFloorFloorfallState state)
         {
             this.template = template ?? throw new ArgumentNullException(nameof(template));
+            this.matchState = matchState;
             this.randomValueSource = randomValueSource ?? throw new ArgumentNullException(nameof(randomValueSource));
             this.state = state ?? throw new ArgumentNullException(nameof(state));
             protectedStartingCorners = new HashSet<TrapFloorCoordinate>();
+
+            if (matchState != null)
+            {
+                if (!matchState.Dice.TryGetValue(template.FloorfallXAxisDieId, out DieState resolvedXAxisDie)
+                    || !matchState.Dice.TryGetValue(template.FloorfallYAxisDieId, out DieState resolvedYAxisDie))
+                {
+                    throw new ArgumentException(
+                        "Trap Floor Match is missing one or both Template-authored Floorfall Dice.",
+                        nameof(matchState));
+                }
+
+                xAxisDieState = resolvedXAxisDie;
+                yAxisDieState = resolvedYAxisDie;
+
+                if (xAxisDieState.SideCount != DieSideCount
+                    || yAxisDieState.SideCount != DieSideCount)
+                {
+                    throw new ArgumentException("Trap Floor Floorfall Dice must both be d6.", nameof(matchState));
+                }
+            }
 
             for (int i = 0; i < template.Players.Count; i++)
             {
@@ -156,6 +190,11 @@ namespace ConsoleCards.Games.TrapFloor
             if (context.RoundNumber < 1)
             {
                 throw new ArgumentOutOfRangeException(nameof(context), "Floorfall requires a valid round context.");
+            }
+
+            if (matchState != null && matchState.Revision == long.MaxValue)
+            {
+                throw new InvalidOperationException("Trap Floor Match revision cannot advance for Floorfall.");
             }
 
             while (true)
@@ -183,6 +222,13 @@ namespace ConsoleCards.Games.TrapFloor
                     yAxisRoll,
                     coordinate,
                     floorCardId);
+                if (matchState != null)
+                {
+                    xAxisDieState.SetAcceptedRoll(xAxisRoll);
+                    yAxisDieState.SetAcceptedRoll(yAxisRoll);
+                    matchState.AdvanceRevision();
+                }
+
                 state.SetCurrentTarget(target);
                 return target;
             }

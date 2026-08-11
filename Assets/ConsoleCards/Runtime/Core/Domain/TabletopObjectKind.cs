@@ -4,6 +4,7 @@ namespace ConsoleCards.Core.Domain
     {
         Card,
         Pawn,
-        Token
+        Token,
+        Die
     }
 }

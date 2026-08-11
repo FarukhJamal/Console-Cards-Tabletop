@@ -39,6 +39,9 @@ namespace ConsoleCards.Games.TrapFloor
         private const double SharedCoinSupplyX = -4.5d;
         private const double SharedCoinSupplyY = -1.08d;
         private const double SharedCoinSpacing = 0.24d;
+        private const double FloorfallDiceX = 3.45d;
+        private const double FloorfallDiceY = 3.45d;
+        private const double FloorfallDiceSpacing = 0.9d;
         private const float PrototypeCameraOrthographicSize = 7.35f;
 
         public static TrapFloorTemplateDefinition CreateStandardFourPlayer()
@@ -59,6 +62,7 @@ namespace ConsoleCards.Games.TrapFloor
             ObjectDefinitionId modeDefinitionId = new ObjectDefinitionId(CreateGuid(20, 7));
             ObjectDefinitionId pawnDefinitionId = new ObjectDefinitionId(CreateGuid(20, 8));
             ObjectDefinitionId coinDefinitionId = new ObjectDefinitionId(CreateGuid(20, 9));
+            ObjectDefinitionId dieDefinitionId = new ObjectDefinitionId(CreateGuid(20, 10));
 
             List<GameTemplateObjectDefinition> objectDefinitions = new List<GameTemplateObjectDefinition>
             {
@@ -71,6 +75,7 @@ namespace ConsoleCards.Games.TrapFloor
                 new GameTemplateObjectDefinition(modeDefinitionId, TabletopObjectKind.Card, "Mode Card"),
                 new GameTemplateObjectDefinition(pawnDefinitionId, TabletopObjectKind.Pawn, "Player Pawn"),
                 new GameTemplateObjectDefinition(coinDefinitionId, TabletopObjectKind.Token, "Wooden Coin Cube"),
+                new GameTemplateObjectDefinition(dieDefinitionId, TabletopObjectKind.Die, "Six-sided Die"),
             };
 
             List<GameTemplateSeatDefinition> seats = new List<GameTemplateSeatDefinition>(PrototypePlayerCount);
@@ -173,6 +178,19 @@ namespace ConsoleCards.Games.TrapFloor
 
             memberships.Add(new GameTemplateContainerMembership(sharedCoinSupplyId, coinTokenIds));
 
+            TabletopObjectId floorfallXAxisDieId = new TabletopObjectId(CreateGuid(60, 1));
+            TabletopObjectId floorfallYAxisDieId = new TabletopObjectId(CreateGuid(60, 2));
+            objects.Add(CreateFloorfallDie(
+                floorfallXAxisDieId,
+                dieDefinitionId,
+                FloorfallDiceX - (FloorfallDiceSpacing * 0.5d),
+                FloorfallDiceY));
+            objects.Add(CreateFloorfallDie(
+                floorfallYAxisDieId,
+                dieDefinitionId,
+                FloorfallDiceX + (FloorfallDiceSpacing * 0.5d),
+                FloorfallDiceY));
+
             TabletopBounds boardBounds = new TabletopBounds(
                 new TableCoordinate(-2.35d, -3.1d),
                 new TableCoordinate(2.35d, 3.1d));
@@ -221,7 +239,28 @@ namespace ConsoleCards.Games.TrapFloor
                 floorCardIds,
                 labels,
                 players,
-                coinTokenIds);
+                coinTokenIds,
+                floorfallXAxisDieId,
+                floorfallYAxisDieId);
+        }
+
+        private static GameTemplateObjectInstanceDefinition CreateFloorfallDie(
+            TabletopObjectId objectId,
+            ObjectDefinitionId definitionId,
+            double tableX,
+            double tableY)
+        {
+            return new GameTemplateObjectInstanceDefinition(
+                objectId,
+                definitionId,
+                TabletopObjectKind.Die,
+                new TabletopPose(new TableCoordinate(tableX, tableY), 0f, 0, 0),
+                SeatId.Empty,
+                ObjectVisibility.Public,
+                false,
+                CardFace.FaceUp,
+                TrapFloorFloorfallService.DieSideCount,
+                1);
         }
 
         private static void CreateFloorBoard(

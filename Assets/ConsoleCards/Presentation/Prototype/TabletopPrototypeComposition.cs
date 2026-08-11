@@ -9,6 +9,7 @@ using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Cards;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Consoles;
+using ConsoleCards.Core.Domain.Dice;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Domain.PlayAreas;
 using ConsoleCards.Core.Domain.PlayerLayouts;
@@ -52,6 +53,7 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal PrototypeCardVisualReferences prototypeCardPrefab;
         [SerializeField] internal PawnView prototypePawnPrefab;
         [SerializeField] internal TokenView prototypeTokenPrefab;
+        [SerializeField] internal DieView prototypeDiePrefab;
         [SerializeField] internal PrototypeFixedContainerVisual prototypeDeckPrefab;
         [SerializeField] internal ConsoleView prototypeConsolePrefab;
         [SerializeField] internal CardView cardView;
@@ -94,6 +96,7 @@ namespace ConsoleCards.Presentation.Prototype
         private readonly List<RuntimeCardInstance> runtimeCardInstances = new List<RuntimeCardInstance>();
         private readonly List<RuntimeObjectInstance> runtimePawnInstances = new List<RuntimeObjectInstance>();
         private readonly List<RuntimeObjectInstance> runtimeTokenInstances = new List<RuntimeObjectInstance>();
+        private readonly List<RuntimeObjectInstance> runtimeDieInstances = new List<RuntimeObjectInstance>();
         private readonly List<RuntimeDeckInstance> runtimeDeckInstances = new List<RuntimeDeckInstance>();
         private readonly List<RuntimeConsoleInstance> runtimeConsoleInstances = new List<RuntimeConsoleInstance>();
         private readonly List<GameObject> runtimeOwnedStackRoots = new List<GameObject>();
@@ -103,8 +106,10 @@ namespace ConsoleCards.Presentation.Prototype
         private readonly List<TabletopSelectionVisual> cardSelectionVisuals = new List<TabletopSelectionVisual>();
         private readonly List<TabletopSelectionVisual> pawnSelectionVisuals = new List<TabletopSelectionVisual>();
         private readonly List<TabletopSelectionVisual> tokenSelectionVisuals = new List<TabletopSelectionVisual>();
+        private readonly List<TabletopSelectionVisual> dieSelectionVisuals = new List<TabletopSelectionVisual>();
         private readonly List<PawnView> pawnViews = new List<PawnView>();
         private readonly List<TokenView> tokenViews = new List<TokenView>();
+        private readonly List<DieView> dieViews = new List<DieView>();
         private readonly List<DeckView> controllerDeckViews = new List<DeckView>();
         private readonly List<ConsoleView> playerConsoleViews = new List<ConsoleView>();
         private readonly List<IContainerLayoutView> layoutViews = new List<IContainerLayoutView>();
@@ -141,6 +146,9 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorFloorfallState floorfallState;
         private TrapFloorFloorfallService floorfallService;
         private TrapFloorFloorfallTargetPresenter floorfallTargetPresenter;
+        private SystemRandomValueSource authoritativeRandomValueSource;
+        private CreateTabletopComponentUseCase componentCreationUseCase;
+        private RollDieUseCase rollDieUseCase;
         private PlayerLayoutDefinition playerLayout;
         private PlayerSeatLayoutEntry localSeatLayout;
         private PlayAreaId centralPlayAreaId;
@@ -189,6 +197,10 @@ namespace ConsoleCards.Presentation.Prototype
         private CardView contextMenuCardView;
         private ContainerId contextMenuContainerId;
         private int selectedDrawCount = 1;
+        private int toolboxSpawnSequence;
+        private bool toolboxVisible;
+        private bool toolboxDieChoicesVisible;
+        private DieView contextMenuDieView;
 
         private DeckView deckView;
         private HandView handView;
@@ -332,6 +344,7 @@ namespace ConsoleCards.Presentation.Prototype
                 presentationTransitions = new TabletopPresentationTransitionController();
                 ReactivateSceneOwnedObjectViews();
                 BuildRuntimeGraph(restoreInitialBaseline);
+                BuildToolboxRuntime();
                 BuildFloorfallRuntime();
                 ProjectTrapFloorCameraBookmark();
                 BindObjectViews();
@@ -385,6 +398,7 @@ namespace ConsoleCards.Presentation.Prototype
                     ? activeSession.Reset()
                     : activeSession.CurrentMatch;
                 localPlayerId = activeSession.Request.RequestingPlayerId;
+                BuildToolboxRuntime();
 
                 BuildInteractionGraph();
                 inputFrameCoordinator.ConfigurePrototypeUiInput(
@@ -527,6 +541,7 @@ namespace ConsoleCards.Presentation.Prototype
             ReleaseRuntimeConsoleInstances();
             ReleaseRuntimeObjectInstances(runtimePawnInstances, pawnViews, pawnSelectionVisuals);
             ReleaseRuntimeObjectInstances(runtimeTokenInstances, tokenViews, tokenSelectionVisuals);
+            ReleaseRuntimeObjectInstances(runtimeDieInstances, dieViews, dieSelectionVisuals);
             ReleaseRuntimeCardInstances();
 
             matchState = null;
@@ -534,6 +549,9 @@ namespace ConsoleCards.Presentation.Prototype
             floorfallState = null;
             floorfallService = null;
             floorfallTargetPresenter = null;
+            authoritativeRandomValueSource = null;
+            componentCreationUseCase = null;
+            rollDieUseCase = null;
             playerLayout = null;
             localSeatLayout = null;
             centralPlayAreaId = PlayAreaId.Empty;
@@ -579,13 +597,16 @@ namespace ConsoleCards.Presentation.Prototype
             runtimeCardInstances.Clear();
             runtimePawnInstances.Clear();
             runtimeTokenInstances.Clear();
+            runtimeDieInstances.Clear();
             runtimeDeckInstances.Clear();
             runtimeConsoleInstances.Clear();
             runtimeOwnedStackRoots.Clear();
             pawnViews.Clear();
             tokenViews.Clear();
+            dieViews.Clear();
             pawnSelectionVisuals.Clear();
             tokenSelectionVisuals.Clear();
+            dieSelectionVisuals.Clear();
             controllerDeckViews.Clear();
             playerConsoleViews.Clear();
             consoleSlotViews.Clear();
@@ -600,8 +621,12 @@ namespace ConsoleCards.Presentation.Prototype
             feedbackHoldUntil = 0f;
             contextMenuMode = PrototypeContextMenuMode.None;
             contextMenuCardView = null;
+            contextMenuDieView = null;
             contextMenuContainerId = ContainerId.Empty;
             selectedDrawCount = 1;
+            toolboxSpawnSequence = 0;
+            toolboxVisible = false;
+            toolboxDieChoicesVisible = false;
             if (!preserveTemplateContext)
             {
                 prototypeTemplateContext = null;
@@ -811,10 +836,36 @@ namespace ConsoleCards.Presentation.Prototype
 
             TrapFloorFloorfallTarget target = floorfallService.RollAndResolve(
                 new TrapFloorFloorfallContext(PrototypeFloorfallRoundNumber));
+            AnimateAcceptedDieResult(trapFloorTemplate.FloorfallXAxisDieId);
+            AnimateAcceptedDieResult(trapFloorTemplate.FloorfallYAxisDieId);
             floorfallTargetPresenter.Show(target.FloorCardId);
             ShowMessage(
                 $"Floorfall: X {target.XAxisRoll.Value}, Y {target.YAxisRoll.Value} -> {target.Coordinate}.");
             return target;
+        }
+
+        private void AnimateAcceptedDieResult(TabletopObjectId dieId)
+        {
+            for (int i = 0; i < dieViews.Count; i++)
+            {
+                DieView view = dieViews[i];
+                if (view == null || !view.IsBound || view.ObjectId != dieId)
+                {
+                    continue;
+                }
+
+                view.ApplyAcceptedState();
+                TabletopTransformSnapshot destination = presentationTransitions.Capture(view.transform);
+                presentationTransitions.AnimateFromCurrentResult(
+                    view.transform,
+                    new TabletopTransformSnapshot(
+                        destination.Position + (Vector3.up * 0.18f),
+                        destination.Rotation * Quaternion.Euler(30f, 210f, 20f),
+                        destination.LocalScale),
+                    settleDuration,
+                    0.12f);
+                return;
+            }
         }
 
         void IContainedCardDragFeedback.Begin(ContainerId sourceContainerId)
@@ -957,6 +1008,17 @@ namespace ConsoleCards.Presentation.Prototype
                 GUIUtility.ExitGUI();
             }
 
+            if (GUILayout.Button(toolboxVisible ? "Close Component Toolbox" : "Add Component"))
+            {
+                toolboxVisible = !toolboxVisible;
+                toolboxDieChoicesVisible = false;
+            }
+
+            if (toolboxVisible)
+            {
+                DrawComponentToolbox();
+            }
+
             GUILayout.Label(CurrentStatusText());
 
             if (!showDeveloperControls
@@ -1030,6 +1092,254 @@ namespace ConsoleCards.Presentation.Prototype
 
             GUILayout.Space(6f);
             GUILayout.EndArea();
+        }
+
+        private void DrawComponentToolbox()
+        {
+            GUILayout.Space(4f);
+            GUILayout.Label("COMPONENT TOOLBOX");
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Card"))
+            {
+                AddToolboxComponent(TabletopComponentKind.Card);
+            }
+
+            if (GUILayout.Button("Deck"))
+            {
+                AddToolboxComponent(TabletopComponentKind.Deck);
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Stack"))
+            {
+                AddToolboxComponent(TabletopComponentKind.Stack);
+            }
+
+            if (GUILayout.Button("Pawn"))
+            {
+                AddToolboxComponent(TabletopComponentKind.Pawn);
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Token"))
+            {
+                AddToolboxComponent(TabletopComponentKind.Token);
+            }
+
+            if (GUILayout.Button("Die"))
+            {
+                toolboxDieChoicesVisible = !toolboxDieChoicesVisible;
+            }
+            GUILayout.EndHorizontal();
+
+            if (!toolboxDieChoicesVisible)
+            {
+                return;
+            }
+
+            GUILayout.Label("Choose Die");
+            GUILayout.BeginHorizontal();
+            DrawDieToolboxButton(4);
+            DrawDieToolboxButton(6);
+            DrawDieToolboxButton(8);
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            DrawDieToolboxButton(10);
+            DrawDieToolboxButton(12);
+            DrawDieToolboxButton(20);
+            GUILayout.EndHorizontal();
+        }
+
+        private void DrawDieToolboxButton(int sideCount)
+        {
+            if (GUILayout.Button($"d{sideCount}"))
+            {
+                AddToolboxComponent(TabletopComponentKind.Die, sideCount);
+            }
+        }
+
+        public CreateTabletopComponentResult AddToolboxComponent(
+            TabletopComponentKind componentKind,
+            int dieSideCount = 0)
+        {
+            EnsureInitialized();
+            TabletopPose spawnPose = CreateNextToolboxSpawnPose();
+            CreateTabletopComponentResult result = componentCreationUseCase.Execute(
+                matchState,
+                activeSession.Request.ActivePlayerIds,
+                new CreateTabletopComponentRequest(
+                    CreateCommandContext(),
+                    componentKind,
+                    spawnPose,
+                    dieSideCount));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Add {componentKind} rejected: {result.Error}.");
+                return result;
+            }
+
+            toolboxSpawnSequence++;
+            ProjectCreatedToolboxComponent(result);
+            ShowMessage(componentKind == TabletopComponentKind.Die
+                ? $"Added d{dieSideCount}."
+                : $"Added {componentKind}.");
+            return result;
+        }
+
+        private TabletopPose CreateNextToolboxSpawnPose()
+        {
+            double baseX = -2.4d;
+            double baseY = -2.4d;
+            double columnX = 0.62d;
+            double columnY = 0d;
+            double rowX = 0d;
+            double rowY = 0.72d;
+            float rotation = 0f;
+            if (localSeatLayout != null)
+            {
+                TabletopPose playerZonePose = localSeatLayout.PlayerZonePose;
+                double x = playerZonePose.Position.X;
+                double y = playerZonePose.Position.Y;
+                double magnitude = Math.Sqrt((x * x) + (y * y));
+                if (magnitude > 0.0001d)
+                {
+                    double radialX = x / magnitude;
+                    double radialY = y / magnitude;
+                    baseX = x - (radialX * 0.25d);
+                    baseY = y - (radialY * 0.25d);
+                    columnX = -radialY * 0.62d;
+                    columnY = radialX * 0.62d;
+                    rowX = radialX * 0.72d;
+                    rowY = radialY * 0.72d;
+                }
+                else
+                {
+                    baseX = x;
+                    baseY = y;
+                }
+
+                rotation = playerZonePose.RotationDegrees;
+            }
+
+            int column = toolboxSpawnSequence % 4;
+            int row = (toolboxSpawnSequence / 4) % 3;
+            return new TabletopPose(
+                new TableCoordinate(
+                    baseX + (column * columnX) + (row * rowX),
+                    baseY + (column * columnY) + (row * rowY)),
+                rotation,
+                0,
+                toolboxSpawnSequence);
+        }
+
+        private void ProjectCreatedToolboxComponent(CreateTabletopComponentResult result)
+        {
+            Transform appearedTransform;
+            switch (result.ComponentKind)
+            {
+                case TabletopComponentKind.Card:
+                {
+                    CardInstanceState card = matchState.Cards[result.ObjectId];
+                    CardView view = CreateCardView(card, "CARD", out TabletopSelectionVisual selectionVisual);
+                    cardViews.Add(view);
+                    cardSelectionVisuals.Add(selectionVisual);
+                    RefreshContainerCardViewSources();
+                    appearedTransform = view.transform;
+                    break;
+                }
+                case TabletopComponentKind.Deck:
+                {
+                    RuntimeDeckInstance instance = CreateRuntimeDeckInstance(
+                        "Toolbox Deck",
+                        "DECK",
+                        result.ContainerId);
+                    runtimeDeckInstances.Add(instance);
+                    controllerDeckViews.Add(instance.View);
+                    instance.View.Bind(
+                        matchState.GetContainer(result.ContainerId),
+                        matchState.ContainerPlacements[result.ContainerId],
+                        coordinateConverter,
+                        cardViews);
+                    ConfigureFixedContainer(instance.Visual, instance.View);
+                    appearedTransform = instance.Root.transform;
+                    break;
+                }
+                case TabletopComponentKind.Stack:
+                {
+                    ContainerState container = matchState.GetContainer(result.ContainerId);
+                    ContainerPlacementState placement = matchState.ContainerPlacements[result.ContainerId];
+                    StackRuntimeView stack = CreateStackRuntimeView("STACK", container, placement);
+                    stackViewsByContainerId.Add(result.ContainerId, stack);
+                    appearedTransform = stack.Root.transform;
+                    break;
+                }
+                case TabletopComponentKind.Pawn:
+                {
+                    PawnView view = CreatePawnView(
+                        matchState.Pawns[result.ObjectId],
+                        out TabletopSelectionVisual selectionVisual);
+                    pawnViews.Add(view);
+                    pawnSelectionVisuals.Add(selectionVisual);
+                    appearedTransform = view.transform;
+                    break;
+                }
+                case TabletopComponentKind.Token:
+                {
+                    TokenView view = CreateTokenView(
+                        matchState.Tokens[result.ObjectId],
+                        out TabletopSelectionVisual selectionVisual,
+                        1f);
+                    tokenViews.Add(view);
+                    tokenSelectionVisuals.Add(selectionVisual);
+                    appearedTransform = view.transform;
+                    break;
+                }
+                case TabletopComponentKind.Die:
+                {
+                    DieState die = matchState.Dice[result.ObjectId];
+                    DieView view = CreateDieView(
+                        die,
+                        $"d{die.SideCount}",
+                        out TabletopSelectionVisual selectionVisual);
+                    dieViews.Add(view);
+                    dieSelectionVisuals.Add(selectionVisual);
+                    appearedTransform = view.transform;
+                    break;
+                }
+                default:
+                    throw new InvalidOperationException("Accepted toolbox component kind is unsupported by Presentation.");
+            }
+
+            RebuildInteractionAfterRuntimeProjection();
+            presentationTransitions.Appear(appearedTransform, settleDuration);
+        }
+
+        private void RefreshContainerCardViewSources()
+        {
+            for (int i = 0; i < layoutViews.Count; i++)
+            {
+                IContainerLayoutView layoutView = layoutViews[i];
+                if (layoutView != null && layoutView.IsBound)
+                {
+                    layoutView.SetCardViews(cardViews);
+                }
+            }
+        }
+
+        private void RebuildInteractionAfterRuntimeProjection()
+        {
+            SuspendInteractionDependenciesForRebuild();
+            inputFrameCoordinator.ClearSelectionPresenter();
+            selectionPresenter = new TabletopSelectionPresenter(
+                selectionState,
+                cardSelectionVisuals,
+                pawnSelectionVisuals,
+                tokenSelectionVisuals,
+                dieSelectionVisuals);
+            inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
+            ResumeInteractionDependenciesAfterRebuild();
         }
 
         private void DrawSessionEntry()
@@ -1245,6 +1555,22 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             CloseContextMenu();
+            if (hitResolver.TryResolve(screenPosition, out TabletopObjectView resolvedObjectView)
+                && resolvedObjectView is DieView hitDie
+                && hitDie.IsBound
+                && hitDie.DieState != null)
+            {
+                selectionState.Select(hitDie);
+                selectionPresenter.Refresh();
+                contextMenuDieView = hitDie;
+                OpenContextMenu(
+                    PrototypeContextMenuMode.Die,
+                    screenPosition,
+                    null,
+                    ContainerId.Empty);
+                return;
+            }
+
             if (hitResolver.TryResolve(screenPosition, out TabletopObjectView objectView)
                 && objectView is CardView hitCard
                 && TryOpenCardContextMenu(hitCard, screenPosition))
@@ -1277,7 +1603,7 @@ namespace ConsoleCards.Presentation.Prototype
                 return false;
             }
 
-            if (trapFloorTemplate.IsFloorCard(hitCard.ObjectId))
+            if (trapFloorTemplate != null && trapFloorTemplate.IsFloorCard(hitCard.ObjectId))
             {
                 OpenContextMenu(
                     PrototypeContextMenuMode.FloorCard,
@@ -1365,6 +1691,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             contextMenuMode = PrototypeContextMenuMode.None;
             contextMenuCardView = null;
+            contextMenuDieView = null;
             contextMenuContainerId = ContainerId.Empty;
             contextMenuScrollPosition = Vector2.zero;
             inputFrameCoordinator?.ClearTransientObjectInputBlockingGuiRect();
@@ -1401,6 +1728,9 @@ namespace ConsoleCards.Presentation.Prototype
                     break;
                 case PrototypeContextMenuMode.MergeDestination:
                     DrawMergeDestinationMenu();
+                    break;
+                case PrototypeContextMenuMode.Die:
+                    DrawDieContextMenu();
                     break;
                 default:
                     CloseContextMenu();
@@ -1587,6 +1917,49 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
+        private void DrawDieContextMenu()
+        {
+            GUILayout.Label("DIE");
+            if (contextMenuDieView == null
+                || !contextMenuDieView.IsBound
+                || contextMenuDieView.DieState == null
+                || !matchState.Dice.ContainsKey(contextMenuDieView.ObjectId))
+            {
+                GUILayout.Label("Die unavailable.");
+                return;
+            }
+
+            GUILayout.Label($"d{contextMenuDieView.DieState.SideCount}: {contextMenuDieView.DieState.CurrentValue}");
+            if (!GUILayout.Button("Roll"))
+            {
+                return;
+            }
+
+            RollDieResult result = rollDieUseCase.Execute(
+                matchState,
+                activeSession.Request.ActivePlayerIds,
+                new RollDieRequest(CreateCommandContext(), contextMenuDieView.ObjectId));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Die Roll rejected: {result.Error}.");
+                return;
+            }
+
+            contextMenuDieView.ApplyAcceptedState();
+            TabletopTransformSnapshot destination = presentationTransitions.Capture(contextMenuDieView.transform);
+            TabletopTransformSnapshot tumbleStart = new TabletopTransformSnapshot(
+                destination.Position + (Vector3.up * 0.18f),
+                destination.Rotation * Quaternion.Euler(30f, 210f, 20f),
+                destination.LocalScale);
+            presentationTransitions.AnimateFromCurrentResult(
+                contextMenuDieView.transform,
+                tumbleStart,
+                settleDuration,
+                0.12f);
+            ShowMessage($"Rolled d{result.Roll.SideCount}: {result.Roll.Value}.");
+            CloseContextMenu();
+        }
+
         private void DrawMergeDestinationMenu()
         {
             GUILayout.Label("MERGE INTO");
@@ -1690,6 +2063,8 @@ namespace ConsoleCards.Presentation.Prototype
                     return 120f;
                 case PrototypeContextMenuMode.MergeDestination:
                     return Mathf.Min(320f, 82f + (stackViewsByContainerId.Count * 28f));
+                case PrototypeContextMenuMode.Die:
+                    return 110f;
                 default:
                     return 90f;
             }
@@ -1748,6 +2123,38 @@ namespace ConsoleCards.Presentation.Prototype
             ValidateFiniteGreaterThanOrEqualToZero(magneticDistance, nameof(magneticDistance));
             ValidateFiniteGreaterThanOrEqualToZero(feedbackDuration, nameof(feedbackDuration));
             ValidateFiniteGreaterThanOrEqualToZero(shuffleCompression, nameof(shuffleCompression));
+            ValidateToolboxPrefabReferences();
+        }
+
+        private void ValidateToolboxPrefabReferences()
+        {
+            RequireReference(prototypeCardPrefab, nameof(prototypeCardPrefab));
+            RequireReference(prototypePawnPrefab, nameof(prototypePawnPrefab));
+            RequireReference(prototypeTokenPrefab, nameof(prototypeTokenPrefab));
+            RequireReference(prototypeDiePrefab, nameof(prototypeDiePrefab));
+            RequireReference(prototypeDeckPrefab, nameof(prototypeDeckPrefab));
+            RequireReference(prototypeStackPrefab, nameof(prototypeStackPrefab));
+
+            if (prototypeCardPrefab.gameObject.scene.IsValid())
+            {
+                throw new InvalidOperationException("prototypeCardPrefab must reference a prefab asset.");
+            }
+
+            prototypeCardPrefab.ValidateReferences();
+            ValidateObjectPrefab(prototypePawnPrefab, nameof(prototypePawnPrefab));
+            ValidateObjectPrefab(prototypeTokenPrefab, nameof(prototypeTokenPrefab));
+            ValidateObjectPrefab(prototypeDiePrefab, nameof(prototypeDiePrefab));
+
+            if (prototypeDeckPrefab.gameObject.scene.IsValid()
+                || prototypeStackPrefab.gameObject.scene.IsValid())
+            {
+                throw new InvalidOperationException("Toolbox container prefabs must reference prefab assets.");
+            }
+
+            prototypeDeckPrefab.ValidateReferences();
+            prototypeDeckPrefab.GetView<DeckView>();
+            prototypeStackPrefab.ValidateReferences();
+            ValidateStackLayoutAnchor(prototypeStackPrefab);
         }
 
         private void ValidateInputPreInitializationState()
@@ -2041,9 +2448,21 @@ namespace ConsoleCards.Presentation.Prototype
             floorfallState = new TrapFloorFloorfallState();
             floorfallService = new TrapFloorFloorfallService(
                 trapFloorTemplate,
-                new SystemRandomValueSource(),
+                matchState,
+                authoritativeRandomValueSource,
                 floorfallState);
             floorfallTargetPresenter = new TrapFloorFloorfallTargetPresenter();
+        }
+
+        private void BuildToolboxRuntime()
+        {
+            authoritativeRandomValueSource = new SystemRandomValueSource();
+            componentCreationUseCase = new CreateTabletopComponentUseCase(
+                new GuidTabletopComponentIdentitySource());
+            rollDieUseCase = new RollDieUseCase(authoritativeRandomValueSource);
+            toolboxSpawnSequence = 0;
+            toolboxVisible = false;
+            toolboxDieChoicesVisible = false;
         }
 
         private static PrototypeTemplateContext CreateTrapFloorPrototypeContext(
@@ -2280,9 +2699,22 @@ namespace ConsoleCards.Presentation.Prototype
                     continue;
                 }
 
-                TokenView createdTokenView = CreateTokenView(token, out TabletopSelectionVisual createdSelectionVisual);
+                TokenView createdTokenView = CreateTokenView(
+                    token,
+                    out TabletopSelectionVisual createdSelectionVisual,
+                    TrapFloorCoinVisualScale);
                 tokenViews.Add(createdTokenView);
                 tokenSelectionVisuals.Add(createdSelectionVisual);
+            }
+
+            foreach (DieState die in matchState.Dice.Values)
+            {
+                DieView createdDieView = CreateDieView(
+                    die,
+                    $"d{die.SideCount}",
+                    out TabletopSelectionVisual createdSelectionVisual);
+                dieViews.Add(createdDieView);
+                dieSelectionVisuals.Add(createdSelectionVisual);
             }
         }
 
@@ -2467,7 +2899,8 @@ namespace ConsoleCards.Presentation.Prototype
                 selectionState,
                 cardSelectionVisuals,
                 pawnSelectionVisuals,
-                tokenSelectionVisuals);
+                tokenSelectionVisuals,
+                dieSelectionVisuals);
         }
 
         private void RebuildInteractionDependencies()
@@ -3002,7 +3435,7 @@ namespace ConsoleCards.Presentation.Prototype
             selectionVisual.SetSelected(false);
             ConfigureCardVisuals(createdVisualReferences, card, label);
             createdView.Bind(card, coordinateConverter);
-            if (trapFloorTemplate.IsFloorCard(card.BaseState.Id))
+            if (trapFloorTemplate != null && trapFloorTemplate.IsFloorCard(card.BaseState.Id))
             {
                 clone.transform.localScale = Vector3.one * floorCardVisualScale;
                 floorfallTargetPresenter.Register(
@@ -3030,16 +3463,32 @@ namespace ConsoleCards.Presentation.Prototype
 
         private TokenView CreateTokenView(
             TokenState token,
-            out TabletopSelectionVisual selectionVisual)
+            out TabletopSelectionVisual selectionVisual,
+            float visualScale)
         {
             TokenView createdView = Instantiate(prototypeTokenPrefab);
-            GameObject root = PrepareRuntimeRoot(createdView.gameObject, "Trap Floor Coin");
+            GameObject root = PrepareRuntimeRoot(createdView.gameObject, "Token");
             selectionVisual = createdView.GetComponent<TabletopSelectionVisual>();
             ValidateRuntimeSelectionVisual(createdView, selectionVisual);
             selectionVisual.SetSelected(false);
             createdView.Bind(token, coordinateConverter);
-            createdView.transform.localScale = Vector3.one * TrapFloorCoinVisualScale;
+            createdView.transform.localScale = Vector3.one * visualScale;
             runtimeTokenInstances.Add(new RuntimeObjectInstance(root, createdView, selectionVisual));
+            return createdView;
+        }
+
+        private DieView CreateDieView(
+            DieState die,
+            string name,
+            out TabletopSelectionVisual selectionVisual)
+        {
+            DieView createdView = Instantiate(prototypeDiePrefab);
+            GameObject root = PrepareRuntimeRoot(createdView.gameObject, name);
+            selectionVisual = createdView.GetComponent<TabletopSelectionVisual>();
+            ValidateRuntimeSelectionVisual(createdView, selectionVisual);
+            selectionVisual.SetSelected(false);
+            createdView.Bind(die, coordinateConverter);
+            runtimeDieInstances.Add(new RuntimeObjectInstance(root, createdView, selectionVisual));
             return createdView;
         }
 
@@ -3129,7 +3578,7 @@ namespace ConsoleCards.Presentation.Prototype
             ConfigurePrototypeLabel(
                 visualReferences.FrontLabel,
                 label,
-                trapFloorTemplate.IsFloorCard(card.BaseState.Id)
+                trapFloorTemplate != null && trapFloorTemplate.IsFloorCard(card.BaseState.Id)
                     ? TrapFloorFloorLabelCharacterSize
                     : TrapFloorCardLabelCharacterSize,
                 TrapFloorCardLabelFontSize);
@@ -4025,6 +4474,7 @@ namespace ConsoleCards.Presentation.Prototype
             StackCard,
             Stack,
             MergeDestination,
+            Die,
         }
 
         private enum StackViewOwnership

@@ -106,6 +106,19 @@ namespace ConsoleCards.Presentation.Views.Containers
             ApplyPlan(plan);
         }
 
+        public void SetCardViews(IReadOnlyList<CardView> cardViews)
+        {
+            EnsureBound();
+            if (cardViews == null)
+            {
+                throw new ArgumentNullException(nameof(cardViews));
+            }
+
+            suppliedCardViews.Clear();
+            suppliedCardViews.AddRange(cardViews);
+            ApplyAcceptedLayout();
+        }
+
         internal bool TryGetReorderTargetIndex(
             CardView movingCard,
             TableCoordinate pointerCoordinate,

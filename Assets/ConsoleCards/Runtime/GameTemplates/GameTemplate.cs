@@ -153,6 +153,31 @@ namespace ConsoleCards.GameTemplates
             ObjectVisibility visibility,
             bool isUserLocked,
             CardFace initialCardFace)
+            : this(
+                id,
+                definitionId,
+                kind,
+                pose,
+                ownerSeatId,
+                visibility,
+                isUserLocked,
+                initialCardFace,
+                0,
+                0)
+        {
+        }
+
+        public GameTemplateObjectInstanceDefinition(
+            TabletopObjectId id,
+            ObjectDefinitionId definitionId,
+            TabletopObjectKind kind,
+            TabletopPose pose,
+            SeatId ownerSeatId,
+            ObjectVisibility visibility,
+            bool isUserLocked,
+            CardFace initialCardFace,
+            int dieSideCount,
+            int initialDieValue)
         {
             Id = id;
             DefinitionId = definitionId;
@@ -162,6 +187,8 @@ namespace ConsoleCards.GameTemplates
             Visibility = visibility;
             IsUserLocked = isUserLocked;
             InitialCardFace = initialCardFace;
+            DieSideCount = dieSideCount;
+            InitialDieValue = initialDieValue;
         }
 
         public TabletopObjectId Id { get; }
@@ -179,6 +206,10 @@ namespace ConsoleCards.GameTemplates
         public bool IsUserLocked { get; }
 
         public CardFace InitialCardFace { get; }
+
+        public int DieSideCount { get; }
+
+        public int InitialDieValue { get; }
     }
 
     public sealed class GameTemplateContainerMembership

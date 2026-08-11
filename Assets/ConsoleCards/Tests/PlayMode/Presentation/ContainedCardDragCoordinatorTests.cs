@@ -1003,6 +1003,11 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
 
             public int ApplyCount { get; private set; }
 
+            public void SetCardViews(IReadOnlyList<CardView> cardViews)
+            {
+                inner.SetCardViews(cardViews);
+            }
+
             public void ApplyAcceptedLayout()
             {
                 inner.ApplyAcceptedLayout();

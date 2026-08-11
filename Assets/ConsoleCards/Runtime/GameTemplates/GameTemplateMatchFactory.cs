@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Consoles;
 using ConsoleCards.Core.Domain.Containers;
+using ConsoleCards.Core.Domain.Dice;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Domain.PlayAreas;
 using ConsoleCards.Core.Domain.PlayerLayouts;
@@ -134,6 +135,7 @@ namespace ConsoleCards.GameTemplates
             List<CardInstanceState> cards = new List<CardInstanceState>();
             List<PawnState> pawns = new List<PawnState>();
             List<TokenState> tokens = new List<TokenState>();
+            List<DieState> dice = new List<DieState>();
             Dictionary<TabletopObjectId, TabletopObjectState> objectStates =
                 new Dictionary<TabletopObjectId, TabletopObjectState>();
 
@@ -165,6 +167,12 @@ namespace ConsoleCards.GameTemplates
                         break;
                     case TabletopObjectKind.Token:
                         tokens.Add(new TokenState(baseState));
+                        break;
+                    case TabletopObjectKind.Die:
+                        dice.Add(new DieState(
+                            baseState,
+                            definition.DieSideCount,
+                            definition.InitialDieValue));
                         break;
                     default:
                         throw new InvalidOperationException("Template contains an unsupported Tabletop Object kind.");
@@ -224,7 +232,8 @@ namespace ConsoleCards.GameTemplates
                 containers.Values,
                 seats,
                 placements,
-                playAreas);
+                playAreas,
+                dice);
         }
 
         private static Dictionary<SeatId, PlayerId> MapPlayersToSeats(

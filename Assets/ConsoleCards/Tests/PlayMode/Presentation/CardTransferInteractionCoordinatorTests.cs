@@ -958,6 +958,11 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
 
             public int ApplyCount { get; private set; }
 
+            public void SetCardViews(IReadOnlyList<CardView> cardViews)
+            {
+                inner.SetCardViews(cardViews);
+            }
+
             public void ApplyAcceptedLayout()
             {
                 inner.ApplyAcceptedLayout();
@@ -983,6 +988,10 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
 
             public ContainerState ContainerState { get; }
 
+            public void SetCardViews(IReadOnlyList<CardView> cardViews)
+            {
+            }
+
             public void ApplyAcceptedLayout()
             {
             }
@@ -1000,6 +1009,10 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             public ContainerId ContainerId => ContainerState.Id;
 
             public ContainerState ContainerState { get; }
+
+            public void SetCardViews(IReadOnlyList<CardView> cardViews)
+            {
+            }
 
             public void ApplyAcceptedLayout()
             {

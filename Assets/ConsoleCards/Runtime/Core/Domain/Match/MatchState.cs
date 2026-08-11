@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using ConsoleCards.Core.Domain.Consoles;
 using ConsoleCards.Core.Domain.Containers;
+using ConsoleCards.Core.Domain.Dice;
 using ConsoleCards.Core.Domain.PlayAreas;
 using ConsoleCards.Core.Domain.Seats;
 using ConsoleCards.Core.Identifiers;
@@ -14,6 +15,7 @@ namespace ConsoleCards.Core.Domain.Match
         private readonly Dictionary<TabletopObjectId, CardInstanceState> cards;
         private readonly Dictionary<TabletopObjectId, PawnState> pawns;
         private readonly Dictionary<TabletopObjectId, TokenState> tokens;
+        private readonly Dictionary<TabletopObjectId, DieState> dice;
         private readonly Dictionary<ContainerId, ContainerState> containers;
         private readonly Dictionary<ContainerId, ContainerPlacementState> containerPlacements;
         private readonly Dictionary<SeatId, SeatState> seats;
@@ -21,6 +23,7 @@ namespace ConsoleCards.Core.Domain.Match
         private readonly ReadOnlyDictionary<TabletopObjectId, CardInstanceState> readOnlyCards;
         private readonly ReadOnlyDictionary<TabletopObjectId, PawnState> readOnlyPawns;
         private readonly ReadOnlyDictionary<TabletopObjectId, TokenState> readOnlyTokens;
+        private readonly ReadOnlyDictionary<TabletopObjectId, DieState> readOnlyDice;
         private readonly ReadOnlyDictionary<ContainerId, ContainerState> readOnlyContainers;
         private readonly ReadOnlyDictionary<ContainerId, ContainerPlacementState> readOnlyContainerPlacements;
         private readonly ReadOnlyDictionary<SeatId, SeatState> readOnlySeats;
@@ -106,6 +109,33 @@ namespace ConsoleCards.Core.Domain.Match
             IEnumerable<SeatState> seats,
             IEnumerable<ContainerPlacementState> containerPlacements,
             IEnumerable<PlayAreaState> playAreas)
+            : this(
+                id,
+                gameTemplateId,
+                revision,
+                cards,
+                pawns,
+                tokens,
+                containers,
+                seats,
+                containerPlacements,
+                playAreas,
+                Array.Empty<DieState>())
+        {
+        }
+
+        public MatchState(
+            MatchId id,
+            GameTemplateId gameTemplateId,
+            long revision,
+            IEnumerable<CardInstanceState> cards,
+            IEnumerable<PawnState> pawns,
+            IEnumerable<TokenState> tokens,
+            IEnumerable<ContainerState> containers,
+            IEnumerable<SeatState> seats,
+            IEnumerable<ContainerPlacementState> containerPlacements,
+            IEnumerable<PlayAreaState> playAreas,
+            IEnumerable<DieState> dice)
         {
             if (id.IsEmpty)
             {
@@ -125,6 +155,7 @@ namespace ConsoleCards.Core.Domain.Match
             this.cards = CopyCards(cards, seenObjectIds);
             this.pawns = CopyPawns(pawns, seenObjectIds);
             this.tokens = CopyTokens(tokens, seenObjectIds);
+            this.dice = CopyDice(dice, seenObjectIds);
             this.containers = CopyContainers(containers);
             this.containerPlacements = CopyContainerPlacements(containerPlacements);
             this.seats = CopySeats(seats);
@@ -137,6 +168,7 @@ namespace ConsoleCards.Core.Domain.Match
             readOnlyCards = new ReadOnlyDictionary<TabletopObjectId, CardInstanceState>(this.cards);
             readOnlyPawns = new ReadOnlyDictionary<TabletopObjectId, PawnState>(this.pawns);
             readOnlyTokens = new ReadOnlyDictionary<TabletopObjectId, TokenState>(this.tokens);
+            readOnlyDice = new ReadOnlyDictionary<TabletopObjectId, DieState>(this.dice);
             readOnlyContainers = new ReadOnlyDictionary<ContainerId, ContainerState>(this.containers);
             readOnlyContainerPlacements = new ReadOnlyDictionary<ContainerId, ContainerPlacementState>(this.containerPlacements);
             readOnlySeats = new ReadOnlyDictionary<SeatId, SeatState>(this.seats);
@@ -149,13 +181,15 @@ namespace ConsoleCards.Core.Domain.Match
 
         public long Revision { get; private set; }
 
-        public int ObjectCount => cards.Count + pawns.Count + tokens.Count;
+        public int ObjectCount => cards.Count + pawns.Count + tokens.Count + dice.Count;
 
         public IReadOnlyDictionary<TabletopObjectId, CardInstanceState> Cards => readOnlyCards;
 
         public IReadOnlyDictionary<TabletopObjectId, PawnState> Pawns => readOnlyPawns;
 
         public IReadOnlyDictionary<TabletopObjectId, TokenState> Tokens => readOnlyTokens;
+
+        public IReadOnlyDictionary<TabletopObjectId, DieState> Dice => readOnlyDice;
 
         public IReadOnlyDictionary<ContainerId, ContainerState> Containers => readOnlyContainers;
 
@@ -169,7 +203,8 @@ namespace ConsoleCards.Core.Domain.Match
         {
             return cards.ContainsKey(objectId)
                 || pawns.ContainsKey(objectId)
-                || tokens.ContainsKey(objectId);
+                || tokens.ContainsKey(objectId)
+                || dice.ContainsKey(objectId);
         }
 
         public TabletopObjectState GetObject(TabletopObjectId objectId)
@@ -187,6 +222,11 @@ namespace ConsoleCards.Core.Domain.Match
             if (tokens.TryGetValue(objectId, out TokenState token))
             {
                 return token.BaseState;
+            }
+
+            if (dice.TryGetValue(objectId, out DieState die))
+            {
+                return die.BaseState;
             }
 
             throw new KeyNotFoundException("Tabletop object was not found.");
@@ -408,6 +448,26 @@ namespace ConsoleCards.Core.Domain.Match
             throw new KeyNotFoundException("Seat was not found.");
         }
 
+        public void AddUncontainedCard(CardInstanceState card)
+        {
+            AddUncontainedObject(card?.BaseState, card, cards, nameof(card));
+        }
+
+        public void AddUncontainedPawn(PawnState pawn)
+        {
+            AddUncontainedObject(pawn?.BaseState, pawn, pawns, nameof(pawn));
+        }
+
+        public void AddUncontainedToken(TokenState token)
+        {
+            AddUncontainedObject(token?.BaseState, token, tokens, nameof(token));
+        }
+
+        public void AddUncontainedDie(DieState die)
+        {
+            AddUncontainedObject(die?.BaseState, die, dice, nameof(die));
+        }
+
         public PlayAreaState GetPlayArea(PlayAreaId playAreaId)
         {
             if (playAreas.TryGetValue(playAreaId, out PlayAreaState playArea))
@@ -497,6 +557,30 @@ namespace ConsoleCards.Core.Domain.Match
             }
 
             return copiedTokens;
+        }
+
+        private static Dictionary<TabletopObjectId, DieState> CopyDice(
+            IEnumerable<DieState> dice,
+            HashSet<TabletopObjectId> seenObjectIds)
+        {
+            if (dice == null)
+            {
+                throw new ArgumentNullException(nameof(dice));
+            }
+
+            Dictionary<TabletopObjectId, DieState> copiedDice = new Dictionary<TabletopObjectId, DieState>();
+            foreach (DieState die in dice)
+            {
+                if (die == null)
+                {
+                    throw new ArgumentException("Dice cannot contain null items.", nameof(dice));
+                }
+
+                AddObjectId(die.BaseState.Id, seenObjectIds, nameof(dice));
+                copiedDice.Add(die.BaseState.Id, die);
+            }
+
+            return copiedDice;
         }
 
         private static Dictionary<ContainerId, ContainerState> CopyContainers(IEnumerable<ContainerState> containers)
@@ -800,7 +884,37 @@ namespace ConsoleCards.Core.Domain.Match
                 objectStates.Add(token.BaseState.Id, token.BaseState);
             }
 
+            foreach (DieState die in dice.Values)
+            {
+                objectStates.Add(die.BaseState.Id, die.BaseState);
+            }
+
             return objectStates;
+        }
+
+        private void AddUncontainedObject<TState>(
+            TabletopObjectState baseState,
+            TState state,
+            IDictionary<TabletopObjectId, TState> destination,
+            string parameterName)
+            where TState : class
+        {
+            if (state == null || baseState == null)
+            {
+                throw new ArgumentNullException(parameterName);
+            }
+
+            if (!baseState.ContainerId.IsEmpty)
+            {
+                throw new InvalidOperationException("Only uncontained Tabletop Objects can be added through this operation.");
+            }
+
+            if (ContainsObject(baseState.Id))
+            {
+                throw new ArgumentException("Tabletop Object ID already exists in the Match.", parameterName);
+            }
+
+            destination.Add(baseState.Id, state);
         }
 
         private static int CountContainerMembership(ContainerState container, TabletopObjectId objectId)
