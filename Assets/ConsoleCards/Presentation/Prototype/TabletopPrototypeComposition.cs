@@ -30,13 +30,12 @@ namespace ConsoleCards.Presentation.Prototype
     public sealed class TabletopPrototypeComposition : MonoBehaviour, IContainedCardDragFeedback
     {
         private const int PrototypeConsoleSlotCount = TrapFloorTemplateFactory.ConsoleSlotCountPerPlayer;
-        private const int PrototypeFloorfallRoundNumber = 1;
         private const int ShuffleSeed = 123;
         private const float ContextMenuWidth = 240f;
         private const float FloorfallStatusWidth = 280f;
         private const float FloorfallStatusHeight = 78f;
-        private const float FloormasterStatusWidth = 320f;
-        private const float FloormasterStatusHeight = 118f;
+        private const float TrapFloorRoundStatusWidth = 340f;
+        private const float TrapFloorRoundStatusHeight = 174f;
         private const float TrapFloorCoinVisualScale = 0.34f;
         private const float TrapFloorFloorLabelCharacterSize = 0.16f;
         private const float TrapFloorCardLabelCharacterSize = 0.18f;
@@ -47,7 +46,7 @@ namespace ConsoleCards.Presentation.Prototype
         private const int ToolboxPhysicalOrderStride = 40;
         private const float SessionEntryWidth = 420f;
         private const float SessionEntryHeight = 270f;
-        private static readonly Rect PrototypeControlsPanelRect = new Rect(16f, 330f, 280f, 460f);
+        private static readonly Rect PrototypeControlsPanelRect = new Rect(16f, 330f, 280f, 620f);
 
         [SerializeField] internal UnityCamera targetCamera;
         [SerializeField] internal TabletopCameraInputAdapter cameraInputAdapter;
@@ -154,6 +153,8 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorFloorfallTargetPresenter floorfallTargetPresenter;
         private TrapFloorFloormasterLifecycleState floormasterLifecycleState;
         private TrapFloorFloormasterLifecycleService floormasterLifecycleService;
+        private TrapFloorRoundState trapFloorRoundState;
+        private TrapFloorRoundOrchestrationService trapFloorRoundOrchestrationService;
         private SystemRandomValueSource authoritativeRandomValueSource;
         private CreateTabletopComponentUseCase componentCreationUseCase;
         private RollDieUseCase rollDieUseCase;
@@ -230,6 +231,8 @@ namespace ConsoleCards.Presentation.Prototype
         public TrapFloorFloorfallState FloorfallState => floorfallState;
 
         public TrapFloorFloormasterLifecycleState FloormasterLifecycleState => floormasterLifecycleState;
+
+        public TrapFloorRoundState TrapFloorRoundState => trapFloorRoundState;
 
         public PlayerLayoutDefinition PlayerLayout => playerLayout;
 
@@ -358,6 +361,7 @@ namespace ConsoleCards.Presentation.Prototype
                 BuildToolboxRuntime();
                 BuildFloormasterLifecycleRuntime();
                 BuildFloorfallRuntime();
+                BuildTrapFloorRoundRuntime();
                 ProjectTrapFloorCameraBookmark();
                 BindObjectViews();
                 BuildContainerViews();
@@ -571,6 +575,8 @@ namespace ConsoleCards.Presentation.Prototype
             floorfallTargetPresenter = null;
             floormasterLifecycleState = null;
             floormasterLifecycleService = null;
+            trapFloorRoundState = null;
+            trapFloorRoundOrchestrationService = null;
             authoritativeRandomValueSource = null;
             componentCreationUseCase = null;
             rollDieUseCase = null;
@@ -848,39 +854,70 @@ namespace ConsoleCards.Presentation.Prototype
             InitializeActiveSession(true);
         }
 
-        public TrapFloorFloorfallTarget TriggerFloorfall()
+        public TrapFloorRoundActionResult CompleteTrapFloorStart()
         {
             EnsureInitialized();
-            if (floorfallService == null || floorfallTargetPresenter == null)
+            if (trapFloorRoundOrchestrationService == null)
+            {
+                throw new InvalidOperationException("Round progression is available only in the active Trap Floor session.");
+            }
+
+            TrapFloorRoundActionResult result = trapFloorRoundOrchestrationService.CompleteStart(
+                new TrapFloorRoundActionRequest(CreateCommandContext()));
+            ShowMessage(result.Succeeded
+                ? trapFloorRoundState.CurrentRoundNumber == 1
+                    ? "Round 1 Start complete. Each participating Player may now Search once."
+                    : $"Round {trapFloorRoundState.CurrentRoundNumber} Start/movement acknowledged for prototype orchestration; no Pawn moved."
+                : $"Start progression rejected: {result.Error}.");
+            return result;
+        }
+
+        public TrapFloorRoundFloorfallResult TriggerFloorfall()
+        {
+            EnsureInitialized();
+            if (trapFloorRoundOrchestrationService == null || floorfallTargetPresenter == null)
             {
                 throw new InvalidOperationException("Floorfall is available only in the active Trap Floor session.");
             }
 
-            TrapFloorFloorfallTarget target = floorfallService.RollAndResolve(
-                new TrapFloorFloorfallContext(PrototypeFloorfallRoundNumber));
+            TrapFloorRoundFloorfallResult result = trapFloorRoundOrchestrationService.RollFloorfall(
+                new TrapFloorRoundActionRequest(CreateCommandContext()));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Official Floorfall rejected: {result.Error}.");
+                return result;
+            }
+
+            TrapFloorFloorfallTarget target = result.Target.Value;
             AnimateAcceptedDieResult(trapFloorTemplate.FloorfallXAxisDieId);
             AnimateAcceptedDieResult(trapFloorTemplate.FloorfallYAxisDieId);
             floorfallTargetPresenter.Show(target.FloorCardId);
             ShowMessage(
-                $"Floorfall: X {target.XAxisRoll.Value}, Y {target.YAxisRoll.Value} -> {target.Coordinate}.");
-            return target;
+                $"Floorfall {trapFloorRoundState.AcceptedFloorfallCount}: X {target.XAxisRoll.Value}, Y {target.YAxisRoll.Value} -> {target.Coordinate}.");
+            return result;
         }
 
-        public TrapFloorFloormasterSearchResult SearchFloormasterDeck()
+        public TrapFloorRoundSearchResult SearchFloormasterDeck()
+        {
+            return SearchFloormasterDeck(localPlayerId);
+        }
+
+        public TrapFloorRoundSearchResult SearchFloormasterDeck(PlayerId searchingPlayerId)
         {
             EnsureInitialized();
-            if (floormasterLifecycleService == null || floormasterLifecycleState == null)
+            if (trapFloorRoundOrchestrationService == null || floormasterLifecycleState == null)
             {
                 throw new InvalidOperationException("Floormaster Search is available only in the active Trap Floor session.");
             }
 
-            TrapFloorFloormasterSearchResult result = floormasterLifecycleService.Search(
-                matchState,
-                activeSession.Request.ActivePlayerIds,
-                new TrapFloorFloormasterSearchRequest(CreateCommandContext()));
+            TrapFloorRoundSearchResult result = trapFloorRoundOrchestrationService.Search(
+                new TrapFloorFloormasterSearchRequest(CreateCommandContext(searchingPlayerId)));
             if (!result.Succeeded)
             {
-                ShowMessage($"Floormaster Search rejected: {result.Error}.");
+                string detail = result.Error == TrapFloorRoundOrchestrationError.FloormasterLifecycleRejected
+                    ? result.LifecycleError.ToString()
+                    : result.Error.ToString();
+                ShowMessage($"Floormaster Search rejected: {detail}.");
                 return result;
             }
 
@@ -899,10 +936,10 @@ namespace ConsoleCards.Presentation.Prototype
             return result;
         }
 
-        public CompletePendingFloormasterCardResult CompletePendingFloormasterTriggerPrototype()
+        public TrapFloorRoundTriggerResult CompletePendingFloormasterTriggerPrototype()
         {
             EnsureInitialized();
-            if (floormasterLifecycleService == null || floormasterLifecycleState == null)
+            if (trapFloorRoundOrchestrationService == null || floormasterLifecycleState == null)
             {
                 throw new InvalidOperationException("Floormaster Trigger completion is available only in the active Trap Floor session.");
             }
@@ -911,24 +948,68 @@ namespace ConsoleCards.Presentation.Prototype
             if (pendingCard == null)
             {
                 ShowMessage("Prototype Trigger completion rejected: no pending Floormaster Card.");
-                return CompletePendingFloormasterCardResult.Failure(
+                return TrapFloorRoundTriggerResult.Failure(
                     CommandResultStatus.Rejected,
-                    TrapFloorFloormasterLifecycleError.PendingCardMissing);
+                    TrapFloorRoundOrchestrationError.PendingCardStateMismatch);
             }
 
-            CompletePendingFloormasterCardResult result = floormasterLifecycleService.CompleteResolvedCard(
-                matchState,
-                activeSession.Request.ActivePlayerIds,
+            TrapFloorRoundTriggerResult result = trapFloorRoundOrchestrationService.CompleteTrigger(
                 new CompletePendingFloormasterCardRequest(CreateCommandContext(), pendingCard.CardId));
             if (!result.Succeeded)
             {
-                ShowMessage($"Prototype Trigger completion rejected: {result.Error}.");
+                string detail = result.Error == TrapFloorRoundOrchestrationError.FloormasterLifecycleRejected
+                    ? result.LifecycleError.ToString()
+                    : result.Error.ToString();
+                ShowMessage($"Prototype Trigger completion rejected: {detail}.");
                 return result;
             }
 
             discardPileView.ApplyAcceptedLayout();
             RefreshCardContentVisibility();
             ShowMessage("Pending Floormaster Card discarded. Prototype acknowledgement only; no Card effect was resolved.");
+            return result;
+        }
+
+        public TrapFloorRoundActionResult CompleteFloorfallPhasePrototype()
+        {
+            EnsureInitialized();
+            if (trapFloorRoundOrchestrationService == null)
+            {
+                throw new InvalidOperationException("Floorfall phase progression is available only in the active Trap Floor session.");
+            }
+
+            TrapFloorRoundActionResult result = trapFloorRoundOrchestrationService.CompleteFloorfallPhase(
+                new TrapFloorRoundActionRequest(CreateCommandContext()));
+            ShowMessage(result.Succeeded
+                ? "Floorfall requirement acknowledged for prototype orchestration. Mode requirements were not evaluated."
+                : $"Floorfall phase completion rejected: {result.Error}.");
+            return result;
+        }
+
+        public TrapFloorRoundActionResult CompleteEndPrototype()
+        {
+            EnsureInitialized();
+            if (trapFloorRoundOrchestrationService == null)
+            {
+                throw new InvalidOperationException("End phase progression is available only in the active Trap Floor session.");
+            }
+
+            int completedRound = trapFloorRoundState.CurrentRoundNumber;
+            TrapFloorRoundActionResult result = trapFloorRoundOrchestrationService.CompleteEnd(
+                new TrapFloorRoundActionRequest(CreateCommandContext()));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"End completion rejected: {result.Error}.");
+            }
+            else if (trapFloorRoundState.IsScheduleCompleted)
+            {
+                ShowMessage("Round 10 schedule complete. Win/loss remains unresolved.");
+            }
+            else
+            {
+                ShowMessage($"Round {completedRound} End acknowledged. Round {trapFloorRoundState.CurrentRoundNumber} begins at Start.");
+            }
+
             return result;
         }
 
@@ -1073,7 +1154,7 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            DrawFloormasterPendingStatus();
+            DrawTrapFloorRoundStatus();
             DrawFloorfallStatus();
             DrawPlayerContextMenu();
             DrawActiveSessionPanel();
@@ -1095,6 +1176,11 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 ResetPrototype();
                 GUIUtility.ExitGUI();
+            }
+
+            if (trapFloorRoundState != null)
+            {
+                DrawTrapFloorRoundActions();
             }
 
             if (GUILayout.Button(toolboxVisible ? "Close Component Toolbox" : "Add Component"))
@@ -1181,6 +1267,102 @@ namespace ConsoleCards.Presentation.Prototype
 
             GUILayout.Space(6f);
             GUILayout.EndArea();
+        }
+
+        private void DrawTrapFloorRoundActions()
+        {
+            GUILayout.Space(4f);
+            GUILayout.Label("Official Trap Floor progression");
+            switch (trapFloorRoundState.Phase)
+            {
+                case TrapFloorRoundPhase.Start:
+                    string startAction = trapFloorRoundState.CurrentRoundNumber == 1
+                        ? "Begin Round / Continue to Search"
+                        : "Complete Start / Movement (Prototype)";
+                    if (GUILayout.Button(startAction))
+                    {
+                        if (CompleteTrapFloorStart().Succeeded)
+                        {
+                            GUIUtility.ExitGUI();
+                        }
+                    }
+
+                    if (trapFloorRoundState.CurrentRoundNumber > 1)
+                    {
+                        GUILayout.Label("Prototype acknowledgement only; no Pawn movement occurs.");
+                    }
+
+                    break;
+                case TrapFloorRoundPhase.Search:
+                    GUILayout.Label("Choose any eligible searching Player:");
+                    for (int i = 0; i < trapFloorRoundState.ParticipatingPlayerIds.Count; i++)
+                    {
+                        PlayerId playerId = trapFloorRoundState.ParticipatingPlayerIds[i];
+                        if (trapFloorRoundState.HasCompletedSearchTrigger(playerId))
+                        {
+                            continue;
+                        }
+
+                        if (GUILayout.Button($"Search - {FormatPlayerName(playerId)}"))
+                        {
+                            if (SearchFloormasterDeck(playerId).Succeeded)
+                            {
+                                GUIUtility.ExitGUI();
+                            }
+                        }
+                    }
+
+                    break;
+                case TrapFloorRoundPhase.Trigger:
+                    GUILayout.Label("Card effects remain unresolved.");
+                    if (GUILayout.Button("Complete Pending Trigger (Prototype)"))
+                    {
+                        if (CompletePendingFloormasterTriggerPrototype().Succeeded)
+                        {
+                            GUIUtility.ExitGUI();
+                        }
+                    }
+
+                    break;
+                case TrapFloorRoundPhase.Floorfall:
+                    if (GUILayout.Button("Roll Floorfall"))
+                    {
+                        if (TriggerFloorfall().Succeeded)
+                        {
+                            GUIUtility.ExitGUI();
+                        }
+                    }
+
+                    bool previousEnabled = GUI.enabled;
+                    GUI.enabled = previousEnabled && trapFloorRoundState.AcceptedFloorfallCount > 0;
+                    if (GUILayout.Button("Complete Floorfall Phase (Prototype)"))
+                    {
+                        if (CompleteFloorfallPhasePrototype().Succeeded)
+                        {
+                            GUIUtility.ExitGUI();
+                        }
+                    }
+
+                    GUI.enabled = previousEnabled;
+                    GUILayout.Label("Mode count is acknowledged externally; Easy/Hard is not selected here.");
+                    break;
+                case TrapFloorRoundPhase.End:
+                    if (GUILayout.Button("Complete End (Prototype)"))
+                    {
+                        if (CompleteEndPrototype().Succeeded)
+                        {
+                            GUIUtility.ExitGUI();
+                        }
+                    }
+
+                    GUILayout.Label("Prototype acknowledgement only; survival and win/loss are not evaluated.");
+                    break;
+                case TrapFloorRoundPhase.Completed:
+                    GUILayout.Label("10-round schedule complete. No winner has been declared.");
+                    break;
+            }
+
+            GUILayout.Space(4f);
         }
 
         private void DrawComponentToolbox()
@@ -2027,12 +2209,15 @@ namespace ConsoleCards.Presentation.Prototype
         {
             GUILayout.Label("OFFICIAL FLOORMASTER DECK");
             bool previousEnabled = GUI.enabled;
-            bool searchBlocked = floormasterLifecycleState == null
+            bool searchBlocked = trapFloorRoundState == null
+                || trapFloorRoundState.Phase != TrapFloorRoundPhase.Search
+                || trapFloorRoundState.HasCompletedSearchTrigger(localPlayerId)
+                || floormasterLifecycleState == null
                 || floormasterLifecycleState.HasPendingCard;
             GUI.enabled = previousEnabled && !searchBlocked;
             if (GUILayout.Button("Search"))
             {
-                TrapFloorFloormasterSearchResult result = SearchFloormasterDeck();
+                TrapFloorRoundSearchResult result = SearchFloormasterDeck();
                 if (result.Succeeded)
                 {
                     CloseContextMenu();
@@ -2042,7 +2227,7 @@ namespace ConsoleCards.Presentation.Prototype
             GUI.enabled = previousEnabled;
             if (searchBlocked)
             {
-                GUILayout.Label("Search blocked: resolve the pending Card first.");
+                GUILayout.Label(OfficialSearchAvailabilityText());
             }
 
             GUILayout.Space(4f);
@@ -2158,14 +2343,20 @@ namespace ConsoleCards.Presentation.Prototype
 
             GUILayout.Label($"Category: {pendingCard.Category}");
             GUILayout.Label("Prototype only: acknowledges future Trigger completion. No Card effect is resolved.");
+            bool previousEnabled = GUI.enabled;
+            GUI.enabled = previousEnabled
+                && trapFloorRoundState != null
+                && trapFloorRoundState.Phase == TrapFloorRoundPhase.Trigger;
             if (GUILayout.Button("Complete Pending Trigger (Prototype)"))
             {
-                CompletePendingFloormasterCardResult result = CompletePendingFloormasterTriggerPrototype();
+                TrapFloorRoundTriggerResult result = CompletePendingFloormasterTriggerPrototype();
                 if (result.Succeeded)
                 {
                     CloseContextMenu();
                 }
             }
+
+            GUI.enabled = previousEnabled;
         }
 
         private void DrawFloorCardContextMenu()
@@ -2182,10 +2373,23 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             GUILayout.Label($"FLOOR {coordinate}");
+            bool previousEnabled = GUI.enabled;
+            GUI.enabled = previousEnabled
+                && trapFloorRoundState != null
+                && trapFloorRoundState.Phase == TrapFloorRoundPhase.Floorfall;
             if (GUILayout.Button("Roll Floorfall"))
             {
-                TriggerFloorfall();
-                CloseContextMenu();
+                if (TriggerFloorfall().Succeeded)
+                {
+                    CloseContextMenu();
+                }
+            }
+
+            GUI.enabled = previousEnabled;
+            if (trapFloorRoundState == null
+                || trapFloorRoundState.Phase != TrapFloorRoundPhase.Floorfall)
+            {
+                GUILayout.Label("Official Floorfall is available only during the Floorfall phase.");
             }
         }
 
@@ -2377,13 +2581,13 @@ namespace ConsoleCards.Presentation.Prototype
             switch (mode)
             {
                 case PrototypeContextMenuMode.Deck:
-                    return 245f;
+                    return 265f;
                 case PrototypeContextMenuMode.DrawCards:
                     return 155f;
                 case PrototypeContextMenuMode.TabletopCard:
                     return 90f;
                 case PrototypeContextMenuMode.FloorCard:
-                    return 90f;
+                    return 130f;
                 case PrototypeContextMenuMode.PendingFloormasterCard:
                     return 180f;
                 case PrototypeContextMenuMode.StackCard:
@@ -2798,6 +3002,20 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorTemplate,
                 authoritativeRandomValueSource,
                 floormasterLifecycleState);
+        }
+
+        private void BuildTrapFloorRoundRuntime()
+        {
+            trapFloorRoundState = new TrapFloorRoundState(
+                matchState.Id,
+                activeSession.Request.ActivePlayerIds);
+            trapFloorRoundOrchestrationService = new TrapFloorRoundOrchestrationService(
+                trapFloorTemplate,
+                matchState,
+                trapFloorRoundState,
+                floormasterLifecycleState,
+                floormasterLifecycleService,
+                floorfallService);
         }
 
         private void BuildToolboxRuntime()
@@ -3762,7 +3980,16 @@ namespace ConsoleCards.Presentation.Prototype
 
         private CommandContext CreateCommandContext()
         {
-            return new CommandContext(CommandId.New(), matchState.Id, localPlayerId, matchState.Revision);
+            return CreateCommandContext(localPlayerId);
+        }
+
+        private CommandContext CreateCommandContext(PlayerId requestingPlayerId)
+        {
+            return new CommandContext(
+                CommandId.New(),
+                matchState.Id,
+                requestingPlayerId,
+                matchState.Revision);
         }
 
         private CardView CreateCardView(
@@ -4072,25 +4299,68 @@ namespace ConsoleCards.Presentation.Prototype
                 : counts;
         }
 
-        private void DrawFloormasterPendingStatus()
+        private string OfficialSearchAvailabilityText()
         {
-            TrapFloorPendingFloormasterCard pendingCard = floormasterLifecycleState?.PendingCard;
-            if (pendingCard == null)
+            if (trapFloorRoundState == null)
+            {
+                return "Official Search is unavailable outside Trap Floor round orchestration.";
+            }
+
+            if (trapFloorRoundState.Phase != TrapFloorRoundPhase.Search)
+            {
+                return $"Official Search is unavailable during {trapFloorRoundState.Phase}.";
+            }
+
+            if (trapFloorRoundState.HasCompletedSearchTrigger(localPlayerId))
+            {
+                return $"{FormatPlayerName(localPlayerId)} already completed Search + Trigger this round.";
+            }
+
+            if (floormasterLifecycleState?.HasPendingCard == true)
+            {
+                return "Search blocked: resolve the pending Card first.";
+            }
+
+            return "Official Search is unavailable.";
+        }
+
+        private void DrawTrapFloorRoundStatus()
+        {
+            if (trapFloorRoundState == null)
             {
                 return;
             }
 
             Rect statusRect = new Rect(
-                Mathf.Max(0f, Screen.width - FloormasterStatusWidth - 16f),
+                Mathf.Max(0f, Screen.width - TrapFloorRoundStatusWidth - 16f),
                 16f,
-                FloormasterStatusWidth,
-                FloormasterStatusHeight);
+                TrapFloorRoundStatusWidth,
+                TrapFloorRoundStatusHeight);
             GUILayout.BeginArea(statusRect, GUI.skin.box);
-            GUILayout.Label("FLOORMASTER CARD PENDING");
-            GUILayout.Label($"Search: {FormatPlayerName(pendingCard.SearchingPlayerId)}");
-            GUILayout.Label($"Category: {pendingCard.Category}");
+            GUILayout.Label("TRAP FLOOR ROUND STATUS");
+            GUILayout.Label($"Round: {trapFloorRoundState.CurrentRoundNumber} / {TrapFloorRoundState.FinalRoundNumber}");
+            GUILayout.Label($"Phase: {trapFloorRoundState.Phase}");
+            GUILayout.Label(
+                $"Search + Trigger: {trapFloorRoundState.CompletedSearchTriggerCount} / {trapFloorRoundState.ParticipatingPlayerIds.Count} Players complete");
+
+            TrapFloorPendingFloormasterCard pendingCard = floormasterLifecycleState?.PendingCard;
+            if (pendingCard != null)
+            {
+                GUILayout.Label(
+                    $"Pending Trigger: {FormatPlayerName(pendingCard.SearchingPlayerId)} / {pendingCard.Category}");
+                GUILayout.Label("Effect unresolved; awaiting prototype/external completion.");
+            }
+            else if (trapFloorRoundState.Phase == TrapFloorRoundPhase.Floorfall)
+            {
+                GUILayout.Label($"Floorfalls performed this phase: {trapFloorRoundState.AcceptedFloorfallCount}");
+                GUILayout.Label("Mode-required count remains external.");
+            }
+            else if (trapFloorRoundState.IsScheduleCompleted)
+            {
+                GUILayout.Label("10-round schedule complete. Win/loss unresolved.");
+            }
+
             GUILayout.Label($"Deck: {ContainerCount(deckContainerId)}   Discard: {ContainerCount(discardContainerId)}");
-            GUILayout.Label("Awaiting future Trigger resolution.");
             GUILayout.EndArea();
         }
 
@@ -4104,8 +4374,8 @@ namespace ConsoleCards.Presentation.Prototype
             TrapFloorFloorfallTarget target = floorfallState.CurrentTarget.Value;
             Rect statusRect = new Rect(
                 Mathf.Max(0f, Screen.width - FloorfallStatusWidth - 16f),
-                floormasterLifecycleState != null && floormasterLifecycleState.HasPendingCard
-                    ? 16f + FloormasterStatusHeight + 8f
+                trapFloorRoundState != null
+                    ? 16f + TrapFloorRoundStatusHeight + 8f
                     : 16f,
                 FloorfallStatusWidth,
                 FloorfallStatusHeight);
