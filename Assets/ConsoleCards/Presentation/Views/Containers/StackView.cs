@@ -155,6 +155,9 @@ namespace ConsoleCards.Presentation.Views.Containers
             Vector3 placementWorldPosition = coordinateConverter.ToWorldPosition(placement.Pose);
             TableCoordinate anchorCoordinate = coordinateConverter.ToTableCoordinate(authoredLayoutAnchor.position);
             float anchorWorldUpOffset = authoredLayoutAnchor.position.y - placementWorldPosition.y;
+            float physicalStep = Mathf.Max(
+                verticalOffset,
+                ContainerViewBinding.MinimumPhysicalCardSeparation);
             for (int i = 0; i < orderedCards.Count; i++)
             {
                 TableCoordinate coordinate = new TableCoordinate(
@@ -167,7 +170,7 @@ namespace ConsoleCards.Presentation.Views.Containers
                 plan.Add(new CardLayoutPlan(
                     orderedCards[i],
                     pose,
-                    anchorWorldUpOffset + (i * verticalOffset)));
+                    anchorWorldUpOffset + (i * physicalStep)));
             }
 
             return plan;

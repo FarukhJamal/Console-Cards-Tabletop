@@ -20,6 +20,7 @@ namespace ConsoleCards.Presentation.Input
         private Action<Vector2> secondaryPointerPressed;
         private Action dismissTransientUi;
         private TabletopSelectionPresenter selectionPresenter;
+        private TabletopComponentPlacementController componentPlacementController;
 
         public bool IsInitialized => isInitialized;
 
@@ -73,6 +74,29 @@ namespace ConsoleCards.Presentation.Input
             suppressObjectPointerUntilRelease = false;
             secondaryPointerPressed = null;
             dismissTransientUi = null;
+        }
+
+        internal void ConfigureComponentPlacement(
+            TabletopComponentPlacementController placementController)
+        {
+            if (placementController == null)
+            {
+                throw new ArgumentNullException(nameof(placementController));
+            }
+
+            if (componentPlacementController != null)
+            {
+                throw new InvalidOperationException(
+                    "TabletopInputFrameCoordinator already has a component placement controller.");
+            }
+
+            componentPlacementController = placementController;
+        }
+
+        internal void ClearComponentPlacement()
+        {
+            componentPlacementController?.Cancel();
+            componentPlacementController = null;
         }
 
         internal void SetTransientObjectInputBlockingGuiRect(Rect guiRect)
@@ -165,7 +189,17 @@ namespace ConsoleCards.Presentation.Input
 
             bool secondaryPressedThisFrame = Mouse.current != null
                 && Mouse.current.rightButton.wasPressedThisFrame;
-            if (secondaryPressedThisFrame
+            bool placementCancelledBySecondary = secondaryPressedThisFrame
+                && componentPlacementController != null
+                && componentPlacementController.IsActive;
+            if (placementCancelledBySecondary)
+            {
+                componentPlacementController.Cancel();
+                dragHeld = false;
+                pointerDelta = Vector2.zero;
+                scrollDelta = 0f;
+            }
+            else if (secondaryPressedThisFrame
                 && secondaryPointerPressed != null
                 && !HasActiveObjectInteraction()
                 && !IsInsideObjectInputBlockingGuiRect(screenPosition))
@@ -199,6 +233,28 @@ namespace ConsoleCards.Presentation.Input
                 throw new ArgumentOutOfRangeException(nameof(unscaledDeltaTime));
             }
 
+            bool pointerInsideBlockedUi = IsInsideObjectInputBlockingGuiRect(frame.ScreenPosition);
+            if (componentPlacementController != null
+                && componentPlacementController.HandlePointerFrame(
+                    frame.ScreenPosition,
+                    pointerInsideBlockedUi,
+                    frame.SelectPressedThisFrame,
+                    frame.CancelPressedThisFrame))
+            {
+                if (selectionPresenter != null)
+                {
+                    selectionPresenter.Refresh();
+                }
+
+                cameraInputAdapter.ApplyInputFrame(
+                    frame.KeyboardPan,
+                    false,
+                    Vector2.zero,
+                    0f,
+                    unscaledDeltaTime);
+                return null;
+            }
+
             bool suppressScrollForPointerTransition = frame.HasPointerTransition;
             if (hasTransientObjectInputBlockingGuiRect
                 && frame.SelectPressedThisFrame
@@ -214,7 +270,6 @@ namespace ConsoleCards.Presentation.Input
                 dismissTransientUi?.Invoke();
             }
 
-            bool pointerInsideBlockedUi = IsInsideObjectInputBlockingGuiRect(frame.ScreenPosition);
             float effectiveRotateDelta = frame.HasPointerTransition || pointerInsideBlockedUi
                 ? 0f
                 : frame.RotateDelta;

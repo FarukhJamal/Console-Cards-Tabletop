@@ -42,6 +42,7 @@ namespace ConsoleCards.Presentation.Prototype
         private const float TrapFloorContainerLabelCharacterSize = 0.1f;
         private const int TrapFloorCardLabelFontSize = 64;
         private const int TrapFloorContainerLabelFontSize = 48;
+        private const int ToolboxPhysicalOrderStride = 40;
         private const float SessionEntryWidth = 420f;
         private const float SessionEntryHeight = 270f;
         private static readonly Rect PrototypeControlsPanelRect = new Rect(16f, 330f, 280f, 460f);
@@ -80,6 +81,8 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal float dragThresholdPixels = 8f;
         [SerializeField] internal float worldUnitsPerTableUnit = 1f;
         [SerializeField] internal float tabletopHeight = 0f;
+        [SerializeField] internal float tabletopLayerHeight = 0.02f;
+        [SerializeField] internal float tabletopLocalOrderHeight = 0.0005f;
         [SerializeField] internal float pickupLift = 0.08f;
         [SerializeField] internal float dragLift = 0.16f;
         [SerializeField] internal float pickupResponseDuration = 0.06f;
@@ -127,6 +130,7 @@ namespace ConsoleCards.Presentation.Prototype
         private bool frameCoordinatorEnabledByComposition;
         private bool controlsPanelInputBlockConfiguredByComposition;
         private bool prototypeUiInputConfiguredByComposition;
+        private bool componentPlacementInputConfiguredByComposition;
         private bool objectAdapterInitializedByComposition;
         private bool cardViewBoundByComposition;
         private bool pawnViewBoundByComposition;
@@ -149,6 +153,7 @@ namespace ConsoleCards.Presentation.Prototype
         private SystemRandomValueSource authoritativeRandomValueSource;
         private CreateTabletopComponentUseCase componentCreationUseCase;
         private RollDieUseCase rollDieUseCase;
+        private TabletopComponentPlacementController componentPlacementController;
         private PlayerLayoutDefinition playerLayout;
         private PlayerSeatLayoutEntry localSeatLayout;
         private PlayAreaId centralPlayAreaId;
@@ -392,8 +397,8 @@ namespace ConsoleCards.Presentation.Prototype
                 coordinateConverter = new TabletopCoordinateConverter(
                     worldUnitsPerTableUnit,
                     tabletopHeight,
-                    0f,
-                    0f);
+                    tabletopLayerHeight,
+                    tabletopLocalOrderHeight);
                 matchState = restoreInitialBaseline
                     ? activeSession.Reset()
                     : activeSession.CurrentMatch;
@@ -447,6 +452,14 @@ namespace ConsoleCards.Presentation.Prototype
             frameCoordinatorEnabledByComposition = false;
 
             CloseContextMenu();
+
+            if (componentPlacementInputConfiguredByComposition && inputFrameCoordinator != null)
+            {
+                inputFrameCoordinator.ClearComponentPlacement();
+            }
+
+            componentPlacementInputConfiguredByComposition = false;
+            componentPlacementController = null;
 
             if (prototypeUiInputConfiguredByComposition && inputFrameCoordinator != null)
             {
@@ -1101,31 +1114,31 @@ namespace ConsoleCards.Presentation.Prototype
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Card"))
             {
-                AddToolboxComponent(TabletopComponentKind.Card);
+                BeginToolboxPlacement(TabletopComponentKind.Card);
             }
 
             if (GUILayout.Button("Deck"))
             {
-                AddToolboxComponent(TabletopComponentKind.Deck);
+                BeginToolboxPlacement(TabletopComponentKind.Deck);
             }
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Stack"))
             {
-                AddToolboxComponent(TabletopComponentKind.Stack);
+                BeginToolboxPlacement(TabletopComponentKind.Stack);
             }
 
             if (GUILayout.Button("Pawn"))
             {
-                AddToolboxComponent(TabletopComponentKind.Pawn);
+                BeginToolboxPlacement(TabletopComponentKind.Pawn);
             }
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Token"))
             {
-                AddToolboxComponent(TabletopComponentKind.Token);
+                BeginToolboxPlacement(TabletopComponentKind.Token);
             }
 
             if (GUILayout.Button("Die"))
@@ -1156,8 +1169,36 @@ namespace ConsoleCards.Presentation.Prototype
         {
             if (GUILayout.Button($"d{sideCount}"))
             {
-                AddToolboxComponent(TabletopComponentKind.Die, sideCount);
+                BeginToolboxPlacement(TabletopComponentKind.Die, sideCount);
             }
+        }
+
+        private void BeginToolboxPlacement(
+            TabletopComponentKind componentKind,
+            int dieSideCount = 0)
+        {
+            EnsureInitialized();
+            if (componentPlacementController == null)
+            {
+                throw new InvalidOperationException("Component placement is not configured.");
+            }
+
+            CloseContextMenu();
+            GameObject previewRoot = CreateToolboxPlacementPreview(componentKind, dieSideCount);
+            float rotation = localSeatLayout != null
+                ? localSeatLayout.PlayerZonePose.RotationDegrees
+                : 0f;
+            componentPlacementController.Begin(
+                componentKind,
+                dieSideCount,
+                previewRoot,
+                rotation,
+                0,
+                toolboxSpawnSequence * ToolboxPhysicalOrderStride);
+            toolboxVisible = false;
+            toolboxDieChoicesVisible = false;
+            ShowMessage(
+                $"Place {(componentKind == TabletopComponentKind.Die ? $"d{dieSideCount}" : componentKind.ToString())}: left-click to confirm, right-click or Escape to cancel.");
         }
 
         public CreateTabletopComponentResult AddToolboxComponent(
@@ -1165,14 +1206,24 @@ namespace ConsoleCards.Presentation.Prototype
             int dieSideCount = 0)
         {
             EnsureInitialized();
-            TabletopPose spawnPose = CreateNextToolboxSpawnPose();
+            return AddToolboxComponentAtPose(
+                componentKind,
+                dieSideCount,
+                CreateNextToolboxSpawnPose());
+        }
+
+        private CreateTabletopComponentResult AddToolboxComponentAtPose(
+            TabletopComponentKind componentKind,
+            int dieSideCount,
+            TabletopPose requestedPose)
+        {
             CreateTabletopComponentResult result = componentCreationUseCase.Execute(
                 matchState,
                 activeSession.Request.ActivePlayerIds,
                 new CreateTabletopComponentRequest(
                     CreateCommandContext(),
                     componentKind,
-                    spawnPose,
+                    requestedPose,
                     dieSideCount));
             if (!result.Succeeded)
             {
@@ -1186,6 +1237,14 @@ namespace ConsoleCards.Presentation.Prototype
                 ? $"Added d{dieSideCount}."
                 : $"Added {componentKind}.");
             return result;
+        }
+
+        private bool CommitToolboxPlacement(
+            TabletopComponentKind componentKind,
+            int dieSideCount,
+            TabletopPose requestedPose)
+        {
+            return AddToolboxComponentAtPose(componentKind, dieSideCount, requestedPose).Succeeded;
         }
 
         private TabletopPose CreateNextToolboxSpawnPose()
@@ -1231,12 +1290,136 @@ namespace ConsoleCards.Presentation.Prototype
                     baseY + (column * columnY) + (row * rowY)),
                 rotation,
                 0,
-                toolboxSpawnSequence);
+                toolboxSpawnSequence * ToolboxPhysicalOrderStride);
+        }
+
+        private GameObject CreateToolboxPlacementPreview(
+            TabletopComponentKind componentKind,
+            int dieSideCount)
+        {
+            GameObject previewRoot;
+            switch (componentKind)
+            {
+                case TabletopComponentKind.Card:
+                {
+                    PrototypeCardVisualReferences preview = Instantiate(prototypeCardPrefab);
+                    preview.ValidateReferences();
+                    ConfigurePrototypeLabel(
+                        preview.FrontLabel,
+                        "CARD",
+                        TrapFloorCardLabelCharacterSize,
+                        TrapFloorCardLabelFontSize);
+                    ConfigurePrototypeLabel(
+                        preview.BackLabel,
+                        preview.BackLabel.text,
+                        TrapFloorCardBackLabelCharacterSize,
+                        TrapFloorCardLabelFontSize);
+                    previewRoot = preview.gameObject;
+                    break;
+                }
+                case TabletopComponentKind.Deck:
+                {
+                    PrototypeFixedContainerVisual preview = Instantiate(prototypeDeckPrefab);
+                    preview.ValidateReferences();
+                    ConfigureContainerLabel(preview.Label, "DECK");
+                    previewRoot = preview.gameObject;
+                    break;
+                }
+                case TabletopComponentKind.Stack:
+                {
+                    PrototypeFixedContainerVisual preview = Instantiate(prototypeStackPrefab);
+                    preview.ValidateReferences();
+                    ConfigureContainerLabel(preview.Label, "STACK");
+                    previewRoot = preview.gameObject;
+                    break;
+                }
+                case TabletopComponentKind.Pawn:
+                    previewRoot = Instantiate(prototypePawnPrefab).gameObject;
+                    break;
+                case TabletopComponentKind.Token:
+                    previewRoot = Instantiate(prototypeTokenPrefab).gameObject;
+                    break;
+                case TabletopComponentKind.Die:
+                {
+                    if (!ToolboxComponentDefinitions.IsSupportedDieSideCount(dieSideCount))
+                    {
+                        throw new ArgumentOutOfRangeException(nameof(dieSideCount));
+                    }
+
+                    DieView preview = Instantiate(prototypeDiePrefab);
+                    ConfigurePrototypeLabel(preview.ResultLabel, $"d{dieSideCount}\n1", 0.18f, 64);
+                    previewRoot = preview.gameObject;
+                    break;
+                }
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(componentKind));
+            }
+
+            PrepareRuntimeRoot(previewRoot, $"{componentKind} Placement Preview");
+            DisablePlacementPreviewInteraction(previewRoot);
+            TintPlacementPreview(previewRoot);
+            return previewRoot;
+        }
+
+        private static void DisablePlacementPreviewInteraction(GameObject previewRoot)
+        {
+            Collider[] colliders = previewRoot.GetComponentsInChildren<Collider>(true);
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                colliders[i].enabled = false;
+            }
+
+            TabletopContainerDropTarget[] dropTargets =
+                previewRoot.GetComponentsInChildren<TabletopContainerDropTarget>(true);
+            for (int i = 0; i < dropTargets.Length; i++)
+            {
+                dropTargets[i].enabled = false;
+            }
+
+            TabletopObjectView[] objectViews = previewRoot.GetComponentsInChildren<TabletopObjectView>(true);
+            for (int i = 0; i < objectViews.Length; i++)
+            {
+                objectViews[i].enabled = false;
+            }
+
+            TabletopSelectionVisual[] selectionVisuals =
+                previewRoot.GetComponentsInChildren<TabletopSelectionVisual>(true);
+            for (int i = 0; i < selectionVisuals.Length; i++)
+            {
+                if (selectionVisuals[i].IsConfigured)
+                {
+                    selectionVisuals[i].SetSelected(false);
+                }
+
+                selectionVisuals[i].enabled = false;
+            }
+        }
+
+        private static void TintPlacementPreview(GameObject previewRoot)
+        {
+            Renderer[] renderers = previewRoot.GetComponentsInChildren<Renderer>(true);
+            MaterialPropertyBlock properties = new MaterialPropertyBlock();
+            Color previewColor = new Color(0.42f, 0.82f, 1f, 0.72f);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer.GetComponent<TextMesh>() != null)
+                {
+                    continue;
+                }
+
+                renderer.GetPropertyBlock(properties);
+                properties.SetColor("_BaseColor", previewColor);
+                properties.SetColor("_Color", previewColor);
+                renderer.SetPropertyBlock(properties);
+                properties.Clear();
+            }
         }
 
         private void ProjectCreatedToolboxComponent(CreateTabletopComponentResult result)
         {
             Transform appearedTransform;
+            bool layoutCollectionChanged = false;
             switch (result.ComponentKind)
             {
                 case TabletopComponentKind.Card:
@@ -1264,6 +1447,7 @@ namespace ConsoleCards.Presentation.Prototype
                         cardViews);
                     ConfigureFixedContainer(instance.Visual, instance.View);
                     appearedTransform = instance.Root.transform;
+                    layoutCollectionChanged = true;
                     break;
                 }
                 case TabletopComponentKind.Stack:
@@ -1273,6 +1457,7 @@ namespace ConsoleCards.Presentation.Prototype
                     StackRuntimeView stack = CreateStackRuntimeView("STACK", container, placement);
                     stackViewsByContainerId.Add(result.ContainerId, stack);
                     appearedTransform = stack.Root.transform;
+                    layoutCollectionChanged = true;
                     break;
                 }
                 case TabletopComponentKind.Pawn:
@@ -1312,8 +1497,15 @@ namespace ConsoleCards.Presentation.Prototype
                     throw new InvalidOperationException("Accepted toolbox component kind is unsupported by Presentation.");
             }
 
-            RebuildInteractionAfterRuntimeProjection();
+            if (layoutCollectionChanged)
+            {
+                RebuildLayoutLookupAndRouter();
+            }
+
+            RefreshSelectionPresenterAfterRuntimeProjection();
+            Physics.SyncTransforms();
             presentationTransitions.Appear(appearedTransform, settleDuration);
+            Physics.SyncTransforms();
         }
 
         private void RefreshContainerCardViewSources()
@@ -1328,9 +1520,8 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
-        private void RebuildInteractionAfterRuntimeProjection()
+        private void RefreshSelectionPresenterAfterRuntimeProjection()
         {
-            SuspendInteractionDependenciesForRebuild();
             inputFrameCoordinator.ClearSelectionPresenter();
             selectionPresenter = new TabletopSelectionPresenter(
                 selectionState,
@@ -1339,7 +1530,7 @@ namespace ConsoleCards.Presentation.Prototype
                 tokenSelectionVisuals,
                 dieSelectionVisuals);
             inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
-            ResumeInteractionDependenciesAfterRebuild();
+            selectionPresenter.Refresh();
         }
 
         private void DrawSessionEntry()
@@ -2113,6 +2304,10 @@ namespace ConsoleCards.Presentation.Prototype
             ValidateFiniteGreaterThanOrEqualToZero(dragThresholdPixels, nameof(dragThresholdPixels));
             ValidateFiniteGreaterThanZero(worldUnitsPerTableUnit, nameof(worldUnitsPerTableUnit));
             ValidateFinite(tabletopHeight, nameof(tabletopHeight));
+            ValidateFiniteGreaterThanOrEqualToZero(tabletopLayerHeight, nameof(tabletopLayerHeight));
+            ValidateFiniteGreaterThanOrEqualToZero(
+                tabletopLocalOrderHeight,
+                nameof(tabletopLocalOrderHeight));
             ValidateFiniteGreaterThanOrEqualToZero(pickupLift, nameof(pickupLift));
             ValidateFiniteGreaterThanOrEqualToZero(dragLift, nameof(dragLift));
             ValidateFiniteGreaterThanOrEqualToZero(pickupResponseDuration, nameof(pickupResponseDuration));
@@ -2432,7 +2627,11 @@ namespace ConsoleCards.Presentation.Prototype
         private void BuildRuntimeGraph(bool restoreInitialBaseline)
         {
             interactionOwnerId = InteractionOwnerId.New();
-            coordinateConverter = new TabletopCoordinateConverter(worldUnitsPerTableUnit, tabletopHeight, 0f, 0f);
+            coordinateConverter = new TabletopCoordinateConverter(
+                worldUnitsPerTableUnit,
+                tabletopHeight,
+                tabletopLayerHeight,
+                tabletopLocalOrderHeight);
 
             if (prototypeTemplateContext == null)
             {
@@ -2901,6 +3100,12 @@ namespace ConsoleCards.Presentation.Prototype
                 pawnSelectionVisuals,
                 tokenSelectionVisuals,
                 dieSelectionVisuals);
+            componentPlacementController = new TabletopComponentPlacementController(
+                pointerProjector,
+                coordinateConverter,
+                CommitToolboxPlacement);
+            inputFrameCoordinator.ConfigureComponentPlacement(componentPlacementController);
+            componentPlacementInputConfiguredByComposition = true;
         }
 
         private void RebuildInteractionDependencies()
@@ -3484,6 +3689,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             DieView createdView = Instantiate(prototypeDiePrefab);
             GameObject root = PrepareRuntimeRoot(createdView.gameObject, name);
+            ConfigurePrototypeLabel(createdView.ResultLabel, createdView.ResultLabel.text, 0.18f, 64);
             selectionVisual = createdView.GetComponent<TabletopSelectionVisual>();
             ValidateRuntimeSelectionVisual(createdView, selectionVisual);
             selectionVisual.SetSelected(false);
@@ -3610,6 +3816,7 @@ namespace ConsoleCards.Presentation.Prototype
             label.anchor = TextAnchor.MiddleCenter;
             label.alignment = TextAlignment.Center;
             label.lineSpacing = 0.8f;
+            PrototypeWorldTextDepth.Apply(label);
         }
 
         private static void ApplyCardColor(Renderer renderer, Color color)
@@ -3640,7 +3847,7 @@ namespace ConsoleCards.Presentation.Prototype
 
             visual.ValidateReferences();
             StackView view = visual.GetView<StackView>();
-            visual.Label.text = name;
+            ConfigureContainerLabel(visual.Label, name);
             view.Bind(container, placement, visual.LayoutAnchor, coordinateConverter, cardViews);
             StackRuntimeView stackRuntimeView = new StackRuntimeView(
                 StackViewOwnership.RuntimeOwned,

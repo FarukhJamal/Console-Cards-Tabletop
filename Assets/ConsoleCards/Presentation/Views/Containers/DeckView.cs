@@ -102,9 +102,15 @@ namespace ConsoleCards.Presentation.Views.Containers
             IReadOnlyList<CardView> orderedCards)
         {
             List<CardLayoutPlan> plan = new List<CardLayoutPlan>(orderedCards.Count);
+            float physicalStep = Mathf.Max(
+                cardThicknessOffset,
+                ContainerViewBinding.MinimumPhysicalCardSeparation);
             for (int i = 0; i < orderedCards.Count; i++)
             {
-                plan.Add(new CardLayoutPlan(orderedCards[i], placement.Pose, i * cardThicknessOffset));
+                plan.Add(new CardLayoutPlan(
+                    orderedCards[i],
+                    placement.Pose,
+                    ContainerViewBinding.DefaultCardSurfaceClearance + (i * physicalStep)));
             }
 
             return plan;

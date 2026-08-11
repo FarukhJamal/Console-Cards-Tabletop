@@ -28,6 +28,11 @@ namespace ConsoleCards.Presentation.Views.Containers
 
     internal static class ContainerViewBinding
     {
+        // Prototype Card labels sit above the card body. This minimum lets the next
+        // opaque card surface physically occlude the complete card beneath it.
+        public const float MinimumPhysicalCardSeparation = 0.02f;
+        public const float DefaultCardSurfaceClearance = 0.025f;
+
         public static void ValidateContainer(
             ContainerState container,
             ContainerKind expectedKind)

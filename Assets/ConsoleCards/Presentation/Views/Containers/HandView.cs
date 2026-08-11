@@ -210,7 +210,7 @@ namespace ConsoleCards.Presentation.Views.Containers
                 plan.Add(new CardLayoutPlan(
                     orderedCards[i],
                     ContainerViewBinding.PoseFromWorld(coordinateConverter, worldPosition, rotation),
-                    i * verticalOffset));
+                    ContainerViewBinding.DefaultCardSurfaceClearance + (i * verticalOffset)));
             }
 
             return plan;

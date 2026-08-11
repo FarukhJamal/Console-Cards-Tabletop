@@ -115,6 +115,9 @@ namespace ConsoleCards.Presentation.Views.Containers
             IReadOnlyList<CardView> orderedCards)
         {
             List<CardLayoutPlan> plan = new List<CardLayoutPlan>(orderedCards.Count);
+            float physicalStep = Mathf.Max(
+                verticalOffset,
+                ContainerViewBinding.MinimumPhysicalCardSeparation);
             for (int i = 0; i < orderedCards.Count; i++)
             {
                 TableCoordinate coordinate = new TableCoordinate(
@@ -124,7 +127,10 @@ namespace ConsoleCards.Presentation.Views.Containers
                     coordinate,
                     placement.Pose.RotationDegrees,
                     placement.Pose);
-                plan.Add(new CardLayoutPlan(orderedCards[i], pose, i * verticalOffset));
+                plan.Add(new CardLayoutPlan(
+                    orderedCards[i],
+                    pose,
+                    ContainerViewBinding.DefaultCardSurfaceClearance + (i * physicalStep)));
             }
 
             return plan;
