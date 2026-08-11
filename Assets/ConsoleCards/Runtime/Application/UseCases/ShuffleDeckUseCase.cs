@@ -5,15 +5,28 @@ using ConsoleCards.Application.Results;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Identifiers;
+using ConsoleCards.Core.Randomness;
 
 namespace ConsoleCards.Application.UseCases
 {
     public sealed class ShuffleDeckUseCase
     {
+        private readonly IRandomValueSource randomValueSource;
+
+        public ShuffleDeckUseCase()
+        {
+        }
+
+        public ShuffleDeckUseCase(IRandomValueSource randomValueSource)
+        {
+            this.randomValueSource = randomValueSource
+                ?? throw new System.ArgumentNullException(nameof(randomValueSource));
+        }
+
         /// <summary>
-        /// Shuffles one Deck using deterministic Fisher-Yates over bottom-to-top container order.
-        /// For index i from Count - 1 down to 1, a stable xorshift32 generator selects j in [0, i],
-        /// then positions i and j are swapped.
+        /// Shuffles one Deck using Fisher-Yates over bottom-to-top container order. Normal requests
+        /// consume the injected authoritative random source; explicitly seeded replay/legacy requests
+        /// retain the stable deterministic generator.
         /// </summary>
         public ShuffleDeckResult Execute(MatchState matchState, ShuffleDeckCommand command)
         {
@@ -53,21 +66,49 @@ namespace ConsoleCards.Application.UseCases
                 return ShuffleDeckResult.Failure(CommandResultStatus.Conflict, ShuffleDeckError.RevisionOverflow);
             }
 
+            if (!command.Seed.HasValue && randomValueSource == null)
+            {
+                return ShuffleDeckResult.Failure(
+                    CommandResultStatus.Invalid,
+                    ShuffleDeckError.RandomSourceMissing);
+            }
+
             List<TabletopObjectId> shuffledObjectIds = new List<TabletopObjectId>(deck.ObjectIds);
-            Shuffle(shuffledObjectIds, command.Seed);
+            if (command.Seed.HasValue)
+            {
+                ShuffleDeterministically(shuffledObjectIds, command.Seed.Value);
+            }
+            else
+            {
+                ShuffleAuthoritatively(shuffledObjectIds, randomValueSource);
+            }
+
             deck.ReplaceOrder(shuffledObjectIds);
             long revision = matchState.AdvanceRevision();
 
             return ShuffleDeckResult.Accepted(revision);
         }
 
-        private static void Shuffle(List<TabletopObjectId> objectIds, int seed)
+        private static void ShuffleDeterministically(List<TabletopObjectId> objectIds, int seed)
         {
             StableShuffleRandom random = new StableShuffleRandom(seed);
 
             for (int index = objectIds.Count - 1; index > 0; index--)
             {
                 int swapIndex = random.NextInclusiveUpperExclusive(index + 1);
+                TabletopObjectId objectId = objectIds[index];
+                objectIds[index] = objectIds[swapIndex];
+                objectIds[swapIndex] = objectId;
+            }
+        }
+
+        private static void ShuffleAuthoritatively(
+            List<TabletopObjectId> objectIds,
+            IRandomValueSource randomValueSource)
+        {
+            for (int index = objectIds.Count - 1; index > 0; index--)
+            {
+                int swapIndex = randomValueSource.NextInt(0, index + 1);
                 TabletopObjectId objectId = objectIds[index];
                 objectIds[index] = objectIds[swapIndex];
                 objectIds[swapIndex] = objectId;

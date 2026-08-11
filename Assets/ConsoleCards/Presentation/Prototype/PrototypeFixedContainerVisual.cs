@@ -28,6 +28,8 @@ namespace ConsoleCards.Presentation.Prototype
 
         public TextMesh Label => label;
 
+        public Renderer FeedbackRenderer => feedbackRenderer;
+
         public TView GetView<TView>() where TView : MonoBehaviour, IContainerView
         {
             TView resolvedView = containerView as TView;

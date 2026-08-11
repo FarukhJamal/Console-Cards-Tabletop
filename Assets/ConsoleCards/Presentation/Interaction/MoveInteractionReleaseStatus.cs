@@ -7,6 +7,8 @@ namespace ConsoleCards.Presentation.Interaction
         MoveRejected,
         CardTransferAccepted,
         CardTransferRejected,
-        ProjectionFailed
+        ProjectionFailed,
+        TokenTransferAccepted,
+        TokenTransferRejected
     }
 }

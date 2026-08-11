@@ -7,8 +7,23 @@ namespace ConsoleCards.Application.Commands
     {
         public ShuffleDeckCommand(
             CommandContext context,
+            ContainerId deckContainerId)
+            : this(context, deckContainerId, null)
+        {
+        }
+
+        public ShuffleDeckCommand(
+            CommandContext context,
             ContainerId deckContainerId,
             int seed)
+            : this(context, deckContainerId, (int?)seed)
+        {
+        }
+
+        private ShuffleDeckCommand(
+            CommandContext context,
+            ContainerId deckContainerId,
+            int? seed)
         {
             if (deckContainerId.IsEmpty)
             {
@@ -24,6 +39,10 @@ namespace ConsoleCards.Application.Commands
 
         public ContainerId DeckContainerId { get; }
 
-        public int Seed { get; }
+        /// <summary>
+        /// Gets the deterministic seed supplied by legacy/replay callers. Normal Player-initiated
+        /// shuffles omit this value and obtain decisions from the injected authoritative random source.
+        /// </summary>
+        public int? Seed { get; }
     }
 }

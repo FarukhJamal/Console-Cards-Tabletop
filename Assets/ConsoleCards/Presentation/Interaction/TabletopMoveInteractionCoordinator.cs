@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
 using ConsoleCards.Application.UseCases;
@@ -26,6 +27,9 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly ContainerLayoutViewLookup layoutViewLookup;
         private readonly IContainedCardDragFeedback cardDragFeedback;
         private readonly float magneticDistance;
+        private readonly TokenDropTargetResolver tokenDropTargetResolver;
+        private readonly TransferTokenUseCase tokenTransferUseCase;
+        private readonly IReadOnlyList<TokenContainerView> tokenContainerViews;
         private TabletopObjectView activeView;
 
         public TabletopMoveInteractionCoordinator(
@@ -92,6 +96,9 @@ namespace ConsoleCards.Presentation.Interaction
             layoutViewLookup = null;
             cardDragFeedback = null;
             magneticDistance = 0f;
+            tokenDropTargetResolver = null;
+            tokenTransferUseCase = null;
+            tokenContainerViews = Array.Empty<TokenContainerView>();
 
             if (stateMachine.Phase != TabletopInteractionPhase.Idle)
             {
@@ -145,6 +152,50 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             this.magneticDistance = magneticDistance;
+            tokenDropTargetResolver = null;
+            tokenTransferUseCase = null;
+            tokenContainerViews = Array.Empty<TokenContainerView>();
+        }
+
+        internal TabletopMoveInteractionCoordinator(
+            MatchState matchState,
+            PlayerId requestedByPlayerId,
+            InteractionOwnerId interactionOwnerId,
+            TabletopSelectionState selectionState,
+            TabletopObjectHitResolver hitResolver,
+            TabletopPointerProjector pointerProjector,
+            LocalInteractionLockService lockService,
+            TabletopInteractionStateMachine stateMachine,
+            TabletopDragPreviewSession previewSession,
+            MoveObjectUseCase moveUseCase,
+            CardDropTargetResolver cardDropTargetResolver,
+            CardTransferInteractionCoordinator cardTransferCoordinator,
+            ContainerLayoutViewLookup layoutViewLookup,
+            IContainedCardDragFeedback cardDragFeedback,
+            float magneticDistance,
+            TokenDropTargetResolver tokenResolver,
+            TransferTokenUseCase transferTokenUseCase,
+            IReadOnlyList<TokenContainerView> containerViews)
+            : this(
+                matchState,
+                requestedByPlayerId,
+                interactionOwnerId,
+                selectionState,
+                hitResolver,
+                pointerProjector,
+                lockService,
+                stateMachine,
+                previewSession,
+                moveUseCase,
+                cardDropTargetResolver,
+                cardTransferCoordinator,
+                layoutViewLookup,
+                cardDragFeedback,
+                magneticDistance)
+        {
+            tokenDropTargetResolver = tokenResolver ?? throw new ArgumentNullException(nameof(tokenResolver));
+            tokenTransferUseCase = transferTokenUseCase ?? throw new ArgumentNullException(nameof(transferTokenUseCase));
+            tokenContainerViews = containerViews ?? throw new ArgumentNullException(nameof(containerViews));
         }
 
         public MatchState MatchState { get; }
@@ -266,7 +317,10 @@ namespace ConsoleCards.Presentation.Interaction
                 if (stateMachine.Phase == TabletopInteractionPhase.Pressed)
                 {
                     stateMachine.ReleasePointer();
-                    previewSession.EndPressAndReturn(view);
+                    if (!TryReturnContainedTokenAfterPress(view))
+                    {
+                        previewSession.EndPressAndReturn(view);
+                    }
                     lockService.Release(view.ObjectId, InteractionOwnerId);
                     activeView = null;
                     return MoveInteractionReleaseResult.ClickCompleted();
@@ -294,6 +348,27 @@ namespace ConsoleCards.Presentation.Interaction
 
                 activeView = null;
                 return transferReleaseResult;
+            }
+
+            if (TryTransferToken(
+                view,
+                screenPosition,
+                out MoveInteractionReleaseResult tokenTransferReleaseResult,
+                out bool tokenTransferAccepted))
+            {
+                lockService.Release(view.ObjectId, InteractionOwnerId);
+                if (tokenTransferAccepted)
+                {
+                    stateMachine.CompleteAcceptance();
+                }
+                else
+                {
+                    stateMachine.BeginCancellation();
+                    stateMachine.CompleteCancellation();
+                }
+
+                activeView = null;
+                return tokenTransferReleaseResult;
             }
 
             if (!pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate))
@@ -350,6 +425,7 @@ namespace ConsoleCards.Presentation.Interaction
                         || cardView.CardState.BaseState.ContainerId.IsEmpty)
                     {
                         view.ReconcileAcceptedState();
+                        ReapplyTokenContainerLayout(view);
                     }
                 }
                 catch (Exception cleanupException)
@@ -428,6 +504,140 @@ namespace ConsoleCards.Presentation.Interaction
             return true;
         }
 
+        private bool TryTransferToken(
+            TabletopObjectView view,
+            Vector2 screenPosition,
+            out MoveInteractionReleaseResult releaseResult,
+            out bool transferAccepted)
+        {
+            releaseResult = default;
+            transferAccepted = false;
+
+            TokenView tokenView = view as TokenView;
+            if (tokenView == null
+                || tokenView.TokenState == null
+                || tokenDropTargetResolver == null
+                || tokenTransferUseCase == null)
+            {
+                return false;
+            }
+
+            ContainerId sourceContainerId = tokenView.TokenState.BaseState.ContainerId;
+            bool hasDestination = tokenDropTargetResolver.TryResolve(
+                screenPosition,
+                out ContainerId destinationContainerId);
+            if (sourceContainerId.IsEmpty && !hasDestination)
+            {
+                return false;
+            }
+
+            TokenContainerView sourceView = FindTokenContainerView(sourceContainerId);
+            TokenContainerView destinationView = hasDestination
+                ? FindTokenContainerView(destinationContainerId)
+                : null;
+            TabletopTransformSnapshot transferStart = previewSession.IsActive
+                ? previewSession.EndPreviewWithoutReconcileAndCapture()
+                : default;
+
+            if ((hasDestination && destinationContainerId == sourceContainerId)
+                || (!sourceContainerId.IsEmpty && sourceView == null)
+                || (hasDestination && destinationView == null))
+            {
+                sourceView?.ApplyAcceptedLayout();
+                if (sourceView == null)
+                {
+                    tokenView.ReconcileAcceptedState();
+                }
+
+                previewSession.AnimateReturnFrom(tokenView, transferStart);
+                releaseResult = MoveInteractionReleaseResult.TokenTransferRejected();
+                return true;
+            }
+
+            CommandContext context = new CommandContext(
+                CommandId.New(),
+                MatchState.Id,
+                RequestedByPlayerId,
+                MatchState.Revision);
+            TransferTokenCommand command;
+            if (hasDestination)
+            {
+                command = TransferTokenCommand.ToContainer(
+                    context,
+                    tokenView.ObjectId,
+                    sourceContainerId,
+                    destinationContainerId);
+            }
+            else
+            {
+                if (!pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate))
+                {
+                    sourceView.ApplyAcceptedLayout();
+                    previewSession.AnimateReturnFrom(tokenView, transferStart);
+                    releaseResult = MoveInteractionReleaseResult.TokenTransferRejected();
+                    return true;
+                }
+
+                TabletopPose acceptedPose = tokenView.TokenState.BaseState.Pose;
+                command = TransferTokenCommand.ToTabletop(
+                    context,
+                    tokenView.ObjectId,
+                    sourceContainerId,
+                    new TabletopPose(
+                        coordinate,
+                        acceptedPose.RotationDegrees,
+                        acceptedPose.Layer,
+                        acceptedPose.LocalOrder));
+            }
+
+            TransferTokenResult transferResult = tokenTransferUseCase.Execute(MatchState, command);
+            releaseResult = MoveInteractionReleaseResult.FromTokenTransferResult(transferResult);
+            if (!transferResult.Succeeded)
+            {
+                sourceView?.ApplyAcceptedLayout();
+                destinationView?.ApplyAcceptedLayout();
+                if (sourceView == null)
+                {
+                    tokenView.ClearContainerLayoutAndReconcile();
+                }
+
+                previewSession.AnimateReturnFrom(tokenView, transferStart);
+                return true;
+            }
+
+            sourceView?.ApplyAcceptedLayout();
+            if (destinationView != null)
+            {
+                destinationView.ApplyAcceptedLayout();
+            }
+            else
+            {
+                tokenView.ClearContainerLayoutAndReconcile();
+            }
+
+            transferAccepted = true;
+            return true;
+        }
+
+        private TokenContainerView FindTokenContainerView(ContainerId containerId)
+        {
+            if (containerId.IsEmpty)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < tokenContainerViews.Count; i++)
+            {
+                TokenContainerView candidate = tokenContainerViews[i];
+                if (candidate != null && candidate.IsBound && candidate.ContainerId == containerId)
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
         public void Cancel()
         {
             TabletopObjectView view = GetActiveView();
@@ -440,9 +650,12 @@ namespace ConsoleCards.Presentation.Interaction
             stateMachine.BeginCancellation();
             if (previewSession.IsActive)
             {
-                previewSession.CancelAndEnd();
+                if (!TryReturnContainedTokenPreview(view))
+                {
+                    previewSession.CancelAndEnd();
+                }
             }
-            else
+            else if (!TryReturnContainedTokenAfterPress(view))
             {
                 previewSession.EndPressAndReturn(view);
             }
@@ -455,6 +668,7 @@ namespace ConsoleCards.Presentation.Interaction
 
         public void Reset()
         {
+            TabletopObjectView viewToReconcile = activeView;
             if (previewSession.IsActive)
             {
                 previewSession.Reset();
@@ -468,7 +682,49 @@ namespace ConsoleCards.Presentation.Interaction
             lockService.ReleaseAllForOwner(InteractionOwnerId);
             stateMachine.Reset();
             activeView = null;
+            ReapplyTokenContainerLayout(viewToReconcile);
             cardDragFeedback?.Clear();
+        }
+
+        private bool TryReturnContainedTokenAfterPress(TabletopObjectView view)
+        {
+            TokenContainerView sourceView = FindSourceTokenContainerView(view);
+            if (sourceView == null)
+            {
+                return false;
+            }
+
+            TabletopTransformSnapshot start = previewSession.EndPressWithoutReconcileAndCapture(view);
+            sourceView.ApplyAcceptedLayout();
+            previewSession.AnimateReturnFrom(view, start);
+            return true;
+        }
+
+        private bool TryReturnContainedTokenPreview(TabletopObjectView view)
+        {
+            TokenContainerView sourceView = FindSourceTokenContainerView(view);
+            if (sourceView == null)
+            {
+                return false;
+            }
+
+            TabletopTransformSnapshot start = previewSession.EndPreviewWithoutReconcileAndCapture();
+            sourceView.ApplyAcceptedLayout();
+            previewSession.AnimateReturnFrom(view, start);
+            return true;
+        }
+
+        private void ReapplyTokenContainerLayout(TabletopObjectView view)
+        {
+            FindSourceTokenContainerView(view)?.ApplyAcceptedLayout();
+        }
+
+        private TokenContainerView FindSourceTokenContainerView(TabletopObjectView view)
+        {
+            TokenView tokenView = view as TokenView;
+            return tokenView != null && tokenView.TokenState != null
+                ? FindTokenContainerView(tokenView.TokenState.BaseState.ContainerId)
+                : null;
         }
 
         private void UpdateCardTargetFeedback(Vector2 screenPosition)

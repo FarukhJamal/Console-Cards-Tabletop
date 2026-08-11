@@ -41,6 +41,7 @@ namespace ConsoleCards.Games.TrapFloor
         private const double SharedCoinSupplyX = -4.5d;
         private const double SharedCoinSupplyY = -1.08d;
         private const double SharedCoinSpacing = 0.24d;
+        private const double CoinStorageOffset = -3.2d;
         private const double FloorfallDiceX = 3.45d;
         private const double FloorfallDiceY = 3.45d;
         private const double FloorfallDiceSpacing = 0.9d;
@@ -250,6 +251,7 @@ namespace ConsoleCards.Games.TrapFloor
                     4,
                     0),
                 sharedCoinSupplyId,
+                GetSharedCoinSupplyPose(),
                 floorCardIds,
                 floormasterCategories,
                 floormasterCardIds,
@@ -385,6 +387,9 @@ namespace ConsoleCards.Games.TrapFloor
             };
             ContainerId controllerDeckId = new ContainerId(CreateGuid(41, (seatIndex * 10) + 8));
             ContainerId coinStorageId = new ContainerId(CreateGuid(41, (seatIndex * 10) + 9));
+            TabletopPose coinStoragePose = OffsetBesideConsole(
+                GetConsolePose(layoutSeat),
+                CoinStorageOffset);
 
             ContainerId[] consoleSlotIds =
             {
@@ -469,6 +474,7 @@ namespace ConsoleCards.Games.TrapFloor
                 itemSlotIds,
                 controllerDeckId,
                 coinStorageId,
+                coinStoragePose,
                 avatarId,
                 ruleId,
                 modeId,
@@ -524,6 +530,17 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             return ProjectToRadius(layoutSeat.HandAnchorPose, PlayerHandRadius);
+        }
+
+        public static TabletopPose GetSharedCoinSupplyPose()
+        {
+            return new TabletopPose(
+                new TableCoordinate(
+                    SharedCoinSupplyX + (2d * SharedCoinSpacing),
+                    SharedCoinSupplyY + (4.5d * SharedCoinSpacing)),
+                0f,
+                0,
+                0);
         }
 
         private static TabletopPose ProjectToRadius(TabletopPose pose, double radius)

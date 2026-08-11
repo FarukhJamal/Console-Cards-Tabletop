@@ -33,6 +33,7 @@ namespace ConsoleCards.Games.TrapFloor
             ContainerId floormasterDiscardId,
             TabletopPose floormasterRevealPose,
             ContainerId sharedCoinSupplyId,
+            TabletopPose sharedCoinSupplyPose,
             IDictionary<TrapFloorCoordinate, TabletopObjectId> floorCardIds,
             IDictionary<ObjectDefinitionId, TrapFloorFloormasterCardCategory> floormasterCategoryDefinitions,
             IEnumerable<TabletopObjectId> floormasterCardIds,
@@ -50,6 +51,7 @@ namespace ConsoleCards.Games.TrapFloor
             FloormasterDiscardId = floormasterDiscardId;
             FloormasterRevealPose = floormasterRevealPose;
             SharedCoinSupplyId = sharedCoinSupplyId;
+            SharedCoinSupplyPose = sharedCoinSupplyPose;
             FloorfallXAxisDieId = floorfallXAxisDieId;
             FloorfallYAxisDieId = floorfallYAxisDieId;
             this.floorCardIds = new ReadOnlyDictionary<TrapFloorCoordinate, TabletopObjectId>(
@@ -138,6 +140,8 @@ namespace ConsoleCards.Games.TrapFloor
             floormasterCategoryDefinitions;
 
         public ContainerId SharedCoinSupplyId { get; }
+
+        public TabletopPose SharedCoinSupplyPose { get; }
 
         public TabletopObjectId FloorfallXAxisDieId { get; }
 
@@ -330,6 +334,7 @@ namespace ConsoleCards.Games.TrapFloor
             IEnumerable<ContainerId> itemSlotContainerIds,
             ContainerId controllerDeckId,
             ContainerId coinStorageContainerId,
+            TabletopPose coinStoragePose,
             TabletopObjectId avatarCardId,
             TabletopObjectId ruleCardId,
             TabletopObjectId modeCardId,
@@ -346,6 +351,7 @@ namespace ConsoleCards.Games.TrapFloor
                 new List<ContainerId>(itemSlotContainerIds));
             ControllerDeckId = controllerDeckId;
             CoinStorageContainerId = coinStorageContainerId;
+            CoinStoragePose = coinStoragePose;
             AvatarCardId = avatarCardId;
             RuleCardId = ruleCardId;
             ModeCardId = modeCardId;
@@ -362,6 +368,7 @@ namespace ConsoleCards.Games.TrapFloor
         public IReadOnlyList<ContainerId> ItemSlotContainerIds { get; }
         public ContainerId ControllerDeckId { get; }
         public ContainerId CoinStorageContainerId { get; }
+        public TabletopPose CoinStoragePose { get; }
         public TabletopObjectId AvatarCardId { get; }
         public TabletopObjectId RuleCardId { get; }
         public TabletopObjectId ModeCardId { get; }

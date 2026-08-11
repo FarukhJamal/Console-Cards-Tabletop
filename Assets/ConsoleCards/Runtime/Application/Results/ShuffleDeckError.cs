@@ -9,6 +9,7 @@ namespace ConsoleCards.Application.Results
         RevisionConflict,
         ContainerMissing,
         ContainerNotDeck,
+        RandomSourceMissing,
         RevisionOverflow
     }
 }

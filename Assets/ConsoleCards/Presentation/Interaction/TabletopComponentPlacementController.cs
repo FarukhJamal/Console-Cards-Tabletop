@@ -7,8 +7,8 @@ using UnityEngine;
 namespace ConsoleCards.Presentation.Interaction
 {
     /// <summary>
-    /// Owns one Presentation-only component placement preview. Authoritative creation is
-    /// requested only after the player confirms a projected tabletop pose.
+    /// Owns one Presentation-only placement preview. Authoritative component creation or
+    /// Container movement is requested only after the Player confirms a projected tabletop pose.
     /// </summary>
     internal sealed class TabletopComponentPlacementController
     {
@@ -16,7 +16,7 @@ namespace ConsoleCards.Presentation.Interaction
 
         private readonly TabletopPointerProjector pointerProjector;
         private readonly TabletopCoordinateConverter coordinateConverter;
-        private readonly Func<TabletopComponentKind, int, TabletopPose, bool> commitPlacement;
+        private readonly Func<TabletopComponentKind, int, TabletopPose, bool> commitComponentPlacement;
 
         private GameObject previewRoot;
         private TabletopComponentKind componentKind;
@@ -26,6 +26,7 @@ namespace ConsoleCards.Presentation.Interaction
         private int localOrder;
         private TabletopPose previewPose;
         private bool hasValidPreviewPose;
+        private Func<TabletopPose, bool> activeCommitPlacement;
 
         public TabletopComponentPlacementController(
             TabletopPointerProjector pointerProjector,
@@ -36,7 +37,7 @@ namespace ConsoleCards.Presentation.Interaction
                 ?? throw new ArgumentNullException(nameof(pointerProjector));
             this.coordinateConverter = coordinateConverter
                 ?? throw new ArgumentNullException(nameof(coordinateConverter));
-            this.commitPlacement = commitPlacement
+            commitComponentPlacement = commitPlacement
                 ?? throw new ArgumentNullException(nameof(commitPlacement));
         }
 
@@ -53,6 +54,40 @@ namespace ConsoleCards.Presentation.Interaction
             float requestedRotationDegrees,
             int requestedLayer,
             int requestedLocalOrder)
+        {
+            BeginInternal(
+                requestedKind,
+                requestedDieSideCount,
+                requestedPreviewRoot,
+                requestedRotationDegrees,
+                requestedLayer,
+                requestedLocalOrder,
+                pose => commitComponentPlacement(requestedKind, requestedDieSideCount, pose));
+        }
+
+        public void BeginContainerMove(
+            GameObject requestedPreviewRoot,
+            TabletopPose currentPose,
+            Func<TabletopPose, bool> commitPlacement)
+        {
+            BeginInternal(
+                default,
+                0,
+                requestedPreviewRoot,
+                currentPose.RotationDegrees,
+                currentPose.Layer,
+                currentPose.LocalOrder,
+                commitPlacement ?? throw new ArgumentNullException(nameof(commitPlacement)));
+        }
+
+        private void BeginInternal(
+            TabletopComponentKind requestedKind,
+            int requestedDieSideCount,
+            GameObject requestedPreviewRoot,
+            float requestedRotationDegrees,
+            int requestedLayer,
+            int requestedLocalOrder,
+            Func<TabletopPose, bool> requestedCommitPlacement)
         {
             if (requestedPreviewRoot == null)
             {
@@ -71,6 +106,7 @@ namespace ConsoleCards.Presentation.Interaction
             rotationDegrees = requestedRotationDegrees;
             layer = requestedLayer;
             localOrder = requestedLocalOrder;
+            activeCommitPlacement = requestedCommitPlacement;
             hasValidPreviewPose = false;
             previewRoot.SetActive(false);
         }
@@ -99,7 +135,8 @@ namespace ConsoleCards.Presentation.Interaction
             if (confirmPressedThisFrame
                 && !pointerBlockedByUi
                 && hasValidPreviewPose
-                && commitPlacement(componentKind, dieSideCount, previewPose))
+                && activeCommitPlacement != null
+                && activeCommitPlacement(previewPose))
             {
                 CompletePreview();
             }
@@ -161,6 +198,7 @@ namespace ConsoleCards.Presentation.Interaction
             localOrder = 0;
             previewPose = TabletopPose.Default;
             hasValidPreviewPose = false;
+            activeCommitPlacement = null;
         }
 
         private static bool IsFinite(float value)
