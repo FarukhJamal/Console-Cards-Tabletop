@@ -36,6 +36,8 @@ namespace ConsoleCards.Games.TrapFloor
         private const double FloormasterSupportX = 3.2d;
         private const double FloormasterDeckY = 1.15d;
         private const double FloormasterDiscardY = -1.15d;
+        private const double FloormasterRevealX = 4.7d;
+        private const double FloormasterRevealY = 0d;
         private const double SharedCoinSupplyX = -4.5d;
         private const double SharedCoinSupplyY = -1.08d;
         private const double SharedCoinSpacing = 0.24d;
@@ -97,6 +99,13 @@ namespace ConsoleCards.Games.TrapFloor
                 floormasterCardIds,
                 labels,
                 objects);
+            Dictionary<ObjectDefinitionId, TrapFloorFloormasterCardCategory> floormasterCategories =
+                new Dictionary<ObjectDefinitionId, TrapFloorFloormasterCardCategory>
+                {
+                    { floormasterTrapDefinitionId, TrapFloorFloormasterCardCategory.Trap },
+                    { floormasterCoinDefinitionId, TrapFloorFloormasterCardCategory.Coin },
+                    { floormasterItemDefinitionId, TrapFloorFloormasterCardCategory.Item },
+                };
 
             containers.Add(CreatePlacedContainer(
                 floormasterDeckId,
@@ -235,8 +244,15 @@ namespace ConsoleCards.Games.TrapFloor
                 boardPlayAreaId,
                 floormasterDeckId,
                 floormasterDiscardId,
+                new TabletopPose(
+                    new TableCoordinate(FloormasterRevealX, FloormasterRevealY),
+                    0f,
+                    4,
+                    0),
                 sharedCoinSupplyId,
                 floorCardIds,
+                floormasterCategories,
+                floormasterCardIds,
                 labels,
                 players,
                 coinTokenIds,

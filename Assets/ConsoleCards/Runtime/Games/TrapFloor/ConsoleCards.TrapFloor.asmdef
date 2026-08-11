@@ -3,6 +3,7 @@
   "rootNamespace": "ConsoleCards.Games.TrapFloor",
   "references": [
     "ConsoleCards.Core",
+    "ConsoleCards.Application",
     "ConsoleCards.GameTemplates"
   ],
   "includePlatforms": [],
