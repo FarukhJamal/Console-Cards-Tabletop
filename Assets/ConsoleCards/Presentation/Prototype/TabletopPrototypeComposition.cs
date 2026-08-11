@@ -29,7 +29,6 @@ namespace ConsoleCards.Presentation.Prototype
     public sealed class TabletopPrototypeComposition : MonoBehaviour, IContainedCardDragFeedback
     {
         private const int PrototypeConsoleSlotCount = TrapFloorTemplateFactory.ConsoleSlotCountPerPlayer;
-        private const int PrototypePlayerLayoutSeatIndex = 0;
         private const int PrototypeFloorfallRoundNumber = 1;
         private const int ShuffleSeed = 123;
         private const float ContextMenuWidth = 240f;
@@ -42,7 +41,9 @@ namespace ConsoleCards.Presentation.Prototype
         private const float TrapFloorContainerLabelCharacterSize = 0.1f;
         private const int TrapFloorCardLabelFontSize = 64;
         private const int TrapFloorContainerLabelFontSize = 48;
-        private static readonly Rect PrototypeControlsPanelRect = new Rect(16f, 330f, 280f, 390f);
+        private const float SessionEntryWidth = 420f;
+        private const float SessionEntryHeight = 270f;
+        private static readonly Rect PrototypeControlsPanelRect = new Rect(16f, 330f, 280f, 460f);
 
         [SerializeField] internal UnityCamera targetCamera;
         [SerializeField] internal TabletopCameraInputAdapter cameraInputAdapter;
@@ -125,9 +126,16 @@ namespace ConsoleCards.Presentation.Prototype
         private bool cardViewBoundByComposition;
         private bool pawnViewBoundByComposition;
         private bool tokenViewBoundByComposition;
-        private bool disablesRepeatedStartAfterFailure;
+        private bool sessionEntryVisible;
+        private bool cameraInputSuspendedForSessionEntry;
 
         private MatchState matchState;
+        private TabletopSession activeSession;
+        private TabletopSessionBootstrapService sessionBootstrapService;
+        private GameTemplateCatalog sessionTemplateCatalog;
+        private TrapFloorTemplateDefinition availableTrapFloorTemplate;
+        private PlayerId sessionEntryActorId;
+        private string sessionEntryError;
         private PrototypeTemplateContext prototypeTemplateContext;
         private TrapFloorTemplateDefinition trapFloorTemplate;
         private TrapFloorFloorfallState floorfallState;
@@ -137,6 +145,7 @@ namespace ConsoleCards.Presentation.Prototype
         private PlayerSeatLayoutEntry localSeatLayout;
         private PlayAreaId centralPlayAreaId;
         private PlayerId localPlayerId;
+        private int localPlayerLayoutSeatIndex = -1;
         private InteractionOwnerId interactionOwnerId;
         private CardInstanceState cardState;
         private PawnState pawnState;
@@ -170,7 +179,7 @@ namespace ConsoleCards.Presentation.Prototype
         private ContainerId primaryStackContainerId;
         private ContainerId sourceFeedbackContainerId;
         private int dynamicStackSequence;
-        private string operationMessage = "Trap Floor tabletop ready.";
+        private string operationMessage = "Tabletop ready.";
         private float operationMessageUntil;
         private float feedbackHoldUntil;
         private PrototypeContextMenuMode contextMenuMode;
@@ -190,6 +199,10 @@ namespace ConsoleCards.Presentation.Prototype
         private PrototypeConsoleSlotVisual[] resolvedSceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
 
         public bool IsInitialized { get; private set; }
+
+        public bool IsSessionEntryVisible => sessionEntryVisible;
+
+        public TabletopSession ActiveSession => activeSession;
 
         public MatchState MatchState => matchState;
 
@@ -281,22 +294,44 @@ namespace ConsoleCards.Presentation.Prototype
 
         public void Initialize()
         {
+            InitializeActiveSession(false);
+        }
+
+        private void InitializeActiveSession(bool restoreInitialBaseline)
+        {
             if (IsInitialized)
             {
                 throw new InvalidOperationException("TabletopPrototypeComposition is already initialized.");
             }
 
-            if (disablesRepeatedStartAfterFailure)
+            if (activeSession == null)
             {
-                throw new InvalidOperationException("TabletopPrototypeComposition cannot retry after a failed initialization.");
+                throw new InvalidOperationException("Session Entry must construct an authoritative session before tabletop initialization.");
+            }
+
+            ResumeCameraInputForSession();
+            if (activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom)
+            {
+                InitializeEmptyTableSession(restoreInitialBaseline);
+                return;
+            }
+
+            InitializeTrapFloorSession(restoreInitialBaseline);
+        }
+
+        private void InitializeTrapFloorSession(bool restoreInitialBaseline)
+        {
+            if (prototypeTemplateContext == null)
+            {
+                throw new InvalidOperationException("The selected Game Template has no Trap Floor prototype wiring.");
             }
 
             try
             {
-                ValidateConfiguration();
+                ValidateTrapFloorConfiguration();
                 presentationTransitions = new TabletopPresentationTransitionController();
                 ReactivateSceneOwnedObjectViews();
-                BuildRuntimeGraph();
+                BuildRuntimeGraph(restoreInitialBaseline);
                 BuildFloorfallRuntime();
                 ProjectTrapFloorCameraBookmark();
                 BindObjectViews();
@@ -309,11 +344,8 @@ namespace ConsoleCards.Presentation.Prototype
                     HandleSecondaryPointerPressed,
                     CloseContextMenu);
                 prototypeUiInputConfiguredByComposition = true;
-                if (showDeveloperControls)
-                {
-                    inputFrameCoordinator.ConfigureObjectInputBlockingGuiRect(ControlsPanelScreenRect);
-                    controlsPanelInputBlockConfiguredByComposition = true;
-                }
+                inputFrameCoordinator.ConfigureObjectInputBlockingGuiRect(ControlsPanelScreenRect);
+                controlsPanelInputBlockConfiguredByComposition = true;
 
                 inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
                 inputFrameCoordinator.enabled = true;
@@ -331,7 +363,52 @@ namespace ConsoleCards.Presentation.Prototype
             }
             catch
             {
-                disablesRepeatedStartAfterFailure = true;
+                Shutdown();
+                throw;
+            }
+        }
+
+        private void InitializeEmptyTableSession(bool restoreInitialBaseline)
+        {
+            try
+            {
+                ValidateCommonConfiguration();
+                ValidateInputPreInitializationState();
+                presentationTransitions = new TabletopPresentationTransitionController();
+                interactionOwnerId = InteractionOwnerId.New();
+                coordinateConverter = new TabletopCoordinateConverter(
+                    worldUnitsPerTableUnit,
+                    tabletopHeight,
+                    0f,
+                    0f);
+                matchState = restoreInitialBaseline
+                    ? activeSession.Reset()
+                    : activeSession.CurrentMatch;
+                localPlayerId = activeSession.Request.RequestingPlayerId;
+
+                BuildInteractionGraph();
+                inputFrameCoordinator.ConfigurePrototypeUiInput(
+                    HandleSecondaryPointerPressed,
+                    CloseContextMenu);
+                prototypeUiInputConfiguredByComposition = true;
+                inputFrameCoordinator.ConfigureObjectInputBlockingGuiRect(ControlsPanelScreenRect);
+                controlsPanelInputBlockConfiguredByComposition = true;
+                inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
+                inputFrameCoordinator.enabled = true;
+                frameCoordinatorEnabledByComposition = true;
+
+                if (!cameraInputAdapter.IsExternallyDrivenBy(inputFrameCoordinator)
+                    || !objectInputAdapter.IsExternallyDrivenBy(inputFrameCoordinator))
+                {
+                    throw new InvalidOperationException("TabletopInputFrameCoordinator failed to attach both input adapters.");
+                }
+
+                selectionPresenter.Refresh();
+                ShowMessage("Empty Table ready.");
+                IsInitialized = true;
+            }
+            catch
+            {
                 Shutdown();
                 throw;
             }
@@ -461,6 +538,7 @@ namespace ConsoleCards.Presentation.Prototype
             localSeatLayout = null;
             centralPlayAreaId = PlayAreaId.Empty;
             localPlayerId = PlayerId.Empty;
+            localPlayerLayoutSeatIndex = -1;
             interactionOwnerId = InteractionOwnerId.Empty;
             localSeatId = SeatId.Empty;
             deckContainerId = ContainerId.Empty;
@@ -718,14 +796,19 @@ namespace ConsoleCards.Presentation.Prototype
 
         public void ResetPrototype()
         {
+            EnsureInitialized();
             Shutdown(true);
-            disablesRepeatedStartAfterFailure = false;
-            Initialize();
+            InitializeActiveSession(true);
         }
 
         public TrapFloorFloorfallTarget TriggerFloorfall()
         {
             EnsureInitialized();
+            if (floorfallService == null || floorfallTargetPresenter == null)
+            {
+                throw new InvalidOperationException("Floorfall is available only in the active Trap Floor session.");
+            }
+
             TrapFloorFloorfallTarget target = floorfallService.RollAndResolve(
                 new TrapFloorFloorfallContext(PrototypeFloorfallRoundNumber));
             floorfallTargetPresenter.Show(target.FloorCardId);
@@ -799,28 +882,33 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void Start()
         {
-            if (IsInitialized || disablesRepeatedStartAfterFailure)
+            if (IsInitialized || sessionEntryVisible)
             {
                 return;
             }
 
             try
             {
-                Initialize();
+                PrepareSessionEntry();
             }
             catch (Exception exception)
             {
                 Debug.LogError(
-                    $"TabletopPrototypeComposition failed to initialize: {exception.Message}",
+                    $"TabletopPrototypeComposition failed to prepare Session Entry: {exception.Message}",
                     this);
-                Shutdown();
-                enabled = false;
+                sessionEntryError = exception.Message;
+                sessionEntryVisible = true;
+                HideSessionPresentation();
+                SuspendCameraInputForSessionEntry();
             }
         }
 
         private void OnDestroy()
         {
             Shutdown();
+            activeSession = null;
+            sessionTemplateCatalog = null;
+            availableTrapFloorTemplate = null;
         }
 
         private void Update()
@@ -835,6 +923,12 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void OnGUI()
         {
+            if (sessionEntryVisible)
+            {
+                DrawSessionEntry();
+                return;
+            }
+
             if (!IsInitialized)
             {
                 return;
@@ -842,14 +936,38 @@ namespace ConsoleCards.Presentation.Prototype
 
             DrawFloorfallStatus();
             DrawPlayerContextMenu();
-            if (!showDeveloperControls)
+            DrawActiveSessionPanel();
+        }
+
+        private void DrawActiveSessionPanel()
+        {
+            GUILayout.BeginArea(ControlsPanelScreenRect, GUI.skin.box);
+            GUILayout.Label(activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom
+                ? "EMPTY / CUSTOM TABLE"
+                : activeSession.Template.DisplayName.ToUpperInvariant());
+            if (GUILayout.Button("Return to Session Entry"))
             {
+                ReturnToSessionEntry();
+                GUIUtility.ExitGUI();
+            }
+
+            if (GUILayout.Button("Reset Current Session"))
+            {
+                ResetPrototype();
+                GUIUtility.ExitGUI();
+            }
+
+            GUILayout.Label(CurrentStatusText());
+
+            if (!showDeveloperControls
+                || activeSession.Selection.Kind != TabletopSessionKind.GameTemplate)
+            {
+                GUILayout.EndArea();
                 return;
             }
 
-            GUILayout.BeginArea(ControlsPanelScreenRect, GUI.skin.box);
-            GUILayout.Label("Trap Floor Prototype Controls");
             GUILayout.Space(4f);
+            GUILayout.Label("Developer Controls");
             if (GUILayout.Button("Shuffle Deck"))
             {
                 ShuffleDeck();
@@ -910,15 +1028,213 @@ namespace ConsoleCards.Presentation.Prototype
                 SplitSelectedOrPrimaryStack();
             }
 
-            GUILayout.Space(4f);
-            if (GUILayout.Button("Reset Prototype"))
+            GUILayout.Space(6f);
+            GUILayout.EndArea();
+        }
+
+        private void DrawSessionEntry()
+        {
+            Rect entryRect = new Rect(
+                Mathf.Max(0f, (Screen.width - SessionEntryWidth) * 0.5f),
+                Mathf.Max(0f, (Screen.height - SessionEntryHeight) * 0.5f),
+                SessionEntryWidth,
+                SessionEntryHeight);
+            GUILayout.BeginArea(entryRect, GUI.skin.window);
+            GUILayout.Label("CONSOLE CARDS");
+            GUILayout.Space(8f);
+            GUILayout.Label("Choose a tabletop session");
+            GUILayout.Space(8f);
+
+            if (GUILayout.Button("Empty Table", GUILayout.Height(42f)))
             {
-                ResetPrototype();
+                SelectEmptyTableSession();
+                GUIUtility.ExitGUI();
             }
 
-            GUILayout.Space(6f);
-            GUILayout.Label(CurrentStatusText());
+            if (sessionTemplateCatalog != null)
+            {
+                foreach (GameTemplateRegistration registration in sessionTemplateCatalog.Registrations.Values)
+                {
+                    if (GUILayout.Button(registration.Template.DisplayName, GUILayout.Height(42f)))
+                    {
+                        SelectGameTemplateSession(registration.Template.Id);
+                        GUIUtility.ExitGUI();
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(sessionEntryError))
+            {
+                GUILayout.Space(8f);
+                GUILayout.Label($"Session could not start: {sessionEntryError}");
+            }
+
             GUILayout.EndArea();
+        }
+
+        public void SelectEmptyTableSession()
+        {
+            TryEnterSession(TabletopSessionSelection.EmptyCustom);
+        }
+
+        public void SelectGameTemplateSession(GameTemplateId gameTemplateId)
+        {
+            TryEnterSession(TabletopSessionSelection.FromGameTemplate(gameTemplateId));
+        }
+
+        public void ReturnToSessionEntry()
+        {
+            if (sessionEntryVisible)
+            {
+                return;
+            }
+
+            Shutdown();
+            activeSession = null;
+            prototypeTemplateContext = null;
+            trapFloorTemplate = null;
+            sessionEntryError = null;
+            HideSessionPresentation();
+            SuspendCameraInputForSessionEntry();
+            sessionEntryVisible = true;
+        }
+
+        private void PrepareSessionEntry()
+        {
+            sessionBootstrapService = new TabletopSessionBootstrapService();
+            sessionEntryActorId = PlayerId.New();
+            sessionEntryError = null;
+            try
+            {
+                availableTrapFloorTemplate = TrapFloorTemplateFactory.CreateStandardFourPlayer();
+                sessionTemplateCatalog = new GameTemplateCatalog(
+                    new[]
+                    {
+                        new GameTemplateRegistration(
+                            availableTrapFloorTemplate.Template,
+                            availableTrapFloorTemplate.ContentCatalog),
+                    });
+            }
+            catch (Exception exception)
+            {
+                availableTrapFloorTemplate = null;
+                sessionTemplateCatalog = new GameTemplateCatalog(Array.Empty<GameTemplateRegistration>());
+                sessionEntryError = $"Trap Floor is unavailable: {exception.Message}";
+            }
+
+            activeSession = null;
+            prototypeTemplateContext = null;
+            trapFloorTemplate = null;
+            HideSessionPresentation();
+            SuspendCameraInputForSessionEntry();
+            sessionEntryVisible = true;
+        }
+
+        private void TryEnterSession(TabletopSessionSelection selection)
+        {
+            if (!sessionEntryVisible)
+            {
+                return;
+            }
+
+            if (sessionBootstrapService == null || sessionTemplateCatalog == null)
+            {
+                sessionEntryError = "Session Entry is not configured.";
+                return;
+            }
+
+            List<PlayerId> activePlayerIds = CreatePrototypeActivePlayers(selection);
+            TabletopSessionBootstrapRequest request = new TabletopSessionBootstrapRequest(
+                sessionEntryActorId,
+                selection,
+                activePlayerIds,
+                MatchId.New());
+            TabletopSessionBootstrapResult result = sessionBootstrapService.TryCreate(
+                request,
+                sessionTemplateCatalog);
+            if (!result.Succeeded)
+            {
+                sessionEntryError = FormatSessionBuildFailure(result.Issues);
+                return;
+            }
+
+            try
+            {
+                activeSession = result.Session;
+                if (selection.Kind == TabletopSessionKind.GameTemplate)
+                {
+                    if (availableTrapFloorTemplate == null
+                        || selection.GameTemplateId != availableTrapFloorTemplate.Template.Id)
+                    {
+                        throw new InvalidOperationException(
+                            "The selected Game Template has no registered prototype Presentation wiring.");
+                    }
+
+                    trapFloorTemplate = availableTrapFloorTemplate;
+                    prototypeTemplateContext = CreateTrapFloorPrototypeContext(
+                        activeSession,
+                        trapFloorTemplate,
+                        sessionEntryActorId);
+                }
+                else
+                {
+                    trapFloorTemplate = null;
+                    prototypeTemplateContext = null;
+                }
+
+                sessionEntryError = null;
+                sessionEntryVisible = false;
+                InitializeActiveSession(false);
+            }
+            catch (Exception exception)
+            {
+                Shutdown();
+                activeSession = null;
+                prototypeTemplateContext = null;
+                trapFloorTemplate = null;
+                HideSessionPresentation();
+                SuspendCameraInputForSessionEntry();
+                sessionEntryError = exception.Message;
+                sessionEntryVisible = true;
+                Debug.LogError($"Session construction failed: {exception.Message}", this);
+            }
+        }
+
+        private List<PlayerId> CreatePrototypeActivePlayers(TabletopSessionSelection selection)
+        {
+            int playerCount = 1;
+            if (selection.Kind == TabletopSessionKind.GameTemplate)
+            {
+                if (!sessionTemplateCatalog.TryGet(selection.GameTemplateId, out GameTemplateRegistration registration))
+                {
+                    return new List<PlayerId> { sessionEntryActorId };
+                }
+
+                playerCount = registration.Template.RequiredPlayerCount;
+            }
+
+            List<PlayerId> players = new List<PlayerId>(playerCount)
+            {
+                sessionEntryActorId,
+            };
+            for (int i = 1; i < playerCount; i++)
+            {
+                players.Add(PlayerId.New());
+            }
+
+            return players;
+        }
+
+        private static string FormatSessionBuildFailure(
+            IReadOnlyList<TabletopSessionBootstrapIssue> issues)
+        {
+            string message = "Authoritative session construction failed.";
+            for (int i = 0; i < issues.Count; i++)
+            {
+                message += $" {issues[i]}";
+            }
+
+            return message;
         }
 
         private void HandleSecondaryPointerPressed(Vector2 screenPosition)
@@ -1379,12 +1695,9 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
-        private void ValidateConfiguration()
+        private void ValidateTrapFloorConfiguration()
         {
-            RequireReference(targetCamera, nameof(targetCamera));
-            RequireReference(cameraInputAdapter, nameof(cameraInputAdapter));
-            RequireReference(objectInputAdapter, nameof(objectInputAdapter));
-            RequireReference(inputFrameCoordinator, nameof(inputFrameCoordinator));
+            ValidateCommonConfiguration();
             RequireReference(prototypeCardPrefab, nameof(prototypeCardPrefab));
             RequireReference(prototypePawnPrefab, nameof(prototypePawnPrefab));
             RequireReference(prototypeTokenPrefab, nameof(prototypeTokenPrefab));
@@ -1401,6 +1714,20 @@ namespace ConsoleCards.Presentation.Prototype
             RequireReference(tokenHighlightRoot, nameof(tokenHighlightRoot));
             ValidateFixedContainerReferences();
             ValidateSceneConsoleReferences();
+            ValidateFiniteGreaterThanZero(floorCardVisualScale, nameof(floorCardVisualScale));
+            ValidateDistinctViews();
+            ValidateSelectionPresentationReferences();
+            ValidateCardPrefabReferences();
+            ValidateTrapFloorPrefabReferences();
+            ValidatePreInitializationState();
+        }
+
+        private void ValidateCommonConfiguration()
+        {
+            RequireReference(targetCamera, nameof(targetCamera));
+            RequireReference(cameraInputAdapter, nameof(cameraInputAdapter));
+            RequireReference(objectInputAdapter, nameof(objectInputAdapter));
+            RequireReference(inputFrameCoordinator, nameof(inputFrameCoordinator));
 
             if (!targetCamera.orthographic)
             {
@@ -1421,12 +1748,55 @@ namespace ConsoleCards.Presentation.Prototype
             ValidateFiniteGreaterThanOrEqualToZero(magneticDistance, nameof(magneticDistance));
             ValidateFiniteGreaterThanOrEqualToZero(feedbackDuration, nameof(feedbackDuration));
             ValidateFiniteGreaterThanOrEqualToZero(shuffleCompression, nameof(shuffleCompression));
-            ValidateFiniteGreaterThanZero(floorCardVisualScale, nameof(floorCardVisualScale));
-            ValidateDistinctViews();
-            ValidateSelectionPresentationReferences();
-            ValidateCardPrefabReferences();
-            ValidateTrapFloorPrefabReferences();
-            ValidatePreInitializationState();
+        }
+
+        private void ValidateInputPreInitializationState()
+        {
+            if (!cameraInputAdapter.IsInitialized)
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires an initialized Camera input adapter.");
+            }
+
+            if (!objectInputAdapter.HasValidActionConfiguration)
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires a valid Object input adapter action configuration.");
+            }
+
+            if (objectInputAdapter.IsInitialized)
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires the Object input adapter to begin uninitialized.");
+            }
+
+            if (cameraInputAdapter.HasScrollRoutingPolicy)
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires the Camera input adapter to begin without a scroll routing policy.");
+            }
+
+            if (inputFrameCoordinator.enabled)
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires the input-frame coordinator to begin disabled.");
+            }
+
+            if (!inputFrameCoordinator.IsInitialized)
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires an initialized input-frame coordinator.");
+            }
+
+            if (!ReferenceEquals(inputFrameCoordinator.CameraInputAdapter, cameraInputAdapter)
+                || !ReferenceEquals(inputFrameCoordinator.ObjectInputAdapter, objectInputAdapter))
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires the input-frame coordinator to reference the supplied adapters.");
+            }
+
+            if (cameraInputAdapter.IsExternallyDriven || objectInputAdapter.IsExternallyDriven)
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires input adapters to begin without an external frame driver.");
+            }
+
+            if (inputFrameCoordinator.HasSelectionPresenter)
+            {
+                throw new InvalidOperationException("TabletopPrototypeComposition requires the input-frame coordinator to begin without a selection presenter.");
+            }
         }
 
         private void ValidateCardPrefabReferences()
@@ -1460,6 +1830,51 @@ namespace ConsoleCards.Presentation.Prototype
             sceneStackBVisual.Reactivate();
             sceneDiscardPileVisual.Reactivate();
             sceneHandVisual.Reactivate();
+            sceneConsoleView.gameObject.SetActive(true);
+        }
+
+        private void HideSessionPresentation()
+        {
+            SetActiveIfPresent(cardView, false);
+            SetActiveIfPresent(pawnView, false);
+            SetActiveIfPresent(tokenView, false);
+            SetActiveIfPresent(sceneDeckVisual, false);
+            SetActiveIfPresent(sceneStackAVisual, false);
+            SetActiveIfPresent(sceneStackBVisual, false);
+            SetActiveIfPresent(sceneDiscardPileVisual, false);
+            SetActiveIfPresent(sceneHandVisual, false);
+            SetActiveIfPresent(sceneConsoleView, false);
+        }
+
+        private void SuspendCameraInputForSessionEntry()
+        {
+            if (cameraInputAdapter != null && cameraInputAdapter.enabled)
+            {
+                cameraInputAdapter.enabled = false;
+                cameraInputSuspendedForSessionEntry = true;
+            }
+        }
+
+        private void ResumeCameraInputForSession()
+        {
+            if (!cameraInputSuspendedForSessionEntry)
+            {
+                return;
+            }
+
+            cameraInputSuspendedForSessionEntry = false;
+            if (cameraInputAdapter != null)
+            {
+                cameraInputAdapter.enabled = true;
+            }
+        }
+
+        private static void SetActiveIfPresent(Component component, bool active)
+        {
+            if (component != null)
+            {
+                component.gameObject.SetActive(active);
+            }
         }
 
         private void ValidateFixedContainerReferences()
@@ -1607,28 +2022,18 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
-        private void BuildRuntimeGraph()
+        private void BuildRuntimeGraph(bool restoreInitialBaseline)
         {
             interactionOwnerId = InteractionOwnerId.New();
             coordinateConverter = new TabletopCoordinateConverter(worldUnitsPerTableUnit, tabletopHeight, 0f, 0f);
 
-            if (prototypeTemplateContext != null)
+            if (prototypeTemplateContext == null)
             {
-                RestorePrototypeTemplateContext(true);
-                ProjectPrototypePlayerLayout(localSeatLayout);
-                return;
+                throw new InvalidOperationException("Trap Floor Presentation requires a selected Template session context.");
             }
 
-            trapFloorTemplate = TrapFloorTemplateFactory.CreateStandardFourPlayer();
-            playerLayout = trapFloorTemplate.PlayerLayout;
-            if (!playerLayout.TryGetSeat(PrototypePlayerLayoutSeatIndex, out localSeatLayout))
-            {
-                throw new InvalidOperationException("The Trap Floor Player Layout does not contain its configured local Seat entry.");
-            }
-
+            RestorePrototypeTemplateContext(restoreInitialBaseline);
             ProjectPrototypePlayerLayout(localSeatLayout);
-            prototypeTemplateContext = CreatePrototypeTemplateContext();
-            RestorePrototypeTemplateContext(false);
         }
 
         private void BuildFloorfallRuntime()
@@ -1641,35 +2046,44 @@ namespace ConsoleCards.Presentation.Prototype
             floorfallTargetPresenter = new TrapFloorFloorfallTargetPresenter();
         }
 
-        private PrototypeTemplateContext CreatePrototypeTemplateContext()
+        private static PrototypeTemplateContext CreateTrapFloorPrototypeContext(
+            TabletopSession session,
+            TrapFloorTemplateDefinition templateDefinition,
+            PlayerId requestingPlayerId)
         {
-            TrapFloorTemplateDefinition templateDefinition = trapFloorTemplate
-                ?? throw new InvalidOperationException("Trap Floor Template content must be created before Match construction.");
-            localPlayerId = PlayerId.New();
-            List<PlayerId> activePlayerIds = new List<PlayerId>(TrapFloorTemplateFactory.PrototypePlayerCount)
+            if (session == null)
             {
-                localPlayerId,
-            };
-            for (int i = 1; i < TrapFloorTemplateFactory.PrototypePlayerCount; i++)
-            {
-                activePlayerIds.Add(PlayerId.New());
+                throw new ArgumentNullException(nameof(session));
             }
 
-            GameTemplateMatchBuildResult buildResult = templateDefinition.TryCreateMatch(
-                activePlayerIds,
-                MatchId.New());
-            if (!buildResult.Succeeded)
+            if (templateDefinition == null)
             {
-                throw new InvalidOperationException(FormatTemplateBuildFailure(buildResult.Issues));
+                throw new ArgumentNullException(nameof(templateDefinition));
             }
 
-            TrapFloorPlayerSetupDefinition localPlayer =
-                templateDefinition.Players[PrototypePlayerLayoutSeatIndex];
+            TrapFloorPlayerSetupDefinition localPlayer = null;
+            for (int i = 0; i < templateDefinition.Players.Count; i++)
+            {
+                TrapFloorPlayerSetupDefinition candidate = templateDefinition.Players[i];
+                if (session.CurrentMatch.GetSeat(candidate.SeatId).OccupantPlayerId == requestingPlayerId)
+                {
+                    localPlayer = candidate;
+                    break;
+                }
+            }
+
+            if (localPlayer == null)
+            {
+                throw new InvalidOperationException(
+                    "The requesting Player is not assigned to a Trap Floor Seat.");
+            }
+
             return new PrototypeTemplateContext(
-                buildResult.Session,
+                session,
                 templateDefinition,
-                localPlayerId,
+                requestingPlayerId,
                 localPlayer.SeatId,
+                localPlayer.LayoutSeatIndex,
                 templateDefinition.FloormasterDeckId,
                 localPlayer.HandContainerId,
                 templateDefinition.FloormasterDiscardId,
@@ -1723,7 +2137,8 @@ namespace ConsoleCards.Presentation.Prototype
                 : context.Session.CurrentMatch;
             playerLayout = context.Session.PlayerLayout;
             trapFloorTemplate = context.TrapFloorTemplate;
-            if (!playerLayout.TryGetSeat(PrototypePlayerLayoutSeatIndex, out localSeatLayout))
+            localPlayerLayoutSeatIndex = context.LocalPlayerLayoutSeatIndex;
+            if (!playerLayout.TryGetSeat(localPlayerLayoutSeatIndex, out localSeatLayout))
             {
                 throw new InvalidOperationException("The prototype Template Player Layout is missing its local Seat entry.");
             }
@@ -1803,18 +2218,6 @@ namespace ConsoleCards.Presentation.Prototype
                 throw new InvalidOperationException(
                     $"TabletopPrototypeComposition requires {fieldName} to own an explicit selection visual.");
             }
-        }
-
-        private static string FormatTemplateBuildFailure(
-            IReadOnlyList<GameTemplateValidationIssue> issues)
-        {
-            string message = "Trap Floor Game Template construction failed.";
-            for (int i = 0; i < issues.Count; i++)
-            {
-                message += $" {issues[i]}";
-            }
-
-            return message;
         }
 
         private void BindObjectViews()
@@ -1903,7 +2306,7 @@ namespace ConsoleCards.Presentation.Prototype
                 runtimeDeckInstances.Add(controllerDeck);
                 controllerDeckViews.Add(controllerDeck.View);
 
-                if (playerIndex == PrototypePlayerLayoutSeatIndex)
+                if (player.LayoutSeatIndex == localPlayerLayoutSeatIndex)
                 {
                     continue;
                 }
@@ -2083,19 +2486,31 @@ namespace ConsoleCards.Presentation.Prototype
                 settleDuration,
                 returnDuration,
                 handReflowDuration);
-            containedCardDragCoordinator = new ContainedCardDragCoordinator(
-                interactionOwnerId,
-                lockService,
-                interactionStateMachine,
-                previewSession,
-                pointerProjector,
-                dropTargetResolver,
-                transferCoordinator,
-                layoutViewLookup,
-                this,
-                magneticDistance,
-                handView,
-                ReorderHandCardFromDrag);
+            containedCardDragCoordinator = handView != null
+                ? new ContainedCardDragCoordinator(
+                    interactionOwnerId,
+                    lockService,
+                    interactionStateMachine,
+                    previewSession,
+                    pointerProjector,
+                    dropTargetResolver,
+                    transferCoordinator,
+                    layoutViewLookup,
+                    this,
+                    magneticDistance,
+                    handView,
+                    ReorderHandCardFromDrag)
+                : new ContainedCardDragCoordinator(
+                    interactionOwnerId,
+                    lockService,
+                    interactionStateMachine,
+                    previewSession,
+                    pointerProjector,
+                    dropTargetResolver,
+                    transferCoordinator,
+                    layoutViewLookup,
+                    this,
+                    magneticDistance);
             moveCoordinator = new TabletopMoveInteractionCoordinator(
                 matchState,
                 localPlayerId,
@@ -2840,6 +3255,12 @@ namespace ConsoleCards.Presentation.Prototype
             if (Time.unscaledTime <= operationMessageUntil)
             {
                 return operationMessage;
+            }
+
+            if (activeSession != null
+                && activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom)
+            {
+                return $"Empty Table | Objects {matchState?.ObjectCount ?? 0}";
             }
 
             return $"Deck {ContainerCount(deckContainerId)} | Hand {ContainerCount(handContainerId)} | Discard {ContainerCount(discardContainerId)}";
@@ -3618,10 +4039,11 @@ namespace ConsoleCards.Presentation.Prototype
             private readonly Dictionary<ObjectDefinitionId, ButtonCardDefinition> buttonDefinitions;
 
             public PrototypeTemplateContext(
-                GameTemplateMatchSession session,
+                TabletopSession session,
                 TrapFloorTemplateDefinition trapFloorTemplate,
                 PlayerId localPlayerId,
                 SeatId localSeatId,
+                int localPlayerLayoutSeatIndex,
                 ContainerId deckContainerId,
                 ContainerId handContainerId,
                 ContainerId discardContainerId,
@@ -3638,6 +4060,7 @@ namespace ConsoleCards.Presentation.Prototype
                 TrapFloorTemplate = trapFloorTemplate ?? throw new ArgumentNullException(nameof(trapFloorTemplate));
                 LocalPlayerId = localPlayerId;
                 LocalSeatId = localSeatId;
+                LocalPlayerLayoutSeatIndex = localPlayerLayoutSeatIndex;
                 DeckContainerId = deckContainerId;
                 HandContainerId = handContainerId;
                 DiscardContainerId = discardContainerId;
@@ -3660,10 +4083,11 @@ namespace ConsoleCards.Presentation.Prototype
                 }
             }
 
-            public GameTemplateMatchSession Session { get; }
+            public TabletopSession Session { get; }
             public TrapFloorTemplateDefinition TrapFloorTemplate { get; }
             public PlayerId LocalPlayerId { get; }
             public SeatId LocalSeatId { get; }
+            public int LocalPlayerLayoutSeatIndex { get; }
             public ContainerId DeckContainerId { get; }
             public ContainerId HandContainerId { get; }
             public ContainerId DiscardContainerId { get; }

@@ -68,11 +68,17 @@ namespace ConsoleCards.Presentation.Interaction
             ValidateDistinctViewTargets(cardSelectionVisuals, pawnSelectionVisuals, tokenSelectionVisuals);
 
             SelectionState = selectionState;
-            CardSelectionVisual = cardSelectionVisuals[0];
+            CardSelectionVisual = cardSelectionVisuals.Count > 0
+                ? cardSelectionVisuals[0]
+                : null;
             CardSelectionVisuals = new List<TabletopSelectionVisual>(cardSelectionVisuals).AsReadOnly();
-            PawnSelectionVisual = pawnSelectionVisuals[0];
+            PawnSelectionVisual = pawnSelectionVisuals.Count > 0
+                ? pawnSelectionVisuals[0]
+                : null;
             PawnSelectionVisuals = new List<TabletopSelectionVisual>(pawnSelectionVisuals).AsReadOnly();
-            TokenSelectionVisual = tokenSelectionVisuals[0];
+            TokenSelectionVisual = tokenSelectionVisuals.Count > 0
+                ? tokenSelectionVisuals[0]
+                : null;
             TokenSelectionVisuals = new List<TabletopSelectionVisual>(tokenSelectionVisuals).AsReadOnly();
         }
 
@@ -161,11 +167,6 @@ namespace ConsoleCards.Presentation.Interaction
             IReadOnlyList<TabletopSelectionVisual> selectionVisuals,
             string parameterName)
         {
-            if (selectionVisuals.Count == 0)
-            {
-                throw new ArgumentException("At least one selection visual is required.", parameterName);
-            }
-
             for (int i = 0; i < selectionVisuals.Count; i++)
             {
                 if (selectionVisuals[i] == null)
