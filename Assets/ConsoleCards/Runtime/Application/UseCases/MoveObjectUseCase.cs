@@ -1,6 +1,8 @@
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
+using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Cards;
 using ConsoleCards.Core.Domain.Match;
 
 namespace ConsoleCards.Application.UseCases
@@ -46,7 +48,21 @@ namespace ConsoleCards.Application.UseCases
                 return MoveObjectResult.Failure(CommandResultStatus.Conflict, MoveObjectError.RevisionOverflow);
             }
 
-            objectState.SetPose(command.TargetPose);
+            TabletopPose targetPose = command.TargetPose;
+            if (objectState.Kind == TabletopObjectKind.Card
+                && objectState.ContainerId.IsEmpty
+                && !LooseCardOrderResolver.TryResolveTopPose(
+                    matchState,
+                    objectState.Id,
+                    command.TargetPose,
+                    out targetPose))
+            {
+                return MoveObjectResult.Failure(
+                    CommandResultStatus.Conflict,
+                    MoveObjectError.LooseCardOrderOverflow);
+            }
+
+            objectState.SetPose(targetPose);
             long revision = matchState.AdvanceRevision();
 
             return MoveObjectResult.Accepted(revision);

@@ -9,6 +9,8 @@ namespace ConsoleCards.Presentation.Prototype
     /// </summary>
     public sealed class PrototypeCardVisualReferences : MonoBehaviour
     {
+        private const float FaceLabelSurfaceEpsilon = 0.0001f;
+
         [SerializeField] private CardView cardView;
         [SerializeField] private TabletopSelectionVisual selectionVisual;
         [SerializeField] private Renderer faceUpRenderer;
@@ -27,6 +29,30 @@ namespace ConsoleCards.Presentation.Prototype
         public TextMesh FrontLabel => frontLabel;
 
         public TextMesh BackLabel => backLabel;
+
+        public void AlignFaceLabelsToSurface(float localOrderHeight)
+        {
+            if (float.IsNaN(localOrderHeight)
+                || float.IsInfinity(localOrderHeight)
+                || localOrderHeight <= FaceLabelSurfaceEpsilon)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(localOrderHeight),
+                    "Card local-order height must exceed the face-label surface epsilon.");
+            }
+
+            ValidateReferences();
+            AlignFaceLabelToSurface(
+                frontLabel,
+                faceUpRenderer,
+                cardView.FaceUpVisualRoot.transform,
+                localOrderHeight);
+            AlignFaceLabelToSurface(
+                backLabel,
+                faceDownRenderer,
+                cardView.FaceDownVisualRoot.transform,
+                localOrderHeight);
+        }
 
         public void SetCardContentVisible(bool visible)
         {
@@ -89,6 +115,39 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 throw new InvalidOperationException(
                     $"PrototypeCard {name} must be a descendant of {expectedRoot.name}.");
+            }
+        }
+
+        private static void AlignFaceLabelToSurface(
+            TextMesh label,
+            Renderer faceRenderer,
+            Transform faceRoot,
+            float localOrderHeight)
+        {
+            MeshFilter meshFilter = faceRenderer.GetComponent<MeshFilter>();
+            if (meshFilter == null || meshFilter.sharedMesh == null)
+            {
+                throw new InvalidOperationException(
+                    $"PrototypeCard {faceRenderer.name} requires a readable face mesh.");
+            }
+
+            Bounds meshBounds = meshFilter.sharedMesh.bounds;
+            Vector3 rendererLocalSurface = new Vector3(
+                meshBounds.center.x,
+                meshBounds.max.y,
+                meshBounds.center.z);
+            Vector3 worldSurface = faceRenderer.transform.TransformPoint(rendererLocalSurface);
+            Vector3 faceRootLocalSurface = faceRoot.InverseTransformPoint(worldSurface);
+
+            Vector3 labelLocalPosition = label.transform.localPosition;
+            labelLocalPosition.y = faceRootLocalSurface.y + FaceLabelSurfaceEpsilon;
+            label.transform.localPosition = labelLocalPosition;
+
+            float worldSurfaceOffset = label.transform.position.y - worldSurface.y;
+            if (worldSurfaceOffset <= 0f || worldSurfaceOffset >= localOrderHeight)
+            {
+                throw new InvalidOperationException(
+                    "PrototypeCard face-label depth must remain above its face and below the next local-order plane.");
             }
         }
     }

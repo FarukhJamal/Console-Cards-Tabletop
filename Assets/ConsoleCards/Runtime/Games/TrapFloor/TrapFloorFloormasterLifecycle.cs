@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
+using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Cards;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Identifiers;
@@ -305,6 +307,17 @@ namespace ConsoleCards.Games.TrapFloor
                 return SearchFailure(CommandResultStatus.Conflict, TrapFloorFloormasterLifecycleError.RevisionOverflow);
             }
 
+            if (!LooseCardOrderResolver.TryResolveTopPose(
+                matchState,
+                TabletopObjectId.Empty,
+                template.FloormasterRevealPose,
+                out TabletopPose revealPose))
+            {
+                return SearchFailure(
+                    CommandResultStatus.Conflict,
+                    TrapFloorFloormasterLifecycleError.OfficialContentStateInvalid);
+            }
+
             bool reshuffledDiscard = false;
             List<TabletopObjectId> shuffledOrder = null;
             TabletopObjectId drawnCardId;
@@ -355,12 +368,15 @@ namespace ConsoleCards.Games.TrapFloor
 
                 reshuffledDiscard = true;
             }
-            else if (!deck.TryPeekTop(out drawnCardId)
-                || !TryResolveDrawableCard(matchState, drawnCardId, out drawnCard, out category))
+            else
             {
-                return SearchFailure(
-                    CommandResultStatus.Rejected,
-                    TrapFloorFloormasterLifecycleError.OfficialCardUnavailable);
+                if (!deck.TryPeekTop(out drawnCardId)
+                    || !TryResolveDrawableCard(matchState, drawnCardId, out drawnCard, out category))
+                {
+                    return SearchFailure(
+                        CommandResultStatus.Rejected,
+                        TrapFloorFloormasterLifecycleError.OfficialCardUnavailable);
+                }
             }
 
             ContainerTransferResult drawResult = new ContainerTransferService().RemoveFromContainer(
@@ -373,7 +389,7 @@ namespace ConsoleCards.Games.TrapFloor
                     TrapFloorFloormasterLifecycleError.OfficialContentStateInvalid);
             }
 
-            drawnCard.BaseState.SetPose(template.FloormasterRevealPose);
+            drawnCard.BaseState.SetPose(revealPose);
             drawnCard.SetFace(CardFace.FaceUp);
             TrapFloorPendingFloormasterCard pendingCard = new TrapFloorPendingFloormasterCard(
                 request.Context.RequestedByPlayerId,

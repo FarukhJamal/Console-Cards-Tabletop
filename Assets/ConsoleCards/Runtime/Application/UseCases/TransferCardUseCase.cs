@@ -2,6 +2,7 @@ using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Cards;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Identifiers;
@@ -114,6 +115,19 @@ namespace ConsoleCards.Application.UseCases
                 return TransferCardResult.Failure(CommandResultStatus.Conflict, TransferCardError.RevisionOverflow);
             }
 
+            TabletopPose targetTablePose = default;
+            if (command.DestinationContainerId.IsEmpty
+                && !LooseCardOrderResolver.TryResolveTopPose(
+                    matchState,
+                    cardObject.Id,
+                    command.TargetTablePose.Value,
+                    out targetTablePose))
+            {
+                return TransferCardResult.Failure(
+                    CommandResultStatus.Conflict,
+                    TransferCardError.LooseCardOrderOverflow);
+            }
+
             TabletopPoseSnapshot cardSnapshot = TabletopPoseSnapshot.Capture(cardObject, source);
             ContainerTransferService transferService = new ContainerTransferService();
 
@@ -133,7 +147,7 @@ namespace ConsoleCards.Application.UseCases
 
                 if (command.DestinationContainerId.IsEmpty)
                 {
-                    cardObject.SetPose(command.TargetTablePose.Value);
+                    cardObject.SetPose(targetTablePose);
                 }
 
                 long revision = matchState.AdvanceRevision();

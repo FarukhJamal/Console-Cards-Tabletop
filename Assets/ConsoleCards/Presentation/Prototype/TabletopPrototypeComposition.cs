@@ -1635,6 +1635,7 @@ namespace ConsoleCards.Presentation.Prototype
                 {
                     PrototypeCardVisualReferences preview = Instantiate(prototypeCardPrefab);
                     preview.ValidateReferences();
+                    preview.AlignFaceLabelsToSurface(tabletopLocalOrderHeight);
                     ConfigurePrototypeLabel(
                         preview.FrontLabel,
                         "CARD",
@@ -4512,6 +4513,7 @@ namespace ConsoleCards.Presentation.Prototype
             CardInstanceState card,
             string label)
         {
+            visualReferences.AlignFaceLabelsToSurface(tabletopLocalOrderHeight);
             bool isButtonCard = IsButtonCard(card);
             ApplyCardColor(
                 visualReferences.FaceUpRenderer,

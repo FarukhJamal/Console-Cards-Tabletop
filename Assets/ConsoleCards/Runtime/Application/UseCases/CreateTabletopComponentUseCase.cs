@@ -4,6 +4,7 @@ using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Cards;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Dice;
 using ConsoleCards.Core.Domain.Match;
@@ -33,6 +34,7 @@ namespace ConsoleCards.Application.UseCases
         DieSideCountInvalid,
         RevisionOverflow,
         IdentityAllocationFailed,
+        LooseCardOrderOverflow,
     }
 
     public sealed class CreateTabletopComponentRequest
@@ -221,12 +223,25 @@ namespace ConsoleCards.Application.UseCases
                     CreateTabletopComponentError.IdentityAllocationFailed);
             }
 
+            TabletopPose initialPose = request.InitialPose;
+            if (request.ComponentKind == TabletopComponentKind.Card
+                && !LooseCardOrderResolver.TryResolveTopPose(
+                    matchState,
+                    objectId,
+                    request.InitialPose,
+                    out initialPose))
+            {
+                return CreateTabletopComponentResult.Failure(
+                    CommandResultStatus.Conflict,
+                    CreateTabletopComponentError.LooseCardOrderOverflow);
+            }
+
             TabletopObjectKind objectKind = ToObjectKind(request.ComponentKind);
             TabletopObjectState baseState = new TabletopObjectState(
                 objectId,
                 DefinitionIdFor(request.ComponentKind),
                 objectKind,
-                request.InitialPose,
+                initialPose,
                 ContainerId.Empty,
                 request.Context.RequestedByPlayerId,
                 ObjectVisibility.Public,
