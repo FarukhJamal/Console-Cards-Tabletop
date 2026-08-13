@@ -31,7 +31,6 @@ namespace ConsoleCards.Presentation.Prototype
     public sealed class TabletopPrototypeComposition : MonoBehaviour, IContainedCardDragFeedback
     {
         private const int PrototypeConsoleSlotCount = TrapFloorTemplateFactory.ConsoleSlotCountPerPlayer;
-        private const float ContextMenuWidth = 240f;
         private const float FloorfallStatusWidth = 280f;
         private const float FloorfallStatusHeight = 78f;
         private const float TrapFloorRoundStatusWidth = 340f;
@@ -209,15 +208,14 @@ namespace ConsoleCards.Presentation.Prototype
         private float operationMessageUntil;
         private float feedbackHoldUntil;
         private PrototypeContextMenuMode contextMenuMode;
-        private Rect contextMenuRect;
-        private Vector2 contextMenuAnchorGuiPosition;
-        private Vector2 contextMenuScrollPosition;
-        private CardView contextMenuCardView;
+        private Vector2 contextMenuAnchorScreenPosition;
+        private TabletopObjectId contextMenuCardId;
         private ContainerId contextMenuContainerId;
         private int selectedDrawCount = 1;
         private int toolboxSpawnSequence;
         private bool toolboxPlacementHintActive;
-        private DieView contextMenuDieView;
+        private TabletopObjectId contextMenuDieId;
+        private long contextMenuRenderedRevision = -1;
 
         private DeckView deckView;
         private HandView handView;
@@ -376,9 +374,7 @@ namespace ConsoleCards.Presentation.Prototype
                 RefreshCardContentVisibility();
                 ConfigureDropTargets();
                 BuildInteractionGraph();
-                inputFrameCoordinator.ConfigurePrototypeUiInput(
-                    HandleSecondaryPointerPressed,
-                    CloseContextMenu);
+                inputFrameCoordinator.ConfigurePrototypeUiInput(HandleSecondaryPointerPressed);
                 prototypeUiInputConfiguredByComposition = true;
                 ConfigureUnmigratedControlsInputBlockIfNeeded();
 
@@ -423,9 +419,7 @@ namespace ConsoleCards.Presentation.Prototype
                 BuildToolboxRuntime();
 
                 BuildInteractionGraph();
-                inputFrameCoordinator.ConfigurePrototypeUiInput(
-                    HandleSecondaryPointerPressed,
-                    CloseContextMenu);
+                inputFrameCoordinator.ConfigurePrototypeUiInput(HandleSecondaryPointerPressed);
                 prototypeUiInputConfiguredByComposition = true;
                 ConfigureUnmigratedControlsInputBlockIfNeeded();
                 inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
@@ -658,9 +652,10 @@ namespace ConsoleCards.Presentation.Prototype
             consoleSlotVisualsByContainerId.Clear();
             feedbackHoldUntil = 0f;
             contextMenuMode = PrototypeContextMenuMode.None;
-            contextMenuCardView = null;
-            contextMenuDieView = null;
+            contextMenuCardId = TabletopObjectId.Empty;
+            contextMenuDieId = TabletopObjectId.Empty;
             contextMenuContainerId = ContainerId.Empty;
+            contextMenuRenderedRevision = -1;
             selectedDrawCount = 1;
             toolboxSpawnSequence = 0;
             toolboxPlacementHintActive = false;
@@ -734,15 +729,21 @@ namespace ConsoleCards.Presentation.Prototype
 
         public DrawCardsResult DrawCards(int count)
         {
+            return DrawCards(deckContainerId, count);
+        }
+
+        private DrawCardsResult DrawCards(ContainerId sourceDeckContainerId, int count)
+        {
             EnsureInitialized();
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
-                CaptureContainerCardTransforms(deckContainerId, handContainerId);
+                CaptureContainerCardTransforms(sourceDeckContainerId, handContainerId);
             DrawCardsResult result = new DrawCardsUseCase().Execute(
                 matchState,
-                new DrawCardsCommand(CreateCommandContext(), deckContainerId, handContainerId, count));
+                new DrawCardsCommand(CreateCommandContext(), sourceDeckContainerId, handContainerId, count));
+            TryGetDeckPresentation(sourceDeckContainerId, out DeckView sourceDeckView, out _);
             if (result.Succeeded)
             {
-                deckView.ApplyAcceptedLayout();
+                sourceDeckView?.ApplyAcceptedLayout();
                 handView.ApplyAcceptedLayout();
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
@@ -752,7 +753,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
             else
             {
-                deckView.ApplyAcceptedLayout();
+                sourceDeckView?.ApplyAcceptedLayout();
                 handView.ApplyAcceptedLayout();
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
@@ -1175,6 +1176,7 @@ namespace ConsoleCards.Presentation.Prototype
 
             RefreshRuntimeStatusUi();
             RefreshToolboxPlacementUi();
+            RefreshOpenTabletopPopup();
         }
 
         private void OnGUI()
@@ -1191,7 +1193,6 @@ namespace ConsoleCards.Presentation.Prototype
 
             DrawTrapFloorRoundStatus();
             DrawFloorfallStatus();
-            DrawPlayerContextMenu();
             if (HasUnmigratedActiveSessionControls())
             {
                 DrawUnmigratedActiveSessionControls();
@@ -2072,12 +2073,12 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 selectionState.Select(hitDie);
                 selectionPresenter.Refresh();
-                contextMenuDieView = hitDie;
                 OpenContextMenu(
                     PrototypeContextMenuMode.Die,
                     screenPosition,
-                    null,
-                    ContainerId.Empty);
+                    TabletopObjectId.Empty,
+                    ContainerId.Empty,
+                    hitDie.ObjectId);
                 return;
             }
 
@@ -2098,12 +2099,22 @@ namespace ConsoleCards.Presentation.Prototype
             if (container.Kind == ContainerKind.Deck
                 && TryGetDeckPresentation(container.Id, out _, out _))
             {
-                OpenContextMenu(PrototypeContextMenuMode.Deck, screenPosition, null, container.Id);
+                OpenContextMenu(
+                    PrototypeContextMenuMode.Deck,
+                    screenPosition,
+                    TabletopObjectId.Empty,
+                    container.Id,
+                    TabletopObjectId.Empty);
             }
             else if (container.Kind == ContainerKind.Stack
                 && stackViewsByContainerId.ContainsKey(container.Id))
             {
-                OpenContextMenu(PrototypeContextMenuMode.Stack, screenPosition, null, container.Id);
+                OpenContextMenu(
+                    PrototypeContextMenuMode.Stack,
+                    screenPosition,
+                    TabletopObjectId.Empty,
+                    container.Id,
+                    TabletopObjectId.Empty);
             }
         }
 
@@ -2122,8 +2133,9 @@ namespace ConsoleCards.Presentation.Prototype
                 OpenContextMenu(
                     PrototypeContextMenuMode.PendingFloormasterCard,
                     screenPosition,
-                    hitCard,
-                    ContainerId.Empty);
+                    hitCard.ObjectId,
+                    ContainerId.Empty,
+                    TabletopObjectId.Empty);
                 return true;
             }
 
@@ -2132,8 +2144,9 @@ namespace ConsoleCards.Presentation.Prototype
                 OpenContextMenu(
                     PrototypeContextMenuMode.FloorCard,
                     screenPosition,
-                    hitCard,
-                    ContainerId.Empty);
+                    hitCard.ObjectId,
+                    ContainerId.Empty,
+                    TabletopObjectId.Empty);
                 return true;
             }
 
@@ -2142,7 +2155,12 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 selectionState.Select(hitCard);
                 selectionPresenter.Refresh();
-                OpenContextMenu(PrototypeContextMenuMode.TabletopCard, screenPosition, hitCard, ContainerId.Empty);
+                OpenContextMenu(
+                    PrototypeContextMenuMode.TabletopCard,
+                    screenPosition,
+                    hitCard.ObjectId,
+                    ContainerId.Empty,
+                    TabletopObjectId.Empty);
                 return true;
             }
 
@@ -2154,7 +2172,12 @@ namespace ConsoleCards.Presentation.Prototype
             if (container.Kind == ContainerKind.Deck
                 && TryGetDeckPresentation(container.Id, out _, out _))
             {
-                OpenContextMenu(PrototypeContextMenuMode.Deck, screenPosition, null, containerId);
+                OpenContextMenu(
+                    PrototypeContextMenuMode.Deck,
+                    screenPosition,
+                    TabletopObjectId.Empty,
+                    containerId,
+                    TabletopObjectId.Empty);
                 return true;
             }
 
@@ -2163,7 +2186,12 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 selectionState.Select(hitCard);
                 selectionPresenter.Refresh();
-                OpenContextMenu(PrototypeContextMenuMode.StackCard, screenPosition, hitCard, containerId);
+                OpenContextMenu(
+                    PrototypeContextMenuMode.StackCard,
+                    screenPosition,
+                    hitCard.ObjectId,
+                    containerId,
+                    TabletopObjectId.Empty);
                 return true;
             }
 
@@ -2173,18 +2201,20 @@ namespace ConsoleCards.Presentation.Prototype
         private void OpenContextMenu(
             PrototypeContextMenuMode mode,
             Vector2 screenPosition,
-            CardView card,
-            ContainerId containerId)
+            TabletopObjectId cardId,
+            ContainerId containerId,
+            TabletopObjectId dieId)
         {
-            contextMenuAnchorGuiPosition = new Vector2(
-                screenPosition.x,
-                Screen.height - screenPosition.y);
-            contextMenuCardView = card;
+            contextMenuAnchorScreenPosition = screenPosition;
+            contextMenuCardId = cardId;
             contextMenuContainerId = containerId;
-            contextMenuScrollPosition = Vector2.zero;
+            contextMenuDieId = dieId;
             if (mode == PrototypeContextMenuMode.Deck)
             {
-                selectedDrawCount = Mathf.Clamp(selectedDrawCount, 1, Math.Max(1, AvailableDrawableCount()));
+                selectedDrawCount = Mathf.Clamp(
+                    selectedDrawCount,
+                    1,
+                    Math.Max(1, AvailableDrawableCount(containerId)));
             }
 
             SetContextMenuMode(mode);
@@ -2195,92 +2225,99 @@ namespace ConsoleCards.Presentation.Prototype
             contextMenuMode = mode;
             if (mode == PrototypeContextMenuMode.None)
             {
-                inputFrameCoordinator?.ClearTransientObjectInputBlockingGuiRect();
+                runtimeUi?.CloseTabletopPopup();
                 return;
             }
 
-            float height = ContextMenuHeight(mode);
-            float x = Mathf.Clamp(
-                contextMenuAnchorGuiPosition.x + 8f,
-                0f,
-                Mathf.Max(0f, Screen.width - ContextMenuWidth));
-            float y = Mathf.Clamp(
-                contextMenuAnchorGuiPosition.y + 8f,
-                0f,
-                Mathf.Max(0f, Screen.height - height));
-            contextMenuRect = new Rect(x, y, ContextMenuWidth, height);
-            inputFrameCoordinator?.SetTransientObjectInputBlockingGuiRect(contextMenuRect);
+            RenderOpenTabletopPopup();
         }
 
         private void CloseContextMenu()
         {
             contextMenuMode = PrototypeContextMenuMode.None;
-            contextMenuCardView = null;
-            contextMenuDieView = null;
+            contextMenuCardId = TabletopObjectId.Empty;
+            contextMenuDieId = TabletopObjectId.Empty;
             contextMenuContainerId = ContainerId.Empty;
-            contextMenuScrollPosition = Vector2.zero;
-            inputFrameCoordinator?.ClearTransientObjectInputBlockingGuiRect();
+            contextMenuRenderedRevision = -1;
+            runtimeUi?.CloseTabletopPopup();
         }
 
-        private void DrawPlayerContextMenu()
+        private void DismissPopupFromSecondary(Vector2 _)
         {
-            PrototypeContextMenuMode mode = contextMenuMode;
-            if (mode == PrototypeContextMenuMode.None)
+            CloseContextMenu();
+        }
+
+        private void RefreshOpenTabletopPopup()
+        {
+            if (contextMenuMode == PrototypeContextMenuMode.None || !IsInitialized)
             {
                 return;
             }
 
-            GUILayout.BeginArea(contextMenuRect, GUI.skin.box);
-            switch (mode)
+            if (!IsContextMenuTargetAvailable())
+            {
+                CloseContextMenu();
+                return;
+            }
+
+            if (matchState != null && contextMenuRenderedRevision != matchState.Revision)
+            {
+                CloseContextMenu();
+            }
+        }
+
+        private void RenderOpenTabletopPopup()
+        {
+            if (runtimeUi == null || !IsContextMenuTargetAvailable())
+            {
+                CloseContextMenu();
+                return;
+            }
+
+            switch (contextMenuMode)
             {
                 case PrototypeContextMenuMode.Deck:
-                    DrawDeckContextMenu();
+                    ShowDeckContextMenu();
                     break;
                 case PrototypeContextMenuMode.DrawCards:
-                    DrawCardCountSelector();
+                    ShowDrawCountPopup();
                     break;
                 case PrototypeContextMenuMode.TabletopCard:
-                    DrawTabletopCardContextMenu();
+                    ShowTabletopCardContextMenu();
                     break;
                 case PrototypeContextMenuMode.FloorCard:
-                    DrawFloorCardContextMenu();
+                    ShowFloorCardContextMenu();
                     break;
                 case PrototypeContextMenuMode.PendingFloormasterCard:
-                    DrawPendingFloormasterCardContextMenu();
+                    ShowPendingFloormasterCardContextMenu();
                     break;
                 case PrototypeContextMenuMode.StackCard:
-                    DrawStackCardContextMenu();
+                    ShowStackCardContextMenu();
                     break;
                 case PrototypeContextMenuMode.Stack:
-                    DrawStackContextMenu();
+                    ShowStackContextMenu();
                     break;
                 case PrototypeContextMenuMode.MergeDestination:
-                    DrawMergeDestinationMenu();
+                    ShowMergeDestinationPopup();
                     break;
                 case PrototypeContextMenuMode.Die:
-                    DrawDieContextMenu();
+                    ShowDieContextMenu();
                     break;
                 default:
                     CloseContextMenu();
-                    break;
+                    return;
             }
 
-            GUILayout.EndArea();
+            contextMenuRenderedRevision = matchState.Revision;
         }
 
-        private void DrawDeckContextMenu()
+        private void ShowDeckContextMenu()
         {
-            if (!matchState.Containers.TryGetValue(contextMenuContainerId, out ContainerState contextDeck)
-                || contextDeck.Kind != ContainerKind.Deck)
-            {
-                GUILayout.Label("Deck unavailable.");
-                return;
-            }
-
+            ContainerId targetDeckId = contextMenuContainerId;
             bool isOfficialFloormasterDeck = trapFloorTemplate != null
-                && contextMenuContainerId == trapFloorTemplate.FloormasterDeckId;
-            GUILayout.Label(isOfficialFloormasterDeck ? "OFFICIAL FLOORMASTER DECK" : "DECK");
-            bool previousEnabled = GUI.enabled;
+                && targetDeckId == trapFloorTemplate.FloormasterDeckId;
+            List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
+            string body = string.Empty;
             if (isOfficialFloormasterDeck)
             {
                 bool searchBlocked = trapFloorRoundState == null
@@ -2288,292 +2325,343 @@ namespace ConsoleCards.Presentation.Prototype
                     || trapFloorRoundState.HasCompletedSearchTrigger(localPlayerId)
                     || floormasterLifecycleState == null
                     || floormasterLifecycleState.HasPendingCard;
-                GUI.enabled = previousEnabled && !searchBlocked;
-                if (GUILayout.Button("Search"))
+                actions.Add(new PrototypePopupActionOption(
+                    "Search",
+                    !searchBlocked,
+                    () =>
+                    {
+                        TrapFloorRoundSearchResult result = SearchFloormasterDeck();
+                        if (result.Succeeded)
+                        {
+                            CloseContextMenu();
+                        }
+                    }));
+                int availableCount = AvailableDrawableCount(targetDeckId);
+                actions.Add(new PrototypePopupActionOption(
+                    "Draw 1",
+                    availableCount > 0,
+                    () =>
+                    {
+                        DrawCardsResult result = DrawCards(targetDeckId, 1);
+                        if (result.Succeeded)
+                        {
+                            CloseContextMenu();
+                        }
+                    }));
+                actions.Add(new PrototypePopupActionOption(
+                    "Draw Cards...",
+                    availableCount > 0,
+                    () =>
+                    {
+                        selectedDrawCount = Mathf.Clamp(selectedDrawCount, 1, availableCount);
+                        SetContextMenuMode(PrototypeContextMenuMode.DrawCards);
+                    }));
+                body = searchBlocked
+                    ? $"{OfficialSearchAvailabilityText()}\nFreeform tabletop actions remain available."
+                    : "Freeform tabletop actions";
+            }
+
+            actions.Add(new PrototypePopupActionOption(
+                "Shuffle",
+                true,
+                () =>
                 {
-                    TrapFloorRoundSearchResult result = SearchFloormasterDeck();
+                    ShuffleDeckResult result = ShuffleDeck(targetDeckId);
                     if (result.Succeeded)
                     {
                         CloseContextMenu();
                     }
-                }
-
-                GUI.enabled = previousEnabled;
-                if (searchBlocked)
-                {
-                    GUILayout.Label(OfficialSearchAvailabilityText());
-                }
-
-                GUILayout.Space(4f);
-                GUILayout.Label("Freeform tabletop actions");
-                int availableCount = AvailableDrawableCount();
-                GUI.enabled = previousEnabled && availableCount > 0;
-                if (GUILayout.Button("Draw 1"))
-                {
-                    DrawCardsResult result = DrawCards(1);
-                    if (result.Succeeded)
-                    {
-                        CloseContextMenu();
-                    }
-                }
-
-                if (GUILayout.Button("Draw Cards..."))
-                {
-                    selectedDrawCount = Mathf.Clamp(selectedDrawCount, 1, availableCount);
-                    SetContextMenuMode(PrototypeContextMenuMode.DrawCards);
-                }
-            }
-
-            GUI.enabled = previousEnabled;
-            if (GUILayout.Button("Shuffle"))
-            {
-                ShuffleDeckResult result = ShuffleDeck(contextMenuContainerId);
-                if (result.Succeeded)
-                {
-                    CloseContextMenu();
-                }
-            }
-
-            if (GUILayout.Button("Move Deck"))
-            {
-                BeginContainerMove(contextMenuContainerId);
-            }
+                }));
+            actions.Add(new PrototypePopupActionOption(
+                "Move Deck",
+                true,
+                () => BeginContainerMove(targetDeckId)));
+            runtimeUi.ShowContextMenu(
+                contextMenuAnchorScreenPosition,
+                isOfficialFloormasterDeck ? "OFFICIAL FLOORMASTER DECK" : "DECK",
+                body,
+                actions,
+                CloseContextMenu,
+                DismissPopupFromSecondary);
         }
 
-        private void DrawCardCountSelector()
+        private void ShowDrawCountPopup()
         {
-            GUILayout.Label("DRAW CARDS");
-            int availableCount = AvailableDrawableCount();
+            int availableCount = AvailableDrawableCount(contextMenuContainerId);
+            selectedDrawCount = availableCount > 0
+                ? Mathf.Clamp(selectedDrawCount, 1, availableCount)
+                : 0;
+            runtimeUi.ShowDrawCountPopup(
+                contextMenuAnchorScreenPosition,
+                selectedDrawCount,
+                availableCount,
+                () => ChangeSelectedDrawCount(-1),
+                () => ChangeSelectedDrawCount(1),
+                ConfirmSelectedDrawCount,
+                CloseContextMenu,
+                CloseContextMenu,
+                DismissPopupFromSecondary);
+        }
+
+        private void ChangeSelectedDrawCount(int delta)
+        {
+            int availableCount = AvailableDrawableCount(contextMenuContainerId);
             if (availableCount <= 0)
             {
-                GUILayout.Label("Deck is empty.");
-                if (GUILayout.Button("Cancel"))
-                {
-                    CloseContextMenu();
-                }
-
+                selectedDrawCount = 0;
+                runtimeUi?.SetDrawCountPopupValue(0, 0);
                 return;
             }
 
-            selectedDrawCount = Mathf.Clamp(selectedDrawCount, 1, availableCount);
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("-", GUILayout.Width(44f)))
+            selectedDrawCount = Mathf.Clamp(selectedDrawCount + delta, 1, availableCount);
+            runtimeUi?.SetDrawCountPopupValue(selectedDrawCount, availableCount);
+        }
+
+        private void ConfirmSelectedDrawCount()
+        {
+            int availableCount = AvailableDrawableCount(contextMenuContainerId);
+            if (availableCount <= 0)
             {
-                selectedDrawCount = Mathf.Max(1, selectedDrawCount - 1);
+                runtimeUi?.SetDrawCountPopupValue(0, 0);
+                return;
             }
 
-            GUILayout.Label(selectedDrawCount.ToString(), GUILayout.ExpandWidth(true));
-            if (GUILayout.Button("+", GUILayout.Width(44f)))
-            {
-                selectedDrawCount = Mathf.Min(availableCount, selectedDrawCount + 1);
-            }
-
-            GUILayout.EndHorizontal();
-            GUILayout.Label($"Available: {availableCount}");
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Draw"))
-            {
-                int count = Mathf.Clamp(selectedDrawCount, 1, availableCount);
-                DrawCardsResult result = DrawCards(count);
-                if (result.Succeeded)
-                {
-                    CloseContextMenu();
-                }
-            }
-
-            if (GUILayout.Button("Cancel"))
+            int count = Mathf.Clamp(selectedDrawCount, 1, availableCount);
+            DrawCardsResult result = DrawCards(contextMenuContainerId, count);
+            if (result.Succeeded)
             {
                 CloseContextMenu();
             }
-
-            GUILayout.EndHorizontal();
         }
 
-        private void DrawTabletopCardContextMenu()
+        private void ShowTabletopCardContextMenu()
         {
-            GUILayout.Label("CARD");
-            if (!IsCurrentContextCardInContainer(ContainerId.Empty))
-            {
-                GUILayout.Label("Card unavailable.");
-                return;
-            }
-
-            if (GUILayout.Button("Flip"))
-            {
-                FlipInteractionResult result = flipCoordinator.Flip(contextMenuCardView);
-                ShowMessage(result.Succeeded ? "Card flipped." : $"Flip rejected: {result.Status}.");
-                if (result.Succeeded)
+            TabletopObjectId targetCardId = contextMenuCardId;
+            runtimeUi.ShowContextMenu(
+                contextMenuAnchorScreenPosition,
+                "CARD",
+                string.Empty,
+                new[]
                 {
-                    CloseContextMenu();
-                }
-            }
+                    new PrototypePopupActionOption(
+                        "Flip",
+                        true,
+                        () => FlipContextCard(targetCardId)),
+                },
+                CloseContextMenu,
+                DismissPopupFromSecondary);
         }
 
-        private void DrawPendingFloormasterCardContextMenu()
+        private void FlipContextCard(TabletopObjectId targetCardId)
         {
-            TrapFloorPendingFloormasterCard pendingCard = floormasterLifecycleState?.PendingCard;
-            GUILayout.Label("PENDING FLOORMASTER CARD");
-            if (pendingCard == null
-                || contextMenuCardView == null
-                || contextMenuCardView.ObjectId != pendingCard.CardId)
+            if (!TryGetCardView(targetCardId, out CardView targetCardView))
             {
-                GUILayout.Label("Pending Card unavailable.");
+                CloseContextMenu();
                 return;
             }
 
-            GUILayout.Label($"Category: {pendingCard.Category}");
-            GUILayout.Label("Prototype only: acknowledges future Trigger completion. No Card effect is resolved.");
-            bool previousEnabled = GUI.enabled;
-            GUI.enabled = previousEnabled
-                && trapFloorRoundState != null
+            FlipInteractionResult result = flipCoordinator.Flip(targetCardView);
+            ShowMessage(result.Succeeded ? "Card flipped." : $"Flip rejected: {result.Status}.");
+            if (result.Succeeded)
+            {
+                CloseContextMenu();
+            }
+        }
+
+        private void ShowPendingFloormasterCardContextMenu()
+        {
+            TrapFloorPendingFloormasterCard pendingCard = floormasterLifecycleState.PendingCard;
+            bool canComplete = trapFloorRoundState != null
                 && trapFloorRoundState.Phase == TrapFloorRoundPhase.Trigger;
-            if (GUILayout.Button("Complete Pending Trigger (Prototype)"))
-            {
-                TrapFloorRoundTriggerResult result = CompletePendingFloormasterTriggerPrototype();
-                if (result.Succeeded)
+            runtimeUi.ShowContextMenu(
+                contextMenuAnchorScreenPosition,
+                "PENDING FLOORMASTER CARD",
+                $"Category: {pendingCard.Category}\nPrototype only: acknowledges future Trigger completion. No Card effect is resolved.",
+                new[]
                 {
-                    CloseContextMenu();
-                }
-            }
-
-            GUI.enabled = previousEnabled;
+                    new PrototypePopupActionOption(
+                        "Complete Pending Trigger (Prototype)",
+                        canComplete,
+                        () =>
+                        {
+                            TrapFloorRoundTriggerResult result = CompletePendingFloormasterTriggerPrototype();
+                            if (result.Succeeded)
+                            {
+                                CloseContextMenu();
+                            }
+                        }),
+                },
+                CloseContextMenu,
+                DismissPopupFromSecondary);
         }
 
-        private void DrawFloorCardContextMenu()
+        private void ShowFloorCardContextMenu()
         {
-            if (contextMenuCardView == null
-                || !contextMenuCardView.IsBound
-                || !trapFloorTemplate.TryGetFloorCoordinate(
-                    contextMenuCardView.ObjectId,
-                    out TrapFloorCoordinate coordinate))
-            {
-                GUILayout.Label("FLOOR CARD");
-                GUILayout.Label("Floor Card unavailable.");
-                return;
-            }
-
-            GUILayout.Label($"FLOOR {coordinate}");
-            bool previousEnabled = GUI.enabled;
-            GUI.enabled = previousEnabled
-                && trapFloorRoundState != null
+            trapFloorTemplate.TryGetFloorCoordinate(contextMenuCardId, out TrapFloorCoordinate coordinate);
+            bool canRoll = trapFloorRoundState != null
                 && trapFloorRoundState.Phase == TrapFloorRoundPhase.Floorfall;
-            if (GUILayout.Button("Roll Floorfall"))
-            {
-                if (TriggerFloorfall().Succeeded)
+            runtimeUi.ShowContextMenu(
+                contextMenuAnchorScreenPosition,
+                $"FLOOR {coordinate}",
+                canRoll ? string.Empty : "Official Floorfall is available only during the Floorfall phase.",
+                new[]
                 {
-                    CloseContextMenu();
-                }
-            }
-
-            GUI.enabled = previousEnabled;
-            if (trapFloorRoundState == null
-                || trapFloorRoundState.Phase != TrapFloorRoundPhase.Floorfall)
-            {
-                GUILayout.Label("Official Floorfall is available only during the Floorfall phase.");
-            }
+                    new PrototypePopupActionOption(
+                        "Roll Floorfall",
+                        canRoll,
+                        () =>
+                        {
+                            if (TriggerFloorfall().Succeeded)
+                            {
+                                CloseContextMenu();
+                            }
+                        }),
+                },
+                CloseContextMenu,
+                DismissPopupFromSecondary);
         }
 
-        private void DrawStackCardContextMenu()
+        private void ShowStackCardContextMenu()
         {
-            GUILayout.Label("CARD");
-            if (!IsCurrentContextCardInContainer(contextMenuContainerId)
-                || !matchState.Containers.TryGetValue(contextMenuContainerId, out ContainerState container)
-                || container.Kind != ContainerKind.Stack)
+            TabletopObjectId targetCardId = contextMenuCardId;
+            ContainerId targetStackId = contextMenuContainerId;
+            ContainerState stack = matchState.GetContainer(targetStackId);
+            int index = stack.IndexOf(targetCardId);
+            List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
+            if (index < stack.Count - 1)
             {
-                GUILayout.Label("Card unavailable.");
+                actions.Add(new PrototypePopupActionOption(
+                    "Move Up",
+                    true,
+                    () => ReorderContextStackCard(targetCardId, targetStackId, 1)));
+            }
+
+            if (index > 0)
+            {
+                actions.Add(new PrototypePopupActionOption(
+                    "Move Down",
+                    true,
+                    () => ReorderContextStackCard(targetCardId, targetStackId, -1)));
+            }
+
+            actions.Add(new PrototypePopupActionOption(
+                "Move Stack",
+                true,
+                () => BeginContainerMove(targetStackId)));
+            runtimeUi.ShowContextMenu(
+                contextMenuAnchorScreenPosition,
+                "CARD",
+                string.Empty,
+                actions,
+                CloseContextMenu,
+                DismissPopupFromSecondary);
+        }
+
+        private void ReorderContextStackCard(
+            TabletopObjectId targetCardId,
+            ContainerId targetStackId,
+            int offset)
+        {
+            if (!TryGetCardView(targetCardId, out CardView targetCardView)
+                || targetCardView.CardState.BaseState.ContainerId != targetStackId)
+            {
+                CloseContextMenu();
                 return;
             }
 
-            int index = container.IndexOf(contextMenuCardView.ObjectId);
-            if (index < container.Count - 1 && GUILayout.Button("Move Up"))
+            ReorderContainerResult result = MoveCardInContainer(targetCardView, targetStackId, offset);
+            if (result.Succeeded)
             {
-                ReorderContainerResult result = MoveCardInContainer(contextMenuCardView, container.Id, 1);
-                if (result.Succeeded)
-                {
-                    CloseContextMenu();
-                }
-            }
-
-            if (index > 0 && GUILayout.Button("Move Down"))
-            {
-                ReorderContainerResult result = MoveCardInContainer(contextMenuCardView, container.Id, -1);
-                if (result.Succeeded)
-                {
-                    CloseContextMenu();
-                }
-            }
-
-            if (GUILayout.Button("Move Stack"))
-            {
-                BeginContainerMove(container.Id);
+                CloseContextMenu();
             }
         }
 
-        private void DrawStackContextMenu()
+        private void ShowStackContextMenu()
         {
-            GUILayout.Label("STACK");
-            if (!TryGetContextStack(out ContainerState stack, out StackRuntimeView stackView))
+            TryGetContextStack(out ContainerState stack, out StackRuntimeView stackView);
+            ContainerId sourceStackId = stack.Id;
+            List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
+            if (stack.Count >= 2)
             {
-                GUILayout.Label("Stack unavailable.");
-                return;
+                actions.Add(new PrototypePopupActionOption(
+                    "Split Stack",
+                    true,
+                    () =>
+                    {
+                        SplitStackResult result = SplitStack(stack, stackView);
+                        if (result.Succeeded)
+                        {
+                            CloseContextMenu();
+                        }
+                    }));
             }
 
-            if (stack.Count >= 2 && GUILayout.Button("Split Stack"))
+            if (HasValidMergeDestination(sourceStackId))
             {
-                SplitStackResult result = SplitStack(stack, stackView);
-                if (result.Succeeded)
-                {
-                    CloseContextMenu();
-                }
+                actions.Add(new PrototypePopupActionOption(
+                    "Merge Into...",
+                    true,
+                    () => SetContextMenuMode(PrototypeContextMenuMode.MergeDestination)));
             }
 
-            if (HasValidMergeDestination(stack.Id) && GUILayout.Button("Merge Into..."))
-            {
-                SetContextMenuMode(PrototypeContextMenuMode.MergeDestination);
-            }
-
-            if (GUILayout.Button("Move Stack"))
-            {
-                BeginContainerMove(stack.Id);
-            }
+            actions.Add(new PrototypePopupActionOption(
+                "Move Stack",
+                true,
+                () => BeginContainerMove(sourceStackId)));
+            runtimeUi.ShowContextMenu(
+                contextMenuAnchorScreenPosition,
+                "STACK",
+                string.Empty,
+                actions,
+                CloseContextMenu,
+                DismissPopupFromSecondary);
         }
 
-        private void DrawDieContextMenu()
+        private void ShowDieContextMenu()
         {
-            GUILayout.Label("DIE");
-            if (contextMenuDieView == null
-                || !contextMenuDieView.IsBound
-                || contextMenuDieView.DieState == null
-                || !matchState.Dice.ContainsKey(contextMenuDieView.ObjectId))
-            {
-                GUILayout.Label("Die unavailable.");
-                return;
-            }
+            TabletopObjectId targetDieId = contextMenuDieId;
+            TryGetDieView(targetDieId, out DieView targetDieView);
+            runtimeUi.ShowContextMenu(
+                contextMenuAnchorScreenPosition,
+                "DIE",
+                $"d{targetDieView.DieState.SideCount}: {targetDieView.DieState.CurrentValue}",
+                new[]
+                {
+                    new PrototypePopupActionOption(
+                        "Roll",
+                        true,
+                        () => RollContextDie(targetDieId)),
+                },
+                CloseContextMenu,
+                DismissPopupFromSecondary);
+        }
 
-            GUILayout.Label($"d{contextMenuDieView.DieState.SideCount}: {contextMenuDieView.DieState.CurrentValue}");
-            if (!GUILayout.Button("Roll"))
+        private void RollContextDie(TabletopObjectId targetDieId)
+        {
+            if (!TryGetDieView(targetDieId, out DieView targetDieView))
             {
+                CloseContextMenu();
                 return;
             }
 
             RollDieResult result = rollDieUseCase.Execute(
                 matchState,
                 activeSession.Request.ActivePlayerIds,
-                new RollDieRequest(CreateCommandContext(), contextMenuDieView.ObjectId));
+                new RollDieRequest(CreateCommandContext(), targetDieId));
             if (!result.Succeeded)
             {
                 ShowMessage($"Die Roll rejected: {result.Error}.");
                 return;
             }
 
-            contextMenuDieView.ApplyAcceptedState();
-            TabletopTransformSnapshot destination = presentationTransitions.Capture(contextMenuDieView.transform);
+            targetDieView.ApplyAcceptedState();
+            TabletopTransformSnapshot destination = presentationTransitions.Capture(targetDieView.transform);
             TabletopTransformSnapshot tumbleStart = new TabletopTransformSnapshot(
                 destination.Position + (Vector3.up * 0.18f),
                 destination.Rotation * Quaternion.Euler(30f, 210f, 20f),
                 destination.LocalScale);
             presentationTransitions.AnimateFromCurrentResult(
-                contextMenuDieView.transform,
+                targetDieView.transform,
                 tumbleStart,
                 settleDuration,
                 0.12f);
@@ -2581,51 +2669,48 @@ namespace ConsoleCards.Presentation.Prototype
             CloseContextMenu();
         }
 
-        private void DrawMergeDestinationMenu()
+        private void ShowMergeDestinationPopup()
         {
-            GUILayout.Label("MERGE INTO");
-            if (!TryGetContextStack(out ContainerState source, out _))
-            {
-                GUILayout.Label("Stack unavailable.");
-                return;
-            }
-
-            contextMenuScrollPosition = GUILayout.BeginScrollView(contextMenuScrollPosition);
+            TryGetContextStack(out ContainerState source, out _);
+            ContainerId sourceStackId = source.Id;
+            List<PrototypePopupActionOption> destinations = new List<PrototypePopupActionOption>();
             foreach (KeyValuePair<ContainerId, StackRuntimeView> pair in stackViewsByContainerId)
             {
-                if (!IsValidMergeDestination(source.Id, pair.Key, pair.Value))
+                if (!IsValidMergeDestination(sourceStackId, pair.Key, pair.Value))
                 {
                     continue;
                 }
 
+                ContainerId destinationStackId = pair.Key;
                 string label = pair.Value.Visual != null && pair.Value.Visual.Label != null
                     ? pair.Value.Visual.Label.text
                     : "Stack";
-                if (GUILayout.Button(label))
-                {
-                    MergeStacksResult result = MergeStacks(source.Id, pair.Key);
-                    if (result.Succeeded)
+                destinations.Add(new PrototypePopupActionOption(
+                    label,
+                    true,
+                    () =>
                     {
-                        CloseContextMenu();
-                    }
-
-                    break;
-                }
+                        MergeStacksResult result = MergeStacks(sourceStackId, destinationStackId);
+                        if (result.Succeeded)
+                        {
+                            CloseContextMenu();
+                        }
+                    }));
             }
 
-            GUILayout.EndScrollView();
-            if (GUILayout.Button("Back"))
-            {
-                SetContextMenuMode(PrototypeContextMenuMode.Stack);
-            }
+            runtimeUi.ShowMergeDestinationPopup(
+                contextMenuAnchorScreenPosition,
+                destinations,
+                () => SetContextMenuMode(PrototypeContextMenuMode.Stack),
+                CloseContextMenu,
+                DismissPopupFromSecondary);
         }
 
         private bool IsCurrentContextCardInContainer(ContainerId containerId)
         {
-            return contextMenuCardView != null
-                && contextMenuCardView.IsBound
-                && contextMenuCardView.CardState != null
-                && contextMenuCardView.CardState.BaseState.ContainerId == containerId;
+            return !contextMenuCardId.IsEmpty
+                && matchState.Cards.TryGetValue(contextMenuCardId, out CardInstanceState card)
+                && card.BaseState.ContainerId == containerId;
         }
 
         private bool TryGetContextStack(out ContainerState stack, out StackRuntimeView stackView)
@@ -2666,31 +2751,84 @@ namespace ConsoleCards.Presentation.Prototype
                 && destination.Kind == ContainerKind.Stack;
         }
 
-        private float ContextMenuHeight(PrototypeContextMenuMode mode)
+        private bool IsContextMenuTargetAvailable()
         {
-            switch (mode)
+            if (matchState == null)
+            {
+                return false;
+            }
+
+            switch (contextMenuMode)
             {
                 case PrototypeContextMenuMode.Deck:
-                    return 300f;
                 case PrototypeContextMenuMode.DrawCards:
-                    return 155f;
+                    return !contextMenuContainerId.IsEmpty
+                        && matchState.Containers.TryGetValue(contextMenuContainerId, out ContainerState deck)
+                        && deck.Kind == ContainerKind.Deck
+                        && TryGetDeckPresentation(contextMenuContainerId, out _, out _);
                 case PrototypeContextMenuMode.TabletopCard:
-                    return 90f;
+                    return IsCurrentContextCardInContainer(ContainerId.Empty)
+                        && TryGetCardView(contextMenuCardId, out _);
                 case PrototypeContextMenuMode.FloorCard:
-                    return 130f;
+                    return trapFloorTemplate != null
+                        && matchState.Cards.ContainsKey(contextMenuCardId)
+                        && trapFloorTemplate.IsFloorCard(contextMenuCardId)
+                        && TryGetCardView(contextMenuCardId, out _);
                 case PrototypeContextMenuMode.PendingFloormasterCard:
-                    return 180f;
+                    return floormasterLifecycleState?.PendingCard != null
+                        && floormasterLifecycleState.PendingCard.CardId == contextMenuCardId
+                        && matchState.Cards.ContainsKey(contextMenuCardId)
+                        && TryGetCardView(contextMenuCardId, out _);
                 case PrototypeContextMenuMode.StackCard:
-                    return 150f;
+                    return IsCurrentContextCardInContainer(contextMenuContainerId)
+                        && matchState.Containers.TryGetValue(contextMenuContainerId, out ContainerState stackCardContainer)
+                        && stackCardContainer.Kind == ContainerKind.Stack
+                        && TryGetCardView(contextMenuCardId, out _);
                 case PrototypeContextMenuMode.Stack:
-                    return 120f;
                 case PrototypeContextMenuMode.MergeDestination:
-                    return Mathf.Min(320f, 82f + (stackViewsByContainerId.Count * 28f));
+                    return TryGetContextStack(out _, out _);
                 case PrototypeContextMenuMode.Die:
-                    return 110f;
+                    return !contextMenuDieId.IsEmpty
+                        && matchState.Dice.ContainsKey(contextMenuDieId)
+                        && TryGetDieView(contextMenuDieId, out _);
                 default:
-                    return 90f;
+                    return false;
             }
+        }
+
+        private bool TryGetCardView(TabletopObjectId cardId, out CardView resolvedView)
+        {
+            for (int i = 0; i < cardViews.Count; i++)
+            {
+                CardView candidate = cardViews[i];
+                if (candidate != null && candidate.IsBound && candidate.ObjectId == cardId)
+                {
+                    resolvedView = candidate;
+                    return true;
+                }
+            }
+
+            resolvedView = null;
+            return false;
+        }
+
+        private bool TryGetDieView(TabletopObjectId dieId, out DieView resolvedView)
+        {
+            for (int i = 0; i < dieViews.Count; i++)
+            {
+                DieView candidate = dieViews[i];
+                if (candidate != null
+                    && candidate.IsBound
+                    && candidate.DieState != null
+                    && candidate.ObjectId == dieId)
+                {
+                    resolvedView = candidate;
+                    return true;
+                }
+            }
+
+            resolvedView = null;
+            return false;
         }
 
         private void ValidateTrapFloorConfiguration()
@@ -4780,8 +4918,13 @@ namespace ConsoleCards.Presentation.Prototype
 
         private int AvailableDrawableCount()
         {
+            return AvailableDrawableCount(deckContainerId);
+        }
+
+        private int AvailableDrawableCount(ContainerId sourceDeckContainerId)
+        {
             if (matchState == null
-                || !matchState.Containers.TryGetValue(deckContainerId, out ContainerState deck)
+                || !matchState.Containers.TryGetValue(sourceDeckContainerId, out ContainerState deck)
                 || !matchState.Containers.TryGetValue(handContainerId, out ContainerState hand))
             {
                 return 0;

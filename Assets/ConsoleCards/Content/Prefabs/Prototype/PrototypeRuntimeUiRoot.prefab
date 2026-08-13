@@ -59,6 +59,8 @@ MonoBehaviour:
   statusMessageView: {fileID: 114221}
   componentToolboxMount: {fileID: 224200}
   componentToolboxPrefab: {fileID: 114000, guid: c5b19139ff4b4f52aad79ee919bb7397, type: 3}
+  tabletopPopupMount: {fileID: 224300}
+  tabletopPopupPrefab: {fileID: 114001, guid: 306faf8f74ea40c29778d2e89f85ec24, type: 3}
 --- !u!1 &100010
 GameObject:
   m_ObjectHideFlags: 0

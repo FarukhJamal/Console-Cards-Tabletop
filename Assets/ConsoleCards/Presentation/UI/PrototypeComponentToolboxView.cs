@@ -57,6 +57,7 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button d20Button;
         [SerializeField] private GameObject placementHintPanel;
         [SerializeField] private Text placementSubjectLabel;
+        private Action beforeOpen;
 
         public void ValidateReferences()
         {
@@ -85,7 +86,7 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
-        public void Bind(PrototypeComponentToolboxBindings bindings)
+        public void Bind(PrototypeComponentToolboxBindings bindings, Action beforeOpenToolbox = null)
         {
             if (bindings.PlaceCard == null
                 || bindings.PlaceDeck == null
@@ -101,6 +102,7 @@ namespace ConsoleCards.Presentation.UI
 
             ValidateReferences();
             Unbind();
+            beforeOpen = beforeOpenToolbox;
 
             addComponentButton.onClick.AddListener(ToggleToolbox);
             dismissOverlayButton.onClick.AddListener(CloseToolbox);
@@ -184,6 +186,7 @@ namespace ConsoleCards.Presentation.UI
                 addComponentButton.interactable = false;
             }
 
+            beforeOpen = null;
             CloseToolbox();
             ClearPlacementHint();
         }
@@ -191,6 +194,11 @@ namespace ConsoleCards.Presentation.UI
         private void ToggleToolbox()
         {
             bool show = !toolboxOverlay.activeSelf;
+            if (show)
+            {
+                beforeOpen?.Invoke();
+            }
+
             toolboxOverlay.SetActive(show);
             dieChoicePanel.SetActive(false);
             ClearSelectedUiObject();
