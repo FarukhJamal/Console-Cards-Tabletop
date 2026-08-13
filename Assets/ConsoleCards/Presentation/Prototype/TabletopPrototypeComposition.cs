@@ -31,10 +31,6 @@ namespace ConsoleCards.Presentation.Prototype
     public sealed class TabletopPrototypeComposition : MonoBehaviour, IContainedCardDragFeedback
     {
         private const int PrototypeConsoleSlotCount = TrapFloorTemplateFactory.ConsoleSlotCountPerPlayer;
-        private const float FloorfallStatusWidth = 280f;
-        private const float FloorfallStatusHeight = 78f;
-        private const float TrapFloorRoundStatusWidth = 340f;
-        private const float TrapFloorRoundStatusHeight = 174f;
         private const float TrapFloorCoinVisualScale = 0.34f;
         private const float TrapFloorCoinAreaLabelCharacterSize = 0.12f;
         private const int TrapFloorCoinAreaLabelFontSize = 56;
@@ -45,7 +41,7 @@ namespace ConsoleCards.Presentation.Prototype
         private const int TrapFloorCardLabelFontSize = 64;
         private const int TrapFloorContainerLabelFontSize = 48;
         private const int ToolboxPhysicalOrderStride = 40;
-        private static readonly Rect PrototypeControlsPanelRect = new Rect(16f, 330f, 280f, 620f);
+        private static readonly Rect PrototypeControlsPanelRect = new Rect(16f, 330f, 280f, 320f);
 
         [SerializeField] internal UnityCamera targetCamera;
         [SerializeField] internal TabletopCameraInputAdapter cameraInputAdapter;
@@ -376,7 +372,7 @@ namespace ConsoleCards.Presentation.Prototype
                 BuildInteractionGraph();
                 inputFrameCoordinator.ConfigurePrototypeUiInput(HandleSecondaryPointerPressed);
                 prototypeUiInputConfiguredByComposition = true;
-                ConfigureUnmigratedControlsInputBlockIfNeeded();
+                ConfigureDeveloperControlsInputBlockIfNeeded();
 
                 inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
                 inputFrameCoordinator.enabled = true;
@@ -421,7 +417,7 @@ namespace ConsoleCards.Presentation.Prototype
                 BuildInteractionGraph();
                 inputFrameCoordinator.ConfigurePrototypeUiInput(HandleSecondaryPointerPressed);
                 prototypeUiInputConfiguredByComposition = true;
-                ConfigureUnmigratedControlsInputBlockIfNeeded();
+                ConfigureDeveloperControlsInputBlockIfNeeded();
                 inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
                 inputFrameCoordinator.enabled = true;
                 frameCoordinatorEnabledByComposition = true;
@@ -879,6 +875,7 @@ namespace ConsoleCards.Presentation.Prototype
             EnsureInitialized();
             Shutdown(true);
             InitializeActiveSession(true);
+            RefreshTrapFloorStatusUi();
         }
 
         public TrapFloorRoundActionResult CompleteTrapFloorStart()
@@ -1175,6 +1172,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             RefreshRuntimeStatusUi();
+            RefreshTrapFloorStatusUi();
             RefreshToolboxPlacementUi();
             RefreshOpenTabletopPopup();
         }
@@ -1191,25 +1189,22 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            DrawTrapFloorRoundStatus();
-            DrawFloorfallStatus();
-            if (HasUnmigratedActiveSessionControls())
+            if (HasDeveloperControls())
             {
-                DrawUnmigratedActiveSessionControls();
+                DrawDeveloperControls();
             }
         }
 
-        private bool HasUnmigratedActiveSessionControls()
+        private bool HasDeveloperControls()
         {
-            return trapFloorRoundState != null
-                || (showDeveloperControls
-                    && activeSession != null
-                    && activeSession.Selection.Kind == TabletopSessionKind.GameTemplate);
+            return showDeveloperControls
+                && activeSession != null
+                && activeSession.Selection.Kind == TabletopSessionKind.GameTemplate;
         }
 
-        private void ConfigureUnmigratedControlsInputBlockIfNeeded()
+        private void ConfigureDeveloperControlsInputBlockIfNeeded()
         {
-            if (!HasUnmigratedActiveSessionControls())
+            if (!HasDeveloperControls())
             {
                 return;
             }
@@ -1218,22 +1213,9 @@ namespace ConsoleCards.Presentation.Prototype
             controlsPanelInputBlockConfiguredByComposition = true;
         }
 
-        private void DrawUnmigratedActiveSessionControls()
+        private void DrawDeveloperControls()
         {
             GUILayout.BeginArea(ControlsPanelScreenRect, GUI.skin.box);
-            if (trapFloorRoundState != null)
-            {
-                DrawTrapFloorRoundActions();
-            }
-
-            if (!showDeveloperControls
-                || activeSession.Selection.Kind != TabletopSessionKind.GameTemplate)
-            {
-                GUILayout.EndArea();
-                return;
-            }
-
-            GUILayout.Space(4f);
             GUILayout.Label("Developer Controls");
             if (GUILayout.Button("Shuffle Deck"))
             {
@@ -1297,102 +1279,6 @@ namespace ConsoleCards.Presentation.Prototype
 
             GUILayout.Space(6f);
             GUILayout.EndArea();
-        }
-
-        private void DrawTrapFloorRoundActions()
-        {
-            GUILayout.Space(4f);
-            GUILayout.Label("Official Trap Floor progression");
-            switch (trapFloorRoundState.Phase)
-            {
-                case TrapFloorRoundPhase.Start:
-                    string startAction = trapFloorRoundState.CurrentRoundNumber == 1
-                        ? "Begin Round / Continue to Search"
-                        : "Complete Start / Movement (Prototype)";
-                    if (GUILayout.Button(startAction))
-                    {
-                        if (CompleteTrapFloorStart().Succeeded)
-                        {
-                            GUIUtility.ExitGUI();
-                        }
-                    }
-
-                    if (trapFloorRoundState.CurrentRoundNumber > 1)
-                    {
-                        GUILayout.Label("Prototype acknowledgement only; no Pawn movement occurs.");
-                    }
-
-                    break;
-                case TrapFloorRoundPhase.Search:
-                    GUILayout.Label("Choose any eligible searching Player:");
-                    for (int i = 0; i < trapFloorRoundState.ParticipatingPlayerIds.Count; i++)
-                    {
-                        PlayerId playerId = trapFloorRoundState.ParticipatingPlayerIds[i];
-                        if (trapFloorRoundState.HasCompletedSearchTrigger(playerId))
-                        {
-                            continue;
-                        }
-
-                        if (GUILayout.Button($"Search - {FormatPlayerName(playerId)}"))
-                        {
-                            if (SearchFloormasterDeck(playerId).Succeeded)
-                            {
-                                GUIUtility.ExitGUI();
-                            }
-                        }
-                    }
-
-                    break;
-                case TrapFloorRoundPhase.Trigger:
-                    GUILayout.Label("Card effects remain unresolved.");
-                    if (GUILayout.Button("Complete Pending Trigger (Prototype)"))
-                    {
-                        if (CompletePendingFloormasterTriggerPrototype().Succeeded)
-                        {
-                            GUIUtility.ExitGUI();
-                        }
-                    }
-
-                    break;
-                case TrapFloorRoundPhase.Floorfall:
-                    if (GUILayout.Button("Roll Floorfall"))
-                    {
-                        if (TriggerFloorfall().Succeeded)
-                        {
-                            GUIUtility.ExitGUI();
-                        }
-                    }
-
-                    bool previousEnabled = GUI.enabled;
-                    GUI.enabled = previousEnabled && trapFloorRoundState.AcceptedFloorfallCount > 0;
-                    if (GUILayout.Button("Complete Floorfall Phase (Prototype)"))
-                    {
-                        if (CompleteFloorfallPhasePrototype().Succeeded)
-                        {
-                            GUIUtility.ExitGUI();
-                        }
-                    }
-
-                    GUI.enabled = previousEnabled;
-                    GUILayout.Label("Mode count is acknowledged externally; Easy/Hard is not selected here.");
-                    break;
-                case TrapFloorRoundPhase.End:
-                    if (GUILayout.Button("Complete End (Prototype)"))
-                    {
-                        if (CompleteEndPrototype().Succeeded)
-                        {
-                            GUIUtility.ExitGUI();
-                        }
-                    }
-
-                    GUILayout.Label("Prototype acknowledgement only; survival and win/loss are not evaluated.");
-                    break;
-                case TrapFloorRoundPhase.Completed:
-                    GUILayout.Label("10-round schedule complete. No winner has been declared.");
-                    break;
-            }
-
-            GUILayout.Space(4f);
         }
 
         private void BeginToolboxPlacement(
@@ -1921,6 +1807,7 @@ namespace ConsoleCards.Presentation.Prototype
                     () => BeginToolboxPlacement(TabletopComponentKind.Pawn),
                     () => BeginToolboxPlacement(TabletopComponentKind.Token),
                     sideCount => BeginToolboxPlacement(TabletopComponentKind.Die, sideCount)));
+            RefreshTrapFloorStatusUi();
         }
 
         private void RefreshRuntimeStatusUi()
@@ -1928,6 +1815,146 @@ namespace ConsoleCards.Presentation.Prototype
             if (runtimeUi != null && IsInitialized && !sessionEntryVisible)
             {
                 runtimeUi.SetStatusMessage(CurrentStatusText());
+            }
+        }
+
+        private void RefreshTrapFloorStatusUi()
+        {
+            if (runtimeUi == null || sessionEntryVisible || !IsInitialized)
+            {
+                return;
+            }
+
+            if (trapFloorRoundState == null)
+            {
+                runtimeUi.HideTrapFloorStatus();
+                return;
+            }
+
+            TrapFloorPendingFloormasterCard pendingCard = floormasterLifecycleState?.PendingCard;
+            string detail = string.Empty;
+            if (pendingCard != null)
+            {
+                detail =
+                    $"Pending Trigger: {FormatPlayerName(pendingCard.SearchingPlayerId)} / {pendingCard.Category}\n"
+                    + "Effect unresolved; awaiting prototype/external completion.";
+            }
+            else if (trapFloorRoundState.Phase == TrapFloorRoundPhase.Floorfall)
+            {
+                detail =
+                    $"Floorfalls performed this phase: {trapFloorRoundState.AcceptedFloorfallCount}\n"
+                    + "Mode-required count remains external.";
+            }
+            else if (trapFloorRoundState.IsScheduleCompleted)
+            {
+                detail = "10-round schedule complete. Win/loss unresolved.";
+            }
+
+            PrototypeTrapFloorStatusModel status = new PrototypeTrapFloorStatusModel(
+                $"Round: {trapFloorRoundState.CurrentRoundNumber} / {TrapFloorRoundState.FinalRoundNumber}",
+                $"Phase: {trapFloorRoundState.Phase}",
+                $"Search + Trigger: {trapFloorRoundState.CompletedSearchTriggerCount} / "
+                    + $"{trapFloorRoundState.ParticipatingPlayerIds.Count} Players complete",
+                detail,
+                $"Deck: {ContainerCount(deckContainerId)}   Discard: {ContainerCount(discardContainerId)}",
+                TrapFloorActionHelpText());
+
+            PrototypeFloorfallStatusModel floorfall = BuildFloorfallStatusModel();
+            runtimeUi.ShowTrapFloorStatus(status, floorfall, BuildTrapFloorAssistedActions());
+        }
+
+        private PrototypeFloorfallStatusModel BuildFloorfallStatusModel()
+        {
+            if (floorfallState == null || !floorfallState.CurrentTarget.HasValue)
+            {
+                return new PrototypeFloorfallStatusModel(false, string.Empty, string.Empty, string.Empty);
+            }
+
+            TrapFloorFloorfallTarget target = floorfallState.CurrentTarget.Value;
+            return new PrototypeFloorfallStatusModel(
+                true,
+                $"Die 1 / X: {target.XAxisRoll.Value}   Die 2 / Y: {target.YAxisRoll.Value}",
+                $"Coordinate: {target.Coordinate}",
+                $"Current target: Floor Card {target.Coordinate}");
+        }
+
+        private List<PrototypePopupActionOption> BuildTrapFloorAssistedActions()
+        {
+            List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
+            switch (trapFloorRoundState.Phase)
+            {
+                case TrapFloorRoundPhase.Start:
+                    actions.Add(new PrototypePopupActionOption(
+                        trapFloorRoundState.CurrentRoundNumber == 1
+                            ? "Begin Round / Continue to Search"
+                            : "Complete Start / Movement (Prototype)",
+                        true,
+                        () => CompleteTrapFloorStart()));
+                    break;
+                case TrapFloorRoundPhase.Search:
+                    for (int i = 0; i < trapFloorRoundState.ParticipatingPlayerIds.Count; i++)
+                    {
+                        PlayerId playerId = trapFloorRoundState.ParticipatingPlayerIds[i];
+                        if (trapFloorRoundState.HasCompletedSearchTrigger(playerId))
+                        {
+                            continue;
+                        }
+
+                        PlayerId searchingPlayerId = playerId;
+                        actions.Add(new PrototypePopupActionOption(
+                            $"Search - {FormatPlayerName(searchingPlayerId)}",
+                            true,
+                            () => SearchFloormasterDeck(searchingPlayerId)));
+                    }
+
+                    break;
+                case TrapFloorRoundPhase.Trigger:
+                    actions.Add(new PrototypePopupActionOption(
+                        "Complete Pending Trigger (Prototype)",
+                        true,
+                        () => CompletePendingFloormasterTriggerPrototype()));
+                    break;
+                case TrapFloorRoundPhase.Floorfall:
+                    actions.Add(new PrototypePopupActionOption(
+                        "Roll Floorfall",
+                        true,
+                        () => TriggerFloorfall()));
+                    actions.Add(new PrototypePopupActionOption(
+                        "Complete Floorfall Phase (Prototype)",
+                        trapFloorRoundState.AcceptedFloorfallCount > 0,
+                        () => CompleteFloorfallPhasePrototype()));
+                    break;
+                case TrapFloorRoundPhase.End:
+                    actions.Add(new PrototypePopupActionOption(
+                        "Complete End (Prototype)",
+                        true,
+                        () => CompleteEndPrototype()));
+                    break;
+            }
+
+            return actions;
+        }
+
+        private string TrapFloorActionHelpText()
+        {
+            switch (trapFloorRoundState.Phase)
+            {
+                case TrapFloorRoundPhase.Start:
+                    return trapFloorRoundState.CurrentRoundNumber == 1
+                        ? string.Empty
+                        : "Prototype acknowledgement only; no Pawn movement occurs.";
+                case TrapFloorRoundPhase.Search:
+                    return "Choose any eligible searching Player.";
+                case TrapFloorRoundPhase.Trigger:
+                    return "Card effects remain unresolved; completion acknowledges external resolution only.";
+                case TrapFloorRoundPhase.Floorfall:
+                    return "Mode count is acknowledged externally; Easy/Hard is not selected here.";
+                case TrapFloorRoundPhase.End:
+                    return "Prototype acknowledgement only; survival and win/loss are not evaluated.";
+                case TrapFloorRoundPhase.Completed:
+                    return "10-round schedule complete. No winner has been declared.";
+                default:
+                    return string.Empty;
             }
         }
 
@@ -4813,69 +4840,6 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             return "Official Search is unavailable.";
-        }
-
-        private void DrawTrapFloorRoundStatus()
-        {
-            if (trapFloorRoundState == null)
-            {
-                return;
-            }
-
-            Rect statusRect = new Rect(
-                Mathf.Max(0f, Screen.width - TrapFloorRoundStatusWidth - 16f),
-                16f,
-                TrapFloorRoundStatusWidth,
-                TrapFloorRoundStatusHeight);
-            GUILayout.BeginArea(statusRect, GUI.skin.box);
-            GUILayout.Label("TRAP FLOOR ROUND STATUS");
-            GUILayout.Label($"Round: {trapFloorRoundState.CurrentRoundNumber} / {TrapFloorRoundState.FinalRoundNumber}");
-            GUILayout.Label($"Phase: {trapFloorRoundState.Phase}");
-            GUILayout.Label(
-                $"Search + Trigger: {trapFloorRoundState.CompletedSearchTriggerCount} / {trapFloorRoundState.ParticipatingPlayerIds.Count} Players complete");
-
-            TrapFloorPendingFloormasterCard pendingCard = floormasterLifecycleState?.PendingCard;
-            if (pendingCard != null)
-            {
-                GUILayout.Label(
-                    $"Pending Trigger: {FormatPlayerName(pendingCard.SearchingPlayerId)} / {pendingCard.Category}");
-                GUILayout.Label("Effect unresolved; awaiting prototype/external completion.");
-            }
-            else if (trapFloorRoundState.Phase == TrapFloorRoundPhase.Floorfall)
-            {
-                GUILayout.Label($"Floorfalls performed this phase: {trapFloorRoundState.AcceptedFloorfallCount}");
-                GUILayout.Label("Mode-required count remains external.");
-            }
-            else if (trapFloorRoundState.IsScheduleCompleted)
-            {
-                GUILayout.Label("10-round schedule complete. Win/loss unresolved.");
-            }
-
-            GUILayout.Label($"Deck: {ContainerCount(deckContainerId)}   Discard: {ContainerCount(discardContainerId)}");
-            GUILayout.EndArea();
-        }
-
-        private void DrawFloorfallStatus()
-        {
-            if (floorfallState == null || !floorfallState.CurrentTarget.HasValue)
-            {
-                return;
-            }
-
-            TrapFloorFloorfallTarget target = floorfallState.CurrentTarget.Value;
-            Rect statusRect = new Rect(
-                Mathf.Max(0f, Screen.width - FloorfallStatusWidth - 16f),
-                trapFloorRoundState != null
-                    ? 16f + TrapFloorRoundStatusHeight + 8f
-                    : 16f,
-                FloorfallStatusWidth,
-                FloorfallStatusHeight);
-            GUILayout.BeginArea(statusRect, GUI.skin.box);
-            GUILayout.Label("FLOORFALL TARGET");
-            GUILayout.Label(
-                $"Die 1 / X: {target.XAxisRoll.Value}   Die 2 / Y: {target.YAxisRoll.Value}");
-            GUILayout.Label($"Coordinate: {target.Coordinate}");
-            GUILayout.EndArea();
         }
 
         private int ContainerCount(ContainerId containerId)

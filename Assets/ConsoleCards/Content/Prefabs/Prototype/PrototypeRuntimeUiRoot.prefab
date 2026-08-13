@@ -61,6 +61,10 @@ MonoBehaviour:
   componentToolboxPrefab: {fileID: 114000, guid: c5b19139ff4b4f52aad79ee919bb7397, type: 3}
   tabletopPopupMount: {fileID: 224300}
   tabletopPopupPrefab: {fileID: 114001, guid: 306faf8f74ea40c29778d2e89f85ec24, type: 3}
+  trapFloorHudMount: {fileID: 224200}
+  trapFloorHudPrefab: {fileID: 114000, guid: 93d8ee6f65234c63bdb3ced54189a2ad, type: 3}
+  interactionGuideMount: {fileID: 224200}
+  interactionGuidePrefab: {fileID: 114000, guid: 18ff22796a2b4e2aaec1e8cd3a815910, type: 3}
 --- !u!1 &100010
 GameObject:
   m_ObjectHideFlags: 0

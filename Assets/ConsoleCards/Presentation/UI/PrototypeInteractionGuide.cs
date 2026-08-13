@@ -1,48 +1,99 @@
+using System;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace ConsoleCards.Presentation.UI
 {
     public sealed class PrototypeInteractionGuide : MonoBehaviour
     {
-        [SerializeField] private bool showGuide = true;
-        [SerializeField] private Rect guideArea = new Rect(16f, 16f, 360f, 300f);
+        [SerializeField] private GameObject guidePanel;
+        [SerializeField] private Button toggleButton;
+        [SerializeField] private Text toggleButtonLabel;
+        [SerializeField] private Button closeButton;
+        [SerializeField] private Text titleLabel;
+        [SerializeField] private Text bodyLabel;
         [SerializeField] private string title = "Console Cards Prototype";
-        [SerializeField] private string[] guideLines =
-        {
-            "Click Card, Pawn, or Token: select",
-            "Click empty table: clear selection",
-            "Drag tabletop Card, Pawn, or Token: move",
-            "Drag contained Card: transfer or play to table",
-            "Drag tabletop Card onto Container: place in Container",
-            "Right-click Deck, Card, or Stack: actions",
-            "Drag Hand Card left/right: reorder Hand",
-            "Esc: cancel / rollback",
-            "Mouse wheel + selection: rotate 15 degrees",
-            "Mouse wheel + no selection: camera zoom",
-            "Scroll during drag: no zoom or rotation",
-            "F + selected Card: flip face",
-            "F + Pawn or Token: rejected, no visible change",
-            "WASD / Arrow keys: camera pan",
-            "Middle mouse drag: camera pan",
-        };
+        [SerializeField, TextArea(8, 20)] private string guideText =
+            "Click Card, Pawn, or Token: select\n"
+            + "Click empty table: clear selection\n"
+            + "Drag tabletop Card, Pawn, or Token: move\n"
+            + "Drag contained Card: transfer or play to table\n"
+            + "Drag tabletop Card onto Container: place in Container\n"
+            + "Right-click Deck, Card, Stack, or Die: actions\n"
+            + "Drag Hand Card left/right: reorder Hand\n"
+            + "Esc: cancel / rollback\n"
+            + "Mouse wheel + selection: rotate 15 degrees\n"
+            + "Mouse wheel + no selection: camera zoom\n"
+            + "Scroll during drag: no zoom or rotation\n"
+            + "F + selected Card: flip face\n"
+            + "F + Pawn or Token: rejected, no visible change\n"
+            + "WASD / Arrow keys: camera pan\n"
+            + "Middle mouse drag: camera pan";
 
-        private void OnGUI()
+        public void ValidateReferences()
         {
-            if (!showGuide)
+            if (guidePanel == null
+                || toggleButton == null
+                || toggleButtonLabel == null
+                || closeButton == null
+                || titleLabel == null
+                || bodyLabel == null)
             {
-                return;
+                throw new InvalidOperationException(
+                    "PrototypeInteractionGuide requires its authored panel, buttons, and text references.");
+            }
+        }
+
+        public void Bind()
+        {
+            ValidateReferences();
+            Unbind();
+            titleLabel.text = title;
+            bodyLabel.text = guideText;
+            toggleButton.onClick.AddListener(ToggleGuide);
+            closeButton.onClick.AddListener(HideGuide);
+            gameObject.SetActive(true);
+            SetGuideVisible(true);
+        }
+
+        public void Unbind()
+        {
+            if (toggleButton != null)
+            {
+                toggleButton.onClick.RemoveAllListeners();
             }
 
-            GUILayout.BeginArea(guideArea, GUI.skin.box);
-            GUILayout.Label(title, GUI.skin.label);
-            GUILayout.Space(4f);
-
-            for (int i = 0; i < guideLines.Length; i++)
+            if (closeButton != null)
             {
-                GUILayout.Label(guideLines[i], GUI.skin.label);
+                closeButton.onClick.RemoveAllListeners();
             }
+        }
 
-            GUILayout.EndArea();
+        public void Hide()
+        {
+            Unbind();
+            gameObject.SetActive(false);
+        }
+
+        private void ToggleGuide()
+        {
+            SetGuideVisible(!guidePanel.activeSelf);
+        }
+
+        private void HideGuide()
+        {
+            SetGuideVisible(false);
+        }
+
+        private void SetGuideVisible(bool visible)
+        {
+            guidePanel.SetActive(visible);
+            toggleButtonLabel.text = visible ? "Hide Help" : "Show Help";
+        }
+
+        private void OnDestroy()
+        {
+            Unbind();
         }
     }
 }

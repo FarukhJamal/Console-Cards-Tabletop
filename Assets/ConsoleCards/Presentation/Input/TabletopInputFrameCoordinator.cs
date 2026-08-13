@@ -175,7 +175,8 @@ namespace ConsoleCards.Presentation.Input
                 && Mouse.current.rightButton.wasPressedThisFrame;
             bool placementCancelledBySecondary = secondaryPressedThisFrame
                 && componentPlacementController != null
-                && componentPlacementController.IsActive;
+                && componentPlacementController.IsActive
+                && !IsInsideObjectInputBlockingGuiRect(screenPosition);
             if (placementCancelledBySecondary)
             {
                 componentPlacementController.Cancel();

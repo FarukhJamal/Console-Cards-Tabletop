@@ -24,9 +24,15 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private PrototypeComponentToolboxView componentToolboxPrefab;
         [SerializeField] private Transform tabletopPopupMount;
         [SerializeField] private PrototypeTabletopPopupView tabletopPopupPrefab;
+        [SerializeField] private Transform trapFloorHudMount;
+        [SerializeField] private PrototypeTrapFloorHudView trapFloorHudPrefab;
+        [SerializeField] private Transform interactionGuideMount;
+        [SerializeField] private PrototypeInteractionGuide interactionGuidePrefab;
 
         private PrototypeComponentToolboxView componentToolboxView;
         private PrototypeTabletopPopupView tabletopPopupView;
+        private PrototypeTrapFloorHudView trapFloorHudView;
+        private PrototypeInteractionGuide interactionGuideView;
 
         public void ValidateReferences()
         {
@@ -56,7 +62,11 @@ namespace ConsoleCards.Presentation.UI
                 || componentToolboxMount == null
                 || componentToolboxPrefab == null
                 || tabletopPopupMount == null
-                || tabletopPopupPrefab == null)
+                || tabletopPopupPrefab == null
+                || trapFloorHudMount == null
+                || trapFloorHudPrefab == null
+                || interactionGuideMount == null
+                || interactionGuidePrefab == null)
             {
                 throw new InvalidOperationException(
                     "PrototypeRuntimeUiRoot requires its authored layers and view references.");
@@ -67,6 +77,8 @@ namespace ConsoleCards.Presentation.UI
             statusMessageView.ValidateReferences();
             componentToolboxPrefab.ValidateReferences();
             tabletopPopupPrefab.ValidateReferences();
+            trapFloorHudPrefab.ValidateReferences();
+            interactionGuidePrefab.ValidateReferences();
         }
 
         public void ShowSessionEntry(
@@ -77,6 +89,8 @@ namespace ConsoleCards.Presentation.UI
             ValidateReferences();
             activeSessionToolbarView.Unbind();
             componentToolboxView?.Unbind();
+            trapFloorHudView?.Hide();
+            interactionGuideView?.Hide();
             CloseTabletopPopup();
             activeSessionHudLayer.SetActive(false);
             sessionEntryLayer.SetActive(true);
@@ -93,12 +107,15 @@ namespace ConsoleCards.Presentation.UI
         {
             ValidateReferences();
             EnsureComponentToolboxView();
+            EnsureInteractionGuideView();
             sessionEntryView.Unbind();
             sessionEntryLayer.SetActive(false);
             CloseTabletopPopup();
             activeSessionHudLayer.SetActive(true);
             activeSessionToolbarView.Bind(sessionTitle, resetSession, returnToSessionEntry);
             componentToolboxView.Bind(componentToolboxBindings, CloseTabletopPopup);
+            interactionGuideView.Bind();
+            trapFloorHudView?.Hide();
             statusMessageView.SetMessage(statusMessage);
             ClearSelectedUiObject();
         }
@@ -180,6 +197,25 @@ namespace ConsoleCards.Presentation.UI
             tabletopPopupView?.SetDrawCount(selectedCount, availableCount);
         }
 
+        public void ShowTrapFloorStatus(
+            PrototypeTrapFloorStatusModel status,
+            PrototypeFloorfallStatusModel floorfall,
+            IReadOnlyList<PrototypePopupActionOption> actions)
+        {
+            if (!activeSessionHudLayer.activeSelf)
+            {
+                return;
+            }
+
+            EnsureTrapFloorHudView();
+            trapFloorHudView.Show(status, floorfall, actions);
+        }
+
+        public void HideTrapFloorStatus()
+        {
+            trapFloorHudView?.Hide();
+        }
+
         public void ShowMergeDestinationPopup(
             Vector2 screenPosition,
             IReadOnlyList<PrototypePopupActionOption> destinations,
@@ -219,6 +255,8 @@ namespace ConsoleCards.Presentation.UI
             sessionEntryView?.Unbind();
             activeSessionToolbarView?.Unbind();
             componentToolboxView?.Unbind();
+            trapFloorHudView?.Hide();
+            interactionGuideView?.Hide();
             CloseTabletopPopup();
         }
 
@@ -244,6 +282,30 @@ namespace ConsoleCards.Presentation.UI
             tabletopPopupView = Instantiate(tabletopPopupPrefab, tabletopPopupMount, false);
             tabletopPopupView.name = tabletopPopupPrefab.name;
             tabletopPopupView.ValidateReferences();
+        }
+
+        private void EnsureTrapFloorHudView()
+        {
+            if (trapFloorHudView != null)
+            {
+                return;
+            }
+
+            trapFloorHudView = Instantiate(trapFloorHudPrefab, trapFloorHudMount, false);
+            trapFloorHudView.name = trapFloorHudPrefab.name;
+            trapFloorHudView.ValidateReferences();
+        }
+
+        private void EnsureInteractionGuideView()
+        {
+            if (interactionGuideView != null)
+            {
+                return;
+            }
+
+            interactionGuideView = Instantiate(interactionGuidePrefab, interactionGuideMount, false);
+            interactionGuideView.name = interactionGuidePrefab.name;
+            interactionGuideView.ValidateReferences();
         }
 
         private void ClearSelectedUiObject()
