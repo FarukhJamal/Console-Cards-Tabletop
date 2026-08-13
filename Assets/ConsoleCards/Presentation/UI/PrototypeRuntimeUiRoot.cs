@@ -20,6 +20,10 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private PrototypeSessionEntryView sessionEntryView;
         [SerializeField] private PrototypeActiveSessionToolbarView activeSessionToolbarView;
         [SerializeField] private PrototypeStatusMessageView statusMessageView;
+        [SerializeField] private Transform componentToolboxMount;
+        [SerializeField] private PrototypeComponentToolboxView componentToolboxPrefab;
+
+        private PrototypeComponentToolboxView componentToolboxView;
 
         public void ValidateReferences()
         {
@@ -45,7 +49,9 @@ namespace ConsoleCards.Presentation.UI
                 || popupLayer == null
                 || sessionEntryView == null
                 || activeSessionToolbarView == null
-                || statusMessageView == null)
+                || statusMessageView == null
+                || componentToolboxMount == null
+                || componentToolboxPrefab == null)
             {
                 throw new InvalidOperationException(
                     "PrototypeRuntimeUiRoot requires its authored layers and view references.");
@@ -54,6 +60,7 @@ namespace ConsoleCards.Presentation.UI
             sessionEntryView.ValidateReferences();
             activeSessionToolbarView.ValidateReferences();
             statusMessageView.ValidateReferences();
+            componentToolboxPrefab.ValidateReferences();
         }
 
         public void ShowSessionEntry(
@@ -63,6 +70,7 @@ namespace ConsoleCards.Presentation.UI
         {
             ValidateReferences();
             activeSessionToolbarView.Unbind();
+            componentToolboxView?.Unbind();
             activeSessionHudLayer.SetActive(false);
             popupLayer.SetActive(false);
             sessionEntryLayer.SetActive(true);
@@ -74,14 +82,17 @@ namespace ConsoleCards.Presentation.UI
             string sessionTitle,
             Action resetSession,
             Action returnToSessionEntry,
-            string statusMessage)
+            string statusMessage,
+            PrototypeComponentToolboxBindings componentToolboxBindings)
         {
             ValidateReferences();
+            EnsureComponentToolboxView();
             sessionEntryView.Unbind();
             sessionEntryLayer.SetActive(false);
             popupLayer.SetActive(false);
             activeSessionHudLayer.SetActive(true);
             activeSessionToolbarView.Bind(sessionTitle, resetSession, returnToSessionEntry);
+            componentToolboxView.Bind(componentToolboxBindings);
             statusMessageView.SetMessage(statusMessage);
             ClearSelectedUiObject();
         }
@@ -101,10 +112,40 @@ namespace ConsoleCards.Presentation.UI
             statusMessageView.SetMessage(statusMessage);
         }
 
+        public void ShowPlacementHint(string placementSubject)
+        {
+            EnsureComponentToolboxView();
+            componentToolboxView.ShowPlacementHint(placementSubject);
+        }
+
+        public void ClearPlacementHint()
+        {
+            componentToolboxView?.ClearPlacementHint();
+        }
+
+        public void ClearActiveSessionTransientUi()
+        {
+            componentToolboxView?.CloseToolbox();
+            componentToolboxView?.ClearPlacementHint();
+        }
+
         public void ReleaseBindings()
         {
             sessionEntryView?.Unbind();
             activeSessionToolbarView?.Unbind();
+            componentToolboxView?.Unbind();
+        }
+
+        private void EnsureComponentToolboxView()
+        {
+            if (componentToolboxView != null)
+            {
+                return;
+            }
+
+            componentToolboxView = Instantiate(componentToolboxPrefab, componentToolboxMount, false);
+            componentToolboxView.name = componentToolboxPrefab.name;
+            componentToolboxView.ValidateReferences();
         }
 
         private void ClearSelectedUiObject()

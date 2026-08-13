@@ -216,8 +216,7 @@ namespace ConsoleCards.Presentation.Prototype
         private ContainerId contextMenuContainerId;
         private int selectedDrawCount = 1;
         private int toolboxSpawnSequence;
-        private bool toolboxVisible;
-        private bool toolboxDieChoicesVisible;
+        private bool toolboxPlacementHintActive;
         private DieView contextMenuDieView;
 
         private DeckView deckView;
@@ -381,8 +380,7 @@ namespace ConsoleCards.Presentation.Prototype
                     HandleSecondaryPointerPressed,
                     CloseContextMenu);
                 prototypeUiInputConfiguredByComposition = true;
-                inputFrameCoordinator.ConfigureObjectInputBlockingGuiRect(ControlsPanelScreenRect);
-                controlsPanelInputBlockConfiguredByComposition = true;
+                ConfigureUnmigratedControlsInputBlockIfNeeded();
 
                 inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
                 inputFrameCoordinator.enabled = true;
@@ -429,8 +427,7 @@ namespace ConsoleCards.Presentation.Prototype
                     HandleSecondaryPointerPressed,
                     CloseContextMenu);
                 prototypeUiInputConfiguredByComposition = true;
-                inputFrameCoordinator.ConfigureObjectInputBlockingGuiRect(ControlsPanelScreenRect);
-                controlsPanelInputBlockConfiguredByComposition = true;
+                ConfigureUnmigratedControlsInputBlockIfNeeded();
                 inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
                 inputFrameCoordinator.enabled = true;
                 frameCoordinatorEnabledByComposition = true;
@@ -666,8 +663,8 @@ namespace ConsoleCards.Presentation.Prototype
             contextMenuContainerId = ContainerId.Empty;
             selectedDrawCount = 1;
             toolboxSpawnSequence = 0;
-            toolboxVisible = false;
-            toolboxDieChoicesVisible = false;
+            toolboxPlacementHintActive = false;
+            runtimeUi?.ClearActiveSessionTransientUi();
             if (!preserveTemplateContext)
             {
                 prototypeTemplateContext = null;
@@ -1177,6 +1174,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             RefreshRuntimeStatusUi();
+            RefreshToolboxPlacementUi();
         }
 
         private void OnGUI()
@@ -1194,7 +1192,29 @@ namespace ConsoleCards.Presentation.Prototype
             DrawTrapFloorRoundStatus();
             DrawFloorfallStatus();
             DrawPlayerContextMenu();
-            DrawUnmigratedActiveSessionControls();
+            if (HasUnmigratedActiveSessionControls())
+            {
+                DrawUnmigratedActiveSessionControls();
+            }
+        }
+
+        private bool HasUnmigratedActiveSessionControls()
+        {
+            return trapFloorRoundState != null
+                || (showDeveloperControls
+                    && activeSession != null
+                    && activeSession.Selection.Kind == TabletopSessionKind.GameTemplate);
+        }
+
+        private void ConfigureUnmigratedControlsInputBlockIfNeeded()
+        {
+            if (!HasUnmigratedActiveSessionControls())
+            {
+                return;
+            }
+
+            inputFrameCoordinator.ConfigureObjectInputBlockingGuiRect(ControlsPanelScreenRect);
+            controlsPanelInputBlockConfiguredByComposition = true;
         }
 
         private void DrawUnmigratedActiveSessionControls()
@@ -1203,17 +1223,6 @@ namespace ConsoleCards.Presentation.Prototype
             if (trapFloorRoundState != null)
             {
                 DrawTrapFloorRoundActions();
-            }
-
-            if (GUILayout.Button(toolboxVisible ? "Close Component Toolbox" : "Add Component"))
-            {
-                toolboxVisible = !toolboxVisible;
-                toolboxDieChoicesVisible = false;
-            }
-
-            if (toolboxVisible)
-            {
-                DrawComponentToolbox();
             }
 
             if (!showDeveloperControls
@@ -1385,72 +1394,6 @@ namespace ConsoleCards.Presentation.Prototype
             GUILayout.Space(4f);
         }
 
-        private void DrawComponentToolbox()
-        {
-            GUILayout.Space(4f);
-            GUILayout.Label("COMPONENT TOOLBOX");
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Card"))
-            {
-                BeginToolboxPlacement(TabletopComponentKind.Card);
-            }
-
-            if (GUILayout.Button("Deck"))
-            {
-                BeginToolboxPlacement(TabletopComponentKind.Deck);
-            }
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Stack"))
-            {
-                BeginToolboxPlacement(TabletopComponentKind.Stack);
-            }
-
-            if (GUILayout.Button("Pawn"))
-            {
-                BeginToolboxPlacement(TabletopComponentKind.Pawn);
-            }
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Token"))
-            {
-                BeginToolboxPlacement(TabletopComponentKind.Token);
-            }
-
-            if (GUILayout.Button("Die"))
-            {
-                toolboxDieChoicesVisible = !toolboxDieChoicesVisible;
-            }
-            GUILayout.EndHorizontal();
-
-            if (!toolboxDieChoicesVisible)
-            {
-                return;
-            }
-
-            GUILayout.Label("Choose Die");
-            GUILayout.BeginHorizontal();
-            DrawDieToolboxButton(4);
-            DrawDieToolboxButton(6);
-            DrawDieToolboxButton(8);
-            GUILayout.EndHorizontal();
-            GUILayout.BeginHorizontal();
-            DrawDieToolboxButton(10);
-            DrawDieToolboxButton(12);
-            DrawDieToolboxButton(20);
-            GUILayout.EndHorizontal();
-        }
-
-        private void DrawDieToolboxButton(int sideCount)
-        {
-            if (GUILayout.Button($"d{sideCount}"))
-            {
-                BeginToolboxPlacement(TabletopComponentKind.Die, sideCount);
-            }
-        }
-
         private void BeginToolboxPlacement(
             TabletopComponentKind componentKind,
             int dieSideCount = 0)
@@ -1473,10 +1416,11 @@ namespace ConsoleCards.Presentation.Prototype
                 rotation,
                 0,
                 toolboxSpawnSequence * ToolboxPhysicalOrderStride);
-            toolboxVisible = false;
-            toolboxDieChoicesVisible = false;
-            ShowMessage(
-                $"Place {(componentKind == TabletopComponentKind.Die ? $"d{dieSideCount}" : componentKind.ToString())}: left-click to confirm, right-click or Escape to cancel.");
+            toolboxPlacementHintActive = true;
+            runtimeUi?.ShowPlacementHint(
+                componentKind == TabletopComponentKind.Die
+                    ? $"d{dieSideCount}"
+                    : componentKind.ToString());
         }
 
         public CreateTabletopComponentResult AddToolboxComponent(
@@ -1968,7 +1912,14 @@ namespace ConsoleCards.Presentation.Prototype
                 sessionTitle,
                 ResetPrototype,
                 ReturnToSessionEntry,
-                CurrentStatusText());
+                CurrentStatusText(),
+                new PrototypeComponentToolboxBindings(
+                    () => BeginToolboxPlacement(TabletopComponentKind.Card),
+                    () => BeginToolboxPlacement(TabletopComponentKind.Deck),
+                    () => BeginToolboxPlacement(TabletopComponentKind.Stack),
+                    () => BeginToolboxPlacement(TabletopComponentKind.Pawn),
+                    () => BeginToolboxPlacement(TabletopComponentKind.Token),
+                    sideCount => BeginToolboxPlacement(TabletopComponentKind.Die, sideCount)));
         }
 
         private void RefreshRuntimeStatusUi()
@@ -1977,6 +1928,22 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 runtimeUi.SetStatusMessage(CurrentStatusText());
             }
+        }
+
+        private void RefreshToolboxPlacementUi()
+        {
+            if (!toolboxPlacementHintActive)
+            {
+                return;
+            }
+
+            if (componentPlacementController != null && componentPlacementController.IsActive)
+            {
+                return;
+            }
+
+            toolboxPlacementHintActive = false;
+            runtimeUi?.ClearPlacementHint();
         }
 
         private void TryEnterSession(TabletopSessionSelection selection)
@@ -3148,8 +3115,8 @@ namespace ConsoleCards.Presentation.Prototype
                 new GuidTabletopComponentIdentitySource());
             rollDieUseCase = new RollDieUseCase(authoritativeRandomValueSource);
             toolboxSpawnSequence = 0;
-            toolboxVisible = false;
-            toolboxDieChoicesVisible = false;
+            toolboxPlacementHintActive = false;
+            runtimeUi?.ClearActiveSessionTransientUi();
         }
 
         private static PrototypeTemplateContext CreateTrapFloorPrototypeContext(
