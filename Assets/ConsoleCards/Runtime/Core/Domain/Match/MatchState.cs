@@ -19,6 +19,7 @@ namespace ConsoleCards.Core.Domain.Match
         private readonly Dictionary<ContainerId, ContainerState> containers;
         private readonly Dictionary<ContainerId, ContainerPlacementState> containerPlacements;
         private readonly Dictionary<SeatId, SeatState> seats;
+        private readonly Dictionary<ConsoleId, PlacedConsoleState> placedConsoles;
         private readonly Dictionary<PlayAreaId, PlayAreaState> playAreas;
         private readonly ReadOnlyDictionary<TabletopObjectId, CardInstanceState> readOnlyCards;
         private readonly ReadOnlyDictionary<TabletopObjectId, PawnState> readOnlyPawns;
@@ -27,6 +28,7 @@ namespace ConsoleCards.Core.Domain.Match
         private readonly ReadOnlyDictionary<ContainerId, ContainerState> readOnlyContainers;
         private readonly ReadOnlyDictionary<ContainerId, ContainerPlacementState> readOnlyContainerPlacements;
         private readonly ReadOnlyDictionary<SeatId, SeatState> readOnlySeats;
+        private readonly ReadOnlyDictionary<ConsoleId, PlacedConsoleState> readOnlyPlacedConsoles;
         private readonly ReadOnlyDictionary<PlayAreaId, PlayAreaState> readOnlyPlayAreas;
 
         public MatchState(
@@ -159,6 +161,7 @@ namespace ConsoleCards.Core.Domain.Match
             this.containers = CopyContainers(containers);
             this.containerPlacements = CopyContainerPlacements(containerPlacements);
             this.seats = CopySeats(seats);
+            placedConsoles = new Dictionary<ConsoleId, PlacedConsoleState>();
             this.playAreas = CopyPlayAreas(playAreas);
 
             ValidateObjectContainerConsistency();
@@ -172,6 +175,7 @@ namespace ConsoleCards.Core.Domain.Match
             readOnlyContainers = new ReadOnlyDictionary<ContainerId, ContainerState>(this.containers);
             readOnlyContainerPlacements = new ReadOnlyDictionary<ContainerId, ContainerPlacementState>(this.containerPlacements);
             readOnlySeats = new ReadOnlyDictionary<SeatId, SeatState>(this.seats);
+            readOnlyPlacedConsoles = new ReadOnlyDictionary<ConsoleId, PlacedConsoleState>(placedConsoles);
             readOnlyPlayAreas = new ReadOnlyDictionary<PlayAreaId, PlayAreaState>(this.playAreas);
         }
 
@@ -196,6 +200,8 @@ namespace ConsoleCards.Core.Domain.Match
         public IReadOnlyDictionary<ContainerId, ContainerPlacementState> ContainerPlacements => readOnlyContainerPlacements;
 
         public IReadOnlyDictionary<SeatId, SeatState> Seats => readOnlySeats;
+
+        public IReadOnlyDictionary<ConsoleId, PlacedConsoleState> PlacedConsoles => readOnlyPlacedConsoles;
 
         public IReadOnlyDictionary<PlayAreaId, PlayAreaState> PlayAreas => readOnlyPlayAreas;
 
@@ -451,6 +457,190 @@ namespace ConsoleCards.Core.Domain.Match
         public void AddUncontainedCard(CardInstanceState card)
         {
             AddUncontainedObject(card?.BaseState, card, cards, nameof(card));
+        }
+
+        public void AddUncontainedCards(IReadOnlyList<CardInstanceState> cardsToAdd)
+        {
+            if (cardsToAdd == null)
+            {
+                throw new ArgumentNullException(nameof(cardsToAdd));
+            }
+
+            HashSet<TabletopObjectId> incomingIds = new HashSet<TabletopObjectId>();
+            for (int i = 0; i < cardsToAdd.Count; i++)
+            {
+                CardInstanceState card = cardsToAdd[i];
+                if (card == null || card.BaseState == null)
+                {
+                    throw new ArgumentException("Card batch cannot contain null entries.", nameof(cardsToAdd));
+                }
+
+                if (!card.BaseState.ContainerId.IsEmpty)
+                {
+                    throw new InvalidOperationException("Only uncontained Cards can be added through this operation.");
+                }
+
+                if (!incomingIds.Add(card.BaseState.Id) || ContainsObject(card.BaseState.Id))
+                {
+                    throw new ArgumentException("Card batch contains an existing or duplicate Object ID.", nameof(cardsToAdd));
+                }
+            }
+
+            List<TabletopObjectId> addedIds = new List<TabletopObjectId>();
+            try
+            {
+                for (int i = 0; i < cardsToAdd.Count; i++)
+                {
+                    CardInstanceState card = cardsToAdd[i];
+                    cards.Add(card.BaseState.Id, card);
+                    addedIds.Add(card.BaseState.Id);
+                }
+            }
+            catch
+            {
+                for (int i = 0; i < addedIds.Count; i++)
+                {
+                    cards.Remove(addedIds[i]);
+                }
+
+                throw;
+            }
+        }
+
+        public void AddCardsToEmptyContainer(
+            ContainerId containerId,
+            IReadOnlyList<CardInstanceState> cardsToAdd)
+        {
+            if (!containers.TryGetValue(containerId, out ContainerState destination))
+            {
+                throw new KeyNotFoundException("Destination Container was not found.");
+            }
+
+            if (destination.Count != 0)
+            {
+                throw new InvalidOperationException("Cards can only be populated into an empty Container.");
+            }
+
+            if (cardsToAdd == null)
+            {
+                throw new ArgumentNullException(nameof(cardsToAdd));
+            }
+
+            if (destination.Capacity > 0 && cardsToAdd.Count > destination.Capacity)
+            {
+                throw new InvalidOperationException("Card batch exceeds Container capacity.");
+            }
+
+            HashSet<TabletopObjectId> incomingIds = new HashSet<TabletopObjectId>();
+            for (int i = 0; i < cardsToAdd.Count; i++)
+            {
+                CardInstanceState card = cardsToAdd[i];
+                if (card == null || card.BaseState == null)
+                {
+                    throw new ArgumentException("Card batch cannot contain null entries.", nameof(cardsToAdd));
+                }
+
+                if (card.BaseState.ContainerId != containerId)
+                {
+                    throw new InvalidOperationException("Every populated Card must reference the destination Container.");
+                }
+
+                if (!incomingIds.Add(card.BaseState.Id) || ContainsObject(card.BaseState.Id))
+                {
+                    throw new ArgumentException("Card batch contains an existing or duplicate Object ID.", nameof(cardsToAdd));
+                }
+            }
+
+            List<TabletopObjectId> addedIds = new List<TabletopObjectId>();
+            try
+            {
+                for (int i = 0; i < cardsToAdd.Count; i++)
+                {
+                    CardInstanceState card = cardsToAdd[i];
+                    cards.Add(card.BaseState.Id, card);
+                    addedIds.Add(card.BaseState.Id);
+                    destination.InsertObject(card.BaseState.Id, destination.Count);
+                }
+            }
+            catch
+            {
+                for (int i = addedIds.Count - 1; i >= 0; i--)
+                {
+                    TabletopObjectId objectId = addedIds[i];
+                    if (destination.Contains(objectId))
+                    {
+                        destination.RemoveObject(objectId);
+                    }
+
+                    cards.Remove(objectId);
+                }
+
+                throw;
+            }
+        }
+
+        public void AddPlacedConsole(
+            PlacedConsoleState placedConsole,
+            IReadOnlyList<ContainerState> slotContainers)
+        {
+            if (placedConsole == null)
+            {
+                throw new ArgumentNullException(nameof(placedConsole));
+            }
+
+            if (slotContainers == null)
+            {
+                throw new ArgumentNullException(nameof(slotContainers));
+            }
+
+            if (placedConsoles.ContainsKey(placedConsole.Id))
+            {
+                throw new ArgumentException("Console ID already exists in the Match.", nameof(placedConsole));
+            }
+
+            if (slotContainers.Count != placedConsole.Console.SlotCount)
+            {
+                throw new ArgumentException("Placed Console Slot count must match its Console state.", nameof(slotContainers));
+            }
+
+            HashSet<ContainerId> incomingIds = new HashSet<ContainerId>();
+            for (int i = 0; i < slotContainers.Count; i++)
+            {
+                ContainerState slot = slotContainers[i];
+                if (slot == null
+                    || slot.Id != placedConsole.Console.SlotContainerIds[i]
+                    || slot.Kind != ContainerKind.ConsoleSlot
+                    || !slot.OwnerSeatId.IsEmpty
+                    || slot.Count != 0
+                    || containers.ContainsKey(slot.Id)
+                    || !incomingIds.Add(slot.Id))
+                {
+                    throw new ArgumentException("Placed Console requires new, unowned, empty Console Slot Containers in Console order.", nameof(slotContainers));
+                }
+            }
+
+            List<ContainerId> addedSlotIds = new List<ContainerId>();
+            try
+            {
+                for (int i = 0; i < slotContainers.Count; i++)
+                {
+                    ContainerState slot = slotContainers[i];
+                    containers.Add(slot.Id, slot);
+                    addedSlotIds.Add(slot.Id);
+                }
+
+                placedConsoles.Add(placedConsole.Id, placedConsole);
+            }
+            catch
+            {
+                placedConsoles.Remove(placedConsole.Id);
+                for (int i = 0; i < addedSlotIds.Count; i++)
+                {
+                    containers.Remove(addedSlotIds[i]);
+                }
+
+                throw;
+            }
         }
 
         public void AddUncontainedPawn(PawnState pawn)
@@ -818,6 +1008,14 @@ namespace ConsoleCards.Core.Domain.Match
             foreach (SeatState seat in seats.Values)
             {
                 if (seat.Console.ContainsSlot(containerId))
+                {
+                    return true;
+                }
+            }
+
+            foreach (PlacedConsoleState placedConsole in placedConsoles.Values)
+            {
+                if (placedConsole.Console.ContainsSlot(containerId))
                 {
                     return true;
                 }

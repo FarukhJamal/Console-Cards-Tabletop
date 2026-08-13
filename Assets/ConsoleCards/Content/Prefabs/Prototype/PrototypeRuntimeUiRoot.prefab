@@ -61,6 +61,7 @@ MonoBehaviour:
   componentToolboxPrefab: {fileID: 114000, guid: c5b19139ff4b4f52aad79ee919bb7397, type: 3}
   tabletopPopupMount: {fileID: 224300}
   tabletopPopupPrefab: {fileID: 114001, guid: 306faf8f74ea40c29778d2e89f85ec24, type: 3}
+  quantityPopupPrefab: {fileID: 114000, guid: 5bce6ed160af4b9da30a80cc6e3957d3, type: 3}
   trapFloorHudMount: {fileID: 224200}
   trapFloorHudPrefab: {fileID: 114000, guid: 93d8ee6f65234c63bdb3ced54189a2ad, type: 3}
   interactionGuideMount: {fileID: 224200}

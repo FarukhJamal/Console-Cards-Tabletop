@@ -24,6 +24,7 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private PrototypeComponentToolboxView componentToolboxPrefab;
         [SerializeField] private Transform tabletopPopupMount;
         [SerializeField] private PrototypeTabletopPopupView tabletopPopupPrefab;
+        [SerializeField] private PrototypeQuantityPopupView quantityPopupPrefab;
         [SerializeField] private Transform trapFloorHudMount;
         [SerializeField] private PrototypeTrapFloorHudView trapFloorHudPrefab;
         [SerializeField] private Transform interactionGuideMount;
@@ -31,6 +32,7 @@ namespace ConsoleCards.Presentation.UI
 
         private PrototypeComponentToolboxView componentToolboxView;
         private PrototypeTabletopPopupView tabletopPopupView;
+        private PrototypeQuantityPopupView quantityPopupView;
         private PrototypeTrapFloorHudView trapFloorHudView;
         private PrototypeInteractionGuide interactionGuideView;
 
@@ -63,6 +65,7 @@ namespace ConsoleCards.Presentation.UI
                 || componentToolboxPrefab == null
                 || tabletopPopupMount == null
                 || tabletopPopupPrefab == null
+                || quantityPopupPrefab == null
                 || trapFloorHudMount == null
                 || trapFloorHudPrefab == null
                 || interactionGuideMount == null
@@ -77,6 +80,7 @@ namespace ConsoleCards.Presentation.UI
             statusMessageView.ValidateReferences();
             componentToolboxPrefab.ValidateReferences();
             tabletopPopupPrefab.ValidateReferences();
+            quantityPopupPrefab.ValidateReferences();
             trapFloorHudPrefab.ValidateReferences();
             interactionGuidePrefab.ValidateReferences();
         }
@@ -155,6 +159,7 @@ namespace ConsoleCards.Presentation.UI
             Action<Vector2> secondaryDismiss)
         {
             EnsureTabletopPopupView();
+            quantityPopupView?.Close();
             componentToolboxView?.CloseToolbox();
             popupLayer.SetActive(true);
             tabletopPopupView.ShowContextMenu(
@@ -178,6 +183,7 @@ namespace ConsoleCards.Presentation.UI
             Action<Vector2> secondaryDismiss)
         {
             EnsureTabletopPopupView();
+            quantityPopupView?.Close();
             componentToolboxView?.CloseToolbox();
             popupLayer.SetActive(true);
             tabletopPopupView.ShowDrawCount(
@@ -195,6 +201,40 @@ namespace ConsoleCards.Presentation.UI
         public void SetDrawCountPopupValue(int selectedCount, int availableCount)
         {
             tabletopPopupView?.SetDrawCount(selectedCount, availableCount);
+        }
+
+        public void ShowQuantityPopup(
+            string title,
+            string description,
+            string confirmText,
+            int quantity,
+            int minimum,
+            int maximum,
+            Action decrement,
+            Action increment,
+            Action confirm,
+            Action dismiss)
+        {
+            EnsureQuantityPopupView();
+            componentToolboxView?.CloseToolbox();
+            tabletopPopupView?.Close();
+            popupLayer.SetActive(true);
+            quantityPopupView.Show(
+                title,
+                description,
+                confirmText,
+                quantity,
+                minimum,
+                maximum,
+                decrement,
+                increment,
+                confirm,
+                dismiss);
+        }
+
+        public void SetQuantityPopupValue(int quantity, int minimum, int maximum)
+        {
+            quantityPopupView?.SetQuantity(quantity, minimum, maximum);
         }
 
         public void ShowTrapFloorStatus(
@@ -224,6 +264,7 @@ namespace ConsoleCards.Presentation.UI
             Action<Vector2> secondaryDismiss)
         {
             EnsureTabletopPopupView();
+            quantityPopupView?.Close();
             componentToolboxView?.CloseToolbox();
             popupLayer.SetActive(true);
             tabletopPopupView.ShowMergeDestinations(
@@ -237,6 +278,7 @@ namespace ConsoleCards.Presentation.UI
         public void CloseTabletopPopup()
         {
             tabletopPopupView?.Close();
+            quantityPopupView?.Close();
             if (popupLayer != null)
             {
                 popupLayer.SetActive(false);
@@ -282,6 +324,18 @@ namespace ConsoleCards.Presentation.UI
             tabletopPopupView = Instantiate(tabletopPopupPrefab, tabletopPopupMount, false);
             tabletopPopupView.name = tabletopPopupPrefab.name;
             tabletopPopupView.ValidateReferences();
+        }
+
+        private void EnsureQuantityPopupView()
+        {
+            if (quantityPopupView != null)
+            {
+                return;
+            }
+
+            quantityPopupView = Instantiate(quantityPopupPrefab, tabletopPopupMount, false);
+            quantityPopupView.name = quantityPopupPrefab.name;
+            quantityPopupView.ValidateReferences();
         }
 
         private void EnsureTrapFloorHudView()

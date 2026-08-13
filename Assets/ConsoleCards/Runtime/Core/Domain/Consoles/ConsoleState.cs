@@ -11,8 +11,16 @@ namespace ConsoleCards.Core.Domain.Consoles
         private readonly ReadOnlyCollection<ContainerId> readOnlySlotContainerIds;
 
         public ConsoleState(SeatId ownerSeatId, IEnumerable<ContainerId> slotContainerIds)
+            : this(ownerSeatId, slotContainerIds, false)
         {
-            if (ownerSeatId.IsEmpty)
+        }
+
+        private ConsoleState(
+            SeatId ownerSeatId,
+            IEnumerable<ContainerId> slotContainerIds,
+            bool allowUnowned)
+        {
+            if (ownerSeatId.IsEmpty && !allowUnowned)
             {
                 throw new ArgumentException("Owner Seat ID cannot be empty.", nameof(ownerSeatId));
             }
@@ -27,7 +35,14 @@ namespace ConsoleCards.Core.Domain.Consoles
             readOnlySlotContainerIds = this.slotContainerIds.AsReadOnly();
         }
 
+        public static ConsoleState CreateUnowned(IEnumerable<ContainerId> slotContainerIds)
+        {
+            return new ConsoleState(SeatId.Empty, slotContainerIds, true);
+        }
+
         public SeatId OwnerSeatId { get; }
+
+        public bool IsOwnedBySeat => !OwnerSeatId.IsEmpty;
 
         public int SlotCount => slotContainerIds.Count;
 

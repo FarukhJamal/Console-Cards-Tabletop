@@ -13,6 +13,7 @@ namespace ConsoleCards.Presentation.UI
             Action placeStack,
             Action placePawn,
             Action placeToken,
+            Action placeConsole,
             Action<int> placeDie)
         {
             PlaceCard = placeCard ?? throw new ArgumentNullException(nameof(placeCard));
@@ -20,6 +21,7 @@ namespace ConsoleCards.Presentation.UI
             PlaceStack = placeStack ?? throw new ArgumentNullException(nameof(placeStack));
             PlacePawn = placePawn ?? throw new ArgumentNullException(nameof(placePawn));
             PlaceToken = placeToken ?? throw new ArgumentNullException(nameof(placeToken));
+            PlaceConsole = placeConsole ?? throw new ArgumentNullException(nameof(placeConsole));
             PlaceDie = placeDie ?? throw new ArgumentNullException(nameof(placeDie));
         }
 
@@ -32,6 +34,8 @@ namespace ConsoleCards.Presentation.UI
         public Action PlacePawn { get; }
 
         public Action PlaceToken { get; }
+
+        public Action PlaceConsole { get; }
 
         public Action<int> PlaceDie { get; }
     }
@@ -47,6 +51,7 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button stackButton;
         [SerializeField] private Button pawnButton;
         [SerializeField] private Button tokenButton;
+        [SerializeField] private Button consoleButton;
         [SerializeField] private Button dieButton;
         [SerializeField] private GameObject dieChoicePanel;
         [SerializeField] private Button d4Button;
@@ -70,6 +75,7 @@ namespace ConsoleCards.Presentation.UI
                 || stackButton == null
                 || pawnButton == null
                 || tokenButton == null
+                || consoleButton == null
                 || dieButton == null
                 || dieChoicePanel == null
                 || d4Button == null
@@ -93,6 +99,7 @@ namespace ConsoleCards.Presentation.UI
                 || bindings.PlaceStack == null
                 || bindings.PlacePawn == null
                 || bindings.PlaceToken == null
+                || bindings.PlaceConsole == null
                 || bindings.PlaceDie == null)
             {
                 throw new ArgumentException(
@@ -112,6 +119,7 @@ namespace ConsoleCards.Presentation.UI
             BindPlacement(stackButton, bindings.PlaceStack);
             BindPlacement(pawnButton, bindings.PlacePawn);
             BindPlacement(tokenButton, bindings.PlaceToken);
+            BindPlacement(consoleButton, bindings.PlaceConsole);
             BindDiePlacement(d4Button, 4, bindings.PlaceDie);
             BindDiePlacement(d6Button, 6, bindings.PlaceDie);
             BindDiePlacement(d8Button, 8, bindings.PlaceDie);
@@ -173,6 +181,7 @@ namespace ConsoleCards.Presentation.UI
             RemoveListeners(stackButton);
             RemoveListeners(pawnButton);
             RemoveListeners(tokenButton);
+            RemoveListeners(consoleButton);
             RemoveListeners(dieButton);
             RemoveListeners(d4Button);
             RemoveListeners(d6Button);

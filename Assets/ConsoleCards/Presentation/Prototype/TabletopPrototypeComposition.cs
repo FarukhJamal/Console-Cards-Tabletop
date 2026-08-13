@@ -158,7 +158,10 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorRoundState trapFloorRoundState;
         private TrapFloorRoundOrchestrationService trapFloorRoundOrchestrationService;
         private SystemRandomValueSource authoritativeRandomValueSource;
+        private ITabletopComponentIdentitySource componentIdentitySource;
         private CreateTabletopComponentUseCase componentCreationUseCase;
+        private CreateGenericCardBatchUseCase cardBatchCreationUseCase;
+        private PopulateDeckUseCase populateDeckUseCase;
         private RollDieUseCase rollDieUseCase;
         private TabletopComponentPlacementController componentPlacementController;
         private PlayerLayoutDefinition playerLayout;
@@ -208,6 +211,7 @@ namespace ConsoleCards.Presentation.Prototype
         private TabletopObjectId contextMenuCardId;
         private ContainerId contextMenuContainerId;
         private int selectedDrawCount = 1;
+        private int selectedQuantity = 1;
         private int toolboxSpawnSequence;
         private bool toolboxPlacementHintActive;
         private TabletopObjectId contextMenuDieId;
@@ -576,7 +580,10 @@ namespace ConsoleCards.Presentation.Prototype
             trapFloorRoundState = null;
             trapFloorRoundOrchestrationService = null;
             authoritativeRandomValueSource = null;
+            componentIdentitySource = null;
             componentCreationUseCase = null;
+            cardBatchCreationUseCase = null;
+            populateDeckUseCase = null;
             rollDieUseCase = null;
             playerLayout = null;
             localSeatLayout = null;
@@ -653,6 +660,7 @@ namespace ConsoleCards.Presentation.Prototype
             contextMenuContainerId = ContainerId.Empty;
             contextMenuRenderedRevision = -1;
             selectedDrawCount = 1;
+            selectedQuantity = 1;
             toolboxSpawnSequence = 0;
             toolboxPlacementHintActive = false;
             runtimeUi?.ClearActiveSessionTransientUi();
@@ -1310,6 +1318,81 @@ namespace ConsoleCards.Presentation.Prototype
                     : componentKind.ToString());
         }
 
+        private void OpenCardQuantityPopup()
+        {
+            EnsureInitialized();
+            CloseContextMenu();
+            selectedQuantity = Mathf.Clamp(
+                selectedQuantity,
+                1,
+                GenericCardBatchLayout.MaximumLooseBatchQuantity);
+            runtimeUi.ShowQuantityPopup(
+                "CREATE CARDS",
+                "Choose how many generic Cards to place as one visible batch.",
+                "Place Cards",
+                selectedQuantity,
+                1,
+                GenericCardBatchLayout.MaximumLooseBatchQuantity,
+                () => ChangeSelectedQuantity(-1, GenericCardBatchLayout.MaximumLooseBatchQuantity),
+                () => ChangeSelectedQuantity(1, GenericCardBatchLayout.MaximumLooseBatchQuantity),
+                ConfirmCardQuantity,
+                CloseContextMenu);
+        }
+
+        private void ChangeSelectedQuantity(int delta, int maximum)
+        {
+            selectedQuantity = Mathf.Clamp(selectedQuantity + delta, 1, maximum);
+            runtimeUi?.SetQuantityPopupValue(selectedQuantity, 1, maximum);
+        }
+
+        private void ConfirmCardQuantity()
+        {
+            int quantity = Mathf.Clamp(
+                selectedQuantity,
+                1,
+                GenericCardBatchLayout.MaximumLooseBatchQuantity);
+            runtimeUi?.CloseTabletopPopup();
+            BeginCardBatchPlacement(quantity);
+        }
+
+        private void BeginCardBatchPlacement(int quantity)
+        {
+            GameObject previewRoot = CreateCardBatchPlacementPreview(quantity);
+            float rotation = localSeatLayout != null
+                ? localSeatLayout.PlayerZonePose.RotationDegrees
+                : 0f;
+            componentPlacementController.BeginCustomComponentPlacement(
+                TabletopComponentKind.Card,
+                previewRoot,
+                rotation,
+                0,
+                toolboxSpawnSequence * ToolboxPhysicalOrderStride,
+                pose => CommitCardBatchPlacement(quantity, pose));
+            toolboxPlacementHintActive = true;
+            runtimeUi?.ShowPlacementHint(quantity == 1 ? "Card" : $"{quantity} Cards");
+        }
+
+        private bool CommitCardBatchPlacement(int quantity, TabletopPose requestedPose)
+        {
+            CreateGenericCardBatchResult result = cardBatchCreationUseCase.Execute(
+                matchState,
+                activeSession.Request.ActivePlayerIds,
+                new CreateGenericCardBatchRequest(
+                    CreateCommandContext(),
+                    quantity,
+                    requestedPose));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Add Cards rejected: {result.Error}.");
+                return false;
+            }
+
+            toolboxSpawnSequence++;
+            ProjectCreatedCardBatch(result.CardIds);
+            ShowMessage(quantity == 1 ? "Added Card." : $"Added {quantity} Cards.");
+            return true;
+        }
+
         public CreateTabletopComponentResult AddToolboxComponent(
             TabletopComponentKind componentKind,
             int dieSideCount = 0)
@@ -1506,11 +1589,50 @@ namespace ConsoleCards.Presentation.Prototype
                     previewRoot = preview.gameObject;
                     break;
                 }
+                case TabletopComponentKind.Console:
+                {
+                    ConsoleView preview = Instantiate(prototypeConsolePrefab);
+                    previewRoot = preview.gameObject;
+                    break;
+                }
                 default:
                     throw new ArgumentOutOfRangeException(nameof(componentKind));
             }
 
             PrepareRuntimeRoot(previewRoot, $"{componentKind} Placement Preview");
+            DisablePlacementPreviewInteraction(previewRoot);
+            TintPlacementPreview(previewRoot);
+            return previewRoot;
+        }
+
+        private GameObject CreateCardBatchPlacementPreview(int quantity)
+        {
+            GameObject previewRoot = new GameObject("Card Batch Placement Preview");
+            PrepareRuntimeRoot(previewRoot, previewRoot.name);
+            TabletopPose origin = TabletopPose.Default;
+            for (int i = 0; i < quantity; i++)
+            {
+                PrototypeCardVisualReferences preview = Instantiate(prototypeCardPrefab, previewRoot.transform, false);
+                preview.ValidateReferences();
+                preview.AlignFaceLabelsToSurface(tabletopLocalOrderHeight);
+                ConfigurePrototypeLabel(
+                    preview.FrontLabel,
+                    "CARD",
+                    TrapFloorCardLabelCharacterSize,
+                    TrapFloorCardLabelFontSize);
+                ConfigurePrototypeLabel(
+                    preview.BackLabel,
+                    preview.BackLabel.text,
+                    TrapFloorCardBackLabelCharacterSize,
+                    TrapFloorCardLabelFontSize);
+                TabletopPose offsetPose = GenericCardBatchLayout.ResolvePose(origin, i, quantity, i);
+                preview.transform.localPosition = new Vector3(
+                    (float)(offsetPose.Position.X * worldUnitsPerTableUnit),
+                    i * tabletopLocalOrderHeight,
+                    (float)(offsetPose.Position.Y * worldUnitsPerTableUnit));
+                preview.transform.localRotation = Quaternion.identity;
+            }
+
             DisablePlacementPreviewInteraction(previewRoot);
             TintPlacementPreview(previewRoot);
             return previewRoot;
@@ -1648,6 +1770,28 @@ namespace ConsoleCards.Presentation.Prototype
                     appearedTransform = view.transform;
                     break;
                 }
+                case TabletopComponentKind.Console:
+                {
+                    PlacedConsoleState placedConsole = matchState.PlacedConsoles[result.ConsoleId];
+                    RuntimeConsoleInstance instance = CreateRuntimeConsoleInstance(
+                        "Toolbox Console",
+                        placedConsole);
+                    runtimeConsoleInstances.Add(instance);
+                    playerConsoleViews.Add(instance.View);
+                    BindConsole(
+                        instance.View,
+                        placedConsole.Console,
+                        instance.SlotViews,
+                        instance.SlotVisuals);
+                    for (int i = 0; i < instance.SlotViews.Length; i++)
+                    {
+                        ConfigureConsoleSlot(instance.SlotViews[i]);
+                    }
+
+                    appearedTransform = instance.Root.transform;
+                    layoutCollectionChanged = true;
+                    break;
+                }
                 default:
                     throw new InvalidOperationException("Accepted toolbox component kind is unsupported by Presentation.");
             }
@@ -1660,6 +1804,53 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshSelectionPresenterAfterRuntimeProjection();
             Physics.SyncTransforms();
             presentationTransitions.Appear(appearedTransform, settleDuration);
+            Physics.SyncTransforms();
+        }
+
+        private void ProjectCreatedCardBatch(IReadOnlyList<TabletopObjectId> cardIds)
+        {
+            List<Transform> appearedTransforms = new List<Transform>(cardIds.Count);
+            for (int i = 0; i < cardIds.Count; i++)
+            {
+                CardInstanceState card = matchState.Cards[cardIds[i]];
+                CardView view = CreateCardView(card, "CARD", out TabletopSelectionVisual selectionVisual);
+                cardViews.Add(view);
+                cardSelectionVisuals.Add(selectionVisual);
+                appearedTransforms.Add(view.transform);
+            }
+
+            RefreshContainerCardViewSources();
+            RefreshSelectionPresenterAfterRuntimeProjection();
+            Physics.SyncTransforms();
+            for (int i = 0; i < appearedTransforms.Count; i++)
+            {
+                presentationTransitions.Appear(appearedTransforms[i], settleDuration);
+            }
+
+            Physics.SyncTransforms();
+        }
+
+        private void ProjectPopulatedDeckCards(
+            ContainerId deckContainerId,
+            IReadOnlyList<TabletopObjectId> cardIds)
+        {
+            for (int i = 0; i < cardIds.Count; i++)
+            {
+                CardInstanceState card = matchState.Cards[cardIds[i]];
+                CardView view = CreateCardView(card, "CARD", out TabletopSelectionVisual selectionVisual);
+                cardViews.Add(view);
+                cardSelectionVisuals.Add(selectionVisual);
+            }
+
+            RefreshContainerCardViewSources();
+            if (!TryGetDeckPresentation(deckContainerId, out DeckView deck, out _))
+            {
+                throw new InvalidOperationException("Populated Deck has no Presentation binding.");
+            }
+
+            deck.ApplyAcceptedLayout();
+            RefreshSelectionPresenterAfterRuntimeProjection();
+            RefreshCardContentVisibility();
             Physics.SyncTransforms();
         }
 
@@ -1801,11 +1992,12 @@ namespace ConsoleCards.Presentation.Prototype
                 ReturnToSessionEntry,
                 CurrentStatusText(),
                 new PrototypeComponentToolboxBindings(
-                    () => BeginToolboxPlacement(TabletopComponentKind.Card),
+                    OpenCardQuantityPopup,
                     () => BeginToolboxPlacement(TabletopComponentKind.Deck),
                     () => BeginToolboxPlacement(TabletopComponentKind.Stack),
                     () => BeginToolboxPlacement(TabletopComponentKind.Pawn),
                     () => BeginToolboxPlacement(TabletopComponentKind.Token),
+                    () => BeginToolboxPlacement(TabletopComponentKind.Console),
                     sideCount => BeginToolboxPlacement(TabletopComponentKind.Die, sideCount)));
             RefreshTrapFloorStatusUi();
         }
@@ -2309,6 +2501,9 @@ namespace ConsoleCards.Presentation.Prototype
                 case PrototypeContextMenuMode.DrawCards:
                     ShowDrawCountPopup();
                     break;
+                case PrototypeContextMenuMode.PopulateDeck:
+                    ShowPopulateDeckQuantityPopup();
+                    break;
                 case PrototypeContextMenuMode.TabletopCard:
                     ShowTabletopCardContextMenu();
                     break;
@@ -2341,6 +2536,7 @@ namespace ConsoleCards.Presentation.Prototype
         private void ShowDeckContextMenu()
         {
             ContainerId targetDeckId = contextMenuContainerId;
+            ContainerState targetDeck = matchState.GetContainer(targetDeckId);
             bool isOfficialFloormasterDeck = trapFloorTemplate != null
                 && targetDeckId == trapFloorTemplate.FloormasterDeckId;
             List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
@@ -2386,6 +2582,18 @@ namespace ConsoleCards.Presentation.Prototype
                 body = searchBlocked
                     ? $"{OfficialSearchAvailabilityText()}\nFreeform tabletop actions remain available."
                     : "Freeform tabletop actions";
+            }
+
+            if (targetDeck.Count == 0)
+            {
+                actions.Add(new PrototypePopupActionOption(
+                    "Populate Deck",
+                    true,
+                    () =>
+                    {
+                        selectedQuantity = 1;
+                        SetContextMenuMode(PrototypeContextMenuMode.PopulateDeck);
+                    }));
             }
 
             actions.Add(new PrototypePopupActionOption(
@@ -2459,6 +2667,56 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 CloseContextMenu();
             }
+        }
+
+        private void ShowPopulateDeckQuantityPopup()
+        {
+            ContainerState deck = matchState.GetContainer(contextMenuContainerId);
+            int maximum = deck.Capacity > 0
+                ? Math.Min(PopulateDeckUseCase.MaximumQuantity, deck.Capacity)
+                : PopulateDeckUseCase.MaximumQuantity;
+            selectedQuantity = Mathf.Clamp(selectedQuantity, 1, maximum);
+            runtimeUi.ShowQuantityPopup(
+                "POPULATE DECK",
+                "Create generic blank Cards directly in this empty Deck.",
+                "Populate",
+                selectedQuantity,
+                1,
+                maximum,
+                () => ChangeSelectedQuantity(-1, maximum),
+                () => ChangeSelectedQuantity(1, maximum),
+                ConfirmPopulateDeck,
+                CloseContextMenu);
+        }
+
+        private void ConfirmPopulateDeck()
+        {
+            ContainerId targetDeckId = contextMenuContainerId;
+            if (!matchState.Containers.TryGetValue(targetDeckId, out ContainerState deck))
+            {
+                ShowMessage("Populate Deck rejected: DeckMissing.");
+                CloseContextMenu();
+                return;
+            }
+
+            int maximum = deck.Capacity > 0
+                ? Math.Min(PopulateDeckUseCase.MaximumQuantity, deck.Capacity)
+                : PopulateDeckUseCase.MaximumQuantity;
+            int quantity = Mathf.Clamp(selectedQuantity, 1, maximum);
+            PopulateDeckResult result = populateDeckUseCase.Execute(
+                matchState,
+                activeSession.Request.ActivePlayerIds,
+                new PopulateDeckRequest(CreateCommandContext(), targetDeckId, quantity));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Populate Deck rejected: {result.Error}.");
+                CloseContextMenu();
+                return;
+            }
+
+            ProjectPopulatedDeckCards(targetDeckId, result.CardIds);
+            ShowMessage($"Populated Deck with {quantity} generic Cards.");
+            CloseContextMenu();
         }
 
         private void ShowTabletopCardContextMenu()
@@ -2789,9 +3047,11 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 case PrototypeContextMenuMode.Deck:
                 case PrototypeContextMenuMode.DrawCards:
+                case PrototypeContextMenuMode.PopulateDeck:
                     return !contextMenuContainerId.IsEmpty
                         && matchState.Containers.TryGetValue(contextMenuContainerId, out ContainerState deck)
                         && deck.Kind == ContainerKind.Deck
+                        && (contextMenuMode != PrototypeContextMenuMode.PopulateDeck || deck.Count == 0)
                         && TryGetDeckPresentation(contextMenuContainerId, out _, out _);
                 case PrototypeContextMenuMode.TabletopCard:
                     return IsCurrentContextCardInContainer(ContainerId.Empty)
@@ -3276,10 +3536,13 @@ namespace ConsoleCards.Presentation.Prototype
         private void BuildToolboxRuntime()
         {
             authoritativeRandomValueSource = new SystemRandomValueSource();
-            componentCreationUseCase = new CreateTabletopComponentUseCase(
-                new GuidTabletopComponentIdentitySource());
+            componentIdentitySource = new GuidTabletopComponentIdentitySource();
+            componentCreationUseCase = new CreateTabletopComponentUseCase(componentIdentitySource);
+            cardBatchCreationUseCase = new CreateGenericCardBatchUseCase(componentIdentitySource);
+            populateDeckUseCase = new PopulateDeckUseCase(componentIdentitySource);
             rollDieUseCase = new RollDieUseCase(authoritativeRandomValueSource);
             toolboxSpawnSequence = 0;
+            selectedQuantity = 1;
             toolboxPlacementHintActive = false;
             runtimeUi?.ClearActiveSessionTransientUi();
         }
@@ -4637,6 +4900,40 @@ namespace ConsoleCards.Presentation.Prototype
             return new RuntimeConsoleInstance(root, view, layoutSeatIndex, slotViews, slotVisuals);
         }
 
+        private RuntimeConsoleInstance CreateRuntimeConsoleInstance(
+            string name,
+            PlacedConsoleState placedConsole)
+        {
+            ConsoleView view = Instantiate(prototypeConsolePrefab);
+            GameObject root = PrepareRuntimeRoot(view.gameObject, name);
+            ApplyAuthoredPose(root.transform, placedConsole.Pose);
+            ConsoleSlotView[] slotViews = view.GetComponentsInChildren<ConsoleSlotView>(true);
+            if (slotViews.Length != placedConsole.Console.SlotCount)
+            {
+                throw new InvalidOperationException(
+                    "Runtime freeform Console prefab Slot count must match authoritative Console state.");
+            }
+
+            Array.Sort(
+                slotViews,
+                (left, right) => left.transform.GetSiblingIndex().CompareTo(right.transform.GetSiblingIndex()));
+            PrototypeConsoleSlotVisual[] slotVisuals = new PrototypeConsoleSlotVisual[slotViews.Length];
+            for (int i = 0; i < slotViews.Length; i++)
+            {
+                slotVisuals[i] = slotViews[i].GetComponent<PrototypeConsoleSlotVisual>();
+                RequireReference(slotVisuals[i], $"Runtime freeform Console Slot visual {i}");
+                slotVisuals[i].ValidateReferences();
+            }
+
+            return new RuntimeConsoleInstance(
+                root,
+                view,
+                -1,
+                slotViews,
+                slotVisuals,
+                placedConsole.Id);
+        }
+
         private GameObject PrepareRuntimeRoot(GameObject root, string name)
         {
             if (root.scene != gameObject.scene)
@@ -5654,6 +5951,7 @@ namespace ConsoleCards.Presentation.Prototype
             None,
             Deck,
             DrawCards,
+            PopulateDeck,
             TabletopCard,
             FloorCard,
             PendingFloormasterCard,
@@ -5829,18 +6127,21 @@ namespace ConsoleCards.Presentation.Prototype
                 ConsoleView view,
                 int layoutSeatIndex,
                 ConsoleSlotView[] slotViews,
-                PrototypeConsoleSlotVisual[] slotVisuals)
+                PrototypeConsoleSlotVisual[] slotVisuals,
+                ConsoleId consoleId = default)
             {
                 Root = root;
                 View = view;
                 LayoutSeatIndex = layoutSeatIndex;
                 SlotViews = slotViews;
                 SlotVisuals = slotVisuals;
+                ConsoleId = consoleId;
             }
 
             public GameObject Root { get; private set; }
             public ConsoleView View { get; private set; }
             public int LayoutSeatIndex { get; }
+            public ConsoleId ConsoleId { get; }
             public ConsoleSlotView[] SlotViews { get; private set; }
             public PrototypeConsoleSlotVisual[] SlotVisuals { get; private set; }
 

@@ -80,6 +80,24 @@ namespace ConsoleCards.Presentation.Interaction
                 commitPlacement ?? throw new ArgumentNullException(nameof(commitPlacement)));
         }
 
+        public void BeginCustomComponentPlacement(
+            TabletopComponentKind requestedKind,
+            GameObject requestedPreviewRoot,
+            float requestedRotationDegrees,
+            int requestedLayer,
+            int requestedLocalOrder,
+            Func<TabletopPose, bool> commitPlacement)
+        {
+            BeginInternal(
+                requestedKind,
+                0,
+                requestedPreviewRoot,
+                requestedRotationDegrees,
+                requestedLayer,
+                requestedLocalOrder,
+                commitPlacement ?? throw new ArgumentNullException(nameof(commitPlacement)));
+        }
+
         private void BeginInternal(
             TabletopComponentKind requestedKind,
             int requestedDieSideCount,

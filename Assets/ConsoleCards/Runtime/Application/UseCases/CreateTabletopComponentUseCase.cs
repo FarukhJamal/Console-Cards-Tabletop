@@ -6,6 +6,7 @@ using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Cards;
 using ConsoleCards.Core.Domain.Containers;
+using ConsoleCards.Core.Domain.Consoles;
 using ConsoleCards.Core.Domain.Dice;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Identifiers;
@@ -20,6 +21,7 @@ namespace ConsoleCards.Application.UseCases
         Pawn,
         Token,
         Die,
+        Console,
     }
 
     public enum CreateTabletopComponentError
@@ -74,13 +76,15 @@ namespace ConsoleCards.Application.UseCases
             CreateTabletopComponentError error,
             TabletopComponentKind componentKind,
             TabletopObjectId objectId,
-            ContainerId containerId)
+            ContainerId containerId,
+            ConsoleId consoleId)
         {
             CommandResult = commandResult;
             Error = error;
             ComponentKind = componentKind;
             ObjectId = objectId;
             ContainerId = containerId;
+            ConsoleId = consoleId;
         }
 
         public CommandResult CommandResult { get; }
@@ -88,6 +92,7 @@ namespace ConsoleCards.Application.UseCases
         public TabletopComponentKind ComponentKind { get; }
         public TabletopObjectId ObjectId { get; }
         public ContainerId ContainerId { get; }
+        public ConsoleId ConsoleId { get; }
         public bool Succeeded => CommandResult.Succeeded;
         public long Revision => CommandResult.Revision;
 
@@ -101,7 +106,8 @@ namespace ConsoleCards.Application.UseCases
                 CreateTabletopComponentError.None,
                 kind,
                 objectId,
-                ContainerId.Empty);
+                ContainerId.Empty,
+                ConsoleId.Empty);
         }
 
         internal static CreateTabletopComponentResult ContainerAccepted(
@@ -114,7 +120,21 @@ namespace ConsoleCards.Application.UseCases
                 CreateTabletopComponentError.None,
                 kind,
                 TabletopObjectId.Empty,
-                containerId);
+                containerId,
+                ConsoleId.Empty);
+        }
+
+        internal static CreateTabletopComponentResult ConsoleAccepted(
+            long revision,
+            ConsoleId consoleId)
+        {
+            return new CreateTabletopComponentResult(
+                CommandResult.Accepted(revision),
+                CreateTabletopComponentError.None,
+                TabletopComponentKind.Console,
+                TabletopObjectId.Empty,
+                ContainerId.Empty,
+                consoleId);
         }
 
         internal static CreateTabletopComponentResult Failure(
@@ -126,7 +146,8 @@ namespace ConsoleCards.Application.UseCases
                 error,
                 default,
                 TabletopObjectId.Empty,
-                ContainerId.Empty);
+                ContainerId.Empty,
+                ConsoleId.Empty);
         }
     }
 
@@ -152,6 +173,7 @@ namespace ConsoleCards.Application.UseCases
             new ObjectDefinitionId(new Guid("a0010000-0000-4000-8000-000000000003"));
         public static readonly ObjectDefinitionId Die =
             new ObjectDefinitionId(new Guid("a0010000-0000-4000-8000-000000000004"));
+        public const int ConsoleSlotCount = 6;
 
         public static bool IsSupportedDieSideCount(int sideCount)
         {
@@ -214,6 +236,38 @@ namespace ConsoleCards.Application.UseCases
                     revision,
                     request.ComponentKind,
                     containerId);
+            }
+
+            if (request.ComponentKind == TabletopComponentKind.Console)
+            {
+                if (!TryAllocateConsoleId(matchState, out ConsoleId consoleId)
+                    || !TryAllocateContainerIds(
+                        matchState,
+                        ToolboxComponentDefinitions.ConsoleSlotCount,
+                        out List<ContainerId> slotContainerIds))
+                {
+                    return CreateTabletopComponentResult.Failure(
+                        CommandResultStatus.Conflict,
+                        CreateTabletopComponentError.IdentityAllocationFailed);
+                }
+
+                List<ContainerState> slots = new List<ContainerState>(slotContainerIds.Count);
+                for (int i = 0; i < slotContainerIds.Count; i++)
+                {
+                    slots.Add(new ContainerState(
+                        slotContainerIds[i],
+                        ContainerKind.ConsoleSlot,
+                        SeatId.Empty,
+                        ObjectVisibility.Public,
+                        1));
+                }
+
+                ConsoleState console = ConsoleState.CreateUnowned(slotContainerIds);
+                matchState.AddPlacedConsole(
+                    new PlacedConsoleState(consoleId, request.InitialPose, console),
+                    slots);
+                long revision = matchState.AdvanceRevision();
+                return CreateTabletopComponentResult.ConsoleAccepted(revision, consoleId);
             }
 
             if (!TryAllocateObjectId(matchState, out TabletopObjectId objectId))
@@ -369,6 +423,58 @@ namespace ConsoleCards.Application.UseCases
             }
 
             containerId = ContainerId.Empty;
+            return false;
+        }
+
+        private bool TryAllocateContainerIds(
+            MatchState matchState,
+            int count,
+            out List<ContainerId> containerIds)
+        {
+            containerIds = new List<ContainerId>(count);
+            HashSet<ContainerId> allocated = new HashSet<ContainerId>();
+            for (int i = 0; i < count; i++)
+            {
+                bool found = false;
+                for (int attempt = 0; attempt < IdentityAllocationAttempts; attempt++)
+                {
+                    ContainerId candidate = identitySource.NextContainerId();
+                    if (!candidate.IsEmpty
+                        && !matchState.Containers.ContainsKey(candidate)
+                        && allocated.Add(candidate))
+                    {
+                        containerIds.Add(candidate);
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                {
+                    containerIds.Clear();
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private bool TryAllocateConsoleId(MatchState matchState, out ConsoleId consoleId)
+        {
+            for (int i = 0; i < IdentityAllocationAttempts; i++)
+            {
+                TabletopObjectId allocatedIdentity = identitySource.NextObjectId();
+                ConsoleId candidate = new ConsoleId(allocatedIdentity.Value);
+                if (!candidate.IsEmpty
+                    && !matchState.ContainsObject(allocatedIdentity)
+                    && !matchState.PlacedConsoles.ContainsKey(candidate))
+                {
+                    consoleId = candidate;
+                    return true;
+                }
+            }
+
+            consoleId = ConsoleId.Empty;
             return false;
         }
 
