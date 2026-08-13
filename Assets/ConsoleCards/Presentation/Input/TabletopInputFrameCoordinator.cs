@@ -224,7 +224,9 @@ namespace ConsoleCards.Presentation.Input
                     frame.ScreenPosition,
                     pointerInsideBlockedUi,
                     frame.SelectPressedThisFrame,
-                    frame.CancelPressedThisFrame))
+                    frame.CancelPressedThisFrame,
+                    frame.RotateDelta,
+                    objectInputAdapter.RotationStepDegrees))
             {
                 if (selectionPresenter != null)
                 {

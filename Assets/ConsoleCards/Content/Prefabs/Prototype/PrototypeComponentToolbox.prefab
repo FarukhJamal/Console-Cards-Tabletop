@@ -796,7 +796,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: Left-click the tabletop to place
+  m_Text: Left-click to place | Mouse wheel rotates 15 degrees
 --- !u!1 &100203
 GameObject:
   m_ObjectHideFlags: 0

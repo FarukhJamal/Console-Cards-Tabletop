@@ -132,7 +132,7 @@ namespace ConsoleCards.Presentation.UI
             ClearPlacementHint();
         }
 
-        public void ShowPlacementHint(string placementSubject)
+        public void ShowPlacementHint(string placementSubject, float rotationDegrees)
         {
             if (string.IsNullOrWhiteSpace(placementSubject))
             {
@@ -140,7 +140,13 @@ namespace ConsoleCards.Presentation.UI
             }
 
             ValidateReferences();
-            placementSubjectLabel.text = $"Placing: {placementSubject}";
+            if (float.IsNaN(rotationDegrees) || float.IsInfinity(rotationDegrees))
+            {
+                throw new ArgumentOutOfRangeException(nameof(rotationDegrees));
+            }
+
+            placementSubjectLabel.text =
+                $"Placing: {placementSubject} | Rotation: {Mathf.RoundToInt(rotationDegrees)}°";
             placementHintPanel.SetActive(true);
         }
 

@@ -17,6 +17,7 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly TabletopPointerProjector pointerProjector;
         private readonly TabletopCoordinateConverter coordinateConverter;
         private readonly Func<TabletopComponentKind, int, TabletopPose, bool> commitComponentPlacement;
+        private readonly Action<float> rotationChanged;
 
         private GameObject previewRoot;
         private TabletopComponentKind componentKind;
@@ -31,7 +32,8 @@ namespace ConsoleCards.Presentation.Interaction
         public TabletopComponentPlacementController(
             TabletopPointerProjector pointerProjector,
             TabletopCoordinateConverter coordinateConverter,
-            Func<TabletopComponentKind, int, TabletopPose, bool> commitPlacement)
+            Func<TabletopComponentKind, int, TabletopPose, bool> commitPlacement,
+            Action<float> placementRotationChanged)
         {
             this.pointerProjector = pointerProjector
                 ?? throw new ArgumentNullException(nameof(pointerProjector));
@@ -39,6 +41,8 @@ namespace ConsoleCards.Presentation.Interaction
                 ?? throw new ArgumentNullException(nameof(coordinateConverter));
             commitComponentPlacement = commitPlacement
                 ?? throw new ArgumentNullException(nameof(commitPlacement));
+            rotationChanged = placementRotationChanged
+                ?? throw new ArgumentNullException(nameof(placementRotationChanged));
         }
 
         public bool IsActive => previewRoot != null;
@@ -46,6 +50,8 @@ namespace ConsoleCards.Presentation.Interaction
         public TabletopComponentKind ComponentKind => componentKind;
 
         public int DieSideCount => dieSideCount;
+
+        public float RotationDegrees => rotationDegrees;
 
         public void Begin(
             TabletopComponentKind requestedKind,
@@ -121,7 +127,7 @@ namespace ConsoleCards.Presentation.Interaction
             componentKind = requestedKind;
             dieSideCount = requestedDieSideCount;
             previewRoot = requestedPreviewRoot;
-            rotationDegrees = requestedRotationDegrees;
+            rotationDegrees = NormalizeDegrees(requestedRotationDegrees);
             layer = requestedLayer;
             localOrder = requestedLocalOrder;
             activeCommitPlacement = requestedCommitPlacement;
@@ -136,11 +142,30 @@ namespace ConsoleCards.Presentation.Interaction
             Vector2 screenPosition,
             bool pointerBlockedByUi,
             bool confirmPressedThisFrame,
-            bool cancelPressedThisFrame)
+            bool cancelPressedThisFrame,
+            float rotateDelta,
+            float rotationStepDegrees)
         {
             if (!IsActive)
             {
                 return false;
+            }
+
+            if (!IsFinite(rotateDelta))
+            {
+                throw new ArgumentOutOfRangeException(nameof(rotateDelta));
+            }
+
+            if (!IsFinite(rotationStepDegrees) || rotationStepDegrees <= 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(rotationStepDegrees));
+            }
+
+            if (!pointerBlockedByUi && rotateDelta != 0f)
+            {
+                rotationDegrees = NormalizeDegrees(
+                    rotationDegrees + (Math.Sign(rotateDelta) * rotationStepDegrees));
+                rotationChanged(rotationDegrees);
             }
 
             UpdatePreview(screenPosition, pointerBlockedByUi);
@@ -222,6 +247,12 @@ namespace ConsoleCards.Presentation.Interaction
         private static bool IsFinite(float value)
         {
             return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        private static float NormalizeDegrees(float value)
+        {
+            float normalized = value % 360f;
+            return normalized < 0f ? normalized + 360f : normalized;
         }
     }
 }

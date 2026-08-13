@@ -25,6 +25,7 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Transform tabletopPopupMount;
         [SerializeField] private PrototypeTabletopPopupView tabletopPopupPrefab;
         [SerializeField] private PrototypeQuantityPopupView quantityPopupPrefab;
+        [SerializeField] private PrototypeCardInspectView cardInspectPopupPrefab;
         [SerializeField] private Transform trapFloorHudMount;
         [SerializeField] private PrototypeTrapFloorHudView trapFloorHudPrefab;
         [SerializeField] private Transform interactionGuideMount;
@@ -33,6 +34,7 @@ namespace ConsoleCards.Presentation.UI
         private PrototypeComponentToolboxView componentToolboxView;
         private PrototypeTabletopPopupView tabletopPopupView;
         private PrototypeQuantityPopupView quantityPopupView;
+        private PrototypeCardInspectView cardInspectPopupView;
         private PrototypeTrapFloorHudView trapFloorHudView;
         private PrototypeInteractionGuide interactionGuideView;
 
@@ -66,6 +68,7 @@ namespace ConsoleCards.Presentation.UI
                 || tabletopPopupMount == null
                 || tabletopPopupPrefab == null
                 || quantityPopupPrefab == null
+                || cardInspectPopupPrefab == null
                 || trapFloorHudMount == null
                 || trapFloorHudPrefab == null
                 || interactionGuideMount == null
@@ -81,6 +84,7 @@ namespace ConsoleCards.Presentation.UI
             componentToolboxPrefab.ValidateReferences();
             tabletopPopupPrefab.ValidateReferences();
             quantityPopupPrefab.ValidateReferences();
+            cardInspectPopupPrefab.ValidateReferences();
             trapFloorHudPrefab.ValidateReferences();
             interactionGuidePrefab.ValidateReferences();
         }
@@ -139,10 +143,10 @@ namespace ConsoleCards.Presentation.UI
             statusMessageView.SetMessage(statusMessage);
         }
 
-        public void ShowPlacementHint(string placementSubject)
+        public void ShowPlacementHint(string placementSubject, float rotationDegrees)
         {
             EnsureComponentToolboxView();
-            componentToolboxView.ShowPlacementHint(placementSubject);
+            componentToolboxView.ShowPlacementHint(placementSubject, rotationDegrees);
         }
 
         public void ClearPlacementHint()
@@ -160,6 +164,7 @@ namespace ConsoleCards.Presentation.UI
         {
             EnsureTabletopPopupView();
             quantityPopupView?.Close();
+            cardInspectPopupView?.Close();
             componentToolboxView?.CloseToolbox();
             popupLayer.SetActive(true);
             tabletopPopupView.ShowContextMenu(
@@ -184,6 +189,7 @@ namespace ConsoleCards.Presentation.UI
         {
             EnsureTabletopPopupView();
             quantityPopupView?.Close();
+            cardInspectPopupView?.Close();
             componentToolboxView?.CloseToolbox();
             popupLayer.SetActive(true);
             tabletopPopupView.ShowDrawCount(
@@ -218,6 +224,7 @@ namespace ConsoleCards.Presentation.UI
             EnsureQuantityPopupView();
             componentToolboxView?.CloseToolbox();
             tabletopPopupView?.Close();
+            cardInspectPopupView?.Close();
             popupLayer.SetActive(true);
             quantityPopupView.Show(
                 title,
@@ -235,6 +242,33 @@ namespace ConsoleCards.Presentation.UI
         public void SetQuantityPopupValue(int quantity, int minimum, int maximum)
         {
             quantityPopupView?.SetQuantity(quantity, minimum, maximum);
+        }
+
+        public void ShowCardInspect(PrototypeCardInspectModel model, Action dismiss)
+        {
+            EnsureCardInspectPopupView();
+            componentToolboxView?.CloseToolbox();
+            tabletopPopupView?.Close();
+            quantityPopupView?.Close();
+            popupLayer.SetActive(true);
+            cardInspectPopupView.Show(model, dismiss);
+        }
+
+        public void RefreshCardInspect(PrototypeCardInspectModel model)
+        {
+            cardInspectPopupView?.Refresh(model);
+        }
+
+        public void CloseCardInspect()
+        {
+            cardInspectPopupView?.Close();
+            if (tabletopPopupView == null || !tabletopPopupView.gameObject.activeSelf)
+            {
+                if (quantityPopupView == null || !quantityPopupView.gameObject.activeSelf)
+                {
+                    popupLayer.SetActive(false);
+                }
+            }
         }
 
         public void ShowTrapFloorStatus(
@@ -265,6 +299,7 @@ namespace ConsoleCards.Presentation.UI
         {
             EnsureTabletopPopupView();
             quantityPopupView?.Close();
+            cardInspectPopupView?.Close();
             componentToolboxView?.CloseToolbox();
             popupLayer.SetActive(true);
             tabletopPopupView.ShowMergeDestinations(
@@ -279,6 +314,7 @@ namespace ConsoleCards.Presentation.UI
         {
             tabletopPopupView?.Close();
             quantityPopupView?.Close();
+            cardInspectPopupView?.Close();
             if (popupLayer != null)
             {
                 popupLayer.SetActive(false);
@@ -336,6 +372,18 @@ namespace ConsoleCards.Presentation.UI
             quantityPopupView = Instantiate(quantityPopupPrefab, tabletopPopupMount, false);
             quantityPopupView.name = quantityPopupPrefab.name;
             quantityPopupView.ValidateReferences();
+        }
+
+        private void EnsureCardInspectPopupView()
+        {
+            if (cardInspectPopupView != null)
+            {
+                return;
+            }
+
+            cardInspectPopupView = Instantiate(cardInspectPopupPrefab, tabletopPopupMount, false);
+            cardInspectPopupView.name = cardInspectPopupPrefab.name;
+            cardInspectPopupView.ValidateReferences();
         }
 
         private void EnsureTrapFloorHudView()

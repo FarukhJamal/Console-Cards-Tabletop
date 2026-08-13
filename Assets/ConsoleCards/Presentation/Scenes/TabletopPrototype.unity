@@ -716,6 +716,8 @@ MonoBehaviour:
   dragThresholdPixels: 8
   worldUnitsPerTableUnit: 1
   tabletopHeight: 0
+  tabletopLayerHeight: 0.02
+  tabletopLocalOrderHeight: 0.0005
   pickupLift: 0.08
   dragLift: 0.16
   pickupResponseDuration: 0.06
@@ -871,29 +873,49 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 269a4af40f2a4d62ba2beafcbb0e2218, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  showGuide: 1
-  guideArea:
-    serializedVersion: 2
-    x: 16
-    y: 16
-    width: 360
-    height: 300
+  guidePanel: {fileID: 0}
+  toggleButton: {fileID: 0}
+  toggleButtonLabel: {fileID: 0}
+  closeButton: {fileID: 0}
+  titleLabel: {fileID: 0}
+  bodyLabel: {fileID: 0}
   title: Console Cards Prototype
-  guideLines:
-  - 'Click Card, Pawn, or Token: select'
-  - 'Click empty table: clear selection'
-  - 'Drag tabletop Card, Pawn, or Token: move'
-  - 'Drag contained Card: transfer or play to table'
-  - 'Drag tabletop Card onto Container: place in Container'
-  - 'Use M3 controls: shuffle, draw, reorder, merge, split'
-  - 'Esc: cancel / rollback'
-  - 'Mouse wheel + selection: rotate 15 degrees'
-  - 'Mouse wheel + no selection: camera zoom'
-  - 'Scroll during drag: no zoom or rotation'
-  - 'F + selected Card: flip face'
-  - 'F + Pawn or Token: rejected, no visible change'
-  - 'WASD / Arrow keys: camera pan'
-  - 'Middle mouse drag: camera pan'
+  guideText: 'Click Card, Pawn, or Token: select
+
+    Click empty table: clear selection
+
+    Drag
+    tabletop Card, Pawn, or Token: move
+
+    Drag contained Card: transfer or play
+    to table
+
+    Drag tabletop Card onto Container: place in Container
+
+    Right-click
+    Deck, Card, Stack, or Die: actions
+
+    Drag Hand Card left/right: reorder Hand
+
+    Esc:
+    cancel / rollback
+
+    Mouse wheel + selection: rotate 15 degrees
+
+    Mouse
+    wheel + no selection: camera zoom
+
+    Scroll during drag: no zoom or rotation
+
+    F
+    + selected Card: flip face
+
+    F + Pawn or Token: rejected, no visible change
+
+    WASD
+    / Arrow keys: camera pan
+
+    Middle mouse drag: camera pan'
 --- !u!1001 &2100000100
 PrefabInstance:
   m_ObjectHideFlags: 0

@@ -21,6 +21,8 @@ namespace ConsoleCards.Core.Domain.Match
         private readonly Dictionary<SeatId, SeatState> seats;
         private readonly Dictionary<ConsoleId, PlacedConsoleState> placedConsoles;
         private readonly Dictionary<PlayAreaId, PlayAreaState> playAreas;
+        private readonly HashSet<TabletopObjectId> templateObjectIds;
+        private readonly HashSet<ContainerId> templateContainerIds;
         private readonly ReadOnlyDictionary<TabletopObjectId, CardInstanceState> readOnlyCards;
         private readonly ReadOnlyDictionary<TabletopObjectId, PawnState> readOnlyPawns;
         private readonly ReadOnlyDictionary<TabletopObjectId, TokenState> readOnlyTokens;
@@ -163,6 +165,16 @@ namespace ConsoleCards.Core.Domain.Match
             this.seats = CopySeats(seats);
             placedConsoles = new Dictionary<ConsoleId, PlacedConsoleState>();
             this.playAreas = CopyPlayAreas(playAreas);
+            templateObjectIds = new HashSet<TabletopObjectId>();
+            templateContainerIds = new HashSet<ContainerId>();
+            if (!GameTemplateId.IsEmpty)
+            {
+                templateObjectIds.UnionWith(this.cards.Keys);
+                templateObjectIds.UnionWith(this.pawns.Keys);
+                templateObjectIds.UnionWith(this.tokens.Keys);
+                templateObjectIds.UnionWith(this.dice.Keys);
+                templateContainerIds.UnionWith(this.containers.Keys);
+            }
 
             ValidateObjectContainerConsistency();
             ValidateContainerPlacementConsistency();
@@ -211,6 +223,16 @@ namespace ConsoleCards.Core.Domain.Match
                 || pawns.ContainsKey(objectId)
                 || tokens.ContainsKey(objectId)
                 || dice.ContainsKey(objectId);
+        }
+
+        public bool IsTemplateObject(TabletopObjectId objectId)
+        {
+            return !objectId.IsEmpty && templateObjectIds.Contains(objectId);
+        }
+
+        public bool IsTemplateContainer(ContainerId containerId)
+        {
+            return !containerId.IsEmpty && templateContainerIds.Contains(containerId);
         }
 
         public TabletopObjectState GetObject(TabletopObjectId objectId)
@@ -441,7 +463,94 @@ namespace ConsoleCards.Core.Domain.Match
 
             containers.Remove(containerId);
             containerPlacements.Remove(containerId);
+            templateContainerIds.Remove(containerId);
             return container;
+        }
+
+        public TabletopObjectState RemoveObject(TabletopObjectId objectId)
+        {
+            if (objectId.IsEmpty)
+            {
+                throw new ArgumentException("Tabletop Object ID cannot be empty.", nameof(objectId));
+            }
+
+            TabletopObjectState objectState = GetObject(objectId);
+            if (!objectState.ContainerId.IsEmpty)
+            {
+                if (!containers.TryGetValue(objectState.ContainerId, out ContainerState container)
+                    || !container.Contains(objectId))
+                {
+                    throw new InvalidOperationException("Tabletop Object Container membership is inconsistent.");
+                }
+
+                container.RemoveObject(objectId);
+            }
+
+            bool removed;
+            switch (objectState.Kind)
+            {
+                case TabletopObjectKind.Card:
+                    removed = cards.Remove(objectId);
+                    break;
+                case TabletopObjectKind.Pawn:
+                    removed = pawns.Remove(objectId);
+                    break;
+                case TabletopObjectKind.Token:
+                    removed = tokens.Remove(objectId);
+                    break;
+                case TabletopObjectKind.Die:
+                    removed = dice.Remove(objectId);
+                    break;
+                default:
+                    throw new InvalidOperationException("Unsupported Tabletop Object kind cannot be removed.");
+            }
+
+            if (!removed)
+            {
+                throw new InvalidOperationException("Tabletop Object removal failed after successful lookup.");
+            }
+
+            templateObjectIds.Remove(objectId);
+            return objectState;
+        }
+
+        public PlacedConsoleState RemoveEmptyPlacedConsole(ConsoleId consoleId)
+        {
+            if (consoleId.IsEmpty)
+            {
+                throw new ArgumentException("Console ID cannot be empty.", nameof(consoleId));
+            }
+
+            if (!placedConsoles.TryGetValue(consoleId, out PlacedConsoleState placedConsole))
+            {
+                throw new KeyNotFoundException("Placed Console was not found.");
+            }
+
+            IReadOnlyList<ContainerId> slotContainerIds = placedConsole.Console.SlotContainerIds;
+            for (int i = 0; i < slotContainerIds.Count; i++)
+            {
+                ContainerId slotContainerId = slotContainerIds[i];
+                if (!containers.TryGetValue(slotContainerId, out ContainerState slot)
+                    || slot.Kind != ContainerKind.ConsoleSlot
+                    || slot.Count != 0
+                    || IsReferencedBySeatHand(slotContainerId)
+                    || IsReferencedByOtherConsoleSlot(slotContainerId, consoleId))
+                {
+                    throw new InvalidOperationException(
+                        "Only a placed Console with complete, empty, unowned Slot Containers can be removed.");
+                }
+            }
+
+            placedConsoles.Remove(consoleId);
+            for (int i = 0; i < slotContainerIds.Count; i++)
+            {
+                ContainerId slotContainerId = slotContainerIds[i];
+                containers.Remove(slotContainerId);
+                containerPlacements.Remove(slotContainerId);
+                templateContainerIds.Remove(slotContainerId);
+            }
+
+            return placedConsole;
         }
 
         public SeatState GetSeat(SeatId seatId)
@@ -1016,6 +1125,29 @@ namespace ConsoleCards.Core.Domain.Match
             foreach (PlacedConsoleState placedConsole in placedConsoles.Values)
             {
                 if (placedConsole.Console.ContainsSlot(containerId))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool IsReferencedByOtherConsoleSlot(
+            ContainerId containerId,
+            ConsoleId excludedConsoleId)
+        {
+            foreach (SeatState seat in seats.Values)
+            {
+                if (seat.Console.ContainsSlot(containerId))
+                {
+                    return true;
+                }
+            }
+
+            foreach (KeyValuePair<ConsoleId, PlacedConsoleState> pair in placedConsoles)
+            {
+                if (pair.Key != excludedConsoleId && pair.Value.Console.ContainsSlot(containerId))
                 {
                     return true;
                 }

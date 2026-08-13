@@ -57,7 +57,7 @@ MonoBehaviour:
   titleLabel: {fileID: 114201}
   bodyLabel: {fileID: 114202}
   title: Console Cards Prototype
-  guideText: "Click Card, Pawn, or Token: select\nClick empty table: clear selection\nDrag tabletop Card, Pawn, or Token: move\nDrag contained Card: transfer or play to table\nDrag tabletop Card onto Container: place in Container\nRight-click Deck, Card, Stack, or Die: actions\nDrag Hand Card left/right: reorder Hand\nEsc: cancel / rollback\nMouse wheel + selection: rotate 15 degrees\nMouse wheel + no selection: camera zoom\nScroll during drag: no zoom or rotation\nF + selected Card: flip face\nF + Pawn or Token: rejected, no visible change\nWASD / Arrow keys: camera pan\nMiddle mouse drag: camera pan"
+  guideText: "Click Card, Pawn, or Token: select\nClick empty table: clear selection\nDrag tabletop Card, Pawn, or Token: move\nDrag contained Card: transfer or play to table\nDrag tabletop Card onto Container: place in Container\nRight-click Component: actions\nDrag Hand Card left/right: reorder Hand\nEsc: cancel / rollback\nMouse wheel + selection: rotate 15 degrees\nMouse wheel during placement: rotate preview 15 degrees\nMouse wheel + no selection: camera zoom\nScroll during drag: no zoom or rotation\nF + selected Card: flip face\nF + Pawn or Token: rejected, no visible change\nWASD / Arrow keys: camera pan\nMiddle mouse drag: camera pan"
 --- !u!1 &100100
 GameObject:
   m_ObjectHideFlags: 0

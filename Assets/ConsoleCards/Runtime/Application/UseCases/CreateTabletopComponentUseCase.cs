@@ -34,6 +34,7 @@ namespace ConsoleCards.Application.UseCases
         ActorNotActive,
         ComponentKindInvalid,
         DieSideCountInvalid,
+        CardFaceInvalid,
         RevisionOverflow,
         IdentityAllocationFailed,
         LooseCardOrderOverflow,
@@ -45,7 +46,8 @@ namespace ConsoleCards.Application.UseCases
             CommandContext context,
             TabletopComponentKind componentKind,
             TabletopPose initialPose,
-            int dieSideCount = 0)
+            int dieSideCount = 0,
+            CardFace initialCardFace = CardFace.FaceUp)
         {
             if (!IsFinite(initialPose.Position.X)
                 || !IsFinite(initialPose.Position.Y)
@@ -58,12 +60,14 @@ namespace ConsoleCards.Application.UseCases
             ComponentKind = componentKind;
             InitialPose = initialPose;
             DieSideCount = dieSideCount;
+            InitialCardFace = initialCardFace;
         }
 
         public CommandContext Context { get; }
         public TabletopComponentKind ComponentKind { get; }
         public TabletopPose InitialPose { get; }
         public int DieSideCount { get; }
+        public CardFace InitialCardFace { get; }
 
         private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
@@ -304,7 +308,7 @@ namespace ConsoleCards.Application.UseCases
             switch (request.ComponentKind)
             {
                 case TabletopComponentKind.Card:
-                    matchState.AddUncontainedCard(new CardInstanceState(baseState, CardFace.FaceUp));
+                    matchState.AddUncontainedCard(new CardInstanceState(baseState, request.InitialCardFace));
                     break;
                 case TabletopComponentKind.Pawn:
                     matchState.AddUncontainedPawn(new PawnState(baseState));
@@ -382,6 +386,16 @@ namespace ConsoleCards.Application.UseCases
                 return CreateTabletopComponentResult.Failure(
                     CommandResultStatus.Invalid,
                     CreateTabletopComponentError.DieSideCountInvalid);
+            }
+
+            bool validCardFace = Enum.IsDefined(typeof(CardFace), request.InitialCardFace)
+                && (request.ComponentKind == TabletopComponentKind.Card
+                    || request.InitialCardFace == CardFace.FaceUp);
+            if (!validCardFace)
+            {
+                return CreateTabletopComponentResult.Failure(
+                    CommandResultStatus.Invalid,
+                    CreateTabletopComponentError.CardFaceInvalid);
             }
 
             if (matchState.Revision == long.MaxValue)
