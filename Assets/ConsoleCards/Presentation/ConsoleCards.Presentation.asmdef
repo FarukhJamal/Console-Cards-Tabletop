@@ -6,7 +6,8 @@
     "ConsoleCards.Application",
     "ConsoleCards.GameTemplates",
     "ConsoleCards.TrapFloor",
-    "Unity.InputSystem"
+    "Unity.InputSystem",
+    "UnityEngine.UI"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

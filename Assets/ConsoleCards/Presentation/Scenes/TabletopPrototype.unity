@@ -708,6 +708,7 @@ MonoBehaviour:
   - {fileID: 4100000011}
   - {fileID: 4100000021}
   - {fileID: 4100000031}
+  runtimeUiPrefab: {fileID: 114000, guid: 44b419cd7fda49de89d332202c7f6c92, type: 3}
   interactionLayerMask:
     serializedVersion: 2
     m_Bits: 256

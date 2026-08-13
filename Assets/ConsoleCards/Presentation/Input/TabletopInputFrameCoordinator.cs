@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using ConsoleCards.Presentation.Interaction;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
 namespace ConsoleCards.Presentation.Input
@@ -17,6 +19,9 @@ namespace ConsoleCards.Presentation.Input
         private bool suppressObjectPointerUntilRelease;
         private Rect objectInputBlockingGuiRect;
         private Rect transientObjectInputBlockingGuiRect;
+        private readonly List<RaycastResult> screenUiRaycastResults = new List<RaycastResult>();
+        private EventSystem screenUiEventSystem;
+        private PointerEventData screenUiPointerEventData;
         private Action<Vector2> secondaryPointerPressed;
         private Action dismissTransientUi;
         private TabletopSelectionPresenter selectionPresenter;
@@ -319,8 +324,8 @@ namespace ConsoleCards.Presentation.Input
                 : frame.ScrollDelta;
             cameraInputAdapter.ApplyInputFrame(
                 frame.KeyboardPan,
-                frame.DragHeld,
-                frame.PointerDelta,
+                frame.DragHeld && !pointerInsideBlockedUi,
+                pointerInsideBlockedUi ? Vector2.zero : frame.PointerDelta,
                 effectiveScroll,
                 unscaledDeltaTime);
 
@@ -341,9 +346,32 @@ namespace ConsoleCards.Presentation.Input
         private bool IsInsideObjectInputBlockingGuiRect(Vector2 screenPosition)
         {
             Vector2 guiPosition = ToGuiPosition(screenPosition);
-            return (hasObjectInputBlockingGuiRect && objectInputBlockingGuiRect.Contains(guiPosition))
+            return IsPointerOverScreenUi(screenPosition)
+                || (hasObjectInputBlockingGuiRect && objectInputBlockingGuiRect.Contains(guiPosition))
                 || (hasTransientObjectInputBlockingGuiRect
                     && transientObjectInputBlockingGuiRect.Contains(guiPosition));
+        }
+
+        private bool IsPointerOverScreenUi(Vector2 screenPosition)
+        {
+            EventSystem currentEventSystem = EventSystem.current;
+            if (currentEventSystem == null || !currentEventSystem.isActiveAndEnabled)
+            {
+                return false;
+            }
+
+            if (!ReferenceEquals(screenUiEventSystem, currentEventSystem)
+                || screenUiPointerEventData == null)
+            {
+                screenUiEventSystem = currentEventSystem;
+                screenUiPointerEventData = new PointerEventData(currentEventSystem);
+            }
+
+            screenUiPointerEventData.Reset();
+            screenUiPointerEventData.position = screenPosition;
+            screenUiRaycastResults.Clear();
+            currentEventSystem.RaycastAll(screenUiPointerEventData, screenUiRaycastResults);
+            return screenUiRaycastResults.Count > 0;
         }
 
         private bool IsInsideTransientObjectInputBlockingGuiRect(Vector2 screenPosition)

@@ -19,6 +19,7 @@ using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Coordinates;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
+using ConsoleCards.Presentation.UI;
 using ConsoleCards.Presentation.Views;
 using ConsoleCards.Presentation.Views.Containers;
 using UnityEngine;
@@ -45,8 +46,6 @@ namespace ConsoleCards.Presentation.Prototype
         private const int TrapFloorCardLabelFontSize = 64;
         private const int TrapFloorContainerLabelFontSize = 48;
         private const int ToolboxPhysicalOrderStride = 40;
-        private const float SessionEntryWidth = 420f;
-        private const float SessionEntryHeight = 270f;
         private static readonly Rect PrototypeControlsPanelRect = new Rect(16f, 330f, 280f, 620f);
 
         [SerializeField] internal UnityCamera targetCamera;
@@ -77,6 +76,7 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal ConsoleView sceneConsoleView;
         [SerializeField] internal ConsoleSlotView[] sceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
         [SerializeField] internal PrototypeConsoleSlotVisual[] sceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
+        [SerializeField] internal PrototypeRuntimeUiRoot runtimeUiPrefab;
 
         [SerializeField] internal LayerMask interactionLayerMask;
         [SerializeField] internal float maximumHitDistance = 100f;
@@ -144,6 +144,7 @@ namespace ConsoleCards.Presentation.Prototype
         private bool tokenViewBoundByComposition;
         private bool sessionEntryVisible;
         private bool cameraInputSuspendedForSessionEntry;
+        private PrototypeRuntimeUiRoot runtimeUi;
 
         private MatchState matchState;
         private TabletopSession activeSession;
@@ -1137,6 +1138,7 @@ namespace ConsoleCards.Presentation.Prototype
 
             try
             {
+                CreateRuntimeUi();
                 PrepareSessionEntry();
             }
             catch (Exception exception)
@@ -1148,12 +1150,18 @@ namespace ConsoleCards.Presentation.Prototype
                 sessionEntryVisible = true;
                 HideSessionPresentation();
                 SuspendCameraInputForSessionEntry();
+                RefreshSessionEntryUi();
             }
         }
 
         private void OnDestroy()
         {
             Shutdown();
+            if (runtimeUi != null)
+            {
+                runtimeUi.ReleaseBindings();
+            }
+
             activeSession = null;
             sessionTemplateCatalog = null;
             availableTrapFloorTemplate = null;
@@ -1167,13 +1175,14 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 ClearFeedback();
             }
+
+            RefreshRuntimeStatusUi();
         }
 
         private void OnGUI()
         {
             if (sessionEntryVisible)
             {
-                DrawSessionEntry();
                 return;
             }
 
@@ -1185,27 +1194,12 @@ namespace ConsoleCards.Presentation.Prototype
             DrawTrapFloorRoundStatus();
             DrawFloorfallStatus();
             DrawPlayerContextMenu();
-            DrawActiveSessionPanel();
+            DrawUnmigratedActiveSessionControls();
         }
 
-        private void DrawActiveSessionPanel()
+        private void DrawUnmigratedActiveSessionControls()
         {
             GUILayout.BeginArea(ControlsPanelScreenRect, GUI.skin.box);
-            GUILayout.Label(activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom
-                ? "EMPTY / CUSTOM TABLE"
-                : activeSession.Template.DisplayName.ToUpperInvariant());
-            if (GUILayout.Button("Return to Session Entry"))
-            {
-                ReturnToSessionEntry();
-                GUIUtility.ExitGUI();
-            }
-
-            if (GUILayout.Button("Reset Current Session"))
-            {
-                ResetPrototype();
-                GUIUtility.ExitGUI();
-            }
-
             if (trapFloorRoundState != null)
             {
                 DrawTrapFloorRoundActions();
@@ -1221,8 +1215,6 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 DrawComponentToolbox();
             }
-
-            GUILayout.Label(CurrentStatusText());
 
             if (!showDeveloperControls
                 || activeSession.Selection.Kind != TabletopSessionKind.GameTemplate)
@@ -1865,46 +1857,6 @@ namespace ConsoleCards.Presentation.Prototype
             selectionPresenter.Refresh();
         }
 
-        private void DrawSessionEntry()
-        {
-            Rect entryRect = new Rect(
-                Mathf.Max(0f, (Screen.width - SessionEntryWidth) * 0.5f),
-                Mathf.Max(0f, (Screen.height - SessionEntryHeight) * 0.5f),
-                SessionEntryWidth,
-                SessionEntryHeight);
-            GUILayout.BeginArea(entryRect, GUI.skin.window);
-            GUILayout.Label("CONSOLE CARDS");
-            GUILayout.Space(8f);
-            GUILayout.Label("Choose a tabletop session");
-            GUILayout.Space(8f);
-
-            if (GUILayout.Button("Empty Table", GUILayout.Height(42f)))
-            {
-                SelectEmptyTableSession();
-                GUIUtility.ExitGUI();
-            }
-
-            if (sessionTemplateCatalog != null)
-            {
-                foreach (GameTemplateRegistration registration in sessionTemplateCatalog.Registrations.Values)
-                {
-                    if (GUILayout.Button(registration.Template.DisplayName, GUILayout.Height(42f)))
-                    {
-                        SelectGameTemplateSession(registration.Template.Id);
-                        GUIUtility.ExitGUI();
-                    }
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(sessionEntryError))
-            {
-                GUILayout.Space(8f);
-                GUILayout.Label($"Session could not start: {sessionEntryError}");
-            }
-
-            GUILayout.EndArea();
-        }
-
         public void SelectEmptyTableSession()
         {
             TryEnterSession(TabletopSessionSelection.EmptyCustom);
@@ -1930,6 +1882,7 @@ namespace ConsoleCards.Presentation.Prototype
             HideSessionPresentation();
             SuspendCameraInputForSessionEntry();
             sessionEntryVisible = true;
+            RefreshSessionEntryUi();
         }
 
         private void PrepareSessionEntry()
@@ -1961,6 +1914,69 @@ namespace ConsoleCards.Presentation.Prototype
             HideSessionPresentation();
             SuspendCameraInputForSessionEntry();
             sessionEntryVisible = true;
+            RefreshSessionEntryUi();
+        }
+
+        private void CreateRuntimeUi()
+        {
+            RequireReference(runtimeUiPrefab, nameof(runtimeUiPrefab));
+            if (runtimeUiPrefab.gameObject.scene.IsValid())
+            {
+                throw new InvalidOperationException(
+                    "TabletopPrototypeComposition requires runtimeUiPrefab to reference a prefab asset.");
+            }
+
+            runtimeUiPrefab.ValidateReferences();
+            runtimeUi = Instantiate(runtimeUiPrefab, transform, false);
+            runtimeUi.name = runtimeUiPrefab.name;
+            runtimeUi.ValidateReferences();
+        }
+
+        private void RefreshSessionEntryUi()
+        {
+            if (runtimeUi == null || !sessionEntryVisible)
+            {
+                return;
+            }
+
+            List<PrototypeSessionTemplateOption> options = new List<PrototypeSessionTemplateOption>();
+            if (sessionTemplateCatalog != null)
+            {
+                foreach (GameTemplateRegistration registration in sessionTemplateCatalog.Registrations.Values)
+                {
+                    GameTemplateId templateId = registration.Template.Id;
+                    options.Add(new PrototypeSessionTemplateOption(
+                        registration.Template.DisplayName,
+                        () => SelectGameTemplateSession(templateId)));
+                }
+            }
+
+            runtimeUi.ShowSessionEntry(SelectEmptyTableSession, options, sessionEntryError);
+        }
+
+        private void ShowActiveSessionUi()
+        {
+            if (runtimeUi == null || activeSession == null)
+            {
+                return;
+            }
+
+            string sessionTitle = activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom
+                ? "EMPTY / CUSTOM TABLE"
+                : activeSession.Template.DisplayName.ToUpperInvariant();
+            runtimeUi.ShowActiveSession(
+                sessionTitle,
+                ResetPrototype,
+                ReturnToSessionEntry,
+                CurrentStatusText());
+        }
+
+        private void RefreshRuntimeStatusUi()
+        {
+            if (runtimeUi != null && IsInitialized && !sessionEntryVisible)
+            {
+                runtimeUi.SetStatusMessage(CurrentStatusText());
+            }
         }
 
         private void TryEnterSession(TabletopSessionSelection selection)
@@ -1973,6 +1989,7 @@ namespace ConsoleCards.Presentation.Prototype
             if (sessionBootstrapService == null || sessionTemplateCatalog == null)
             {
                 sessionEntryError = "Session Entry is not configured.";
+                runtimeUi?.SetSessionEntryError(sessionEntryError);
                 return;
             }
 
@@ -1988,6 +2005,7 @@ namespace ConsoleCards.Presentation.Prototype
             if (!result.Succeeded)
             {
                 sessionEntryError = FormatSessionBuildFailure(result.Issues);
+                runtimeUi?.SetSessionEntryError(sessionEntryError);
                 return;
             }
 
@@ -2018,6 +2036,7 @@ namespace ConsoleCards.Presentation.Prototype
                 sessionEntryError = null;
                 sessionEntryVisible = false;
                 InitializeActiveSession(false);
+                ShowActiveSessionUi();
             }
             catch (Exception exception)
             {
@@ -2029,6 +2048,7 @@ namespace ConsoleCards.Presentation.Prototype
                 SuspendCameraInputForSessionEntry();
                 sessionEntryError = exception.Message;
                 sessionEntryVisible = true;
+                RefreshSessionEntryUi();
                 Debug.LogError($"Session construction failed: {exception.Message}", this);
             }
         }
@@ -4810,6 +4830,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             operationMessage = message;
             operationMessageUntil = Time.unscaledTime + 2.5f;
+            runtimeUi?.SetStatusMessage(CurrentStatusText());
         }
 
         private void EnsureInitialized()
