@@ -1,9 +1,9 @@
 # Console Cards - Layout Design Requirements Matrix
 
 **Document ID:** 17_Layout_Design_Requirements_Matrix  
-**Version:** 1.6
+**Version:** 1.7
 **Status:** Approved with Open Decisions  
-**Authoritative sources:** `Consolecards_LayoutRef_doc.pdf`, title "Game Design Notes", pages 1-6, supplied 2026-08-07; the approved Trap Floor correction in `18_Trap_Floor_Game_Requirements.md`; and the confirmed freeform tabletop rule philosophy supplied 2026-08-11
+**Authoritative sources:** `Consolecards_LayoutRef_doc.pdf`, title "Game Design Notes", pages 1-6, supplied 2026-08-07; the approved Trap Floor correction in `18_Trap_Floor_Game_Requirements.md`; the confirmed freeform tabletop rule philosophy supplied 2026-08-11; and the user-approved visual/physical framework and newer Milanote revision summary supplied 2026-09-03, recorded in ADR-026
 **Purpose:** Preserve the approved design requirements, distinguish Platform requirements from Game-specific content, and trace each requirement to current implementation and planned delivery.
 
 ## 1. Interpretation Rules
@@ -16,6 +16,7 @@
 - Runtime State remains authoritative. A requirement marked `Partial` or `Missing` is not implemented merely because an architectural extension point exists.
 - Game Rules are primarily player-enforced. Rows describing a Game flow, cost, consequence, or win condition do not imply that coded execution is required for playable acceptance.
 - Optional Game-specific assistance is tracked as assistance, not as ownership of the underlying Freeform Actions.
+- ADR-026 records the approved visual/physical framework and the newer Milanote revisions supplied in the approval summary, not a wholesale import of historical Milanote boards. Older Milanote Trap/Friend/Key/Exit counts are legacy/reference material only. Trap Floor's current Floormaster Deck remains 36 Cards: 14 Trap, 14 Coin, and 8 Item; its approved setup is unchanged.
 
 ### Status values
 
@@ -23,6 +24,7 @@
 - **Partial:** Some required capability exists, but the full requirement is not delivered.
 - **Architecture only:** Approved architecture anticipates the requirement, but usable implementation is absent.
 - **Missing:** No implementing system was found in the current repository.
+- **Approved; not assessed:** The requirement is approved, but implementation/asset compliance was not assessed by this documentation update.
 
 ## 2. Player Count / Seating
 
@@ -90,6 +92,18 @@
 | LDR-025 | The Console is universal: Players learn one persistent personal interaction/storage system reused across Games. | Platform-wide | **Partial:** Console/Slot Runtime State, Views, transfer, prototype interactions, and Template setup data exist; reuse must be validated with both official Games. | M4.1 foundation complete; validate in G1 and G2 | PDF pp.5-6 | Templates may configure Console contents without replacing the universal Console contract. |
 | LDR-026 | The central Game Board is separate from the Console and is defined by the loaded Game. | Platform-wide boundary; Game-specific content | **Partial:** stable Play Area identity/bounds/focus and Template Play Area definitions exist; official Game Board content does not. | M4/M4.1 foundation complete; G1/G2 content | PDF pp.5-6 | None. |
 | LDR-027 | Each Game may provide its own Board layout and mechanics; the Platform must not force one grid or Board type. | Platform-wide extension rule | **Architecture only for strategies:** the Game Template/Play Area boundary exists, but the Trap Floor grid and Super Leroy Sisters Side-Scroller are not implemented. | G1, G2 | PDF p.6 | Implement only Board types required by approved Games. |
+
+### 9.1 Shared Visual and Physical Framework
+
+The following additions record Platform direction only. They do not change milestone completion claims or the approved Trap Floor composition/setup.
+
+| ID | Requirement | Scope | Current implementation status | Planned milestone | Source/page | Unresolved decision |
+|---|---|---|---|---|---|---|
+| LDR-040 | System Cards use poker-card proportions. | Platform visual framework | **Approved; not assessed** | No scheduling change in this approval | User approval 2026-09-03; ADR-026 | Exact artwork dimensions are not prescribed. |
+| LDR-041 | Console is configurable, not permanently six Slots; support a Main Slot, optional Side Slots, Cube Slots, and Dice Slots. A Game Template may use only the Slots it needs. | Platform capability; Template configuration | **Approved; not assessed** | No scheduling change in this approval | User approval 2026-09-03; ADR-026 | No universal Slot count or per-Game allocation is inferred. |
+| LDR-042 | Console may be horizontal or vertical while retaining the universal Console contract. | Platform visual/layout framework | **Approved; not assessed** | No scheduling change in this approval | User approval 2026-09-03; ADR-026 | No default orientation is imposed on existing Templates. |
+| LDR-043 | Preserve Slot-symbol language, including newer Milanote teal fill, Plus / Diamond / Minus bottom-slot symbols, and nested-shape combinations. | Platform visual framework | **Approved; not assessed** | No scheduling change in this approval | Newer Milanote revision summary approved 2026-09-03; ADR-026 | Exact teal value and artwork geometry are not specified by the summary. |
+| LDR-044 | Physical reference sizing: approximately 16 mm for Dice/chits/meeples and 8 mm for cubes. | Platform physical authoring reference | **Approved; not assessed** | No scheduling change in this approval | User approval 2026-09-03; ADR-026 | Not an exact collider size, manufacturing specification, or Unity-unit conversion. |
 
 ## 10. Trap Floor
 

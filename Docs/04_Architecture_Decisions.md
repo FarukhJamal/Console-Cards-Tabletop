@@ -1,7 +1,7 @@
 # Console Cards — Architecture Decisions
 
 **Document ID:** 04_Architecture_Decisions  
-**Version:** 1.6
+**Version:** 1.7
 
 **Status:** Approved with Open Decisions
 
@@ -319,7 +319,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 **Consequences:**
 
 - Trap Floor and Super Leroy Sisters use separate Game-specific Boards.
-- Game Templates may configure Console contents without replacing the Console contract.
+- Game Templates may configure Console contents, Slot mix/usage, and horizontal or vertical layout without replacing the Console contract; ADR-026 defines the shared visual framework.
 - The Platform must not force one reference screenshot, Grid, or Board layout onto every Game.
 - Game Board content must not introduce Game-specific dependencies into universal Console modules.
 
@@ -430,3 +430,30 @@ This file records accepted or proposed Architecture Decision Records. A decision
 **Reason:** Real surfaces, collisions, and throws supply physical tabletop behavior while the existing identity, Command, revision, Container, and Match authority boundaries preserve consistent accepted state. Layout authoring remains separate from free 3D simulation.
 
 **Approval boundary:** This is approved direction, not evidence of implementation or verification. Full-scene physics, physical Container bodies/stacks, networking delivery, new Game rules, and unrelated interaction redesign remain outside this pass.
+
+---
+
+## ADR-026 - Shared Visual Framework and Configurable Consoles
+
+**Status:** Accepted
+
+**Approval source:** Visual/physical framework and newer Milanote revision summary approved by the user on 2026-09-03. Only the requirements recorded here are adopted; this does not adopt all historical Milanote content.
+
+**Decision:**
+
+- System Cards use poker-card proportions.
+- The universal Console is configurable, not permanently defined as six Slots. Its visual framework supports a Main Slot, optional Side Slots, Cube Slots, and Dice Slots. A Game Template may use only the Slots it needs.
+- A Console may be horizontal or vertical. Orientation and Slot selection do not replace the universal Console contract or change it into a Game Board.
+- Preserve the Slot-symbol visual language. The approved newer Milanote revisions use teal Slot-symbol fill, Plus / Diamond / Minus bottom-slot symbols, and nested-shape combinations. Preserve the nested combinations as part of that language, not just the individual shapes.
+- Physical reference sizing is approximately 16 mm for Dice, chits, and meeples, and 8 mm for cubes. These are approximate physical authoring references, not exact collider dimensions or a prescribed Unity-unit conversion.
+
+**Reason:** A shared visual identity and physical scale reference must survive changes to models and Game-specific layouts without making one prototype Console layout a permanent Platform restriction.
+
+**Consequences and preserved boundaries:**
+
+- Extends ADR-020. Any fixed six-Slot prototype arrangement is a configuration, not a universal Slot-count requirement. Existing Template arrangements remain valid; this decision does not migrate them.
+- Slot roles, orientation, and symbols belong to authored configuration and Presentation. Their visual design alone does not define Game Rules, capacity, permissions, or new Runtime types.
+- ADR-025 physical interaction, authored Table/Board surface contracts, separate physical state, `TabletopPose` layout coordinates, IDs, Commands, Container membership, and Match authority remain unchanged. Decorative models and symbols do not become gameplay authority.
+- The current Trap Floor Floormaster Deck remains 36 Cards: 14 Trap, 14 Coin, and 8 Item. Older Milanote Trap/Friend/Key/Exit counts are legacy/reference material only, not approved composition or content to import. `18_Trap_Floor_Game_Requirements.md` continues to govern Trap Floor setup and Game Rules.
+
+**Approval boundary:** This approves visual/platform rules only. It is not evidence that current assets or Runtime already support every configuration, and does not authorize runtime, prefab, scene, physics-tuning, or Game-content changes in this documentation task. Exact artwork geometry, a numeric teal color value, and manufacturing dimensions are not specified by this summary.

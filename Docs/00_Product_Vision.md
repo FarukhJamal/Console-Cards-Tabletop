@@ -1,7 +1,7 @@
 # Console Cards — Product Vision
 
 **Document ID:** 00_Product_Vision  
-**Version:** 1.6
+**Version:** 1.7
 
 **Status:** Approved
 **Purpose:** Define what Console Cards is, what experience it must create, and which product boundaries must remain stable before architecture and implementation begin.
@@ -98,6 +98,14 @@ The universal Button Cards are:
 - Y
 
 Their meaning may change between games. The physical Button Cards remain universal.
+
+### 3.1 Shared Visual and Physical Framework
+
+System Cards use poker-card proportions. The universal Console is configurable, not permanently defined as six Slots: its visual framework supports a Main Slot, optional Side Slots, Cube Slots, and Dice Slots. A Game Template may use only the Slots it needs, and a Console may be horizontal or vertical.
+
+Preserve the Slot-symbol visual language, including the approved newer Milanote revisions: teal Slot-symbol fill, Plus / Diamond / Minus bottom-slot symbols, and nested-shape combinations. Physical reference sizing is approximately 16 mm for Dice, chits, and meeples, and 8 mm for cubes. These are visual/physical authoring references, not a change to Runtime coordinates or physics authority.
+
+ADR-026 records this framework; `17_Layout_Design_Requirements_Matrix.md` traces it separately from Game-specific content. It does not change the approved Trap Floor setup or Floormaster Deck composition.
 
 ---
 

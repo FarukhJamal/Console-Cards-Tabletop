@@ -1,7 +1,7 @@
 # Console Cards — Terminology
 
 **Document ID:** 02_Terminology  
-**Version:** 1.6
+**Version:** 1.7
 
 **Status:** Approved
 **Depends on:** `00_Product_Vision.md`  
@@ -708,6 +708,10 @@ One physical runtime copy of a Card Definition in a Match.
 
 Ten Button A cards are ten Card Instances referencing one Card Definition.
 
+### 6.6.1 System Card
+
+A Card following the shared Console Cards visual framework. System Cards use poker-card proportions under ADR-026. This is a visual/content convention, not a separate Runtime Object type.
+
 ---
 
 ## 6.7 Button Card
@@ -924,6 +928,8 @@ A Console may contain:
 - Personal organizational areas.
 
 The Console is separate from the Hand.
+
+Its Slot configuration is not permanently fixed to six Slots. The visual framework supports a Main Slot, optional Side Slots, Cube Slots, and Dice Slots; a Game Template may use only the Slots it needs. A Console may be horizontal or vertical. These are configurable layout roles, not new Runtime types or Game-rule enforcement inferred from their symbols. ADR-026 defines the shared Slot-symbol language and physical reference sizing.
 
 ---
 

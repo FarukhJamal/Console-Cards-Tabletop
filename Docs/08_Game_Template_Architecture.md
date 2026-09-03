@@ -1,7 +1,7 @@
 # Console Cards — Game Template Architecture
 
 **Document ID:** 08_Game_Template_Architecture  
-**Version:** 1.4
+**Version:** 1.5
 
 **Status:** Approved
 
@@ -125,6 +125,8 @@ Trap Floor is selectable content and is not the permanent application startup st
 ## 7.1 Universal Console and Game-Specific Game Board
 
 The Console contract is universal and persists across Games. A Game Template may configure Console contents, Slot usage, labels, and allowed Card Definitions, but it must not replace the universal Console concept with a Game-specific Board.
+
+Under ADR-026, Console configuration is not permanently fixed to six Slots. The visual framework supports a Main Slot, optional Side Slots, Cube Slots, and Dice Slots; each Game Template may use only the Slots it needs and select a horizontal or vertical Console layout. Preserve the shared Slot-symbol language across those configurations. This is approved configuration direction, not a claim that every variant is implemented or a requirement to change existing Template setups.
 
 The central Game Board is Game-specific Template content. It may reference one or more Boards and Play Areas, and it may choose a Player Layout compatible with the active Player count.
 
