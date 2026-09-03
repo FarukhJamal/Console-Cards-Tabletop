@@ -9,15 +9,69 @@ namespace ConsoleCards.Presentation.Coordinates
     /// </summary>
     public sealed class TabletopCoordinateConverter
     {
+        private readonly Vector3 worldOrigin;
+        private readonly Vector3 worldXAxisPerTableUnit;
+        private readonly Vector3 worldYAxisPerTableUnit;
+        private readonly Vector3 worldUp;
+        private readonly Quaternion worldRotation;
+
         public TabletopCoordinateConverter(
             float worldUnitsPerTableUnit,
             float baseHeight,
             float layerHeight,
             float localOrderHeight)
+            : this(
+                Vector3.zero,
+                Vector3.right * worldUnitsPerTableUnit,
+                Vector3.forward * worldUnitsPerTableUnit,
+                Vector3.up,
+                baseHeight,
+                layerHeight,
+                localOrderHeight)
         {
-            if (!IsFinite(worldUnitsPerTableUnit) || worldUnitsPerTableUnit <= 0f)
+        }
+
+        /// <summary>
+        /// Creates a converter whose logical X/Y axes are supplied by an authored physical Table frame.
+        /// Axis vectors include the current Table scale and represent one logical table unit in world space.
+        /// </summary>
+        public TabletopCoordinateConverter(
+            Vector3 worldOrigin,
+            Vector3 worldXAxisPerTableUnit,
+            Vector3 worldYAxisPerTableUnit,
+            Vector3 worldUp,
+            float baseHeight,
+            float layerHeight,
+            float localOrderHeight)
+        {
+            ValidateFinite(worldOrigin);
+            ValidateFinite(worldXAxisPerTableUnit);
+            ValidateFinite(worldYAxisPerTableUnit);
+            ValidateFinite(worldUp);
+            if (worldXAxisPerTableUnit.sqrMagnitude <= Mathf.Epsilon)
             {
-                throw new ArgumentOutOfRangeException(nameof(worldUnitsPerTableUnit));
+                throw new ArgumentOutOfRangeException(nameof(worldXAxisPerTableUnit));
+            }
+
+            if (worldYAxisPerTableUnit.sqrMagnitude <= Mathf.Epsilon)
+            {
+                throw new ArgumentOutOfRangeException(nameof(worldYAxisPerTableUnit));
+            }
+
+            if (worldUp.sqrMagnitude <= Mathf.Epsilon)
+            {
+                throw new ArgumentOutOfRangeException(nameof(worldUp));
+            }
+
+            Vector3 normalizedX = worldXAxisPerTableUnit.normalized;
+            Vector3 normalizedY = worldYAxisPerTableUnit.normalized;
+            Vector3 normalizedUp = worldUp.normalized;
+            if (Mathf.Abs(Vector3.Dot(normalizedX, normalizedY)) > 0.001f
+                || Mathf.Abs(Vector3.Dot(normalizedX, normalizedUp)) > 0.001f
+                || Mathf.Abs(Vector3.Dot(normalizedY, normalizedUp)) > 0.001f
+                || Vector3.Dot(Vector3.Cross(normalizedUp, normalizedY), normalizedX) < 0.999f)
+            {
+                throw new ArgumentException("Tabletop coordinate axes must form an orthogonal right-handed frame.");
             }
 
             if (!IsFinite(baseHeight))
@@ -35,7 +89,12 @@ namespace ConsoleCards.Presentation.Coordinates
                 throw new ArgumentOutOfRangeException(nameof(localOrderHeight));
             }
 
-            WorldUnitsPerTableUnit = worldUnitsPerTableUnit;
+            this.worldOrigin = worldOrigin;
+            this.worldXAxisPerTableUnit = worldXAxisPerTableUnit;
+            this.worldYAxisPerTableUnit = worldYAxisPerTableUnit;
+            this.worldUp = normalizedUp;
+            worldRotation = Quaternion.LookRotation(normalizedY, normalizedUp);
+            WorldUnitsPerTableUnit = (worldXAxisPerTableUnit.magnitude + worldYAxisPerTableUnit.magnitude) * 0.5f;
             BaseHeight = baseHeight;
             LayerHeight = layerHeight;
             LocalOrderHeight = localOrderHeight;
@@ -61,6 +120,13 @@ namespace ConsoleCards.Presentation.Coordinates
         /// </summary>
         public float LocalOrderHeight { get; }
 
+        /// <summary>World-space normal of the authored tabletop coordinate frame.</summary>
+        public Vector3 WorldUp => worldUp;
+
+        public Vector3 WorldXAxisPerTableUnit => worldXAxisPerTableUnit;
+
+        public Vector3 WorldYAxisPerTableUnit => worldYAxisPerTableUnit;
+
         /// <summary>
         /// Converts a logical table coordinate to a Unity world position.
         /// </summary>
@@ -68,10 +134,7 @@ namespace ConsoleCards.Presentation.Coordinates
         {
             ValidateFinite(coordinate);
 
-            float worldX = ConvertToFiniteFloat(coordinate.X * WorldUnitsPerTableUnit);
-            float worldZ = ConvertToFiniteFloat(coordinate.Y * WorldUnitsPerTableUnit);
-
-            return new Vector3(worldX, BaseHeight, worldZ);
+            return ConvertPosition(coordinate, BaseHeight);
         }
 
         /// <summary>
@@ -82,14 +145,11 @@ namespace ConsoleCards.Presentation.Coordinates
             ValidateFinite(pose.Position);
             ValidateFiniteRotation(pose);
 
-            float worldX = ConvertToFiniteFloat(pose.Position.X * WorldUnitsPerTableUnit);
-            float worldY = ConvertToFiniteFloat(
+            float worldHeight = ConvertToFiniteFloat(
                 BaseHeight
                 + (double)pose.Layer * LayerHeight
                 + (double)pose.LocalOrder * LocalOrderHeight);
-            float worldZ = ConvertToFiniteFloat(pose.Position.Y * WorldUnitsPerTableUnit);
-
-            return new Vector3(worldX, worldY, worldZ);
+            return ConvertPosition(pose.Position, worldHeight);
         }
 
         /// <summary>
@@ -99,20 +159,35 @@ namespace ConsoleCards.Presentation.Coordinates
         {
             ValidateFiniteRotation(pose);
 
-            return Quaternion.Euler(0f, pose.RotationDegrees, 0f);
+            return worldRotation * Quaternion.Euler(0f, pose.RotationDegrees, 0f);
         }
 
         /// <summary>
-        /// Converts a Unity world position back to its logical table coordinate using the approved X/Z mapping.
+        /// Converts a Unity world position back through the configured tabletop axes.
         /// </summary>
         public TableCoordinate ToTableCoordinate(Vector3 worldPosition)
         {
             ValidateFinite(worldPosition);
 
-            double logicalX = ConvertToFiniteDouble(worldPosition.x / WorldUnitsPerTableUnit);
-            double logicalY = ConvertToFiniteDouble(worldPosition.z / WorldUnitsPerTableUnit);
+            Vector3 offset = worldPosition - worldOrigin;
+            double logicalX = ConvertToFiniteDouble(
+                Vector3.Dot(offset, worldXAxisPerTableUnit) / worldXAxisPerTableUnit.sqrMagnitude);
+            double logicalY = ConvertToFiniteDouble(
+                Vector3.Dot(offset, worldYAxisPerTableUnit) / worldYAxisPerTableUnit.sqrMagnitude);
 
             return new TableCoordinate(logicalX, logicalY);
+        }
+
+        private Vector3 ConvertPosition(TableCoordinate coordinate, float worldHeight)
+        {
+            float logicalX = ConvertToFiniteFloat(coordinate.X);
+            float logicalY = ConvertToFiniteFloat(coordinate.Y);
+            Vector3 converted = worldOrigin
+                + (worldXAxisPerTableUnit * logicalX)
+                + (worldYAxisPerTableUnit * logicalY)
+                + (worldUp * worldHeight);
+            ValidateFinite(converted);
+            return converted;
         }
 
         private static void ValidateFinite(TableCoordinate coordinate)

@@ -215,9 +215,12 @@ namespace ConsoleCards.Presentation.Interaction
             if (view.BoundState.PhysicalState == null)
             {
                 PhysicalObjectState initial;
-                if (!authority.Surfaces.TryResolve(view.BoundState.Pose, actor, out initial,
-                    view is DieView ? ConsoleCards.Application.UseCases.TabletopComponentKind.Die
-                        : ConsoleCards.Application.UseCases.TabletopComponentKind.Card))
+                if (!authority.Surfaces.TryResolveAuthoredLooseObject(
+                        view.BoundState.Pose,
+                        actor,
+                        physicalCollider,
+                        view.BoundState.IsUserLocked,
+                        out initial))
                     initial = Capture(PhysicalObjectMode.Dynamic); // Authored/template extraction may start off-table.
                 if (!Commit(initial)) return;
                 applied = null;

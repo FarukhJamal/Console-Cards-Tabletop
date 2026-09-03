@@ -32,6 +32,57 @@ namespace ConsoleCards.Presentation.Interaction
             return count;
         }
 
+        public static TabletopCoordinateConverter CreateTemplateLayoutConverter(
+            UnityEngine.Camera camera,
+            float worldUnitsPerTableUnit,
+            float layerHeight,
+            float localOrderHeight)
+        {
+            if (camera == null)
+            {
+                throw new ArgumentNullException(nameof(camera));
+            }
+
+            Physics.SyncTransforms();
+            PhysicsScene physicsScene = camera.gameObject.scene.GetPhysicsScene();
+            PhysicalTabletopSurface selected = null;
+            foreach (PhysicalTabletopSurface surface in PhysicalTabletopSurface.Registered)
+            {
+                if (surface == null
+                    || !surface.ParticipatesIn(physicsScene)
+                    || !surface.IsTemplateLayoutOrigin)
+                {
+                    continue;
+                }
+
+                if (selected != null)
+                {
+                    throw new InvalidOperationException(
+                        "Game Template projection requires exactly one active PhysicalTabletopSurface marked as the Template Layout Origin.");
+                }
+
+                selected = surface;
+            }
+
+            if (selected == null)
+            {
+                throw new InvalidOperationException(
+                    "Game Template projection requires one active physical Table surface marked as the Template Layout Origin.");
+            }
+
+            if (!selected.TryCreateTemplateCoordinateConverter(
+                    worldUnitsPerTableUnit,
+                    layerHeight,
+                    localOrderHeight,
+                    out TabletopCoordinateConverter converter,
+                    out string issue))
+            {
+                throw new InvalidOperationException($"Game Template physical Table projection is invalid: {issue}");
+            }
+
+            return converter;
+        }
+
         public bool ValidateSetup()
         {
             PhysicsScene physicsScene = camera.gameObject.scene.GetPhysicsScene();
@@ -50,21 +101,54 @@ namespace ConsoleCards.Presentation.Interaction
         {
             Physics.SyncTransforms();
             Vector3 point = converter.ToWorldPosition(pose);
-            float highest = point.y;
-            PhysicsScene physicsScene = camera.gameObject.scene.GetPhysicsScene();
-            foreach (PhysicalTabletopSurface surface in PhysicalTabletopSurface.Registered)
-                if (surface != null && surface.ParticipatesIn(physicsScene) && surface.TryGetCollider(out Collider collider, out _))
-                    highest = Mathf.Max(highest, collider.bounds.max.y);
-            point.y = highest + 2f;
-            return TryRay(new Ray(point, Vector3.down), out hit);
+            const float layoutRayDistance = 1000f;
+            return TryRay(
+                new Ray(point + (converter.WorldUp * layoutRayDistance), -converter.WorldUp),
+                out hit,
+                converter.WorldUp,
+                layoutRayDistance * 2f);
         }
 
         public bool TryResolve(TabletopPose layoutPose, PlayerId actor, out PhysicalObjectState state,
             TabletopComponentKind kind = TabletopComponentKind.Card)
         {
             if (!TryAtLayout(layoutPose, out RaycastHit hit)) { state = null; return false; }
-            state = PhysicalLooseObject.State(hit.point + Vector3.up * (kind == TabletopComponentKind.Die ? 0.6f : PlacementClearance),
+            state = PhysicalLooseObject.State(hit.point + hit.normal.normalized * (kind == TabletopComponentKind.Die ? 0.6f : PlacementClearance),
                 converter.ToWorldRotation(layoutPose), Vector3.zero, Vector3.zero, PhysicalObjectMode.Dynamic, actor);
+            return true;
+        }
+
+        public bool TryResolveAuthoredLooseObject(
+            TabletopPose layoutPose,
+            PlayerId actor,
+            Collider physicalCollider,
+            bool isUserLocked,
+            out PhysicalObjectState state)
+        {
+            if (physicalCollider == null)
+            {
+                throw new ArgumentNullException(nameof(physicalCollider));
+            }
+
+            if (!TryAtLayout(layoutPose, out RaycastHit hit))
+            {
+                state = null;
+                return false;
+            }
+
+            Vector3 normal = hit.normal.normalized;
+            Bounds bounds = physicalCollider.bounds;
+            Vector3 centerOffset = bounds.center - physicalCollider.transform.position;
+            float projectedExtent = Vector3.Dot(Abs(normal), bounds.extents);
+            float restingRootOffset = Mathf.Max(0f, projectedExtent - Vector3.Dot(centerOffset, normal));
+            float settlingClearance = isUserLocked ? 0f : PlacementClearance;
+            state = PhysicalLooseObject.State(
+                hit.point + (normal * (restingRootOffset + settlingClearance)),
+                converter.ToWorldRotation(layoutPose),
+                Vector3.zero,
+                Vector3.zero,
+                isUserLocked ? PhysicalObjectMode.Sleeping : PhysicalObjectMode.Dynamic,
+                actor);
             return true;
         }
 
@@ -76,6 +160,11 @@ namespace ConsoleCards.Presentation.Interaction
 
         private bool TryRay(Ray ray, out RaycastHit closest)
         {
+            return TryRay(ray, out closest, Vector3.up, float.MaxValue);
+        }
+
+        private bool TryRay(Ray ray, out RaycastHit closest, Vector3 expectedUp, float maximumDistance)
+        {
             Physics.SyncTransforms();
             closest = default;
             if (!ValidateSetup()) return false;
@@ -85,11 +174,16 @@ namespace ConsoleCards.Presentation.Interaction
             foreach (PhysicalTabletopSurface surface in PhysicalTabletopSurface.Registered)
             {
                 if (surface == null || !surface.ParticipatesIn(physicsScene) || !surface.TryGetCollider(out Collider collider, out _)) continue;
-                if (collider.Raycast(ray, out RaycastHit hit, float.MaxValue)
-                    && Vector3.Dot(hit.normal, Vector3.up) > 0.1f && hit.distance < distance)
+                if (collider.Raycast(ray, out RaycastHit hit, maximumDistance)
+                    && Vector3.Dot(hit.normal, expectedUp) > 0.1f && hit.distance < distance)
                 { closest = hit; distance = hit.distance; found = true; }
             }
             return found;
         }
+
+        private static Vector3 Abs(Vector3 value) => new Vector3(
+            Mathf.Abs(value.x),
+            Mathf.Abs(value.y),
+            Mathf.Abs(value.z));
     }
 }

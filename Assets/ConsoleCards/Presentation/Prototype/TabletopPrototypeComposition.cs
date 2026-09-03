@@ -4280,9 +4280,9 @@ namespace ConsoleCards.Presentation.Prototype
         private void BuildRuntimeGraph(bool restoreInitialBaseline)
         {
             interactionOwnerId = InteractionOwnerId.New();
-            coordinateConverter = new TabletopCoordinateConverter(
+            coordinateConverter = PhysicalTabletopSurfaces.CreateTemplateLayoutConverter(
+                targetCamera,
                 worldUnitsPerTableUnit,
-                tabletopHeight,
                 tabletopLayerHeight,
                 tabletopLocalOrderHeight);
 
@@ -4292,6 +4292,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             RestorePrototypeTemplateContext(restoreInitialBaseline);
+            ProjectTemplateBoardSurface();
             ProjectPrototypePlayerLayout(localSeatLayout);
         }
 
@@ -4434,6 +4435,55 @@ namespace ConsoleCards.Presentation.Prototype
             target.SetPositionAndRotation(
                 coordinateConverter.ToWorldPosition(pose),
                 coordinateConverter.ToWorldRotation(pose));
+        }
+
+        private void ProjectTemplateBoardSurface()
+        {
+            if (gameBoardPhysicalSurface == null)
+            {
+                throw new InvalidOperationException(
+                    "Trap Floor Presentation requires an authored Game Board physical surface.");
+            }
+
+            if (!(gameBoardPhysicalSurface is BoxCollider boardCollider))
+            {
+                throw new InvalidOperationException(
+                    "Trap Floor's rectangular Board physical surface must use a BoxCollider.");
+            }
+
+            PlayAreaState board = matchState.GetPlayArea(centralPlayAreaId);
+            TabletopPose boardPose = new TabletopPose(board.Bounds.Center, 0f, 0, 0);
+            Transform boardTransform = boardCollider.transform;
+            boardTransform.SetParent(transform, true);
+            boardTransform.SetPositionAndRotation(
+                coordinateConverter.ToWorldPosition(boardPose),
+                coordinateConverter.ToWorldRotation(boardPose));
+
+            Vector3 lossyScale = boardTransform.lossyScale;
+            float scaleX = Mathf.Abs(lossyScale.x);
+            float scaleY = Mathf.Abs(lossyScale.y);
+            float scaleZ = Mathf.Abs(lossyScale.z);
+            if (scaleX <= Mathf.Epsilon || scaleY <= Mathf.Epsilon || scaleZ <= Mathf.Epsilon)
+            {
+                throw new InvalidOperationException(
+                    "Trap Floor Board physical surface requires a non-zero Transform scale.");
+            }
+
+            Vector3 size = boardCollider.size;
+            size.x = (float)board.Bounds.Width
+                * coordinateConverter.WorldXAxisPerTableUnit.magnitude / scaleX;
+            size.z = (float)board.Bounds.Height
+                * coordinateConverter.WorldYAxisPerTableUnit.magnitude / scaleZ;
+            boardCollider.size = size;
+
+            Vector3 up = coordinateConverter.WorldUp;
+            float halfThickness = Mathf.Abs(Vector3.Dot(
+                boardTransform.TransformVector(Vector3.up * (size.y * 0.5f)),
+                up));
+            Vector3 centerOffset = boardTransform.TransformVector(boardCollider.center);
+            boardTransform.position = coordinateConverter.ToWorldPosition(boardPose)
+                + (up * halfThickness)
+                - centerOffset;
         }
 
         private void RestorePrototypeTemplateContext(bool restoreInitialBaseline)

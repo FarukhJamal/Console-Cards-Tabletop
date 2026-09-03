@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using ConsoleCards.Presentation.Coordinates;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -17,7 +19,15 @@ namespace ConsoleCards.Presentation.Interaction
 
         [SerializeField, Tooltip("The authored top collider on this same GameObject. Automatically resolved when there is exactly one collider. Other colliders are not placement surfaces.")]
         private Collider surfaceCollider;
+        [SerializeField, Tooltip("Marks this surface as the single physical Table frame used to project Game Template TabletopPose layout. Do not enable this on Game Boards.")]
+        private bool templateLayoutOrigin;
+        [SerializeField, Tooltip("Authored Table transform supplying logical X/Z orientation and scale. Assign the fixed Table root when the collider is on a resized/rotated child.")]
+        private Transform templateLayoutFrame;
+        [SerializeField, Min(0.0001f), Tooltip("Table-root local units represented by one logical TabletopPose unit before the Table transform scale is applied.")]
+        private float localUnitsPerTableUnit = 1f;
         private string lastReportedIssue;
+
+        internal bool IsTemplateLayoutOrigin => templateLayoutOrigin;
 
         private void Reset() => ResolveLocalCollider();
 
@@ -80,11 +90,80 @@ namespace ConsoleCards.Presentation.Interaction
             Debug.LogError($"PhysicalTabletopSurface: {issue}", this);
         }
 
+        internal bool TryCreateTemplateCoordinateConverter(
+            float worldUnitsPerTableUnit,
+            float layerHeight,
+            float localOrderHeight,
+            out TabletopCoordinateConverter converter,
+            out string issue)
+        {
+            converter = null;
+            if (!templateLayoutOrigin)
+            {
+                issue = "This surface is not marked as the Game Template layout origin.";
+                return false;
+            }
+
+            if (!TryGetCollider(out Collider collider, out issue))
+            {
+                return false;
+            }
+
+            Transform frame = templateLayoutFrame != null ? templateLayoutFrame : transform;
+            if (!IsFinite(localUnitsPerTableUnit) || localUnitsPerTableUnit <= 0f)
+            {
+                issue = "Local Units Per Table Unit must be finite and greater than zero.";
+                return false;
+            }
+
+            if (!IsFinite(worldUnitsPerTableUnit) || worldUnitsPerTableUnit <= 0f)
+            {
+                issue = "World Units Per Table Unit must be finite and greater than zero.";
+                return false;
+            }
+
+            Vector3 up = frame.up.normalized;
+            Vector3 probeOrigin = collider.bounds.center
+                + (up * (collider.bounds.extents.magnitude + 1f));
+            if (!collider.Raycast(
+                    new Ray(probeOrigin, -up),
+                    out RaycastHit topHit,
+                    (collider.bounds.extents.magnitude * 2f) + 2f))
+            {
+                issue = "The Template layout frame Up axis must point through the authored tabletop collider's top surface.";
+                return false;
+            }
+
+            float logicalScale = localUnitsPerTableUnit * worldUnitsPerTableUnit;
+            try
+            {
+                converter = new TabletopCoordinateConverter(
+                    topHit.point,
+                    frame.TransformVector(Vector3.right * logicalScale),
+                    frame.TransformVector(Vector3.forward * logicalScale),
+                    up,
+                    0f,
+                    layerHeight,
+                    localOrderHeight);
+            }
+            catch (ArgumentException exception)
+            {
+                issue = $"The Template layout frame is invalid: {exception.Message}";
+                return false;
+            }
+
+            issue = null;
+            return true;
+        }
+
         private void ResolveLocalCollider()
         {
             if (surfaceCollider != null) return;
             Collider[] colliders = GetComponents<Collider>();
             if (colliders.Length == 1) surfaceCollider = colliders[0];
         }
+
+        private static bool IsFinite(float value) =>
+            !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

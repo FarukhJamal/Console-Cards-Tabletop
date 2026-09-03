@@ -165,6 +165,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   surfaceCollider: {fileID: 234356918}
+  templateLayoutOrigin: 0
+  templateLayoutFrame: {fileID: 0}
+  localUnitsPerTableUnit: 1
 --- !u!65 &234356918
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -287,6 +290,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   surfaceCollider: {fileID: 602502503}
+  templateLayoutOrigin: 1
+  templateLayoutFrame: {fileID: 1106030041141595072}
+  localUnitsPerTableUnit: 0.2
 --- !u!1 &602502511
 GameObject:
   m_ObjectHideFlags: 0
@@ -354,6 +360,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   surfaceCollider: {fileID: 602502513}
+  templateLayoutOrigin: 0
+  templateLayoutFrame: {fileID: 0}
+  localUnitsPerTableUnit: 1
 --- !u!1 &839904106
 GameObject:
   m_ObjectHideFlags: 0
@@ -778,7 +787,7 @@ MonoBehaviour:
   prototypePawnPrefab: {fileID: 114100, guid: 5239af82a047422eb755f790bbe5daea, type: 3}
   prototypeTokenPrefab: {fileID: 114100, guid: 2f85d772fd64424baa3eeb27b542f608, type: 3}
   prototypeDiePrefab: {fileID: 611100, guid: 7a41f6c247cc4a47a0fe1586125cc1a6, type: 3}
-  gameBoardPhysicalSurface: {fileID: 602502513}
+  gameBoardPhysicalSurface: {fileID: 234356918}
   physicalInteraction:
     releaseSmoothingSeconds: 0.08
     releaseVelocityMultiplier: 0.25
@@ -2772,6 +2781,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   surfaceCollider: {fileID: 6739714105500091903}
+  templateLayoutOrigin: 1
+  templateLayoutFrame: {fileID: 6406510502779078047}
+  localUnitsPerTableUnit: 0.2
 --- !u!65 &6739714105500091903
 BoxCollider:
   m_ObjectHideFlags: 0
