@@ -670,6 +670,13 @@ MonoBehaviour:
   - {fileID: 602502503}
   - {fileID: 602502513}
   gameBoardPhysicalSurface: {fileID: 602502513}
+  physicalInteraction:
+    releaseSmoothingSeconds: 0.08
+    releaseVelocityMultiplier: 0.25
+    maximumReleaseVelocity: 4
+    releaseAngularVelocityMultiplier: 0.25
+    maximumReleaseAngularVelocity: 6
+    releaseSampleTimeoutSeconds: 0.12
   prototypeDeckPrefab: {fileID: 114102, guid: e81b395902c476d7f8192a3b4c5d6e78, type: 3}
   prototypeConsolePrefab: {fileID: 114100, guid: e2283b6fd55d32c2417eb33679d3bb2b, type: 3}
   cardView: {fileID: 2100000102}

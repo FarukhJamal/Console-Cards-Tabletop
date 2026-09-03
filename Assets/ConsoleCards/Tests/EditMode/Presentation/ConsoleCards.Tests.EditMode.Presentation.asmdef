@@ -3,7 +3,9 @@
   "rootNamespace": "ConsoleCards.Tests.EditMode.Presentation",
   "references": [
     "ConsoleCards.Core",
-    "ConsoleCards.Presentation"
+    "ConsoleCards.Presentation",
+    "ConsoleCards.Application",
+    "UnityEngine.UI"
   ],
   "includePlatforms": [
     "Editor"

@@ -21,13 +21,16 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly List<PhysicalLooseObject> objects = new List<PhysicalLooseObject>();
         private readonly Dictionary<PhysicalLooseObject, bool> contained = new Dictionary<PhysicalLooseObject, bool>();
         public LocalPhysicalObjectAuthority(MatchState match, IReadOnlyList<PlayerId> actors, Func<PlayerId> actor,
-            UnityEngine.Camera camera, PhysicalTabletopSurfaces surfaces, Action<Transform> stopAnimation)
+            UnityEngine.Camera camera, PhysicalTabletopSurfaces surfaces, Action<Transform> stopAnimation,
+            PhysicalInteractionConfig interactionConfig = null)
         {
             this.match = match; this.actors = actors; this.actor = actor;
             Camera = camera; Surfaces = surfaces; this.stopAnimation = stopAnimation;
+            InteractionConfig = interactionConfig ?? new PhysicalInteractionConfig();
         }
         public UnityEngine.Camera Camera { get; }
         public PhysicalTabletopSurfaces Surfaces { get; }
+        public PhysicalInteractionConfig InteractionConfig { get; }
         public PlayerId Actor => actor();
         public void StopAnimation(Transform transform) => stopAnimation(transform);
         public void Register(TabletopObjectView view)

@@ -53,6 +53,7 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal DieView prototypeDiePrefab;
         [SerializeField] private Collider[] physicalSurfaces;
         [SerializeField] private Collider gameBoardPhysicalSurface;
+        [SerializeField] private PhysicalInteractionConfig physicalInteraction = new PhysicalInteractionConfig();
         private PhysicalTabletopSurfaces physicalSurfaceQuery;
         private LocalPhysicalObjectAuthority physicalAuthority;
         private bool physicalFloorfallPending;
@@ -2824,7 +2825,11 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            if (matchState != null && contextMenuRenderedRevision != matchState.Revision)
+            // Physics checkpoints advance the Match even while a uGUI Button owns a press.
+            // Keep the Die menu and its Button instance alive until click/acceptance; Roll validates
+            // current state through the physical authority. Other menus retain their existing policy.
+            if (contextMenuMode != PrototypeContextMenuMode.Die
+                && matchState != null && contextMenuRenderedRevision != matchState.Revision)
             {
                 CloseContextMenu();
             }
@@ -3579,6 +3584,8 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void RollContextDie(TabletopObjectId targetDieId)
         {
+            // Ignore callbacks retained from a closed/replaced menu; one accepted click launches once.
+            if (contextMenuMode != PrototypeContextMenuMode.Die || contextMenuDieId != targetDieId) return;
             if (!TryGetDieView(targetDieId, out DieView targetDieView))
             {
                 CloseContextMenu();
@@ -4265,7 +4272,8 @@ namespace ConsoleCards.Presentation.Prototype
                 gameBoardPhysicalSurface.enabled = activeSession.Selection.Kind == TabletopSessionKind.GameTemplate;
             physicalSurfaceQuery = new PhysicalTabletopSurfaces(targetCamera, coordinateConverter, physicalSurfaces);
             physicalAuthority = new LocalPhysicalObjectAuthority(matchState, activeSession.Request.ActivePlayerIds,
-                () => localPlayerId, targetCamera, physicalSurfaceQuery, target => presentationTransitions.Stop(target, false));
+                () => localPlayerId, targetCamera, physicalSurfaceQuery, target => presentationTransitions.Stop(target, false),
+                physicalInteraction);
             authoritativeRandomValueSource = new SystemRandomValueSource();
             componentIdentitySource = new GuidTabletopComponentIdentitySource();
             componentCreationUseCase = new CreateTabletopComponentUseCase(componentIdentitySource, physicalSurfaceQuery);

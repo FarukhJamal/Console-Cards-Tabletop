@@ -17,11 +17,7 @@ namespace ConsoleCards.Presentation.Interaction
         private PhysicalObjectState applied;
         private bool held;
         private float holdDepth;
-        private float lastSampleTime;
-        private Vector3 lastPosition;
-        private Quaternion lastRotation;
-        private Vector3 releaseVelocity;
-        private Vector3 releaseAngularVelocity;
+        private PhysicalReleaseMotion releaseMotion;
         private float nextCheckpoint;
         private int dynamicFrames;
         private PlayerId actor;
@@ -43,6 +39,7 @@ namespace ConsoleCards.Presentation.Interaction
         internal void Initialize(TabletopObjectView view, LocalPhysicalObjectAuthority authority)
         {
             this.view = view; this.authority = authority;
+            releaseMotion = new PhysicalReleaseMotion(authority.InteractionConfig);
             held = false;
             applied = null;
             grabOrigin = null;
@@ -110,11 +107,7 @@ namespace ConsoleCards.Presentation.Interaction
             authority.StopAnimation(transform);
             Vector3 lifted = transform.position + Vector3.up * 0.8f;
             holdDepth = authority.Camera.WorldToScreenPoint(lifted).z;
-            lastPosition = transform.position;
-            lastRotation = transform.rotation;
-            lastSampleTime = Time.unscaledTime;
-            releaseVelocity = Vector3.zero;
-            releaseAngularVelocity = Vector3.zero;
+            releaseMotion.Reset();
             return true;
         }
 
@@ -122,34 +115,23 @@ namespace ConsoleCards.Presentation.Interaction
         {
             if (!held && !BeginHold()) return;
             Vector3 target = authority.Camera.ScreenToWorldPoint(new Vector3(screenPosition.x, screenPosition.y, holdDepth));
+            // Sample pointer motion before automatic surface/obstacle clearance changes the held height.
+            releaseMotion.Sample(target, transform.rotation, Time.unscaledTime);
             if (authority.Surfaces.TryPointer(screenPosition, out RaycastHit hit))
                 target.y = Mathf.Max(target.y, hit.point.y + 0.8f);
             Ray ray = authority.Camera.ScreenPointToRay(screenPosition);
             foreach (RaycastHit obstacle in Physics.RaycastAll(ray, 200f, ~0, QueryTriggerInteraction.Ignore))
                 if (obstacle.rigidbody != body && obstacle.collider != null)
                     target.y = Mathf.Max(target.y, obstacle.point.y + 0.8f);
-            float dt = Time.unscaledTime - lastSampleTime;
-            if (dt > 0.0001f)
-            {
-                releaseVelocity = Vector3.ClampMagnitude((target - lastPosition) / dt, 35f);
-                Quaternion delta = transform.rotation * Quaternion.Inverse(lastRotation);
-                delta.ToAngleAxis(out float angle, out Vector3 axis);
-                if (angle > 180f) angle -= 360f;
-                releaseAngularVelocity = axis.sqrMagnitude > 0f && !float.IsNaN(axis.x)
-                    ? Vector3.ClampMagnitude(axis * (angle * Mathf.Deg2Rad / dt), 35f) : Vector3.zero;
-            }
             body.position = target;
             transform.position = target;
-            lastPosition = target;
-            lastRotation = transform.rotation;
-            lastSampleTime = Time.unscaledTime;
         }
 
         public PhysicalObjectState ReleaseState()
         {
-            bool recent = Time.unscaledTime - lastSampleTime < 0.15f;
-            return State(transform.position, transform.rotation, recent ? releaseVelocity : Vector3.zero,
-                recent ? releaseAngularVelocity : Vector3.zero, PhysicalObjectMode.Dynamic, actor);
+            releaseMotion.GetRelease(Time.unscaledTime, out Vector3 velocity, out Vector3 angularVelocity);
+            return State(transform.position, transform.rotation, velocity,
+                angularVelocity, PhysicalObjectMode.Dynamic, actor);
         }
 
         public bool Release()
