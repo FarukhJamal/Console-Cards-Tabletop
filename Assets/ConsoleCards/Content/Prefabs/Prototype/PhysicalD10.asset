@@ -14,34 +14,36 @@ MonoBehaviour:
   m_EditorClassIdentifier:
   sideCount: 10
   readOppositeSupportingFace: 0
+  visualPrefab: {fileID: 4590406764288392387, guid: 862888be00d6b15438cd0d6595438365, type: 3}
+  visualSize: 0.6
   faces:
   - value: 1
-    outwardNormal: {x: 0.89442719, y: 0.44721360, z: 0.00000000}
+    outwardNormal: {x: -0.236709, y: -0.642768, z: -0.728573}
     planeDistance: 0.3
   - value: 2
-    outwardNormal: {x: 0.72360680, y: -0.44721360, z: 0.52573111}
+    outwardNormal: {x: 0.235148, y: 0.642714, z: -0.729125}
     planeDistance: 0.3
   - value: 3
-    outwardNormal: {x: 0.27639320, y: 0.44721360, z: 0.85065081}
+    outwardNormal: {x: 0.61972, y: -0.642817, z: 0.45026}
     planeDistance: 0.3
   - value: 4
-    outwardNormal: {x: -0.27639320, y: -0.44721360, z: 0.85065081}
+    outwardNormal: {x: -0.618794, y: 0.642743, z: 0.451636}
     planeDistance: 0.3
   - value: 5
-    outwardNormal: {x: -0.72360680, y: 0.44721360, z: 0.52573111}
+    outwardNormal: {x: 0.619853, y: -0.642646, z: -0.450321}
     planeDistance: 0.3
   - value: 6
-    outwardNormal: {x: -0.89442719, y: -0.44721360, z: 0.00000000}
+    outwardNormal: {x: -0.620695, y: 0.642792, z: -0.44895}
     planeDistance: 0.3
   - value: 7
-    outwardNormal: {x: -0.72360680, y: 0.44721360, z: -0.52573111}
+    outwardNormal: {x: -0.236621, y: -0.642793, z: 0.72858}
     planeDistance: 0.3
   - value: 8
-    outwardNormal: {x: -0.27639320, y: -0.44721360, z: -0.85065081}
+    outwardNormal: {x: 0.237958, y: 0.642651, z: 0.728269}
     planeDistance: 0.3
   - value: 9
-    outwardNormal: {x: 0.27639320, y: 0.44721360, z: -0.85065081}
+    outwardNormal: {x: -0.76603, y: -0.642805, z: -0.000072}
     planeDistance: 0.3
   - value: 10
-    outwardNormal: {x: 0.72360680, y: -0.44721360, z: -0.52573111}
+    outwardNormal: {x: 0.766029, y: 0.642804, z: -0.001705}
     planeDistance: 0.3

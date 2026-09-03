@@ -29,12 +29,7 @@ namespace ConsoleCards.Presentation.Views
             foreach (PhysicalDieDefinition definition in physicalDefinitions)
                 if (definition != null && definition.SideCount == sideCount) physicalDefinition = definition;
             if (physicalDefinition == null) throw new InvalidOperationException("No authored physical Die face mapping.");
-            physicalDefinition.Build(transform, physicalBodyMesh, resultLabel);
-        }
-
-        private void OnDestroy()
-        {
-            if (physicalDefinition != null && physicalBodyMesh != null) Destroy(physicalBodyMesh.sharedMesh);
+            physicalDefinition.Build(transform, physicalBodyMesh);
         }
 
         private DieState dieState;

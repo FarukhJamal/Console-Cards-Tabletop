@@ -32,6 +32,7 @@ namespace ConsoleCards.Presentation.Interaction
             {
                 if (physicalCollider != null) return physicalCollider;
                 foreach (Collider candidate in GetComponents<Collider>()) if (candidate.enabled) return candidate;
+                foreach (Collider candidate in GetComponentsInChildren<Collider>(true)) if (candidate.enabled) return candidate;
                 return null;
             }
         }
@@ -43,7 +44,7 @@ namespace ConsoleCards.Presentation.Interaction
             held = false;
             applied = null;
             grabOrigin = null;
-            if (PhysicalCollider == null) throw new InvalidOperationException("Loose physics requires the existing root collider.");
+            if (PhysicalCollider == null) throw new InvalidOperationException("Loose physics requires an enabled collider on the wrapper or its visual child.");
             physicalCollider = PhysicalCollider;
             body = GetComponent<Rigidbody>();
             if (body == null) body = gameObject.AddComponent<Rigidbody>();

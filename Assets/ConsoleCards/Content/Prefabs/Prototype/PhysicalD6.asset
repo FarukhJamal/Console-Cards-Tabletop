@@ -14,22 +14,24 @@ MonoBehaviour:
   m_EditorClassIdentifier:
   sideCount: 6
   readOppositeSupportingFace: 0
+  visualPrefab: {fileID: 7480525804154556286, guid: cc2e145304a0b1e44aa1567da9218354, type: 3}
+  visualSize: 0.6
   faces:
   - value: 1
-    outwardNormal: {x: 0.00000000, y: 1.00000000, z: 0.00000000}
+    outwardNormal: {x: 0, y: 0, z: 1}
     planeDistance: 0.3
   - value: 2
-    outwardNormal: {x: 1.00000000, y: 0.00000000, z: 0.00000000}
+    outwardNormal: {x: 0, y: 1, z: 0}
     planeDistance: 0.3
   - value: 3
-    outwardNormal: {x: 0.00000000, y: 0.00000000, z: 1.00000000}
+    outwardNormal: {x: 1, y: 0, z: 0}
     planeDistance: 0.3
   - value: 4
-    outwardNormal: {x: 0.00000000, y: 0.00000000, z: -1.00000000}
+    outwardNormal: {x: -1, y: 0, z: 0}
     planeDistance: 0.3
   - value: 5
-    outwardNormal: {x: -1.00000000, y: 0.00000000, z: 0.00000000}
+    outwardNormal: {x: 0, y: -1, z: 0}
     planeDistance: 0.3
   - value: 6
-    outwardNormal: {x: 0.00000000, y: -1.00000000, z: 0.00000000}
+    outwardNormal: {x: 0, y: 0, z: -1}
     planeDistance: 0.3
