@@ -166,7 +166,7 @@ Completed history is preserved: M4 Player Layout + Central Play Area, M4.1 minim
 
 **Status:** Initial ADR-025 implementation is present; compilation, automated execution, and Editor/manual physics verification remain pending. No physical-play completion claim is made. Existing M2 interaction and generic Dice completion evidence describes the previous controlled-plane/RNG model, not this physical replacement.
 
-The initial integration uses separate immutable physical state and per-object physical revisions, a shared local authority/Rigidbody adapter, explicitly referenced Table/Board colliders, and six authored Dice face mappings. New regression tests are added but unexecuted. Existing Floorfall controls launch the two generic physical Dice, wait for settled results, and physically reroll protected corners; assistance no longer overwrites physical Dice with preselected values. Container-body positioning, UI structure, and Game rules remain outside the replacement.
+The initial integration uses separate immutable physical state and per-object physical revisions, a shared local authority/Rigidbody adapter, authored Table/Board colliders registered by `PhysicalTabletopSurface` independently of visual models, and six authored Dice face mappings. New regression tests are added but unexecuted. Existing Floorfall controls launch the two generic physical Dice, wait for settled results, and physically reroll protected corners; assistance no longer overwrites physical Dice with preselected values. Container-body positioning, UI structure, and Game rules remain outside the replacement.
 
 This is scoped shared tabletop work within the existing immediate G1 capability priority:
 

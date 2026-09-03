@@ -5,36 +5,56 @@ using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Presentation.Coordinates;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace ConsoleCards.Presentation.Interaction
 {
-    /// <summary>Explicitly injected authored colliders, independent from decorative geometry and camera motion.</summary>
+    /// <summary>Queries live, opted-in surface components; independent from model assets, hierarchy and camera motion.</summary>
     public sealed class PhysicalTabletopSurfaces : IPhysicalPlacementResolver
     {
-        private readonly Collider[] surfaces;
         private readonly UnityEngine.Camera camera;
         private readonly TabletopCoordinateConverter converter;
+        private bool missingSetupReported;
         public const float PlacementClearance = 0.06f;
+        public const string MissingSurfaceMessage = "Physical tabletop placement is unavailable: no active, usable PhysicalTabletopSurface collider is registered. Add PhysicalTabletopSurface and an enabled, non-trigger Collider to the same GameObject on the Table or Board top. No model or composition reference is required.";
 
-        public PhysicalTabletopSurfaces(UnityEngine.Camera camera, TabletopCoordinateConverter converter, Collider[] surfaces)
+        public PhysicalTabletopSurfaces(UnityEngine.Camera camera, TabletopCoordinateConverter converter)
         {
             this.camera = camera ?? throw new ArgumentNullException(nameof(camera));
             this.converter = converter ?? throw new ArgumentNullException(nameof(converter));
-            this.surfaces = (Collider[])(surfaces ?? throw new ArgumentNullException(nameof(surfaces))).Clone();
-            if (surfaces.Length == 0) throw new ArgumentException("Physical placement requires authored Table/Board colliders.");
-            foreach (Collider surface in surfaces)
-                if (surface == null || surface.isTrigger || surface.attachedRigidbody != null)
-                    throw new ArgumentException("Surface colliders must be assigned, static, and non-trigger.");
+        }
+
+        public static int CountUsableSurfaces(PhysicsScene physicsScene)
+        {
+            int count = 0;
+            foreach (PhysicalTabletopSurface surface in PhysicalTabletopSurface.Registered)
+                if (surface != null && surface.ParticipatesIn(physicsScene) && surface.TryGetCollider(out _, out _)) count++;
+            return count;
+        }
+
+        public bool ValidateSetup()
+        {
+            PhysicsScene physicsScene = camera.gameObject.scene.GetPhysicsScene();
+            foreach (PhysicalTabletopSurface surface in PhysicalTabletopSurface.Registered)
+                if (surface != null && surface.ParticipatesIn(physicsScene)) surface.ReportConfigurationIssue();
+            bool available = CountUsableSurfaces(physicsScene) > 0;
+            if (!available && !missingSetupReported)
+                Debug.LogError(MissingSurfaceMessage, camera);
+            missingSetupReported = !available;
+            return available;
         }
 
         public bool TryPointer(Vector2 screen, out RaycastHit hit) => TryRay(camera.ScreenPointToRay(screen), out hit);
 
         public bool TryAtLayout(TabletopPose pose, out RaycastHit hit)
         {
+            Physics.SyncTransforms();
             Vector3 point = converter.ToWorldPosition(pose);
             float highest = point.y;
-            foreach (Collider surface in surfaces)
-                if (surface.enabled && surface.gameObject.activeInHierarchy) highest = Mathf.Max(highest, surface.bounds.max.y);
+            PhysicsScene physicsScene = camera.gameObject.scene.GetPhysicsScene();
+            foreach (PhysicalTabletopSurface surface in PhysicalTabletopSurface.Registered)
+                if (surface != null && surface.ParticipatesIn(physicsScene) && surface.TryGetCollider(out Collider collider, out _))
+                    highest = Mathf.Max(highest, collider.bounds.max.y);
             point.y = highest + 2f;
             return TryRay(new Ray(point, Vector3.down), out hit);
         }
@@ -54,12 +74,14 @@ namespace ConsoleCards.Presentation.Interaction
         {
             Physics.SyncTransforms();
             closest = default;
+            if (!ValidateSetup()) return false;
             float distance = float.PositiveInfinity;
             bool found = false;
-            foreach (Collider surface in surfaces)
+            PhysicsScene physicsScene = camera.gameObject.scene.GetPhysicsScene();
+            foreach (PhysicalTabletopSurface surface in PhysicalTabletopSurface.Registered)
             {
-                if (!surface.enabled || !surface.gameObject.activeInHierarchy) continue;
-                if (surface.Raycast(ray, out RaycastHit hit, float.MaxValue)
+                if (surface == null || !surface.ParticipatesIn(physicsScene) || !surface.TryGetCollider(out Collider collider, out _)) continue;
+                if (collider.Raycast(ray, out RaycastHit hit, float.MaxValue)
                     && Vector3.Dot(hit.normal, Vector3.up) > 0.1f && hit.distance < distance)
                 { closest = hit; distance = hit.distance; found = true; }
             }

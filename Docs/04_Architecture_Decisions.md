@@ -401,6 +401,8 @@ This file records accepted or proposed Architecture Decision Records. A decision
 
 **Decision:** Use one reusable physical tabletop interaction model initially for loose Cards, Pawns, Tokens, and Dice. The real fixed Table and Game Boards provide explicitly authored, valid physical collision surfaces. Their colliders are editable with the corresponding Table/Board and follow its Transform and scale; decorative mesh details are not gameplay authority.
 
+**Approved surface contract:** A `PhysicalTabletopSurface` component opts in an enabled, non-trigger, fixed Collider on the same GameObject. The single local Collider is resolved automatically; if multiple colliders exist, the authored top Collider is selected explicitly. Enabled surface components register/unregister through their lifecycle; the shared query reads live registrations in the Camera's physics scene, not a list of model references, names, or hierarchy paths. This is a Presentation-only collider membership registry, not globally stored Match State or a service locator. Table/Board models can be replaced independently; placing the authored collider on a child makes its area follow the model Transform/scale. Missing or invalid surface setup is diagnosed in the Inspector and runtime logs. Disabling a surface excludes it from placement; disabling its Collider/GameObject also removes physical collision. Existing session-owned Board visibility remains separate from surface discovery.
+
 **Physical interaction:**
 
 - Toolbox placement raycasts valid Table/Board physical surfaces, not the mathematical placement plane or `TabletopSurfaceProxy`. A valid hit supplies the preview and initial 3D placement; no valid hit means invalid/hidden preview and no creation commit.

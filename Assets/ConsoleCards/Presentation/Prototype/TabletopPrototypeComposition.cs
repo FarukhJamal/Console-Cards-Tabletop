@@ -51,7 +51,8 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal PawnView prototypePawnPrefab;
         [SerializeField] internal TokenView prototypeTokenPrefab;
         [SerializeField] internal DieView prototypeDiePrefab;
-        [SerializeField] private Collider[] physicalSurfaces;
+        // Optional existing Board visibility only; placement discovery uses PhysicalTabletopSurface registration.
+        [Tooltip("Optional session-owned Board collider to hide outside Game Templates. Not a placement-surface reference; add PhysicalTabletopSurface to opt a collider in.")]
         [SerializeField] private Collider gameBoardPhysicalSurface;
         [SerializeField] private PhysicalInteractionConfig physicalInteraction = new PhysicalInteractionConfig();
         private PhysicalTabletopSurfaces physicalSurfaceQuery;
@@ -4270,7 +4271,8 @@ namespace ConsoleCards.Presentation.Prototype
         {
             if (gameBoardPhysicalSurface != null)
                 gameBoardPhysicalSurface.enabled = activeSession.Selection.Kind == TabletopSessionKind.GameTemplate;
-            physicalSurfaceQuery = new PhysicalTabletopSurfaces(targetCamera, coordinateConverter, physicalSurfaces);
+            physicalSurfaceQuery = new PhysicalTabletopSurfaces(targetCamera, coordinateConverter);
+            physicalSurfaceQuery.ValidateSetup();
             physicalAuthority = new LocalPhysicalObjectAuthority(matchState, activeSession.Request.ActivePlayerIds,
                 () => localPlayerId, targetCamera, physicalSurfaceQuery, target => presentationTransitions.Stop(target, false),
                 physicalInteraction);
