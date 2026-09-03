@@ -118,7 +118,7 @@ namespace ConsoleCards.GameTemplates
     }
 
     /// <summary>
-    /// Minimum in-memory catalog used by Session Entry. It catalogs setup data, not Game rules.
+    /// Minimum in-memory catalog used by in-simulator Template loading. It catalogs setup data, not Game rules.
     /// </summary>
     public sealed class GameTemplateCatalog
     {
@@ -271,7 +271,7 @@ namespace ConsoleCards.GameTemplates
     }
 
     /// <summary>
-    /// Validates a Session Entry request before exposing an authoritative local session.
+    /// Validates a table-session construction request before exposing an authoritative local session.
     /// </summary>
     public sealed class TabletopSessionBootstrapService
     {
@@ -294,7 +294,7 @@ namespace ConsoleCards.GameTemplates
                 }
                 else if (!gameTemplateCatalog.TryGet(request.Selection.GameTemplateId, out registration))
                 {
-                    Add(issues, "TemplateNotRegistered", "The selected Game Template is not registered for Session Entry.");
+                    Add(issues, "TemplateNotRegistered", "The selected Game Template is not registered for loading.");
                 }
             }
 
@@ -368,18 +368,18 @@ namespace ConsoleCards.GameTemplates
             List<TabletopSessionBootstrapIssue> issues = new List<TabletopSessionBootstrapIssue>();
             if (request == null)
             {
-                Add(issues, "SessionRequestRequired", "A Session Entry request is required.");
+                Add(issues, "SessionRequestRequired", "A table-session construction request is required.");
                 return issues;
             }
 
             if (request.RequestingPlayerId.IsEmpty)
             {
-                Add(issues, "RequestingPlayerRequired", "Session Entry requires an initiating Player identity.");
+                Add(issues, "RequestingPlayerRequired", "Table replacement requires an initiating Player identity.");
             }
 
             if (request.MatchId.IsEmpty)
             {
-                Add(issues, "MatchIdEmpty", "Session Entry requires a non-empty Match ID.");
+                Add(issues, "MatchIdEmpty", "Table-session construction requires a non-empty Match ID.");
             }
 
             if (!Enum.IsDefined(typeof(TabletopSessionKind), request.Selection.Kind))
@@ -399,7 +399,7 @@ namespace ConsoleCards.GameTemplates
 
             if (request.ActivePlayerIds.Count < 1 || request.ActivePlayerIds.Count > 8)
             {
-                Add(issues, "ActivePlayerCountInvalid", "Session Entry supports between one and eight active Players.");
+                Add(issues, "ActivePlayerCountInvalid", "Table-session construction supports between one and eight active Players.");
             }
 
             HashSet<PlayerId> seenPlayers = new HashSet<PlayerId>();

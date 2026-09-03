@@ -109,6 +109,26 @@ namespace ConsoleCards.Tests.EditMode.Application
             Assert.That(match.Revision, Is.Zero);
         }
 
+        [TestCase(TabletopComponentKind.Deck)]
+        [TestCase(TabletopComponentKind.Stack)]
+        public void ContainerSurfaceHeight_IsCapturedAndRestoredWithLayoutPose(TabletopComponentKind kind)
+        {
+            CreateTabletopComponentUseCase create = new CreateTabletopComponentUseCase(
+                new GuidTabletopComponentIdentitySource(), resolveContainerSurfaceHeight: _ => 2.1f);
+            TabletopPose pose = new TabletopPose(new TableCoordinate(1d, 2d), 35f, 2, 800);
+            CreateTabletopComponentResult result = create.Execute(match, new[] { actor },
+                new CreateTabletopComponentRequest(
+                    new CommandContext(CommandId.New(), match.Id, actor, match.Revision), kind, pose));
+            Assert.That(result.Succeeded, Is.True);
+            GameTemplateInitialSnapshot snapshot = GameTemplateInitialSnapshot.Capture(match);
+            match.ContainerPlacements[result.ContainerId].SetPose(TabletopPose.Default, 4.1f);
+
+            MatchState restored = snapshot.Restore();
+            Assert.That(restored.ContainerPlacements[result.ContainerId].Pose, Is.EqualTo(pose));
+            Assert.That(restored.ContainerPlacements[result.ContainerId].SurfaceHeight, Is.EqualTo(2.1f));
+            Assert.That(restored.Revision, Is.EqualTo(result.Revision));
+        }
+
         [TestCase(TabletopComponentKind.Card)] [TestCase(TabletopComponentKind.Pawn)]
         [TestCase(TabletopComponentKind.Token)] [TestCase(TabletopComponentKind.Die)]
         public void LooseCreationWithoutSurface_DoesNotCommit(TabletopComponentKind kind)

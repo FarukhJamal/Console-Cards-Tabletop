@@ -1,7 +1,7 @@
 # Console Cards — Milestones and Roadmap
 
 **Document ID:** 16_Milestones_And_Roadmap  
-**Version:** 1.10
+**Version:** 1.11
 
 **Status:** Approved
 **Planning basis:** One developer, approximately 30–35 focused hours per week.
@@ -256,13 +256,13 @@ Exit:
 **Authority:** `18_Trap_Floor_Game_Requirements.md`
 **Prerequisite:** M4 and M4.1 are complete. OD-014 still governs which Player-count layouts may be claimed as supported. OD-018 must resolve any missing readable content or physical Component definition needed for Players to know what to do, but it does not require coded execution of those rules. Do not infer missing rules.
 
-**Current status:** The Template-driven tabletop, `6 x 6` Board, authoritative physical `2d6`, Floorfall targeting assistance, Session Entry, Empty/Custom Table, Component Toolbox, Floormaster Search lifecycle assistance, and prototype round/phase orchestration are implemented foundations. Search lifecycle and round orchestration are optional/prototype assistance rather than required core play.
+**Current status:** The Template-driven tabletop, `6 x 6` Board, authoritative physical `2d6`, Floorfall targeting assistance, direct Empty Table simulator startup, in-simulator Game Template loading, Component Toolbox, Floormaster Search lifecycle assistance, and prototype round/phase orchestration are implemented foundations. Search lifecycle and round orchestration are optional/prototype assistance rather than required core play.
 
 ### Completed Shared Foundation
 
-The completed Session Entry + Component Toolbox Foundation provides:
+The completed Template Loading + Component Toolbox Foundation provides:
 
-- explicit selection of Empty/Custom Table or an available Game Template before Match construction;
+- direct Empty/Custom Table startup and in-simulator loading of available Game Templates;
 - authoritative toolbox-created Card, Deck, Stack/pile, Pawn/meeple, Token/counter, and Die instances;
 - first-class generic Dice and actor-aware authoritative Roll;
 - Trap Floor's two d6 through the same generic Die capability; and
@@ -274,13 +274,13 @@ This history remains complete. It does not make assisted Trap Floor automation m
 
 Complete Trap Floor as a manually playable Game Template by prioritizing the shared physical capabilities and readable Game content needed for Players to carry out the rules themselves:
 
-- Load the approved starting Template exactly once through Session Entry.
+- Load the approved starting Template through the in-simulator Games / Templates panel.
 - Present the fixed `6 x 6` Floor Card Board and required physical Components readably.
 - Preserve the separate 36-Card Floormaster's Deck composition of 14 Trap, 14 Coin, and 8 Item Cards, with draw-left, discard-right, and exhaustion reshuffle as Player-facing rules.
 - Present the universal Console/Slot setup, Controller Decks, Pawns, shared 50-coin supply, two d6, Rule Cards, Avatar Cards, Mode Cards, Item Slots, and starting poses required by the approved setup.
 - Ensure Players can manually draw, shuffle, flip, reorder, stack, transfer, discard, move Pawns/Tokens/coins, roll/reposition Dice, and move Cards among Hands, table, Consoles, Slots, Decks, Stacks, and other Containers as Trap Floor requires.
 - Provide enough readable Game content and instructions for Players to perform the 10-round `Start -> Search -> Trigger -> Floorfall -> End` loop and apply the approved Easy/Hard, cost, effect, elimination, and win/loss rules socially.
-- Keep Reset and Session Entry/exit behavior coherent.
+- Keep Reset, Clear Table, and in-simulator Template replacement behavior coherent.
 - Ensure optional assistance never prevents manual play, including after house-rule modification or Component substitution.
 
 The detailed Game Rules remain the intended Trap Floor design, but automatic execution is not G1 scope. Floorfall targeting may remain optional assistance. The Floormaster lifecycle may remain optional/prototype assistance. Prototype round/phase orchestration may remain experimental optional infrastructure.
@@ -344,7 +344,7 @@ Deliver:
 - Separate Hand, personal Play Area, and individual Card visibility configuration; secure network delivery remains M7.
 - Large, central, readable high-stakes Card-choice UI with hide/reopen and explicit hover, selection, confirmation, and registered-choice feedback.
 - Regression and interaction pass across Empty Table, Trap Floor, and Super Leroy Sisters.
-- Verification that Session Entry does not auto-load a Game, Empty/Custom Table is a valid Match path, and toolbox-created pieces remain authoritative.
+- Verification that startup enters an Empty/Custom Table without auto-loading a Game, in-simulator replacement preserves authoritative construction, and toolbox-created pieces remain authoritative.
 - Verification of structural one-to-eight Seat capability and the standard four-Player, eight-Player, and compact four-Player authored layouts. Unresolved Player-count mappings must not be claimed as implemented.
 - Verification that the table does not grow and core gameplay remains centered.
 - Verification of marquee selection, landing indicators, independent visibility configuration, and high-stakes Card-choice UI.
@@ -400,7 +400,7 @@ These remain planned Platform work but are not on the immediate Phase 1 critical
 - M4 is authorized to implement only the confirmed standard four-Player, compact four-Player, and eight-Player authored layouts. OD-014 retains the missing one-to-three and five-to-seven mappings without blocking that confirmed work.
 - OD-015 visibility work and OD-016 marquee/group-landing work remain required before Phase 1 closure but do not block the M4 foundation. An approved Game may pull a necessary subset earlier.
 - Trap Floor and Super Leroy Sisters are separate Game-specific Board types and Game Templates.
-- Session Entry + Component Toolbox, generic Dice, Floormaster lifecycle assistance, and prototype Trap Floor round/phase orchestration preserve their completed implementation history. The latter two remain optional/prototype assistance.
+- The superseded Session Entry implementation remains completed history; direct Empty Table startup, in-simulator Template loading, Component Toolbox, generic Dice, Floormaster lifecycle assistance, and prototype Trap Floor round/phase orchestration define the current direction. The latter two remain optional/prototype assistance.
 - Empty/Custom Table is a first-class product path, not a debug mode and not dependent on Game-specific Board or rule content.
 - Template-created and toolbox-created components share authoritative Runtime State; a Game Template owns setup/content/layout, not generic component types.
 - New loose Cards/Pawns/Tokens/Dice, including Card batches and duplicates, require valid Table/Board surface hits. Released physical objects may fall off the Table without snap-back; Deck/Stack/Console bodies retain existing non-physical positioning and applicable ADR-024 authored-area rules. Freeform and house-rule play remain available without Game-rule enforcement.

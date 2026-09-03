@@ -15,11 +15,11 @@ namespace ConsoleCards.Presentation.UI
             if (sessionTitleLabel == null || resetButton == null || returnButton == null)
             {
                 throw new InvalidOperationException(
-                    "PrototypeActiveSessionToolbarView requires its title, Reset Button, and Return Button references.");
+                    "PrototypeActiveSessionToolbarView requires its title, Reset Button, and Games / Templates Button references.");
             }
         }
 
-        public void Bind(string sessionTitle, Action resetSession, Action returnToSessionEntry)
+        public void Bind(string sessionTitle, Action resetSession, Action openGameTemplates)
         {
             if (string.IsNullOrWhiteSpace(sessionTitle))
             {
@@ -31,9 +31,9 @@ namespace ConsoleCards.Presentation.UI
                 throw new ArgumentNullException(nameof(resetSession));
             }
 
-            if (returnToSessionEntry == null)
+            if (openGameTemplates == null)
             {
-                throw new ArgumentNullException(nameof(returnToSessionEntry));
+                throw new ArgumentNullException(nameof(openGameTemplates));
             }
 
             ValidateReferences();
@@ -41,7 +41,7 @@ namespace ConsoleCards.Presentation.UI
             resetButton.onClick.RemoveAllListeners();
             resetButton.onClick.AddListener(resetSession.Invoke);
             returnButton.onClick.RemoveAllListeners();
-            returnButton.onClick.AddListener(returnToSessionEntry.Invoke);
+            returnButton.onClick.AddListener(openGameTemplates.Invoke);
         }
 
         public void Unbind()

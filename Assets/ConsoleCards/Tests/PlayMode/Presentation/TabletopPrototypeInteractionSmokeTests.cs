@@ -1,6 +1,7 @@
 using System.Collections;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
+using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
@@ -555,6 +556,8 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(scene.IsValid(), Is.True);
             loadedScene = scene;
             fixture = new SceneFixture(scene);
+            fixture.Composition.LoadGameTemplate(
+                TrapFloorTemplateFactory.CreateStandardFourPlayer().Template.Id);
             fixture.AssertInitialized();
             Physics.SyncTransforms();
         }

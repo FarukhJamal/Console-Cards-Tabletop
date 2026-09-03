@@ -199,12 +199,15 @@ namespace ConsoleCards.Application.UseCases
         private const int IdentityAllocationAttempts = 32;
         private readonly ITabletopComponentIdentitySource identitySource;
         private readonly IPhysicalPlacementResolver physicalPlacement;
+        private readonly Func<TabletopPose, float?> resolveContainerSurfaceHeight;
 
         public CreateTabletopComponentUseCase(ITabletopComponentIdentitySource identitySource,
-            IPhysicalPlacementResolver physicalPlacement = null)
+            IPhysicalPlacementResolver physicalPlacement = null,
+            Func<TabletopPose, float?> resolveContainerSurfaceHeight = null)
         {
             this.identitySource = identitySource ?? throw new ArgumentNullException(nameof(identitySource));
             this.physicalPlacement = physicalPlacement;
+            this.resolveContainerSurfaceHeight = resolveContainerSurfaceHeight;
         }
 
         public CreateTabletopComponentResult Execute(
@@ -221,6 +224,14 @@ namespace ConsoleCards.Application.UseCases
             if (request.ComponentKind == TabletopComponentKind.Deck
                 || request.ComponentKind == TabletopComponentKind.Stack)
             {
+                float? surfaceHeight = resolveContainerSurfaceHeight?.Invoke(request.InitialPose);
+                if (resolveContainerSurfaceHeight != null && !surfaceHeight.HasValue)
+                {
+                    return CreateTabletopComponentResult.Failure(
+                        CommandResultStatus.Rejected,
+                        CreateTabletopComponentError.PhysicalSurfaceRequired);
+                }
+
                 if (!TryAllocateContainerId(matchState, out ContainerId containerId))
                 {
                     return CreateTabletopComponentResult.Failure(
@@ -238,7 +249,7 @@ namespace ConsoleCards.Application.UseCases
                         SeatId.Empty,
                         ObjectVisibility.Public,
                         0),
-                    new ContainerPlacementState(containerId, request.InitialPose));
+                    new ContainerPlacementState(containerId, request.InitialPose, surfaceHeight));
                 long revision = matchState.AdvanceRevision();
                 return CreateTabletopComponentResult.ContainerAccepted(
                     revision,

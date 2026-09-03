@@ -93,7 +93,7 @@ namespace ConsoleCards.GameTemplates
                 new List<ContainerPlacementSnapshot>(matchState.ContainerPlacements.Count);
             foreach (ContainerPlacementState placement in matchState.ContainerPlacements.Values)
             {
-                placementSnapshots.Add(new ContainerPlacementSnapshot(placement.ContainerId, placement.Pose));
+                placementSnapshots.Add(new ContainerPlacementSnapshot(placement.ContainerId, placement.Pose, placement.SurfaceHeight));
             }
 
             List<SeatSnapshot> seatSnapshots = new List<SeatSnapshot>(matchState.Seats.Count);
@@ -193,7 +193,7 @@ namespace ConsoleCards.GameTemplates
             for (int i = 0; i < containerPlacements.Count; i++)
             {
                 ContainerPlacementSnapshot placement = containerPlacements[i];
-                restoredPlacements.Add(new ContainerPlacementState(placement.ContainerId, placement.Pose));
+                restoredPlacements.Add(new ContainerPlacementState(placement.ContainerId, placement.Pose, placement.SurfaceHeight));
             }
 
             List<SeatState> restoredSeats = new List<SeatState>(seats.Count);
@@ -317,14 +317,16 @@ namespace ConsoleCards.GameTemplates
 
         private sealed class ContainerPlacementSnapshot
         {
-            public ContainerPlacementSnapshot(ContainerId containerId, TabletopPose pose)
+            public ContainerPlacementSnapshot(ContainerId containerId, TabletopPose pose, float? surfaceHeight)
             {
                 ContainerId = containerId;
                 Pose = pose;
+                SurfaceHeight = surfaceHeight;
             }
 
             public ContainerId ContainerId { get; }
             public TabletopPose Pose { get; }
+            public float? SurfaceHeight { get; }
         }
 
         private sealed class SeatSnapshot

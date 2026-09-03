@@ -28,7 +28,7 @@ namespace ConsoleCards.Presentation.UI
         {
             if (string.IsNullOrWhiteSpace(displayName))
             {
-                throw new ArgumentException("A Session Entry option requires a display name.", nameof(displayName));
+                throw new ArgumentException("A Game Template option requires a display name.", nameof(displayName));
             }
 
             if (selected == null)

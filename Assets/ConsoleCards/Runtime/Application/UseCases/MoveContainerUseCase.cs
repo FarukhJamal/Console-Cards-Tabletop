@@ -1,5 +1,7 @@
+using System;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
+using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Match;
 
@@ -11,6 +13,13 @@ namespace ConsoleCards.Application.UseCases
     /// </summary>
     public sealed class MoveContainerUseCase
     {
+        private readonly Func<TabletopPose, float?> resolveSurfaceHeight;
+
+        public MoveContainerUseCase(Func<TabletopPose, float?> resolveSurfaceHeight = null)
+        {
+            this.resolveSurfaceHeight = resolveSurfaceHeight;
+        }
+
         public MoveContainerResult Execute(MatchState matchState, MoveContainerCommand command)
         {
             if (matchState == null)
@@ -70,7 +79,15 @@ namespace ConsoleCards.Application.UseCases
                     MoveContainerError.RevisionOverflow);
             }
 
-            placement.SetPose(command.TargetPose);
+            float? surfaceHeight = resolveSurfaceHeight?.Invoke(command.TargetPose);
+            if (resolveSurfaceHeight != null && !surfaceHeight.HasValue)
+            {
+                return MoveContainerResult.Failure(
+                    CommandResultStatus.Rejected,
+                    MoveContainerError.PhysicalSurfaceRequired);
+            }
+
+            placement.SetPose(command.TargetPose, surfaceHeight);
             long revision = matchState.AdvanceRevision();
             return MoveContainerResult.Accepted(revision);
         }

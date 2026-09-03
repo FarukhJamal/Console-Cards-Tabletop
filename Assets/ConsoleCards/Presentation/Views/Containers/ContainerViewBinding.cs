@@ -33,6 +33,19 @@ namespace ConsoleCards.Presentation.Views.Containers
         public const float MinimumPhysicalCardSeparation = 0.02f;
         public const float DefaultCardSurfaceClearance = 0.025f;
 
+        public static Vector3 PlacementWorldPosition(
+            ContainerPlacementState placement,
+            TabletopCoordinateConverter converter)
+        {
+            Vector3 position = converter.ToWorldPosition(placement.Pose);
+            if (placement.SurfaceHeight.HasValue)
+            {
+                position.y = placement.SurfaceHeight.Value;
+            }
+
+            return position;
+        }
+
         public static void ValidateContainer(
             ContainerState container,
             ContainerKind expectedKind)

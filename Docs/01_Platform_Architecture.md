@@ -1,7 +1,7 @@
 # Console Cards — Platform Architecture
 
 **Document ID:** 01_Platform_Architecture  
-**Version:** 1.3
+**Version:** 1.4
 
 **Status:** Approved with Open Decisions
 **Depends on:** `00_Product_Vision.md`, `02_Terminology.md`, `03_Project_Principles.md`
@@ -236,16 +236,17 @@ Owns:
 - Snap bypass.
 - Object-control requests.
 
-### 6.4.1 Session Entry and Component Toolbox
+### 6.4.1 Game Template Loading and Component Toolbox
 
 Owns:
 
-- The explicit pre-Match choice between Empty/Custom Table and available Game Templates.
-- Validation and handoff to authoritative Match/session construction.
+- Direct simulator startup with a fresh Empty/Custom Table.
+- In-simulator listing and selection of registered Game Templates.
+- Validation and handoff to authoritative replacement Match/session construction.
 - In-session requests to create supported generic Tabletop Objects.
 - The initial Platform catalog of Card, Deck, Stack/pile, Pawn/meeple, Token/counter, and Die.
 
-Session Entry and toolbox UI remain Presentation concerns, while accepted construction and mutation use Application/Core boundaries. Neither path may create Presentation-only objects that lack authoritative Runtime State.
+The Games / Templates panel and toolbox UI remain Presentation concerns, while accepted construction and mutation use Application/Core boundaries. Neither path may create Presentation-only objects that lack authoritative Runtime State.
 
 ### 6.5 Play Areas
 
@@ -292,7 +293,7 @@ Owns:
 
 A Game Template is content, not a running Match or a rules engine.
 
-A Game Template is selected explicitly through Session Entry. It may instantiate generic component types, but it does not own or redefine those types. Empty/Custom Table entry remains valid without a Game-specific Board or Game-specific rules.
+A Game Template is selected explicitly through the in-simulator Games / Templates panel. It may instantiate generic component types, but it does not own or redefine those types. Direct Empty/Custom Table startup and Clear Table remain valid without a Game-specific Board or Game-specific rules.
 
 ### 6.8 Presentation
 
@@ -325,7 +326,7 @@ Owns dependency composition and startup.
 
 Bootstrap must not become a universal `GameManager`.
 
-Bootstrap must expose Session Entry before Match construction. It must not force Trap Floor or any other Game Template merely because Play begins. After the player selects Empty/Custom Table or a Game Template, Bootstrap wires the validated authoritative Match/session and its Presentation.
+Bootstrap constructs a fresh Empty/Custom Match and enters the simulator directly. It must not force Trap Floor or any other Game Template merely because Play begins. In-simulator Template loading and Clear Table construct and validate a candidate Match/session before replacing the active Runtime State and Presentation; replacement does not reload the Unity scene.
 
 ## 7. Core Extension Points
 

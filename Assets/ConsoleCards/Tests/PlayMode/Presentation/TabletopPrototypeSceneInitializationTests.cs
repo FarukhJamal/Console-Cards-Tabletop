@@ -1,8 +1,9 @@
 using System.Collections;
 using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Identifiers;
+using ConsoleCards.GameTemplates;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Prototype;
-using ConsoleCards.Presentation.Views;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -13,7 +14,6 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
     public sealed class TabletopPrototypeSceneInitializationTests
     {
         private const string ScenePath = "Assets/ConsoleCards/Presentation/Scenes/TabletopPrototype.unity";
-        private const float PositionTolerance = 0.0001f;
 
         [UnityTest]
         public IEnumerator TabletopPrototypeScene_LoadsAndInitializesLocalPrototypeComposition()
@@ -39,9 +39,9 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 FindPath(scene, "Interaction/TabletopInput").GetComponent<TabletopObjectInputAdapter>();
             TabletopCameraInputAdapter cameraInputAdapter =
                 FindPath(scene, "CameraRig").GetComponent<TabletopCameraInputAdapter>();
-            CardView cardView = FindPath(scene, "TabletopObjects/PrototypeCard").GetComponent<CardView>();
-            PawnView pawnView = FindPath(scene, "TabletopObjects/PrototypePawn").GetComponent<PawnView>();
-            TokenView tokenView = FindPath(scene, "TabletopObjects/PrototypeToken").GetComponent<TokenView>();
+            GameObject cardObject = FindPath(scene, "TabletopObjects/PrototypeCard");
+            GameObject pawnObject = FindPath(scene, "TabletopObjects/PrototypePawn");
+            GameObject tokenObject = FindPath(scene, "TabletopObjects/PrototypeToken");
 
             Assert.That(composition.IsInitialized, Is.True);
             Assert.That(frameCoordinator.enabled, Is.True);
@@ -52,24 +52,15 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(composition.SelectionPresenter, Is.Not.Null);
             Assert.That(frameCoordinator.SelectionPresenter, Is.SameAs(composition.SelectionPresenter));
 
-            Assert.That(cardView.IsBound, Is.True);
-            Assert.That(pawnView.IsBound, Is.True);
-            Assert.That(tokenView.IsBound, Is.True);
-            Assert.That(cardView.CardState, Is.SameAs(composition.CardState));
-            Assert.That(pawnView.PawnState, Is.SameAs(composition.PawnState));
-            Assert.That(tokenView.TokenState, Is.SameAs(composition.TokenState));
-            Assert.That(cardView.BoundState, Is.SameAs(composition.MatchState.GetObject(composition.CardState.BaseState.Id)));
-            Assert.That(pawnView.BoundState, Is.SameAs(composition.MatchState.GetObject(composition.PawnState.BaseState.Id)));
-            Assert.That(tokenView.BoundState, Is.SameAs(composition.MatchState.GetObject(composition.TokenState.BaseState.Id)));
-
-            AssertPosition(cardView.transform.position, -2f, 0f, 0f);
-            AssertPosition(pawnView.transform.position, -3.5f, 0f, -0.5f);
-            AssertPosition(tokenView.transform.position, 3.5f, 0f, -0.5f);
-            Assert.That(composition.CardState.Face, Is.EqualTo(CardFace.FaceUp));
-            Assert.That(cardView.DisplayedFace, Is.EqualTo(CardFace.FaceUp));
-            Assert.That(FindPath(scene, "TabletopObjects/PrototypeCard/SelectionHighlightRoot").activeSelf, Is.False);
-            Assert.That(FindPath(scene, "TabletopObjects/PrototypePawn/SelectionHighlightRoot").activeSelf, Is.False);
-            Assert.That(FindPath(scene, "TabletopObjects/PrototypeToken/SelectionHighlightRoot").activeSelf, Is.False);
+            Assert.That(composition.ActiveSession.Selection.Kind, Is.EqualTo(TabletopSessionKind.EmptyCustom));
+            Assert.That(composition.MatchState.GameTemplateId, Is.EqualTo(GameTemplateId.Empty));
+            Assert.That(composition.MatchState.ObjectCount, Is.EqualTo(0));
+            Assert.That(composition.MatchState.Containers.Count, Is.EqualTo(0));
+            Assert.That(composition.MatchState.Seats.Count, Is.EqualTo(0));
+            Assert.That(composition.MatchState.PlayAreas.Count, Is.EqualTo(0));
+            Assert.That(cardObject.activeSelf, Is.False);
+            Assert.That(pawnObject.activeSelf, Is.False);
+            Assert.That(tokenObject.activeSelf, Is.False);
             Assert.That(composition.MatchState.Revision, Is.EqualTo(0));
             Assert.That(composition.LockService.Count, Is.EqualTo(0));
             Assert.That(composition.PreviewSession.IsActive, Is.False);
@@ -122,11 +113,5 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             return null;
         }
 
-        private static void AssertPosition(Vector3 actual, float expectedX, float expectedY, float expectedZ)
-        {
-            Assert.That(actual.x, Is.EqualTo(expectedX).Within(PositionTolerance));
-            Assert.That(actual.y, Is.EqualTo(expectedY).Within(PositionTolerance));
-            Assert.That(actual.z, Is.EqualTo(expectedZ).Within(PositionTolerance));
-        }
     }
 }

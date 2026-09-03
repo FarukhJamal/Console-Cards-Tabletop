@@ -145,8 +145,7 @@ namespace ConsoleCards.Presentation.Prototype
         private bool cardViewBoundByComposition;
         private bool pawnViewBoundByComposition;
         private bool tokenViewBoundByComposition;
-        private bool sessionEntryVisible;
-        private bool cameraInputSuspendedForSessionEntry;
+        private bool gameTemplatesPanelVisible;
         private PrototypeRuntimeUiRoot runtimeUi;
 
         private MatchState matchState;
@@ -154,8 +153,9 @@ namespace ConsoleCards.Presentation.Prototype
         private TabletopSessionBootstrapService sessionBootstrapService;
         private GameTemplateCatalog sessionTemplateCatalog;
         private TrapFloorTemplateDefinition availableTrapFloorTemplate;
-        private PlayerId sessionEntryActorId;
-        private string sessionEntryError;
+        private PlayerId tableActionActorId;
+        private string templateCatalogError;
+        private string gameTemplatesPanelError;
         private PrototypeTemplateContext prototypeTemplateContext;
         private TrapFloorTemplateDefinition trapFloorTemplate;
         private TrapFloorFloorfallState floorfallState;
@@ -242,7 +242,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         public bool IsInitialized { get; private set; }
 
-        public bool IsSessionEntryVisible => sessionEntryVisible;
+        public bool IsGameTemplatesPanelVisible => gameTemplatesPanelVisible;
 
         public TabletopSession ActiveSession => activeSession;
 
@@ -352,10 +352,9 @@ namespace ConsoleCards.Presentation.Prototype
 
             if (activeSession == null)
             {
-                throw new InvalidOperationException("Session Entry must construct an authoritative session before tabletop initialization.");
+                throw new InvalidOperationException("An authoritative table session must be constructed before tabletop initialization.");
             }
 
-            ResumeCameraInputForSession();
             if (activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom)
             {
                 InitializeEmptyTableSession(restoreInitialBaseline);
@@ -421,6 +420,7 @@ namespace ConsoleCards.Presentation.Prototype
                 ValidateCommonConfiguration();
                 ValidateInputPreInitializationState();
                 presentationTransitions = new TabletopPresentationTransitionController();
+                HideSceneOwnedTemplatePresentation();
                 interactionOwnerId = InteractionOwnerId.New();
                 coordinateConverter = new TabletopCoordinateConverter(
                     worldUnitsPerTableUnit,
@@ -692,6 +692,8 @@ namespace ConsoleCards.Presentation.Prototype
             toolboxPlacementHintActive = false;
             toolboxPlacementSubject = null;
             runtimeUi?.ClearActiveSessionTransientUi();
+            gameTemplatesPanelVisible = false;
+            runtimeUi?.HideGameTemplatesPanel();
             if (!preserveTemplateContext)
             {
                 prototypeTemplateContext = null;
@@ -1195,7 +1197,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void Start()
         {
-            if (IsInitialized || sessionEntryVisible)
+            if (IsInitialized)
             {
                 return;
             }
@@ -1203,18 +1205,19 @@ namespace ConsoleCards.Presentation.Prototype
             try
             {
                 CreateRuntimeUi();
-                PrepareSessionEntry();
+                PrepareTemplateCatalog();
+                if (!TryReplaceTable(TabletopSessionSelection.EmptyCustom))
+                {
+                    throw new InvalidOperationException(
+                        gameTemplatesPanelError ?? "Empty Table startup failed.");
+                }
             }
             catch (Exception exception)
             {
                 Debug.LogError(
-                    $"TabletopPrototypeComposition failed to prepare Session Entry: {exception.Message}",
+                    $"TabletopPrototypeComposition failed to start an Empty Table: {exception.Message}",
                     this);
-                sessionEntryError = exception.Message;
-                sessionEntryVisible = true;
-                HideSessionPresentation();
-                SuspendCameraInputForSessionEntry();
-                RefreshSessionEntryUi();
+                gameTemplatesPanelError = exception.Message;
             }
         }
 
@@ -1251,11 +1254,6 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void OnGUI()
         {
-            if (sessionEntryVisible)
-            {
-                return;
-            }
-
             if (!IsInitialized)
             {
                 return;
@@ -1633,7 +1631,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private bool CommitContainerMove(ContainerId containerId, TabletopPose requestedPose)
         {
-            MoveContainerResult result = new MoveContainerUseCase().Execute(
+            MoveContainerResult result = new MoveContainerUseCase(physicalSurfaceQuery.ResolveContainerSurfaceHeight).Execute(
                 matchState,
                 new MoveContainerCommand(CreateCommandContext(), containerId, requestedPose));
             if (!result.Succeeded)
@@ -2134,39 +2132,45 @@ namespace ConsoleCards.Presentation.Prototype
             selectionPresenter.Refresh();
         }
 
-        public void SelectEmptyTableSession()
+        public void ClearTable()
         {
-            TryEnterSession(TabletopSessionSelection.EmptyCustom);
+            RequestTableReplacement(TabletopSessionSelection.EmptyCustom);
         }
 
-        public void SelectGameTemplateSession(GameTemplateId gameTemplateId)
+        public void LoadGameTemplate(GameTemplateId gameTemplateId)
         {
-            TryEnterSession(TabletopSessionSelection.FromGameTemplate(gameTemplateId));
+            RequestTableReplacement(TabletopSessionSelection.FromGameTemplate(gameTemplateId));
         }
 
-        public void ReturnToSessionEntry()
+        public void ToggleGameTemplatesPanel()
         {
-            if (sessionEntryVisible)
+            if (!IsInitialized)
             {
                 return;
             }
 
-            Shutdown();
-            activeSession = null;
-            prototypeTemplateContext = null;
-            trapFloorTemplate = null;
-            sessionEntryError = null;
-            HideSessionPresentation();
-            SuspendCameraInputForSessionEntry();
-            sessionEntryVisible = true;
-            RefreshSessionEntryUi();
+            if (gameTemplatesPanelVisible)
+            {
+                CloseGameTemplatesPanel();
+                return;
+            }
+
+            gameTemplatesPanelVisible = true;
+            RefreshGameTemplatesPanelUi();
         }
 
-        private void PrepareSessionEntry()
+        private void CloseGameTemplatesPanel()
+        {
+            gameTemplatesPanelVisible = false;
+            runtimeUi?.HideGameTemplatesPanel();
+        }
+
+        private void PrepareTemplateCatalog()
         {
             sessionBootstrapService = new TabletopSessionBootstrapService();
-            sessionEntryActorId = PlayerId.New();
-            sessionEntryError = null;
+            tableActionActorId = PlayerId.New();
+            templateCatalogError = null;
+            gameTemplatesPanelError = null;
             try
             {
                 availableTrapFloorTemplate = TrapFloorTemplateFactory.CreateStandardFourPlayer();
@@ -2182,16 +2186,8 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 availableTrapFloorTemplate = null;
                 sessionTemplateCatalog = new GameTemplateCatalog(Array.Empty<GameTemplateRegistration>());
-                sessionEntryError = $"Trap Floor is unavailable: {exception.Message}";
+                templateCatalogError = $"Trap Floor is unavailable: {exception.Message}";
             }
-
-            activeSession = null;
-            prototypeTemplateContext = null;
-            trapFloorTemplate = null;
-            HideSessionPresentation();
-            SuspendCameraInputForSessionEntry();
-            sessionEntryVisible = true;
-            RefreshSessionEntryUi();
         }
 
         private void CreateRuntimeUi()
@@ -2209,26 +2205,30 @@ namespace ConsoleCards.Presentation.Prototype
             runtimeUi.ValidateReferences();
         }
 
-        private void RefreshSessionEntryUi()
+        private void RefreshGameTemplatesPanelUi()
         {
-            if (runtimeUi == null || !sessionEntryVisible)
+            if (runtimeUi == null || !gameTemplatesPanelVisible)
             {
                 return;
             }
 
-            List<PrototypeSessionTemplateOption> options = new List<PrototypeSessionTemplateOption>();
+            List<PrototypeGameTemplateOption> options = new List<PrototypeGameTemplateOption>();
             if (sessionTemplateCatalog != null)
             {
                 foreach (GameTemplateRegistration registration in sessionTemplateCatalog.Registrations.Values)
                 {
                     GameTemplateId templateId = registration.Template.Id;
-                    options.Add(new PrototypeSessionTemplateOption(
+                    options.Add(new PrototypeGameTemplateOption(
                         registration.Template.DisplayName,
-                        () => SelectGameTemplateSession(templateId)));
+                        () => RequestTableReplacement(
+                            TabletopSessionSelection.FromGameTemplate(templateId))));
                 }
             }
 
-            runtimeUi.ShowSessionEntry(SelectEmptyTableSession, options, sessionEntryError);
+            runtimeUi.ShowGameTemplatesPanel(
+                () => RequestTableReplacement(TabletopSessionSelection.EmptyCustom),
+                options,
+                gameTemplatesPanelError ?? templateCatalogError);
         }
 
         private void ShowActiveSessionUi()
@@ -2244,7 +2244,7 @@ namespace ConsoleCards.Presentation.Prototype
             runtimeUi.ShowActiveSession(
                 sessionTitle,
                 ResetPrototype,
-                ReturnToSessionEntry,
+                ToggleGameTemplatesPanel,
                 CurrentStatusText(),
                 new PrototypeComponentToolboxBindings(
                     OpenCardQuantityPopup,
@@ -2259,7 +2259,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void RefreshRuntimeStatusUi()
         {
-            if (runtimeUi != null && IsInitialized && !sessionEntryVisible)
+            if (runtimeUi != null && IsInitialized)
             {
                 runtimeUi.SetStatusMessage(CurrentStatusText());
             }
@@ -2267,7 +2267,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void RefreshTrapFloorStatusUi()
         {
-            if (runtimeUi == null || sessionEntryVisible || !IsInitialized)
+            if (runtimeUi == null || !IsInitialized)
             {
                 return;
             }
@@ -2441,23 +2441,48 @@ namespace ConsoleCards.Presentation.Prototype
             runtimeUi?.ShowPlacementHint(toolboxPlacementSubject, rotationDegrees);
         }
 
-        private void TryEnterSession(TabletopSessionSelection selection)
+        private void RequestTableReplacement(TabletopSessionSelection selection)
         {
-            if (!sessionEntryVisible)
+            if (!IsInitialized || !HasCurrentTableContent())
             {
+                TryReplaceTable(selection);
                 return;
             }
 
+            string replacementName = ReplacementDisplayName(selection);
+            runtimeUi.ShowContextMenu(
+                new Vector2(Screen.width * 0.5f, Screen.height * 0.5f),
+                "REPLACE CURRENT TABLE?",
+                $"The current table contains content. Loading {replacementName} will replace it and establish a new Reset baseline.",
+                new[]
+                {
+                    new PrototypePopupActionOption(
+                        selection.Kind == TabletopSessionKind.EmptyCustom
+                            ? "Clear Table"
+                            : $"Load {replacementName}",
+                        true,
+                        () => TryReplaceTable(selection)),
+                    new PrototypePopupActionOption(
+                        "Cancel",
+                        true,
+                        CloseContextMenu),
+                },
+                CloseContextMenu,
+                DismissPopupFromSecondary);
+        }
+
+        private bool TryReplaceTable(TabletopSessionSelection selection)
+        {
             if (sessionBootstrapService == null || sessionTemplateCatalog == null)
             {
-                sessionEntryError = "Session Entry is not configured.";
-                runtimeUi?.SetSessionEntryError(sessionEntryError);
-                return;
+                gameTemplatesPanelError = "Game Template loading is not configured.";
+                runtimeUi?.SetGameTemplatesError(gameTemplatesPanelError);
+                return false;
             }
 
             List<PlayerId> activePlayerIds = CreatePrototypeActivePlayers(selection);
             TabletopSessionBootstrapRequest request = new TabletopSessionBootstrapRequest(
-                sessionEntryActorId,
+                tableActionActorId,
                 selection,
                 activePlayerIds,
                 MatchId.New());
@@ -2466,14 +2491,15 @@ namespace ConsoleCards.Presentation.Prototype
                 sessionTemplateCatalog);
             if (!result.Succeeded)
             {
-                sessionEntryError = FormatSessionBuildFailure(result.Issues);
-                runtimeUi?.SetSessionEntryError(sessionEntryError);
-                return;
+                gameTemplatesPanelError = FormatSessionBuildFailure(result.Issues);
+                runtimeUi?.SetGameTemplatesError(gameTemplatesPanelError);
+                return false;
             }
 
+            TrapFloorTemplateDefinition candidateTemplate = null;
+            PrototypeTemplateContext candidateContext = null;
             try
             {
-                activeSession = result.Session;
                 if (selection.Kind == TabletopSessionKind.GameTemplate)
                 {
                     if (availableTrapFloorTemplate == null
@@ -2483,36 +2509,95 @@ namespace ConsoleCards.Presentation.Prototype
                             "The selected Game Template has no registered prototype Presentation wiring.");
                     }
 
-                    trapFloorTemplate = availableTrapFloorTemplate;
-                    prototypeTemplateContext = CreateTrapFloorPrototypeContext(
-                        activeSession,
-                        trapFloorTemplate,
-                        sessionEntryActorId);
+                    candidateTemplate = availableTrapFloorTemplate;
+                    candidateContext = CreateTrapFloorPrototypeContext(
+                        result.Session,
+                        candidateTemplate,
+                        tableActionActorId);
                 }
-                else
+            }
+            catch (Exception exception)
+            {
+                gameTemplatesPanelError = exception.Message;
+                runtimeUi?.SetGameTemplatesError(gameTemplatesPanelError);
+                Debug.LogError($"Table replacement validation failed: {exception.Message}", this);
+                return false;
+            }
+
+            TabletopSession previousSession = activeSession;
+            PrototypeTemplateContext previousContext = prototypeTemplateContext;
+            TrapFloorTemplateDefinition previousTemplate = trapFloorTemplate;
+            bool hadActivePresentation = IsInitialized;
+
+            try
+            {
+                if (hadActivePresentation)
                 {
-                    trapFloorTemplate = null;
-                    prototypeTemplateContext = null;
+                    Shutdown();
                 }
 
-                sessionEntryError = null;
-                sessionEntryVisible = false;
+                activeSession = result.Session;
+                prototypeTemplateContext = candidateContext;
+                trapFloorTemplate = candidateTemplate;
                 InitializeActiveSession(false);
+                gameTemplatesPanelError = null;
+                gameTemplatesPanelVisible = false;
                 ShowActiveSessionUi();
+                return true;
             }
             catch (Exception exception)
             {
                 Shutdown();
-                activeSession = null;
-                prototypeTemplateContext = null;
-                trapFloorTemplate = null;
-                HideSessionPresentation();
-                SuspendCameraInputForSessionEntry();
-                sessionEntryError = exception.Message;
-                sessionEntryVisible = true;
-                RefreshSessionEntryUi();
-                Debug.LogError($"Session construction failed: {exception.Message}", this);
+                activeSession = previousSession;
+                prototypeTemplateContext = previousContext;
+                trapFloorTemplate = previousTemplate;
+                gameTemplatesPanelError = $"Table replacement failed: {exception.Message}";
+                Debug.LogError(gameTemplatesPanelError, this);
+
+                if (hadActivePresentation && previousSession != null)
+                {
+                    try
+                    {
+                        InitializeActiveSession(false);
+                        ShowActiveSessionUi();
+                        gameTemplatesPanelVisible = true;
+                        RefreshGameTemplatesPanelUi();
+                    }
+                    catch (Exception rollbackException)
+                    {
+                        Debug.LogError(
+                            $"Previous table presentation could not be restored: {rollbackException.Message}",
+                            this);
+                    }
+                }
+
+                return false;
             }
+        }
+
+        private bool HasCurrentTableContent()
+        {
+            return matchState != null
+                && (matchState.ObjectCount > 0
+                    || matchState.Containers.Count > 0
+                    || matchState.ContainerPlacements.Count > 0
+                    || matchState.Seats.Count > 0
+                    || matchState.PlacedConsoles.Count > 0
+                    || matchState.PlayAreas.Count > 0);
+        }
+
+        private string ReplacementDisplayName(TabletopSessionSelection selection)
+        {
+            if (selection.Kind == TabletopSessionKind.EmptyCustom)
+            {
+                return "a fresh Empty Table";
+            }
+
+            return sessionTemplateCatalog.TryGet(
+                    selection.GameTemplateId,
+                    out GameTemplateRegistration registration)
+                ? registration.Template.DisplayName
+                : "the selected Game Template";
         }
 
         private List<PlayerId> CreatePrototypeActivePlayers(TabletopSessionSelection selection)
@@ -2522,7 +2607,7 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 if (!sessionTemplateCatalog.TryGet(selection.GameTemplateId, out GameTemplateRegistration registration))
                 {
-                    return new List<PlayerId> { sessionEntryActorId };
+                    return new List<PlayerId> { tableActionActorId };
                 }
 
                 playerCount = registration.Template.RequiredPlayerCount;
@@ -2530,7 +2615,7 @@ namespace ConsoleCards.Presentation.Prototype
 
             List<PlayerId> players = new List<PlayerId>(playerCount)
             {
-                sessionEntryActorId,
+                tableActionActorId,
             };
             for (int i = 1; i < playerCount; i++)
             {
@@ -4026,7 +4111,7 @@ namespace ConsoleCards.Presentation.Prototype
             sceneConsoleView.gameObject.SetActive(true);
         }
 
-        private void HideSessionPresentation()
+        private void HideSceneOwnedTemplatePresentation()
         {
             SetActiveIfPresent(cardView, false);
             SetActiveIfPresent(pawnView, false);
@@ -4037,29 +4122,6 @@ namespace ConsoleCards.Presentation.Prototype
             SetActiveIfPresent(sceneDiscardPileVisual, false);
             SetActiveIfPresent(sceneHandVisual, false);
             SetActiveIfPresent(sceneConsoleView, false);
-        }
-
-        private void SuspendCameraInputForSessionEntry()
-        {
-            if (cameraInputAdapter != null && cameraInputAdapter.enabled)
-            {
-                cameraInputAdapter.enabled = false;
-                cameraInputSuspendedForSessionEntry = true;
-            }
-        }
-
-        private void ResumeCameraInputForSession()
-        {
-            if (!cameraInputSuspendedForSessionEntry)
-            {
-                return;
-            }
-
-            cameraInputSuspendedForSessionEntry = false;
-            if (cameraInputAdapter != null)
-            {
-                cameraInputAdapter.enabled = true;
-            }
         }
 
         private static void SetActiveIfPresent(Component component, bool active)
@@ -4278,7 +4340,8 @@ namespace ConsoleCards.Presentation.Prototype
                 physicalInteraction);
             authoritativeRandomValueSource = new SystemRandomValueSource();
             componentIdentitySource = new GuidTabletopComponentIdentitySource();
-            componentCreationUseCase = new CreateTabletopComponentUseCase(componentIdentitySource, physicalSurfaceQuery);
+            componentCreationUseCase = new CreateTabletopComponentUseCase(componentIdentitySource, physicalSurfaceQuery,
+                physicalSurfaceQuery.ResolveContainerSurfaceHeight);
             cardBatchCreationUseCase = new CreateGenericCardBatchUseCase(componentIdentitySource, physicalSurfaceQuery);
             populateDeckUseCase = new PopulateDeckUseCase(componentIdentitySource);
             componentDeletionUseCase = new DeleteTabletopComponentUseCase();

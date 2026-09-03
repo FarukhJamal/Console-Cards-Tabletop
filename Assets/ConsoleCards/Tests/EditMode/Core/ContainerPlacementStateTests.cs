@@ -20,6 +20,20 @@ namespace ConsoleCards.Tests.EditMode.Core
 
             Assert.That(state.ContainerId, Is.EqualTo(containerId));
             Assert.That(state.Pose, Is.EqualTo(pose));
+            Assert.That(state.SurfaceHeight, Is.Null);
+        }
+
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        [TestCase(float.NegativeInfinity)]
+        public void NonFiniteSurfaceHeight_RejectsWithoutChangingAcceptedPlacement(float height)
+        {
+            ContainerPlacementState state = new ContainerPlacementState(ContainerId.New(), TabletopPose.Default, 2.1f);
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                new ContainerPlacementState(ContainerId.New(), TabletopPose.Default, height));
+            Assert.Throws<ArgumentOutOfRangeException>(() => state.SetPose(CreatePose(1d, 2d, 30f), height));
+            Assert.That(state.Pose, Is.EqualTo(TabletopPose.Default));
+            Assert.That(state.SurfaceHeight, Is.EqualTo(2.1f));
         }
 
         [Test]

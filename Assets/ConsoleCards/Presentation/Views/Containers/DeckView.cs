@@ -50,7 +50,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             ContainerViewBinding.ValidateFiniteNonNegative(cardThicknessOffset, nameof(cardThicknessOffset));
             Dictionary<TabletopObjectId, CardView> lookup = ContainerViewBinding.BuildLookup(cardViews);
             List<CardView> resolvedCards = ContainerViewBinding.ResolveOrderedCards(container, lookup);
-            List<CardLayoutPlan> plan = BuildLayoutPlan(placement, resolvedCards);
+            List<CardLayoutPlan> plan = BuildLayoutPlan(placement, coordinateConverter, resolvedCards);
 
             ContainerViewBinding.ClearAppliedCards(layoutAppliedCards);
             containerState = container;
@@ -68,7 +68,7 @@ namespace ConsoleCards.Presentation.Views.Containers
 
             Dictionary<TabletopObjectId, CardView> lookup = ContainerViewBinding.BuildLookup(suppliedCardViews);
             List<CardView> resolvedCards = ContainerViewBinding.ResolveOrderedCards(containerState, lookup);
-            List<CardLayoutPlan> plan = BuildLayoutPlan(placementState, resolvedCards);
+            List<CardLayoutPlan> plan = BuildLayoutPlan(placementState, converter, resolvedCards);
 
             ApplyPlan(plan);
         }
@@ -99,9 +99,12 @@ namespace ConsoleCards.Presentation.Views.Containers
 
         private List<CardLayoutPlan> BuildLayoutPlan(
             ContainerPlacementState placement,
+            TabletopCoordinateConverter coordinateConverter,
             IReadOnlyList<CardView> orderedCards)
         {
             List<CardLayoutPlan> plan = new List<CardLayoutPlan>(orderedCards.Count);
+            float surfaceOffset = ContainerViewBinding.PlacementWorldPosition(placement, coordinateConverter).y
+                - coordinateConverter.ToWorldPosition(placement.Pose).y;
             float physicalStep = Mathf.Max(
                 cardThicknessOffset,
                 ContainerViewBinding.MinimumPhysicalCardSeparation);
@@ -110,7 +113,7 @@ namespace ConsoleCards.Presentation.Views.Containers
                 plan.Add(new CardLayoutPlan(
                     orderedCards[i],
                     placement.Pose,
-                    ContainerViewBinding.DefaultCardSurfaceClearance + (i * physicalStep)));
+                    surfaceOffset + ContainerViewBinding.DefaultCardSurfaceClearance + (i * physicalStep)));
             }
 
             return plan;
@@ -119,7 +122,7 @@ namespace ConsoleCards.Presentation.Views.Containers
         private void ApplyPlan(IReadOnlyList<CardLayoutPlan> plan)
         {
             transform.SetPositionAndRotation(
-                converter.ToWorldPosition(placementState.Pose),
+                ContainerViewBinding.PlacementWorldPosition(placementState, converter),
                 converter.ToWorldRotation(placementState.Pose));
             ContainerViewBinding.ApplyPlan(plan, layoutAppliedCards, containerState.Id);
             VisibleCardCount = plan.Count;

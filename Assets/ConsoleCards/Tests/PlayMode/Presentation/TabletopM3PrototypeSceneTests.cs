@@ -4,6 +4,7 @@ using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Identifiers;
+using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
 using ConsoleCards.Presentation.Prototype;
@@ -302,6 +303,11 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
 
             yield return null;
             Scene scene = SceneManager.GetSceneByBuildIndex(buildIndex);
+            TabletopPrototypeComposition composition =
+                SceneFixture.FindPath(scene, "Interaction/PrototypeComposition")
+                    .GetComponent<TabletopPrototypeComposition>();
+            composition.LoadGameTemplate(
+                TrapFloorTemplateFactory.CreateStandardFourPlayer().Template.Id);
             fixture = new SceneFixture(scene);
             fixture.AssertInitialized();
         }
@@ -444,7 +450,7 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
                 StackA = stackA as StackView;
             }
 
-            private static GameObject FindPath(Scene scene, string path)
+            public static GameObject FindPath(Scene scene, string path)
             {
                 string[] parts = path.Split('/');
                 GameObject current = scene.GetRootGameObjects().Single(root => root.name == parts[0]);

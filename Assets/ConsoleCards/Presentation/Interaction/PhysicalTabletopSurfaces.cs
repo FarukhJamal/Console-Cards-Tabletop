@@ -70,6 +70,10 @@ namespace ConsoleCards.Presentation.Interaction
 
         public TableCoordinate Coordinate(Vector3 worldPosition) => converter.ToTableCoordinate(worldPosition);
 
+        // Non-physical Containers sit on the surface; loose-object spawn clearance does not apply.
+        public float? ResolveContainerSurfaceHeight(TabletopPose pose) =>
+            TryAtLayout(pose, out RaycastHit hit) ? hit.point.y : (float?)null;
+
         private bool TryRay(Ray ray, out RaycastHit closest)
         {
             Physics.SyncTransforms();

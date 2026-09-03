@@ -4,6 +4,8 @@
   "references": [
     "ConsoleCards.Core",
     "ConsoleCards.Application",
+    "ConsoleCards.GameTemplates",
+    "ConsoleCards.TrapFloor",
     "ConsoleCards.Presentation",
     "Unity.InputSystem"
   ],

@@ -1,7 +1,7 @@
 # Console Cards — Product Vision
 
 **Document ID:** 00_Product_Vision  
-**Version:** 1.7
+**Version:** 1.8
 
 **Status:** Approved
 **Purpose:** Define what Console Cards is, what experience it must create, and which product boundaries must remain stable before architecture and implementation begin.
@@ -26,7 +26,7 @@ Console Cards has three requirement horizons:
 
 ### Foundation Requirements
 
-- Explicit Session Entry between Empty/Custom Table and available Game Templates.
+- Direct simulator startup on an Empty/Custom Table, with in-simulator Game Template loading.
 - Official developer-authored Game Templates.
 - Empty-table sessions where players arrange objects and define the rules socially.
 - An in-session component toolbox whose pieces become authoritative tabletop objects.
@@ -57,7 +57,7 @@ The intended experience is the digital equivalent of one to eight friends sittin
 
 A typical session should allow players to:
 
-1. Enter a session and explicitly choose an Empty/Custom Table or an available Game Template.
+1. Enter the simulator on an Empty/Custom Table and optionally load an available Game Template.
 2. Join the resulting table.
 3. Occupy a seat around that table.
 4. Access their private hand and personal Console.
@@ -166,14 +166,11 @@ A Match is a running instance created from a Game Template or an empty table.
 
 During a Match, players may rearrange objects, use house rules, or continue playing freely according to the available policies.
 
-### 4.4 Session Entry
+### 4.4 Simulator Entry and Game Template Loading
 
-Application startup does not imply a selected Game. Before authoritative Match construction, the player explicitly chooses:
+Application startup enters the simulator directly with a fresh **Empty / Custom Table**, with no mandatory Game-specific Board or Game-specific rules. Available Game Templates are loaded from an in-simulator **Games / Templates** panel rather than a blocking pre-Match selection screen.
 
-- **Empty / Custom Table**, with no mandatory Game-specific Board or Game-specific rules; or
-- an available **Game Template**, beginning with Trap Floor and later including Super Leroy Sisters.
-
-The chosen setup is then validated and used to construct authoritative Runtime State before the player enters the tabletop. Final UI styling is not defined here.
+Loading a Template or clearing the Table constructs and validates a replacement authoritative Match through the existing Game Template/session pipeline, replaces the current Match and Presentation without reloading the Unity scene, and establishes the replacement's initial Reset baseline. Destructive replacement requires confirmation when the current Table contains content. The physical Table, Camera, and Runtime UI remain alive across replacement. No official Game, including Trap Floor, is auto-selected at startup.
 
 ---
 
@@ -499,7 +496,7 @@ In the first builds, players own:
 
 The first foundation should focus on:
 
-- Explicit Session Entry without automatic official-Game loading.
+- Direct Empty Table startup without automatic official-Game loading, plus in-simulator Template replacement.
 - Empty/Custom Table as a legitimate Match path.
 - Top-down virtual tabletop.
 - One-to-eight-Player seating model.
@@ -542,8 +539,8 @@ The first foundation should not attempt to deliver:
 
 The foundation is successful when a group can:
 
-1. Explicitly choose an Empty/Custom Table or available Game Template before Match construction.
-2. Enter the resulting shared top-down table.
+1. Enter the shared top-down simulator directly with a fresh Empty/Custom Table.
+2. Load a registered Game Template or clear back to a fresh Empty Table without reloading the Unity scene.
 3. Occupy configurable seats.
 4. Use private hands and personal Consoles.
 5. Load or arrange cards, decks, pieces, and Play Areas.

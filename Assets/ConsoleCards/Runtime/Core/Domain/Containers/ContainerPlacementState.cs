@@ -12,28 +12,39 @@ namespace ConsoleCards.Core.Domain.Containers
     {
         public ContainerPlacementState(
             ContainerId containerId,
-            TabletopPose pose)
+            TabletopPose pose,
+            float? surfaceHeight = null)
         {
             if (containerId.IsEmpty)
             {
                 throw new ArgumentException("Container ID cannot be empty.", nameof(containerId));
             }
 
-            ValidatePose(pose, nameof(pose));
-
             ContainerId = containerId;
-            Pose = pose;
+            SetPose(pose, surfaceHeight);
         }
 
         public ContainerId ContainerId { get; }
 
         public TabletopPose Pose { get; private set; }
 
-        public void SetPose(TabletopPose pose)
+        /// <summary>
+        /// Accepted surface world Y for a non-physical anchor. Null retains authored layout height.
+        /// This excludes preview lift and contained Card thickness/order offsets.
+        /// </summary>
+        public float? SurfaceHeight { get; private set; }
+
+        public void SetPose(TabletopPose pose, float? surfaceHeight = null)
         {
             ValidatePose(pose, nameof(pose));
+            if (surfaceHeight.HasValue
+                && (float.IsNaN(surfaceHeight.Value) || float.IsInfinity(surfaceHeight.Value)))
+            {
+                throw new ArgumentOutOfRangeException(nameof(surfaceHeight));
+            }
 
             Pose = pose;
+            SurfaceHeight = surfaceHeight;
         }
 
         private static void ValidatePose(TabletopPose pose, string parameterName)

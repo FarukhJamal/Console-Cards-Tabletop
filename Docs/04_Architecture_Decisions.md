@@ -1,7 +1,7 @@
 # Console Cards — Architecture Decisions
 
 **Document ID:** 04_Architecture_Decisions  
-**Version:** 1.7
+**Version:** 1.9
 
 **Status:** Approved with Open Decisions
 
@@ -344,7 +344,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 
 ## ADR-022 - Explicit Session Entry and Empty Table
 
-**Status:** Accepted
+**Status:** Superseded by ADR-027
 
 **Decision:** Application startup presents an explicit choice between an Empty/Custom Table and available Game Templates before constructing a Match. No official Game, including Trap Floor, is automatically selected as permanent product behavior.
 
@@ -356,6 +356,8 @@ This file records accepted or proposed Architecture Decision Records. A decision
 - Trap Floor uses the M4.1 Game Template pipeline only after player selection.
 - The current automatic Trap Floor prototype bootstrap is temporary and must be replaced.
 - Final Session Entry UI styling remains deferred.
+
+**Disposition:** The Empty/Custom Table remains a first-class path and no official Game auto-loads. The blocking startup selection and Return-to-Session-Entry flow are superseded by ADR-027.
 
 ---
 
@@ -390,6 +392,8 @@ This file records accepted or proposed Architecture Decision Records. A decision
 **Superseded:** Loose Card/Pawn/Token/Die placement no longer projects onto a mathematical plane and then tests a two-dimensional Table boundary. Physical release is no longer rejected or rolled back solely for being outside that boundary. Accepted loose poses are no longer limited to `TabletopPose`. Game Boards are valid physical collision/placement surfaces, not merely inner logical placement guides. ADR-025 defines these replacements.
 
 **Remaining scope:** Deck/Stack/Console bodies remain non-physical in this pass. Their existing positioning model retains mathematical-plane/layout placement and authored Table-area validation: invalid creation does not commit, and invalid supported movement releases retain/return to the previous authoritative pose. This does not authorize adding missing Container interactions or imply boundary validation is already implemented.
+
+**Deck/Stack surface-height correction (approved task, 2026-09-03):** Keep the existing plane-derived layout candidate, but sample the registered Table/Board surface beneath it for toolbox creation and supported movement. Commit the exact hit height alongside the Container's unchanged `TabletopPose`, through the existing Application/revision path, and preserve it in snapshots. Preview lift, spawn-order height, and contained Card thickness are not part of this anchor height. Views apply the accepted surface height before existing contained Card/layout offsets. A missing surface hit rejects the operation without changing accepted placement. This is non-physical Container positioning, not Rigidbody conversion; Console positioning and loose-object physics are unchanged.
 
 ---
 
@@ -457,3 +461,24 @@ This file records accepted or proposed Architecture Decision Records. A decision
 - The current Trap Floor Floormaster Deck remains 36 Cards: 14 Trap, 14 Coin, and 8 Item. Older Milanote Trap/Friend/Key/Exit counts are legacy/reference material only, not approved composition or content to import. `18_Trap_Floor_Game_Requirements.md` continues to govern Trap Floor setup and Game Rules.
 
 **Approval boundary:** This approves visual/platform rules only. It is not evidence that current assets or Runtime already support every configuration, and does not authorize runtime, prefab, scene, physics-tuning, or Game-content changes in this documentation task. Exact artwork geometry, a numeric teal color value, and manufacturing dimensions are not specified by this summary.
+
+---
+
+## ADR-027 - In-Simulator Game Template Loading
+
+**Status:** Accepted
+
+**Supersedes:** ADR-022's blocking startup Session Entry and Return-to-Session-Entry flow. ADR-022's Empty/Custom Table and no-automatic-official-Game principles remain preserved.
+
+**Decision:** Play enters the simulator directly with a freshly constructed Empty/Custom Match. A prefab-based **Games / Templates** panel lists the current registered Game Template catalog and provides **Clear Table**. Selecting a Template or Clear Table replaces the active authoritative Match and Presentation without reloading the Unity scene; the fixed physical Table, Camera, and Runtime UI remain alive.
+
+**Authority and replacement contract:**
+
+- A replacement request retains an initiating Player identity and passes through the existing validated, atomic Game Template/session construction pipeline. This is the future host-authorization boundary; it does not implement networking.
+- If the current Table contains authoritative content, replacement requires player confirmation before teardown.
+- Candidate Match construction and Template validation complete before the active Presentation is cleared. Accepted replacement then tears down the old session projection, adopts the candidate Match, and projects it onto the same physical Table.
+- Loading a Template establishes that Template construction snapshot as the new Reset baseline. Clear Table constructs a new empty Match and captures a new Empty Table baseline.
+- Registered catalog entries populate the panel automatically. Template-specific Presentation remains responsible for projecting content supported by the current build.
+- Normal Session Entry is not a player-facing startup state. Opening or closing Games / Templates does not suspend Camera controls, destroy the active Match, or hide the simulator.
+
+**Preserved boundaries:** IDs, Match State, revisions, actor context, Game Template validation, atomic construction, Reset, toolbox behavior, physical-object interaction, prefab Runtime UI, and Game rules/content remain unchanged. Scene loading and networking are not introduced.

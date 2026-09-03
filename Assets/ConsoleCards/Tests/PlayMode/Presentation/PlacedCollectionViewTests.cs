@@ -168,6 +168,47 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(fixture.CardViews[1].transform.position.y, Is.GreaterThan(fixture.CardViews[0].transform.position.y));
         }
 
+        [TestCase(PlacedCollectionKind.Deck, 2.1f)]
+        [TestCase(PlacedCollectionKind.Deck, 16.1f)]
+        [TestCase(PlacedCollectionKind.Stack, 2.1f)]
+        [TestCase(PlacedCollectionKind.Stack, 16.1f)]
+        public void SurfaceAnchor_OverridesBaseAndOrderHeight_PreservingCardLayoutOffsets(
+            PlacedCollectionKind kind, float surfaceHeight)
+        {
+            PlacedFixture fixture = CreatePlacedFixture(kind, 3);
+            TabletopCoordinateConverter converter = new TabletopCoordinateConverter(1f, 14.3f, 0.02f, 0.0005f);
+            TabletopPose pose = new TabletopPose(new TableCoordinate(1d, 2d), 30f, 2, 800);
+            fixture.Placement.SetPose(pose, surfaceHeight);
+            foreach (CardView card in fixture.CardViews) card.Bind(card.CardState, converter);
+            Transform anchor = null;
+            float firstCardOffset;
+            if (fixture.DeckView != null)
+            {
+                fixture.DeckView.Bind(fixture.Container, fixture.Placement, converter, fixture.CardViews);
+                firstCardOffset = 0.025f;
+            }
+            else
+            {
+                anchor = CreateGameObject("Authored stack layout anchor").transform;
+                anchor.SetParent(fixture.ViewGameObject.transform, false);
+                anchor.localPosition = new Vector3(0f, 0.025f, 0f);
+                fixture.StackView.Bind(fixture.Container, fixture.Placement, anchor, converter, fixture.CardViews);
+                firstCardOffset = anchor.localPosition.y;
+            }
+
+            Assert.That(fixture.ViewGameObject.transform.position.y, Is.EqualTo(surfaceHeight).Within(Tolerance));
+            for (int i = 0; i < fixture.CardViews.Count; i++)
+                Assert.That(fixture.CardViews[i].transform.position.y,
+                    Is.EqualTo(surfaceHeight + firstCardOffset + i * 0.02f).Within(Tolerance));
+
+            fixture.Placement.SetPose(pose, surfaceHeight + 1f);
+            fixture.ApplyAcceptedLayout();
+            Assert.That(fixture.ViewGameObject.transform.position.y, Is.EqualTo(surfaceHeight + 1f).Within(Tolerance));
+            Assert.That(fixture.CardViews[0].transform.position.y,
+                Is.EqualTo(surfaceHeight + 1f + firstCardOffset).Within(Tolerance));
+            Assert.That(fixture.Container.Count, Is.EqualTo(3));
+        }
+
         [Test]
         public void DiscardPileView_AppliesDeterministicDiagonalAndVerticalOffset()
         {

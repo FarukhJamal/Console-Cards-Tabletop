@@ -30,6 +30,7 @@ namespace ConsoleCards.Presentation.Interaction
         private Func<TabletopPose, bool> activeCommitPlacement;
         internal PhysicalTabletopSurfaces PhysicalSurfaces { get; set; }
         private bool physicalPlacement;
+        private bool containerPlacement;
         internal int PhysicalQuantity { get; set; } = 1;
 
         public TabletopComponentPlacementController(
@@ -88,6 +89,7 @@ namespace ConsoleCards.Presentation.Interaction
                 currentPose.LocalOrder,
                 commitPlacement ?? throw new ArgumentNullException(nameof(commitPlacement)));
             physicalPlacement = false;
+            containerPlacement = true;
         }
 
         public void BeginCustomComponentPlacement(
@@ -130,6 +132,8 @@ namespace ConsoleCards.Presentation.Interaction
             Cancel();
             PhysicalQuantity = 1;
             componentKind = requestedKind;
+            containerPlacement = requestedKind == TabletopComponentKind.Deck
+                || requestedKind == TabletopComponentKind.Stack;
             physicalPlacement = requestedKind == TabletopComponentKind.Card || requestedKind == TabletopComponentKind.Pawn
                 || requestedKind == TabletopComponentKind.Token || requestedKind == TabletopComponentKind.Die;
             dieSideCount = requestedDieSideCount;
@@ -241,6 +245,18 @@ namespace ConsoleCards.Presentation.Interaction
                 layer,
                 localOrder);
             Vector3 worldPosition = coordinateConverter.ToWorldPosition(previewPose);
+            if (containerPlacement && PhysicalSurfaces != null)
+            {
+                float? surfaceHeight = PhysicalSurfaces.ResolveContainerSurfaceHeight(previewPose);
+                if (!surfaceHeight.HasValue)
+                {
+                    hasValidPreviewPose = false;
+                    previewRoot.SetActive(false);
+                    return;
+                }
+
+                worldPosition.y = surfaceHeight.Value;
+            }
             Quaternion worldRotation = coordinateConverter.ToWorldRotation(previewPose);
             previewRoot.transform.SetPositionAndRotation(
                 worldPosition + (Vector3.up * PreviewHeight),

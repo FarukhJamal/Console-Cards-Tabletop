@@ -14,10 +14,10 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private GraphicRaycaster graphicRaycaster;
         [SerializeField] private EventSystem eventSystem;
         [SerializeField] private InputSystemUIInputModule inputModule;
-        [SerializeField] private GameObject sessionEntryLayer;
+        [SerializeField] private GameObject gameTemplatesLayer;
         [SerializeField] private GameObject activeSessionHudLayer;
         [SerializeField] private GameObject popupLayer;
-        [SerializeField] private PrototypeSessionEntryView sessionEntryView;
+        [SerializeField] private PrototypeGameTemplatesPanelView gameTemplatesPanelView;
         [SerializeField] private PrototypeActiveSessionToolbarView activeSessionToolbarView;
         [SerializeField] private PrototypeStatusMessageView statusMessageView;
         [SerializeField] private Transform componentToolboxMount;
@@ -57,10 +57,10 @@ namespace ConsoleCards.Presentation.UI
                     "PrototypeRuntimeUiRoot requires a Screen Space Overlay Canvas using Scale With Screen Size.");
             }
 
-            if (sessionEntryLayer == null
+            if (gameTemplatesLayer == null
                 || activeSessionHudLayer == null
                 || popupLayer == null
-                || sessionEntryView == null
+                || gameTemplatesPanelView == null
                 || activeSessionToolbarView == null
                 || statusMessageView == null
                 || componentToolboxMount == null
@@ -78,7 +78,7 @@ namespace ConsoleCards.Presentation.UI
                     "PrototypeRuntimeUiRoot requires its authored layers and view references.");
             }
 
-            sessionEntryView.ValidateReferences();
+            gameTemplatesPanelView.ValidateReferences();
             activeSessionToolbarView.ValidateReferences();
             statusMessageView.ValidateReferences();
             componentToolboxPrefab.ValidateReferences();
@@ -89,38 +89,43 @@ namespace ConsoleCards.Presentation.UI
             interactionGuidePrefab.ValidateReferences();
         }
 
-        public void ShowSessionEntry(
-            Action selectEmptyTable,
-            IReadOnlyList<PrototypeSessionTemplateOption> templateOptions,
+        public void ShowGameTemplatesPanel(
+            Action clearTable,
+            IReadOnlyList<PrototypeGameTemplateOption> templateOptions,
             string errorMessage)
         {
             ValidateReferences();
-            activeSessionToolbarView.Unbind();
-            componentToolboxView?.Unbind();
-            trapFloorHudView?.Hide();
-            interactionGuideView?.Hide();
             CloseTabletopPopup();
-            activeSessionHudLayer.SetActive(false);
-            sessionEntryLayer.SetActive(true);
-            sessionEntryView.Bind(selectEmptyTable, templateOptions, errorMessage);
+            gameTemplatesLayer.SetActive(true);
+            gameTemplatesPanelView.Bind(clearTable, templateOptions, errorMessage);
+            ClearSelectedUiObject();
+        }
+
+        public void HideGameTemplatesPanel()
+        {
+            gameTemplatesPanelView?.Unbind();
+            if (gameTemplatesLayer != null)
+            {
+                gameTemplatesLayer.SetActive(false);
+            }
+
             ClearSelectedUiObject();
         }
 
         public void ShowActiveSession(
             string sessionTitle,
             Action resetSession,
-            Action returnToSessionEntry,
+            Action openGameTemplates,
             string statusMessage,
             PrototypeComponentToolboxBindings componentToolboxBindings)
         {
             ValidateReferences();
             EnsureComponentToolboxView();
             EnsureInteractionGuideView();
-            sessionEntryView.Unbind();
-            sessionEntryLayer.SetActive(false);
+            HideGameTemplatesPanel();
             CloseTabletopPopup();
             activeSessionHudLayer.SetActive(true);
-            activeSessionToolbarView.Bind(sessionTitle, resetSession, returnToSessionEntry);
+            activeSessionToolbarView.Bind(sessionTitle, resetSession, openGameTemplates);
             componentToolboxView.Bind(componentToolboxBindings, CloseTabletopPopup);
             interactionGuideView.Bind();
             trapFloorHudView?.Hide();
@@ -128,9 +133,9 @@ namespace ConsoleCards.Presentation.UI
             ClearSelectedUiObject();
         }
 
-        public void SetSessionEntryError(string errorMessage)
+        public void SetGameTemplatesError(string errorMessage)
         {
-            sessionEntryView.SetError(errorMessage);
+            gameTemplatesPanelView.SetError(errorMessage);
         }
 
         public void SetStatusMessage(string statusMessage)
@@ -330,7 +335,7 @@ namespace ConsoleCards.Presentation.UI
 
         public void ReleaseBindings()
         {
-            sessionEntryView?.Unbind();
+            gameTemplatesPanelView?.Unbind();
             activeSessionToolbarView?.Unbind();
             componentToolboxView?.Unbind();
             trapFloorHudView?.Hide();

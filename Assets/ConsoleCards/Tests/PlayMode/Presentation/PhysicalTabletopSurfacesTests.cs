@@ -1,7 +1,12 @@
 using System;
 using System.Collections;
+using ConsoleCards.Application.Commands;
+using ConsoleCards.Application.UseCases;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Containers;
+using ConsoleCards.Core.Domain.Match;
+using ConsoleCards.Core.Domain.Seats;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Presentation.Coordinates;
 using ConsoleCards.Presentation.Interaction;
@@ -65,6 +70,82 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
             Assert.That(query.TryAtLayout(Pose(0f, 0f), out RaycastHit hit), Is.True);
             Assert.That(hit.collider, Is.SameAs(board));
             Assert.That(query.TryAtLayout(Pose(8f, 8f), out _), Is.False);
+        }
+
+        [TestCase(TabletopComponentKind.Deck)]
+        [TestCase(TabletopComponentKind.Stack)]
+        public void ContainerPlacementAndMove_CommitSurfaceHeightWithoutPreviewOrOrderLift(TabletopComponentKind kind)
+        {
+            Surface(new Vector3(0f, 2f, 0f));
+            BoxCollider board = Surface(new Vector3(0f, 4f, 0f));
+            board.size = new Vector3(2f, 0.2f, 2f);
+            PlayerId actor = PlayerId.New();
+            MatchState match = new MatchState(MatchId.New(), GameTemplateId.Empty, 0,
+                Array.Empty<CardInstanceState>(), Array.Empty<PawnState>(), Array.Empty<TokenState>(),
+                Array.Empty<ContainerState>(), Array.Empty<SeatState>());
+            CommandContext Context() => new CommandContext(CommandId.New(), match.Id, actor, match.Revision);
+            CreateTabletopComponentUseCase creation = new CreateTabletopComponentUseCase(
+                new GuidTabletopComponentIdentitySource(), query, query.ResolveContainerSurfaceHeight);
+            CreateTabletopComponentResult created = default;
+            int commits = 0;
+            TabletopComponentPlacementController controller = new TabletopComponentPlacementController(
+                new TabletopPointerProjector(camera, converter, converter.BaseHeight), converter,
+                (requestedKind, sides, pose) =>
+                {
+                    commits++;
+                    created = creation.Execute(match, new[] { actor },
+                        new CreateTabletopComponentRequest(Context(), requestedKind, pose, sides));
+                    return created.Succeeded;
+                }, _ => { });
+            controller.PhysicalSurfaces = query;
+            GameObject preview = Create("Container preview");
+            controller.Begin(kind, 0, preview, 35f, 2, 800);
+            Vector2 tablePointer = camera.WorldToScreenPoint(new Vector3(3f, 0f, 0f));
+            controller.HandlePointerFrame(tablePointer, false, false, false, 0f, 15f);
+            Assert.That(preview.transform.position.y, Is.EqualTo(2.135f).Within(0.001f));
+            Assert.That(match.ContainerPlacements.Count, Is.Zero);
+            controller.HandlePointerFrame(tablePointer, false, true, false, 0f, 15f);
+            Assert.That(created.Succeeded, Is.True);
+            Assert.That(commits, Is.EqualTo(1));
+            ContainerPlacementState placement = match.ContainerPlacements[created.ContainerId];
+            Assert.That(placement.SurfaceHeight.Value, Is.EqualTo(2.1f).Within(0.001f));
+            Assert.That(placement.Pose.Layer, Is.EqualTo(2));
+            Assert.That(placement.Pose.LocalOrder, Is.EqualTo(800));
+
+            MoveContainerUseCase movement = new MoveContainerUseCase(query.ResolveContainerSurfaceHeight);
+            GameObject movePreview = Create("Container move preview");
+            controller.BeginContainerMove(movePreview, placement.Pose, pose =>
+                movement.Execute(match, new MoveContainerCommand(Context(), created.ContainerId, pose)).Succeeded);
+            Vector2 boardPointer = camera.WorldToScreenPoint(Vector3.zero);
+            controller.HandlePointerFrame(boardPointer, false, false, false, 0f, 15f);
+            Assert.That(movePreview.transform.position.y, Is.EqualTo(4.135f).Within(0.001f));
+            Assert.That(placement.SurfaceHeight.Value, Is.EqualTo(2.1f).Within(0.001f));
+            controller.HandlePointerFrame(boardPointer, false, true, false, 0f, 15f);
+            Assert.That(placement.SurfaceHeight.Value, Is.EqualTo(4.1f).Within(0.001f));
+            Assert.That(match.Revision, Is.EqualTo(2));
+
+            TabletopPose acceptedPose = placement.Pose;
+            Assert.That(movement.Execute(match,
+                new MoveContainerCommand(Context(), created.ContainerId, Pose(30f, 30f))).Succeeded, Is.False);
+            Assert.That(placement.Pose, Is.EqualTo(acceptedPose));
+            Assert.That(placement.SurfaceHeight.Value, Is.EqualTo(4.1f).Within(0.001f));
+            Assert.That(creation.Execute(match, new[] { actor },
+                new CreateTabletopComponentRequest(Context(), kind, Pose(30f, 30f))).Succeeded, Is.False);
+            Assert.That(match.ContainerPlacements.Count, Is.EqualTo(1));
+            Assert.That(match.Revision, Is.EqualTo(2));
+
+            // Returning from the raised Board to the Table must resolve the lower height again.
+            Assert.That(movement.Execute(match,
+                new MoveContainerCommand(Context(), created.ContainerId, Pose(3f, 0f))).Succeeded, Is.True);
+            Assert.That(placement.SurfaceHeight.Value, Is.EqualTo(2.1f).Within(0.001f));
+
+            GameObject invalidPreview = Create("Off-surface preview");
+            controller.Begin(kind, 0, invalidPreview, 0f, 0, 800);
+            controller.HandlePointerFrame(camera.WorldToScreenPoint(new Vector3(30f, 0f, 30f)),
+                false, true, false, 0f, 15f);
+            Assert.That(invalidPreview.activeSelf, Is.False);
+            Assert.That(commits, Is.EqualTo(1));
+            controller.Cancel();
         }
 
         [Test]

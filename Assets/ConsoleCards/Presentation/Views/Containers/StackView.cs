@@ -187,7 +187,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             TabletopCoordinateConverter coordinateConverter)
         {
             transform.SetPositionAndRotation(
-                coordinateConverter.ToWorldPosition(placement.Pose),
+                ContainerViewBinding.PlacementWorldPosition(placement, coordinateConverter),
                 coordinateConverter.ToWorldRotation(placement.Pose));
         }
 

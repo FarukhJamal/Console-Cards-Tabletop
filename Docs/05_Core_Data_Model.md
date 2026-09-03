@@ -1,7 +1,7 @@
 # Console Cards — Core Data Model
 
 **Document ID:** 05_Core_Data_Model  
-**Version:** 1.2
+**Version:** 1.3
 **Status:** Approved
 
 > **Contract note:** Code blocks, type names, interfaces, field lists, and diagrams in this document are illustrative unless explicitly labelled **Approved Contract**. Codex must not treat illustrative examples as fixed public APIs.
@@ -197,6 +197,8 @@ A Die uses Base Tabletop Object State plus:
 Its stable Tabletop Object ID and authored/layout Tabletop Pose come from Base Tabletop Object State. A Die created by a Game Template and one created by the component toolbox use the same typed Runtime State and separate loose physical state. Its settled physical orientation determines the accepted value through an explicit authored face/value mapping for its d4/d6/d8/d10/d12/d20 variant. The mapping includes the result-reading convention and belongs to immutable content/configuration, not mutable Match data; values must not be inferred from mesh triangle order or names.
 
 ## 8. Containers
+
+Deck/Stack placement retains `TabletopPose` and may additionally record the accepted Table/Board surface height (shared world Y), independent of preview lift and layer/local-order render offsets. The creation/movement Application path resolves this height from the authored surface; Views add existing contained Card/layout offsets above it. Snapshot capture/restore preserves the value. An absent value retains legacy authored/template layout height. This targeted ADR-024 correction does not introduce physical Container bodies or extend `TabletopPose` into a 3D pose.
 
 ```text
 ContainerState
