@@ -1,7 +1,7 @@
 # Console Cards — Terminology
 
 **Document ID:** 02_Terminology  
-**Version:** 1.4
+**Version:** 1.6
 
 **Status:** Approved
 **Depends on:** `00_Product_Vision.md`  
@@ -346,7 +346,7 @@ A Network Connection ID may change after reconnection and must not own persisten
 **Definition:**
 A reusable arrangement of Seat positions and Player-facing areas around the stable central play space.
 
-Required Player Layout capabilities include standard four-Player, eight-Player, and compact four-Player arrangements. A Player Layout repositions Seats; it does not enlarge the logical Virtual Tabletop or define a Game's central Game Board.
+Required Player Layout capabilities include standard four-Player, eight-Player, and compact four-Player arrangements. A Player Layout repositions Seats; it does not enlarge the physical Table or its authored usable area and does not define a Game's central Game Board.
 
 ---
 
@@ -355,9 +355,9 @@ Required Player Layout capabilities include standard four-Player, eight-Player, 
 ## 4.1 Virtual Tabletop
 
 **Definition:**  
-The complete logical and visual shared surface on which players place and manipulate objects.
+The complete logical and visual shared space in which Players manipulate objects on one fixed physical Table.
 
-The Virtual Tabletop is effectively unbounded for normal use.
+New loose-object placement requires a valid physical Table/Board surface hit. Released/thrown loose objects may fall beyond the Table without snapping back. Authored layout coordinates and separate loose 3D physical state remain authoritative Runtime data rather than scene-only Transforms (ADR-025).
 
 **Preferred term:** `Virtual Tabletop` or `Tabletop`  
 **Avoid:** infinite board, endless board, replicated tables, parallax table.
@@ -396,7 +396,7 @@ The exact implementation is defined in the Core Data Model document.
 ## 4.4 Tabletop Pose
 
 **Definition:**  
-The complete logical placement of a Tabletop Object.
+The logical placement used for authored/template/container layout. It is not the full 3D physical pose of a loose object.
 
 A Tabletop Pose may include:
 
@@ -411,11 +411,11 @@ A Tabletop Pose may include:
 ## 4.5 Table Surface
 
 **Definition:**  
-The visual representation of the tabletop beneath objects.
+The fixed physical Table's authored collision surface beneath tabletop objects.
 
-The Table Surface may be streamed, repositioned, tiled, or generated around the camera, but it must appear seamless.
+The usable surface is explicitly authored, editable with the Table in Unity, and follows the Table's Transform and scale. It is a valid loose-placement raycast target and catches released objects physically. Decorative mesh details are not gameplay authority. Game Boards provide their own authored physical collision surfaces; a logical Play Area alone does not.
 
-The Table Surface is not the authoritative source of object positions.
+Accepted object positions remain Runtime State: `TabletopPose` for authored/layout placement and separate 3D physical pose/state for loose physical objects. The local Camera moves independently and does not move the Table. Surface-hit validation of creation does not prohibit an object from falling off after release.
 
 ---
 
@@ -427,6 +427,16 @@ A local player-controlled view into the shared Tabletop Space.
 Each Player normally controls their own Camera independently.
 
 Camera movement does not modify Match state unless an explicit shared-camera feature is introduced.
+
+---
+
+## 4.7 Physical Pose / Physical Object State
+
+**Definition:**
+
+The separate authoritative 3D position, full rotation, and necessary motion/lifecycle state of a loose physical Object Instance, associated with its existing stable Object ID in Match State.
+
+This does not extend or replace `TabletopPose`. Held objects are temporarily controlled/kinematic; released objects use gravity and collision. Settled poses and Dice results commit through Commands or approved Application Use Cases. In future multiplayer, the host/server owns physics outcomes; clients do not independently decide them. Contained Cards use Container layouts with loose physics disabled, and accepted extraction restores loose physical behavior.
 
 ---
 
@@ -815,11 +825,11 @@ A Die has:
 - stable object identity;
 - a side count;
 - an authoritative current/result value;
-- a Tabletop Pose;
+- an authored/layout Tabletop Pose and separate loose 3D physical pose/state;
 - a Presentation View; and
 - normal selection and interaction where appropriate.
 
-A Roll request is authoritative state mutation. Physics, tumble, and settling are Presentation feedback only and must display the accepted result.
+A Roll request initiates an authority-validated physical throw. The settled physical face determines the value through an explicit authored mapping for d4/d6/d8/d10/d12/d20, including the result-reading convention; values are not inferred from mesh triangle order or object names. Manual grab/throw uses the same settlement path. The accepted 3D pose and value commit together through the Application boundary; future host/server physics, not independent client simulation, decides the result.
 
 ---
 
@@ -1373,8 +1383,8 @@ Avoid these terms unless a specific document defines a narrow technical use.
 |---|---|
 | Preset | Game Template |
 | Game mode | Game Template or Match configuration |
-| Infinite table | Effectively unbounded Virtual Tabletop |
-| Parallax table | Seamless Table Surface |
+| Infinite table | Fixed physical Table with an authored usable surface |
+| Parallax table | Fixed physical Table |
 | Player slot | Seat |
 | Client ID as player identity | Player ID |
 | Card data | Card Definition or Card Instance State |

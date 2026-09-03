@@ -54,6 +54,9 @@ namespace ConsoleCards.Application.UseCases
                 currentPose.Layer,
                 currentPose.LocalOrder);
 
+            if (objectState.ContainerId.IsEmpty && objectState.PhysicalState != null)
+                objectState.SetPhysicalState(objectState.PhysicalState.WithRotation(
+                    objectState.PhysicalState.Rotation.RotateWorldYaw(command.TargetRotationDegrees - currentPose.RotationDegrees)));
             objectState.SetPose(targetPose);
             long revision = matchState.AdvanceRevision();
 

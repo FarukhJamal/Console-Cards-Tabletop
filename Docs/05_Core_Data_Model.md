@@ -1,7 +1,7 @@
 # Console Cards — Core Data Model
 
 **Document ID:** 05_Core_Data_Model  
-**Version:** 1.1
+**Version:** 1.2
 **Status:** Approved
 
 > **Contract note:** Code blocks, type names, interfaces, field lists, and diagrams in this document are illustrative unless explicitly labelled **Approved Contract**. Codex must not treat illustrative examples as fixed public APIs.
@@ -68,6 +68,20 @@ A Tabletop Pose conceptually contains:
 - Local order.
 
 Runtime scaling is excluded until explicitly approved.
+
+`TabletopPose` remains the authored/template/container-layout model. It must not be expanded to carry loose-object height, full 3D orientation, or physical motion.
+
+### 3.3 Loose Physical Pose and State
+
+ADR-025 approves separate authoritative 3D physical pose/state for loose Cards, Pawns, Tokens, and Dice, associated with their existing stable Object IDs in `MatchState`.
+
+It represents full 3D position and rotation, plus the motion/lifecycle state needed for held/kinematic and released/dynamic behavior, including linear/angular motion where needed. These are serializable Runtime values, not Unity Rigidbody/Transform references or a replacement for `TabletopPose`. Physical coordinates correspond to the shared 3D tabletop world, independently of the local Camera.
+
+The current placement owner is explicit: Container membership/layout controls a contained Card with loose physics disabled; accepted extraction restores physical control. Authored/template/layout poses remain available without competing with accepted loose physical state.
+
+Commands or approved Application Use Cases accept simulation outcomes with the existing actor context, Technical Invariants, and revision boundary. Settling commits the final 3D pose; a Die's settled pose and resolved value commit together. Off-table physical state is valid and must not be rejected merely because no Table/Board is beneath it. In future multiplayer, host/server physics is the accepted source of simulation outcomes; clients do not independently decide them.
+
+This section approves the state separation and authority model, not a fixed API or field layout. Snapshot compatibility follows the existing versioning rules; scene objects alone are not a recovery source.
 
 ## 4. Definitions
 
@@ -137,7 +151,7 @@ Initial typed models:
 - `TokenState`
 - `ContainerState`
 
-The Session Entry + Component Toolbox Foundation adds explicit `DieState`. Later object types such as Bags, Miniatures, or specialized Counters add typed state only through an approved milestone and Architecture Decision where necessary.
+The Session Entry + Component Toolbox Foundation adds explicit `DieState`. ADR-025 adds the separate physical state described in §3.3 for the existing loose Card/Pawn/Token/Die identities; it does not introduce arbitrary payloads. Later object types such as Bags, Miniatures, or specialized Counters add typed state only through an approved milestone and Architecture Decision where necessary.
 
 ## 6. Card State
 
@@ -180,7 +194,7 @@ A Die uses Base Tabletop Object State plus:
 - authoritative current/result value; and
 - any minimal roll revision/status needed to project an accepted result safely.
 
-Its stable Tabletop Object ID and Tabletop Pose come from Base Tabletop Object State. A Die created by a Game Template and one created by the component toolbox use the same typed Runtime State. Physics orientation or tumble is Presentation-only and cannot choose the accepted value.
+Its stable Tabletop Object ID and authored/layout Tabletop Pose come from Base Tabletop Object State. A Die created by a Game Template and one created by the component toolbox use the same typed Runtime State and separate loose physical state. Its settled physical orientation determines the accepted value through an explicit authored face/value mapping for its d4/d6/d8/d10/d12/d20 variant. The mapping includes the result-reading convention and belongs to immutable content/configuration, not mutable Match data; values must not be inferred from mesh triangle order or names.
 
 ## 8. Containers
 
@@ -211,6 +225,7 @@ Container types include:
 - Ordered Containers contain unique Object IDs.
 - Order indices are derived from Container ordering where possible.
 - Moving an object between Containers is atomic.
+- Contained Cards are positioned by Deck/Stack/Hand/Console/Slot or other Container layouts with loose physics disabled. Accepted extraction restores loose physical behavior without changing identity or duplicating membership.
 - Deleting a Container requires an explicit policy for its contents.
 
 ## 9. Deck State
@@ -401,7 +416,7 @@ Private Definition data must not be distributed to unauthorized clients.
 
 ## 20. Random State
 
-Random operations use an injected random source.
+Logical random operations such as shuffle use an injected random source. Physical Dice may use randomized impulses and torque to initiate a throw; randomness does not preselect the accepted face value.
 
 A Match may store:
 
@@ -409,7 +424,7 @@ A Match may store:
 - Sequence position.
 - Last accepted result.
 
-The authoritative implementation determines the official shuffle or Die result. A Player-initiated Roll preserves actor context, validates through the Application boundary, records the accepted value in `DieState`, and only then drives Presentation feedback.
+The authoritative implementation determines the official shuffle result. For physical Dice, actor-aware Roll validates through the Application boundary, the authority runs the physical throw, and the settled-face mapping supplies the result. Manual grab/throw follows the same settlement path. The final 3D pose and accepted value commit together to Runtime State; clients do not independently resolve authoritative faces. Accepted outcomes are stored for synchronization/recovery rather than reconstructed from deterministic physics replay.
 
 ## 21. Mutation Rules
 
@@ -453,4 +468,4 @@ Implement first:
 
 M0 implements `PlayAreaId` only. `PlayAreaState`, Play Area layout state, Player Layout state, Zones, Slots, Grids, and other Play Area runtime models are deferred to M4 - Play Area and Player-Layout Foundation. Minimum Game Template loading follows in M4.1.
 
-Add the minimum first-class Die State in the Session Entry + Component Toolbox Foundation. Defer custom-face Dice, a custom-die editor, detailed Miniature, Bag, Spinner, and speculative randomizer state until an approved milestone requires them.
+Add the minimum first-class Die State in the Session Entry + Component Toolbox Foundation. ADR-025 additionally approves separate loose physical state and explicit authored face/value mappings for the six standard Die variants; this is not a custom-die editor. Defer user-customized Dice, detailed Miniature, Bag, Spinner, and speculative randomizer state until an approved milestone requires them.

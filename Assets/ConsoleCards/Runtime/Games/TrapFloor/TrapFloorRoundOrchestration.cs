@@ -214,6 +214,7 @@ namespace ConsoleCards.Games.TrapFloor
         FloorfallCountOverflow,
         FloormasterLifecycleRejected,
         RevisionOverflow,
+        PhysicalDiceMustSettleOrReroll,
     }
 
     public sealed class TrapFloorRoundActionRequest
@@ -602,6 +603,11 @@ namespace ConsoleCards.Games.TrapFloor
                     CommandResultStatus.Conflict,
                     TrapFloorRoundOrchestrationError.FloorfallCountOverflow);
             }
+
+            if (floorfallService.UsesPhysicalDice && !floorfallService.CanResolvePhysicalDice(
+                new TrapFloorFloorfallContext(roundState.CurrentRoundNumber)))
+                return TrapFloorRoundFloorfallResult.Failure(CommandResultStatus.Rejected,
+                    TrapFloorRoundOrchestrationError.PhysicalDiceMustSettleOrReroll);
 
             TrapFloorFloorfallTarget target = floorfallService.RollAndResolve(
                 new TrapFloorFloorfallContext(roundState.CurrentRoundNumber));

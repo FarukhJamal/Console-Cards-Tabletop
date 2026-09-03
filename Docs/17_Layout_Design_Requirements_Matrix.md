@@ -1,7 +1,7 @@
 # Console Cards - Layout Design Requirements Matrix
 
 **Document ID:** 17_Layout_Design_Requirements_Matrix  
-**Version:** 1.5
+**Version:** 1.6
 **Status:** Approved with Open Decisions  
 **Authoritative sources:** `Consolecards_LayoutRef_doc.pdf`, title "Game Design Notes", pages 1-6, supplied 2026-08-07; the approved Trap Floor correction in `18_Trap_Floor_Game_Requirements.md`; and the confirmed freeform tabletop rule philosophy supplied 2026-08-11
 **Purpose:** Preserve the approved design requirements, distinguish Platform requirements from Game-specific content, and trace each requirement to current implementation and planned delivery.
@@ -10,7 +10,7 @@
 
 - The source PDF is an authoritative design-requirements source except where the later approved Trap Floor direction explicitly supersedes its obsolete Trap Door example.
 - Reference screenshots communicate interaction or layout principles. They are not exact layouts that every Game Template must reproduce.
-- "Physical" Card movement means smooth, controlled, natural Presentation behavior. It does not require physics-authoritative Runtime State or unrestricted physical simulation.
+- ADR-025 supersedes the former Presentation-only interpretation of physical loose Card movement: holding is controlled/kinematic and release may use Rigidbody simulation, with settled 3D state accepted through the Application authority boundary. Contained Cards remain layout-controlled. This approval is not implementation evidence.
 - `Console` means the universal personal Console system. `Game Board` means the Game-specific central Board and associated Play Areas.
 - Trap Floor and Super Leroy Sisters are separate Game-specific Board types and content packages. Trap Floor is governed by `18_Trap_Floor_Game_Requirements.md`; unresolved details remain open rather than inheriting obsolete Trap Door rules.
 - Runtime State remains authoritative. A requirement marked `Partial` or `Missing` is not implemented merely because an architectural extension point exists.
@@ -39,7 +39,7 @@
 
 | ID | Requirement | Scope | Current implementation status | Planned milestone | Source/page | Unresolved decision |
 |---|---|---|---|---|---|---|
-| LDR-007 | Cards follow the pointer smoothly with controlled physical feel rather than harsh instantaneous snapping. | Platform-wide | **Implemented for the current prototype:** Card drag preview and interruptible Presentation transitions exist. This is controlled movement, not physics-authoritative simulation. | Maintain from M2-M3; acceptance review at P1 | PDF p.1 | None. |
+| LDR-007 | Cards follow the pointer smoothly while held, then use the approved physical release model. | Platform-wide | **Partial for ADR-025:** prior Card drag preview and interruptible Presentation transitions exist; shared kinematic holding, physical release, and authoritative 3D settlement remain pending. | ADR-025 integration gate; acceptance review at P1 | PDF p.1; ADR-025 | No new UI design implied. |
 | LDR-008 | Cards support natural free-form drag and drop on the tabletop, not only fixed-slot movement. | Platform-wide | **Implemented for single Cards:** tabletop movement and contained-Card transfer to tabletop/Containers exist. | Maintain from M2-M3; expand for groups before P1 closure unless required earlier | PDF p.1 | Group manipulation behavior is OD-016. |
 
 ## 4. Selection and Multi-Selection
@@ -54,7 +54,7 @@
 
 | ID | Requirement | Scope | Current implementation status | Planned milestone | Source/page | Unresolved decision |
 |---|---|---|---|---|---|---|
-| LDR-012 | While dragging, show a live landing indicator that previews where the Card will land before release. | Platform-wide | **Partial:** the dragged Card previews pointer position and Containers show valid/source/invalid feedback; there is no explicit generalized landing indicator for exact tabletop or Play Area placement. | Remaining shared requirements before P1 closure; earlier only if a Game requires it | PDF p.2 | OD-016 |
+| LDR-012 | While dragging, preview the intended surface placement or Container layout; a physical throw's final resting pose is not guaranteed by the indicator. | Platform-wide | **Partial:** the dragged Card previews pointer position and Containers show valid/source/invalid feedback; a generalized surface/layout indicator remains pending. | Remaining shared requirements before P1 closure; earlier only if a Game requires it | PDF p.2; ADR-025 | OD-016 |
 | LDR-013 | A dragged group receives a live landing indicator for the group, not only the primary Card. | Platform-wide | **Missing** | Remaining shared requirements before P1 closure; earlier only if a Game requires it | PDF p.2 | OD-016 |
 
 ## 6. Card-Choice UI

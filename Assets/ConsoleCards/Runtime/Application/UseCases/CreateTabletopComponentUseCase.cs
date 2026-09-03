@@ -38,6 +38,7 @@ namespace ConsoleCards.Application.UseCases
         RevisionOverflow,
         IdentityAllocationFailed,
         LooseCardOrderOverflow,
+        PhysicalSurfaceRequired,
     }
 
     public sealed class CreateTabletopComponentRequest
@@ -197,10 +198,13 @@ namespace ConsoleCards.Application.UseCases
     {
         private const int IdentityAllocationAttempts = 32;
         private readonly ITabletopComponentIdentitySource identitySource;
+        private readonly IPhysicalPlacementResolver physicalPlacement;
 
-        public CreateTabletopComponentUseCase(ITabletopComponentIdentitySource identitySource)
+        public CreateTabletopComponentUseCase(ITabletopComponentIdentitySource identitySource,
+            IPhysicalPlacementResolver physicalPlacement = null)
         {
             this.identitySource = identitySource ?? throw new ArgumentNullException(nameof(identitySource));
+            this.physicalPlacement = physicalPlacement;
         }
 
         public CreateTabletopComponentResult Execute(
@@ -274,6 +278,12 @@ namespace ConsoleCards.Application.UseCases
                 return CreateTabletopComponentResult.ConsoleAccepted(revision, consoleId);
             }
 
+            PhysicalObjectState physicalState = null;
+            if (physicalPlacement != null && !physicalPlacement.TryResolve(request.InitialPose,
+                request.Context.RequestedByPlayerId, out physicalState, request.ComponentKind))
+                return CreateTabletopComponentResult.Failure(CommandResultStatus.Rejected,
+                    CreateTabletopComponentError.PhysicalSurfaceRequired);
+
             if (!TryAllocateObjectId(matchState, out TabletopObjectId objectId))
             {
                 return CreateTabletopComponentResult.Failure(
@@ -305,6 +315,7 @@ namespace ConsoleCards.Application.UseCases
                 ObjectVisibility.Public,
                 false);
 
+            baseState.SetPhysicalState(physicalState);
             switch (request.ComponentKind)
             {
                 case TabletopComponentKind.Card:

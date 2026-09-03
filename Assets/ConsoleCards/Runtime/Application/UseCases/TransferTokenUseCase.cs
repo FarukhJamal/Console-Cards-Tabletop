@@ -106,6 +106,12 @@ namespace ConsoleCards.Application.UseCases
                 return Failure(CommandResultStatus.Conflict, TransferTokenError.RevisionOverflow);
             }
 
+            if (command.PhysicalState != null && (!command.DestinationContainerId.IsEmpty
+                || command.PhysicalState.Mode != PhysicalObjectMode.Dynamic
+                || command.PhysicalState.ControllingPlayerId != command.Context.RequestedByPlayerId))
+                return Failure(CommandResultStatus.Invalid, TransferTokenError.PhysicalStateInvalid);
+
+            PhysicalObjectState originalPhysical = token.PhysicalState;
             TabletopPose originalPose = token.Pose;
             int originalSourceIndex = source == null ? -1 : source.IndexOf(token.Id);
             ContainerTransferService transferService = new ContainerTransferService();
@@ -134,7 +140,9 @@ namespace ConsoleCards.Application.UseCases
                 if (destination == null)
                 {
                     token.SetPose(command.TargetTablePose.Value);
+                    token.SetPhysicalState(command.PhysicalState);
                 }
+                else token.SetPhysicalState(null);
 
                 return TransferTokenResult.Accepted(matchState.AdvanceRevision());
             }
@@ -147,6 +155,7 @@ namespace ConsoleCards.Application.UseCases
                     destination,
                     originalSourceIndex,
                     originalPose);
+                token.SetPhysicalState(originalPhysical);
                 throw;
             }
         }

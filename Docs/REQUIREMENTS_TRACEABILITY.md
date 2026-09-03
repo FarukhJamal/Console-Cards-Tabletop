@@ -1,6 +1,6 @@
 # Console Cards — Requirements Traceability
 
-**Version:** 1.6
+**Version:** 1.8
 
 **Status:** Approved
 
@@ -8,13 +8,13 @@ The source, scope, repository status, milestone, and unresolved-decision trace f
 
 | ID | Requirement | Architecture Owner | Planned Milestone | Evidence |
 |---|---|---|---|---|
-| PR-001 | Top-down shared Virtual Tabletop | Platform + Play Area Architecture | M1 | Camera/Table Surface manual test |
-| PR-002 | Effectively unbounded normal-use table | Play Area Architecture | M1 | Large-area precision and seam test |
+| PR-001 | Top-down shared Virtual Tabletop using one fixed physical Table independent from Camera movement | Platform + Play Area Architecture | M1 | Camera/fixed-Table manual test |
+| PR-002 | Real authored Table/Board collision surfaces gate new loose placement; no valid surface hit means no commit; off-table physical releases may fall without snap-back | ADR-025 + Play Area Architecture + Interaction Design | ADR-025 integration gate within G1 shared capabilities | Pending: authored collider/Transform-follow evidence, physical raycast creation/preview checks for Card, batch, Pawn, Token, Die, duplicates, and off-table release coverage. Deck/Stack/Console bodies retain non-physical ADR-024 positioning; no implementation claim from this approval |
 | PR-003 | One-to-eight configurable Seats and Player Layouts | Core Data + Play Areas + Multiplayer | M0, M4, M7 | Seat state evidence; Player Layout tests; multiplayer join test |
 | PR-004 | Private Hands | Core Data + Multiplayer | M3, M7 | Visibility tests; multiplayer filtering |
 | PR-005 | Personal Consoles separate from Hands | Core Data + Interaction | M3 | Console transfer and UI tests |
 | PR-006 | Universal Button Cards | Product Vision + Game Templates | M3 | Definition and deck tests |
-| PR-007 | Freeform object movement | Interaction Design | M2 | Object Views, pointer projection, hit resolution, selection, drag preview, accepted movement, and cancel/rollback: `Assets/ConsoleCards/Presentation/Views/`, `Assets/ConsoleCards/Presentation/Interaction/`, `Assets/ConsoleCards/Tests/PlayMode/Presentation/TabletopPrototypeInteractionSmokeTests.cs` |
+| PR-007 | Reusable loose Card/Pawn/Token/Die physics: controlled/kinematic holding, dynamic gravity/collision/velocity/torque on release, and authoritative settled 3D state | ADR-025 + Interaction Design + Core Data | M2 historical foundation; ADR-025 integration gate | Existing controlled interaction source remains historical evidence. Pending physical acceptance: preserved throw momentum, no off-table snap-back, separate physical state alongside unchanged layout TabletopPose, actor/revision settlement, contained-Card physics disable/extraction, and unchanged Container-body positioning |
 | PR-008 | Cards can flip, rotate, stack, and transfer | Interaction + Core Data | M2, M3 | Rotation, flip, stack, and transfer source exists under `Assets/ConsoleCards/Runtime/Application/` and `Assets/ConsoleCards/Presentation/`; current M3 verification evidence is not recorded by this documentation pass |
 | PR-009 | Deck draw, move, shuffle, split/merge | Interaction + Core Data | M3 | Commands, use cases, prototype Views, context controls, and lifecycle source exist; current M3 verification evidence remains to be updated |
 | PR-010 | Cards, Pawns, and basic Tokens | Core Data + Tabletop Objects | M0, M2 | Explicit state and View coverage, prototype prefabs/materials/layer, and scene integration: `Assets/ConsoleCards/Runtime/Core/Domain/`, `Assets/ConsoleCards/Presentation/Views/`, `Assets/ConsoleCards/Content/Prefabs/Prototype/`, `Assets/ConsoleCards/Presentation/Scenes/TabletopPrototype.unity` |
@@ -28,7 +28,7 @@ The source, scope, repository status, milestone, and unresolved-decision trace f
 | PR-018 | Console Cards is a freeform Virtual Tabletop; Game Rules are primarily player-enforced | Product Vision + Policy Architecture | M2 onward | Generic physical actions remain available while Technical Invariants, actor context, and authoritative state are preserved; no comprehensive Game-rule engine is required |
 | PR-019 | Future restrictions through Policies | Policy Architecture | Foundation contracts; later implementation | Policy composition tests |
 | PR-020 | Technical Invariants always enforced | Core/Application | M0 onward | Edit Mode invariant tests |
-| PR-021 | Runtime State separate from Views | Platform Architecture | M0-M2 | M2 View/state boundary verified: Runtime State remains authoritative; Transform, highlight roots, Card face roots, and TableSurfaceProxy are Presentation only; `TabletopPrototypeComposition` is prototype-only and not a permanent Bootstrap |
+| PR-021 | Runtime State separate from Views; physical outcomes commit through Application authority | Platform Architecture + ADR-025 | M0-M2 foundation; ADR-025 integration gate | Historical M2 View/state boundary evidence remains. New physical pose/result commits require actor/ID/revision validation; Rigidbody state alone is not accepted Match State. TableSurfaceProxy is not used for normal loose interaction. `TabletopPrototypeComposition` remains prototype-only, not a permanent Bootstrap |
 | PR-022 | Save/load and reset | Persistence Architecture | M4.1 baseline/reset, M5 persistence | Snapshot round-trip/reset tests |
 | PR-023 | Networking remains vendor-neutral and synchronizes authoritative physical tabletop state without requiring comprehensive Game-specific rule execution | Multiplayer Architecture | M0–M7 | Assembly audit plus actor-identified move/flip/roll/shuffle/transfer synchronization acceptance |
 | PR-024 | Stable identity and Seat restoration | Multiplayer Architecture | M7 | Reconnect test |
@@ -47,7 +47,7 @@ The source, scope, repository status, milestone, and unresolved-decision trace f
 | PR-037 | Phase 1 closes after both official Games are playable and remaining shared requirements are complete | Roadmap + Acceptance | P1 | Approved acceptance after OD-015, OD-016, OD-017, and OD-020 resolution |
 | PR-038 | Session Entry explicitly chooses Empty/Custom Table or an available Game Template; startup does not force Trap Floor | Bootstrap + Presentation + Game Templates | Immediate shared prerequisite inside G1 | Input-isolated choice UI, no-auto-load, valid selection, and atomic construction tests |
 | PR-039 | In-session component toolbox adds generic authoritative Card, Deck, Stack/pile, Pawn/meeple, Token/counter, and Die instances | Core + Application + Presentation | Immediate shared prerequisite inside G1 | Stable-ID creation, state/view binding, container/pose integration, removal, reset, and house-rule manipulation tests |
-| PR-040 | Dice are first-class physical Tabletop Objects; Roll uses authoritative RNG/state and Presentation-only tumble/settle | Core + Application + Tabletop Objects + Presentation | Immediate shared prerequisite inside G1 | d4/d6/d8/d10/d12/d20 creation, actor-aware Roll, deterministic RNG, state/view reconciliation, and Trap Floor generic-2d6 integration tests |
+| PR-040 | Physical Dice results come from settled orientation using explicit authored d4/d6/d8/d10/d12/d20 face/value mappings; Roll and manual throw share settlement | ADR-025 + Core + Application + Tabletop Objects | ADR-025 integration gate within G1; network delivery remains M7 | Pending: authored mapping/result-reading validation, physical Roll/throw, atomic settled pose/value commit, actor/revision handling, Trap Floor generic-2d6 integration. Existing RNG/Presentation-roll evidence does not verify this model; future clients accept host/server outcomes |
 | PR-041 | New player-initiated actions preserve actor context and authoritative request boundaries without networking packages | Application + Multiplayer boundary | Immediate shared prerequisite onward; transport remains M6/M7 | No implicit Seat-0/local-user assumptions; request validation and assembly/dependency audit |
 | PR-042 | Game-specific automation is optional assistance and cannot disable underlying Freeform Actions | Optional Game modules + Presentation | G1 onward | Manual play remains possible with assistance disabled or after house-rule setup changes; assistance may fail clearly without blocking generic manipulation |
 | PR-043 | Trap Floor receives a dedicated polishing pass after manually playable completion | Game-specific content + Presentation | Immediately after G1, before G2 | Readability, layout, interaction clarity, status/reference feedback, reset/session coherence, and manual-play defect review |
@@ -55,6 +55,8 @@ The source, scope, repository status, milestone, and unresolved-decision trace f
 ## M2 Implementation Evidence
 
 M2 Generic Object and Card Interaction is complete.
+
+The evidence below is historical for the controlled interaction model. It does not verify ADR-025's physical surfaces, loose-object simulation, separate 3D state, or settled-face Dice; that integration remains pending.
 
 - Object Views: `Assets/ConsoleCards/Presentation/Views/`
 - Pointer projection, object hit resolution, selection, drag preview, accepted movement coordination, cancel/rollback, rotation coordination, Card flip coordination, local interaction locks: `Assets/ConsoleCards/Presentation/Interaction/`

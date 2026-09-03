@@ -1,7 +1,7 @@
 # Console Cards — Architecture Decisions
 
 **Document ID:** 04_Architecture_Decisions  
-**Version:** 1.4
+**Version:** 1.6
 
 **Status:** Approved with Open Decisions
 
@@ -141,24 +141,11 @@ This file records accepted or proposed Architecture Decision Records. A decision
 
 ## ADR-009 — Effectively Unbounded Tabletop
 
-**Status:** Accepted
+**Status:** Superseded by ADR-024
 
-**Decision:** Use logical Tabletop Space with a seamless rendered Table Surface around the local Camera. The logical Virtual Tabletop is effectively unbounded and does not move during Camera panning. Camera movement must not move Match State or tabletop objects. For the MVP, use direct logical-to-render mapping: logical X maps to Unity world X, logical Y maps to Unity world Z, and `1` table unit maps to `1` Unity world unit.
+**Historical decision:** The original decision used an effectively unbounded logical tabletop with camera-local rendered surface coverage.
 
-**Reason:** Players must continue placing objects without visible table duplication or a practical edge.
-
-**Consequences:**
-
-- Logical coordinates are independent from visible surface sections.
-- Visible surface geometry may be camera-local and repositioned as a Presentation rendering proxy.
-- Surface-proxy transforms are Presentation state only, not Match State, object placement authority, Play Area state, or coordinate source.
-- Surface visual patterns, markings, and textures must remain anchored to Tabletop Space or world-space X/Z coordinates so proxy repositioning is visually undetectable.
-- M1 direct-coordinate precision measurement accepts a characterized normal-use render range of +/-100,000 table units for the MVP.
-- Within that range, the prototype `0.10` card gap remains within the approved `0.01` world-unit error tolerance. At 100,000 table units, the measured represented gap is approximately `0.1015625`, with approximately `0.0015625` error.
-- This is a measured MVP rendering baseline, not a claim of infinite floating-point precision.
-- Floating origin, render-origin rebasing, sectors, and chunks are rejected for the MVP because current evidence does not justify their complexity.
-- Reconsider those strategies only if a real product requirement exceeds the characterized range or visual testing reveals instability inside it.
-- Far objects may be culled visually while remaining in Runtime State.
+**Disposition:** This decision no longer authorizes an unbounded placement surface, camera-following Table geometry, or a camera-local Table Surface proxy. ADR-024 replaces it, with the loose-object placement model subsequently superseded by ADR-025. The authored-layout coordinate mapping and the rule that Camera movement must not move Match State remain preserved.
 
 ---
 
@@ -174,7 +161,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 
 - Grid is one layout strategy.
 - Play Areas supply suggestions and focus bounds.
-- Freeform placement remains available unless a Policy restricts it.
+- Freeform loose-object creation uses valid physical Table/Board surfaces under ADR-025. Play Areas remain optional guidance, not collision surfaces or a reason to snap back an off-table physical release. Non-physical Container positioning retains ADR-024's authored Table boundary.
 
 ---
 
@@ -189,6 +176,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 **Consequences:**
 
 - Camera state is usually not authoritative Match State.
+- Camera movement does not reposition, rotate, or scale the physical Table or its authored usable area.
 - Focus suggestions may be shared.
 - Console and Play Area bookmarks are required.
 
@@ -277,17 +265,13 @@ This file records accepted or proposed Architecture Decision Records. A decision
 
 ## ADR-017 — No Full Physics Foundation
 
-**Status:** Accepted
+**Status:** Accepted in part; conflicting interaction/physics restrictions superseded by ADR-025
 
-**Decision:** Use controlled tabletop interaction and deterministic placement rather than unrestricted rigidbody simulation.
+**Historical decision:** Use controlled tabletop interaction and deterministic placement rather than unrestricted Rigidbody simulation; logically generate Dice outcomes and animate them.
 
-**Reason:** Full physics creates unstable stacks, input ambiguity, and network cost without improving the core card experience.
+**Superseded:** The prohibition on loose-object Rigidbody interaction, the restriction of physics to visual feedback, and the blanket deferral of physical Dice. ADR-025 approves physical Card, Pawn, Token, and Die interaction and settled-face Dice results.
 
-**Consequences:**
-
-- Dice outcomes may be generated logically and animated.
-- Objects can appear physical without physics owning authoritative state.
-- Advanced physics is deferred.
+**Preserved:** The scope is not full-scene simulation. Deck/Stack/Console bodies retain their existing positioning system, contained Cards remain layout-controlled, and accepted Match State remains separate from Unity objects and changes through the Application boundary.
 
 ---
 
@@ -377,9 +361,9 @@ This file records accepted or proposed Architecture Decision Records. A decision
 
 ## ADR-023 - Authoritative Toolbox Components and Dice
 
-**Status:** Accepted
+**Status:** Accepted in part; Dice-result and loose-placement restrictions superseded by ADR-025
 
-**Decision:** Generic components added through the in-session component toolbox become first-class authoritative object/container instances using the existing state and placement architecture. Dice are physical/interactable generic components whose accepted results are determined by authoritative logic, not physics.
+**Preserved decision:** Generic components added through the in-session component toolbox become first-class authoritative object/container instances. Template-created and toolbox-created pieces share stable identity, Runtime State, actor-aware Commands, and Match revisions.
 
 **Reason:** Empty/custom games and house rules require reusable pieces that remain compatible with later persistence and host/server-authoritative multiplayer.
 
@@ -387,8 +371,60 @@ This file records accepted or proposed Architecture Decision Records. A decision
 
 - Initial toolbox categories are Card, Deck, Stack/pile, Pawn/meeple, Token/counter, and Die.
 - Toolbox-created and Template-created pieces share stable identity and Runtime State contracts.
-- A Die records side count, authoritative current/result value, and Tabletop Pose and has a Presentation View.
+- A Die records side count and authoritative current/result value and has a Presentation View. Its authored/layout `TabletopPose` remains; loose physical pose/state is separate under ADR-025.
 - Initial common Die options are d4, d6, d8, d10, d12, and d20; no custom-die editor is implied.
-- Roll follows actor request -> authoritative validation/RNG/state mutation -> Presentation tumble/settle.
+- Roll follows actor request -> authoritative validation -> physical roll -> settled-face resolution -> authoritative pose/value commit under ADR-025. RNG-only result selection with Presentation-only settling is no longer the required model.
 - Trap Floor's two d6 are generic Platform Dice that its Game-specific Floorfall logic interprets as X and Y.
-- Production physics, networking, persistence, and speculative component categories remain deferred.
+- Networking implementation, persistence milestones, and speculative component categories remain deferred. The scoped physical-object system is approved by ADR-025, not covered by the former blanket physics deferral.
+
+---
+
+## ADR-024 - Fixed Physical Table and Authored Placement Boundary
+
+**Status:** Accepted in part; loose-object plane/boundary/release rules superseded by ADR-025
+
+**Supersedes:** ADR-009
+
+**Preserved decision:** Console Cards uses one real, fixed physical Table. The local Camera moves independently and never repositions, rotates, or scales the Table or Match objects. Surface authoring is inspector-editable, follows the Table Transform/scale, and is independent of decorative mesh geometry. `TableCoordinate` and `TabletopPose` remain the authored/template/container-layout model. Freeform and house-rule play remain available without Game-rule enforcement.
+
+**Superseded:** Loose Card/Pawn/Token/Die placement no longer projects onto a mathematical plane and then tests a two-dimensional Table boundary. Physical release is no longer rejected or rolled back solely for being outside that boundary. Accepted loose poses are no longer limited to `TabletopPose`. Game Boards are valid physical collision/placement surfaces, not merely inner logical placement guides. ADR-025 defines these replacements.
+
+**Remaining scope:** Deck/Stack/Console bodies remain non-physical in this pass. Their existing positioning model retains mathematical-plane/layout placement and authored Table-area validation: invalid creation does not commit, and invalid supported movement releases retain/return to the previous authoritative pose. This does not authorize adding missing Container interactions or imply boundary validation is already implemented.
+
+---
+
+## ADR-025 - Physical Loose Objects and Authoritative 3D State
+
+**Status:** Accepted
+
+**Supersedes:** The conflicting portions of ADR-017, ADR-023, and ADR-024 identified above. ADR-009 remains superseded; neither the infinite placement plane nor camera-following Table Surface behavior is reinstated.
+
+**Decision:** Use one reusable physical tabletop interaction model initially for loose Cards, Pawns, Tokens, and Dice. The real fixed Table and Game Boards provide explicitly authored, valid physical collision surfaces. Their colliders are editable with the corresponding Table/Board and follow its Transform and scale; decorative mesh details are not gameplay authority.
+
+**Physical interaction:**
+
+- Toolbox placement raycasts valid Table/Board physical surfaces, not the mathematical placement plane or `TabletopSurfaceProxy`. A valid hit supplies the preview and initial 3D placement; no valid hit means invalid/hidden preview and no creation commit.
+- Create slightly above the hit surface so the loose object can settle through collision and gravity. Card batches and duplicate placement use the same physical-surface rule for every created loose object.
+- Loose objects may use Rigidbody and collider physics. While held, they are temporarily controlled/kinematic with gravity disabled, lifted clear of surfaces/objects, and follow the pointer.
+- Release restores dynamic physics and gravity and preserves release velocity/throw momentum. Collision, velocity, and torque determine subsequent motion. Releasing or throwing beyond the Table is allowed to fall naturally; loss of a surface hit is not a movement rejection and must not snap the object back.
+- Deck, Stack, Hand, Console/Slot, and other Container layouts control contained Cards with loose physics disabled. Accepted extraction returns a Card to loose physical behavior; transfers remain authoritative and atomic.
+- Deck/Stack/Console bodies keep their existing positioning system. Selection, flip, Inspect, Delete, Duplicate, labels, UI, Container ordering/transfers, Camera controls, and Game rules/content are not redesigned by this decision.
+
+**State and authority:**
+
+- Keep existing `TabletopPose` for authored/template/container layout. Add a separate authoritative, serializable 3D physical pose/state for loose physical objects, including full position and rotation and the motion/lifecycle state needed by the physical interaction. Do not force full 3D into `TabletopPose` or store live Match State only on a Rigidbody.
+- Associate physical state with the existing stable Object ID in `MatchState`. Contained layout and loose physical state must not compete to position the same object.
+- Player requests and accepted simulation outcomes pass through Commands or approved Application Use Cases with actor context, Technical Invariants, duplicate/stale-request handling, and Match revisions. When physics settles, commit the final 3D pose and any Die result through this boundary; Views must not directly mutate Runtime State.
+- The approved local/offline implementation runs physics under the local authority. In future multiplayer, one host/server physics simulation determines accepted motion and Dice results. Clients may display/interpolate feedback but do not independently decide authoritative outcomes. This does not select or authorize a networking package.
+- Surface-hit validation gates new loose placement. It is not an invariant that every accepted physical pose remains above the Table: off-table falling/settled state is valid.
+
+**Dice:**
+
+- d4, d6, d8, d10, d12, and d20 each have explicit authored physical face/value mappings, including their result-reading convention. Do not infer values from mesh triangle order or object names.
+- A Roll action physically lifts/throws the Die with randomized impulse and torque; the settled physical orientation determines the result through that mapping. Manual grab/throw uses the same settle/value-resolution path.
+- Commit the settled 3D pose and resolved value to authoritative Die State together. RNG may drive the throw, but no preselected RNG value overrides the settled face.
+- Trap Floor's two d6 remain generic Platform Dice using this same system. Optional Floorfall assistance interprets accepted values without replacing generic Dice physics or changing Game rules.
+
+**Reason:** Real surfaces, collisions, and throws supply physical tabletop behavior while the existing identity, Command, revision, Container, and Match authority boundaries preserve consistent accepted state. Layout authoring remains separate from free 3D simulation.
+
+**Approval boundary:** This is approved direction, not evidence of implementation or verification. Full-scene physics, physical Container bodies/stacks, networking delivery, new Game rules, and unrelated interaction redesign remain outside this pass.

@@ -10,6 +10,32 @@ namespace ConsoleCards.Presentation.Views
     public sealed class DieView : TabletopObjectView
     {
         [SerializeField] private TextMesh resultLabel;
+        [SerializeField] private MeshFilter physicalBodyMesh;
+        [SerializeField] private PhysicalDieDefinition[] physicalDefinitions;
+        private PhysicalDieDefinition physicalDefinition;
+        public bool HasPhysicalDefinition => physicalDefinition != null;
+
+        public bool TryResolvePhysicalValue(out int value)
+        {
+            value = 0;
+            Quaternion orientation = PhysicalObject != null && PhysicalObject.Body != null
+                ? PhysicalObject.Body.rotation : transform.rotation;
+            return physicalDefinition != null && physicalDefinition.TryRead(orientation, out value);
+        }
+
+        public void ConfigurePhysicalShape(int sideCount)
+        {
+            if (physicalBodyMesh == null || physicalDefinition != null) return;
+            foreach (PhysicalDieDefinition definition in physicalDefinitions)
+                if (definition != null && definition.SideCount == sideCount) physicalDefinition = definition;
+            if (physicalDefinition == null) throw new InvalidOperationException("No authored physical Die face mapping.");
+            physicalDefinition.Build(transform, physicalBodyMesh, resultLabel);
+        }
+
+        private void OnDestroy()
+        {
+            if (physicalDefinition != null && physicalBodyMesh != null) Destroy(physicalBodyMesh.sharedMesh);
+        }
 
         private DieState dieState;
 
@@ -30,6 +56,7 @@ namespace ConsoleCards.Presentation.Views
             }
 
             dieState = state;
+            ConfigurePhysicalShape(state.SideCount);
             try
             {
                 BindBase(state.BaseState, converter, TabletopObjectKind.Die);
@@ -45,7 +72,8 @@ namespace ConsoleCards.Presentation.Views
         {
             if (dieState != null && resultLabel != null)
             {
-                resultLabel.text = $"d{dieState.SideCount}\n{dieState.CurrentValue}";
+                resultLabel.text = dieState.BaseState.PhysicalState?.Mode == PhysicalObjectMode.SleepingUnresolved
+                    ? $"d{dieState.SideCount}\ncocked" : $"d{dieState.SideCount}\n{dieState.CurrentValue}";
             }
         }
 

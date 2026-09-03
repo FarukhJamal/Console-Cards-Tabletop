@@ -12,6 +12,18 @@ namespace ConsoleCards.Core.Domain.Match
 {
     public sealed class MatchState
     {
+        private readonly HashSet<CommandId> physicalCommands = new HashSet<CommandId>();
+        private readonly Queue<CommandId> physicalCommandOrder = new Queue<CommandId>();
+        public const int PhysicalCommandHistoryCapacity = 4096;
+        public bool HasPhysicalCommand(CommandId id) => physicalCommands.Contains(id);
+        public IReadOnlyCollection<CommandId> CopyPhysicalCommandHistory() => new List<CommandId>(physicalCommandOrder).AsReadOnly();
+        public void RecordPhysicalCommand(CommandId id)
+        {
+            if (!physicalCommands.Add(id)) return;
+            physicalCommandOrder.Enqueue(id);
+            if (physicalCommandOrder.Count > PhysicalCommandHistoryCapacity)
+                physicalCommands.Remove(physicalCommandOrder.Dequeue());
+        }
         private readonly Dictionary<TabletopObjectId, CardInstanceState> cards;
         private readonly Dictionary<TabletopObjectId, PawnState> pawns;
         private readonly Dictionary<TabletopObjectId, TokenState> tokens;

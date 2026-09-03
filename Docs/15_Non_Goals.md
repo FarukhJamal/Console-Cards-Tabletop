@@ -1,7 +1,7 @@
 # Console Cards — Non-Goals
 
 **Document ID:** 15_Non_Goals  
-**Version:** 1.3
+**Version:** 1.4
 
 **Status:** Approved
 
@@ -53,9 +53,9 @@ The initial foundation is not building:
 - Cloud content distribution.
 - Custom 3D model upload.
 - Unrestricted shader upload.
-- Full physical simulation.
-- Physics-based card stacks.
-- Physics-authoritative dice.
+- Full-scene physical simulation beyond the scoped loose Card/Pawn/Token/Die system approved by ADR-025.
+- Physics-based Container bodies or contained Card layouts, including Decks/Stacks/Hands/Consoles.
+- Independent client-authoritative physics or Dice results.
 - Measuring rulers.
 - Freehand drawing.
 - Fog of war.
@@ -124,7 +124,9 @@ The foundation must be small, not careless.
 
 Player-enforced rules do not weaken authoritative state. Freeform Actions still preserve actor context, Match revisions, Container membership, visibility/ownership requirements, and other Technical Invariants.
 
-"Full physical simulation" does not exclude the required smooth, controlled physical feel for Card dragging, Presentation transitions, or live landing indicators. Runtime State remains authoritative.
+ADR-025 explicitly removes loose Card/Pawn/Token/Die Rigidbody physics and settled-face Dice results from the Non-Goals. Approved scope includes real Table/Board collision surfaces, surface-raycast placement, controlled/kinematic holding, gravity/collision/velocity/torque on release, natural off-table falling without snap-back, and separate authoritative 3D physical pose/state alongside unchanged authored/layout `TabletopPose`. Standard d4/d6/d8/d10/d12/d20 use explicit authored face/value mappings. Contained Cards remain layout-controlled with loose physics disabled; Deck/Stack/Console bodies are not converted.
+
+Runtime State, IDs, actor-aware Commands/Application Use Cases, and Match revisions remain authoritative. Future host/server physics determines accepted outcomes; clients do not independently decide results. This approval does not authorize networking packages, full-scene simulation, or new Game rules/content. Roadmap scope and acceptance are recorded under the ADR-025 physical-object integration gate.
 
 ## 8. Change Process
 

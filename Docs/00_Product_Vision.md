@@ -1,7 +1,7 @@
 # Console Cards — Product Vision
 
 **Document ID:** 00_Product_Vision  
-**Version:** 1.4
+**Version:** 1.6
 
 **Status:** Approved
 **Purpose:** Define what Console Cards is, what experience it must create, and which product boundaries must remain stable before architecture and implementation begin.
@@ -173,17 +173,17 @@ The chosen setup is then validated and used to construct authoritative Runtime S
 
 The initial builds should prioritize player freedom.
 
-Players should generally be able to:
+Within the authored usable surface of the physical Table, Players should generally be able to:
 
 - Move objects freely.
-- Place cards outside suggested areas.
+- Place cards outside suggested Play Areas, Boards, Zones, and guides.
 - Ignore turn order.
 - Rearrange decks and piles.
 - Correct accidental actions manually.
 - Use house rules.
 - Play games not understood by the software.
 
-This freedom includes adding or removing generic pieces, using different Dice, creating extra Decks or Stacks, and rearranging official setups for house rules. Optional official Game automation may stop recognizing or assisting a modified setup; that is acceptable. Unless an approved Policy explicitly restricts an action, loss of automation understanding must not make the generic tabletop pieces Presentation-only or prevent free manual manipulation.
+This freedom includes adding or removing generic pieces, using different Dice, creating extra Decks or Stacks, and rearranging official setups for house rules. Optional official Game automation may stop recognizing or assisting a modified setup; that is acceptable. Unless an approved Policy explicitly restricts an action, loss of automation understanding must not make the generic tabletop pieces Presentation-only or prevent free manual manipulation. New loose placement requires a valid physical Table/Board surface, but objects released or thrown beyond the Table may fall naturally without snapping back. These physical capabilities are Platform behavior, not Game-rule enforcement.
 
 However, the architecture must allow restrictions and automated enforcement to be introduced later.
 
@@ -245,11 +245,11 @@ Each player should have:
 
 One player's camera movement should not move every other player's camera.
 
-The table should appear seamless and effectively unbounded for normal use.
+Console Cards uses one real, fixed physical Table. The Table remains fixed while each local Camera pans and zooms independently; Camera movement must not reposition or resize the Table.
 
-Players should be able to continue placing objects without reaching an obvious visual table edge or seeing multiple separate table meshes placed beside each other.
+The Table and Game Boards provide real physical collision surfaces. Usable surface colliders are explicitly authored independently from decorative geometry, are editable with the Table/Board in Unity, and follow its Transform and scale. Normal freeform and house-rule placement is available on valid Table/Board surfaces.
 
-The virtual tabletop should maintain stable logical coordinates while rendering only the nearby visible surface and objects.
+Loose Card/Pawn/Token/Die placement raycasts those physical surfaces rather than the mathematical placement plane. The existing `TableCoordinate` and `TabletopPose` model remains for authored/template/container layout; separate authoritative 3D physical pose/state represents loose objects. Boards sit on the Table and can catch objects physically. Logical Play Areas, mats, and guides do not create collision surfaces merely by defining bounds. ADR-025 supersedes the former loose-object plane/boundary model.
 
 Player-count adaptation must not enlarge the table or reduce Card readability. Important usable and interactable areas should be within the default Game Template framing, while local Camera pan and zoom remain available.
 
@@ -375,14 +375,16 @@ The Platform must provide the common physical tabletop actions required by suppo
 - Creating supported generic Components through the toolbox.
 - Arranging Game-specific Boards and shared tabletop pieces.
 - Grouping and organizing components.
-- Previewing the exact landing placement of a dragged Card or selected Card group before release.
+- Previewing the surface placement or Container layout of a Card or selected Card group; a physical throw's final resting pose is determined by simulation, not guaranteed by the preview.
 - Locking setup objects when needed.
 - Undoing or manually correcting accidental placement.
 - Resetting a Match to its initial setup.
 
-Interactions should be responsive, predictable, and easier to manage than unrestricted physical simulation.
+Interactions should be responsive and clear: controlled while held, physical when released.
 
-Cards must support natural free-form dragging with smooth controlled Presentation motion. This physical feel does not make Unity physics or Transforms authoritative.
+New loose Cards, Pawns, Tokens, and Dice, including Card batches and duplicate placement, require valid Table/Board surface hits. No valid surface means invalid/hidden preview and no creation commit. Released loose objects use gravity, collision, velocity, and torque; an off-table release is not invalid and must not snap back. Deck/Stack/Console bodies retain their existing non-physical positioning and the applicable authored Table-area validation under ADR-024.
+
+Loose objects may use Rigidbody/collider physics. Held objects are temporarily kinematic with gravity disabled, lift clear of surfaces/objects, and follow the pointer; release restores dynamic motion and preserves throw momentum. Containers control contained Cards through their layouts with loose physics disabled; accepted extraction restores loose physical behavior. Settled 3D poses commit through actor-aware Commands/Application Use Cases to Runtime State. Future host/server physics determines accepted simulation outcomes; clients do not independently decide them.
 
 High-stakes Card choices require a large, central, readable selection UI. Players must be able to hide it temporarily to inspect the Board, reopen it without losing the pending choice, and receive clear hover, selection, and confirmation feedback.
 
@@ -390,9 +392,9 @@ Hand visibility, personal Play Area visibility, and individual Card face/identit
 
 ### 10.1 Dice Authority
 
-A Die is a physical, interactable Tabletop Object with stable identity, side count, current authoritative value, and Tabletop Pose. Common initial toolbox options include d4, d6, d8, d10, d12, and d20.
+A Die is a physical, interactable Tabletop Object with stable identity, side count, current authoritative value, authored/layout Tabletop Pose, and separate loose 3D physical pose/state. Common initial toolbox options include d4, d6, d8, d10, d12, and d20, each with explicit authored face/value mappings and a result-reading convention.
 
-Rolling follows the normal authoritative state-change path: a Player requests Roll, the authoritative operation validates the request and chooses the result through the approved random source, Runtime State records that result, and Presentation animates the Die settling on the accepted value. Physics or animation must not determine the authoritative result.
+Rolling follows the authoritative state-change path: a Player requests Roll, authority validates and physically throws the Die using randomized impulse/torque, then resolves the settled physical face through its authored mapping and commits the final 3D pose and value to Die State. Manual grab/throw uses the same settlement path. Values must not be inferred from mesh triangle order or names. Future host/server physics decides the result, not independent client simulations; IDs, Match State, Commands, actor context, and revisions remain authoritative.
 
 Roll is exposed through the normal player-facing object interaction, with a Die context-menu action acceptable for the initial implementation. This does not prescribe final UI styling.
 
@@ -500,7 +502,7 @@ The first foundation should focus on:
 - Basic boards or Play Areas.
 - Pawns or meeples.
 - Tokens.
-- Dice with authoritative values and Presentation-only roll feedback.
+- Physical Dice with authoritative settled-face values and explicit face/value mappings.
 - A component toolbox for adding supported generic authoritative objects.
 - Optional placement guides.
 - Freeform interaction.
@@ -520,7 +522,7 @@ The first foundation should not attempt to deliver:
 - Workshop distribution.
 - User scripting.
 - Arbitrary runtime plugins.
-- Advanced physical simulation.
+- Physical simulation beyond the scoped loose Card/Pawn/Token/Die system of ADR-025, including physical Container bodies and physics-driven contained Card layouts.
 - Production economy.
 - Cosmetic store.
 - Voice chat.

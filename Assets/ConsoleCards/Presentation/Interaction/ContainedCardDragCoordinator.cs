@@ -235,6 +235,15 @@ namespace ConsoleCards.Presentation.Interaction
                 return;
             }
 
+            if (view.PhysicalObject != null)
+            {
+                if (startedDragging) previewSession.Begin(view);
+                view.PhysicalObject.Follow(screenPosition);
+                UpdateHandReorderPreview(view, view.PhysicalObject.LayoutCoordinate, screenPosition);
+                UpdateFeedback(screenPosition);
+                return;
+            }
+
             if (!pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate))
             {
                 CancelActiveInteraction(ContainedCardDragReleaseStatus.ProjectionFailed);
@@ -285,7 +294,15 @@ namespace ConsoleCards.Presentation.Interaction
             stateMachine.ReleasePointer();
             try
             {
-                if (!dropTargetResolver.TryResolve(screenPosition, out CardDropTarget target))
+                bool resolved = dropTargetResolver.TryResolve(screenPosition, out CardDropTarget target);
+                if (view.PhysicalObject != null && (!resolved || target.Kind != CardDropTargetKind.Container))
+                {
+                    target = CardDropTarget.ForTabletop(new TabletopPose(
+                        view.PhysicalObject.LayoutCoordinate,
+                        view.BoundState.Pose.RotationDegrees, view.BoundState.Pose.Layer, view.BoundState.Pose.LocalOrder));
+                    resolved = true;
+                }
+                if (!resolved)
                 {
                     TabletopTransformSnapshot start = EndPresentationWithoutReconcile(view);
                     RestoreSourceLayout();

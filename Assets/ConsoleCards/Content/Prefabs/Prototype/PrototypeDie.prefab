@@ -50,6 +50,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   resultLabel: {fileID: 610302}
+  physicalBodyMesh: {fileID: 633200}
+  physicalDefinitions:
+  - {fileID: 11400000, guid: b6025025f1a24d9a9ba9ac75eedf0004, type: 2}
+  - {fileID: 11400000, guid: b6025025f1a24d9a9ba9ac75eedf0006, type: 2}
+  - {fileID: 11400000, guid: b6025025f1a24d9a9ba9ac75eedf0008, type: 2}
+  - {fileID: 11400000, guid: b6025025f1a24d9a9ba9ac75eedf0010, type: 2}
+  - {fileID: 11400000, guid: b6025025f1a24d9a9ba9ac75eedf0012, type: 2}
+  - {fileID: 11400000, guid: b6025025f1a24d9a9ba9ac75eedf0020, type: 2}
 --- !u!114 &611101
 MonoBehaviour:
   m_ObjectHideFlags: 0

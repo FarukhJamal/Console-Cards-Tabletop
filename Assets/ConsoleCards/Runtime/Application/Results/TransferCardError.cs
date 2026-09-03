@@ -20,6 +20,7 @@ namespace ConsoleCards.Application.Results
         SameLocation,
         TargetTablePoseMissing,
         LooseCardOrderOverflow,
-        RevisionOverflow
+        RevisionOverflow,
+        PhysicalStateInvalid
     }
 }

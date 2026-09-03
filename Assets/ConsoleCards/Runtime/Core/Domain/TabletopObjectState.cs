@@ -14,7 +14,7 @@ namespace ConsoleCards.Core.Domain
             ContainerId containerId,
             PlayerId ownerPlayerId,
             ObjectVisibility visibility,
-            bool isUserLocked)
+            bool isUserLocked, PhysicalObjectState physicalState = null, long physicalRevision = 0)
         {
             if (id.IsEmpty)
             {
@@ -34,6 +34,10 @@ namespace ConsoleCards.Core.Domain
             OwnerPlayerId = ownerPlayerId;
             Visibility = visibility;
             IsUserLocked = isUserLocked;
+            if (physicalRevision < 0 || (!containerId.IsEmpty && physicalState != null))
+                throw new ArgumentException("Invalid initial physical state.");
+            PhysicalState = physicalState;
+            PhysicalRevision = physicalRevision;
         }
 
         public TabletopObjectId Id { get; }
@@ -43,6 +47,18 @@ namespace ConsoleCards.Core.Domain
         public TabletopObjectKind Kind { get; }
 
         public TabletopPose Pose { get; private set; }
+
+        public PhysicalObjectState PhysicalState { get; private set; }
+        public long PhysicalRevision { get; private set; }
+
+        public void SetPhysicalState(PhysicalObjectState state)
+        {
+            if (!ContainerId.IsEmpty && state != null) throw new InvalidOperationException("Contained objects use Container layout.");
+            if (ReferenceEquals(PhysicalState, state)) return;
+            if (PhysicalRevision == long.MaxValue) throw new InvalidOperationException("Physical revision overflow.");
+            PhysicalState = state;
+            PhysicalRevision++;
+        }
 
         public ContainerId ContainerId { get; private set; }
 
@@ -59,6 +75,7 @@ namespace ConsoleCards.Core.Domain
 
         public void SetContainer(ContainerId containerId)
         {
+            if (!containerId.IsEmpty) SetPhysicalState(null);
             ContainerId = containerId;
         }
 

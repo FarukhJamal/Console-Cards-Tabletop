@@ -1,7 +1,7 @@
 # Console Cards — Play Area Architecture
 
 **Document ID:** 07_Play_Area_Architecture  
-**Version:** 1.3
+**Version:** 1.5
 
 **Status:** Approved
 
@@ -41,7 +41,7 @@ Required reusable Player Layouts are:
 - Eight-Player: two Seats per side.
 - Compact four-Player: Seats pulled toward the central action.
 
-The Platform supports one to eight Players. For smaller Player counts, occupied Seats reposition toward the center rather than remaining at distant unused edge positions. The logical Virtual Tabletop and central Game Board do not scale up as more Players join.
+The Platform supports one to eight Players. For smaller Player counts, occupied Seats reposition toward the center rather than remaining at distant unused edge positions. The fixed physical Table, its authored usable area, and the central Game Board do not scale up as more Players join.
 
 Selection of a Player Layout is Game Template and Player-count configuration, not hardcoded Game logic. Exact mappings for one to three and five to seven Players remain open.
 
@@ -188,28 +188,27 @@ The loaded Game Template supplies the central Game Board and associated Play Are
 
 Reference screenshots and mockups demonstrate possible compositions only. They do not define one mandatory Board, Grid, Seat, or Camera layout for every Game.
 
-## 12. Effectively Unbounded Tabletop
+## 12. Fixed Table and Physical Surfaces
 
-The logical Virtual Tabletop is effectively unbounded as a product abstraction. It never expands by stretching, appending, or duplicating logical tables, and there is no meaningful logical table edge for normal freeform play.
+The Virtual Tabletop uses one fixed physical Table. The Table and Game Boards provide real authored collision surfaces for loose Card/Pawn/Token/Die placement and simulation under ADR-025.
 
-Rendered Table Surface coverage is a Presentation concern:
+An authored usable Table/Board surface:
 
-- Only nearby visual coverage is rendered.
-- Surface proxies may reposition around each local Camera.
-- Objects retain stable logical `TableCoordinate` values in Tabletop Space.
-- Objects may retain double-precision logical coordinates beyond the current practical render range.
-- Repositioned proxy geometry must not cause texture, pattern, or marking swimming.
-- Play Areas and Boards remain independent from the surface proxy.
+- Uses explicitly configured physical colliders editable with the Table/Board in Unity.
+- Follows the owning Table/Board's position, rotation, and scale.
+- Is independent from decorative Table mesh geometry and mesh bounds.
+- Supplies valid raycast hits for new loose placement and catches released objects by collision.
+- Does not move with the local Camera.
 
-This is not parallax.
+Game Boards sit on the Table and are physical surfaces, while Play Areas remain logical structure. A mat, Zone, Slot, or guide does not create a collision surface merely by defining bounds. Off-table physical releases may fall naturally and must not snap back. Deck/Stack/Console bodies retain their non-physical positioning and applicable authored Table-area validation under ADR-024.
 
-## 13. Large-Coordinate Strategy
+## 13. Coordinate and Projection Strategy
 
-The first Presentation implementation uses direct logical-to-render mapping: logical X maps to Unity world X, logical Y maps to Unity world Z, and `1` table unit maps to `1` Unity world unit. This has a characterized MVP render range of +/-100,000 table units, where a `0.10` card gap remains within the approved `0.01` world-unit error tolerance.
+Authored/template/container layout retains direct logical-to-render mapping: logical X maps to Unity world X, logical Y maps to Unity world Z, and `1` table unit maps to `1` Unity world unit. Existing `TableCoordinate` and `TabletopPose` values remain unchanged for those uses. Separate authoritative 3D physical pose/state represents loose physical objects in the shared world; full 3D is not forced into `TabletopPose`.
 
-The effectively unbounded logical tabletop is not a claim of mathematically infinite float render precision. Known measurements outside the approved normal-use range show increasing error: at 1,000,000 table units a requested `0.10` gap is represented at approximately `0.125`, and at 2,097,152 table units the `0.10` separation collapses.
+New loose placement raycasts valid physical Table/Board surfaces instead of the mathematical placement plane. A hit supplies the preview and initial placement slightly above the surface; no hit means no creation commit. This applies to each loose object in Card batches and duplicate placement. Holding is controlled/kinematic, releasing is dynamic, and settling commits final 3D pose through the authoritative Application path. Loss of a surface hit must not cancel release or roll back an off-table object.
 
-Sectoring, chunk coordinates, floating-origin rebasing, or render-origin rebasing are not Foundation implementations. Any future larger-range rendering strategy remains Presentation-only and must not alter accepted logical Match State.
+Moving/scaling an authored Table/Board moves/scales its colliders, not the logical coordinate system. Camera movement changes neither. Non-physical Container positioning retains its existing coordinate/projection model; this decision does not convert Container bodies or logical Play Area strategies to physics.
 
 ## 14. Layering
 
@@ -226,6 +225,8 @@ Canonical layer intent:
 
 Logical `Layer` and `LocalOrder` must not depend solely on transform Y position.
 
+This layering is authored/layout and overlay intent, not a constraint on simulated loose-object height or orientation. Collision determines physical overlap and resting height; Container layouts control contained Cards with loose physics disabled.
+
 ## 15. Placement Priority
 
 When multiple guides overlap:
@@ -234,7 +235,7 @@ When multiple guides overlap:
 2. Explicit Zone target.
 3. Active Play Area strategy.
 4. Nearby Stack/Deck target.
-5. Freeform table placement.
+5. Freeform loose placement on a valid physical Table/Board surface; non-physical Container placement retains the authored Table-area rule.
 
 The exact priority must be configurable and tested.
 
@@ -251,6 +252,8 @@ Policy determines whether:
 - Bypass is allowed.
 
 This separation prevents layout code from becoming a Rule engine.
+
+A valid physical surface hit is a requirement for new loose placement, not a Play Area suggestion or Game Rule. A logical guide or bypass cannot fabricate a surface. Off-table physical release and falling remain valid under ADR-025; do not apply a two-dimensional Table-boundary check to reject accepted physical settlement. Non-physical Container positioning retains ADR-024's boundary validation. Optional Game-rule restrictions remain separate from these generic mechanics.
 
 ## 17. Camera Bookmarks
 

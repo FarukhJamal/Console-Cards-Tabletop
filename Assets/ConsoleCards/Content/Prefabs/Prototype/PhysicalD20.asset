@@ -1,0 +1,77 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b6025025f1a24d9a9ba9ac75eedf1001, type: 3}
+  m_Name: PhysicalD20
+  m_EditorClassIdentifier:
+  sideCount: 20
+  readOppositeSupportingFace: 0
+  faces:
+  - value: 1
+    outwardNormal: {x: -0.57735027, y: -0.57735027, z: -0.57735027}
+    planeDistance: 0.3
+  - value: 2
+    outwardNormal: {x: -0.57735027, y: -0.57735027, z: 0.57735027}
+    planeDistance: 0.3
+  - value: 3
+    outwardNormal: {x: -0.57735027, y: 0.57735027, z: -0.57735027}
+    planeDistance: 0.3
+  - value: 4
+    outwardNormal: {x: -0.57735027, y: 0.57735027, z: 0.57735027}
+    planeDistance: 0.3
+  - value: 5
+    outwardNormal: {x: 0.57735027, y: -0.57735027, z: -0.57735027}
+    planeDistance: 0.3
+  - value: 6
+    outwardNormal: {x: 0.57735027, y: -0.57735027, z: 0.57735027}
+    planeDistance: 0.3
+  - value: 7
+    outwardNormal: {x: 0.57735027, y: 0.57735027, z: -0.57735027}
+    planeDistance: 0.3
+  - value: 8
+    outwardNormal: {x: 0.57735027, y: 0.57735027, z: 0.57735027}
+    planeDistance: 0.3
+  - value: 9
+    outwardNormal: {x: 0.00000000, y: -0.35682209, z: -0.93417236}
+    planeDistance: 0.3
+  - value: 10
+    outwardNormal: {x: -0.35682209, y: -0.93417236, z: 0.00000000}
+    planeDistance: 0.3
+  - value: 11
+    outwardNormal: {x: -0.93417236, y: 0.00000000, z: -0.35682209}
+    planeDistance: 0.3
+  - value: 12
+    outwardNormal: {x: 0.00000000, y: -0.35682209, z: 0.93417236}
+    planeDistance: 0.3
+  - value: 13
+    outwardNormal: {x: -0.35682209, y: 0.93417236, z: 0.00000000}
+    planeDistance: 0.3
+  - value: 14
+    outwardNormal: {x: -0.93417236, y: 0.00000000, z: 0.35682209}
+    planeDistance: 0.3
+  - value: 15
+    outwardNormal: {x: 0.00000000, y: 0.35682209, z: -0.93417236}
+    planeDistance: 0.3
+  - value: 16
+    outwardNormal: {x: 0.35682209, y: -0.93417236, z: 0.00000000}
+    planeDistance: 0.3
+  - value: 17
+    outwardNormal: {x: 0.93417236, y: 0.00000000, z: -0.35682209}
+    planeDistance: 0.3
+  - value: 18
+    outwardNormal: {x: 0.00000000, y: 0.35682209, z: 0.93417236}
+    planeDistance: 0.3
+  - value: 19
+    outwardNormal: {x: 0.35682209, y: 0.93417236, z: 0.00000000}
+    planeDistance: 0.3
+  - value: 20
+    outwardNormal: {x: 0.93417236, y: 0.00000000, z: 0.35682209}
+    planeDistance: 0.3

@@ -1,7 +1,7 @@
 # Console Cards — Milestones and Roadmap
 
 **Document ID:** 16_Milestones_And_Roadmap  
-**Version:** 1.7
+**Version:** 1.10
 
 **Status:** Approved
 **Planning basis:** One developer, approximately 30–35 focused hours per week.
@@ -90,14 +90,14 @@ Deliver:
 - Top-down local Camera.
 - Pan, zoom, and focus bookmarks.
 - Logical-to-render coordinate conversion.
-- Camera-local Table Surface proxy providing seamless visual coverage without moving the logical tabletop.
-- Large-area precision measurements.
-- Decision on whether sectoring/floating origin is actually required.
+- One fixed physical Table that remains independent from Camera movement.
+- Authored, inspector-editable Table collision surfaces that follow the Table Transform and scale without using decorative geometry as gameplay authority.
+- Physical Table/Board raycast placement for loose objects under ADR-025; mathematical coordinates remain for authored/template/container layout.
 - Basic View culling strategy.
 
 Exit:
 
-- Player navigates a visually seamless large tabletop while logical object coordinates remain stable.
+- Player navigates around a fixed physical Table while authored logical coordinates remain stable; new loose placement requires valid physical Table/Board hits. ADR-025 integration is a separate pending gate below, not implied complete by earlier M1/M2 evidence.
 
 ## 5. M2 — Generic Object and Card Interaction
 
@@ -161,6 +161,27 @@ The approved delivery direction is:
 > **Completed shared foundations -> finish the shared physical tabletop capabilities Trap Floor needs -> G1 Trap Floor manually playable -> Trap Floor polishing pass -> G2 Super Leroy Sisters manually playable -> P1 remaining shared Phase 1 work and closure -> future persistence/multiplayer milestones.**
 
 Completed history is preserved: M4 Player Layout + Central Play Area, M4.1 minimum Game Template support, Trap Floor tabletop/Floorfall targeting, Session Entry, Empty/Custom Table, Component Toolbox, generic Dice, Floormaster Search lifecycle assistance, and prototype round/phase orchestration. The assisted Trap Floor systems are retained as optional/prototype infrastructure; deeper rules-engine work is not a prerequisite for G1.
+
+### ADR-025 Physical-Object Integration Gate
+
+**Status:** Initial ADR-025 implementation is present; compilation, automated execution, and Editor/manual physics verification remain pending. No physical-play completion claim is made. Existing M2 interaction and generic Dice completion evidence describes the previous controlled-plane/RNG model, not this physical replacement.
+
+The initial integration uses separate immutable physical state and per-object physical revisions, a shared local authority/Rigidbody adapter, explicitly referenced Table/Board colliders, and six authored Dice face mappings. New regression tests are added but unexecuted. Existing Floorfall controls launch the two generic physical Dice, wait for settled results, and physically reroll protected corners; assistance no longer overwrites physical Dice with preselected values. Container-body positioning, UI structure, and Game rules remain outside the replacement.
+
+This is scoped shared tabletop work within the existing immediate G1 capability priority:
+
+- Author real Table/Board collision surfaces independent of decorative meshes, editable with and following each surface's Transform/scale.
+- Raycast those surfaces for loose Card/Pawn/Token/Die creation, Card batches, and duplicate placement; preview at a valid hit and create slightly above it. No valid hit means no commit.
+- Share Rigidbody/collider holding and release: temporary kinematic control with gravity off, clear lifted pointer following, then dynamic gravity/collision with preserved release velocity and torque. Off-table throws fall without snap-back.
+- Keep Container membership/order and contained Card layout control, with loose physics disabled while contained and restored on accepted extraction. Keep Deck/Stack/Console bodies on existing positioning.
+- Add separate authoritative 3D physical pose/state for loose objects; preserve authored/template/container `TabletopPose`, stable IDs, `MatchState`, Commands, actor context, Technical Invariants, and revisions.
+- Resolve physical d4/d6/d8/d10/d12/d20 through explicit authored face/value mappings and commit settled pose/value together for both Roll and manual throw. Trap Floor's two d6 use the same generic system.
+
+Exit evidence must cover valid/no-hit creation (including batch/duplicate), held/released transitions and off-table falling, accepted settlement/revision handling, Container entry/exit, all six authored Dice mappings, and preservation of existing selection/flip/Inspect/Delete/labels/UI/transfers/reset. These are future acceptance requirements, not tests performed by this documentation update.
+
+Excluded: Container-body physics, physics-driven contained Card layouts, Camera redesign, Game-rule/content changes, new UI, and networking implementation. Future host/server physics authority is an architectural requirement, not an early transport deliverable. Persistence continues to version accepted Runtime State through the existing milestone boundaries.
+
+**Planning impact:** Replace the earlier plane-boundary-only loose-placement work with this physical-object scope. Re-estimate integration effort before implementation scheduling; no new hour estimate or completion claim is inferred. Approval is recorded by ADR-025; Game-specific delivery order remains unchanged.
 
 Do not combine these gates into one broad implementation task. Each gate requires its own tests, manual checks, implementation report, and rollback point.
 
@@ -247,7 +268,7 @@ The completed Session Entry + Component Toolbox Foundation provides:
 - Trap Floor's two d6 through the same generic Die capability; and
 - actor/revision boundaries suitable for later multiplayer without assuming Seat 0 is the permanent actor.
 
-This history remains complete. It does not make assisted Trap Floor automation mandatory.
+This history remains complete. It does not make assisted Trap Floor automation mandatory or establish physical-roll completion; the existing Dice foundation used authoritative RNG results and Presentation settling. ADR-025's physical replacement remains pending at the integration gate above.
 
 ### G1 Delivery Focus
 
@@ -382,6 +403,7 @@ These remain planned Platform work but are not on the immediate Phase 1 critical
 - Session Entry + Component Toolbox, generic Dice, Floormaster lifecycle assistance, and prototype Trap Floor round/phase orchestration preserve their completed implementation history. The latter two remain optional/prototype assistance.
 - Empty/Custom Table is a first-class product path, not a debug mode and not dependent on Game-specific Board or rule content.
 - Template-created and toolbox-created components share authoritative Runtime State; a Game Template owns setup/content/layout, not generic component types.
+- New loose Cards/Pawns/Tokens/Dice, including Card batches and duplicates, require valid Table/Board surface hits. Released physical objects may fall off the Table without snap-back; Deck/Stack/Console bodies retain existing non-physical positioning and applicable ADR-024 authored-area rules. Freeform and house-rule play remain available without Game-rule enforcement.
 - New player-initiated component actions preserve actor context for later authority validation without adding networking before M6/M7.
 - Phase 1 requires minimum manually playable versions of both Games, not invented rules, full automation, or production-complete content.
 - Generic physical tabletop capabilities take priority over deeper Game-specific rules-engine work.

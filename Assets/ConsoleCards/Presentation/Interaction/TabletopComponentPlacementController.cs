@@ -28,6 +28,9 @@ namespace ConsoleCards.Presentation.Interaction
         private TabletopPose previewPose;
         private bool hasValidPreviewPose;
         private Func<TabletopPose, bool> activeCommitPlacement;
+        internal PhysicalTabletopSurfaces PhysicalSurfaces { get; set; }
+        private bool physicalPlacement;
+        internal int PhysicalQuantity { get; set; } = 1;
 
         public TabletopComponentPlacementController(
             TabletopPointerProjector pointerProjector,
@@ -84,6 +87,7 @@ namespace ConsoleCards.Presentation.Interaction
                 currentPose.Layer,
                 currentPose.LocalOrder,
                 commitPlacement ?? throw new ArgumentNullException(nameof(commitPlacement)));
+            physicalPlacement = false;
         }
 
         public void BeginCustomComponentPlacement(
@@ -124,7 +128,10 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             Cancel();
+            PhysicalQuantity = 1;
             componentKind = requestedKind;
+            physicalPlacement = requestedKind == TabletopComponentKind.Card || requestedKind == TabletopComponentKind.Pawn
+                || requestedKind == TabletopComponentKind.Token || requestedKind == TabletopComponentKind.Die;
             dieSideCount = requestedDieSideCount;
             previewRoot = requestedPreviewRoot;
             rotationDegrees = NormalizeDegrees(requestedRotationDegrees);
@@ -194,6 +201,28 @@ namespace ConsoleCards.Presentation.Interaction
 
         private void UpdatePreview(Vector2 screenPosition, bool pointerBlockedByUi)
         {
+            if (physicalPlacement && PhysicalSurfaces != null)
+            {
+                hasValidPreviewPose = !pointerBlockedByUi && PhysicalSurfaces.TryPointer(screenPosition, out _);
+                previewRoot.SetActive(hasValidPreviewPose);
+                if (!hasValidPreviewPose || !PhysicalSurfaces.TryPointer(screenPosition, out RaycastHit hit)) return;
+                previewPose = new TabletopPose(PhysicalSurfaces.Coordinate(hit.point), rotationDegrees, layer, localOrder);
+                for (int i = 0; i < PhysicalQuantity; i++)
+                {
+                    TabletopPose candidate = GenericCardBatchLayout.ResolvePose(previewPose, i, PhysicalQuantity, localOrder);
+                    if (!PhysicalSurfaces.TryAtLayout(candidate, out _))
+                    { hasValidPreviewPose = false; previewRoot.SetActive(false); return; }
+                }
+                previewRoot.transform.SetPositionAndRotation(hit.point + Vector3.up *
+                    (componentKind == TabletopComponentKind.Die ? 0.6f : PhysicalTabletopSurfaces.PlacementClearance),
+                    coordinateConverter.ToWorldRotation(previewPose));
+                if (PhysicalQuantity > 1 && previewRoot.transform.childCount == PhysicalQuantity)
+                    for (int i = 0; i < PhysicalQuantity; i++)
+                        if (PhysicalSurfaces.TryAtLayout(GenericCardBatchLayout.ResolvePose(
+                            previewPose, i, PhysicalQuantity, localOrder), out RaycastHit cardHit))
+                            previewRoot.transform.GetChild(i).position = cardHit.point + Vector3.up * PhysicalTabletopSurfaces.PlacementClearance;
+                return;
+            }
             if (pointerBlockedByUi
                 || !pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate))
             {

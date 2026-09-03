@@ -58,7 +58,7 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             pressedView = view;
-            transitions?.BeginPickup(view.transform, pickupLift, pickupResponseDuration);
+            if (view.PhysicalObject == null) transitions?.BeginPickup(view.transform, pickupLift, pickupResponseDuration);
         }
 
         public void Begin(TabletopObjectView view)
@@ -137,6 +137,7 @@ namespace ConsoleCards.Presentation.Interaction
         public void CancelAndEnd()
         {
             TabletopObjectView view = GetActiveView();
+            view.PhysicalObject?.Cancel();
             TabletopTransformSnapshot start = transitions != null
                 ? transitions.StopAndCapture(view.transform)
                 : default;
@@ -176,6 +177,7 @@ namespace ConsoleCards.Presentation.Interaction
 
         public void Reset()
         {
+            activeView?.PhysicalObject?.Cancel();
             if (pressedView != null)
             {
                 if (pressedView.IsBound)

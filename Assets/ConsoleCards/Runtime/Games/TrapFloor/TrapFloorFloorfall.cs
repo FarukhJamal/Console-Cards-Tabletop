@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ConsoleCards.Core.Domain.Dice;
+using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Core.Randomness;
@@ -138,6 +139,25 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly DieState yAxisDieState;
         private readonly HashSet<TrapFloorCoordinate> protectedStartingCorners;
         private readonly Die coordinateDie = new Die(DieSideCount);
+        private PhysicalObjectState lastPhysicalX;
+        private PhysicalObjectState lastPhysicalY;
+
+        public bool UsesPhysicalDice => xAxisDieState?.BaseState.PhysicalState != null
+            || yAxisDieState?.BaseState.PhysicalState != null;
+
+        public bool IsProtectedPhysicalResult(TrapFloorFloorfallContext context) =>
+            context.HasStartingCornerProtection && protectedStartingCorners.Contains(
+                new TrapFloorCoordinate(xAxisDieState.CurrentValue, yAxisDieState.CurrentValue));
+
+        public bool CanResolvePhysicalDice(TrapFloorFloorfallContext context)
+        {
+            PhysicalObjectState x = xAxisDieState?.BaseState.PhysicalState;
+            PhysicalObjectState y = yAxisDieState?.BaseState.PhysicalState;
+            return x != null && y != null && x.Mode == PhysicalObjectMode.Sleeping && y.Mode == PhysicalObjectMode.Sleeping
+                && (!ReferenceEquals(x, lastPhysicalX) || !ReferenceEquals(y, lastPhysicalY))
+                && !(context.HasStartingCornerProtection && protectedStartingCorners.Contains(
+                    new TrapFloorCoordinate(xAxisDieState.CurrentValue, yAxisDieState.CurrentValue)));
+        }
 
         public TrapFloorFloorfallService(
             TrapFloorTemplateDefinition template,
@@ -188,15 +208,24 @@ namespace ConsoleCards.Games.TrapFloor
         public TrapFloorFloorfallTarget RollAndResolve(TrapFloorFloorfallContext context)
         {
             if (context.RoundNumber < 1)
-            {
                 throw new ArgumentOutOfRangeException(nameof(context), "Floorfall requires a valid round context.");
-            }
-
             if (matchState != null && matchState.Revision == long.MaxValue)
-            {
                 throw new InvalidOperationException("Trap Floor Match revision cannot advance for Floorfall.");
+            if (UsesPhysicalDice)
+            {
+                if (!CanResolvePhysicalDice(context))
+                    throw new InvalidOperationException("Roll/settle the physical Dice; protected starting corners require a physical reroll.");
+                TrapFloorCoordinate coordinate = new TrapFloorCoordinate(xAxisDieState.CurrentValue, yAxisDieState.CurrentValue);
+                if (!template.TryGetFloorCardId(coordinate, out TabletopObjectId id))
+                    throw new InvalidOperationException("Missing Floor Card mapping.");
+                TrapFloorFloorfallTarget target = new TrapFloorFloorfallTarget(
+                    new DieRoll(6, coordinate.X), new DieRoll(6, coordinate.Y), coordinate, id);
+                lastPhysicalX = xAxisDieState.BaseState.PhysicalState;
+                lastPhysicalY = yAxisDieState.BaseState.PhysicalState;
+                state.SetCurrentTarget(target);
+                matchState.AdvanceRevision();
+                return target;
             }
-
             while (true)
             {
                 DieRoll xAxisRoll = coordinateDie.Roll(randomValueSource);

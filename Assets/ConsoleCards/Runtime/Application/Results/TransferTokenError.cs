@@ -19,6 +19,7 @@ namespace ConsoleCards.Application.Results
         ObjectFoundInUnexpectedContainer,
         SameLocation,
         TargetTablePoseMissing,
-        RevisionOverflow
+        RevisionOverflow,
+        PhysicalStateInvalid
     }
 }

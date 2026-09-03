@@ -10,7 +10,8 @@ using UnityCamera = UnityEngine.Camera;
 namespace ConsoleCards.Presentation.Interaction
 {
     /// <summary>
-    /// Resolves a screen position to the nearest explicit Container drop target, then to the mathematical tabletop.
+    /// Resolves a screen position to the nearest explicit Container drop target, then to an authored physical surface.
+    /// The projector fallback is retained only for callers without the physical integration.
     /// Container hits use an instance-local fixed buffer; when the buffer is filled, only the returned hits are sorted
     /// and considered, and resolution still remains read-only and deterministic for that returned set.
     /// </summary>
@@ -19,6 +20,7 @@ namespace ConsoleCards.Presentation.Interaction
         private const int DefaultHitBufferCapacity = 32;
 
         private readonly RaycastHit[] hitBuffer;
+        public PhysicalTabletopSurfaces PhysicalSurfaces { get; set; }
 
         public CardDropTargetResolver(
             UnityCamera targetCamera,
@@ -107,6 +109,16 @@ namespace ConsoleCards.Presentation.Interaction
                 return true;
             }
 
+            if (PhysicalSurfaces != null)
+            {
+                if (PhysicalSurfaces.TryPointer(screenPosition, out RaycastHit surface))
+                {
+                    target = CardDropTarget.ForTabletop(new TabletopPose(PhysicalSurfaces.Coordinate(surface.point), 0f, 0, 0));
+                    return true;
+                }
+                target = CardDropTarget.None();
+                return false;
+            }
             if (PointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate))
             {
                 target = CardDropTarget.ForTabletop(new TabletopPose(coordinate, 0f, 0, 0));

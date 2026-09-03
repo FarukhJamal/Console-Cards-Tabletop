@@ -93,6 +93,7 @@ namespace ConsoleCards.Presentation.Interaction
             bool acquiredByThisCall = acquireResult.Status == InteractionLockAcquireStatus.Acquired;
             try
             {
+                selectedView.PhysicalObject?.CaptureBeforeRotation();
                 float targetRotationDegrees = CalculateTargetRotation(
                     selectedView.BoundState.Pose.RotationDegrees,
                     rotationDeltaDegrees);

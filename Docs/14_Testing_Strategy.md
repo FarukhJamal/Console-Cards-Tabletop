@@ -1,7 +1,7 @@
 # Console Cards — Testing Strategy
 
 **Document ID:** 14_Testing_Strategy  
-**Version:** 1.1
+**Version:** 1.2
 **Status:** Approved
 
 > **Contract note:** Code blocks, type names, interfaces, field lists, and diagrams in this document are illustrative unless explicitly labelled **Approved Contract**. Codex must not treat illustrative examples as fixed public APIs.
@@ -121,7 +121,10 @@ Mandatory Technical Invariants:
 - Toolbox-created Card, Deck, Stack/pile, Pawn, Token, and Die receive stable IDs and authoritative Runtime State.
 - Created pieces bind Presentation Views without making GameObjects authoritative.
 - Common d4, d6, d8, d10, d12, and d20 options validate their side counts.
-- Roll preserves actor context, uses injectable authoritative randomness, commits the accepted Die value once, and reconciles Presentation to that value.
+- ADR-025 Roll preserves actor context, launches the authority's physical Die, and commits settled pose/value once through its authored face mapping. Throw randomness must not preselect the result. The older RNG use case is not the physical Dice acceptance path.
+- Loose physical state preserves full 3D pose/motion, object identity, revisions, stale/duplicate rejection, and snapshot/reset state separately from `TabletopPose`.
+- No Table/Board surface hit rejects new loose creation, including every Card in a batch and duplicate placement; failed batches remain atomic.
+- Held/released transitions, off-table falling without snap-back, Container physics disable/restore, and all six Dice mappings require physics integration checks.
 - Trap Floor's X/Y dice use the same generic Die state and Roll path as toolbox d6.
 - Reset and object removal leave no stale View or ownership records.
 

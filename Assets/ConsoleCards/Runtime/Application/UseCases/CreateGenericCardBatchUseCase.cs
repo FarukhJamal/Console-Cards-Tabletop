@@ -22,6 +22,7 @@ namespace ConsoleCards.Application.UseCases
         RevisionOverflow,
         IdentityAllocationFailed,
         LooseCardOrderOverflow,
+        PhysicalSurfaceRequired,
     }
 
     public sealed class CreateGenericCardBatchRequest
@@ -135,10 +136,13 @@ namespace ConsoleCards.Application.UseCases
     {
         private const int IdentityAllocationAttempts = 32;
         private readonly ITabletopComponentIdentitySource identitySource;
+        private readonly IPhysicalPlacementResolver physicalPlacement;
 
-        public CreateGenericCardBatchUseCase(ITabletopComponentIdentitySource identitySource)
+        public CreateGenericCardBatchUseCase(ITabletopComponentIdentitySource identitySource,
+            IPhysicalPlacementResolver physicalPlacement = null)
         {
             this.identitySource = identitySource ?? throw new ArgumentNullException(nameof(identitySource));
+            this.physicalPlacement = physicalPlacement;
         }
 
         public CreateGenericCardBatchResult Execute(
@@ -189,6 +193,14 @@ namespace ConsoleCards.Application.UseCases
                     ObjectVisibility.Public,
                     false);
                 cards.Add(new CardInstanceState(baseState, CardFace.FaceUp));
+                if (physicalPlacement != null)
+                {
+                    if (!physicalPlacement.TryResolve(pose, request.Context.RequestedByPlayerId,
+                        out PhysicalObjectState physicalState))
+                        return CreateGenericCardBatchResult.Failure(CommandResultStatus.Rejected,
+                            CreateGenericCardBatchError.PhysicalSurfaceRequired);
+                    baseState.SetPhysicalState(physicalState);
+                }
             }
 
             matchState.AddUncontainedCards(cards);

@@ -51,6 +51,12 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal PawnView prototypePawnPrefab;
         [SerializeField] internal TokenView prototypeTokenPrefab;
         [SerializeField] internal DieView prototypeDiePrefab;
+        [SerializeField] private Collider[] physicalSurfaces;
+        [SerializeField] private Collider gameBoardPhysicalSurface;
+        private PhysicalTabletopSurfaces physicalSurfaceQuery;
+        private LocalPhysicalObjectAuthority physicalAuthority;
+        private bool physicalFloorfallPending;
+        private PlayerId physicalFloorfallActor;
         [SerializeField] internal PrototypeFixedContainerVisual prototypeDeckPrefab;
         [SerializeField] internal ConsoleView prototypeConsolePrefab;
         [SerializeField] internal CardView cardView;
@@ -164,7 +170,6 @@ namespace ConsoleCards.Presentation.Prototype
         private PopulateDeckUseCase populateDeckUseCase;
         private DeleteTabletopComponentUseCase componentDeletionUseCase;
         private DuplicateTabletopComponentUseCase componentDuplicationUseCase;
-        private RollDieUseCase rollDieUseCase;
         private TabletopComponentPlacementController componentPlacementController;
         private PlayerLayoutDefinition playerLayout;
         private PlayerSeatLayoutEntry localSeatLayout;
@@ -458,6 +463,11 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void Shutdown(bool preserveTemplateContext)
         {
+            physicalFloorfallPending = false;
+            physicalFloorfallActor = PlayerId.Empty;
+            physicalAuthority?.Shutdown();
+            physicalAuthority = null;
+            if (gameBoardPhysicalSurface != null) gameBoardPhysicalSurface.enabled = false;
             ClearFeedback();
             floorfallTargetPresenter?.Clear();
             floorfallState?.Clear();
@@ -595,7 +605,6 @@ namespace ConsoleCards.Presentation.Prototype
             populateDeckUseCase = null;
             componentDeletionUseCase = null;
             componentDuplicationUseCase = null;
-            rollDieUseCase = null;
             playerLayout = null;
             localSeatLayout = null;
             centralPlayAreaId = PlayAreaId.Empty;
@@ -930,7 +939,8 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             TrapFloorRoundFloorfallResult result = trapFloorRoundOrchestrationService.RollFloorfall(
-                new TrapFloorRoundActionRequest(CreateCommandContext()));
+                new TrapFloorRoundActionRequest(CreateCommandContext(
+                    physicalFloorfallActor.IsEmpty ? localPlayerId : physicalFloorfallActor)));
             if (!result.Succeeded)
             {
                 ShowMessage($"Official Floorfall rejected: {result.Error}.");
@@ -944,6 +954,38 @@ namespace ConsoleCards.Presentation.Prototype
             ShowMessage(
                 $"Floorfall {trapFloorRoundState.AcceptedFloorfallCount}: X {target.XAxisRoll.Value}, Y {target.YAxisRoll.Value} -> {target.Coordinate}.");
             return result;
+        }
+
+        private bool BeginPhysicalFloorfall()
+        {
+            if (physicalFloorfallPending || trapFloorRoundState == null
+                || trapFloorRoundState.Phase != TrapFloorRoundPhase.Floorfall
+                || !TryGetDieView(trapFloorTemplate.FloorfallXAxisDieId, out DieView x)
+                || !TryGetDieView(trapFloorTemplate.FloorfallYAxisDieId, out DieView y)
+                || x.PhysicalObject == null || y.PhysicalObject == null
+                || x.PhysicalObject.IsHeld || y.PhysicalObject.IsHeld) return false;
+            if (physicalFloorfallActor.IsEmpty) physicalFloorfallActor = localPlayerId;
+            if (!x.PhysicalObject.Roll(physicalFloorfallActor) || !y.PhysicalObject.Roll(physicalFloorfallActor))
+            { physicalFloorfallActor = PlayerId.Empty; return false; }
+            physicalFloorfallPending = true;
+            ShowMessage("Floorfall Dice rolling physically; waiting for both to settle.");
+            return true;
+        }
+
+        private void CompletePhysicalFloorfallIfSettled()
+        {
+            if (!physicalFloorfallPending) return;
+            if (trapFloorRoundState == null || trapFloorRoundState.Phase != TrapFloorRoundPhase.Floorfall)
+            { physicalFloorfallPending = false; physicalFloorfallActor = PlayerId.Empty; return; }
+            DieState x = matchState.Dice[trapFloorTemplate.FloorfallXAxisDieId];
+            DieState y = matchState.Dice[trapFloorTemplate.FloorfallYAxisDieId];
+            if (x.BaseState.PhysicalState?.Mode != PhysicalObjectMode.Sleeping
+                || y.BaseState.PhysicalState?.Mode != PhysicalObjectMode.Sleeping) return;
+            physicalFloorfallPending = false;
+            if (floorfallService.IsProtectedPhysicalResult(new TrapFloorFloorfallContext(trapFloorRoundState.CurrentRoundNumber)))
+            { BeginPhysicalFloorfall(); return; }
+            TriggerFloorfall();
+            physicalFloorfallActor = PlayerId.Empty;
         }
 
         public TrapFloorRoundSearchResult SearchFloormasterDeck()
@@ -1189,6 +1231,8 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void Update()
         {
+            physicalAuthority?.Tick();
+            CompletePhysicalFloorfallIfSettled();
             presentationTransitions?.Tick(Time.unscaledDeltaTime);
             RefreshCardContentVisibility();
             if (feedbackHoldUntil > 0f && Time.unscaledTime >= feedbackHoldUntil)
@@ -1385,6 +1429,7 @@ namespace ConsoleCards.Presentation.Prototype
                 0,
                 toolboxSpawnSequence * ToolboxPhysicalOrderStride,
                 pose => CommitCardBatchPlacement(quantity, pose));
+            componentPlacementController.PhysicalQuantity = quantity;
             ShowPlacementHint(quantity == 1 ? "Card" : $"{quantity} Cards");
         }
 
@@ -1702,6 +1747,7 @@ namespace ConsoleCards.Presentation.Prototype
                     }
 
                     DieView preview = Instantiate(prototypeDiePrefab);
+                    preview.ConfigurePhysicalShape(dieSideCount);
                     ConfigurePrototypeLabel(preview.ResultLabel, $"d{dieSideCount}\n1", 0.18f, 64);
                     previewRoot = preview.gameObject;
                     break;
@@ -2074,6 +2120,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void RefreshSelectionPresenterAfterRuntimeProjection()
         {
+            RegisterPhysicalViews();
             inputFrameCoordinator.ClearSelectionPresenter();
             selectionPresenter = new TabletopSelectionPresenter(
                 selectionState,
@@ -2316,7 +2363,7 @@ namespace ConsoleCards.Presentation.Prototype
                     actions.Add(new PrototypePopupActionOption(
                         "Roll Floorfall",
                         true,
-                        () => TriggerFloorfall()));
+                        () => BeginPhysicalFloorfall()));
                     actions.Add(new PrototypePopupActionOption(
                         "Complete Floorfall Phase (Prototype)",
                         trapFloorRoundState.AcceptedFloorfallCount > 0,
@@ -3197,7 +3244,7 @@ namespace ConsoleCards.Presentation.Prototype
                         canRoll,
                         () =>
                         {
-                            if (TriggerFloorfall().Succeeded)
+                            if (BeginPhysicalFloorfall())
                             {
                                 CloseContextMenu();
                             }
@@ -3538,28 +3585,12 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            RollDieResult result = rollDieUseCase.Execute(
-                matchState,
-                activeSession.Request.ActivePlayerIds,
-                new RollDieRequest(CreateCommandContext(), targetDieId));
-            if (!result.Succeeded)
+            if (targetDieView.PhysicalObject == null || !targetDieView.PhysicalObject.Roll())
             {
-                ShowMessage($"Die Roll rejected: {result.Error}.");
+                ShowMessage("Die Roll rejected: object is unavailable or controlled.");
                 return;
             }
-
-            targetDieView.ApplyAcceptedState();
-            TabletopTransformSnapshot destination = presentationTransitions.Capture(targetDieView.transform);
-            TabletopTransformSnapshot tumbleStart = new TabletopTransformSnapshot(
-                destination.Position + (Vector3.up * 0.18f),
-                destination.Rotation * Quaternion.Euler(30f, 210f, 20f),
-                destination.LocalScale);
-            presentationTransitions.AnimateFromCurrentResult(
-                targetDieView.transform,
-                tumbleStart,
-                settleDuration,
-                0.12f);
-            ShowMessage($"Rolled d{result.Roll.SideCount}: {result.Roll.Value}.");
+            ShowMessage("Rolling physically; result is accepted when the Die settles.");
             CloseContextMenu();
         }
 
@@ -4230,14 +4261,18 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void BuildToolboxRuntime()
         {
+            if (gameBoardPhysicalSurface != null)
+                gameBoardPhysicalSurface.enabled = activeSession.Selection.Kind == TabletopSessionKind.GameTemplate;
+            physicalSurfaceQuery = new PhysicalTabletopSurfaces(targetCamera, coordinateConverter, physicalSurfaces);
+            physicalAuthority = new LocalPhysicalObjectAuthority(matchState, activeSession.Request.ActivePlayerIds,
+                () => localPlayerId, targetCamera, physicalSurfaceQuery, target => presentationTransitions.Stop(target, false));
             authoritativeRandomValueSource = new SystemRandomValueSource();
             componentIdentitySource = new GuidTabletopComponentIdentitySource();
-            componentCreationUseCase = new CreateTabletopComponentUseCase(componentIdentitySource);
-            cardBatchCreationUseCase = new CreateGenericCardBatchUseCase(componentIdentitySource);
+            componentCreationUseCase = new CreateTabletopComponentUseCase(componentIdentitySource, physicalSurfaceQuery);
+            cardBatchCreationUseCase = new CreateGenericCardBatchUseCase(componentIdentitySource, physicalSurfaceQuery);
             populateDeckUseCase = new PopulateDeckUseCase(componentIdentitySource);
             componentDeletionUseCase = new DeleteTabletopComponentUseCase();
             componentDuplicationUseCase = new DuplicateTabletopComponentUseCase(componentCreationUseCase);
-            rollDieUseCase = new RollDieUseCase(authoritativeRandomValueSource);
             toolboxSpawnSequence = 0;
             selectedQuantity = 1;
             toolboxPlacementHintActive = false;
@@ -4737,6 +4772,7 @@ namespace ConsoleCards.Presentation.Prototype
                 interactionLayerMask,
                 maximumHitDistance,
                 QueryTriggerInteraction.Collide);
+            dropTargetResolver.PhysicalSurfaces = physicalSurfaceQuery;
             tokenDropTargetResolver = new TokenDropTargetResolver(
                 targetCamera,
                 interactionLayerMask,
@@ -4753,12 +4789,14 @@ namespace ConsoleCards.Presentation.Prototype
                 coordinateConverter,
                 CommitToolboxPlacement,
                 HandlePlacementRotationChanged);
+            componentPlacementController.PhysicalSurfaces = physicalSurfaceQuery;
             inputFrameCoordinator.ConfigureComponentPlacement(componentPlacementController);
             componentPlacementInputConfiguredByComposition = true;
         }
 
         private void RebuildInteractionDependencies()
         {
+            RegisterPhysicalViews();
             RebuildLayoutViewCollection();
             layoutViewLookup = new ContainerLayoutViewLookup(layoutViews);
             transferCoordinator = new CardTransferInteractionCoordinator(
@@ -4893,6 +4931,14 @@ namespace ConsoleCards.Presentation.Prototype
             inputFrameCoordinator.enabled = true;
             frameCoordinatorEnabledByComposition = true;
             selectionPresenter.Refresh();
+        }
+
+        private void RegisterPhysicalViews()
+        {
+            foreach (CardView view in cardViews) physicalAuthority?.Register(view);
+            foreach (PawnView view in pawnViews) physicalAuthority?.Register(view);
+            foreach (TokenView view in tokenViews) physicalAuthority?.Register(view);
+            foreach (DieView view in dieViews) physicalAuthority?.Register(view);
         }
 
         private void RebuildLayoutViewCollection()

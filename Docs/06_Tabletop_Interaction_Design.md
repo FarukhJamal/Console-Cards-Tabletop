@@ -1,7 +1,7 @@
 # Console Cards — Tabletop Interaction Design
 
 **Document ID:** 06_Tabletop_Interaction_Design  
-**Version:** 1.1
+**Version:** 1.3
 
 **Status:** Approved
 
@@ -9,11 +9,11 @@
 
 ## 1. Interaction Goal
 
-Interaction should reproduce physical tabletop freedom while being more predictable than unrestricted physics.
+Interaction should reproduce physical tabletop freedom with clear controlled holding and physical release (ADR-025).
 
-Players must understand what will happen before releasing an object.
+Players must understand the intended placement or transfer and that physical release may collide, tumble, or fall beyond the Table.
 
-The Platform must support natural free-form Card dragging with smooth, controlled Presentation motion. Reference products communicate feel and feedback; they do not require physics-authoritative Runtime State or unrestricted simulation.
+Loose Cards, Pawns, Tokens, and Dice share Rigidbody/collider interaction. Holding is temporarily controlled/kinematic; release is dynamic. The authority accepts settled 3D state through Commands/Application Use Cases, not direct View mutation. Deck/Stack/Console bodies and contained Card layouts retain their existing non-physical positioning.
 
 ## 2. Input Independence
 
@@ -42,6 +42,8 @@ Input Adapter
 → Result
 → Final View Update
 ```
+
+For loose physical objects, validated grab/release/Roll intent drives the authority's simulation. Settled pose/result is then committed through the Command/Application boundary and reconciled to Views. A local preview does not independently decide an accepted outcome; future host/server physics is authoritative.
 
 ## 4. Interaction States
 
@@ -73,10 +75,13 @@ Avoid many overlapping Boolean fields.
 ### 5.2 Move
 
 - Press and drag an object.
-- During drag, the local View follows the pointer.
+- While a loose physical object is held, it is temporarily kinematic with gravity off, lifted clear of surfaces/objects, and follows the pointer.
 - Placement Guides show suggested destinations.
-- A live landing indicator shows where the Card or selected Card group will land if released.
-- Release submits the final Move Command.
+- A live indicator previews the intended surface placement or Container layout for a Card/group; it does not promise the final resting pose of a physical throw.
+- Release restores dynamic physics/gravity and preserves release velocity/throw momentum. Collision, velocity, and torque determine the subsequent motion.
+- Releasing or throwing off the Table is allowed to fall naturally, even without a valid surface hit. It is not an invalid movement release and must not snap back.
+- Physics settlement commits the final 3D pose through the authoritative Application path; Dice also resolve and commit the settled value.
+- Deck/Stack/Console bodies keep existing positioning. Invalid non-physical movement requests still leave accepted state unchanged and reconcile the View.
 - Cancel restores the last accepted pose.
 
 ### 5.3 Rotate
@@ -95,6 +100,10 @@ Initial proposal:
 - Alternative key binding may be added after usability testing.
 
 A flip is a discrete Command.
+
+### 5.4.1 Roll Die
+
+Roll validates actor intent, physically lifts/throws the Die, and applies randomized impulse and torque. The authority resolves the settled face using explicit authored mappings for d4/d6/d8/d10/d12/d20, including each variant's result-reading convention; mesh triangle order and object names are not value mappings. Manual grab/throw uses the same settle/value-resolution path. Final 3D pose and value commit together to Die State. Trap Floor's two d6 use this generic path.
 
 ### 5.5 Inspect
 
@@ -160,6 +169,8 @@ Supported operations:
 
 The first build may implement top-card removal and whole-Stack movement before arbitrary split UI.
 
+Deck/Stack/Hand/Console/Slot and other Container layouts control contained Cards with loose physics disabled. Accepted extraction enables physical loose-object behavior; accepted insertion restores layout control. Membership and ordering remain authoritative and transfers remain atomic. Container bodies are not converted to physics in this pass.
+
 ## 9. Hand Interaction
 
 - Drag card into Hand to transfer ownership/visibility.
@@ -188,7 +199,7 @@ Required scope:
 - Drag the selected group as one temporary manipulation.
 - Preserve individual poses relative to the group origin.
 - Preview the group landing arrangement before release.
-- Final accepted movement is a batch transaction; preview never mutates Runtime State.
+- Accepted group operations remain atomic; held previews never directly mutate Runtime State. Physical release may change relative resting poses through collision; settlement commits separate physical poses rather than imposing the preview as the final layout.
 
 Detailed marquee inclusion, overlapping-Card, and mixed-Container behavior remain in `OPEN_DECISIONS.md`.
 
@@ -198,23 +209,29 @@ During drag:
 
 1. Query nearby Play Areas, Zones, Slots, and Containers.
 2. Calculate candidate placement.
-3. Display highlight and preview.
-4. Display the exact landing indicator for the current Card or selected Card group.
-5. Allow snap bypass.
-6. Submit requested and suggested placement data as required.
-7. Authority applies the accepted result.
+3. For loose physical placement, raycast valid Table/Board surfaces; handle explicit Container targets through the existing transfer/layout path.
+4. Hide or invalidate new loose-placement preview when there is no valid surface hit. This does not cancel a held object's off-table release.
+5. Display highlight and preview for a valid candidate.
+6. Display the intended surface placement or Container layout for the current Card/group, not a guaranteed post-throw resting pose.
+7. Allow bypass of optional layout suggestions without fabricating a physical surface hit.
+8. Submit requested and suggested placement data as required.
+9. Authority applies the accepted result.
 
-### 12.1 Future Pointer Placement Boundary
+### 12.1 Physical Surfaces and Loose Placement
 
-Pointer placement must not depend on a visual Table Surface proxy mesh.
+The real fixed Table and Game Boards have explicitly authored valid collision surfaces, editable in Unity with their owning Table/Board and following its Transform/scale. Decorative geometry and mesh bounds are not gameplay authority.
 
-Future pointer-to-table conversion should raycast or intersect against a mathematical tabletop plane, initially `Y = 0`, then convert the resulting intersection to a `TableCoordinate`.
+Toolbox placement for loose Cards, Pawns, Tokens, and Dice raycasts only valid Table/Board physical surfaces. Preview uses the hit position; confirmation creates authoritative loose state slightly above the hit surface so physics can settle it. No valid hit means no valid preview and no commit. Card batches and duplicate placement apply this rule to every created loose object.
 
-No infinite physical collider is required for freeform table placement.
+Normal loose placement/movement does not use the old mathematical placement plane or `TabletopSurfaceProxy`. `TabletopPose` remains unchanged for authored/template/container layout; separate authoritative 3D physical pose/state carries loose simulation outcomes.
+
+Creation needs a surface, but release does not: objects thrown or released past the Table may fall naturally and must not be snapped back. Missing a surface is not grounds to reject a settled physical pose. Technical and actor/permission validation still apply.
+
+Game Boards catch objects through their authored collision surfaces. Logical Play Areas, Zones, mats, and guides are not collision authority merely because they have bounds. Deck/Stack/Console bodies remain on the existing non-physical positioning path with the surviving ADR-024 authored-area rules; this pass does not add missing Container movement behavior.
 
 ## 13. Snap Bypass
 
-An explicit modifier must permit freeform placement unless Policy blocks bypass.
+An explicit modifier must permit bypass of placement suggestions or Play Area snapping unless Policy blocks bypass. It cannot make new loose placement valid without a physical Table/Board hit. Off-table physical release is normal behavior, not a bypass action. Non-physical Container placement retains ADR-024's boundary.
 
 Initial proposal:
 
@@ -258,6 +275,8 @@ Rejected actions must provide:
 - No duplicate sound or animation.
 - Sufficient logging for debugging.
 
+An accepted physical release that falls off the Table is not a rejected action and must not trigger rollback.
+
 ## 17. Accessibility and Usability
 
 Design for:
@@ -288,7 +307,6 @@ Not required in the earliest build:
 
 - Advanced measuring tools.
 - Freehand drawing.
-- Physics flicking.
 - Arbitrary object scaling.
 - Complex Stack splitting UI.
 - Touch gestures.

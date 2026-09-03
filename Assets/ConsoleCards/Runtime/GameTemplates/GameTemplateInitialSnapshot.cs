@@ -25,6 +25,7 @@ namespace ConsoleCards.GameTemplates
         private readonly ReadOnlyCollection<ContainerPlacementSnapshot> containerPlacements;
         private readonly ReadOnlyCollection<SeatSnapshot> seats;
         private readonly ReadOnlyCollection<PlayAreaSnapshot> playAreas;
+        private readonly IReadOnlyCollection<CommandId> physicalCommands;
 
         private GameTemplateInitialSnapshot(
             MatchId matchId,
@@ -34,11 +35,12 @@ namespace ConsoleCards.GameTemplates
             IEnumerable<ContainerSnapshot> containers,
             IEnumerable<ContainerPlacementSnapshot> containerPlacements,
             IEnumerable<SeatSnapshot> seats,
-            IEnumerable<PlayAreaSnapshot> playAreas)
+            IEnumerable<PlayAreaSnapshot> playAreas, IReadOnlyCollection<CommandId> physicalCommands)
         {
             MatchId = matchId;
             GameTemplateId = gameTemplateId;
             Revision = revision;
+            this.physicalCommands = new List<CommandId>(physicalCommands).AsReadOnly();
             this.objects = new ReadOnlyCollection<ObjectSnapshot>(new List<ObjectSnapshot>(objects));
             this.containers = new ReadOnlyCollection<ContainerSnapshot>(new List<ContainerSnapshot>(containers));
             this.containerPlacements = new ReadOnlyCollection<ContainerPlacementSnapshot>(
@@ -114,7 +116,7 @@ namespace ConsoleCards.GameTemplates
                 containerSnapshots,
                 placementSnapshots,
                 seatSnapshots,
-                playAreaSnapshots);
+                playAreaSnapshots, matchState.CopyPhysicalCommandHistory());
         }
 
         public MatchState Restore()
@@ -207,7 +209,7 @@ namespace ConsoleCards.GameTemplates
                 restoredPlayAreas.Add(new PlayAreaState(playArea.Id, playArea.Bounds, playArea.FocusRegion));
             }
 
-            return new MatchState(
+            MatchState restored = new MatchState(
                 MatchId,
                 GameTemplateId,
                 Revision,
@@ -219,6 +221,8 @@ namespace ConsoleCards.GameTemplates
                 restoredPlacements,
                 restoredPlayAreas,
                 restoredDice);
+            foreach (CommandId command in physicalCommands) restored.RecordPhysicalCommand(command);
+            return restored;
         }
 
         private sealed class ObjectSnapshot
@@ -233,6 +237,8 @@ namespace ConsoleCards.GameTemplates
                 DefinitionId = state.DefinitionId;
                 Kind = state.Kind;
                 Pose = state.Pose;
+                PhysicalState = state.PhysicalState;
+                PhysicalRevision = state.PhysicalRevision;
                 OwnerPlayerId = state.OwnerPlayerId;
                 Visibility = state.Visibility;
                 IsUserLocked = state.IsUserLocked;
@@ -245,6 +251,8 @@ namespace ConsoleCards.GameTemplates
             public ObjectDefinitionId DefinitionId { get; }
             public TabletopObjectKind Kind { get; }
             public TabletopPose Pose { get; }
+            public PhysicalObjectState PhysicalState { get; }
+            public long PhysicalRevision { get; }
             public PlayerId OwnerPlayerId { get; }
             public ObjectVisibility Visibility { get; }
             public bool IsUserLocked { get; }
@@ -273,7 +281,7 @@ namespace ConsoleCards.GameTemplates
 
             public TabletopObjectState CreateBaseState()
             {
-                return new TabletopObjectState(
+                TabletopObjectState state = new TabletopObjectState(
                     Id,
                     DefinitionId,
                     Kind,
@@ -281,7 +289,8 @@ namespace ConsoleCards.GameTemplates
                     ContainerId.Empty,
                     OwnerPlayerId,
                     Visibility,
-                    IsUserLocked);
+                    IsUserLocked, PhysicalState, PhysicalRevision);
+                return state;
             }
         }
 

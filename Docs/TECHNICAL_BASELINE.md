@@ -1,6 +1,7 @@
 # Console Cards — Technical Baseline
 
-**Version:** 1.0  
+**Version:** 1.1
+
 **Status:** Approved  
 **Purpose:** Define the exact implementation baseline for project creation and M0–M2 work.
 
@@ -24,8 +25,8 @@
 - **Presentation:** 3D tabletop scene.
 - **Camera:** Orthographic, top-down.
 - A slight visual angle may be evaluated later, but the approved foundation is orthographic top-down.
-- Cards, Pawns, Tokens, Boards, and pieces are 3D objects with controlled deterministic movement.
-- Unrestricted physics is not authoritative.
+- Under ADR-025, loose Cards, Pawns, Tokens, and Dice may use Rigidbody/collider physics: controlled/kinematic while held, dynamic with gravity, collision, velocity, and torque after release. The Table and Game Boards are real authored collision surfaces.
+- Accepted physical outcomes commit to Runtime State through the Application boundary. Future host/server physics is authoritative; clients do not independently decide outcomes. Deck/Stack/Console bodies and contained Card layouts retain non-physical positioning.
 - The orthographic Tabletop Scene and Camera are M1 deliverables. The default Unity starter scene is not required to match the final presentation before M0 begins.
 ## 4. Initial Platform
 
@@ -71,6 +72,8 @@ The ratio is a project convention, not a requirement that all future cards share
 - The characterized MVP render range is +/-100,000 table units.
 - Within that range, the measured `0.10` card gap remains within the approved `0.01` world-unit error tolerance.
 - Sectoring, chunking, floating-origin rebasing, and render-origin rebasing are not implemented in the Foundation because M1 evidence does not justify them.
+
+ADR-025 preserves this logical coordinate/`TabletopPose` baseline for authored/template/container layout, and adds separate authoritative 3D physical pose/state for loose objects. Normal loose placement raycasts valid Table/Board physical surfaces, not the mathematical placement plane or `TabletopSurfaceProxy`; no hit means no creation commit. Off-table physical release may fall naturally without snap-back. This changes neither the Unity version nor Camera controls.
 
 ## 9. Networking
 

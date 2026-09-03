@@ -1,5 +1,6 @@
 using System;
 using ConsoleCards.Core.Coordinates;
+using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Identifiers;
 
 namespace ConsoleCards.Application.Commands
@@ -11,7 +12,7 @@ namespace ConsoleCards.Application.Commands
             TabletopObjectId cardObjectId,
             ContainerId expectedSourceContainerId,
             ContainerId destinationContainerId,
-            TabletopPose? targetTablePose)
+            TabletopPose? targetTablePose, PhysicalObjectState physicalState = null)
         {
             if (cardObjectId.IsEmpty)
             {
@@ -43,6 +44,7 @@ namespace ConsoleCards.Application.Commands
             ExpectedSourceContainerId = expectedSourceContainerId;
             DestinationContainerId = destinationContainerId;
             TargetTablePose = targetTablePose;
+            PhysicalState = physicalState;
         }
 
         public CommandContext Context { get; }
@@ -54,6 +56,7 @@ namespace ConsoleCards.Application.Commands
         public ContainerId DestinationContainerId { get; }
 
         public TabletopPose? TargetTablePose { get; }
+        public PhysicalObjectState PhysicalState { get; }
 
         public static TransferCardCommand ToContainer(
             CommandContext context,
@@ -73,14 +76,14 @@ namespace ConsoleCards.Application.Commands
             CommandContext context,
             TabletopObjectId cardObjectId,
             ContainerId expectedSourceContainerId,
-            TabletopPose targetTablePose)
+            TabletopPose targetTablePose, PhysicalObjectState physicalState = null)
         {
             return new TransferCardCommand(
                 context,
                 cardObjectId,
                 expectedSourceContainerId,
                 ContainerId.Empty,
-                targetTablePose);
+                targetTablePose, physicalState);
         }
 
         private static void ValidatePose(TabletopPose pose, string parameterName)

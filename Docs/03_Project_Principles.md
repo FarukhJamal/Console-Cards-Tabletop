@@ -1,7 +1,7 @@
 # Console Cards — Project Principles
 
 **Document ID:** 03_Project_Principles  
-**Version:** 1.3
+**Version:** 1.4
 
 **Status:** Approved
 **Depends on:** `00_Product_Vision.md`, `02_Terminology.md`
@@ -144,9 +144,9 @@ Do not expose public mutable collections or permit unrelated systems to edit sta
 
 ### 2.14 Prefer deterministic outcomes
 
-Deck order, shuffle results, dice results, and state transitions should be reproducible where required by authority, testing, or recovery.
+Deck order, shuffle results, and state transitions should be reproducible where required by authority, testing, or recovery. Under ADR-025, physical Dice results and loose-object poses are recorded after authoritative simulation; recovery and synchronization use accepted state rather than requiring deterministic physics replay.
 
-Visual animation may vary. Accepted outcomes must not.
+Visual animation may vary. Accepted outcomes must not differ between clients: future host/server physics decides them, and clients reconcile to the accepted state.
 
 ### 2.15 Build the smallest complete vertical foundation
 

@@ -19,6 +19,7 @@ namespace ConsoleCards.Application.UseCases
         ActorNotActive,
         DieNotFound,
         RevisionOverflow,
+        PhysicalSimulationRequired,
     }
 
     public sealed class RollDieRequest
@@ -116,6 +117,9 @@ namespace ConsoleCards.Application.UseCases
             {
                 return RollDieResult.Failure(CommandResultStatus.Conflict, RollDieError.RevisionOverflow);
             }
+
+            if (dieState.BaseState.PhysicalState != null)
+                return RollDieResult.Failure(CommandResultStatus.Rejected, RollDieError.PhysicalSimulationRequired);
 
             DieRoll roll = new Die(dieState.SideCount).Roll(randomValueSource);
             dieState.SetAcceptedRoll(roll);

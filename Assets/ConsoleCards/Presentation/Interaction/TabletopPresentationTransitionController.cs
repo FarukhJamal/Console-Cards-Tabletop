@@ -34,6 +34,12 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly Dictionary<Transform, Vector3> restingScales = new Dictionary<Transform, Vector3>();
         private readonly List<Transform> completedTransforms = new List<Transform>();
 
+        private static bool PhysicalOwns(Transform target)
+        {
+            PhysicalLooseObject body = target.GetComponent<PhysicalLooseObject>();
+            return body != null && (body.OwnsLooseTransform || body.IsHeld);
+        }
+
         public TabletopTransformSnapshot Capture(Transform target)
         {
             if (target == null)
@@ -100,7 +106,7 @@ namespace ConsoleCards.Presentation.Interaction
             float arcHeight = 0f,
             float delay = 0f)
         {
-            if (target == null)
+            if (target == null || PhysicalOwns(target))
             {
                 return;
             }
@@ -135,7 +141,7 @@ namespace ConsoleCards.Presentation.Interaction
 
         public void Appear(Transform target, float duration)
         {
-            if (target == null)
+            if (target == null || PhysicalOwns(target))
             {
                 return;
             }
@@ -152,7 +158,7 @@ namespace ConsoleCards.Presentation.Interaction
 
         public void Pulse(Transform target, float compression, float duration)
         {
-            if (target == null)
+            if (target == null || PhysicalOwns(target))
             {
                 return;
             }

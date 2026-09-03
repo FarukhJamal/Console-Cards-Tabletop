@@ -128,6 +128,11 @@ namespace ConsoleCards.Application.UseCases
                     TransferCardError.LooseCardOrderOverflow);
             }
 
+            if (command.PhysicalState != null && (!command.DestinationContainerId.IsEmpty
+                || command.PhysicalState.Mode != PhysicalObjectMode.Dynamic
+                || command.PhysicalState.ControllingPlayerId != command.Context.RequestedByPlayerId))
+                return TransferCardResult.Failure(CommandResultStatus.Invalid, TransferCardError.PhysicalStateInvalid);
+
             TabletopPoseSnapshot cardSnapshot = TabletopPoseSnapshot.Capture(cardObject, source);
             ContainerTransferService transferService = new ContainerTransferService();
 
@@ -148,7 +153,9 @@ namespace ConsoleCards.Application.UseCases
                 if (command.DestinationContainerId.IsEmpty)
                 {
                     cardObject.SetPose(targetTablePose);
+                    cardObject.SetPhysicalState(command.PhysicalState);
                 }
+                else cardObject.SetPhysicalState(null);
 
                 long revision = matchState.AdvanceRevision();
                 return TransferCardResult.Accepted(revision);
@@ -269,6 +276,7 @@ namespace ConsoleCards.Application.UseCases
 
             cardObject.SetContainer(cardSnapshot.ContainerId);
             cardObject.SetPose(cardSnapshot.Pose);
+            cardObject.SetPhysicalState(cardSnapshot.PhysicalState);
         }
 
         private static TransferCardResult MapTransferFailure(ContainerTransferError error)
@@ -314,11 +322,12 @@ namespace ConsoleCards.Application.UseCases
 
         private readonly struct TabletopPoseSnapshot
         {
-            private TabletopPoseSnapshot(TabletopPose pose, ContainerId containerId, int sourceIndex)
+            private TabletopPoseSnapshot(TabletopPose pose, ContainerId containerId, int sourceIndex, PhysicalObjectState physicalState)
             {
                 Pose = pose;
                 ContainerId = containerId;
                 SourceIndex = sourceIndex;
+                PhysicalState = physicalState;
             }
 
             public TabletopPose Pose { get; }
@@ -326,11 +335,12 @@ namespace ConsoleCards.Application.UseCases
             public ContainerId ContainerId { get; }
 
             public int SourceIndex { get; }
+            public PhysicalObjectState PhysicalState { get; }
 
             public static TabletopPoseSnapshot Capture(TabletopObjectState cardObject, ContainerState source)
             {
                 int sourceIndex = source == null ? -1 : source.IndexOf(cardObject.Id);
-                return new TabletopPoseSnapshot(cardObject.Pose, cardObject.ContainerId, sourceIndex);
+                return new TabletopPoseSnapshot(cardObject.Pose, cardObject.ContainerId, sourceIndex, cardObject.PhysicalState);
             }
         }
     }

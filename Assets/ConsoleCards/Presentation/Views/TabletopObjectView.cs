@@ -3,12 +3,13 @@ using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Presentation.Coordinates;
+using ConsoleCards.Presentation.Interaction;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Views
 {
     /// <summary>
-    /// Base Unity View that projects an accepted tabletop object pose from Runtime State.
+    /// Projects accepted layout or physical Runtime State without competing with active loose simulation.
     /// </summary>
     public abstract class TabletopObjectView : MonoBehaviour
     {
@@ -21,6 +22,8 @@ namespace ConsoleCards.Presentation.Views
         private TabletopPose containerLayoutPose;
 
         public bool IsBound => isBound;
+        public PhysicalLooseObject PhysicalObject { get; internal set; }
+        public void RefreshAcceptedAppearance() => OnAcceptedStateApplied();
 
         public TabletopObjectId ObjectId => isBound ? boundState.Id : TabletopObjectId.Empty;
 
@@ -54,6 +57,15 @@ namespace ConsoleCards.Presentation.Views
         {
             EnsureBound();
 
+            if (PhysicalObject != null && boundState.ContainerId.IsEmpty)
+            {
+                PhysicalObject.ApplyAccepted();
+                ClearPreviewState();
+                OnAcceptedStateApplied();
+                return;
+            }
+            PhysicalObject?.DisableForContainer();
+
             Vector3 worldPosition = coordinateConverter.ToWorldPosition(boundState.Pose);
             Quaternion worldRotation = coordinateConverter.ToWorldRotation(boundState.Pose);
 
@@ -79,7 +91,7 @@ namespace ConsoleCards.Presentation.Views
         {
             EnsureBound();
 
-            if (!isPreviewing)
+            if (!isPreviewing && PhysicalObject == null)
             {
                 throw new InvalidOperationException("TabletopObjectView is not previewing.");
             }
@@ -95,6 +107,7 @@ namespace ConsoleCards.Presentation.Views
         public void ApplyContainerLayoutPose(TabletopPose pose, float additionalWorldHeight)
         {
             EnsureBound();
+            PhysicalObject?.DisableForContainer();
 
             if (boundState.ContainerId.IsEmpty)
             {
@@ -136,6 +149,8 @@ namespace ConsoleCards.Presentation.Views
 
         public virtual void Unbind()
         {
+            PhysicalObject?.DisableForContainer();
+            PhysicalObject = null;
             boundState = null;
             coordinateConverter = null;
             isBound = false;

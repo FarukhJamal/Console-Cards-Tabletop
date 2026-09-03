@@ -1,7 +1,7 @@
 # Console Cards — Multiplayer Architecture
 
 **Document ID:** 10_Multiplayer_Architecture  
-**Version:** 1.2
+**Version:** 1.3
 
 **Status:** Approved with Open Decisions
 
@@ -24,6 +24,8 @@ Multiplayer must support:
 ## 2. Authority Model
 
 One accepted authority owns official Match State at a time.
+
+Under ADR-025, the host/server also owns the physics simulation that determines accepted loose-object motion and settled Dice faces. Clients do not independently decide authoritative poses or Dice results. The local/offline authority preserves this boundary before networking exists; no networking package is authorized by the physical-object decision.
 
 Possible topologies:
 
@@ -96,6 +98,8 @@ During drag:
 - Rate-limited preview updates may be shared.
 - Remote Views interpolate.
 - Final accepted pose is committed as authoritative state.
+
+For loose Card/Pawn/Token/Die physics, held control is temporary/kinematic and release starts dynamic simulation, not an immediate final layout commit. The authority commits the settled 3D pose and, for Dice, the mapped settled value through Commands or approved Application Use Cases with actor context and Match revisions. Clients reconcile/interpolate accepted physical state rather than independently rerolling or requiring deterministic cross-client physics replay. `TabletopPose` remains the authored/template/container-layout model; loose physical pose/state is separate. An off-table physical release is valid and must not be treated as a boundary rejection or snap-back.
 
 ## 7. Private Information
 

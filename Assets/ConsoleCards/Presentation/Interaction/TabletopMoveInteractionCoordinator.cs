@@ -279,6 +279,13 @@ namespace ConsoleCards.Presentation.Interaction
                 return false;
             }
 
+            if (view.PhysicalObject != null)
+            {
+                view.PhysicalObject.Follow(screenPosition);
+                if (view is CardView) UpdateCardTargetFeedback(screenPosition);
+                return true;
+            }
+
             if (!pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate))
             {
                 cardDragFeedback?.Update(ContainerId.Empty, CardDropTarget.None(), false);
@@ -369,6 +376,18 @@ namespace ConsoleCards.Presentation.Interaction
 
                 activeView = null;
                 return tokenTransferReleaseResult;
+            }
+
+            if (view.PhysicalObject != null)
+            {
+                previewSession.EndPreviewWithoutReconcile();
+                bool accepted = view.PhysicalObject.Release();
+                lockService.Release(view.ObjectId, InteractionOwnerId);
+                if (accepted) stateMachine.CompleteAcceptance();
+                else { stateMachine.BeginCancellation(); stateMachine.CompleteCancellation(); }
+                activeView = null;
+                return accepted ? MoveInteractionReleaseResult.FromMoveResult(MoveObjectResult.Accepted(MatchState.Revision))
+                    : MoveInteractionReleaseResult.ProjectionFailed();
             }
 
             if (!pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate))
@@ -496,6 +515,7 @@ namespace ConsoleCards.Presentation.Interaction
 
             if (!transferResult.TransferAttempted)
             {
+                cardView.PhysicalObject?.Cancel();
                 cardView.ClearContainerLayoutAndReconcile();
                 previewSession.AnimateReturnFrom(cardView, transferStart);
             }
@@ -570,7 +590,10 @@ namespace ConsoleCards.Presentation.Interaction
             }
             else
             {
-                if (!pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate))
+                TableCoordinate coordinate;
+                if (tokenView.PhysicalObject != null)
+                    coordinate = tokenView.PhysicalObject.LayoutCoordinate;
+                else if (!pointerProjector.TryProjectScreenPoint(screenPosition, out coordinate))
                 {
                     sourceView.ApplyAcceptedLayout();
                     previewSession.AnimateReturnFrom(tokenView, transferStart);
@@ -587,13 +610,14 @@ namespace ConsoleCards.Presentation.Interaction
                         coordinate,
                         acceptedPose.RotationDegrees,
                         acceptedPose.Layer,
-                        acceptedPose.LocalOrder));
+                        acceptedPose.LocalOrder), tokenView.PhysicalObject?.ReleaseState());
             }
 
             TransferTokenResult transferResult = tokenTransferUseCase.Execute(MatchState, command);
             releaseResult = MoveInteractionReleaseResult.FromTokenTransferResult(transferResult);
             if (!transferResult.Succeeded)
             {
+                tokenView.PhysicalObject?.Cancel();
                 sourceView?.ApplyAcceptedLayout();
                 destinationView?.ApplyAcceptedLayout();
                 if (sourceView == null)

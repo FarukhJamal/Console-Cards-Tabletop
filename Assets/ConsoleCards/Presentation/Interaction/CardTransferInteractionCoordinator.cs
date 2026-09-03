@@ -163,11 +163,12 @@ namespace ConsoleCards.Presentation.Interaction
                     transitions != null
                         ? CaptureAffectedCardTransforms(cardView, sourceContainerId, target.ContainerId)
                         : null;
-                TransferCardCommand command = CreateCommand(matchCard, sourceContainerId, target);
+                TransferCardCommand command = CreateCommand(matchCard, sourceContainerId, target, cardView);
                 TransferCardResult transferResult;
                 try
                 {
                     transferResult = transferUseCase.Execute(MatchState, command);
+                    if (!transferResult.Succeeded) cardView.PhysicalObject?.Cancel();
 
                     ReconcileAfterTransfer(
                         cardView,
@@ -179,6 +180,7 @@ namespace ConsoleCards.Presentation.Interaction
                 }
                 catch
                 {
+                    cardView.PhysicalObject?.Cancel();
                     ReconcileCurrentPresentation(cardView, sourceLayoutView, destinationLayoutView);
                     if (transitions != null)
                     {
@@ -273,7 +275,7 @@ namespace ConsoleCards.Presentation.Interaction
         private TransferCardCommand CreateCommand(
             CardInstanceState card,
             ContainerId sourceContainerId,
-            CardDropTarget target)
+            CardDropTarget target, CardView cardView)
         {
             CommandContext context = new CommandContext(
                 CommandId.New(),
@@ -294,7 +296,8 @@ namespace ConsoleCards.Presentation.Interaction
                     context,
                     card.BaseState.Id,
                     sourceContainerId,
-                    targetPose);
+                    targetPose, cardView.PhysicalObject != null && cardView.PhysicalObject.IsHeld
+                        ? cardView.PhysicalObject.ReleaseState() : null);
             }
 
             return TransferCardCommand.ToContainer(
