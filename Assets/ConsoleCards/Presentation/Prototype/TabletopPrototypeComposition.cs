@@ -150,6 +150,7 @@ namespace ConsoleCards.Presentation.Prototype
         private bool cardViewBoundByComposition;
         private bool pawnViewBoundByComposition;
         private bool tokenViewBoundByComposition;
+        private bool destroyRuntimePresentationImmediately;
         private bool gameTemplatesPanelVisible;
         private PrototypeRuntimeUiRoot runtimeUi;
 
@@ -491,11 +492,15 @@ namespace ConsoleCards.Presentation.Prototype
 
             if (componentPlacementInputConfiguredByComposition && inputFrameCoordinator != null)
             {
-                inputFrameCoordinator.ClearComponentPlacement();
+                inputFrameCoordinator.ClearComponentPlacement(destroyRuntimePresentationImmediately);
             }
 
             componentPlacementInputConfiguredByComposition = false;
             componentPlacementController = null;
+
+            // Scene-owned roots are reusable, but must not expose their previous bindings while
+            // runtime-owned Presentation is being removed and the baseline Match is replaced.
+            HideSceneOwnedTemplatePresentation();
 
             if (prototypeUiInputConfiguredByComposition && inputFrameCoordinator != null)
             {
@@ -542,6 +547,9 @@ namespace ConsoleCards.Presentation.Prototype
             DeactivateSelectionVisual(pawnSelectionVisual);
             DeactivateSelectionVisual(tokenSelectionVisual);
 
+            // ConsoleView depends on its bound Slot Views while applying layout, so release the
+            // parent binding before releasing the Slot bindings. Rebuild performs the inverse.
+            consoleView?.Unbind();
             for (int i = 0; i < consoleSlotViews.Count; i++)
             {
                 if (i < resolvedSceneConsoleSlotVisuals.Length)
@@ -559,12 +567,6 @@ namespace ConsoleCards.Presentation.Prototype
                     consoleSlotViews[i].Unbind();
                 }
             }
-
-            consoleView?.Unbind();
-
-            UnbindIfOwned(cardView, ref cardViewBoundByComposition);
-            UnbindIfOwned(pawnView, ref pawnViewBoundByComposition);
-            UnbindIfOwned(tokenView, ref tokenViewBoundByComposition);
 
             selectionState = null;
             hitResolver = null;
@@ -590,6 +592,11 @@ namespace ConsoleCards.Presentation.Prototype
             ReleaseRuntimeDeckInstances();
             ReleaseRuntimeConsoleInstances();
             ReleaseRuntimeTokenContainerInstances();
+            // Container layouts own the contained-object presentation. Release every Container
+            // binding before releasing the scene-owned object bindings they may still reference.
+            UnbindIfOwned(cardView, ref cardViewBoundByComposition);
+            UnbindIfOwned(pawnView, ref pawnViewBoundByComposition);
+            UnbindIfOwned(tokenView, ref tokenViewBoundByComposition);
             ClearOfficialPawnPresentation();
             ReleaseRuntimeObjectInstances(runtimePawnInstances, pawnViews, pawnSelectionVisuals);
             ReleaseRuntimeObjectInstances(runtimeTokenInstances, tokenViews, tokenSelectionVisuals);
@@ -916,7 +923,16 @@ namespace ConsoleCards.Presentation.Prototype
         public void ResetPrototype()
         {
             EnsureInitialized();
-            Shutdown(true);
+            destroyRuntimePresentationImmediately = true;
+            try
+            {
+                Shutdown(true);
+            }
+            finally
+            {
+                destroyRuntimePresentationImmediately = false;
+            }
+
             InitializeActiveSession(true);
             RefreshTrapFloorStatusUi();
         }
@@ -4785,7 +4801,6 @@ namespace ConsoleCards.Presentation.Prototype
             PlayAreaState board = matchState.GetPlayArea(centralPlayAreaId);
             TabletopPose boardPose = new TabletopPose(board.Bounds.Center, 0f, 0, 0);
             Transform boardTransform = boardCollider.transform;
-            boardTransform.SetParent(transform, true);
             boardTransform.SetPositionAndRotation(
                 coordinateConverter.ToWorldPosition(boardPose),
                 coordinateConverter.ToWorldRotation(boardPose));
@@ -6859,6 +6874,12 @@ namespace ConsoleCards.Presentation.Prototype
                 int lastIndex = runtimeConsoleInstances.Count - 1;
                 RuntimeConsoleInstance instance = runtimeConsoleInstances[lastIndex];
                 GameObject root = instance.Root;
+                DisableRuntimeInteraction(root);
+                if (instance.View != null && instance.View.IsBound)
+                {
+                    instance.View.Unbind();
+                }
+
                 for (int i = 0; i < instance.SlotViews.Length; i++)
                 {
                     ConsoleSlotView slotView = instance.SlotViews[i];
@@ -6883,15 +6904,9 @@ namespace ConsoleCards.Presentation.Prototype
                     }
                 }
 
-                if (instance.View != null && instance.View.IsBound)
-                {
-                    instance.View.Unbind();
-                }
-
                 playerConsoleViews.Remove(instance.View);
                 runtimeConsoleInstances.RemoveAt(lastIndex);
                 instance.ClearReferences();
-                DisableRuntimeInteraction(root);
                 DestroyRuntimeOwnedGameObject(root);
             }
         }
@@ -6907,6 +6922,12 @@ namespace ConsoleCards.Presentation.Prototype
                 }
 
                 GameObject root = instance.Root;
+                DisableRuntimeInteraction(root);
+                if (instance.View != null && instance.View.IsBound)
+                {
+                    instance.View.Unbind();
+                }
+
                 for (int i = 0; i < instance.SlotViews.Length; i++)
                 {
                     ConsoleSlotView slotView = instance.SlotViews[i];
@@ -6940,15 +6961,9 @@ namespace ConsoleCards.Presentation.Prototype
                     }
                 }
 
-                if (instance.View != null && instance.View.IsBound)
-                {
-                    instance.View.Unbind();
-                }
-
                 playerConsoleViews.Remove(instance.View);
                 runtimeConsoleInstances.RemoveAt(instanceIndex);
                 instance.ClearReferences();
-                DisableRuntimeInteraction(root);
                 DestroyRuntimeOwnedGameObject(root);
                 return;
             }
@@ -7141,7 +7156,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
-        private static void DestroyRuntimeOwnedGameObject(GameObject root)
+        private void DestroyRuntimeOwnedGameObject(GameObject root)
         {
             if (root == null)
             {
@@ -7150,7 +7165,14 @@ namespace ConsoleCards.Presentation.Prototype
 
             root.SetActive(false);
             root.name = $"{root.name} (Pending Runtime Destruction)";
-            Destroy(root);
+            if (destroyRuntimePresentationImmediately)
+            {
+                DestroyImmediate(root);
+            }
+            else
+            {
+                Destroy(root);
+            }
         }
 
         private void ValidateDistinctViews()

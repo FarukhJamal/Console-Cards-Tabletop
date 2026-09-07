@@ -79,7 +79,7 @@ namespace ConsoleCards.Presentation.Views.Containers
         public void Unbind()
         {
             consoleState = null;
-            layoutAnchor = null;
+            // layoutAnchor and slotAnchors are authored prefab configuration reused after Reset.
             slotViews.Clear();
             isBound = false;
         }

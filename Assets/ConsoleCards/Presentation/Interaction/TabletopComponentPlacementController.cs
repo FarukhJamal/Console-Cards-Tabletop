@@ -209,6 +209,11 @@ namespace ConsoleCards.Presentation.Interaction
             CompletePreview(false);
         }
 
+        internal void Cancel(bool destroyImmediately)
+        {
+            CompletePreview(false, destroyImmediately);
+        }
+
         private void UpdatePreview(Vector2 screenPosition, bool pointerBlockedByUi)
         {
             if (physicalPlacement && PhysicalSurfaces != null)
@@ -275,7 +280,7 @@ namespace ConsoleCards.Presentation.Interaction
             hasValidPreviewPose = true;
         }
 
-        private void CompletePreview(bool committed)
+        private void CompletePreview(bool committed, bool destroyImmediately = false)
         {
             Action<bool> placementEnded = activePlacementEnded;
             if (previewRoot != null)
@@ -283,7 +288,14 @@ namespace ConsoleCards.Presentation.Interaction
                 GameObject root = previewRoot;
                 previewRoot = null;
                 root.SetActive(false);
-                UnityEngine.Object.Destroy(root);
+                if (destroyImmediately)
+                {
+                    UnityEngine.Object.DestroyImmediate(root);
+                }
+                else
+                {
+                    UnityEngine.Object.Destroy(root);
+                }
             }
 
             componentKind = default;
