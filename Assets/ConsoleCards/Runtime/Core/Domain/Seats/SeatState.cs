@@ -13,7 +13,9 @@ namespace ConsoleCards.Core.Domain.Seats
             ContainerId handContainerId,
             ConsoleState console,
             PlayerId occupantPlayerId,
-            SeatStatus status)
+            SeatStatus status,
+            TabletopPose? consolePose = null,
+            float? consoleSurfaceHeight = null)
         {
             if (id.IsEmpty)
             {
@@ -41,6 +43,7 @@ namespace ConsoleCards.Core.Domain.Seats
             TablePose = tablePose;
             HandContainerId = handContainerId;
             Console = console;
+            SetConsolePlacement(consolePose ?? tablePose, consoleSurfaceHeight);
             OccupantPlayerId = occupantPlayerId;
             Status = status;
         }
@@ -53,6 +56,14 @@ namespace ConsoleCards.Core.Domain.Seats
 
         public ConsoleState Console { get; }
 
+        public TabletopPose ConsolePose { get; private set; }
+
+        /// <summary>
+        /// Accepted physical Table/Board surface world Y for the non-physical Console anchor.
+        /// Null retains authored layout projection height.
+        /// </summary>
+        public float? ConsoleSurfaceHeight { get; private set; }
+
         public PlayerId OccupantPlayerId { get; private set; }
 
         public SeatStatus Status { get; private set; }
@@ -60,6 +71,19 @@ namespace ConsoleCards.Core.Domain.Seats
         public void SetTablePose(TabletopPose tablePose)
         {
             TablePose = tablePose;
+        }
+
+        public void SetConsolePlacement(TabletopPose pose, float? surfaceHeight = null)
+        {
+            ValidatePose(pose, nameof(pose));
+            if (surfaceHeight.HasValue
+                && (float.IsNaN(surfaceHeight.Value) || float.IsInfinity(surfaceHeight.Value)))
+            {
+                throw new ArgumentOutOfRangeException(nameof(surfaceHeight));
+            }
+
+            ConsolePose = pose;
+            ConsoleSurfaceHeight = surfaceHeight;
         }
 
         public void AssignPlayer(PlayerId playerId)
@@ -125,6 +149,19 @@ namespace ConsoleCards.Core.Domain.Seats
             if (occupantPlayerId.IsEmpty)
             {
                 throw new ArgumentException("Non-vacant Seats require an occupant.", nameof(occupantPlayerId));
+            }
+        }
+
+        private static void ValidatePose(TabletopPose pose, string parameterName)
+        {
+            if (double.IsNaN(pose.Position.X)
+                || double.IsInfinity(pose.Position.X)
+                || double.IsNaN(pose.Position.Y)
+                || double.IsInfinity(pose.Position.Y)
+                || float.IsNaN(pose.RotationDegrees)
+                || float.IsInfinity(pose.RotationDegrees))
+            {
+                throw new ArgumentOutOfRangeException(parameterName, "Console pose must be finite.");
             }
         }
     }

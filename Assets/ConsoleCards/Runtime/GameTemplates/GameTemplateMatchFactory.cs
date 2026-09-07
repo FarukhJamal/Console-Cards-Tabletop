@@ -212,7 +212,10 @@ namespace ConsoleCards.GameTemplates
                     definition.HandContainerId,
                     new ConsoleState(definition.SeatId, definition.ConsoleSlotContainerIds),
                     playersBySeatId[definition.SeatId],
-                    SeatStatus.Occupied));
+                    SeatStatus.Occupied,
+                    definition.HasConsolePose
+                        ? definition.ConsolePose
+                        : layoutSeat.ConsoleAnchorPose));
             }
 
             List<PlayAreaState> playAreas = new List<PlayAreaState>(template.PlayAreas.Count);

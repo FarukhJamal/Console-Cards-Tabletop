@@ -335,6 +335,8 @@ namespace ConsoleCards.GameTemplates
             {
                 Id = seat.Id;
                 TablePose = seat.TablePose;
+                ConsolePose = seat.ConsolePose;
+                ConsoleSurfaceHeight = seat.ConsoleSurfaceHeight;
                 HandContainerId = seat.HandContainerId;
                 SlotContainerIds = new ReadOnlyCollection<ContainerId>(
                     new List<ContainerId>(seat.Console.SlotContainerIds));
@@ -344,6 +346,8 @@ namespace ConsoleCards.GameTemplates
 
             public SeatId Id { get; }
             public TabletopPose TablePose { get; }
+            public TabletopPose ConsolePose { get; }
+            public float? ConsoleSurfaceHeight { get; }
             public ContainerId HandContainerId { get; }
             public IReadOnlyList<ContainerId> SlotContainerIds { get; }
             public PlayerId OccupantPlayerId { get; }
@@ -357,7 +361,9 @@ namespace ConsoleCards.GameTemplates
                     HandContainerId,
                     new ConsoleState(Id, SlotContainerIds),
                     OccupantPlayerId,
-                    Status);
+                    Status,
+                    ConsolePose,
+                    ConsoleSurfaceHeight);
             }
         }
 

@@ -5,7 +5,8 @@ using ConsoleCards.Core.Identifiers;
 namespace ConsoleCards.Application.Commands
 {
     /// <summary>
-    /// Requests an authoritative placement change for one physical Container.
+    /// Requests an authoritative placement change for a Deck/Stack anchor or for the
+    /// Console owning the supplied authoritative Slot Container ID.
     /// </summary>
     public sealed class MoveContainerCommand : ITabletopCommand
     {

@@ -28,6 +28,7 @@ namespace ConsoleCards.Presentation.Interaction
         private TabletopPose previewPose;
         private bool hasValidPreviewPose;
         private Func<TabletopPose, bool> activeCommitPlacement;
+        private Action<bool> activePlacementEnded;
         internal PhysicalTabletopSurfaces PhysicalSurfaces { get; set; }
         private bool physicalPlacement;
         private bool containerPlacement;
@@ -78,7 +79,8 @@ namespace ConsoleCards.Presentation.Interaction
         public void BeginContainerMove(
             GameObject requestedPreviewRoot,
             TabletopPose currentPose,
-            Func<TabletopPose, bool> commitPlacement)
+            Func<TabletopPose, bool> commitPlacement,
+            Action<bool> placementEnded = null)
         {
             BeginInternal(
                 default,
@@ -87,7 +89,8 @@ namespace ConsoleCards.Presentation.Interaction
                 currentPose.RotationDegrees,
                 currentPose.Layer,
                 currentPose.LocalOrder,
-                commitPlacement ?? throw new ArgumentNullException(nameof(commitPlacement)));
+                commitPlacement ?? throw new ArgumentNullException(nameof(commitPlacement)),
+                placementEnded);
             physicalPlacement = false;
             containerPlacement = true;
         }
@@ -117,7 +120,8 @@ namespace ConsoleCards.Presentation.Interaction
             float requestedRotationDegrees,
             int requestedLayer,
             int requestedLocalOrder,
-            Func<TabletopPose, bool> requestedCommitPlacement)
+            Func<TabletopPose, bool> requestedCommitPlacement,
+            Action<bool> requestedPlacementEnded = null)
         {
             if (requestedPreviewRoot == null)
             {
@@ -133,7 +137,8 @@ namespace ConsoleCards.Presentation.Interaction
             PhysicalQuantity = 1;
             componentKind = requestedKind;
             containerPlacement = requestedKind == TabletopComponentKind.Deck
-                || requestedKind == TabletopComponentKind.Stack;
+                || requestedKind == TabletopComponentKind.Stack
+                || requestedKind == TabletopComponentKind.Console;
             physicalPlacement = requestedKind == TabletopComponentKind.Card || requestedKind == TabletopComponentKind.Pawn
                 || requestedKind == TabletopComponentKind.Token || requestedKind == TabletopComponentKind.Die;
             dieSideCount = requestedDieSideCount;
@@ -142,6 +147,7 @@ namespace ConsoleCards.Presentation.Interaction
             layer = requestedLayer;
             localOrder = requestedLocalOrder;
             activeCommitPlacement = requestedCommitPlacement;
+            activePlacementEnded = requestedPlacementEnded;
             hasValidPreviewPose = false;
             previewRoot.SetActive(false);
         }
@@ -192,7 +198,7 @@ namespace ConsoleCards.Presentation.Interaction
                 && activeCommitPlacement != null
                 && activeCommitPlacement(previewPose))
             {
-                CompletePreview();
+                CompletePreview(true);
             }
 
             return true;
@@ -200,7 +206,7 @@ namespace ConsoleCards.Presentation.Interaction
 
         public void Cancel()
         {
-            CompletePreview();
+            CompletePreview(false);
         }
 
         private void UpdatePreview(Vector2 screenPosition, bool pointerBlockedByUi)
@@ -269,8 +275,9 @@ namespace ConsoleCards.Presentation.Interaction
             hasValidPreviewPose = true;
         }
 
-        private void CompletePreview()
+        private void CompletePreview(bool committed)
         {
+            Action<bool> placementEnded = activePlacementEnded;
             if (previewRoot != null)
             {
                 GameObject root = previewRoot;
@@ -287,6 +294,8 @@ namespace ConsoleCards.Presentation.Interaction
             previewPose = TabletopPose.Default;
             hasValidPreviewPose = false;
             activeCommitPlacement = null;
+            activePlacementEnded = null;
+            placementEnded?.Invoke(committed);
         }
 
         private static bool IsFinite(float value)

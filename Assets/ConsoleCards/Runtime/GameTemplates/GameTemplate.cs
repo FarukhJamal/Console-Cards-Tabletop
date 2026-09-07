@@ -84,7 +84,8 @@ namespace ConsoleCards.GameTemplates
             SeatId seatId,
             int playerLayoutSeatIndex,
             ContainerId handContainerId,
-            IEnumerable<ContainerId> consoleSlotContainerIds)
+            IEnumerable<ContainerId> consoleSlotContainerIds,
+            TabletopPose? consolePose = null)
         {
             if (consoleSlotContainerIds == null)
             {
@@ -96,6 +97,8 @@ namespace ConsoleCards.GameTemplates
             HandContainerId = handContainerId;
             ConsoleSlotContainerIds = new ReadOnlyCollection<ContainerId>(
                 new List<ContainerId>(consoleSlotContainerIds));
+            HasConsolePose = consolePose.HasValue;
+            ConsolePose = consolePose ?? TabletopPose.Default;
         }
 
         public SeatId SeatId { get; }
@@ -105,6 +108,10 @@ namespace ConsoleCards.GameTemplates
         public ContainerId HandContainerId { get; }
 
         public IReadOnlyList<ContainerId> ConsoleSlotContainerIds { get; }
+
+        public bool HasConsolePose { get; }
+
+        public TabletopPose ConsolePose { get; }
     }
 
     public sealed class GameTemplateContainerDefinition

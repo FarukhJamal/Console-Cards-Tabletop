@@ -259,6 +259,14 @@ namespace ConsoleCards.Application.UseCases
 
             if (request.ComponentKind == TabletopComponentKind.Console)
             {
+                float? surfaceHeight = resolveContainerSurfaceHeight?.Invoke(request.InitialPose);
+                if (resolveContainerSurfaceHeight != null && !surfaceHeight.HasValue)
+                {
+                    return CreateTabletopComponentResult.Failure(
+                        CommandResultStatus.Rejected,
+                        CreateTabletopComponentError.PhysicalSurfaceRequired);
+                }
+
                 if (!TryAllocateConsoleId(matchState, out ConsoleId consoleId)
                     || !TryAllocateContainerIds(
                         matchState,
@@ -283,7 +291,7 @@ namespace ConsoleCards.Application.UseCases
 
                 ConsoleState console = ConsoleState.CreateUnowned(slotContainerIds);
                 matchState.AddPlacedConsole(
-                    new PlacedConsoleState(consoleId, request.InitialPose, console),
+                    new PlacedConsoleState(consoleId, request.InitialPose, console, surfaceHeight),
                     slots);
                 long revision = matchState.AdvanceRevision();
                 return CreateTabletopComponentResult.ConsoleAccepted(revision, consoleId);

@@ -400,7 +400,12 @@ namespace ConsoleCards.Games.TrapFloor
                 itemSlotIds[1],
                 itemSlotIds[2],
             };
-            seats.Add(new GameTemplateSeatDefinition(seatId, seatIndex, handId, consoleSlotIds));
+            seats.Add(new GameTemplateSeatDefinition(
+                seatId,
+                seatIndex,
+                handId,
+                consoleSlotIds,
+                GetConsolePose(layoutSeat)));
             containers.Add(CreateContainer(handId, ContainerKind.Hand, seatId, ObjectVisibility.OwnerOnly, 10));
             for (int i = 0; i < consoleSlotIds.Length; i++)
             {

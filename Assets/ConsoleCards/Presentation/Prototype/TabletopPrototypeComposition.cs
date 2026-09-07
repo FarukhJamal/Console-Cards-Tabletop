@@ -13,6 +13,7 @@ using ConsoleCards.Core.Domain.Dice;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Domain.PlayAreas;
 using ConsoleCards.Core.Domain.PlayerLayouts;
+using ConsoleCards.Core.Domain.Seats;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.Games.TrapFloor;
@@ -1619,12 +1620,38 @@ namespace ConsoleCards.Presentation.Prototype
             TabletopComponentKind previewKind = container.Kind == ContainerKind.Deck
                 ? TabletopComponentKind.Deck
                 : TabletopComponentKind.Stack;
+            if (!TryResolveContainerMoveRoot(containerId, container.Kind, out GameObject sourceRoot))
+            {
+                ShowMessage("Container move rejected: bound View unavailable.");
+                return;
+            }
+
+            componentPlacementController.Cancel();
             GameObject previewRoot = CreateToolboxPlacementPreview(previewKind, 0);
+            List<GameObjectActivationSnapshot> sourceVisibility = HideContainerMoveSource(
+                sourceRoot,
+                new[] { containerId });
             CloseContextMenu();
-            componentPlacementController.BeginContainerMove(
-                previewRoot,
-                placement.Pose,
-                pose => CommitContainerMove(containerId, pose));
+            try
+            {
+                componentPlacementController.BeginContainerMove(
+                    previewRoot,
+                    placement.Pose,
+                    pose => CommitContainerMove(containerId, pose),
+                    committed => CompleteContainerMovePresentation(
+                        containerId,
+                        false,
+                        committed,
+                        sourceVisibility));
+            }
+            catch
+            {
+                RestoreMoveSourceVisibility(sourceVisibility);
+                previewRoot.SetActive(false);
+                Destroy(previewRoot);
+                throw;
+            }
+
             ShowPlacementHint($"Move {container.Kind}");
             ShowMessage($"Move {container.Kind}: left-click to confirm, right-click or Escape to cancel.");
         }
@@ -1636,14 +1663,178 @@ namespace ConsoleCards.Presentation.Prototype
                 new MoveContainerCommand(CreateCommandContext(), containerId, requestedPose));
             if (!result.Succeeded)
             {
-                ApplyLayout(containerId);
                 ShowMessage($"Container move rejected: {result.Error}.");
                 return false;
             }
 
-            ApplyLayout(containerId);
+            if (matchState.Containers.TryGetValue(containerId, out ContainerState container)
+                && container.Kind == ContainerKind.ConsoleSlot)
+            {
+                ApplyConsolePlacement(containerId);
+            }
+            else
+            {
+                ApplyLayout(containerId);
+            }
+
             ShowMessage("Container moved.");
             return true;
+        }
+
+        private void BeginConsoleMove(ContainerId slotContainerId)
+        {
+            EnsureInitialized();
+            if (componentPlacementController == null)
+            {
+                throw new InvalidOperationException("Component placement is not configured.");
+            }
+
+            if (!TryResolveConsolePlacement(
+                    slotContainerId,
+                    out TabletopPose pose,
+                    out _,
+                    out ConsoleView sourceView))
+            {
+                ShowMessage("Console move rejected: Console unavailable.");
+                return;
+            }
+
+            componentPlacementController.Cancel();
+            GameObject previewRoot = CreateToolboxPlacementPreview(TabletopComponentKind.Console, 0);
+            List<GameObjectActivationSnapshot> sourceVisibility = HideContainerMoveSource(
+                sourceView.gameObject,
+                sourceView.ConsoleState.SlotContainerIds);
+            CloseContextMenu();
+            try
+            {
+                componentPlacementController.BeginContainerMove(
+                    previewRoot,
+                    pose,
+                    requestedPose => CommitContainerMove(slotContainerId, requestedPose),
+                    committed => CompleteContainerMovePresentation(
+                        slotContainerId,
+                        true,
+                        committed,
+                        sourceVisibility));
+            }
+            catch
+            {
+                RestoreMoveSourceVisibility(sourceVisibility);
+                previewRoot.SetActive(false);
+                Destroy(previewRoot);
+                throw;
+            }
+
+            ShowPlacementHint("Move Console");
+            ShowMessage("Move Console: left-click to confirm, right-click or Escape to cancel.");
+        }
+
+        private bool TryResolveContainerMoveRoot(
+            ContainerId containerId,
+            ContainerKind containerKind,
+            out GameObject sourceRoot)
+        {
+            if (containerKind == ContainerKind.Deck
+                && TryGetDeckPresentation(containerId, out _, out PrototypeFixedContainerVisual deckVisual))
+            {
+                sourceRoot = deckVisual.gameObject;
+                return true;
+            }
+
+            if (containerKind == ContainerKind.Stack
+                && stackViewsByContainerId.TryGetValue(containerId, out StackRuntimeView stackView)
+                && stackView.Root != null)
+            {
+                sourceRoot = stackView.Root;
+                return true;
+            }
+
+            sourceRoot = null;
+            return false;
+        }
+
+        private List<GameObjectActivationSnapshot> HideContainerMoveSource(
+            GameObject sourceRoot,
+            IReadOnlyList<ContainerId> memberContainerIds)
+        {
+            List<GameObjectActivationSnapshot> snapshots = new List<GameObjectActivationSnapshot>();
+            HashSet<GameObject> capturedObjects = new HashSet<GameObject>();
+            CaptureActivation(sourceRoot, snapshots, capturedObjects);
+            for (int containerIndex = 0; containerIndex < memberContainerIds.Count; containerIndex++)
+            {
+                if (!matchState.Containers.TryGetValue(
+                        memberContainerIds[containerIndex],
+                        out ContainerState memberContainer))
+                {
+                    continue;
+                }
+
+                for (int objectIndex = 0; objectIndex < memberContainer.ObjectIds.Count; objectIndex++)
+                {
+                    if (TryGetCardView(memberContainer.ObjectIds[objectIndex], out CardView card))
+                    {
+                        CaptureActivation(card.gameObject, snapshots, capturedObjects);
+                    }
+                }
+            }
+
+            for (int i = 0; i < snapshots.Count; i++)
+            {
+                snapshots[i].Target.SetActive(false);
+            }
+
+            return snapshots;
+        }
+
+        private void CompleteContainerMovePresentation(
+            ContainerId authoritativeId,
+            bool isConsole,
+            bool committed,
+            IReadOnlyList<GameObjectActivationSnapshot> sourceVisibility)
+        {
+            try
+            {
+                if (!committed && matchState != null)
+                {
+                    if (isConsole)
+                    {
+                        ApplyConsolePlacement(authoritativeId);
+                    }
+                    else
+                    {
+                        ApplyLayout(authoritativeId);
+                    }
+                }
+            }
+            finally
+            {
+                RestoreMoveSourceVisibility(sourceVisibility);
+                Physics.SyncTransforms();
+            }
+        }
+
+        private static void CaptureActivation(
+            GameObject target,
+            ICollection<GameObjectActivationSnapshot> snapshots,
+            ISet<GameObject> capturedObjects)
+        {
+            if (target != null && capturedObjects.Add(target))
+            {
+                snapshots.Add(new GameObjectActivationSnapshot(target, target.activeSelf));
+            }
+        }
+
+        private static void RestoreMoveSourceVisibility(
+            IReadOnlyList<GameObjectActivationSnapshot> snapshots)
+        {
+            for (int i = 0; i < snapshots.Count; i++)
+            {
+                GameObjectActivationSnapshot snapshot = snapshots[i];
+                if (snapshot.Target != null)
+                {
+                    snapshot.Target.SetActive(snapshot.WasActive);
+                }
+            }
         }
 
         private TabletopPose CreateNextToolboxSpawnPose()
@@ -2713,9 +2904,9 @@ namespace ConsoleCards.Presentation.Prototype
                     TabletopObjectId.Empty);
             }
             else if (container.Kind == ContainerKind.ConsoleSlot
-                && TryGetPlacedConsoleBySlot(container.Id, out ConsoleId consoleId))
+                && TryResolveConsolePlacement(container.Id, out _, out _, out _))
             {
-                OpenConsoleContextMenu(screenPosition, consoleId);
+                OpenConsoleContextMenu(screenPosition, container.Id);
             }
         }
 
@@ -2856,15 +3047,17 @@ namespace ConsoleCards.Presentation.Prototype
             SetContextMenuMode(PrototypeContextMenuMode.Token);
         }
 
-        private void OpenConsoleContextMenu(Vector2 screenPosition, ConsoleId consoleId)
+        private void OpenConsoleContextMenu(Vector2 screenPosition, ContainerId slotContainerId)
         {
             contextMenuAnchorScreenPosition = screenPosition;
             contextMenuCardId = TabletopObjectId.Empty;
-            contextMenuContainerId = ContainerId.Empty;
+            contextMenuContainerId = slotContainerId;
             contextMenuDieId = TabletopObjectId.Empty;
             contextMenuPawnId = TabletopObjectId.Empty;
             contextMenuTokenId = TabletopObjectId.Empty;
-            contextMenuConsoleId = consoleId;
+            contextMenuConsoleId = TryGetPlacedConsoleBySlot(slotContainerId, out ConsoleId consoleId)
+                ? consoleId
+                : ConsoleId.Empty;
             SetContextMenuMode(PrototypeContextMenuMode.Console);
         }
 
@@ -3061,7 +3254,7 @@ namespace ConsoleCards.Presentation.Prototype
                     }
                 }));
             actions.Add(new PrototypePopupActionOption(
-                "Move Deck",
+                "Move",
                 true,
                 () => BeginContainerMove(targetDeckId)));
             AddDeleteActionIfRuntime(
@@ -3374,7 +3567,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             actions.Add(new PrototypePopupActionOption(
-                "Move Stack",
+                "Move",
                 true,
                 () => BeginContainerMove(targetStackId)));
             AddDeleteActionIfRuntime(
@@ -3414,6 +3607,16 @@ namespace ConsoleCards.Presentation.Prototype
             ContainerState container = matchState.GetContainer(contextMenuContainerId);
             List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
             AddInspectAction(actions, targetCardId);
+            if (container.Kind == ContainerKind.ConsoleSlot
+                && TryResolveConsolePlacement(container.Id, out _, out _, out _))
+            {
+                ContainerId targetSlotContainerId = container.Id;
+                actions.Add(new PrototypePopupActionOption(
+                    "Move",
+                    true,
+                    () => BeginConsoleMove(targetSlotContainerId)));
+            }
+
             runtimeUi.ShowContextMenu(
                 contextMenuAnchorScreenPosition,
                 "CARD",
@@ -3566,7 +3769,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             actions.Add(new PrototypePopupActionOption(
-                "Move Stack",
+                "Move",
                 true,
                 () => BeginContainerMove(sourceStackId)));
             AddDeleteActionIfRuntime(
@@ -3655,14 +3858,27 @@ namespace ConsoleCards.Presentation.Prototype
         private void ShowConsoleContextMenu()
         {
             ConsoleId targetConsoleId = contextMenuConsoleId;
-            List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
-            AddDeleteActionIfRuntime(
-                actions,
-                TabletopComponentTarget.ForConsole(targetConsoleId));
+            ContainerId targetSlotContainerId = contextMenuContainerId;
+            List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>
+            {
+                new PrototypePopupActionOption(
+                    "Move",
+                    true,
+                    () => BeginConsoleMove(targetSlotContainerId)),
+            };
+            if (!targetConsoleId.IsEmpty)
+            {
+                AddDeleteActionIfRuntime(
+                    actions,
+                    TabletopComponentTarget.ForConsole(targetConsoleId));
+            }
+
             runtimeUi.ShowContextMenu(
                 contextMenuAnchorScreenPosition,
                 "CONSOLE",
-                "Delete is available only while every Console Slot is empty.",
+                targetConsoleId.IsEmpty
+                    ? string.Empty
+                    : "Delete is available only while every Console Slot is empty.",
                 actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);
@@ -3827,9 +4043,11 @@ namespace ConsoleCards.Presentation.Prototype
                         && matchState.Tokens.ContainsKey(contextMenuTokenId)
                         && TryGetTokenView(contextMenuTokenId, out _);
                 case PrototypeContextMenuMode.Console:
-                    return !contextMenuConsoleId.IsEmpty
-                        && matchState.PlacedConsoles.ContainsKey(contextMenuConsoleId)
-                        && TryGetRuntimeConsole(contextMenuConsoleId, out _);
+                    return TryResolveConsolePlacement(
+                        contextMenuContainerId,
+                        out _,
+                        out _,
+                        out _);
                 default:
                     return false;
             }
@@ -3915,6 +4133,89 @@ namespace ConsoleCards.Presentation.Prototype
 
             consoleId = ConsoleId.Empty;
             return false;
+        }
+
+        private bool TryResolveConsolePlacement(
+            ContainerId slotContainerId,
+            out TabletopPose pose,
+            out float? surfaceHeight,
+            out ConsoleView resolvedView)
+        {
+            pose = TabletopPose.Default;
+            surfaceHeight = null;
+            resolvedView = null;
+            if (slotContainerId.IsEmpty
+                || !matchState.Containers.TryGetValue(slotContainerId, out ContainerState slot)
+                || slot.Kind != ContainerKind.ConsoleSlot)
+            {
+                return false;
+            }
+
+            ConsoleState console = null;
+            foreach (SeatState seat in matchState.Seats.Values)
+            {
+                if (!seat.Console.ContainsSlot(slotContainerId))
+                {
+                    continue;
+                }
+
+                console = seat.Console;
+                pose = seat.ConsolePose;
+                surfaceHeight = seat.ConsoleSurfaceHeight;
+                break;
+            }
+
+            if (console == null)
+            {
+                foreach (PlacedConsoleState placedConsole in matchState.PlacedConsoles.Values)
+                {
+                    if (!placedConsole.Console.ContainsSlot(slotContainerId))
+                    {
+                        continue;
+                    }
+
+                    console = placedConsole.Console;
+                    pose = placedConsole.Pose;
+                    surfaceHeight = placedConsole.SurfaceHeight;
+                    break;
+                }
+            }
+
+            if (console == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < playerConsoleViews.Count; i++)
+            {
+                ConsoleView candidate = playerConsoleViews[i];
+                if (candidate != null
+                    && candidate.IsBound
+                    && ReferenceEquals(candidate.ConsoleState, console))
+                {
+                    resolvedView = candidate;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void ApplyConsolePlacement(ContainerId slotContainerId)
+        {
+            if (!TryResolveConsolePlacement(
+                    slotContainerId,
+                    out TabletopPose pose,
+                    out float? surfaceHeight,
+                    out ConsoleView targetConsole))
+            {
+                throw new InvalidOperationException("Moved Console has no authoritative Presentation binding.");
+            }
+
+            ApplyConsolePose(targetConsole.transform, pose, surfaceHeight);
+            targetConsole.ApplyAcceptedLayout();
+            RefreshCardContentVisibility();
+            Physics.SyncTransforms();
         }
 
         private bool TryGetRuntimeConsole(
@@ -4410,9 +4711,11 @@ namespace ConsoleCards.Presentation.Prototype
             ApplyAuthoredPose(
                 sceneHandVisual.transform,
                 TrapFloorTemplateFactory.GetHandPose(seatLayout));
-            ApplyAuthoredPose(
+            SeatState seat = matchState.GetSeat(localSeatId);
+            ApplyConsolePose(
                 sceneConsoleView.transform,
-                TrapFloorTemplateFactory.GetConsolePose(seatLayout));
+                seat.ConsolePose,
+                seat.ConsoleSurfaceHeight);
         }
 
         private void ProjectTrapFloorCameraBookmark()
@@ -4434,6 +4737,22 @@ namespace ConsoleCards.Presentation.Prototype
         {
             target.SetPositionAndRotation(
                 coordinateConverter.ToWorldPosition(pose),
+                coordinateConverter.ToWorldRotation(pose));
+        }
+
+        private void ApplyConsolePose(
+            Transform target,
+            TabletopPose pose,
+            float? surfaceHeight)
+        {
+            Vector3 worldPosition = coordinateConverter.ToWorldPosition(pose);
+            if (surfaceHeight.HasValue)
+            {
+                worldPosition.y = surfaceHeight.Value;
+            }
+
+            target.SetPositionAndRotation(
+                worldPosition,
                 coordinateConverter.ToWorldRotation(pose));
         }
 
@@ -4685,7 +5004,8 @@ namespace ConsoleCards.Presentation.Prototype
 
                 RuntimeConsoleInstance playerConsole = CreateRuntimeConsoleInstance(
                     $"Player {playerIndex + 1} Console",
-                    player.LayoutSeatIndex);
+                    player.LayoutSeatIndex,
+                    player.SeatId);
                 runtimeConsoleInstances.Add(playerConsole);
                 playerConsoleViews.Add(playerConsole.View);
             }
@@ -5737,18 +6057,23 @@ namespace ConsoleCards.Presentation.Prototype
             return new RuntimeDeckInstance(root, visual, view, containerId);
         }
 
-        private RuntimeConsoleInstance CreateRuntimeConsoleInstance(string name, int layoutSeatIndex)
+        private RuntimeConsoleInstance CreateRuntimeConsoleInstance(
+            string name,
+            int layoutSeatIndex,
+            SeatId seatId)
         {
             ConsoleView view = Instantiate(prototypeConsolePrefab);
             GameObject root = PrepareRuntimeRoot(view.gameObject, name);
-            if (!playerLayout.TryGetSeat(layoutSeatIndex, out PlayerSeatLayoutEntry seatLayout))
+            if (!playerLayout.TryGetSeat(layoutSeatIndex, out _))
             {
                 throw new InvalidOperationException("Trap Floor Console references a missing Player Layout Seat.");
             }
 
-            ApplyAuthoredPose(
+            SeatState seat = matchState.GetSeat(seatId);
+            ApplyConsolePose(
                 root.transform,
-                TrapFloorTemplateFactory.GetConsolePose(seatLayout));
+                seat.ConsolePose,
+                seat.ConsoleSurfaceHeight);
             ConsoleSlotView[] slotViews = view.GetComponentsInChildren<ConsoleSlotView>(true);
             if (slotViews.Length != PrototypeConsoleSlotCount)
             {
@@ -5774,7 +6099,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             ConsoleView view = Instantiate(prototypeConsolePrefab);
             GameObject root = PrepareRuntimeRoot(view.gameObject, name);
-            ApplyAuthoredPose(root.transform, placedConsole.Pose);
+            ApplyConsolePose(root.transform, placedConsole.Pose, placedConsole.SurfaceHeight);
             ConsoleSlotView[] slotViews = view.GetComponentsInChildren<ConsoleSlotView>(true);
             if (slotViews.Length != placedConsole.Console.SlotCount)
             {
@@ -6952,6 +7277,19 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 throw new ArgumentOutOfRangeException(name);
             }
+        }
+
+        private readonly struct GameObjectActivationSnapshot
+        {
+            public GameObjectActivationSnapshot(GameObject target, bool wasActive)
+            {
+                Target = target;
+                WasActive = wasActive;
+            }
+
+            public GameObject Target { get; }
+
+            public bool WasActive { get; }
         }
 
         private enum PrototypeContextMenuMode

@@ -199,6 +199,11 @@ namespace ConsoleCards.GameTemplates
                     Add(issues, "HandIdEmpty", "Every Template Seat requires a Hand Container ID.");
                 }
 
+                if (seat.HasConsolePose && !IsFinite(seat.ConsolePose))
+                {
+                    Add(issues, "ConsolePoseInvalid", "A Template Console pose must be finite.");
+                }
+
                 HashSet<ContainerId> localSlots = new HashSet<ContainerId>();
                 for (int slotIndex = 0; slotIndex < seat.ConsoleSlotContainerIds.Count; slotIndex++)
                 {
