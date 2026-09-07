@@ -89,9 +89,9 @@ namespace ConsoleCards.Presentation.Input
             componentPlacementController = placementController;
         }
 
-        internal void ClearComponentPlacement(bool destroyPreviewImmediately = false)
+        internal void ClearComponentPlacement()
         {
-            componentPlacementController?.Cancel(destroyPreviewImmediately);
+            componentPlacementController?.Cancel();
             componentPlacementController = null;
         }
 

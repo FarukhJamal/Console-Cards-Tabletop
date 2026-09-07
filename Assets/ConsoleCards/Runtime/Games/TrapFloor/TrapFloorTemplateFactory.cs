@@ -181,7 +181,7 @@ namespace ConsoleCards.Games.TrapFloor
                         i),
                     SeatId.Empty,
                     ObjectVisibility.Public,
-                    true,
+                    false,
                     CardFace.FaceUp));
                 coinTokenIds.Add(tokenId);
             }

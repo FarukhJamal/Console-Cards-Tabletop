@@ -150,7 +150,6 @@ namespace ConsoleCards.Presentation.Prototype
         private bool cardViewBoundByComposition;
         private bool pawnViewBoundByComposition;
         private bool tokenViewBoundByComposition;
-        private bool destroyRuntimePresentationImmediately;
         private bool gameTemplatesPanelVisible;
         private PrototypeRuntimeUiRoot runtimeUi;
 
@@ -492,7 +491,7 @@ namespace ConsoleCards.Presentation.Prototype
 
             if (componentPlacementInputConfiguredByComposition && inputFrameCoordinator != null)
             {
-                inputFrameCoordinator.ClearComponentPlacement(destroyRuntimePresentationImmediately);
+                inputFrameCoordinator.ClearComponentPlacement();
             }
 
             componentPlacementInputConfiguredByComposition = false;
@@ -923,16 +922,7 @@ namespace ConsoleCards.Presentation.Prototype
         public void ResetPrototype()
         {
             EnsureInitialized();
-            destroyRuntimePresentationImmediately = true;
-            try
-            {
-                Shutdown(true);
-            }
-            finally
-            {
-                destroyRuntimePresentationImmediately = false;
-            }
-
+            Shutdown(true);
             InitializeActiveSession(true);
             RefreshTrapFloorStatusUi();
         }
@@ -7131,22 +7121,52 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            TabletopContainerDropTarget dropTarget = root.GetComponent<TabletopContainerDropTarget>();
-            if (dropTarget != null)
+            TabletopContainerDropTarget[] dropTargets =
+                root.GetComponentsInChildren<TabletopContainerDropTarget>(true);
+            for (int i = 0; i < dropTargets.Length; i++)
             {
-                dropTarget.ClearConfiguration();
-                dropTarget.enabled = false;
+                if (dropTargets[i] == null)
+                {
+                    continue;
+                }
+
+                dropTargets[i].ClearConfiguration();
+                dropTargets[i].enabled = false;
             }
 
-            TabletopTokenContainerDropTarget tokenDropTarget =
-                root.GetComponent<TabletopTokenContainerDropTarget>();
-            if (tokenDropTarget != null)
+            TabletopTokenContainerDropTarget[] tokenDropTargets =
+                root.GetComponentsInChildren<TabletopTokenContainerDropTarget>(true);
+            for (int i = 0; i < tokenDropTargets.Length; i++)
             {
-                tokenDropTarget.ClearConfiguration();
-                tokenDropTarget.enabled = false;
+                if (tokenDropTargets[i] == null)
+                {
+                    continue;
+                }
+
+                tokenDropTargets[i].ClearConfiguration();
+                tokenDropTargets[i].enabled = false;
             }
 
-            Collider[] colliders = root.GetComponents<Collider>();
+            Rigidbody[] rigidbodies = root.GetComponentsInChildren<Rigidbody>(true);
+            for (int i = 0; i < rigidbodies.Length; i++)
+            {
+                if (rigidbodies[i] == null)
+                {
+                    continue;
+                }
+
+                if (!rigidbodies[i].isKinematic)
+                {
+                    rigidbodies[i].linearVelocity = Vector3.zero;
+                    rigidbodies[i].angularVelocity = Vector3.zero;
+                }
+
+                rigidbodies[i].isKinematic = true;
+                rigidbodies[i].useGravity = false;
+                rigidbodies[i].detectCollisions = false;
+            }
+
+            Collider[] colliders = root.GetComponentsInChildren<Collider>(true);
             for (int i = 0; i < colliders.Length; i++)
             {
                 if (colliders[i] != null)
@@ -7154,6 +7174,8 @@ namespace ConsoleCards.Presentation.Prototype
                     colliders[i].enabled = false;
                 }
             }
+
+            root.SetActive(false);
         }
 
         private void DestroyRuntimeOwnedGameObject(GameObject root)
@@ -7165,14 +7187,7 @@ namespace ConsoleCards.Presentation.Prototype
 
             root.SetActive(false);
             root.name = $"{root.name} (Pending Runtime Destruction)";
-            if (destroyRuntimePresentationImmediately)
-            {
-                DestroyImmediate(root);
-            }
-            else
-            {
-                Destroy(root);
-            }
+            Destroy(root);
         }
 
         private void ValidateDistinctViews()
