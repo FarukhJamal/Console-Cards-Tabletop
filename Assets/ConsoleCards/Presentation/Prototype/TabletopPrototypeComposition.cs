@@ -52,9 +52,13 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal PawnView prototypePawnPrefab;
         [SerializeField] internal TokenView prototypeTokenPrefab;
         [SerializeField] internal DieView prototypeDiePrefab;
-        // Optional existing Board visibility only; placement discovery uses PhysicalTabletopSurface registration.
-        [Tooltip("Optional session-owned Board collider to hide outside Game Templates. Not a placement-surface reference; add PhysicalTabletopSurface to opt a collider in.")]
+        // Session-owned Trap Floor Board. Placement discovery still uses PhysicalTabletopSurface registration.
+        [Tooltip("Trap Floor Board collider/surface. The Board is shown only while the Trap Floor Template is active.")]
         [SerializeField] private Collider gameBoardPhysicalSurface;
+        [Tooltip("Imported Game Board model root used only as visual geometry under the authored Board collider.")]
+        [SerializeField] private Transform gameBoardVisualRoot;
+        [Tooltip("Only imported renderers using this Board material remain visible; showcase Table/lighting geometry stays disabled.")]
+        [SerializeField] private Material gameBoardVisualMaterial;
         [SerializeField] private PhysicalInteractionConfig physicalInteraction = new PhysicalInteractionConfig();
         private PhysicalTabletopSurfaces physicalSurfaceQuery;
         private LocalPhysicalObjectAuthority physicalAuthority;
@@ -470,7 +474,7 @@ namespace ConsoleCards.Presentation.Prototype
             physicalFloorfallActor = PlayerId.Empty;
             physicalAuthority?.Shutdown();
             physicalAuthority = null;
-            if (gameBoardPhysicalSurface != null) gameBoardPhysicalSurface.enabled = false;
+            SetGameBoardActive(false);
             ClearFeedback();
             floorfallTargetPresenter?.Clear();
             floorfallState?.Clear();
@@ -4241,6 +4245,15 @@ namespace ConsoleCards.Presentation.Prototype
         private void ValidateTrapFloorConfiguration()
         {
             ValidateCommonConfiguration();
+            RequireReference(gameBoardPhysicalSurface, nameof(gameBoardPhysicalSurface));
+            RequireReference(gameBoardVisualRoot, nameof(gameBoardVisualRoot));
+            RequireReference(gameBoardVisualMaterial, nameof(gameBoardVisualMaterial));
+            if (!gameBoardVisualRoot.IsChildOf(gameBoardPhysicalSurface.transform))
+            {
+                throw new InvalidOperationException(
+                    "The Trap Floor Board visual must be a child of its authored physical surface.");
+            }
+
             RequireReference(prototypeCardPrefab, nameof(prototypeCardPrefab));
             RequireReference(prototypePawnPrefab, nameof(prototypePawnPrefab));
             RequireReference(prototypeTokenPrefab, nameof(prototypeTokenPrefab));
@@ -4633,8 +4646,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void BuildToolboxRuntime()
         {
-            if (gameBoardPhysicalSurface != null)
-                gameBoardPhysicalSurface.enabled = activeSession.Selection.Kind == TabletopSessionKind.GameTemplate;
+            SetGameBoardActive(activeSession.Selection.Kind == TabletopSessionKind.GameTemplate);
             physicalSurfaceQuery = new PhysicalTabletopSurfaces(targetCamera, coordinateConverter);
             physicalSurfaceQuery.ValidateSetup();
             physicalAuthority = new LocalPhysicalObjectAuthority(matchState, activeSession.Request.ActivePlayerIds,
@@ -4803,6 +4815,162 @@ namespace ConsoleCards.Presentation.Prototype
             boardTransform.position = coordinateConverter.ToWorldPosition(boardPose)
                 + (up * halfThickness)
                 - centerOffset;
+
+            PrepareGameBoardVisual(boardCollider);
+        }
+
+        private void SetGameBoardActive(bool active)
+        {
+            if (gameBoardPhysicalSurface == null)
+            {
+                return;
+            }
+
+            if (!active && gameBoardVisualRoot != null)
+            {
+                gameBoardVisualRoot.gameObject.SetActive(false);
+            }
+
+            gameBoardPhysicalSurface.enabled = active;
+            gameBoardPhysicalSurface.gameObject.SetActive(active);
+
+            if (active && gameBoardVisualRoot != null)
+            {
+                gameBoardVisualRoot.gameObject.SetActive(true);
+            }
+        }
+
+        private void PrepareGameBoardVisual(BoxCollider boardCollider)
+        {
+            GameObject visualObject = gameBoardVisualRoot.gameObject;
+            visualObject.SetActive(false);
+
+            UnityCamera[] importedCameras = gameBoardVisualRoot.GetComponentsInChildren<UnityCamera>(true);
+            for (int i = 0; i < importedCameras.Length; i++)
+            {
+                importedCameras[i].enabled = false;
+            }
+
+            Light[] importedLights = gameBoardVisualRoot.GetComponentsInChildren<Light>(true);
+            for (int i = 0; i < importedLights.Length; i++)
+            {
+                importedLights[i].enabled = false;
+            }
+
+            Collider[] importedColliders = gameBoardVisualRoot.GetComponentsInChildren<Collider>(true);
+            for (int i = 0; i < importedColliders.Length; i++)
+            {
+                importedColliders[i].enabled = false;
+            }
+
+            Rigidbody[] importedRigidbodies = gameBoardVisualRoot.GetComponentsInChildren<Rigidbody>(true);
+            for (int i = 0; i < importedRigidbodies.Length; i++)
+            {
+                importedRigidbodies[i].useGravity = false;
+                importedRigidbodies[i].isKinematic = true;
+                importedRigidbodies[i].detectCollisions = false;
+            }
+
+            Animator[] importedAnimators = gameBoardVisualRoot.GetComponentsInChildren<Animator>(true);
+            for (int i = 0; i < importedAnimators.Length; i++)
+            {
+                importedAnimators[i].enabled = false;
+            }
+
+            Renderer[] importedRenderers = gameBoardVisualRoot.GetComponentsInChildren<Renderer>(true);
+            List<Renderer> boardRenderers = new List<Renderer>();
+            for (int i = 0; i < importedRenderers.Length; i++)
+            {
+                Renderer renderer = importedRenderers[i];
+                renderer.enabled = UsesMaterial(renderer, gameBoardVisualMaterial);
+                if (renderer.enabled)
+                {
+                    boardRenderers.Add(renderer);
+                }
+            }
+
+            if (boardRenderers.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    "The imported Trap Floor Board visual has no renderer using its configured Board material.");
+            }
+
+            gameBoardVisualRoot.localPosition = Vector3.zero;
+            gameBoardVisualRoot.localRotation = Quaternion.identity;
+            gameBoardVisualRoot.localScale = Vector3.one;
+
+            Bounds sourceBounds = CalculateLocalRendererBounds(boardCollider.transform, boardRenderers);
+            Vector3 sourceSize = sourceBounds.size;
+            if (sourceSize.x <= Mathf.Epsilon
+                || sourceSize.y <= Mathf.Epsilon
+                || sourceSize.z <= Mathf.Epsilon)
+            {
+                throw new InvalidOperationException(
+                    "The imported Trap Floor Board visual requires non-zero three-dimensional renderer bounds.");
+            }
+
+            gameBoardVisualRoot.localScale = new Vector3(
+                boardCollider.size.x / sourceSize.x,
+                boardCollider.size.y / sourceSize.y,
+                boardCollider.size.z / sourceSize.z);
+
+            Bounds fittedBounds = CalculateLocalRendererBounds(boardCollider.transform, boardRenderers);
+            Vector3 targetCenter = boardCollider.center;
+            gameBoardVisualRoot.localPosition = new Vector3(
+                targetCenter.x - fittedBounds.center.x,
+                targetCenter.y - (boardCollider.size.y * 0.5f) - fittedBounds.min.y,
+                targetCenter.z - fittedBounds.center.z);
+
+            visualObject.SetActive(true);
+        }
+
+        private static bool UsesMaterial(Renderer renderer, Material material)
+        {
+            Material[] materials = renderer.sharedMaterials;
+            for (int i = 0; i < materials.Length; i++)
+            {
+                if (materials[i] == material)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static Bounds CalculateLocalRendererBounds(
+            Transform targetSpace,
+            IReadOnlyList<Renderer> renderers)
+        {
+            bool initialized = false;
+            Bounds combined = default;
+            for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
+            {
+                Renderer renderer = renderers[rendererIndex];
+                Bounds localBounds = renderer.localBounds;
+                Vector3 center = localBounds.center;
+                Vector3 extents = localBounds.extents;
+                for (int cornerIndex = 0; cornerIndex < 8; cornerIndex++)
+                {
+                    Vector3 localCorner = center + new Vector3(
+                        (cornerIndex & 1) == 0 ? -extents.x : extents.x,
+                        (cornerIndex & 2) == 0 ? -extents.y : extents.y,
+                        (cornerIndex & 4) == 0 ? -extents.z : extents.z);
+                    Vector3 targetPoint = targetSpace.InverseTransformPoint(
+                        renderer.transform.TransformPoint(localCorner));
+                    if (!initialized)
+                    {
+                        combined = new Bounds(targetPoint, Vector3.zero);
+                        initialized = true;
+                    }
+                    else
+                    {
+                        combined.Encapsulate(targetPoint);
+                    }
+                }
+            }
+
+            return combined;
         }
 
         private void RestorePrototypeTemplateContext(bool restoreInitialBaseline)
