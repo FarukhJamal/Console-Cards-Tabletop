@@ -1,16 +1,19 @@
 using System;
 using System.Collections.Generic;
+using ConsoleCards.Application.Random;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.PlayerLayouts;
 using ConsoleCards.Core.Identifiers;
+using ConsoleCards.Core.Randomness;
 using ConsoleCards.GameTemplates;
 
 namespace ConsoleCards.Games.TrapFloor
 {
     /// <summary>
-    /// Builds the approved deterministic four-Player Trap Floor starting setup.
+    /// Builds the current four-Player Trap Floor starting setup.
+    /// Stable identities and layout are deterministic; hidden Floor content is assigned by the supplied authority random source.
     /// Two- and three-Player authored Seat mappings remain intentionally unresolved.
     /// </summary>
     public static class TrapFloorTemplateFactory
@@ -20,11 +23,6 @@ namespace ConsoleCards.Games.TrapFloor
         public const int PrototypePlayerCount = 4;
         public const int BoardAxisSize = 6;
         public const int FloorCardCount = 36;
-        public const int FloormasterTrapCardCount = 14;
-        public const int FloormasterCoinCardCount = 14;
-        public const int FloormasterItemCardCount = 8;
-        public const int FloormasterCardCount = 36;
-        public const int SharedCoinCount = 50;
         public const int ItemSlotCountPerPlayer = 3;
         public const int ConsoleSlotCountPerPlayer = 6;
 
@@ -33,15 +31,6 @@ namespace ConsoleCards.Games.TrapFloor
         private const double PlayerConsoleRadius = 6.1d;
         private const double PlayerHandRadius = 4.15d;
         private const double ControllerDeckOffset = 3.2d;
-        private const double FloormasterSupportX = 3.2d;
-        private const double FloormasterDeckY = 1.15d;
-        private const double FloormasterDiscardY = -1.15d;
-        private const double FloormasterRevealX = 4.7d;
-        private const double FloormasterRevealY = 0d;
-        private const double SharedCoinSupplyX = -4.5d;
-        private const double SharedCoinSupplyY = -1.08d;
-        private const double SharedCoinSpacing = 0.24d;
-        private const double CoinStorageOffset = -3.2d;
         private const double FloorfallDiceX = 3.45d;
         private const double FloorfallDiceY = 3.45d;
         private const double FloorfallDiceSpacing = 0.9d;
@@ -49,37 +38,45 @@ namespace ConsoleCards.Games.TrapFloor
 
         public static TrapFloorTemplateDefinition CreateStandardFourPlayer()
         {
+            return CreateStandardFourPlayer(new SystemRandomValueSource(0));
+        }
+
+        public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
+            IRandomValueSource randomValueSource)
+        {
+            if (randomValueSource == null)
+            {
+                throw new ArgumentNullException(nameof(randomValueSource));
+            }
+
             PlayerLayoutDefinition playerLayout = PlayerLayoutPresets.StandardFourPlayer;
             GameTemplateId templateId = new GameTemplateId(CreateGuid(1, 1));
             PlayAreaId boardPlayAreaId = new PlayAreaId(CreateGuid(2, 1));
-            ContainerId floormasterDeckId = new ContainerId(CreateGuid(10, 1));
-            ContainerId floormasterDiscardId = new ContainerId(CreateGuid(10, 2));
-            ContainerId sharedCoinSupplyId = new ContainerId(CreateGuid(10, 3));
 
-            ObjectDefinitionId floorDefinitionId = new ObjectDefinitionId(CreateGuid(20, 1));
-            ObjectDefinitionId floormasterTrapDefinitionId = new ObjectDefinitionId(CreateGuid(20, 2));
-            ObjectDefinitionId floormasterCoinDefinitionId = new ObjectDefinitionId(CreateGuid(20, 3));
-            ObjectDefinitionId floormasterItemDefinitionId = new ObjectDefinitionId(CreateGuid(20, 4));
             ObjectDefinitionId avatarDefinitionId = new ObjectDefinitionId(CreateGuid(20, 5));
             ObjectDefinitionId ruleDefinitionId = new ObjectDefinitionId(CreateGuid(20, 6));
             ObjectDefinitionId modeDefinitionId = new ObjectDefinitionId(CreateGuid(20, 7));
             ObjectDefinitionId pawnDefinitionId = new ObjectDefinitionId(CreateGuid(20, 8));
-            ObjectDefinitionId coinDefinitionId = new ObjectDefinitionId(CreateGuid(20, 9));
             ObjectDefinitionId dieDefinitionId = new ObjectDefinitionId(CreateGuid(20, 10));
 
+            IReadOnlyList<TrapFloorFloorContentDefinition> floorContentDefinitions =
+                TrapFloorStage03ContentPool.CreateDefinitions();
             List<GameTemplateObjectDefinition> objectDefinitions = new List<GameTemplateObjectDefinition>
             {
-                new GameTemplateObjectDefinition(floorDefinitionId, TabletopObjectKind.Card, "Floor Card"),
-                new GameTemplateObjectDefinition(floormasterTrapDefinitionId, TabletopObjectKind.Card, "Floormaster Trap Card"),
-                new GameTemplateObjectDefinition(floormasterCoinDefinitionId, TabletopObjectKind.Card, "Floormaster Coin Card"),
-                new GameTemplateObjectDefinition(floormasterItemDefinitionId, TabletopObjectKind.Card, "Floormaster Item Card"),
                 new GameTemplateObjectDefinition(avatarDefinitionId, TabletopObjectKind.Card, "Avatar Card"),
                 new GameTemplateObjectDefinition(ruleDefinitionId, TabletopObjectKind.Card, "Rule Card"),
                 new GameTemplateObjectDefinition(modeDefinitionId, TabletopObjectKind.Card, "Mode Card"),
                 new GameTemplateObjectDefinition(pawnDefinitionId, TabletopObjectKind.Pawn, "Player Pawn"),
-                new GameTemplateObjectDefinition(coinDefinitionId, TabletopObjectKind.Token, "Wooden Coin Cube"),
                 new GameTemplateObjectDefinition(dieDefinitionId, TabletopObjectKind.Die, "Six-sided Die"),
             };
+            for (int i = 0; i < floorContentDefinitions.Count; i++)
+            {
+                TrapFloorFloorContentDefinition definition = floorContentDefinitions[i];
+                objectDefinitions.Add(new GameTemplateObjectDefinition(
+                    definition.Id,
+                    TabletopObjectKind.Card,
+                    definition.DisplayName));
+            }
 
             List<GameTemplateSeatDefinition> seats = new List<GameTemplateSeatDefinition>(PrototypePlayerCount);
             List<GameTemplateContainerDefinition> containers = new List<GameTemplateContainerDefinition>();
@@ -90,50 +87,12 @@ namespace ConsoleCards.Games.TrapFloor
             Dictionary<TrapFloorCoordinate, TabletopObjectId> floorCardIds =
                 new Dictionary<TrapFloorCoordinate, TabletopObjectId>();
 
-            CreateFloorBoard(floorDefinitionId, floorCardIds, labels, objects);
-
-            List<TabletopObjectId> floormasterCardIds = new List<TabletopObjectId>(FloormasterCardCount);
-            CreateFloormasterCards(
-                floormasterTrapDefinitionId,
-                floormasterCoinDefinitionId,
-                floormasterItemDefinitionId,
-                floormasterCardIds,
+            CreateFloorBoard(
+                floorContentDefinitions,
+                randomValueSource,
+                floorCardIds,
                 labels,
                 objects);
-            Dictionary<ObjectDefinitionId, TrapFloorFloormasterCardCategory> floormasterCategories =
-                new Dictionary<ObjectDefinitionId, TrapFloorFloormasterCardCategory>
-                {
-                    { floormasterTrapDefinitionId, TrapFloorFloormasterCardCategory.Trap },
-                    { floormasterCoinDefinitionId, TrapFloorFloormasterCardCategory.Coin },
-                    { floormasterItemDefinitionId, TrapFloorFloormasterCardCategory.Item },
-                };
-
-            containers.Add(CreatePlacedContainer(
-                floormasterDeckId,
-                ContainerKind.Deck,
-                new TabletopPose(
-                    new TableCoordinate(FloormasterSupportX, FloormasterDeckY),
-                    0f,
-                    0,
-                    0)));
-            containers.Add(CreatePlacedContainer(
-                floormasterDiscardId,
-                ContainerKind.DiscardPile,
-                new TabletopPose(
-                    new TableCoordinate(FloormasterSupportX, FloormasterDiscardY),
-                    0f,
-                    0,
-                    0)));
-            containers.Add(CreateContainer(
-                sharedCoinSupplyId,
-                ContainerKind.Generic,
-                SeatId.Empty,
-                ObjectVisibility.Public,
-                SharedCoinCount));
-            memberships.Add(new GameTemplateContainerMembership(floormasterDeckId, floormasterCardIds));
-            memberships.Add(new GameTemplateContainerMembership(
-                floormasterDiscardId,
-                Array.Empty<TabletopObjectId>()));
 
             TrapFloorCoordinate[] startingCorners =
             {
@@ -161,32 +120,6 @@ namespace ConsoleCards.Games.TrapFloor
                     labels,
                     players);
             }
-
-            List<TabletopObjectId> coinTokenIds = new List<TabletopObjectId>(SharedCoinCount);
-            for (int i = 0; i < SharedCoinCount; i++)
-            {
-                TabletopObjectId tokenId = new TabletopObjectId(CreateGuid(50, i + 1));
-                int column = i % 5;
-                int row = i / 5;
-                objects.Add(new GameTemplateObjectInstanceDefinition(
-                    tokenId,
-                    coinDefinitionId,
-                    TabletopObjectKind.Token,
-                    new TabletopPose(
-                        new TableCoordinate(
-                            SharedCoinSupplyX + (column * SharedCoinSpacing),
-                            SharedCoinSupplyY + (row * SharedCoinSpacing)),
-                        0f,
-                        0,
-                        i),
-                    SeatId.Empty,
-                    ObjectVisibility.Public,
-                    false,
-                    CardFace.FaceUp));
-                coinTokenIds.Add(tokenId);
-            }
-
-            memberships.Add(new GameTemplateContainerMembership(sharedCoinSupplyId, coinTokenIds));
 
             TabletopObjectId floorfallXAxisDieId = new TabletopObjectId(CreateGuid(60, 1));
             TabletopObjectId floorfallYAxisDieId = new TabletopObjectId(CreateGuid(60, 2));
@@ -243,21 +176,10 @@ namespace ConsoleCards.Games.TrapFloor
                 catalog,
                 playerLayout,
                 boardPlayAreaId,
-                floormasterDeckId,
-                floormasterDiscardId,
-                new TabletopPose(
-                    new TableCoordinate(FloormasterRevealX, FloormasterRevealY),
-                    0f,
-                    4,
-                    0),
-                sharedCoinSupplyId,
-                GetSharedCoinSupplyPose(),
                 floorCardIds,
-                floormasterCategories,
-                floormasterCardIds,
+                floorContentDefinitions,
                 labels,
                 players,
-                coinTokenIds,
                 floorfallXAxisDieId,
                 floorfallYAxisDieId);
         }
@@ -282,11 +204,27 @@ namespace ConsoleCards.Games.TrapFloor
         }
 
         private static void CreateFloorBoard(
-            ObjectDefinitionId definitionId,
+            IReadOnlyList<TrapFloorFloorContentDefinition> contentDefinitions,
+            IRandomValueSource randomValueSource,
             IDictionary<TrapFloorCoordinate, TabletopObjectId> floorCardIds,
             IDictionary<TabletopObjectId, string> labels,
             ICollection<GameTemplateObjectInstanceDefinition> objects)
         {
+            if (contentDefinitions == null || contentDefinitions.Count != FloorCardCount)
+            {
+                throw new ArgumentException("Trap Floor Board construction requires exactly 36 content definitions.");
+            }
+
+            List<TrapFloorFloorContentDefinition> shuffledContent =
+                new List<TrapFloorFloorContentDefinition>(contentDefinitions);
+            for (int i = shuffledContent.Count - 1; i > 0; i--)
+            {
+                int swapIndex = randomValueSource.NextInt(0, i + 1);
+                TrapFloorFloorContentDefinition swap = shuffledContent[i];
+                shuffledContent[i] = shuffledContent[swapIndex];
+                shuffledContent[swapIndex] = swap;
+            }
+
             int objectIndex = 0;
             for (int y = TrapFloorCoordinate.MinimumAxisValue; y <= TrapFloorCoordinate.MaximumAxisValue; y++)
             {
@@ -294,67 +232,21 @@ namespace ConsoleCards.Games.TrapFloor
                 {
                     TrapFloorCoordinate coordinate = new TrapFloorCoordinate(x, y);
                     TabletopObjectId objectId = new TabletopObjectId(CreateGuid(30, ++objectIndex));
+                    TrapFloorFloorContentDefinition content = shuffledContent[objectIndex - 1];
                     double tableX = (x - 3.5d) * FloorColumnSpacing;
                     double tableY = (y - 3.5d) * FloorRowSpacing;
                     objects.Add(new GameTemplateObjectInstanceDefinition(
                         objectId,
-                        definitionId,
+                        content.Id,
                         TabletopObjectKind.Card,
                         new TabletopPose(new TableCoordinate(tableX, tableY), 0f, 2, objectIndex),
                         SeatId.Empty,
                         ObjectVisibility.Public,
                         true,
-                        CardFace.FaceUp));
+                        CardFace.FaceDown));
                     floorCardIds.Add(coordinate, objectId);
-                    labels.Add(objectId, $"{x},{y}");
+                    labels.Add(objectId, content.DisplayName);
                 }
-            }
-        }
-
-        private static void CreateFloormasterCards(
-            ObjectDefinitionId trapDefinitionId,
-            ObjectDefinitionId coinDefinitionId,
-            ObjectDefinitionId itemDefinitionId,
-            ICollection<TabletopObjectId> orderedCardIds,
-            IDictionary<TabletopObjectId, string> labels,
-            ICollection<GameTemplateObjectInstanceDefinition> objects)
-        {
-            for (int i = 0; i < FloormasterCardCount; i++)
-            {
-                ObjectDefinitionId definitionId;
-                string label;
-                if (i < FloormasterTrapCardCount)
-                {
-                    definitionId = trapDefinitionId;
-                    label = "TRAP";
-                }
-                else if (i < FloormasterTrapCardCount + FloormasterCoinCardCount)
-                {
-                    definitionId = coinDefinitionId;
-                    label = "COIN";
-                }
-                else
-                {
-                    definitionId = itemDefinitionId;
-                    label = "ITEM";
-                }
-
-                TabletopObjectId objectId = new TabletopObjectId(CreateGuid(31, i + 1));
-                objects.Add(new GameTemplateObjectInstanceDefinition(
-                    objectId,
-                    definitionId,
-                    TabletopObjectKind.Card,
-                    new TabletopPose(
-                        new TableCoordinate(FloormasterSupportX, FloormasterDeckY),
-                        0f,
-                        0,
-                        i),
-                    SeatId.Empty,
-                    ObjectVisibility.Public,
-                    false,
-                    CardFace.FaceDown));
-                orderedCardIds.Add(objectId);
-                labels.Add(objectId, label);
             }
         }
 
@@ -386,10 +278,6 @@ namespace ConsoleCards.Games.TrapFloor
                 new ContainerId(CreateGuid(41, (seatIndex * 10) + 7)),
             };
             ContainerId controllerDeckId = new ContainerId(CreateGuid(41, (seatIndex * 10) + 8));
-            ContainerId coinStorageId = new ContainerId(CreateGuid(41, (seatIndex * 10) + 9));
-            TabletopPose coinStoragePose = OffsetBesideConsole(
-                GetConsolePose(layoutSeat),
-                CoinStorageOffset);
 
             ContainerId[] consoleSlotIds =
             {
@@ -428,12 +316,6 @@ namespace ConsoleCards.Games.TrapFloor
                 0,
                 true,
                 controllerDeckPose));
-            containers.Add(CreateContainer(
-                coinStorageId,
-                ContainerKind.Generic,
-                seatId,
-                ObjectVisibility.Public,
-                SharedCoinCount));
 
             TabletopObjectId avatarId = new TabletopObjectId(CreateGuid(42, playerNumber));
             TabletopObjectId ruleId = new TabletopObjectId(CreateGuid(43, playerNumber));
@@ -466,7 +348,6 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             memberships.Add(new GameTemplateContainerMembership(controllerDeckId, Array.Empty<TabletopObjectId>()));
-            memberships.Add(new GameTemplateContainerMembership(coinStorageId, Array.Empty<TabletopObjectId>()));
             memberships.Add(new GameTemplateContainerMembership(handId, Array.Empty<TabletopObjectId>()));
 
             players.Add(new TrapFloorPlayerSetupDefinition(
@@ -478,8 +359,6 @@ namespace ConsoleCards.Games.TrapFloor
                 modeSlotId,
                 itemSlotIds,
                 controllerDeckId,
-                coinStorageId,
-                coinStoragePose,
                 avatarId,
                 ruleId,
                 modeId,
@@ -537,17 +416,6 @@ namespace ConsoleCards.Games.TrapFloor
             return ProjectToRadius(layoutSeat.HandAnchorPose, PlayerHandRadius);
         }
 
-        public static TabletopPose GetSharedCoinSupplyPose()
-        {
-            return new TabletopPose(
-                new TableCoordinate(
-                    SharedCoinSupplyX + (2d * SharedCoinSpacing),
-                    SharedCoinSupplyY + (4.5d * SharedCoinSpacing)),
-                0f,
-                0,
-                0);
-        }
-
         private static TabletopPose ProjectToRadius(TabletopPose pose, double radius)
         {
             double sourceRadius = Math.Sqrt(
@@ -595,21 +463,6 @@ namespace ConsoleCards.Games.TrapFloor
                 capacity,
                 false,
                 TabletopPose.Default);
-        }
-
-        private static GameTemplateContainerDefinition CreatePlacedContainer(
-            ContainerId id,
-            ContainerKind kind,
-            TabletopPose pose)
-        {
-            return new GameTemplateContainerDefinition(
-                id,
-                kind,
-                SeatId.Empty,
-                ObjectVisibility.Public,
-                0,
-                true,
-                pose);
         }
 
         private static Guid CreateGuid(int category, int index)

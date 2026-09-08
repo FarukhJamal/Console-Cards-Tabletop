@@ -163,6 +163,9 @@ namespace ConsoleCards.Presentation.Prototype
         private string gameTemplatesPanelError;
         private PrototypeTemplateContext prototypeTemplateContext;
         private TrapFloorTemplateDefinition trapFloorTemplate;
+        private TrapFloorActivityFeedState trapFloorActivityFeed;
+        private TrapFloorRevealFloorUseCase trapFloorRevealFloorUseCase;
+        private TrapFloorActivityEntry activeFloorRevealActivity;
         private TrapFloorFloorfallState floorfallState;
         private TrapFloorFloorfallService floorfallService;
         private TrapFloorFloorfallTargetPresenter floorfallTargetPresenter;
@@ -258,6 +261,8 @@ namespace ConsoleCards.Presentation.Prototype
         public TrapFloorFloormasterLifecycleState FloormasterLifecycleState => floormasterLifecycleState;
 
         public TrapFloorRoundState TrapFloorRoundState => trapFloorRoundState;
+
+        public TrapFloorActivityFeedState TrapFloorActivityFeed => trapFloorActivityFeed;
 
         public PlayerLayoutDefinition PlayerLayout => playerLayout;
 
@@ -383,9 +388,7 @@ namespace ConsoleCards.Presentation.Prototype
                 ReactivateSceneOwnedObjectViews();
                 BuildRuntimeGraph(restoreInitialBaseline);
                 BuildToolboxRuntime();
-                BuildFloormasterLifecycleRuntime();
                 BuildFloorfallRuntime();
-                BuildTrapFloorRoundRuntime();
                 ProjectTrapFloorCameraBookmark();
                 BindObjectViews();
                 BuildContainerViews();
@@ -604,6 +607,10 @@ namespace ConsoleCards.Presentation.Prototype
 
             matchState = null;
             trapFloorTemplate = null;
+            trapFloorActivityFeed?.Clear();
+            trapFloorActivityFeed = null;
+            trapFloorRevealFloorUseCase = null;
+            activeFloorRevealActivity = null;
             floorfallState = null;
             floorfallService = null;
             floorfallTargetPresenter = null;
@@ -1298,23 +1305,26 @@ namespace ConsoleCards.Presentation.Prototype
         {
             GUILayout.BeginArea(ControlsPanelScreenRect, GUI.skin.box);
             GUILayout.Label("Developer Controls");
-            if (GUILayout.Button("Shuffle Deck"))
+            if (!deckContainerId.IsEmpty && matchState.Containers.ContainsKey(deckContainerId))
             {
-                ShuffleDeck();
-            }
+                if (GUILayout.Button("Shuffle Deck"))
+                {
+                    ShuffleDeck();
+                }
 
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Draw 1"))
-            {
-                DrawOne();
-            }
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button("Draw 1"))
+                {
+                    DrawOne();
+                }
 
-            if (GUILayout.Button("Draw 3"))
-            {
-                DrawThree();
-            }
+                if (GUILayout.Button("Draw 3"))
+                {
+                    DrawThree();
+                }
 
-            GUILayout.EndHorizontal();
+                GUILayout.EndHorizontal();
+            }
             GUILayout.Space(4f);
             GUILayout.Label("Hand order");
             GUILayout.BeginHorizontal();
@@ -2370,18 +2380,12 @@ namespace ConsoleCards.Presentation.Prototype
         {
             sessionBootstrapService = new TabletopSessionBootstrapService();
             tableActionActorId = PlayerId.New();
+            authoritativeRandomValueSource = new SystemRandomValueSource();
             templateCatalogError = null;
             gameTemplatesPanelError = null;
             try
             {
-                availableTrapFloorTemplate = TrapFloorTemplateFactory.CreateStandardFourPlayer();
-                sessionTemplateCatalog = new GameTemplateCatalog(
-                    new[]
-                    {
-                        new GameTemplateRegistration(
-                            availableTrapFloorTemplate.Template,
-                            availableTrapFloorTemplate.ContentCatalog),
-                    });
+                RegisterFreshTrapFloorTemplate();
             }
             catch (Exception exception)
             {
@@ -2389,6 +2393,24 @@ namespace ConsoleCards.Presentation.Prototype
                 sessionTemplateCatalog = new GameTemplateCatalog(Array.Empty<GameTemplateRegistration>());
                 templateCatalogError = $"Trap Floor is unavailable: {exception.Message}";
             }
+        }
+
+        private void RegisterFreshTrapFloorTemplate()
+        {
+            if (authoritativeRandomValueSource == null)
+            {
+                authoritativeRandomValueSource = new SystemRandomValueSource();
+            }
+
+            availableTrapFloorTemplate = TrapFloorTemplateFactory.CreateStandardFourPlayer(
+                authoritativeRandomValueSource);
+            sessionTemplateCatalog = new GameTemplateCatalog(
+                new[]
+                {
+                    new GameTemplateRegistration(
+                        availableTrapFloorTemplate.Template,
+                        availableTrapFloorTemplate.ContentCatalog),
+                });
         }
 
         private void CreateRuntimeUi()
@@ -2679,6 +2701,22 @@ namespace ConsoleCards.Presentation.Prototype
                 gameTemplatesPanelError = "Game Template loading is not configured.";
                 runtimeUi?.SetGameTemplatesError(gameTemplatesPanelError);
                 return false;
+            }
+
+            if (selection.Kind == TabletopSessionKind.GameTemplate
+                && availableTrapFloorTemplate != null
+                && selection.GameTemplateId == availableTrapFloorTemplate.Template.Id)
+            {
+                try
+                {
+                    RegisterFreshTrapFloorTemplate();
+                }
+                catch (Exception exception)
+                {
+                    gameTemplatesPanelError = $"Trap Floor setup could not be prepared: {exception.Message}";
+                    runtimeUi?.SetGameTemplatesError(gameTemplatesPanelError);
+                    return false;
+                }
             }
 
             List<PlayerId> activePlayerIds = CreatePrototypeActivePlayers(selection);
@@ -3188,56 +3226,10 @@ namespace ConsoleCards.Presentation.Prototype
         {
             ContainerId targetDeckId = contextMenuContainerId;
             ContainerState targetDeck = matchState.GetContainer(targetDeckId);
-            bool isOfficialFloormasterDeck = trapFloorTemplate != null
-                && targetDeckId == trapFloorTemplate.FloormasterDeckId;
             List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
-            string body = string.Empty;
             if (!contextMenuCardId.IsEmpty)
             {
                 AddInspectAction(actions, contextMenuCardId);
-            }
-
-            if (isOfficialFloormasterDeck)
-            {
-                bool searchBlocked = trapFloorRoundState == null
-                    || trapFloorRoundState.Phase != TrapFloorRoundPhase.Search
-                    || trapFloorRoundState.HasCompletedSearchTrigger(localPlayerId)
-                    || floormasterLifecycleState == null
-                    || floormasterLifecycleState.HasPendingCard;
-                actions.Add(new PrototypePopupActionOption(
-                    "Search",
-                    !searchBlocked,
-                    () =>
-                    {
-                        TrapFloorRoundSearchResult result = SearchFloormasterDeck();
-                        if (result.Succeeded)
-                        {
-                            CloseContextMenu();
-                        }
-                    }));
-                int availableCount = AvailableDrawableCount(targetDeckId);
-                actions.Add(new PrototypePopupActionOption(
-                    "Draw 1",
-                    availableCount > 0,
-                    () =>
-                    {
-                        DrawCardsResult result = DrawCards(targetDeckId, 1);
-                        if (result.Succeeded)
-                        {
-                            CloseContextMenu();
-                        }
-                    }));
-                actions.Add(new PrototypePopupActionOption(
-                    "Draw Cards...",
-                    availableCount > 0,
-                    () =>
-                    {
-                        selectedDrawCount = Mathf.Clamp(selectedDrawCount, 1, availableCount);
-                        SetContextMenuMode(PrototypeContextMenuMode.DrawCards);
-                    }));
-                body = searchBlocked
-                    ? $"{OfficialSearchAvailabilityText()}\nFreeform tabletop actions remain available."
-                    : "Freeform tabletop actions";
             }
 
             if (targetDeck.Count == 0)
@@ -3272,8 +3264,8 @@ namespace ConsoleCards.Presentation.Prototype
                 TabletopComponentTarget.ForContainer(targetDeckId));
             runtimeUi.ShowContextMenu(
                 contextMenuAnchorScreenPosition,
-                isOfficialFloormasterDeck ? "OFFICIAL FLOORMASTER DECK" : "DECK",
-                body,
+                "DECK",
+                string.Empty,
                 actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);
@@ -3519,37 +3511,90 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ShowFloorCardContextMenu()
         {
-            trapFloorTemplate.TryGetFloorCoordinate(contextMenuCardId, out TrapFloorCoordinate coordinate);
-            bool canRoll = trapFloorRoundState != null
-                && trapFloorRoundState.Phase == TrapFloorRoundPhase.Floorfall;
+            if (!trapFloorTemplate.TryGetFloorCardState(
+                    matchState,
+                    contextMenuCardId,
+                    out TrapFloorFloorCardState floorCard))
+            {
+                CloseContextMenu();
+                return;
+            }
+
             TabletopObjectId targetCardId = contextMenuCardId;
+            List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
+            if (!floorCard.IsRevealed)
+            {
+                actions.Add(new PrototypePopupActionOption(
+                    "Search / Reveal",
+                    true,
+                    () => SearchAndRevealFloorCard(targetCardId)));
+            }
+
+            actions.Add(new PrototypePopupActionOption(
+                "Inspect",
+                true,
+                () => OpenCardInspect(targetCardId)));
+            actions.Add(new PrototypePopupActionOption(
+                "Duplicate as Generic Card",
+                true,
+                () => BeginDuplicatePlacement(targetCardId)));
             runtimeUi.ShowContextMenu(
                 contextMenuAnchorScreenPosition,
-                $"FLOOR {coordinate}",
-                canRoll ? string.Empty : "Official Floorfall is available only during the Floorfall phase.",
-                new[]
-                {
-                    new PrototypePopupActionOption(
-                        "Inspect",
-                        true,
-                        () => OpenCardInspect(targetCardId)),
-                    new PrototypePopupActionOption(
-                        "Roll Floorfall",
-                        canRoll,
-                        () =>
-                        {
-                            if (BeginPhysicalFloorfall())
-                            {
-                                CloseContextMenu();
-                            }
-                        }),
-                    new PrototypePopupActionOption(
-                        "Duplicate as Generic Card",
-                        true,
-                        () => BeginDuplicatePlacement(targetCardId)),
-                },
+                $"FLOOR {floorCard.Coordinate}",
+                floorCard.IsRevealed
+                    ? $"Revealed: {floorCard.Content.Category} — {floorCard.Content.DisplayName}"
+                    : "MYSTERY — content is hidden until Search / Reveal is accepted.",
+                actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);
+        }
+
+        private void SearchAndRevealFloorCard(TabletopObjectId floorCardId)
+        {
+            if (trapFloorRevealFloorUseCase == null)
+            {
+                ShowMessage("Search / Reveal unavailable outside Trap Floor.");
+                return;
+            }
+
+            TrapFloorRevealFloorResult result = trapFloorRevealFloorUseCase.Execute(
+                matchState,
+                new TrapFloorRevealFloorCommand(CreateCommandContext(), floorCardId));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Search / Reveal rejected: {result.Error}.");
+                return;
+            }
+
+            if (TryGetCardView(floorCardId, out CardView floorCardView))
+            {
+                floorCardView.ApplyAcceptedState();
+            }
+
+            RefreshCardContentVisibility();
+            selectionPresenter?.Refresh();
+            ShowTrapFloorReveal(result);
+            ShowMessage(
+                $"{FormatPlayerName(result.RevealedActivity.ActorPlayerId)} revealed "
+                + $"{result.FloorCard.Content.DisplayName} at Floor {result.FloorCard.Coordinate}.");
+        }
+
+        private void ShowTrapFloorReveal(TrapFloorRevealFloorResult result)
+        {
+            CloseContextMenu();
+            CloseCardInspect();
+            activeFloorRevealActivity = result.RevealedActivity;
+            inspectedCardId = result.FloorCard.ObjectId;
+            inspectedCardRenderedRevision = result.Revision;
+            if (!TryBuildCardInspectModel(inspectedCardId, out PrototypeCardInspectModel model))
+            {
+                activeFloorRevealActivity = null;
+                inspectedCardId = TabletopObjectId.Empty;
+                inspectedCardRenderedRevision = -1;
+                return;
+            }
+
+            runtimeUi.ShowCardInspect(model, CloseCardInspect);
         }
 
         private void ShowStackCardContextMenu()
@@ -3653,6 +3698,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void OpenCardInspect(TabletopObjectId targetCardId)
         {
+            activeFloorRevealActivity = null;
             if (!TryBuildCardInspectModel(targetCardId, out PrototypeCardInspectModel model))
             {
                 ShowMessage("Inspect unavailable: Card Presentation is no longer available.");
@@ -3668,6 +3714,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void CloseCardInspect()
         {
+            activeFloorRevealActivity = null;
             inspectedCardId = TabletopObjectId.Empty;
             inspectedCardRenderedRevision = -1;
             runtimeUi?.CloseCardInspect();
@@ -3703,6 +3750,43 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 model = null;
                 return false;
+            }
+
+            if (trapFloorTemplate != null
+                && trapFloorTemplate.TryGetFloorCardState(
+                    matchState,
+                    targetCardId,
+                    out TrapFloorFloorCardState floorCard))
+            {
+                TrapFloorActivityEntry revealActivity = activeFloorRevealActivity != null
+                    && activeFloorRevealActivity.FloorCardId == targetCardId
+                        ? activeFloorRevealActivity
+                        : null;
+                string revealContext = revealActivity == null
+                    ? string.Empty
+                    : $"Revealed by: {FormatPlayerName(revealActivity.ActorPlayerId)}\n"
+                        + $"Floor coordinate: {floorCard.Coordinate}\n";
+                string frontBody = $"{revealContext}"
+                    + $"Category: {floorCard.Content.Category}\n"
+                    + $"Content: {floorCard.Content.DisplayName}\n\n"
+                    + floorCard.Content.DisplayText;
+                model = new PrototypeCardInspectModel(
+                    $"Floor {floorCard.Coordinate} | {targetCardId}",
+                    card.Face,
+                    new PrototypeCardInspectSideModel(
+                        floorCard.Content.DisplayName,
+                        frontBody,
+                        null,
+                        TrapFloorContentColor(floorCard.Content.Category),
+                        new Color(0.04f, 0.06f, 0.08f)),
+                    new PrototypeCardInspectSideModel(
+                        "MYSTERY",
+                        $"Floor {floorCard.Coordinate}\nContent remains hidden until Search / Reveal.",
+                        null,
+                        new Color(0.10f, 0.19f, 0.42f),
+                        Color.white),
+                    false);
+                return true;
             }
 
             Color frontSurface = IsButtonCard(card)
@@ -4612,8 +4696,18 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             RestorePrototypeTemplateContext(restoreInitialBaseline);
+            BuildTrapFloorRevealRuntime();
             ProjectTemplateBoardSurface();
             ProjectPrototypePlayerLayout(localSeatLayout);
+        }
+
+        private void BuildTrapFloorRevealRuntime()
+        {
+            trapFloorActivityFeed = new TrapFloorActivityFeedState(matchState.Id);
+            trapFloorRevealFloorUseCase = new TrapFloorRevealFloorUseCase(
+                trapFloorTemplate,
+                trapFloorActivityFeed);
+            activeFloorRevealActivity = null;
         }
 
         private void BuildFloorfallRuntime()
@@ -4658,7 +4752,10 @@ namespace ConsoleCards.Presentation.Prototype
             physicalAuthority = new LocalPhysicalObjectAuthority(matchState, activeSession.Request.ActivePlayerIds,
                 () => localPlayerId, targetCamera, physicalSurfaceQuery, target => presentationTransitions.Stop(target, false),
                 physicalInteraction);
-            authoritativeRandomValueSource = new SystemRandomValueSource();
+            if (authoritativeRandomValueSource == null)
+            {
+                authoritativeRandomValueSource = new SystemRandomValueSource();
+            }
             componentIdentitySource = new GuidTabletopComponentIdentitySource();
             componentCreationUseCase = new CreateTabletopComponentUseCase(componentIdentitySource, physicalSurfaceQuery,
                 physicalSurfaceQuery.ResolveContainerSurfaceHeight);
@@ -4711,15 +4808,15 @@ namespace ConsoleCards.Presentation.Prototype
                 requestingPlayerId,
                 localPlayer.SeatId,
                 localPlayer.LayoutSeatIndex,
-                templateDefinition.FloormasterDeckId,
+                ContainerId.Empty,
                 localPlayer.HandContainerId,
-                templateDefinition.FloormasterDiscardId,
+                ContainerId.Empty,
                 ContainerId.Empty,
                 ContainerId.Empty,
                 templateDefinition.BoardPlayAreaId,
                 localPlayer.AvatarCardId,
                 localPlayer.PawnId,
-                templateDefinition.CoinTokenIds[0],
+                TabletopObjectId.Empty,
                 templateDefinition.CardLabels,
                 new Dictionary<ObjectDefinitionId, ButtonCardDefinition>());
         }
@@ -5003,7 +5100,9 @@ namespace ConsoleCards.Presentation.Prototype
             centralPlayAreaId = context.CentralPlayAreaId;
             cardState = matchState.Cards[context.LooseCardId];
             pawnState = matchState.Pawns[context.PawnId];
-            tokenState = matchState.Tokens[context.TokenId];
+            tokenState = context.TokenId.IsEmpty
+                ? null
+                : matchState.Tokens[context.TokenId];
 
             foreach (KeyValuePair<TabletopObjectId, string> label in context.LabelsByCardId)
             {
@@ -5117,12 +5216,19 @@ namespace ConsoleCards.Presentation.Prototype
 
             ConfigureOfficialPawnPresentation();
 
-            tokenSelectionVisual.SetSelected(false);
-            tokenView.Bind(tokenState, coordinateConverter);
-            tokenView.transform.localScale = Vector3.one * TrapFloorCoinVisualScale;
-            tokenViewBoundByComposition = true;
-            tokenViews.Add(tokenView);
-            tokenSelectionVisuals.Add(tokenSelectionVisual);
+            if (tokenState != null)
+            {
+                tokenSelectionVisual.SetSelected(false);
+                tokenView.Bind(tokenState, coordinateConverter);
+                tokenView.transform.localScale = Vector3.one * TrapFloorCoinVisualScale;
+                tokenViewBoundByComposition = true;
+                tokenViews.Add(tokenView);
+                tokenSelectionVisuals.Add(tokenSelectionVisual);
+            }
+            else
+            {
+                tokenView.gameObject.SetActive(false);
+            }
 
             foreach (TokenState token in matchState.Tokens.Values)
             {
@@ -5152,11 +5258,13 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void BuildContainerViews()
         {
-            deckView = sceneDeckVisual.GetView<DeckView>();
+            deckView = null;
+            sceneDeckVisual.gameObject.SetActive(false);
             handView = sceneHandVisual.GetView<HandView>();
             DeactivateUnusedSceneStack(sceneStackAVisual);
             DeactivateUnusedSceneStack(sceneStackBVisual);
-            discardPileView = sceneDiscardPileVisual.GetView<DiscardPileView>();
+            discardPileView = null;
+            sceneDiscardPileVisual.gameObject.SetActive(false);
             consoleView = sceneConsoleView;
             playerConsoleViews.Add(consoleView);
 
@@ -5183,38 +5291,6 @@ namespace ConsoleCards.Presentation.Prototype
                 playerConsoleViews.Add(playerConsole.View);
             }
 
-            RuntimeTokenContainerInstance sharedCoinSupply = CreateTokenContainerInstance(
-                "Shared Coin Supply",
-                trapFloorTemplate.SharedCoinSupplyId,
-                trapFloorTemplate.SharedCoinSupplyPose,
-                "COIN SUPPLY",
-                1.5f,
-                2.6f,
-                5,
-                0.24d,
-                0.24d,
-                new Color(0.58f, 0.43f, 0.13f));
-            runtimeTokenContainerInstances.Add(sharedCoinSupply);
-            tokenContainerViews.Add(sharedCoinSupply.View);
-
-            for (int playerIndex = 0; playerIndex < trapFloorTemplate.Players.Count; playerIndex++)
-            {
-                TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[playerIndex];
-                int playerNumber = player.LayoutSeatIndex + 1;
-                RuntimeTokenContainerInstance storage = CreateTokenContainerInstance(
-                    $"Player {playerNumber} Coin Storage",
-                    player.CoinStorageContainerId,
-                    player.CoinStoragePose,
-                    $"P{playerNumber} COINS",
-                    1.8f,
-                    1.2f,
-                    10,
-                    0.16d,
-                    0.16d,
-                    PlayerPrototypeColor(player.LayoutSeatIndex));
-                runtimeTokenContainerInstances.Add(storage);
-                tokenContainerViews.Add(storage.View);
-            }
         }
 
         private static void DeactivateUnusedSceneStack(PrototypeFixedContainerVisual visual)
@@ -5244,11 +5320,8 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void BindContainerViews()
         {
-            ContainerState deck = matchState.GetContainer(deckContainerId);
             ContainerState hand = matchState.GetContainer(handContainerId);
-            ContainerState discard = matchState.GetContainer(discardContainerId);
 
-            deckView.Bind(deck, matchState.ContainerPlacements[deckContainerId], coordinateConverter, cardViews);
             handView.Bind(hand, sceneHandVisual.LayoutAnchor, coordinateConverter, cardViews);
             foreach (StackRuntimeView stackRuntimeView in stackViewsByContainerId.Values)
             {
@@ -5259,8 +5332,6 @@ namespace ConsoleCards.Presentation.Prototype
                     coordinateConverter,
                     cardViews);
             }
-
-            discardPileView.Bind(discard, matchState.ContainerPlacements[discardContainerId], coordinateConverter, cardViews);
 
             consoleSlotViews.Clear();
             BindConsole(
@@ -5305,8 +5376,6 @@ namespace ConsoleCards.Presentation.Prototype
                     instance.RowSpacing);
             }
 
-            ConfigureContainerLabel(sceneDeckVisual.Label, "FM DECK");
-            ConfigureContainerLabel(sceneDiscardPileVisual.Label, "FM DISC");
             ConfigureContainerLabel(sceneHandVisual.Label, "HAND");
             RebuildLayoutViewCollection();
         }
@@ -5339,7 +5408,6 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ConfigureDropTargets()
         {
-            ConfigureFixedContainer(sceneDeckVisual, deckView);
             for (int i = 0; i < runtimeDeckInstances.Count; i++)
             {
                 RuntimeDeckInstance instance = runtimeDeckInstances[i];
@@ -5352,7 +5420,6 @@ namespace ConsoleCards.Presentation.Prototype
                 ConfigureStackDropTarget(stackRuntimeView);
             }
 
-            ConfigureFixedContainer(sceneDiscardPileVisual, discardPileView);
             for (int i = 0; i < consoleSlotViews.Count; i++)
             {
                 ConfigureConsoleSlot(consoleSlotViews[i]);
@@ -6330,24 +6397,60 @@ namespace ConsoleCards.Presentation.Prototype
         {
             visualReferences.AlignFaceLabelsToSurface(tabletopLocalOrderHeight);
             bool isButtonCard = IsButtonCard(card);
+            bool isFloorCard = trapFloorTemplate != null
+                && trapFloorTemplate.IsFloorCard(card.BaseState.Id);
+            Color frontColor = isButtonCard
+                ? new Color(0.58f, 0.88f, 0.82f)
+                : new Color(0.95f, 0.88f, 0.42f);
+            string frontLabel = label;
+            if (isFloorCard
+                && trapFloorTemplate.TryGetFloorCardState(
+                    matchState,
+                    card.BaseState.Id,
+                    out TrapFloorFloorCardState floorCard))
+            {
+                frontColor = TrapFloorContentColor(floorCard.Content.Category);
+                frontLabel = $"{floorCard.Content.Category.ToString().ToUpperInvariant()}\n"
+                    + floorCard.Content.DisplayName;
+            }
+
             ApplyCardColor(
                 visualReferences.FaceUpRenderer,
-                isButtonCard
-                    ? new Color(0.58f, 0.88f, 0.82f)
-                    : new Color(0.95f, 0.88f, 0.42f));
+                frontColor);
             ApplyCardColor(visualReferences.FaceDownRenderer, new Color(0.10f, 0.19f, 0.42f));
             ConfigurePrototypeLabel(
                 visualReferences.FrontLabel,
-                label,
-                trapFloorTemplate != null && trapFloorTemplate.IsFloorCard(card.BaseState.Id)
+                frontLabel,
+                isFloorCard
                     ? TrapFloorFloorLabelCharacterSize
                     : TrapFloorCardLabelCharacterSize,
                 TrapFloorCardLabelFontSize);
             ConfigurePrototypeLabel(
                 visualReferences.BackLabel,
-                visualReferences.BackLabel.text,
+                isFloorCard ? "MYSTERY" : visualReferences.BackLabel.text,
                 TrapFloorCardBackLabelCharacterSize,
                 TrapFloorCardLabelFontSize);
+        }
+
+        private static Color TrapFloorContentColor(TrapFloorFloorContentCategory category)
+        {
+            switch (category)
+            {
+                case TrapFloorFloorContentCategory.Trap:
+                    return new Color(0.86f, 0.34f, 0.28f);
+                case TrapFloorFloorContentCategory.Friend:
+                    return new Color(0.40f, 0.76f, 0.70f);
+                case TrapFloorFloorContentCategory.Key:
+                    return new Color(0.95f, 0.78f, 0.26f);
+                case TrapFloorFloorContentCategory.SecretExit:
+                    return new Color(0.56f, 0.48f, 0.84f);
+                case TrapFloorFloorContentCategory.Entry:
+                    return new Color(0.40f, 0.70f, 0.42f);
+                case TrapFloorFloorContentCategory.Ability:
+                    return new Color(0.42f, 0.66f, 0.90f);
+                default:
+                    return new Color(0.95f, 0.88f, 0.42f);
+            }
         }
 
         private static void ConfigureContainerLabel(TextMesh label, string text)
@@ -6474,10 +6577,55 @@ namespace ConsoleCards.Presentation.Prototype
                 return $"Empty Table | Objects {matchState?.ObjectCount ?? 0}";
             }
 
-            string counts = $"Floormaster Deck {ContainerCount(deckContainerId)} | Discard {ContainerCount(discardContainerId)}";
+            string counts = $"Trap Floor | Floor Cards {CurrentFloorCardCount()}";
+            string activity = CurrentTrapFloorActivityText();
+            string persistentStatus = string.IsNullOrEmpty(activity)
+                ? counts
+                : $"{counts}\n{activity}";
             return Time.unscaledTime <= operationMessageUntil
-                ? $"{operationMessage}\n{counts}"
-                : counts;
+                ? $"{operationMessage}\n{persistentStatus}"
+                : persistentStatus;
+        }
+
+        private string CurrentTrapFloorActivityText()
+        {
+            if (trapFloorActivityFeed == null || trapFloorActivityFeed.Entries.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            int firstIndex = Math.Max(0, trapFloorActivityFeed.Entries.Count - 2);
+            string text = string.Empty;
+            for (int i = firstIndex; i < trapFloorActivityFeed.Entries.Count; i++)
+            {
+                TrapFloorActivityEntry entry = trapFloorActivityFeed.Entries[i];
+                string line = entry.Kind == TrapFloorActivityKind.SearchedFloor
+                    ? $"{FormatPlayerName(entry.ActorPlayerId)} searched Floor {entry.Coordinate}"
+                    : $"{FormatPlayerName(entry.ActorPlayerId)} revealed "
+                        + $"{entry.ContentName} [{entry.ContentCategory}]";
+                text = string.IsNullOrEmpty(text) ? line : $"{text}\n{line}";
+            }
+
+            return text;
+        }
+
+        private int CurrentFloorCardCount()
+        {
+            if (trapFloorTemplate == null || matchState == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            foreach (TabletopObjectId objectId in trapFloorTemplate.FloorCardIds.Values)
+            {
+                if (matchState.Cards.ContainsKey(objectId))
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private string OfficialSearchAvailabilityText()
@@ -6523,7 +6671,7 @@ namespace ConsoleCards.Presentation.Prototype
                 }
             }
 
-            throw new InvalidOperationException("Authoritative Floormaster Card has no bound Presentation View.");
+            throw new InvalidOperationException("Authoritative Card has no bound Presentation View.");
         }
 
         private string FormatPlayerName(PlayerId playerId)
