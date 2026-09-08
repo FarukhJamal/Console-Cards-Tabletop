@@ -71,11 +71,15 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Text floorfallCoordinateLabel;
         [SerializeField] private Text floorfallTargetLabel;
         [SerializeField] private Transform actionsRoot;
+        [SerializeField] private GameObject actionsTitle;
         [SerializeField] private Text actionHelpLabel;
         [SerializeField] private PrototypePopupActionRowView actionRowPrefab;
 
         private readonly List<PrototypePopupActionRowView> actionRows =
             new List<PrototypePopupActionRowView>();
+        private float expandedHeight;
+
+        private const float ObjectivePanelHeight = 116f;
 
         public void ValidateReferences()
         {
@@ -89,6 +93,7 @@ namespace ConsoleCards.Presentation.UI
                 || floorfallCoordinateLabel == null
                 || floorfallTargetLabel == null
                 || actionsRoot == null
+                || actionsTitle == null
                 || actionHelpLabel == null
                 || actionRowPrefab == null)
             {
@@ -111,11 +116,17 @@ namespace ConsoleCards.Presentation.UI
 
             ValidateReferences();
             gameObject.SetActive(true);
+            SetCompact(false);
             roundLabel.text = status.Round;
             phaseLabel.text = status.Phase;
             searchProgressLabel.text = status.SearchProgress;
             detailLabel.text = status.Detail;
             containerCountsLabel.text = status.ContainerCounts;
+            roundLabel.gameObject.SetActive(!string.IsNullOrWhiteSpace(status.Round));
+            phaseLabel.gameObject.SetActive(!string.IsNullOrWhiteSpace(status.Phase));
+            searchProgressLabel.gameObject.SetActive(!string.IsNullOrWhiteSpace(status.SearchProgress));
+            detailLabel.gameObject.SetActive(!string.IsNullOrWhiteSpace(status.Detail));
+            containerCountsLabel.gameObject.SetActive(!string.IsNullOrWhiteSpace(status.ContainerCounts));
             actionHelpLabel.text = status.ActionHelp;
             actionHelpLabel.gameObject.SetActive(!string.IsNullOrWhiteSpace(status.ActionHelp));
 
@@ -123,7 +134,28 @@ namespace ConsoleCards.Presentation.UI
             floorfallDiceLabel.text = floorfall.Dice;
             floorfallCoordinateLabel.text = floorfall.Coordinate;
             floorfallTargetLabel.text = floorfall.Target;
+            actionsTitle.SetActive(actions.Count > 0);
+            actionsRoot.gameObject.SetActive(actions.Count > 0);
             BindActions(actions);
+        }
+
+        public void ShowObjective(string keyProgress, bool isWon)
+        {
+            ValidateReferences();
+            gameObject.SetActive(true);
+            SetCompact(true);
+            roundLabel.gameObject.SetActive(true);
+            roundLabel.text = keyProgress ?? string.Empty;
+            phaseLabel.gameObject.SetActive(isWon);
+            phaseLabel.text = isWon ? "VICTORY" : string.Empty;
+            searchProgressLabel.gameObject.SetActive(false);
+            detailLabel.gameObject.SetActive(false);
+            containerCountsLabel.gameObject.SetActive(false);
+            floorfallPanel.SetActive(false);
+            actionsTitle.SetActive(false);
+            actionsRoot.gameObject.SetActive(false);
+            actionHelpLabel.gameObject.SetActive(false);
+            UnbindActions();
         }
 
         public void Hide()
@@ -167,6 +199,24 @@ namespace ConsoleCards.Presentation.UI
                     actionRows[i].Unbind();
                 }
             }
+        }
+
+        private void SetCompact(bool compact)
+        {
+            RectTransform rectTransform = transform as RectTransform;
+            if (rectTransform == null)
+            {
+                return;
+            }
+
+            if (expandedHeight <= 0f)
+            {
+                expandedHeight = rectTransform.sizeDelta.y;
+            }
+
+            Vector2 size = rectTransform.sizeDelta;
+            size.y = compact ? ObjectivePanelHeight : expandedHeight;
+            rectTransform.sizeDelta = size;
         }
 
         private void OnDestroy()

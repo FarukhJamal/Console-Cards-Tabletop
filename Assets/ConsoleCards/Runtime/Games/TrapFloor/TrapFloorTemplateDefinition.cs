@@ -31,6 +31,7 @@ namespace ConsoleCards.Games.TrapFloor
             PlayAreaId boardPlayAreaId,
             IDictionary<TrapFloorCoordinate, TabletopObjectId> floorCardIds,
             IEnumerable<TrapFloorFloorContentDefinition> floorContentDefinitions,
+            TrapFloorStage03Configuration stage03Configuration,
             IDictionary<TabletopObjectId, string> cardLabels,
             IEnumerable<TrapFloorPlayerSetupDefinition> players,
             TabletopObjectId floorfallXAxisDieId,
@@ -52,6 +53,8 @@ namespace ConsoleCards.Games.TrapFloor
                     cardLabels ?? throw new ArgumentNullException(nameof(cardLabels))));
             this.floorContentDefinitions = new ReadOnlyDictionary<ObjectDefinitionId, TrapFloorFloorContentDefinition>(
                 IndexFloorContentDefinitions(floorContentDefinitions));
+            Stage03Configuration = stage03Configuration
+                ?? throw new ArgumentNullException(nameof(stage03Configuration));
             this.players = new ReadOnlyCollection<TrapFloorPlayerSetupDefinition>(
                 new List<TrapFloorPlayerSetupDefinition>(
                     players ?? throw new ArgumentNullException(nameof(players))));
@@ -80,6 +83,8 @@ namespace ConsoleCards.Games.TrapFloor
 
         public IReadOnlyDictionary<ObjectDefinitionId, TrapFloorFloorContentDefinition> FloorContentDefinitions =>
             floorContentDefinitions;
+
+        public TrapFloorStage03Configuration Stage03Configuration { get; }
 
         public IReadOnlyDictionary<TabletopObjectId, string> CardLabels => cardLabels;
 
@@ -246,6 +251,12 @@ namespace ConsoleCards.Games.TrapFloor
                 TrapFloorStage03ContentPool.SecretExitCount);
             RequireCategoryCount(categoryCounts, TrapFloorFloorContentCategory.Entry, TrapFloorStage03ContentPool.EntryCount);
             RequireCategoryCount(categoryCounts, TrapFloorFloorContentCategory.Ability, TrapFloorStage03ContentPool.AbilityCount);
+
+            if (Stage03Configuration.RequiredKeyCount > TrapFloorStage03ContentPool.KeyCount)
+            {
+                throw new ArgumentException(
+                    "Trap Floor required-Key count cannot exceed the configured Stage-03 Key pool.");
+            }
 
             Dictionary<TabletopObjectId, GameTemplateObjectInstanceDefinition> templateObjects =
                 new Dictionary<TabletopObjectId, GameTemplateObjectInstanceDefinition>();

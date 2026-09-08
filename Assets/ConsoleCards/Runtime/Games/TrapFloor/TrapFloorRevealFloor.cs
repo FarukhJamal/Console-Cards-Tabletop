@@ -13,6 +13,8 @@ namespace ConsoleCards.Games.TrapFloor
     {
         SearchedFloor = 0,
         RevealedFloorContent = 1,
+        ClaimedKey = 2,
+        WonGame = 3,
     }
 
     /// <summary>
@@ -142,6 +144,34 @@ namespace ConsoleCards.Games.TrapFloor
                 floorCard,
                 TrapFloorActivityKind.RevealedFloorContent);
             entries.Add(revealedEntry);
+        }
+
+        internal TrapFloorActivityEntry RecordKeyClaim(
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TrapFloorFloorCardState floorCard)
+        {
+            TrapFloorActivityEntry entry = CreateEntry(
+                acceptedRevision,
+                actorPlayerId,
+                floorCard,
+                TrapFloorActivityKind.ClaimedKey);
+            entries.Add(entry);
+            return entry;
+        }
+
+        internal TrapFloorActivityEntry RecordVictory(
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TrapFloorFloorCardState floorCard)
+        {
+            TrapFloorActivityEntry entry = CreateEntry(
+                acceptedRevision,
+                actorPlayerId,
+                floorCard,
+                TrapFloorActivityKind.WonGame);
+            entries.Add(entry);
+            return entry;
         }
 
         public void Clear()

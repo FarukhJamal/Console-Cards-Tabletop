@@ -44,9 +44,23 @@ namespace ConsoleCards.Games.TrapFloor
         public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
             IRandomValueSource randomValueSource)
         {
+            return CreateStandardFourPlayer(
+                randomValueSource,
+                TrapFloorStage03Configuration.CreateDefault());
+        }
+
+        public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
+            IRandomValueSource randomValueSource,
+            TrapFloorStage03Configuration stage03Configuration)
+        {
             if (randomValueSource == null)
             {
                 throw new ArgumentNullException(nameof(randomValueSource));
+            }
+
+            if (stage03Configuration == null)
+            {
+                throw new ArgumentNullException(nameof(stage03Configuration));
             }
 
             PlayerLayoutDefinition playerLayout = PlayerLayoutPresets.StandardFourPlayer;
@@ -178,6 +192,7 @@ namespace ConsoleCards.Games.TrapFloor
                 boardPlayAreaId,
                 floorCardIds,
                 floorContentDefinitions,
+                stage03Configuration,
                 labels,
                 players,
                 floorfallXAxisDieId,

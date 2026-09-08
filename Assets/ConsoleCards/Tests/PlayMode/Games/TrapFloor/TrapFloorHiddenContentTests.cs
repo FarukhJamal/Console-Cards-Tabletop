@@ -119,6 +119,91 @@ namespace ConsoleCards.Tests.PlayMode.Games.TrapFloor
             Assert.That(activityFeed.Entries, Is.Empty);
         }
 
+        [Test]
+        public void Objective_ClaimsConfiguredKeysThenAcceptsOneAuthoritativeEscape()
+        {
+            TrapFloorTemplateDefinition template = TrapFloorTemplateFactory.CreateStandardFourPlayer(
+                new CyclingRandomValueSource(),
+                new TrapFloorStage03Configuration(2));
+            IReadOnlyList<PlayerId> players = CreatePlayers();
+            GameTemplateMatchBuildResult build = template.TryCreateMatch(players, MatchId.New());
+            Assert.That(build.Succeeded, Is.True);
+            MatchState match = build.Session.CurrentMatch;
+            TrapFloorActivityFeedState activityFeed = new TrapFloorActivityFeedState(match.Id);
+            TrapFloorRevealFloorUseCase reveal = new TrapFloorRevealFloorUseCase(template, activityFeed);
+            TrapFloorObjectiveState objective = new TrapFloorObjectiveState(
+                match.Id,
+                template.Stage03Configuration.RequiredKeyCount);
+            TrapFloorObjectiveUseCase objectiveUseCase = new TrapFloorObjectiveUseCase(
+                template,
+                objective,
+                activityFeed);
+            List<TabletopObjectId> keyIds = FindFloorCards(
+                template,
+                match,
+                TrapFloorFloorContentCategory.Key);
+            TabletopObjectId exitId = FindFloorCards(
+                template,
+                match,
+                TrapFloorFloorContentCategory.SecretExit)[0];
+
+            Reveal(reveal, match, players[0], exitId);
+            long beforeRejectedEscape = match.Revision;
+            TrapFloorObjectiveResult rejectedEscape = objectiveUseCase.AttemptEscape(
+                match,
+                new TrapFloorAttemptEscapeCommand(
+                    CommandFor(match, players[0]),
+                    exitId));
+            Assert.That(rejectedEscape.Succeeded, Is.False);
+            Assert.That(rejectedEscape.Error, Is.EqualTo(TrapFloorObjectiveError.RequiredKeysMissing));
+            Assert.That(rejectedEscape.CollectedKeyCount, Is.EqualTo(0));
+            Assert.That(rejectedEscape.RequiredKeyCount, Is.EqualTo(2));
+            Assert.That(match.Revision, Is.EqualTo(beforeRejectedEscape));
+
+            for (int i = 0; i < objective.RequiredKeyCount; i++)
+            {
+                Reveal(reveal, match, players[i], keyIds[i]);
+                ObjectDefinitionId assignedKeyId = match.Cards[keyIds[i]].BaseState.DefinitionId;
+                long beforeClaim = match.Revision;
+                TrapFloorObjectiveResult claim = objectiveUseCase.ClaimKey(
+                    match,
+                    new TrapFloorClaimKeyCommand(
+                        CommandFor(match, players[i]),
+                        keyIds[i]));
+                Assert.That(claim.Succeeded, Is.True);
+                Assert.That(match.Revision, Is.EqualTo(beforeClaim + 1));
+                Assert.That(claim.ClaimedKey.ContentDefinitionId, Is.EqualTo(assignedKeyId));
+                Assert.That(claim.ClaimedKey.ClaimedByPlayerId, Is.EqualTo(players[i]));
+                Assert.That(match.Cards[keyIds[i]].Face, Is.EqualTo(CardFace.FaceUp));
+                Assert.That(claim.Activity.Kind, Is.EqualTo(TrapFloorActivityKind.ClaimedKey));
+                Assert.That(claim.Activity.FloorCardId, Is.EqualTo(keyIds[i]));
+            }
+
+            Assert.That(objective.CollectedKeyCount, Is.EqualTo(2));
+            Assert.That(objective.HasRequiredKeys, Is.True);
+            long beforeVictory = match.Revision;
+            TrapFloorObjectiveResult victory = objectiveUseCase.AttemptEscape(
+                match,
+                new TrapFloorAttemptEscapeCommand(
+                    CommandFor(match, players[3]),
+                    exitId));
+            Assert.That(victory.Succeeded, Is.True);
+            Assert.That(match.Revision, Is.EqualTo(beforeVictory + 1));
+            Assert.That(objective.IsWon, Is.True);
+            Assert.That(objective.WinningPlayerId, Is.EqualTo(players[3]));
+            Assert.That(objective.ExitFloorCardId, Is.EqualTo(exitId));
+            Assert.That(victory.Activity.Kind, Is.EqualTo(TrapFloorActivityKind.WonGame));
+
+            MatchState reset = build.Session.Reset();
+            objective.Clear();
+            activityFeed.Clear();
+            Assert.That(objective.CollectedKeys, Is.Empty);
+            Assert.That(objective.IsWon, Is.False);
+            Assert.That(activityFeed.Entries, Is.Empty);
+            Assert.That(reset.Cards[exitId].Face, Is.EqualTo(CardFace.FaceDown));
+            Assert.That(reset.Cards[keyIds[0]].Face, Is.EqualTo(CardFace.FaceDown));
+        }
+
         private static TabletopObjectId FirstFloorCardId(TrapFloorTemplateDefinition template)
         {
             foreach (TabletopObjectId floorCardId in template.FloorCardIds.Values)
@@ -135,6 +220,43 @@ namespace ConsoleCards.Tests.PlayMode.Games.TrapFloor
             GameTemplateMatchBuildResult build = template.TryCreateMatch(CreatePlayers(), MatchId.New());
             Assert.That(build.Succeeded, Is.True);
             return build.Session.CurrentMatch;
+        }
+
+        private static List<TabletopObjectId> FindFloorCards(
+            TrapFloorTemplateDefinition template,
+            MatchState match,
+            TrapFloorFloorContentCategory category)
+        {
+            List<TabletopObjectId> matches = new List<TabletopObjectId>();
+            foreach (TabletopObjectId floorCardId in template.FloorCardIds.Values)
+            {
+                if (template.TryGetFloorCardState(match, floorCardId, out TrapFloorFloorCardState floorCard)
+                    && floorCard.Content.Category == category)
+                {
+                    matches.Add(floorCardId);
+                }
+            }
+
+            return matches;
+        }
+
+        private static void Reveal(
+            TrapFloorRevealFloorUseCase useCase,
+            MatchState match,
+            PlayerId playerId,
+            TabletopObjectId floorCardId)
+        {
+            TrapFloorRevealFloorResult result = useCase.Execute(
+                match,
+                new TrapFloorRevealFloorCommand(
+                    CommandFor(match, playerId),
+                    floorCardId));
+            Assert.That(result.Succeeded, Is.True);
+        }
+
+        private static CommandContext CommandFor(MatchState match, PlayerId playerId)
+        {
+            return new CommandContext(CommandId.New(), match.Id, playerId, match.Revision);
         }
 
         private static IReadOnlyList<PlayerId> CreatePlayers()

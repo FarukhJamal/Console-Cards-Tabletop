@@ -165,6 +165,8 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorTemplateDefinition trapFloorTemplate;
         private TrapFloorActivityFeedState trapFloorActivityFeed;
         private TrapFloorRevealFloorUseCase trapFloorRevealFloorUseCase;
+        private TrapFloorObjectiveState trapFloorObjectiveState;
+        private TrapFloorObjectiveUseCase trapFloorObjectiveUseCase;
         private TrapFloorActivityEntry activeFloorRevealActivity;
         private TrapFloorFloorfallState floorfallState;
         private TrapFloorFloorfallService floorfallService;
@@ -263,6 +265,8 @@ namespace ConsoleCards.Presentation.Prototype
         public TrapFloorRoundState TrapFloorRoundState => trapFloorRoundState;
 
         public TrapFloorActivityFeedState TrapFloorActivityFeed => trapFloorActivityFeed;
+
+        public TrapFloorObjectiveState TrapFloorObjectiveState => trapFloorObjectiveState;
 
         public PlayerLayoutDefinition PlayerLayout => playerLayout;
 
@@ -610,6 +614,9 @@ namespace ConsoleCards.Presentation.Prototype
             trapFloorActivityFeed?.Clear();
             trapFloorActivityFeed = null;
             trapFloorRevealFloorUseCase = null;
+            trapFloorObjectiveState?.Clear();
+            trapFloorObjectiveState = null;
+            trapFloorObjectiveUseCase = null;
             activeFloorRevealActivity = null;
             floorfallState = null;
             floorfallService = null;
@@ -2495,6 +2502,15 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
+            if (trapFloorObjectiveState != null)
+            {
+                runtimeUi.ShowTrapFloorObjective(
+                    $"KEYS {trapFloorObjectiveState.CollectedKeyCount} / "
+                        + trapFloorObjectiveState.RequiredKeyCount,
+                    trapFloorObjectiveState.IsWon);
+                return;
+            }
+
             if (trapFloorRoundState == null)
             {
                 runtimeUi.HideTrapFloorStatus();
@@ -3530,6 +3546,25 @@ namespace ConsoleCards.Presentation.Prototype
                     () => SearchAndRevealFloorCard(targetCardId)));
             }
 
+            else if (trapFloorObjectiveState != null && trapFloorObjectiveUseCase != null)
+            {
+                if (floorCard.Content.Category == TrapFloorFloorContentCategory.Key
+                    && !trapFloorObjectiveState.TryGetClaim(targetCardId, out _))
+                {
+                    actions.Add(new PrototypePopupActionOption(
+                        "Claim Key",
+                        !trapFloorObjectiveState.IsWon,
+                        () => ClaimTrapFloorKey(targetCardId)));
+                }
+                else if (floorCard.Content.Category == TrapFloorFloorContentCategory.SecretExit)
+                {
+                    actions.Add(new PrototypePopupActionOption(
+                        "Attempt Escape",
+                        !trapFloorObjectiveState.IsWon,
+                        () => AttemptTrapFloorEscape(targetCardId)));
+                }
+            }
+
             actions.Add(new PrototypePopupActionOption(
                 "Inspect",
                 true,
@@ -3542,11 +3577,35 @@ namespace ConsoleCards.Presentation.Prototype
                 contextMenuAnchorScreenPosition,
                 $"FLOOR {floorCard.Coordinate}",
                 floorCard.IsRevealed
-                    ? $"Revealed: {floorCard.Content.Category} — {floorCard.Content.DisplayName}"
+                    ? FloorCardContextDescription(floorCard)
                     : "MYSTERY — content is hidden until Search / Reveal is accepted.",
                 actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);
+        }
+
+        private string FloorCardContextDescription(TrapFloorFloorCardState floorCard)
+        {
+            string description =
+                $"Revealed: {floorCard.Content.Category} — {floorCard.Content.DisplayName}";
+            if (trapFloorObjectiveState == null)
+            {
+                return description;
+            }
+
+            if (floorCard.Content.Category == TrapFloorFloorContentCategory.Key
+                && trapFloorObjectiveState.TryGetClaim(floorCard.ObjectId, out TrapFloorCollectedKeyState claim))
+            {
+                return $"{description}\nClaimed by {FormatPlayerName(claim.ClaimedByPlayerId)}.";
+            }
+
+            if (floorCard.Content.Category == TrapFloorFloorContentCategory.SecretExit)
+            {
+                return $"{description}\nKEYS {trapFloorObjectiveState.CollectedKeyCount} / "
+                    + trapFloorObjectiveState.RequiredKeyCount;
+            }
+
+            return description;
         }
 
         private void SearchAndRevealFloorCard(TabletopObjectId floorCardId)
@@ -3577,6 +3636,84 @@ namespace ConsoleCards.Presentation.Prototype
             ShowMessage(
                 $"{FormatPlayerName(result.RevealedActivity.ActorPlayerId)} revealed "
                 + $"{result.FloorCard.Content.DisplayName} at Floor {result.FloorCard.Coordinate}.");
+        }
+
+        private void ClaimTrapFloorKey(TabletopObjectId floorCardId)
+        {
+            if (trapFloorObjectiveUseCase == null)
+            {
+                ShowMessage("Claim Key unavailable outside Trap Floor.");
+                return;
+            }
+
+            TrapFloorObjectiveResult result = trapFloorObjectiveUseCase.ClaimKey(
+                matchState,
+                new TrapFloorClaimKeyCommand(CreateCommandContext(), floorCardId));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Claim Key rejected: {result.Error}.");
+                return;
+            }
+
+            CloseContextMenu();
+            RefreshTrapFloorStatusUi();
+            ShowMessage(
+                $"{FormatPlayerName(result.Activity.ActorPlayerId)} claimed "
+                + $"{result.FloorCard.Content.DisplayName}. "
+                + $"KEYS {result.CollectedKeyCount} / {result.RequiredKeyCount}.");
+        }
+
+        private void AttemptTrapFloorEscape(TabletopObjectId floorCardId)
+        {
+            if (trapFloorObjectiveUseCase == null)
+            {
+                ShowMessage("Attempt Escape unavailable outside Trap Floor.");
+                return;
+            }
+
+            TrapFloorObjectiveResult result = trapFloorObjectiveUseCase.AttemptEscape(
+                matchState,
+                new TrapFloorAttemptEscapeCommand(CreateCommandContext(), floorCardId));
+            if (!result.Succeeded)
+            {
+                if (result.Error == TrapFloorObjectiveError.RequiredKeysMissing)
+                {
+                    ShowMessage(
+                        $"Attempt Escape rejected: KEYS {result.CollectedKeyCount} / "
+                        + $"{result.RequiredKeyCount}.");
+                }
+                else
+                {
+                    ShowMessage($"Attempt Escape rejected: {result.Error}.");
+                }
+
+                return;
+            }
+
+            ShowTrapFloorVictory(result);
+            RefreshTrapFloorStatusUi();
+            ShowMessage(
+                $"{FormatPlayerName(result.Activity.ActorPlayerId)} completed Trap Floor. "
+                + $"KEYS {result.CollectedKeyCount} / {result.RequiredKeyCount}.");
+        }
+
+        private void ShowTrapFloorVictory(TrapFloorObjectiveResult result)
+        {
+            Vector2 popupPosition = contextMenuAnchorScreenPosition;
+            CloseContextMenu();
+            Action closeVictory = () => runtimeUi?.CloseTabletopPopup();
+            runtimeUi.ShowContextMenu(
+                popupPosition,
+                "TRAP FLOOR VICTORY",
+                $"{FormatPlayerName(result.Activity.ActorPlayerId)} escaped through "
+                    + $"Floor {result.FloorCard.Coordinate}.\n"
+                    + $"KEYS {result.CollectedKeyCount} / {result.RequiredKeyCount}",
+                new[]
+                {
+                    new PrototypePopupActionOption("Close", true, closeVictory),
+                },
+                closeVictory,
+                _ => closeVictory());
         }
 
         private void ShowTrapFloorReveal(TrapFloorRevealFloorResult result)
@@ -4706,6 +4843,13 @@ namespace ConsoleCards.Presentation.Prototype
             trapFloorActivityFeed = new TrapFloorActivityFeedState(matchState.Id);
             trapFloorRevealFloorUseCase = new TrapFloorRevealFloorUseCase(
                 trapFloorTemplate,
+                trapFloorActivityFeed);
+            trapFloorObjectiveState = new TrapFloorObjectiveState(
+                matchState.Id,
+                trapFloorTemplate.Stage03Configuration.RequiredKeyCount);
+            trapFloorObjectiveUseCase = new TrapFloorObjectiveUseCase(
+                trapFloorTemplate,
+                trapFloorObjectiveState,
                 trapFloorActivityFeed);
             activeFloorRevealActivity = null;
         }
@@ -6578,10 +6722,16 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             string counts = $"Trap Floor | Floor Cards {CurrentFloorCardCount()}";
+            string objective = CurrentTrapFloorObjectiveText();
             string activity = CurrentTrapFloorActivityText();
-            string persistentStatus = string.IsNullOrEmpty(activity)
+            string persistentStatus = string.IsNullOrEmpty(objective)
                 ? counts
-                : $"{counts}\n{activity}";
+                : $"{counts}\n{objective}";
+            if (!string.IsNullOrEmpty(activity))
+            {
+                persistentStatus = $"{persistentStatus}\n{activity}";
+            }
+
             return Time.unscaledTime <= operationMessageUntil
                 ? $"{operationMessage}\n{persistentStatus}"
                 : persistentStatus;
@@ -6599,14 +6749,43 @@ namespace ConsoleCards.Presentation.Prototype
             for (int i = firstIndex; i < trapFloorActivityFeed.Entries.Count; i++)
             {
                 TrapFloorActivityEntry entry = trapFloorActivityFeed.Entries[i];
-                string line = entry.Kind == TrapFloorActivityKind.SearchedFloor
-                    ? $"{FormatPlayerName(entry.ActorPlayerId)} searched Floor {entry.Coordinate}"
-                    : $"{FormatPlayerName(entry.ActorPlayerId)} revealed "
-                        + $"{entry.ContentName} [{entry.ContentCategory}]";
+                string line;
+                switch (entry.Kind)
+                {
+                    case TrapFloorActivityKind.SearchedFloor:
+                        line = $"{FormatPlayerName(entry.ActorPlayerId)} searched Floor {entry.Coordinate}";
+                        break;
+                    case TrapFloorActivityKind.RevealedFloorContent:
+                        line = $"{FormatPlayerName(entry.ActorPlayerId)} revealed "
+                            + $"{entry.ContentName} [{entry.ContentCategory}]";
+                        break;
+                    case TrapFloorActivityKind.ClaimedKey:
+                        line = $"{FormatPlayerName(entry.ActorPlayerId)} claimed {entry.ContentName}";
+                        break;
+                    case TrapFloorActivityKind.WonGame:
+                        line = $"{FormatPlayerName(entry.ActorPlayerId)} escaped at Floor {entry.Coordinate}";
+                        break;
+                    default:
+                        line = string.Empty;
+                        break;
+                }
+
                 text = string.IsNullOrEmpty(text) ? line : $"{text}\n{line}";
             }
 
             return text;
+        }
+
+        private string CurrentTrapFloorObjectiveText()
+        {
+            if (trapFloorObjectiveState == null)
+            {
+                return string.Empty;
+            }
+
+            string keys =
+                $"KEYS {trapFloorObjectiveState.CollectedKeyCount} / {trapFloorObjectiveState.RequiredKeyCount}";
+            return trapFloorObjectiveState.IsWon ? $"{keys} | VICTORY" : keys;
         }
 
         private int CurrentFloorCardCount()

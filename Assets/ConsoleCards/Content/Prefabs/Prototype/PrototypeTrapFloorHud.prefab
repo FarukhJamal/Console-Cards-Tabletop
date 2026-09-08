@@ -108,6 +108,7 @@ MonoBehaviour:
   floorfallCoordinateLabel: {fileID: 114203}
   floorfallTargetLabel: {fileID: 114204}
   actionsRoot: {fileID: 224300}
+  actionsTitle: {fileID: 100301}
   actionHelpLabel: {fileID: 114302}
   actionRowPrefab: {fileID: 114003, guid: 7e02bb55013040a7879b457a2f45fd88, type: 3}
 --- !u!1 &100100

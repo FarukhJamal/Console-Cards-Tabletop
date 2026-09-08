@@ -76,6 +76,11 @@ namespace ConsoleCards.Games.TrapFloor
             + EntryCount
             + AbilityCount;
 
+        // Stage-03 objective tuning belongs with the provisional content/configuration rather
+        // than in the command logic. Change this value (or supply another configuration to the
+        // Template factory) when the approved required-Key count changes.
+        public const int DefaultRequiredKeyCount = KeyCount;
+
         public static IReadOnlyList<TrapFloorFloorContentDefinition> CreateDefinitions()
         {
             List<TrapFloorFloorContentDefinition> definitions =
@@ -130,6 +135,29 @@ namespace ConsoleCards.Games.TrapFloor
                 (byte)(index >> 16),
                 (byte)(index >> 8),
                 (byte)index);
+        }
+    }
+
+    public sealed class TrapFloorStage03Configuration
+    {
+        public TrapFloorStage03Configuration(int requiredKeyCount)
+        {
+            if (requiredKeyCount < 1 || requiredKeyCount > TrapFloorStage03ContentPool.KeyCount)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(requiredKeyCount),
+                    $"Required Key count must be between 1 and {TrapFloorStage03ContentPool.KeyCount}.");
+            }
+
+            RequiredKeyCount = requiredKeyCount;
+        }
+
+        public int RequiredKeyCount { get; }
+
+        public static TrapFloorStage03Configuration CreateDefault()
+        {
+            return new TrapFloorStage03Configuration(
+                TrapFloorStage03ContentPool.DefaultRequiredKeyCount);
         }
     }
 }

@@ -290,6 +290,17 @@ namespace ConsoleCards.Presentation.UI
             trapFloorHudView.Show(status, floorfall, actions);
         }
 
+        public void ShowTrapFloorObjective(string keyProgress, bool isWon)
+        {
+            if (!activeSessionHudLayer.activeSelf)
+            {
+                return;
+            }
+
+            EnsureTrapFloorHudView();
+            trapFloorHudView.ShowObjective(keyProgress, isWon);
+        }
+
         public void HideTrapFloorStatus()
         {
             trapFloorHudView?.Hide();
