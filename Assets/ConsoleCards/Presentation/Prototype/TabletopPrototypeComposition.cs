@@ -64,6 +64,8 @@ namespace ConsoleCards.Presentation.Prototype
         private LocalPhysicalObjectAuthority physicalAuthority;
         private bool physicalFloorfallPending;
         private PlayerId physicalFloorfallActor;
+        private bool physicalFloorCollapsePending;
+        private PlayerId physicalFloorCollapseActor;
         [SerializeField] internal PrototypeFixedContainerVisual prototypeDeckPrefab;
         [SerializeField] internal ConsoleView prototypeConsolePrefab;
         [SerializeField] internal CardView cardView;
@@ -167,6 +169,8 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorRevealFloorUseCase trapFloorRevealFloorUseCase;
         private TrapFloorObjectiveState trapFloorObjectiveState;
         private TrapFloorObjectiveUseCase trapFloorObjectiveUseCase;
+        private TrapFloorCollapseState trapFloorCollapseState;
+        private TrapFloorCollapseUseCase trapFloorCollapseUseCase;
         private TrapFloorActivityEntry activeFloorRevealActivity;
         private TrapFloorFloorfallState floorfallState;
         private TrapFloorFloorfallService floorfallService;
@@ -267,6 +271,8 @@ namespace ConsoleCards.Presentation.Prototype
         public TrapFloorActivityFeedState TrapFloorActivityFeed => trapFloorActivityFeed;
 
         public TrapFloorObjectiveState TrapFloorObjectiveState => trapFloorObjectiveState;
+
+        public TrapFloorCollapseState TrapFloorCollapseState => trapFloorCollapseState;
 
         public PlayerLayoutDefinition PlayerLayout => playerLayout;
 
@@ -479,6 +485,8 @@ namespace ConsoleCards.Presentation.Prototype
         {
             physicalFloorfallPending = false;
             physicalFloorfallActor = PlayerId.Empty;
+            physicalFloorCollapsePending = false;
+            physicalFloorCollapseActor = PlayerId.Empty;
             physicalAuthority?.Shutdown();
             physicalAuthority = null;
             SetGameBoardActive(false);
@@ -617,6 +625,9 @@ namespace ConsoleCards.Presentation.Prototype
             trapFloorObjectiveState?.Clear();
             trapFloorObjectiveState = null;
             trapFloorObjectiveUseCase = null;
+            trapFloorCollapseState?.Clear();
+            trapFloorCollapseState = null;
+            trapFloorCollapseUseCase = null;
             activeFloorRevealActivity = null;
             floorfallState = null;
             floorfallService = null;
@@ -1017,6 +1028,152 @@ namespace ConsoleCards.Presentation.Prototype
             physicalFloorfallActor = PlayerId.Empty;
         }
 
+        private bool BeginPhysicalFloorCollapse()
+        {
+            if (physicalFloorCollapsePending
+                || trapFloorCollapseState == null
+                || trapFloorCollapseUseCase == null)
+            {
+                return false;
+            }
+
+            if (trapFloorCollapseState.IsBoardExhausted)
+            {
+                ShowMessage("Collapse Floor rejected: the Board has no usable Floors remaining.");
+                return false;
+            }
+
+            if (!TryGetOfficialFloorfallDieViews(out DieView xAxisDieView, out DieView yAxisDieView))
+            {
+                ShowMessage("Collapse Floor rejected: the two official physical d6 are unavailable.");
+                return false;
+            }
+
+            PlayerId actor = localPlayerId;
+            if (!LaunchPhysicalFloorCollapseDice(xAxisDieView, yAxisDieView, actor))
+            {
+                ShowMessage("Collapse Floor rejected: both official d6 must be loose and available.");
+                return false;
+            }
+
+            TrapFloorCollapseResult begin = trapFloorCollapseUseCase.Begin(
+                matchState,
+                new TrapFloorBeginCollapseCommand(CreateCommandContext(actor)));
+            if (!begin.Succeeded)
+            {
+                ShowMessage($"Collapse Floor rejected: {begin.Error}.");
+                return false;
+            }
+
+            physicalFloorCollapsePending = true;
+            physicalFloorCollapseActor = actor;
+            RefreshTrapFloorStatusUi();
+            ShowMessage(
+                $"{FormatPlayerName(actor)} triggered Floorfall; rolling the two official d6 physically.");
+            return true;
+        }
+
+        private void CompletePhysicalFloorCollapseIfSettled()
+        {
+            if (!physicalFloorCollapsePending)
+            {
+                return;
+            }
+
+            if (trapFloorCollapseState == null
+                || trapFloorCollapseUseCase == null
+                || !trapFloorCollapseState.IsCollapsePending
+                || !TryGetOfficialFloorfallDieViews(out DieView xAxisDieView, out DieView yAxisDieView))
+            {
+                physicalFloorCollapsePending = false;
+                physicalFloorCollapseActor = PlayerId.Empty;
+                return;
+            }
+
+            DieState xAxisDie = matchState.Dice[trapFloorTemplate.FloorfallXAxisDieId];
+            DieState yAxisDie = matchState.Dice[trapFloorTemplate.FloorfallYAxisDieId];
+            if (xAxisDie.BaseState.PhysicalState?.Mode != PhysicalObjectMode.Sleeping
+                || yAxisDie.BaseState.PhysicalState?.Mode != PhysicalObjectMode.Sleeping
+                || (ReferenceEquals(
+                        xAxisDie.BaseState.PhysicalState,
+                        trapFloorCollapseState.LastResolvedXAxisPhysicalState)
+                    && ReferenceEquals(
+                        yAxisDie.BaseState.PhysicalState,
+                        trapFloorCollapseState.LastResolvedYAxisPhysicalState)))
+            {
+                return;
+            }
+
+            TrapFloorCollapseResult result = trapFloorCollapseUseCase.ResolveSettled(
+                matchState,
+                new TrapFloorResolveCollapseCommand(
+                    CreateCommandContext(physicalFloorCollapseActor)));
+            if (!result.Succeeded)
+            {
+                physicalFloorCollapsePending = false;
+                physicalFloorCollapseActor = PlayerId.Empty;
+                ShowMessage($"Collapse Floor rejected: {result.Error}.");
+                return;
+            }
+
+            if (result.RerollRequired)
+            {
+                ShowMessage(
+                    $"Floor {result.Roll.Coordinate} is already collapsed; rerolling both official d6.");
+                if (!LaunchPhysicalFloorCollapseDice(
+                        xAxisDieView,
+                        yAxisDieView,
+                        physicalFloorCollapseActor))
+                {
+                    physicalFloorCollapsePending = false;
+                    physicalFloorCollapseActor = PlayerId.Empty;
+                    ShowMessage("Automatic Floorfall reroll could not launch both official d6.");
+                }
+
+                RefreshTrapFloorStatusUi();
+                return;
+            }
+
+            physicalFloorCollapsePending = false;
+            physicalFloorCollapseActor = PlayerId.Empty;
+            ApplyCollapsedFloorPresentation(result.CollapsedFloor.FloorCardId);
+            selectionState?.ClearAll();
+            selectionPresenter?.Refresh();
+            RefreshTrapFloorStatusUi();
+            ShowMessage(
+                $"Floorfall rolled {result.Roll.XAxisResult}/{result.Roll.YAxisResult}; "
+                + $"Floor {result.Roll.Coordinate} collapsed permanently."
+                + (result.BoardExhausted ? " The Board is exhausted." : string.Empty));
+        }
+
+        private bool TryGetOfficialFloorfallDieViews(
+            out DieView xAxisDieView,
+            out DieView yAxisDieView)
+        {
+            xAxisDieView = null;
+            yAxisDieView = null;
+            return trapFloorTemplate != null
+                && TryGetDieView(trapFloorTemplate.FloorfallXAxisDieId, out xAxisDieView)
+                && TryGetDieView(trapFloorTemplate.FloorfallYAxisDieId, out yAxisDieView)
+                && xAxisDieView.PhysicalObject != null
+                && yAxisDieView.PhysicalObject != null
+                && !xAxisDieView.PhysicalObject.IsHeld
+                && !yAxisDieView.PhysicalObject.IsHeld
+                && xAxisDieView.PhysicalObject.OwnsLooseTransform
+                && yAxisDieView.PhysicalObject.OwnsLooseTransform
+                && !xAxisDieView.BoundState.IsUserLocked
+                && !yAxisDieView.BoundState.IsUserLocked;
+        }
+
+        private static bool LaunchPhysicalFloorCollapseDice(
+            DieView xAxisDieView,
+            DieView yAxisDieView,
+            PlayerId actor)
+        {
+            return xAxisDieView.PhysicalObject.Roll(actor)
+                && yAxisDieView.PhysicalObject.Roll(actor);
+        }
+
         public TrapFloorRoundSearchResult SearchFloormasterDeck()
         {
             return SearchFloormasterDeck(localPlayerId);
@@ -1263,6 +1420,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             physicalAuthority?.Tick();
             CompletePhysicalFloorfallIfSettled();
+            CompletePhysicalFloorCollapseIfSettled();
             presentationTransitions?.Tick(Time.unscaledDeltaTime);
             RefreshCardContentVisibility();
             if (feedbackHoldUntil > 0f && Time.unscaledTime >= feedbackHoldUntil)
@@ -2507,7 +2665,9 @@ namespace ConsoleCards.Presentation.Prototype
                 runtimeUi.ShowTrapFloorObjective(
                     $"KEYS {trapFloorObjectiveState.CollectedKeyCount} / "
                         + trapFloorObjectiveState.RequiredKeyCount,
-                    trapFloorObjectiveState.IsWon);
+                    CurrentTrapFloorCollapseStatusText(),
+                    trapFloorObjectiveState.IsWon,
+                    BuildTrapFloorCollapseActions());
                 return;
             }
 
@@ -2618,6 +2778,22 @@ namespace ConsoleCards.Presentation.Prototype
                     break;
             }
 
+            return actions;
+        }
+
+        private List<PrototypePopupActionOption> BuildTrapFloorCollapseActions()
+        {
+            List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
+            if (trapFloorCollapseState == null)
+            {
+                return actions;
+            }
+
+            actions.Add(new PrototypePopupActionOption(
+                "Collapse Floor",
+                !trapFloorCollapseState.IsCollapsePending
+                    && !trapFloorCollapseState.IsBoardExhausted,
+                () => BeginPhysicalFloorCollapse()));
             return actions;
         }
 
@@ -3538,7 +3714,9 @@ namespace ConsoleCards.Presentation.Prototype
 
             TabletopObjectId targetCardId = contextMenuCardId;
             List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
-            if (!floorCard.IsRevealed)
+            bool isCollapsed = trapFloorCollapseState != null
+                && trapFloorCollapseState.IsCollapsed(targetCardId);
+            if (!floorCard.IsRevealed && !isCollapsed)
             {
                 actions.Add(new PrototypePopupActionOption(
                     "Search / Reveal",
@@ -3576,7 +3754,9 @@ namespace ConsoleCards.Presentation.Prototype
             runtimeUi.ShowContextMenu(
                 contextMenuAnchorScreenPosition,
                 $"FLOOR {floorCard.Coordinate}",
-                floorCard.IsRevealed
+                isCollapsed
+                    ? $"COLLAPSED HOLE — Floor {floorCard.Coordinate} is permanently unusable."
+                    : floorCard.IsRevealed
                     ? FloorCardContextDescription(floorCard)
                     : "MYSTERY — content is hidden until Search / Reveal is accepted.",
                 actions,
@@ -3895,6 +4075,29 @@ namespace ConsoleCards.Presentation.Prototype
                     targetCardId,
                     out TrapFloorFloorCardState floorCard))
             {
+                if (trapFloorCollapseState != null
+                    && trapFloorCollapseState.IsCollapsed(targetCardId))
+                {
+                    Color holeColor = new Color(0.025f, 0.03f, 0.04f);
+                    model = new PrototypeCardInspectModel(
+                        $"Collapsed Floor {floorCard.Coordinate} | {targetCardId}",
+                        card.Face,
+                        new PrototypeCardInspectSideModel(
+                            "HOLE",
+                            $"Floor {floorCard.Coordinate} is permanently collapsed and unusable.",
+                            null,
+                            holeColor,
+                            Color.white),
+                        new PrototypeCardInspectSideModel(
+                            "HOLE",
+                            $"Floor {floorCard.Coordinate} is permanently collapsed and unusable.",
+                            null,
+                            holeColor,
+                            Color.white),
+                        false);
+                    return true;
+                }
+
                 TrapFloorActivityEntry revealActivity = activeFloorRevealActivity != null
                     && activeFloorRevealActivity.FloorCardId == targetCardId
                         ? activeFloorRevealActivity
@@ -4841,9 +5044,17 @@ namespace ConsoleCards.Presentation.Prototype
         private void BuildTrapFloorRevealRuntime()
         {
             trapFloorActivityFeed = new TrapFloorActivityFeedState(matchState.Id);
+            trapFloorCollapseState = new TrapFloorCollapseState(
+                matchState.Id,
+                trapFloorTemplate.FloorCardIds.Count);
+            trapFloorCollapseUseCase = new TrapFloorCollapseUseCase(
+                trapFloorTemplate,
+                trapFloorCollapseState,
+                trapFloorActivityFeed);
             trapFloorRevealFloorUseCase = new TrapFloorRevealFloorUseCase(
                 trapFloorTemplate,
-                trapFloorActivityFeed);
+                trapFloorActivityFeed,
+                trapFloorCollapseState);
             trapFloorObjectiveState = new TrapFloorObjectiveState(
                 matchState.Id,
                 trapFloorTemplate.Stage03Configuration.RequiredKeyCount);
@@ -6547,21 +6758,34 @@ namespace ConsoleCards.Presentation.Prototype
                 ? new Color(0.58f, 0.88f, 0.82f)
                 : new Color(0.95f, 0.88f, 0.42f);
             string frontLabel = label;
+            string backLabel = isFloorCard ? "MYSTERY" : visualReferences.BackLabel.text;
+            Color backColor = new Color(0.10f, 0.19f, 0.42f);
             if (isFloorCard
                 && trapFloorTemplate.TryGetFloorCardState(
                     matchState,
                     card.BaseState.Id,
                     out TrapFloorFloorCardState floorCard))
             {
-                frontColor = TrapFloorContentColor(floorCard.Content.Category);
-                frontLabel = $"{floorCard.Content.Category.ToString().ToUpperInvariant()}\n"
-                    + floorCard.Content.DisplayName;
+                if (trapFloorCollapseState != null
+                    && trapFloorCollapseState.IsCollapsed(card.BaseState.Id))
+                {
+                    frontColor = new Color(0.025f, 0.03f, 0.04f);
+                    backColor = frontColor;
+                    frontLabel = $"HOLE\n{floorCard.Coordinate}";
+                    backLabel = frontLabel;
+                }
+                else
+                {
+                    frontColor = TrapFloorContentColor(floorCard.Content.Category);
+                    frontLabel = $"{floorCard.Content.Category.ToString().ToUpperInvariant()}\n"
+                        + floorCard.Content.DisplayName;
+                }
             }
 
             ApplyCardColor(
                 visualReferences.FaceUpRenderer,
                 frontColor);
-            ApplyCardColor(visualReferences.FaceDownRenderer, new Color(0.10f, 0.19f, 0.42f));
+            ApplyCardColor(visualReferences.FaceDownRenderer, backColor);
             ConfigurePrototypeLabel(
                 visualReferences.FrontLabel,
                 frontLabel,
@@ -6571,7 +6795,7 @@ namespace ConsoleCards.Presentation.Prototype
                 TrapFloorCardLabelFontSize);
             ConfigurePrototypeLabel(
                 visualReferences.BackLabel,
-                isFloorCard ? "MYSTERY" : visualReferences.BackLabel.text,
+                backLabel,
                 TrapFloorCardBackLabelCharacterSize,
                 TrapFloorCardLabelFontSize);
         }
@@ -6765,6 +6989,16 @@ namespace ConsoleCards.Presentation.Prototype
                     case TrapFloorActivityKind.WonGame:
                         line = $"{FormatPlayerName(entry.ActorPlayerId)} escaped at Floor {entry.Coordinate}";
                         break;
+                    case TrapFloorActivityKind.TriggeredFloorfall:
+                        line = $"{FormatPlayerName(entry.ActorPlayerId)} triggered Floorfall";
+                        break;
+                    case TrapFloorActivityKind.RolledFloorfall:
+                        line = $"{FormatPlayerName(entry.ActorPlayerId)} rolled "
+                            + $"{entry.XAxisResult}/{entry.YAxisResult} for Floor {entry.Coordinate}";
+                        break;
+                    case TrapFloorActivityKind.CollapsedFloor:
+                        line = $"Floor {entry.Coordinate} collapsed";
+                        break;
                     default:
                         line = string.Empty;
                         break;
@@ -6786,6 +7020,53 @@ namespace ConsoleCards.Presentation.Prototype
             string keys =
                 $"KEYS {trapFloorObjectiveState.CollectedKeyCount} / {trapFloorObjectiveState.RequiredKeyCount}";
             return trapFloorObjectiveState.IsWon ? $"{keys} | VICTORY" : keys;
+        }
+
+        private string CurrentTrapFloorCollapseStatusText()
+        {
+            if (trapFloorCollapseState == null)
+            {
+                return string.Empty;
+            }
+
+            TrapFloorCollapseRollState roll = trapFloorCollapseState.LastRoll;
+            if (trapFloorCollapseState.IsBoardExhausted)
+            {
+                return $"USABLE FLOORS 0 / {trapFloorCollapseState.TotalFloorCount} | BOARD EXHAUSTED";
+            }
+
+            if (trapFloorCollapseState.IsCollapsePending)
+            {
+                return roll != null && roll.RequiredReroll
+                    ? $"FLOORFALL {roll.XAxisResult}/{roll.YAxisResult}: ALREADY A HOLE — REROLLING"
+                    : "FLOORFALL: ROLLING 2d6";
+            }
+
+            string usable = $"USABLE FLOORS {trapFloorCollapseState.UsableFloorCount}"
+                + $" / {trapFloorCollapseState.TotalFloorCount}";
+            return roll == null
+                ? usable
+                : $"{usable} | LAST {roll.XAxisResult}/{roll.YAxisResult} → {roll.Coordinate}";
+        }
+
+        private void ApplyCollapsedFloorPresentation(TabletopObjectId floorCardId)
+        {
+            if (!matchState.Cards.TryGetValue(floorCardId, out CardInstanceState card)
+                || !TryGetCardVisualReferences(floorCardId, out PrototypeCardVisualReferences visualReferences))
+            {
+                return;
+            }
+
+            string label = labelsByCardId.TryGetValue(floorCardId, out string configuredLabel)
+                ? configuredLabel
+                : "FLOOR";
+            ConfigureCardVisuals(visualReferences, card, label);
+            visualReferences.SetCardContentVisible(true);
+            visualReferences.CardView.ApplyAcceptedState();
+            if (inspectedCardId == floorCardId)
+            {
+                CloseCardInspect();
+            }
         }
 
         private int CurrentFloorCardCount()

@@ -78,8 +78,12 @@ namespace ConsoleCards.Presentation.UI
         private readonly List<PrototypePopupActionRowView> actionRows =
             new List<PrototypePopupActionRowView>();
         private float expandedHeight;
+        private bool objectiveLayoutCaptured;
+        private Vector2 expandedActionsTitlePosition;
+        private Vector2 expandedActionsPosition;
+        private Vector2 expandedActionsSize;
 
-        private const float ObjectivePanelHeight = 116f;
+        private const float ObjectivePanelHeight = 232f;
 
         public void ValidateReferences()
         {
@@ -116,6 +120,7 @@ namespace ConsoleCards.Presentation.UI
 
             ValidateReferences();
             gameObject.SetActive(true);
+            RestoreExpandedActionLayout();
             SetCompact(false);
             roundLabel.text = status.Round;
             phaseLabel.text = status.Phase;
@@ -139,8 +144,17 @@ namespace ConsoleCards.Presentation.UI
             BindActions(actions);
         }
 
-        public void ShowObjective(string keyProgress, bool isWon)
+        public void ShowObjective(
+            string keyProgress,
+            string collapseStatus,
+            bool isWon,
+            IReadOnlyList<PrototypePopupActionOption> actions)
         {
+            if (actions == null)
+            {
+                throw new ArgumentNullException(nameof(actions));
+            }
+
             ValidateReferences();
             gameObject.SetActive(true);
             SetCompact(true);
@@ -148,14 +162,16 @@ namespace ConsoleCards.Presentation.UI
             roundLabel.text = keyProgress ?? string.Empty;
             phaseLabel.gameObject.SetActive(isWon);
             phaseLabel.text = isWon ? "VICTORY" : string.Empty;
-            searchProgressLabel.gameObject.SetActive(false);
+            searchProgressLabel.gameObject.SetActive(!string.IsNullOrWhiteSpace(collapseStatus));
+            searchProgressLabel.text = collapseStatus ?? string.Empty;
             detailLabel.gameObject.SetActive(false);
             containerCountsLabel.gameObject.SetActive(false);
             floorfallPanel.SetActive(false);
-            actionsTitle.SetActive(false);
-            actionsRoot.gameObject.SetActive(false);
+            ConfigureObjectiveActionLayout();
+            actionsTitle.SetActive(actions.Count > 0);
+            actionsRoot.gameObject.SetActive(actions.Count > 0);
             actionHelpLabel.gameObject.SetActive(false);
-            UnbindActions();
+            BindActions(actions);
         }
 
         public void Hide()
@@ -217,6 +233,64 @@ namespace ConsoleCards.Presentation.UI
             Vector2 size = rectTransform.sizeDelta;
             size.y = compact ? ObjectivePanelHeight : expandedHeight;
             rectTransform.sizeDelta = size;
+        }
+
+        private void ConfigureObjectiveActionLayout()
+        {
+            CaptureExpandedActionLayout();
+            RectTransform titleRect = actionsTitle.transform as RectTransform;
+            RectTransform actionsRect = actionsRoot as RectTransform;
+            if (titleRect != null)
+            {
+                titleRect.anchoredPosition = new Vector2(0f, -142f);
+            }
+
+            if (actionsRect != null)
+            {
+                actionsRect.anchoredPosition = new Vector2(0f, -166f);
+                actionsRect.sizeDelta = new Vector2(340f, 56f);
+            }
+        }
+
+        private void RestoreExpandedActionLayout()
+        {
+            if (!objectiveLayoutCaptured)
+            {
+                return;
+            }
+
+            RectTransform titleRect = actionsTitle.transform as RectTransform;
+            RectTransform actionsRect = actionsRoot as RectTransform;
+            if (titleRect != null)
+            {
+                titleRect.anchoredPosition = expandedActionsTitlePosition;
+            }
+
+            if (actionsRect != null)
+            {
+                actionsRect.anchoredPosition = expandedActionsPosition;
+                actionsRect.sizeDelta = expandedActionsSize;
+            }
+        }
+
+        private void CaptureExpandedActionLayout()
+        {
+            if (objectiveLayoutCaptured)
+            {
+                return;
+            }
+
+            RectTransform titleRect = actionsTitle.transform as RectTransform;
+            RectTransform actionsRect = actionsRoot as RectTransform;
+            if (titleRect == null || actionsRect == null)
+            {
+                return;
+            }
+
+            expandedActionsTitlePosition = titleRect.anchoredPosition;
+            expandedActionsPosition = actionsRect.anchoredPosition;
+            expandedActionsSize = actionsRect.sizeDelta;
+            objectiveLayoutCaptured = true;
         }
 
         private void OnDestroy()

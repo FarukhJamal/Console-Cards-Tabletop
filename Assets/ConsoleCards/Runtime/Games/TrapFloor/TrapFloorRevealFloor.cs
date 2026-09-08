@@ -15,6 +15,9 @@ namespace ConsoleCards.Games.TrapFloor
         RevealedFloorContent = 1,
         ClaimedKey = 2,
         WonGame = 3,
+        TriggeredFloorfall = 4,
+        RolledFloorfall = 5,
+        CollapsedFloor = 6,
     }
 
     /// <summary>
@@ -32,6 +35,37 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorCoordinate coordinate,
             TrapFloorActivityKind kind,
             TrapFloorFloorContentDefinition content)
+            : this(
+                sequence,
+                matchId,
+                acceptedRevision,
+                actorPlayerId,
+                floorCardId,
+                coordinate,
+                true,
+                kind,
+                content,
+                TabletopObjectId.Empty,
+                TabletopObjectId.Empty,
+                null,
+                null)
+        {
+        }
+
+        internal TrapFloorActivityEntry(
+            long sequence,
+            MatchId matchId,
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TabletopObjectId floorCardId,
+            TrapFloorCoordinate coordinate,
+            bool hasCoordinate,
+            TrapFloorActivityKind kind,
+            TrapFloorFloorContentDefinition content,
+            TabletopObjectId xAxisDieId,
+            TabletopObjectId yAxisDieId,
+            int? xAxisResult,
+            int? yAxisResult)
         {
             if (sequence < 1)
             {
@@ -53,9 +87,29 @@ namespace ConsoleCards.Games.TrapFloor
                 throw new ArgumentException("Activity actor Player ID cannot be empty.", nameof(actorPlayerId));
             }
 
-            if (floorCardId.IsEmpty)
+            bool floorfallActivity = kind == TrapFloorActivityKind.TriggeredFloorfall
+                || kind == TrapFloorActivityKind.RolledFloorfall
+                || kind == TrapFloorActivityKind.CollapsedFloor;
+            if (floorCardId.IsEmpty && kind != TrapFloorActivityKind.TriggeredFloorfall)
             {
                 throw new ArgumentException("Activity Floor Card ID cannot be empty.", nameof(floorCardId));
+            }
+
+            if (floorfallActivity && (xAxisDieId.IsEmpty || yAxisDieId.IsEmpty || xAxisDieId == yAxisDieId))
+            {
+                throw new ArgumentException("Floorfall activity requires two distinct official Die IDs.");
+            }
+
+            if ((kind == TrapFloorActivityKind.RolledFloorfall
+                    || kind == TrapFloorActivityKind.CollapsedFloor)
+                && (!hasCoordinate || !xAxisResult.HasValue || !yAxisResult.HasValue))
+            {
+                throw new ArgumentException("Resolved Floorfall activity requires Dice results and a Floor coordinate.");
+            }
+
+            if (!floorfallActivity && content == null)
+            {
+                throw new ArgumentNullException(nameof(content));
             }
 
             if (!Enum.IsDefined(typeof(TrapFloorActivityKind), kind))
@@ -69,10 +123,15 @@ namespace ConsoleCards.Games.TrapFloor
             ActorPlayerId = actorPlayerId;
             FloorCardId = floorCardId;
             Coordinate = coordinate;
+            HasCoordinate = hasCoordinate;
             Kind = kind;
-            ContentDefinitionId = (content ?? throw new ArgumentNullException(nameof(content))).Id;
-            ContentCategory = content.Category;
-            ContentName = content.DisplayName;
+            ContentDefinitionId = content?.Id ?? ObjectDefinitionId.Empty;
+            ContentCategory = content?.Category ?? default;
+            ContentName = content?.DisplayName ?? string.Empty;
+            XAxisDieId = xAxisDieId;
+            YAxisDieId = yAxisDieId;
+            XAxisResult = xAxisResult;
+            YAxisResult = yAxisResult;
         }
 
         public long Sequence { get; }
@@ -87,6 +146,8 @@ namespace ConsoleCards.Games.TrapFloor
 
         public TrapFloorCoordinate Coordinate { get; }
 
+        public bool HasCoordinate { get; }
+
         public TrapFloorActivityKind Kind { get; }
 
         public ObjectDefinitionId ContentDefinitionId { get; }
@@ -94,6 +155,14 @@ namespace ConsoleCards.Games.TrapFloor
         public TrapFloorFloorContentCategory ContentCategory { get; }
 
         public string ContentName { get; }
+
+        public TabletopObjectId XAxisDieId { get; }
+
+        public TabletopObjectId YAxisDieId { get; }
+
+        public int? XAxisResult { get; }
+
+        public int? YAxisResult { get; }
     }
 
     /// <summary>
@@ -174,6 +243,69 @@ namespace ConsoleCards.Games.TrapFloor
             return entry;
         }
 
+        internal TrapFloorActivityEntry RecordFloorfallTriggered(
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TabletopObjectId xAxisDieId,
+            TabletopObjectId yAxisDieId)
+        {
+            TrapFloorActivityEntry entry = CreateFloorfallEntry(
+                acceptedRevision,
+                actorPlayerId,
+                TrapFloorActivityKind.TriggeredFloorfall,
+                null,
+                xAxisDieId,
+                yAxisDieId,
+                null,
+                null);
+            entries.Add(entry);
+            return entry;
+        }
+
+        internal TrapFloorActivityEntry RecordFloorfallRoll(
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TrapFloorFloorCardState floorCard,
+            TabletopObjectId xAxisDieId,
+            TabletopObjectId yAxisDieId,
+            int xAxisResult,
+            int yAxisResult)
+        {
+            TrapFloorActivityEntry entry = CreateFloorfallEntry(
+                acceptedRevision,
+                actorPlayerId,
+                TrapFloorActivityKind.RolledFloorfall,
+                floorCard,
+                xAxisDieId,
+                yAxisDieId,
+                xAxisResult,
+                yAxisResult);
+            entries.Add(entry);
+            return entry;
+        }
+
+        internal TrapFloorActivityEntry RecordFloorCollapsed(
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TrapFloorFloorCardState floorCard,
+            TabletopObjectId xAxisDieId,
+            TabletopObjectId yAxisDieId,
+            int xAxisResult,
+            int yAxisResult)
+        {
+            TrapFloorActivityEntry entry = CreateFloorfallEntry(
+                acceptedRevision,
+                actorPlayerId,
+                TrapFloorActivityKind.CollapsedFloor,
+                floorCard,
+                xAxisDieId,
+                yAxisDieId,
+                xAxisResult,
+                yAxisResult);
+            entries.Add(entry);
+            return entry;
+        }
+
         public void Clear()
         {
             entries.Clear();
@@ -194,6 +326,32 @@ namespace ConsoleCards.Games.TrapFloor
                 floorCard.Coordinate,
                 kind,
                 floorCard.Content);
+        }
+
+        private TrapFloorActivityEntry CreateFloorfallEntry(
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TrapFloorActivityKind kind,
+            TrapFloorFloorCardState floorCard,
+            TabletopObjectId xAxisDieId,
+            TabletopObjectId yAxisDieId,
+            int? xAxisResult,
+            int? yAxisResult)
+        {
+            return new TrapFloorActivityEntry(
+                entries.Count + 1L,
+                MatchId,
+                acceptedRevision,
+                actorPlayerId,
+                floorCard?.ObjectId ?? TabletopObjectId.Empty,
+                floorCard?.Coordinate ?? default,
+                floorCard != null,
+                kind,
+                floorCard?.Content,
+                xAxisDieId,
+                yAxisDieId,
+                xAxisResult,
+                yAxisResult);
         }
     }
 
@@ -226,6 +384,7 @@ namespace ConsoleCards.Games.TrapFloor
         ActivityFeedMismatch,
         ActorNotParticipating,
         FloorCardMissingOrInvalid,
+        FloorCollapsed,
         FloorAlreadyRevealed,
         RevisionOverflow,
     }
@@ -301,13 +460,23 @@ namespace ConsoleCards.Games.TrapFloor
     {
         private readonly TrapFloorTemplateDefinition template;
         private readonly TrapFloorActivityFeedState activityFeed;
+        private readonly TrapFloorCollapseState collapseState;
 
         public TrapFloorRevealFloorUseCase(
             TrapFloorTemplateDefinition template,
             TrapFloorActivityFeedState activityFeed)
+            : this(template, activityFeed, null)
+        {
+        }
+
+        public TrapFloorRevealFloorUseCase(
+            TrapFloorTemplateDefinition template,
+            TrapFloorActivityFeedState activityFeed,
+            TrapFloorCollapseState collapseState)
         {
             this.template = template ?? throw new ArgumentNullException(nameof(template));
             this.activityFeed = activityFeed ?? throw new ArgumentNullException(nameof(activityFeed));
+            this.collapseState = collapseState;
         }
 
         public TrapFloorRevealFloorResult Execute(
@@ -353,6 +522,19 @@ namespace ConsoleCards.Games.TrapFloor
             if (!template.TryGetFloorCardState(matchState, command.FloorCardId, out TrapFloorFloorCardState floorCard))
             {
                 return Failure(CommandResultStatus.Rejected, TrapFloorRevealFloorError.FloorCardMissingOrInvalid);
+            }
+
+            if (collapseState != null)
+            {
+                if (collapseState.MatchId != matchState.Id)
+                {
+                    return Failure(CommandResultStatus.Rejected, TrapFloorRevealFloorError.MatchTemplateMismatch);
+                }
+
+                if (collapseState.IsCollapsed(command.FloorCardId))
+                {
+                    return Failure(CommandResultStatus.Rejected, TrapFloorRevealFloorError.FloorCollapsed);
+                }
             }
 
             if (floorCard.IsRevealed)
