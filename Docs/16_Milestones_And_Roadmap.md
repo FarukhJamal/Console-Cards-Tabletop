@@ -1,7 +1,7 @@
 # Console Cards — Milestones and Roadmap
 
 **Document ID:** 16_Milestones_And_Roadmap  
-**Version:** 1.11
+**Version:** 1.12
 
 **Status:** Approved
 **Planning basis:** One developer, approximately 30–35 focused hours per week.
@@ -160,13 +160,13 @@ The approved delivery direction is:
 
 > **Completed shared foundations -> finish the shared physical tabletop capabilities Trap Floor needs -> G1 Trap Floor manually playable -> Trap Floor polishing pass -> G2 Super Leroy Sisters manually playable -> P1 remaining shared Phase 1 work and closure -> future persistence/multiplayer milestones.**
 
-Completed history is preserved: M4 Player Layout + Central Play Area, M4.1 minimum Game Template support, Trap Floor tabletop/Floorfall targeting, Session Entry, Empty/Custom Table, Component Toolbox, generic Dice, Floormaster Search lifecycle assistance, and prototype round/phase orchestration. The assisted Trap Floor systems are retained as optional/prototype infrastructure; deeper rules-engine work is not a prerequisite for G1.
+Completed history is preserved: M4 Player Layout + Central Play Area, M4.1 minimum Game Template support, Trap Floor tabletop/Floor-coordinate targeting, Session Entry, Empty/Custom Table, Component Toolbox, generic Dice, legacy Floormaster Search lifecycle assistance, and legacy prototype round/phase orchestration. The latter two systems reflect a superseded Trap Floor build; they are not current Game-rule authority or prerequisites for G1.
 
 ### ADR-025 Physical-Object Integration Gate
 
 **Status:** Initial ADR-025 implementation is present; compilation, automated execution, and Editor/manual physics verification remain pending. No physical-play completion claim is made. Existing M2 interaction and generic Dice completion evidence describes the previous controlled-plane/RNG model, not this physical replacement.
 
-The initial integration uses separate immutable physical state and per-object physical revisions, a shared local authority/Rigidbody adapter, authored Table/Board colliders registered by `PhysicalTabletopSurface` independently of visual models, and six authored Dice face mappings. New regression tests are added but unexecuted. Existing Floorfall controls launch the two generic physical Dice, wait for settled results, and physically reroll protected corners; assistance no longer overwrites physical Dice with preselected values. Container-body positioning, UI structure, and Game rules remain outside the replacement.
+The initial integration uses separate immutable physical state and per-object physical revisions, a shared local authority/Rigidbody adapter, authored Table/Board colliders registered by `PhysicalTabletopSurface` independently of visual models, and six authored Dice face mappings. New regression tests are added but unexecuted. Existing legacy Floorfall controls launch the two generic physical Dice, wait for settled results, and physically reroll protected corners; this is implementation history, not authority for the current setup/Collapse rules. Container-body positioning, UI structure, and Game rules remain outside the replacement.
 
 This is scoped shared tabletop work within the existing immediate G1 capability priority:
 
@@ -256,7 +256,7 @@ Exit:
 **Authority:** `18_Trap_Floor_Game_Requirements.md`
 **Prerequisite:** M4 and M4.1 are complete. OD-014 still governs which Player-count layouts may be claimed as supported. OD-018 must resolve any missing readable content or physical Component definition needed for Players to know what to do, but it does not require coded execution of those rules. Do not infer missing rules.
 
-**Current status:** The Template-driven tabletop, `6 x 6` Board, authoritative physical `2d6`, Floorfall targeting assistance, direct Empty Table simulator startup, in-simulator Game Template loading, Component Toolbox, Floormaster Search lifecycle assistance, and prototype round/phase orchestration are implemented foundations. Search lifecycle and round orchestration are optional/prototype assistance rather than required core play.
+**Current status:** The Template-driven tabletop, `6 x 6` Board, authoritative physical `2d6`, Floor-coordinate targeting assistance, direct Empty Table simulator startup, in-simulator Game Template loading, and Component Toolbox are implemented foundations. The current Template/content still requires alignment with the latest Russell/Milanote direction. Floormaster Search lifecycle assistance and prototype round/phase orchestration are legacy systems tied to the superseded build, not required core play.
 
 ### Completed Shared Foundation
 
@@ -272,37 +272,41 @@ This history remains complete. It does not make assisted Trap Floor automation m
 
 ### G1 Delivery Focus
 
-Complete Trap Floor as a manually playable Game Template by prioritizing the shared physical capabilities and readable Game content needed for Players to carry out the rules themselves:
+Complete Trap Floor as a manually playable Game Template by prioritizing the shared physical capabilities and readable current Game content needed for Players to carry out the rules themselves:
 
 - Load the approved starting Template through the in-simulator Games / Templates panel.
-- Present the fixed `6 x 6` Floor Card Board and required physical Components readably.
-- Preserve the separate 36-Card Floormaster's Deck composition of 14 Trap, 14 Coin, and 8 Item Cards, with draw-left, discard-right, and exhaustion reshuffle as Player-facing rules.
-- Present the universal Console/Slot setup, Controller Decks, Pawns, shared 50-coin supply, two d6, Rule Cards, Avatar Cards, Mode Cards, Item Slots, and starting poses required by the approved setup.
-- Ensure Players can manually draw, shuffle, flip, reorder, stack, transfer, discard, move Pawns/Tokens/coins, roll/reposition Dice, and move Cards among Hands, table, Consoles, Slots, Decks, Stacks, and other Containers as Trap Floor requires.
-- Provide enough readable Game content and instructions for Players to perform the 10-round `Start -> Search -> Trigger -> Floorfall -> End` loop and apply the approved Easy/Hard, cost, effect, elimination, and win/loss rules socially.
+- Present the fixed `6 x 6` Floor Card Board and current required physical Components readably.
+- Use the latest Milanote card-set structure as the current content reference while leaving unconfirmed counts/content provisional; do not preserve the old 14 Trap + 14 Coin + 8 Item Floormaster Deck as authority.
+- Present the universal Console with Avatar in the Main Slot, without hard-locking other Slot use, Controller Decks, Skill/Ability architecture, Hands, modes, or a round limit.
+- Support `2d6` starting-position setup, orthogonal movement, shared Floor-tile occupancy, and flexible normal movement generally no more than three tiles.
+- Make Search readable and manually usable as flipping/revealing the interacted Floor Card, including Keys, Traps, and other current effects.
+- Support the objective of finding all required Keys and bringing them to the Exit, with loss by Trap failure or running out of usable Floor.
+- Keep Floor Collapse separate from Search: at provisional intervals, `2d6` identifies a Floor that becomes a permanent hole/unusable space.
+- Keep Avatar stats/abilities, exact movement values, Trap costs, Key count, Collapse timing, falling rules, and action economy explicitly provisional.
+- Ensure Players can manually flip, move, stack, transfer, roll/reposition Dice, move Pawns/Tokens, and manipulate current Components as the confirmed flow requires.
 - Keep Reset, Clear Table, and in-simulator Template replacement behavior coherent.
 - Ensure optional assistance never prevents manual play, including after house-rule modification or Component substitution.
 
-The detailed Game Rules remain the intended Trap Floor design, but automatic execution is not G1 scope. Floorfall targeting may remain optional assistance. The Floormaster lifecycle may remain optional/prototype assistance. Prototype round/phase orchestration may remain experimental optional infrastructure.
+The confirmed Game Rules in `18_Trap_Floor_Game_Requirements.md` define the current Trap Floor direction, but automatic execution is not G1 scope. Reusable `2d6` Floor-coordinate targeting may remain optional assistance. The old Floormaster lifecycle and fixed round/phase orchestration may remain as legacy/prototype infrastructure only if they do not block or misrepresent current manual play.
 
 G1 does **not** require:
 
-- full automated Trap, Coin, or Item effects;
-- coded Controller Card or coin economy validation;
+- full automated Floor Card, Trap, Key, or other effects;
+- coded action-cost or economy validation;
 - automatic movement legality;
 - automatic elimination or survival calculation;
 - automatic win/loss evaluation;
-- comprehensive round/phase enforcement; or
+- comprehensive round/action enforcement; or
 - extending the existing prototypes into a complete Trap Floor rules engine.
 
-Do not add a sequential Level Deck, dungeon/room reveal progression, enemies, keys, or exits. Those belong to the superseded Trap Door concept.
+Do not add a sequential Level Deck, dungeon/room reveal progression, or enemies from the superseded Trap Door concept. Keys and the Exit are current Trap Floor concepts under `18_Trap_Floor_Game_Requirements.md`.
 
 Exit:
 
 1. The approved starting Trap Floor Template loads correctly.
 2. The `6 x 6` Board and required physical Components are present and readable.
-3. Players can manipulate the required Cards, Decks, Dice, Pawns, Tokens, Consoles, Slots, and discard areas manually.
-4. Players can read enough Game content and instructions to know what actions to perform.
+3. Players can use `2d6` setup, move orthogonally and share tiles, reveal searched Floor Cards, bring required Keys to the Exit, resolve Traps/effects, and mark permanent Collapse holes manually.
+4. Players can manipulate the current required Cards, Dice, Pawns, Tokens, Consoles, Slots, and other confirmed Components manually.
 5. Generic physical actions required by Trap Floor are functional.
 6. Reset and session behavior are coherent.
 7. Optional assistance does not prevent manual play.
@@ -400,7 +404,7 @@ These remain planned Platform work but are not on the immediate Phase 1 critical
 - M4 is authorized to implement only the confirmed standard four-Player, compact four-Player, and eight-Player authored layouts. OD-014 retains the missing one-to-three and five-to-seven mappings without blocking that confirmed work.
 - OD-015 visibility work and OD-016 marquee/group-landing work remain required before Phase 1 closure but do not block the M4 foundation. An approved Game may pull a necessary subset earlier.
 - Trap Floor and Super Leroy Sisters are separate Game-specific Board types and Game Templates.
-- The superseded Session Entry implementation remains completed history; direct Empty Table startup, in-simulator Template loading, Component Toolbox, generic Dice, Floormaster lifecycle assistance, and prototype Trap Floor round/phase orchestration define the current direction. The latter two remain optional/prototype assistance.
+- The superseded Session Entry implementation remains completed history; direct Empty Table startup, in-simulator Template loading, Component Toolbox, and generic Dice remain current foundations. Floormaster lifecycle assistance and prototype Trap Floor round/phase orchestration are legacy implementation history tied to the superseded Trap Floor build.
 - Empty/Custom Table is a first-class product path, not a debug mode and not dependent on Game-specific Board or rule content.
 - Template-created and toolbox-created components share authoritative Runtime State; a Game Template owns setup/content/layout, not generic component types.
 - New loose Cards/Pawns/Tokens/Dice, including Card batches and duplicates, require valid Table/Board surface hits. Released physical objects may fall off the Table without snap-back; Deck/Stack/Console bodies retain existing non-physical positioning and applicable ADR-024 authored-area rules. Freeform and house-rule play remain available without Game-rule enforcement.

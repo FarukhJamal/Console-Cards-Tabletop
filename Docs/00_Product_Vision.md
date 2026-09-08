@@ -1,7 +1,7 @@
 # Console Cards — Product Vision
 
 **Document ID:** 00_Product_Vision  
-**Version:** 1.8
+**Version:** 1.9
 
 **Status:** Approved
 **Purpose:** Define what Console Cards is, what experience it must create, and which product boundaries must remain stable before architecture and implementation begin.
@@ -105,7 +105,7 @@ System Cards use poker-card proportions. The universal Console is configurable, 
 
 Preserve the Slot-symbol visual language, including the approved newer Milanote revisions: teal Slot-symbol fill, Plus / Diamond / Minus bottom-slot symbols, and nested-shape combinations. Physical reference sizing is approximately 16 mm for Dice, chits, and meeples, and 8 mm for cubes. These are visual/physical authoring references, not a change to Runtime coordinates or physics authority.
 
-ADR-026 records this framework; `17_Layout_Design_Requirements_Matrix.md` traces it separately from Game-specific content. It does not change the approved Trap Floor setup or Floormaster Deck composition.
+ADR-026 records this framework; `17_Layout_Design_Requirements_Matrix.md` traces it separately from Game-specific content. Trap Floor's current Game-specific setup and provisional content direction are governed by `18_Trap_Floor_Game_Requirements.md`.
 
 ---
 

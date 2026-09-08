@@ -1,7 +1,7 @@
 # Console Cards — Non-Goals
 
 **Document ID:** 15_Non_Goals  
-**Version:** 1.4
+**Version:** 1.5
 
 **Status:** Approved
 
@@ -22,9 +22,9 @@ The initial foundation is not building:
 - Full Game-rule automation for Trap Floor or Super Leroy Sisters.
 - Automated Game-rule validation.
 - Automatic victory detection.
-- Mandatory coded Trap/Coin/Item effect execution.
+- Mandatory coded Floor Card, Trap, Key, or other effect execution.
 - Automatic Pawn movement legality.
-- Coded Trap Floor coin-cost/reward enforcement.
+- Coded Trap Floor action-cost/economy enforcement while those values remain provisional.
 - Automatic elimination or survival evaluation.
 - Mandatory round/phase orchestration for official Game play.
 - Universal turn enforcement.

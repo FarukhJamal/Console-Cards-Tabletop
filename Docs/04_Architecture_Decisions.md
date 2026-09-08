@@ -1,7 +1,7 @@
 # Console Cards — Architecture Decisions
 
 **Document ID:** 04_Architecture_Decisions  
-**Version:** 1.9
+**Version:** 1.10
 
 **Status:** Approved with Open Decisions
 
@@ -376,7 +376,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 - A Die records side count and authoritative current/result value and has a Presentation View. Its authored/layout `TabletopPose` remains; loose physical pose/state is separate under ADR-025.
 - Initial common Die options are d4, d6, d8, d10, d12, and d20; no custom-die editor is implied.
 - Roll follows actor request -> authoritative validation -> physical roll -> settled-face resolution -> authoritative pose/value commit under ADR-025. RNG-only result selection with Presentation-only settling is no longer the required model.
-- Trap Floor's two d6 are generic Platform Dice that its Game-specific Floorfall logic interprets as X and Y.
+- Trap Floor's two d6 are generic Platform Dice that its Game-specific setup/Collapse logic may interpret as X and Y.
 - Networking implementation, persistence milestones, and speculative component categories remain deferred. The scoped physical-object system is approved by ADR-025, not covered by the former blanket physics deferral.
 
 ---
@@ -429,7 +429,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 - d4, d6, d8, d10, d12, and d20 each have explicit authored physical face/value mappings, including their result-reading convention. Do not infer values from mesh triangle order or object names.
 - A Roll action physically lifts/throws the Die with randomized impulse and torque; the settled physical orientation determines the result through that mapping. Manual grab/throw uses the same settle/value-resolution path.
 - Commit the settled 3D pose and resolved value to authoritative Die State together. RNG may drive the throw, but no preselected RNG value overrides the settled face.
-- Trap Floor's two d6 remain generic Platform Dice using this same system. Optional Floorfall assistance interprets accepted values without replacing generic Dice physics or changing Game rules.
+- Trap Floor's two d6 remain generic Platform Dice using this same system. Optional Floor-coordinate assistance may interpret accepted values for setup or Collapse without replacing generic Dice physics or changing Game rules.
 
 **Reason:** Real surfaces, collisions, and throws supply physical tabletop behavior while the existing identity, Command, revision, Container, and Match authority boundaries preserve consistent accepted state. Layout authoring remains separate from free 3D simulation.
 
@@ -458,7 +458,7 @@ This file records accepted or proposed Architecture Decision Records. A decision
 - Extends ADR-020. Any fixed six-Slot prototype arrangement is a configuration, not a universal Slot-count requirement. Existing Template arrangements remain valid; this decision does not migrate them.
 - Slot roles, orientation, and symbols belong to authored configuration and Presentation. Their visual design alone does not define Game Rules, capacity, permissions, or new Runtime types.
 - ADR-025 physical interaction, authored Table/Board surface contracts, separate physical state, `TabletopPose` layout coordinates, IDs, Commands, Container membership, and Match authority remain unchanged. Decorative models and symbols do not become gameplay authority.
-- The current Trap Floor Floormaster Deck remains 36 Cards: 14 Trap, 14 Coin, and 8 Item. Older Milanote Trap/Friend/Key/Exit counts are legacy/reference material only, not approved composition or content to import. `18_Trap_Floor_Game_Requirements.md` continues to govern Trap Floor setup and Game Rules.
+- The former Trap Floor 14 Trap + 14 Coin + 8 Item Floormaster Deck and 50-coin setup are legacy/reference material, not current authority. The latest Russell/Milanote direction expressly includes Keys and an Exit while leaving unconfirmed counts/content provisional. `18_Trap_Floor_Game_Requirements.md` governs the current Trap Floor setup and Game Rules.
 
 **Approval boundary:** This approves visual/platform rules only. It is not evidence that current assets or Runtime already support every configuration, and does not authorize runtime, prefab, scene, physics-tuning, or Game-content changes in this documentation task. Exact artwork geometry, a numeric teal color value, and manufacturing dimensions are not specified by this summary.
 
