@@ -1020,7 +1020,7 @@ namespace ConsoleCards.Presentation.Prototype
                 undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
                 Debug.Log(
                     $"[Undo] Restored state index {undoHistory.CurrentStateIndex}; "
-                    + $"remaining transactions={undoHistory.TransactionCount}; "
+                    + $"history states={undoHistory.CurrentStateIndex}/{undoHistory.TransactionCount}; "
                     + $"objects={matchState.ObjectCount}.",
                     this);
                 ShowActiveSessionUi();
@@ -1030,6 +1030,72 @@ namespace ConsoleCards.Presentation.Prototype
             catch (Exception exception)
             {
                 Debug.LogError($"Undo Presentation rebuild failed: {exception.Message}", this);
+                throw;
+            }
+            finally
+            {
+                pendingRestoredTrapFloorState = null;
+                rebuildingFromUndo = false;
+                RefreshUndoUi();
+            }
+        }
+
+        public bool RedoLatestAction()
+        {
+            return RedoLatestAction(localPlayerId);
+        }
+
+        public bool RedoLatestAction(PlayerId requestingPlayerId)
+        {
+            if (!IsActiveSessionPlayer(requestingPlayerId)
+                || !CanRedoCurrentAction()
+                || !undoHistory.TryPeekRedo(
+                    out PrototypeSessionUndoSnapshot snapshot,
+                    out ActiveSessionUndoTransaction transaction))
+            {
+                return false;
+            }
+
+            long redoRevision;
+            try
+            {
+                redoRevision = checked(matchState.Revision + 1L);
+            }
+            catch (OverflowException)
+            {
+                ShowMessage("Redo rejected: Match revision cannot advance.");
+                return false;
+            }
+
+            MatchState replacement;
+            TrapFloorSessionState restoredTrapFloor = null;
+            try
+            {
+                replacement = snapshot.Match.Restore(redoRevision);
+                restoredTrapFloor = snapshot.TrapFloor?.Restore();
+            }
+            catch (Exception exception)
+            {
+                ShowMessage($"Redo rejected: {exception.Message}");
+                return false;
+            }
+
+            rebuildingFromUndo = true;
+            try
+            {
+                Shutdown(true);
+                activeSession.ReplaceCurrentMatch(replacement);
+                pendingRestoredTrapFloorState = restoredTrapFloor;
+                InitializeActiveSession(false);
+                undoHistory.CommitRedo();
+                undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
+                ShowActiveSessionUi();
+                ShowMessage($"Redid {transaction.Description}.");
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError($"Redo Presentation rebuild failed: {exception.Message}", this);
                 throw;
             }
             finally
@@ -1055,12 +1121,35 @@ namespace ConsoleCards.Presentation.Prototype
             if (!IsInitialized
                 || keyboard == null
                 || !keyboard.zKey.wasPressedThisFrame
-                || !(keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed))
+                || !(keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed)
+                || keyboard.leftShiftKey.isPressed
+                || keyboard.rightShiftKey.isPressed)
             {
                 return false;
             }
 
             UndoLatestAction();
+            return true;
+        }
+
+        private bool HandleRedoShortcut()
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (!IsInitialized || keyboard == null)
+            {
+                return false;
+            }
+
+            bool controlPressed = keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed;
+            bool shiftPressed = keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed;
+            bool redoPressed = keyboard.yKey.wasPressedThisFrame
+                || (shiftPressed && keyboard.zKey.wasPressedThisFrame);
+            if (!controlPressed || !redoPressed)
+            {
+                return false;
+            }
+
+            RedoLatestAction();
             return true;
         }
 
@@ -1070,6 +1159,14 @@ namespace ConsoleCards.Presentation.Prototype
                 && !rebuildingFromUndo
                 && !undoTransactionInProgress
                 && undoHistory.CanUndo;
+        }
+
+        private bool CanRedoCurrentAction()
+        {
+            return IsInitialized
+                && !rebuildingFromUndo
+                && !undoTransactionInProgress
+                && undoHistory.CanRedo;
         }
 
         private void BeginUndoTrackingForCurrentMatch()
@@ -1199,10 +1296,14 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void RefreshUndoUi()
         {
-            ActiveSessionUndoTransaction next = undoHistory.NextUndo;
+            ActiveSessionUndoTransaction nextUndo = undoHistory.NextUndo;
             runtimeUi?.SetUndoState(
                 CanUndoCurrentAction(),
-                next == null ? "Undo" : $"Undo: {next.Description}");
+                nextUndo == null ? "Undo" : $"Undo: {nextUndo.Description}");
+            ActiveSessionUndoTransaction nextRedo = undoHistory.NextRedo;
+            runtimeUi?.SetRedoState(
+                CanRedoCurrentAction(),
+                nextRedo == null ? "Redo" : $"Redo: {nextRedo.Description}");
         }
 
         public TrapFloorRoundActionResult CompleteTrapFloorStart()
@@ -1671,6 +1772,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void Update()
         {
+            if (HandleRedoShortcut()) return;
             if (HandleUndoShortcut()) return;
             physicalAuthority?.Tick();
             CompletePhysicalFloorfallIfSettled();
@@ -2886,6 +2988,7 @@ namespace ConsoleCards.Presentation.Prototype
             runtimeUi.ShowActiveSession(
                 sessionTitle,
                 HandleUndoButtonPressed,
+                HandleRedoButtonPressed,
                 ResetPrototype,
                 ToggleGameTemplatesPanel,
                 CurrentStatusText(),
@@ -2904,6 +3007,11 @@ namespace ConsoleCards.Presentation.Prototype
         private void HandleUndoButtonPressed()
         {
             UndoLatestAction();
+        }
+
+        private void HandleRedoButtonPressed()
+        {
+            RedoLatestAction();
         }
 
         private void RefreshRuntimeStatusUi()

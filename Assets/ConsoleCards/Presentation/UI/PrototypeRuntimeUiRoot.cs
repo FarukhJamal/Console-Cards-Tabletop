@@ -115,6 +115,7 @@ namespace ConsoleCards.Presentation.UI
         public void ShowActiveSession(
             string sessionTitle,
             Action undo,
+            Action redo,
             Action resetSession,
             Action openGameTemplates,
             string statusMessage,
@@ -126,7 +127,7 @@ namespace ConsoleCards.Presentation.UI
             HideGameTemplatesPanel();
             CloseTabletopPopup();
             activeSessionHudLayer.SetActive(true);
-            activeSessionToolbarView.Bind(sessionTitle, undo, resetSession, openGameTemplates);
+            activeSessionToolbarView.Bind(sessionTitle, undo, redo, resetSession, openGameTemplates);
             componentToolboxView.Bind(componentToolboxBindings, CloseTabletopPopup);
             interactionGuideView.Bind();
             trapFloorHudView?.Hide();
@@ -139,6 +140,14 @@ namespace ConsoleCards.Presentation.UI
             if (activeSessionToolbarView != null)
             {
                 activeSessionToolbarView.SetUndoState(enabled, label);
+            }
+        }
+
+        public void SetRedoState(bool enabled, string label)
+        {
+            if (activeSessionToolbarView != null)
+            {
+                activeSessionToolbarView.SetRedoState(enabled, label);
             }
         }
 
