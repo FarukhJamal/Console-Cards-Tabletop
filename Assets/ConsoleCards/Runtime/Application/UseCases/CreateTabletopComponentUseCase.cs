@@ -48,7 +48,8 @@ namespace ConsoleCards.Application.UseCases
             TabletopComponentKind componentKind,
             TabletopPose initialPose,
             int dieSideCount = 0,
-            CardFace initialCardFace = CardFace.FaceUp)
+            CardFace initialCardFace = CardFace.FaceUp,
+            AuthoritativeActionKind actionKind = AuthoritativeActionKind.CreateComponent)
         {
             if (!IsFinite(initialPose.Position.X)
                 || !IsFinite(initialPose.Position.Y)
@@ -62,6 +63,7 @@ namespace ConsoleCards.Application.UseCases
             InitialPose = initialPose;
             DieSideCount = dieSideCount;
             InitialCardFace = initialCardFace;
+            ActionKind = actionKind;
         }
 
         public CommandContext Context { get; }
@@ -69,6 +71,7 @@ namespace ConsoleCards.Application.UseCases
         public TabletopPose InitialPose { get; }
         public int DieSideCount { get; }
         public CardFace InitialCardFace { get; }
+        public AuthoritativeActionKind ActionKind { get; }
 
         private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
@@ -250,7 +253,8 @@ namespace ConsoleCards.Application.UseCases
                         ObjectVisibility.Public,
                         0),
                     new ContainerPlacementState(containerId, request.InitialPose, surfaceHeight));
-                long revision = matchState.AdvanceRevision();
+                long revision = matchState.AdvanceRevision(
+                    request.Context.Id, request.Context.RequestedByPlayerId, request.ActionKind);
                 return CreateTabletopComponentResult.ContainerAccepted(
                     revision,
                     request.ComponentKind,
@@ -293,7 +297,8 @@ namespace ConsoleCards.Application.UseCases
                 matchState.AddPlacedConsole(
                     new PlacedConsoleState(consoleId, request.InitialPose, console, surfaceHeight),
                     slots);
-                long revision = matchState.AdvanceRevision();
+                long revision = matchState.AdvanceRevision(
+                    request.Context.Id, request.Context.RequestedByPlayerId, request.ActionKind);
                 return CreateTabletopComponentResult.ConsoleAccepted(revision, consoleId);
             }
 
@@ -353,7 +358,8 @@ namespace ConsoleCards.Application.UseCases
                     throw new InvalidOperationException("Validated component kind is unsupported.");
             }
 
-            long acceptedRevision = matchState.AdvanceRevision();
+            long acceptedRevision = matchState.AdvanceRevision(
+                request.Context.Id, request.Context.RequestedByPlayerId, request.ActionKind);
             return CreateTabletopComponentResult.ObjectAccepted(
                 acceptedRevision,
                 request.ComponentKind,

@@ -1,6 +1,6 @@
 # Console Cards — Requirements Traceability
 
-**Version:** 1.9
+**Version:** 1.10
 
 **Status:** Approved
 
@@ -51,6 +51,7 @@ The source, scope, repository status, milestone, and unresolved-decision trace f
 | PR-041 | New player-initiated actions preserve actor context and authoritative request boundaries without networking packages | Application + Multiplayer boundary | Immediate shared prerequisite onward; transport remains M6/M7 | No implicit Seat-0/local-user assumptions; request validation and assembly/dependency audit |
 | PR-042 | Game-specific automation is optional assistance and cannot disable underlying Freeform Actions | Optional Game modules + Presentation | G1 onward | Manual play remains possible with assistance disabled or after house-rule setup changes; assistance may fail clearly without blocking generic manipulation |
 | PR-043 | Trap Floor receives a dedicated polishing pass after manually playable completion | Game-specific content + Presentation | Immediately after G1, before G2 | Readability, layout, interaction clarity, status/reference feedback, reset/session coherence, and manual-play defect review |
+| PR-044 | Global authoritative active-session Undo restores accepted top-level table actions back to the session baseline while preserving monotonic Match revision | ADR-028 + Core/Application + Snapshots + Presentation | Immediate current Platform work | Transaction-boundary tests; snapshot restoration of objects, Containers, ordering, poses, physical state, Card faces, Decks, Slots, Dice, and Game state; compound-action coverage; no intermediate simulation entries; repeated Undo to State 0; fresh history after Reset/Clear/Template replacement; Presentation/physics reconciliation; disabled UI and `Ctrl+Z` input isolation at State 0 |
 
 ## M2 Implementation Evidence
 

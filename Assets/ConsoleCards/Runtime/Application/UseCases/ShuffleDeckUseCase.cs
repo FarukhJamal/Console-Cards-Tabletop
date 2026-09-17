@@ -84,7 +84,8 @@ namespace ConsoleCards.Application.UseCases
             }
 
             deck.ReplaceOrder(shuffledObjectIds);
-            long revision = matchState.AdvanceRevision();
+            long revision = matchState.AdvanceRevision(
+                command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.ShuffleDeck);
 
             return ShuffleDeckResult.Accepted(revision);
         }

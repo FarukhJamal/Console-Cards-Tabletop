@@ -1,7 +1,7 @@
 # Console Cards — Architecture Decisions
 
 **Document ID:** 04_Architecture_Decisions  
-**Version:** 1.10
+**Version:** 1.11
 
 **Status:** Approved with Open Decisions
 
@@ -482,3 +482,40 @@ This file records accepted or proposed Architecture Decision Records. A decision
 - Normal Session Entry is not a player-facing startup state. Opening or closing Games / Templates does not suspend Camera controls, destroy the active Match, or hide the simulator.
 
 **Preserved boundaries:** IDs, Match State, revisions, actor context, Game Template validation, atomic construction, Reset, toolbox behavior, physical-object interaction, prefab Runtime UI, and Game rules/content remain unchanged. Scene loading and networking are not introduced.
+
+---
+
+## ADR-028 - Authoritative Active-Session Undo
+
+**Status:** Accepted
+
+**Approval source:** Platform-level session Undo direction approved by the user on 2026-09-17.
+
+**Decision:** Console Cards maintains one global authoritative transactional Undo history for the active session. State 0 is the authoritative baseline established when that session is created. Each accepted top-level Player table action may append exactly one Undo transaction containing the authoritative state needed to restore the immediately preceding accepted state and descriptive actor/action metadata. Undo always targets the latest accepted transaction, regardless of which Player performed it, and repeated Undo may restore State 0.
+
+**Authoritative restoration contract:**
+
+- Undo restores authoritative Runtime/Match State from state snapshots; it never treats Unity GameObjects, Views, Transforms, Rigidbody state, or other Presentation objects as history authority.
+- Restored state includes the applicable object identities and existence, Container membership and ordering, authored and physical poses, Card face/reveal state, Deck order, Console/Slot contents, settled Die pose/value, and Game-specific authoritative state represented by the Match/session snapshot.
+- Presentation is reconciled or rebuilt only after the restored authoritative state is accepted. Stale Views, physics registrations, input ownership, and lookup entries must not survive the restoration boundary.
+- Match revision remains monotonic. Restoring data from an earlier snapshot does not restore that snapshot's old revision as the live revision; accepting Undo advances from the current revision exactly once.
+
+**Transaction boundary:**
+
+- One accepted top-level Player action is one Undo entry, including accepted moves, transfers, flips/reveals, shuffles, creation/deletion/duplication, population, completed Dice rolls, and accepted Game-specific actions.
+- Placement previews, drag-frame updates, Rigidbody checkpoints, intermediate Dice simulation states, UI-only changes, and status/activity messages are not Undo entries.
+- A compound action may group multiple authoritative substeps into one transaction. For example, `Collapse Floor -> roll two Dice -> settle -> resolve coordinate -> collapse Floor` is recorded as one completed action, not separate Dice and Floor entries.
+- Rejected or cancelled actions do not create history entries.
+
+**Session boundary:**
+
+- Loading or replacing a Game Template, Clear Table, and Reset each establish a new State 0 and clear all prior Undo history.
+- Undo cannot cross a Match, session, Game, Template, Clear Table, or Reset boundary.
+- The local prototype may allow any local Player to invoke Undo. Multiplayer host/permission policy remains deferred, but the request boundary must remain actor-aware and extensible.
+
+**Consequences and exclusions:**
+
+- Snapshot/reset restoration infrastructure should be reused or extended rather than implementing and maintaining inverse logic for every Command.
+- Undo is global table history, not per-Player history.
+- Redo is not approved by this decision.
+- Persistent Undo history, replay, cross-session restoration, and final multiplayer Undo permissions remain future work.

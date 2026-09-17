@@ -311,6 +311,18 @@ namespace ConsoleCards.Games.TrapFloor
             entries.Clear();
         }
 
+        internal void RestoreEntries(IEnumerable<TrapFloorActivityEntry> restoredEntries)
+        {
+            if (restoredEntries == null) throw new ArgumentNullException(nameof(restoredEntries));
+            entries.Clear();
+            foreach (TrapFloorActivityEntry entry in restoredEntries)
+            {
+                if (entry == null || entry.MatchId != MatchId)
+                    throw new ArgumentException("Activity snapshot does not belong to this Match.", nameof(restoredEntries));
+                entries.Add(entry);
+            }
+        }
+
         private TrapFloorActivityEntry CreateEntry(
             long acceptedRevision,
             PlayerId actorPlayerId,
@@ -548,7 +560,7 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             matchState.Cards[command.FloorCardId].SetFace(CardFace.FaceUp);
-            long acceptedRevision = matchState.AdvanceRevision();
+            long acceptedRevision = checked(matchState.Revision + 1L);
             TrapFloorFloorCardState revealedFloorCard = new TrapFloorFloorCardState(
                 floorCard.ObjectId,
                 floorCard.Coordinate,
@@ -560,6 +572,10 @@ namespace ConsoleCards.Games.TrapFloor
                 revealedFloorCard,
                 out TrapFloorActivityEntry searchedActivity,
                 out TrapFloorActivityEntry revealedActivity);
+            matchState.AdvanceRevision(
+                command.Context.Id,
+                command.Context.RequestedByPlayerId,
+                AuthoritativeActionKind.TrapFloorReveal);
             return TrapFloorRevealFloorResult.Accepted(
                 acceptedRevision,
                 revealedFloorCard,

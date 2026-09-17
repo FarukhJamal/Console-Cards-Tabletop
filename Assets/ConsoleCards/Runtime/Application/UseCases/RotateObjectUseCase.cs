@@ -58,7 +58,8 @@ namespace ConsoleCards.Application.UseCases
                 objectState.SetPhysicalState(objectState.PhysicalState.WithRotation(
                     objectState.PhysicalState.Rotation.RotateWorldYaw(command.TargetRotationDegrees - currentPose.RotationDegrees)));
             objectState.SetPose(targetPose);
-            long revision = matchState.AdvanceRevision();
+            long revision = matchState.AdvanceRevision(
+                command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.RotateObject);
 
             return RotateObjectResult.Accepted(revision);
         }

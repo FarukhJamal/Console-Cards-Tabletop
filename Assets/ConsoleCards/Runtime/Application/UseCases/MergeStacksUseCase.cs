@@ -163,7 +163,8 @@ namespace ConsoleCards.Application.UseCases
                         MergeStacksError.SourceContainerRemovalFailed);
                 }
 
-                long revision = matchState.AdvanceRevision();
+                long revision = matchState.AdvanceRevision(
+                    command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.MergeStacks);
                 return MergeStacksResult.Accepted(revision);
             }
             catch

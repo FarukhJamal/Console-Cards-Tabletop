@@ -1,6 +1,7 @@
 using System;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Presentation.Views;
 using UnityEngine;
@@ -22,6 +23,8 @@ namespace ConsoleCards.Presentation.Interaction
         private int dynamicFrames;
         private PlayerId actor;
         private PhysicalObjectState grabOrigin;
+        private bool userActionActive;
+        private bool compoundActionActive;
         public bool IsHeld => held;
         public bool OwnsLooseTransform => view != null && view.IsBound && view.BoundState.ContainerId.IsEmpty;
         public Rigidbody Body => body;
@@ -44,6 +47,8 @@ namespace ConsoleCards.Presentation.Interaction
             held = false;
             applied = null;
             grabOrigin = null;
+            userActionActive = false;
+            compoundActionActive = false;
             if (PhysicalCollider == null) throw new InvalidOperationException("Loose physics requires an enabled collider on the wrapper or its visual child.");
             physicalCollider = PhysicalCollider;
             body = GetComponent<Rigidbody>();
@@ -100,7 +105,16 @@ namespace ConsoleCards.Presentation.Interaction
             if (held) return true;
             actor = authority.Actor;
             grabOrigin = view.BoundState.PhysicalState;
-            if (OwnsLooseTransform && !Commit(Capture(PhysicalObjectMode.Held))) return false;
+            userActionActive = true;
+            compoundActionActive = false;
+            if (OwnsLooseTransform && !Commit(
+                    Capture(PhysicalObjectMode.Held),
+                    null,
+                    AuthoritativeActionRecordMode.Intermediate))
+            {
+                userActionActive = false;
+                return false;
+            }
             held = true;
             body.isKinematic = true;
             body.useGravity = false;
@@ -138,7 +152,7 @@ namespace ConsoleCards.Presentation.Interaction
         public bool Release()
         {
             if (!OwnsLooseTransform) return false;
-            if (!Commit(ReleaseState())) { Cancel(); return false; }
+            if (!Commit(ReleaseState(), null, AuthoritativeActionRecordMode.Intermediate)) { Cancel(); return false; }
             held = false;
             body.isKinematic = false;
             body.useGravity = true;
@@ -151,27 +165,42 @@ namespace ConsoleCards.Presentation.Interaction
 
         public void CaptureBeforeRotation()
         {
-            if (OwnsLooseTransform) Commit(Capture(held ? PhysicalObjectMode.Held : PhysicalObjectMode.Dynamic));
+            if (OwnsLooseTransform) Commit(
+                Capture(held ? PhysicalObjectMode.Held : PhysicalObjectMode.Dynamic),
+                null,
+                userActionActive || compoundActionActive
+                    ? AuthoritativeActionRecordMode.Intermediate
+                    : AuthoritativeActionRecordMode.None);
         }
 
         public void Cancel()
         {
             if (held && OwnsLooseTransform && grabOrigin != null)
                 Commit(State(Vector(grabOrigin.Position), Rotation(grabOrigin.Rotation), Vector(grabOrigin.Velocity),
-                    Vector(grabOrigin.AngularVelocity), PhysicalObjectMode.Dynamic, actor));
+                    Vector(grabOrigin.AngularVelocity), PhysicalObjectMode.Dynamic, actor), null,
+                    AuthoritativeActionRecordMode.CancelTransaction);
             held = false;
+            userActionActive = false;
+            compoundActionActive = false;
             applied = null;
             Synchronize();
         }
 
-        public bool Roll(PlayerId? requestingActor = null)
+        public bool Roll(PlayerId? requestingActor = null, bool partOfCompoundAction = false)
         {
             if (!(view is DieView) || !OwnsLooseTransform || view.BoundState.IsUserLocked || held) return false;
             actor = requestingActor ?? authority.Actor;
+            userActionActive = !partOfCompoundAction;
+            compoundActionActive = partOfCompoundAction;
             PhysicalObjectState launch = State(transform.position + Vector3.up * 0.8f, transform.rotation,
                 new Vector3(UnityEngine.Random.Range(-1.8f, 1.8f), 4f, UnityEngine.Random.Range(-1.8f, 1.8f)),
                 UnityEngine.Random.onUnitSphere * UnityEngine.Random.Range(12f, 25f), PhysicalObjectMode.Dynamic, actor);
-            if (!Commit(launch)) return false;
+            if (!Commit(launch, null, AuthoritativeActionRecordMode.Intermediate))
+            {
+                userActionActive = false;
+                compoundActionActive = false;
+                return false;
+            }
             applied = null;
             ApplyAccepted();
             return true;
@@ -193,18 +222,35 @@ namespace ConsoleCards.Presentation.Interaction
                     if (!die.TryResolvePhysicalValue(out int face))
                     {
                         Commit(State(body.position, body.rotation, Vector3.zero, Vector3.zero,
-                            PhysicalObjectMode.SleepingUnresolved, actor));
+                            PhysicalObjectMode.SleepingUnresolved, actor), null,
+                            userActionActive
+                                ? AuthoritativeActionRecordMode.Transaction
+                                : compoundActionActive
+                                    ? AuthoritativeActionRecordMode.Intermediate
+                                    : AuthoritativeActionRecordMode.None);
+                        userActionActive = false;
+                        compoundActionActive = false;
                         return; // Cocked: retain the prior result, but record the actual resting pose and unresolved status.
                     }
                     value = face;
                 }
                 Commit(State(body.position, body.rotation, Vector3.zero, Vector3.zero,
-                    PhysicalObjectMode.Sleeping, actor), value);
+                    PhysicalObjectMode.Sleeping, actor), value,
+                    userActionActive
+                        ? AuthoritativeActionRecordMode.Transaction
+                        : compoundActionActive
+                            ? AuthoritativeActionRecordMode.Intermediate
+                            : AuthoritativeActionRecordMode.None);
+                userActionActive = false;
+                compoundActionActive = false;
             }
             else if (Time.unscaledTime >= nextCheckpoint)
             {
                 nextCheckpoint = Time.unscaledTime + 0.25f;
-                Commit(Capture(PhysicalObjectMode.Dynamic)); // Includes continuing off-table falls.
+                Commit(Capture(PhysicalObjectMode.Dynamic), null,
+                    userActionActive || compoundActionActive
+                        ? AuthoritativeActionRecordMode.Intermediate
+                        : AuthoritativeActionRecordMode.None); // Includes continuing off-table falls.
             }
         }
 
@@ -223,15 +269,18 @@ namespace ConsoleCards.Presentation.Interaction
                         view.BoundState.IsUserLocked,
                         out initial))
                     initial = Capture(PhysicalObjectMode.Dynamic); // Authored/template extraction may start off-table.
-                if (!Commit(initial)) return;
+                if (!Commit(initial, null, AuthoritativeActionRecordMode.None)) return;
                 applied = null;
             }
             ApplyAccepted();
         }
 
-        private bool Commit(PhysicalObjectState state, int? value = null)
+        private bool Commit(
+            PhysicalObjectState state,
+            int? value = null,
+            AuthoritativeActionRecordMode recordMode = AuthoritativeActionRecordMode.None)
         {
-            if (!authority.Commit(view, state, value)) return false;
+            if (!authority.Commit(view, state, value, recordMode)) return false;
             applied = view.BoundState.PhysicalState;
             view.RefreshAcceptedAppearance();
             return true;

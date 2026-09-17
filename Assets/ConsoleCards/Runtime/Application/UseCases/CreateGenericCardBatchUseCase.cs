@@ -204,7 +204,8 @@ namespace ConsoleCards.Application.UseCases
             }
 
             matchState.AddUncontainedCards(cards);
-            return CreateGenericCardBatchResult.Accepted(matchState.AdvanceRevision(), cardIds);
+            return CreateGenericCardBatchResult.Accepted(matchState.AdvanceRevision(
+                request.Context.Id, request.Context.RequestedByPlayerId, AuthoritativeActionKind.CreateComponent), cardIds);
         }
 
         private static CreateGenericCardBatchResult? Validate(

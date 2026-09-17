@@ -84,7 +84,8 @@ namespace ConsoleCards.Application.UseCases
             try
             {
                 container.Reorder(command.FromIndex, command.ToIndex);
-                long revision = matchState.AdvanceRevision();
+                long revision = matchState.AdvanceRevision(
+                    command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.ReorderContainer);
                 return ReorderContainerResult.Accepted(revision);
             }
             catch

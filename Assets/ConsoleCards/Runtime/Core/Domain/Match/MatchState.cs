@@ -12,6 +12,7 @@ namespace ConsoleCards.Core.Domain.Match
 {
     public sealed class MatchState
     {
+        public event Action<AuthoritativeActionAcceptance> AuthoritativeActionAccepted;
         private readonly HashSet<CommandId> physicalCommands = new HashSet<CommandId>();
         private readonly Queue<CommandId> physicalCommandOrder = new Queue<CommandId>();
         public const int PhysicalCommandHistoryCapacity = 4096;
@@ -245,6 +246,35 @@ namespace ConsoleCards.Core.Domain.Match
         public bool IsTemplateContainer(ContainerId containerId)
         {
             return !containerId.IsEmpty && templateContainerIds.Contains(containerId);
+        }
+
+        public void RestoreTemplateProtection(
+            IEnumerable<TabletopObjectId> protectedObjectIds,
+            IEnumerable<ContainerId> protectedContainerIds)
+        {
+            if (protectedObjectIds == null) throw new ArgumentNullException(nameof(protectedObjectIds));
+            if (protectedContainerIds == null) throw new ArgumentNullException(nameof(protectedContainerIds));
+
+            HashSet<TabletopObjectId> restoredObjects = new HashSet<TabletopObjectId>();
+            foreach (TabletopObjectId objectId in protectedObjectIds)
+            {
+                if (!ContainsObject(objectId))
+                    throw new ArgumentException("Template protection references a missing object.", nameof(protectedObjectIds));
+                restoredObjects.Add(objectId);
+            }
+
+            HashSet<ContainerId> restoredContainers = new HashSet<ContainerId>();
+            foreach (ContainerId containerId in protectedContainerIds)
+            {
+                if (!containers.ContainsKey(containerId))
+                    throw new ArgumentException("Template protection references a missing Container.", nameof(protectedContainerIds));
+                restoredContainers.Add(containerId);
+            }
+
+            templateObjectIds.Clear();
+            templateObjectIds.UnionWith(restoredObjects);
+            templateContainerIds.Clear();
+            templateContainerIds.UnionWith(restoredContainers);
         }
 
         public TabletopObjectState GetObject(TabletopObjectId objectId)
@@ -793,6 +823,22 @@ namespace ConsoleCards.Core.Domain.Match
         {
             Revision = checked(Revision + 1);
             return Revision;
+        }
+
+        public long AdvanceRevision(
+            CommandId commandId,
+            PlayerId actorPlayerId,
+            AuthoritativeActionKind kind,
+            AuthoritativeActionRecordMode recordMode = AuthoritativeActionRecordMode.Transaction)
+        {
+            long revision = AdvanceRevision();
+            AuthoritativeActionAccepted?.Invoke(new AuthoritativeActionAcceptance(
+                revision,
+                commandId,
+                actorPlayerId,
+                kind,
+                recordMode));
+            return revision;
         }
 
         private static Dictionary<TabletopObjectId, CardInstanceState> CopyCards(

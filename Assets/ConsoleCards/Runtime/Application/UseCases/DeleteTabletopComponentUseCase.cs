@@ -166,11 +166,11 @@ namespace ConsoleCards.Application.UseCases
             switch (request.Target.Kind)
             {
                 case TabletopComponentTargetKind.Object:
-                    return DeleteObject(matchState, request.Target);
+                    return DeleteObject(matchState, request.Context, request.Target);
                 case TabletopComponentTargetKind.Container:
-                    return DeleteContainer(matchState, request.Target);
+                    return DeleteContainer(matchState, request.Context, request.Target);
                 case TabletopComponentTargetKind.Console:
-                    return DeleteConsole(matchState, request.Target);
+                    return DeleteConsole(matchState, request.Context, request.Target);
                 default:
                     return DeleteTabletopComponentResult.Failure(
                         CommandResultStatus.Invalid,
@@ -180,6 +180,7 @@ namespace ConsoleCards.Application.UseCases
 
         private static DeleteTabletopComponentResult DeleteObject(
             MatchState matchState,
+            CommandContext context,
             TabletopComponentTarget target)
         {
             if (target.ObjectId.IsEmpty || !matchState.ContainsObject(target.ObjectId))
@@ -207,7 +208,8 @@ namespace ConsoleCards.Application.UseCases
             ContainerId previousContainerId = objectState.ContainerId;
             matchState.RemoveObject(target.ObjectId);
             return DeleteTabletopComponentResult.Accepted(
-                matchState.AdvanceRevision(),
+                matchState.AdvanceRevision(
+                    context.Id, context.RequestedByPlayerId, AuthoritativeActionKind.DeleteComponent),
                 target,
                 componentKind,
                 previousContainerId);
@@ -215,6 +217,7 @@ namespace ConsoleCards.Application.UseCases
 
         private static DeleteTabletopComponentResult DeleteContainer(
             MatchState matchState,
+            CommandContext context,
             TabletopComponentTarget target)
         {
             if (target.ContainerId.IsEmpty
@@ -256,7 +259,8 @@ namespace ConsoleCards.Application.UseCases
 
             matchState.RemoveEmptyContainer(target.ContainerId);
             return DeleteTabletopComponentResult.Accepted(
-                matchState.AdvanceRevision(),
+                matchState.AdvanceRevision(
+                    context.Id, context.RequestedByPlayerId, AuthoritativeActionKind.DeleteComponent),
                 target,
                 componentKind,
                 ContainerId.Empty);
@@ -264,6 +268,7 @@ namespace ConsoleCards.Application.UseCases
 
         private static DeleteTabletopComponentResult DeleteConsole(
             MatchState matchState,
+            CommandContext context,
             TabletopComponentTarget target)
         {
             if (target.ConsoleId.IsEmpty
@@ -288,7 +293,8 @@ namespace ConsoleCards.Application.UseCases
 
             matchState.RemoveEmptyPlacedConsole(target.ConsoleId);
             return DeleteTabletopComponentResult.Accepted(
-                matchState.AdvanceRevision(),
+                matchState.AdvanceRevision(
+                    context.Id, context.RequestedByPlayerId, AuthoritativeActionKind.DeleteComponent),
                 target,
                 TabletopComponentKind.Console,
                 ContainerId.Empty);

@@ -157,7 +157,8 @@ namespace ConsoleCards.Application.UseCases
                 }
                 else cardObject.SetPhysicalState(null);
 
-                long revision = matchState.AdvanceRevision();
+                long revision = matchState.AdvanceRevision(
+                    command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.TransferCard);
                 return TransferCardResult.Accepted(revision);
             }
             catch

@@ -123,7 +123,8 @@ namespace ConsoleCards.Application.UseCases
                 placedConsole.SetPose(command.TargetPose, surfaceHeight);
             }
 
-            long revision = matchState.AdvanceRevision();
+            long revision = matchState.AdvanceRevision(
+                command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.MoveContainer);
             return MoveContainerResult.Accepted(revision);
         }
 

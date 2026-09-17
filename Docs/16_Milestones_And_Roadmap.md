@@ -1,7 +1,7 @@
 # Console Cards — Milestones and Roadmap
 
 **Document ID:** 16_Milestones_And_Roadmap  
-**Version:** 1.12
+**Version:** 1.13
 
 **Status:** Approved
 **Planning basis:** One developer, approximately 30–35 focused hours per week.
@@ -158,7 +158,7 @@ Exit:
 
 The approved delivery direction is:
 
-> **Completed shared foundations -> finish the shared physical tabletop capabilities Trap Floor needs -> G1 Trap Floor manually playable -> Trap Floor polishing pass -> G2 Super Leroy Sisters manually playable -> P1 remaining shared Phase 1 work and closure -> future persistence/multiplayer milestones.**
+> **Completed shared foundations -> finish the shared physical tabletop capabilities Trap Floor needs and active-session Undo -> G1 Trap Floor manually playable -> Trap Floor polishing pass -> G2 Super Leroy Sisters manually playable -> P1 remaining shared Phase 1 work and closure -> future persistence/multiplayer milestones.**
 
 Completed history is preserved: M4 Player Layout + Central Play Area, M4.1 minimum Game Template support, Trap Floor tabletop/Floor-coordinate targeting, Session Entry, Empty/Custom Table, Component Toolbox, generic Dice, legacy Floormaster Search lifecycle assistance, and legacy prototype round/phase orchestration. The latter two systems reflect a superseded Trap Floor build; they are not current Game-rule authority or prerequisites for G1.
 
@@ -182,6 +182,35 @@ Exit evidence must cover valid/no-hit creation (including batch/duplicate), held
 Excluded: Container-body physics, physics-driven contained Card layouts, Camera redesign, Game-rule/content changes, new UI, and networking implementation. Future host/server physics authority is an architectural requirement, not an early transport deliverable. Persistence continues to version accepted Runtime State through the existing milestone boundaries.
 
 **Planning impact:** Replace the earlier plane-boundary-only loose-placement work with this physical-object scope. Re-estimate integration effort before implementation scheduling; no new hour estimate or completion claim is inferred. Approval is recorded by ADR-025; Game-specific delivery order remains unchanged.
+
+### ADR-028 Active-Session Undo Gate
+
+**Status:** Approved current Platform work; implementation and verification are pending.
+
+Deliver:
+
+- One global authoritative Undo history for the active session, with the session baseline as State 0.
+- One history transaction per accepted top-level Player table action, independent of which Player acted.
+- Snapshot-based restoration of authoritative Runtime/Match State, including object existence, Container membership/order, poses and settled physical state, Card face/reveal state, Deck order, Console/Slot membership, Dice value, and applicable Game-specific state.
+- Compound-action grouping so physical simulation and assisted-action substeps produce one history entry only after the top-level action completes.
+- Monotonic Match revisions: an accepted Undo advances the current revision once rather than reverting to the captured revision.
+- Safe Presentation teardown/reconciliation after authoritative restoration, with input isolated during restoration and no duplicate Views or stale physics registrations.
+- A prefab-based Undo control and the existing input system's `Ctrl+Z` path, disabled at State 0 and identifying the next action to reverse.
+- Fresh State 0/history whenever a Game/Template is loaded or replaced, Clear Table is accepted, or Reset restores its baseline.
+
+Exit:
+
+- Repeated Undo restores each accepted top-level action in reverse global order through State 0 without crossing the active session boundary.
+- Preview, drag-frame, intermediate physics/Dice, UI-only, rejected, and cancelled changes do not create entries.
+- A completed compound action such as Trap Floor Collapse is reversed by one Undo.
+- Restored Runtime State and Presentation agree, Match revision remains monotonic, and State 0 disables Undo.
+
+Exclude:
+
+- Redo.
+- Persistent or cross-session Undo history.
+- Replay tooling.
+- Final multiplayer host/permission policy; the local prototype may permit any Player while preserving an actor-aware request boundary.
 
 Do not combine these gates into one broad implementation task. Each gate requires its own tests, manual checks, implementation report, and rollback point.
 

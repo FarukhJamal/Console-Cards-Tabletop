@@ -59,7 +59,7 @@ Commands create a consistent path for:
 - Testing.
 - Snapshots.
 - Reconnection.
-- Future undo or replay.
+- Authoritative active-session Undo, and future replay.
 
 Continuous drag previews are not permanent Commands. The final accepted placement is.
 

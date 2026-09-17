@@ -164,7 +164,8 @@ namespace ConsoleCards.Application.UseCases
                     componentKind,
                     request.PlacementPose,
                     dieSideCount,
-                    cardFace));
+                    cardFace,
+                    AuthoritativeActionKind.DuplicateComponent));
             return result.Succeeded
                 ? DuplicateTabletopComponentResult.Accepted(result)
                 : DuplicateTabletopComponentResult.Failure(

@@ -115,6 +115,31 @@ namespace ConsoleCards.Games.TrapFloor
             WinningPlayerId = PlayerId.Empty;
             ExitFloorCardId = TabletopObjectId.Empty;
         }
+
+        internal void Restore(
+            IEnumerable<TrapFloorCollectedKeyState> claims,
+            bool isWon,
+            PlayerId winningPlayerId,
+            TabletopObjectId exitFloorCardId)
+        {
+            if (claims == null) throw new ArgumentNullException(nameof(claims));
+            Clear();
+            foreach (TrapFloorCollectedKeyState claim in claims)
+            {
+                if (claim == null || claimsByFloorCardId.ContainsKey(claim.FloorCardId))
+                    throw new ArgumentException("Objective snapshot contains an invalid Key claim.", nameof(claims));
+                collectedKeys.Add(claim);
+                claimsByFloorCardId.Add(claim.FloorCardId, claim);
+            }
+            if (isWon)
+            {
+                if (winningPlayerId.IsEmpty || exitFloorCardId.IsEmpty)
+                    throw new ArgumentException("Won objective snapshot requires winner and Exit identities.");
+                IsWon = true;
+                WinningPlayerId = winningPlayerId;
+                ExitFloorCardId = exitFloorCardId;
+            }
+        }
     }
 
     public sealed class TrapFloorClaimKeyCommand : ITabletopCommand
@@ -319,7 +344,7 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(CommandResultStatus.Conflict, TrapFloorObjectiveError.RevisionOverflow);
             }
 
-            long acceptedRevision = matchState.AdvanceRevision();
+            long acceptedRevision = checked(matchState.Revision + 1L);
             TrapFloorCollectedKeyState claim = objectiveState.RecordKeyClaim(
                 floorCard,
                 command.Context.RequestedByPlayerId,
@@ -328,6 +353,10 @@ namespace ConsoleCards.Games.TrapFloor
                 acceptedRevision,
                 command.Context.RequestedByPlayerId,
                 floorCard);
+            matchState.AdvanceRevision(
+                command.Context.Id,
+                command.Context.RequestedByPlayerId,
+                AuthoritativeActionKind.TrapFloorClaimKey);
             return TrapFloorObjectiveResult.Accepted(
                 acceptedRevision,
                 floorCard,
@@ -378,7 +407,7 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(CommandResultStatus.Conflict, TrapFloorObjectiveError.RevisionOverflow);
             }
 
-            long acceptedRevision = matchState.AdvanceRevision();
+            long acceptedRevision = checked(matchState.Revision + 1L);
             objectiveState.RecordVictory(
                 floorCard.ObjectId,
                 command.Context.RequestedByPlayerId);
@@ -386,6 +415,10 @@ namespace ConsoleCards.Games.TrapFloor
                 acceptedRevision,
                 command.Context.RequestedByPlayerId,
                 floorCard);
+            matchState.AdvanceRevision(
+                command.Context.Id,
+                command.Context.RequestedByPlayerId,
+                AuthoritativeActionKind.TrapFloorAttemptEscape);
             return TrapFloorObjectiveResult.Accepted(
                 acceptedRevision,
                 floorCard,

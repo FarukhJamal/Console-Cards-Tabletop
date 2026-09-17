@@ -174,7 +174,8 @@ namespace ConsoleCards.Application.UseCases
                     return SplitStackResult.Failure(CommandResultStatus.Rejected, SplitStackError.NewStackCreationFailed);
                 }
 
-                long revision = matchState.AdvanceRevision();
+                long revision = matchState.AdvanceRevision(
+                    command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.SplitStack);
                 return SplitStackResult.Accepted(revision);
             }
             catch

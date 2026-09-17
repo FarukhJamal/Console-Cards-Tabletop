@@ -63,7 +63,8 @@ namespace ConsoleCards.Application.UseCases
             }
 
             objectState.SetPose(targetPose);
-            long revision = matchState.AdvanceRevision();
+            long revision = matchState.AdvanceRevision(
+                command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.MoveObject);
 
             return MoveObjectResult.Accepted(revision);
         }

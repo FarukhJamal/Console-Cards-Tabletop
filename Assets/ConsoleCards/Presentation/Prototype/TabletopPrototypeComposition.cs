@@ -24,6 +24,7 @@ using ConsoleCards.Presentation.UI;
 using ConsoleCards.Presentation.Views;
 using ConsoleCards.Presentation.Views.Containers;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityCamera = UnityEngine.Camera;
 
@@ -154,6 +155,12 @@ namespace ConsoleCards.Presentation.Prototype
         private bool tokenViewBoundByComposition;
         private bool gameTemplatesPanelVisible;
         private PrototypeRuntimeUiRoot runtimeUi;
+        private readonly ActiveSessionUndoHistory<PrototypeSessionUndoSnapshot> undoHistory =
+            new ActiveSessionUndoHistory<PrototypeSessionUndoSnapshot>();
+        private MatchState undoTrackedMatch;
+        private bool undoTransactionInProgress;
+        private bool rebuildingFromUndo;
+        private TrapFloorSessionState pendingRestoredTrapFloorState;
 
         private MatchState matchState;
         private TabletopSession activeSession;
@@ -423,6 +430,7 @@ namespace ConsoleCards.Presentation.Prototype
                 selectionPresenter.Refresh();
                 ShowMessage("Trap Floor tabletop foundation ready.");
                 IsInitialized = true;
+                BeginUndoTrackingForCurrentMatch();
             }
             catch
             {
@@ -450,6 +458,7 @@ namespace ConsoleCards.Presentation.Prototype
                     : activeSession.CurrentMatch;
                 localPlayerId = activeSession.Request.RequestingPlayerId;
                 BuildToolboxRuntime();
+                RebuildEmptyTableLooseObjectPresentation();
 
                 BuildInteractionGraph();
                 inputFrameCoordinator.ConfigurePrototypeUiInput(HandleSecondaryPointerPressed);
@@ -468,6 +477,7 @@ namespace ConsoleCards.Presentation.Prototype
                 selectionPresenter.Refresh();
                 ShowMessage("Empty Table ready.");
                 IsInitialized = true;
+                BeginUndoTrackingForCurrentMatch();
             }
             catch
             {
@@ -483,6 +493,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void Shutdown(bool preserveTemplateContext)
         {
+            StopUndoTrackingCurrentMatch();
             physicalFloorfallPending = false;
             physicalFloorfallActor = PlayerId.Empty;
             physicalFloorCollapsePending = false;
@@ -952,6 +963,248 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshTrapFloorStatusUi();
         }
 
+        public bool UndoLatestAction()
+        {
+            return UndoLatestAction(localPlayerId);
+        }
+
+        public bool UndoLatestAction(PlayerId requestingPlayerId)
+        {
+            if (!IsActiveSessionPlayer(requestingPlayerId)
+                || !CanUndoCurrentAction()
+                || !undoHistory.TryPeekUndo(
+                    out PrototypeSessionUndoSnapshot snapshot,
+                    out ActiveSessionUndoTransaction transaction))
+            {
+                return false;
+            }
+
+            Debug.Log(
+                $"[Undo] Selecting state index {undoHistory.CurrentStateIndex - 1} "
+                + $"from {undoHistory.TransactionCount} transactions: {transaction.Description}; "
+                + $"objects={snapshot.Match.ObjectCount}; ids={FormatUndoObjectIds(snapshot.Match)}.",
+                this);
+
+            long undoRevision;
+            try
+            {
+                undoRevision = checked(matchState.Revision + 1L);
+            }
+            catch (OverflowException)
+            {
+                ShowMessage("Undo rejected: Match revision cannot advance.");
+                return false;
+            }
+
+            MatchState replacement;
+            TrapFloorSessionState restoredTrapFloor = null;
+            try
+            {
+                replacement = snapshot.Match.Restore(undoRevision);
+                restoredTrapFloor = snapshot.TrapFloor?.Restore();
+            }
+            catch (Exception exception)
+            {
+                ShowMessage($"Undo rejected: {exception.Message}");
+                return false;
+            }
+
+            rebuildingFromUndo = true;
+            try
+            {
+                Shutdown(true);
+                activeSession.ReplaceCurrentMatch(replacement);
+                pendingRestoredTrapFloorState = restoredTrapFloor;
+                InitializeActiveSession(false);
+                undoHistory.CommitUndo();
+                undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
+                Debug.Log(
+                    $"[Undo] Restored state index {undoHistory.CurrentStateIndex}; "
+                    + $"remaining transactions={undoHistory.TransactionCount}; "
+                    + $"objects={matchState.ObjectCount}.",
+                    this);
+                ShowActiveSessionUi();
+                ShowMessage($"Undid {transaction.Description}.");
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError($"Undo Presentation rebuild failed: {exception.Message}", this);
+                throw;
+            }
+            finally
+            {
+                pendingRestoredTrapFloorState = null;
+                rebuildingFromUndo = false;
+                RefreshUndoUi();
+            }
+        }
+
+        private bool IsActiveSessionPlayer(PlayerId playerId)
+        {
+            if (playerId.IsEmpty || activeSession == null) return false;
+            IReadOnlyList<PlayerId> players = activeSession.Request.ActivePlayerIds;
+            for (int i = 0; i < players.Count; i++)
+                if (players[i] == playerId) return true;
+            return false;
+        }
+
+        private bool HandleUndoShortcut()
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (!IsInitialized
+                || keyboard == null
+                || !keyboard.zKey.wasPressedThisFrame
+                || !(keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed))
+            {
+                return false;
+            }
+
+            UndoLatestAction();
+            return true;
+        }
+
+        private bool CanUndoCurrentAction()
+        {
+            return IsInitialized
+                && !rebuildingFromUndo
+                && !undoTransactionInProgress
+                && undoHistory.CanUndo;
+        }
+
+        private void BeginUndoTrackingForCurrentMatch()
+        {
+            StopUndoTrackingCurrentMatch();
+            undoTrackedMatch = matchState;
+            undoTrackedMatch.AuthoritativeActionAccepted += HandleAuthoritativeActionAccepted;
+            undoTransactionInProgress = false;
+            if (!rebuildingFromUndo)
+            {
+                undoHistory.EstablishBaseline(CaptureUndoSnapshot());
+            }
+            RefreshUndoUi();
+        }
+
+        private void StopUndoTrackingCurrentMatch()
+        {
+            if (undoTrackedMatch != null)
+            {
+                undoTrackedMatch.AuthoritativeActionAccepted -= HandleAuthoritativeActionAccepted;
+                undoTrackedMatch = null;
+            }
+            undoTransactionInProgress = false;
+        }
+
+        private void HandleAuthoritativeActionAccepted(AuthoritativeActionAcceptance acceptance)
+        {
+            switch (acceptance.RecordMode)
+            {
+                case AuthoritativeActionRecordMode.Intermediate:
+                    undoTransactionInProgress = true;
+                    RefreshUndoUi();
+                    break;
+                case AuthoritativeActionRecordMode.Transaction:
+                    PrototypeSessionUndoSnapshot beforeState = undoHistory.CurrentState;
+                    PrototypeSessionUndoSnapshot afterState = CaptureUndoSnapshot();
+                    undoHistory.RecordAccepted(
+                        beforeState,
+                        afterState,
+                        acceptance,
+                        DescribeUndoAction(acceptance));
+                    Debug.Log(
+                        $"[Undo] Recorded state index {undoHistory.CurrentStateIndex}; "
+                        + $"transactions={undoHistory.TransactionCount}; "
+                        + $"action={DescribeUndoAction(acceptance)}; "
+                        + $"beforeObjects={beforeState.Match.ObjectCount}; "
+                        + $"afterObjects={afterState.Match.ObjectCount}; "
+                        + $"afterIds={FormatUndoObjectIds(afterState.Match)}.",
+                        this);
+                    undoTransactionInProgress = false;
+                    RefreshUndoUi();
+                    break;
+                case AuthoritativeActionRecordMode.CancelTransaction:
+                    undoTransactionInProgress = false;
+                    undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
+                    RefreshUndoUi();
+                    break;
+                default:
+                    if (!undoTransactionInProgress)
+                    {
+                        undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
+                        RefreshUndoUi();
+                    }
+                    break;
+            }
+        }
+
+        private PrototypeSessionUndoSnapshot CaptureUndoSnapshot()
+        {
+            return PrototypeSessionUndoSnapshot.Capture(
+                matchState,
+                trapFloorActivityFeed,
+                trapFloorObjectiveState,
+                trapFloorCollapseState);
+        }
+
+        private static string FormatUndoObjectIds(GameTemplateInitialSnapshot snapshot)
+        {
+            IReadOnlyList<TabletopObjectId> ids = snapshot.CopyObjectIds();
+            if (ids.Count == 0) return "<none>";
+            string result = ids[0].ToString();
+            for (int i = 1; i < ids.Count; i++) result += $",{ids[i]}";
+            return result;
+        }
+
+        private string DescribeUndoAction(AuthoritativeActionAcceptance acceptance)
+        {
+            string actor = FormatUndoActor(acceptance.ActorPlayerId);
+            switch (acceptance.Kind)
+            {
+                case AuthoritativeActionKind.MoveObject: return $"{actor} moved an object";
+                case AuthoritativeActionKind.MoveContainer: return $"{actor} moved a Container";
+                case AuthoritativeActionKind.RotateObject: return $"{actor} rotated an object";
+                case AuthoritativeActionKind.FlipCard: return $"{actor} flipped a Card";
+                case AuthoritativeActionKind.TransferCard: return $"{actor} transferred a Card";
+                case AuthoritativeActionKind.TransferToken: return $"{actor} transferred a Token";
+                case AuthoritativeActionKind.ShuffleDeck: return $"{actor} shuffled a Deck";
+                case AuthoritativeActionKind.DrawCards: return $"{actor} drew Cards";
+                case AuthoritativeActionKind.ReorderContainer: return $"{actor} reordered a Container";
+                case AuthoritativeActionKind.MergeStacks: return $"{actor} merged Stacks";
+                case AuthoritativeActionKind.SplitStack: return $"{actor} split a Stack";
+                case AuthoritativeActionKind.CreateComponent: return $"{actor} created a Component";
+                case AuthoritativeActionKind.DuplicateComponent: return $"{actor} duplicated a Component";
+                case AuthoritativeActionKind.DeleteComponent: return $"{actor} deleted a Component";
+                case AuthoritativeActionKind.PopulateDeck: return $"{actor} populated a Deck";
+                case AuthoritativeActionKind.PhysicalObjectSettled: return $"{actor} moved a physical object";
+                case AuthoritativeActionKind.TrapFloorReveal: return $"{actor} searched a Floor";
+                case AuthoritativeActionKind.TrapFloorClaimKey: return $"{actor} claimed a Key";
+                case AuthoritativeActionKind.TrapFloorAttemptEscape: return $"{actor} attempted Escape";
+                case AuthoritativeActionKind.TrapFloorCollapse: return $"{actor} collapsed a Floor";
+                default: return $"{actor} performed a table action";
+            }
+        }
+
+        private string FormatUndoActor(PlayerId playerId)
+        {
+            if (activeSession != null)
+            {
+                IReadOnlyList<PlayerId> players = activeSession.Request.ActivePlayerIds;
+                for (int i = 0; i < players.Count; i++)
+                {
+                    if (players[i] == playerId) return $"P{i + 1}";
+                }
+            }
+            return "Player";
+        }
+
+        private void RefreshUndoUi()
+        {
+            ActiveSessionUndoTransaction next = undoHistory.NextUndo;
+            runtimeUi?.SetUndoState(
+                CanUndoCurrentAction(),
+                next == null ? "Undo" : $"Undo: {next.Description}");
+        }
+
         public TrapFloorRoundActionResult CompleteTrapFloorStart()
         {
             EnsureInitialized();
@@ -1170,8 +1423,8 @@ namespace ConsoleCards.Presentation.Prototype
             DieView yAxisDieView,
             PlayerId actor)
         {
-            return xAxisDieView.PhysicalObject.Roll(actor)
-                && yAxisDieView.PhysicalObject.Roll(actor);
+            return xAxisDieView.PhysicalObject.Roll(actor, true)
+                && yAxisDieView.PhysicalObject.Roll(actor, true);
         }
 
         public TrapFloorRoundSearchResult SearchFloormasterDeck()
@@ -1418,6 +1671,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void Update()
         {
+            if (HandleUndoShortcut()) return;
             physicalAuthority?.Tick();
             CompletePhysicalFloorfallIfSettled();
             CompletePhysicalFloorCollapseIfSettled();
@@ -2631,6 +2885,7 @@ namespace ConsoleCards.Presentation.Prototype
                 : activeSession.Template.DisplayName.ToUpperInvariant();
             runtimeUi.ShowActiveSession(
                 sessionTitle,
+                HandleUndoButtonPressed,
                 ResetPrototype,
                 ToggleGameTemplatesPanel,
                 CurrentStatusText(),
@@ -2642,7 +2897,13 @@ namespace ConsoleCards.Presentation.Prototype
                     () => BeginToolboxPlacement(TabletopComponentKind.Token),
                     () => BeginToolboxPlacement(TabletopComponentKind.Console),
                     sideCount => BeginToolboxPlacement(TabletopComponentKind.Die, sideCount)));
+            RefreshUndoUi();
             RefreshTrapFloorStatusUi();
+        }
+
+        private void HandleUndoButtonPressed()
+        {
+            UndoLatestAction();
         }
 
         private void RefreshRuntimeStatusUi()
@@ -5084,10 +5345,22 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void BuildTrapFloorRevealRuntime()
         {
-            trapFloorActivityFeed = new TrapFloorActivityFeedState(matchState.Id);
-            trapFloorCollapseState = new TrapFloorCollapseState(
-                matchState.Id,
-                trapFloorTemplate.FloorCardIds.Count);
+            if (pendingRestoredTrapFloorState != null)
+            {
+                trapFloorActivityFeed = pendingRestoredTrapFloorState.Activity;
+                trapFloorCollapseState = pendingRestoredTrapFloorState.Collapse;
+                trapFloorObjectiveState = pendingRestoredTrapFloorState.Objective;
+            }
+            else
+            {
+                trapFloorActivityFeed = new TrapFloorActivityFeedState(matchState.Id);
+                trapFloorCollapseState = new TrapFloorCollapseState(
+                    matchState.Id,
+                    trapFloorTemplate.FloorCardIds.Count);
+                trapFloorObjectiveState = new TrapFloorObjectiveState(
+                    matchState.Id,
+                    trapFloorTemplate.Stage03Configuration.RequiredKeyCount);
+            }
             trapFloorCollapseUseCase = new TrapFloorCollapseUseCase(
                 trapFloorTemplate,
                 trapFloorCollapseState,
@@ -5096,9 +5369,6 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorTemplate,
                 trapFloorActivityFeed,
                 trapFloorCollapseState);
-            trapFloorObjectiveState = new TrapFloorObjectiveState(
-                matchState.Id,
-                trapFloorTemplate.Stage03Configuration.RequiredKeyCount);
             trapFloorObjectiveUseCase = new TrapFloorObjectiveUseCase(
                 trapFloorTemplate,
                 trapFloorObjectiveState,
@@ -5164,6 +5434,45 @@ namespace ConsoleCards.Presentation.Prototype
             toolboxPlacementHintActive = false;
             toolboxPlacementSubject = null;
             runtimeUi?.ClearActiveSessionTransientUi();
+        }
+
+        private void RebuildEmptyTableLooseObjectPresentation()
+        {
+            // Empty Table owns no scene-authored object Views. After Undo replaces the Match,
+            // teardown has removed every runtime-owned View, so recreate exactly the objects in
+            // the selected authoritative snapshot before interaction registries are rebuilt.
+            foreach (CardInstanceState card in matchState.Cards.Values)
+            {
+                CardView view = CreateCardView(card, "CARD", out TabletopSelectionVisual selectionVisual);
+                cardViews.Add(view);
+                cardSelectionVisuals.Add(selectionVisual);
+            }
+
+            foreach (PawnState pawn in matchState.Pawns.Values)
+            {
+                PawnView view = CreatePawnView(pawn, out TabletopSelectionVisual selectionVisual);
+                pawnViews.Add(view);
+                pawnSelectionVisuals.Add(selectionVisual);
+            }
+
+            foreach (TokenState token in matchState.Tokens.Values)
+            {
+                TokenView view = CreateTokenView(token, out TabletopSelectionVisual selectionVisual, 1f);
+                tokenViews.Add(view);
+                tokenSelectionVisuals.Add(selectionVisual);
+            }
+
+            foreach (DieState die in matchState.Dice.Values)
+            {
+                DieView view = CreateDieView(
+                    die,
+                    $"d{die.SideCount}",
+                    out TabletopSelectionVisual selectionVisual);
+                dieViews.Add(view);
+                dieSelectionVisuals.Add(selectionVisual);
+            }
+
+            Physics.SyncTransforms();
         }
 
         private static PrototypeTemplateContext CreateTrapFloorPrototypeContext(

@@ -144,7 +144,8 @@ namespace ConsoleCards.Application.UseCases
                 }
                 else token.SetPhysicalState(null);
 
-                return TransferTokenResult.Accepted(matchState.AdvanceRevision());
+                return TransferTokenResult.Accepted(matchState.AdvanceRevision(
+                    command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.TransferToken));
             }
             catch
             {

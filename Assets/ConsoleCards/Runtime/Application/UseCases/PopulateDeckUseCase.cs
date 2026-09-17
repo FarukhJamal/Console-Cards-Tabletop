@@ -129,7 +129,8 @@ namespace ConsoleCards.Application.UseCases
             }
 
             matchState.AddCardsToEmptyContainer(deck.Id, cards);
-            return PopulateDeckResult.Accepted(matchState.AdvanceRevision(), cardIds);
+            return PopulateDeckResult.Accepted(matchState.AdvanceRevision(
+                request.Context.Id, request.Context.RequestedByPlayerId, AuthoritativeActionKind.PopulateDeck), cardIds);
         }
 
         private static PopulateDeckResult? Validate(

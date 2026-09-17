@@ -7,19 +7,26 @@ namespace ConsoleCards.Presentation.UI
     public sealed class PrototypeActiveSessionToolbarView : MonoBehaviour
     {
         [SerializeField] private Text sessionTitleLabel;
+        [SerializeField] private Button undoButton;
+        [SerializeField] private Text undoButtonLabel;
         [SerializeField] private Button resetButton;
         [SerializeField] private Button returnButton;
 
         public void ValidateReferences()
         {
-            if (sessionTitleLabel == null || resetButton == null || returnButton == null)
+            if (sessionTitleLabel == null || undoButton == null || undoButtonLabel == null
+                || resetButton == null || returnButton == null)
             {
                 throw new InvalidOperationException(
-                    "PrototypeActiveSessionToolbarView requires its title, Reset Button, and Games / Templates Button references.");
+                    "PrototypeActiveSessionToolbarView requires its title, Undo, Reset, and Games / Templates references.");
             }
         }
 
-        public void Bind(string sessionTitle, Action resetSession, Action openGameTemplates)
+        public void Bind(
+            string sessionTitle,
+            Action undo,
+            Action resetSession,
+            Action openGameTemplates)
         {
             if (string.IsNullOrWhiteSpace(sessionTitle))
             {
@@ -31,6 +38,11 @@ namespace ConsoleCards.Presentation.UI
                 throw new ArgumentNullException(nameof(resetSession));
             }
 
+            if (undo == null)
+            {
+                throw new ArgumentNullException(nameof(undo));
+            }
+
             if (openGameTemplates == null)
             {
                 throw new ArgumentNullException(nameof(openGameTemplates));
@@ -38,14 +50,29 @@ namespace ConsoleCards.Presentation.UI
 
             ValidateReferences();
             sessionTitleLabel.text = sessionTitle;
+            undoButton.onClick.RemoveAllListeners();
+            undoButton.onClick.AddListener(undo.Invoke);
             resetButton.onClick.RemoveAllListeners();
             resetButton.onClick.AddListener(resetSession.Invoke);
             returnButton.onClick.RemoveAllListeners();
             returnButton.onClick.AddListener(openGameTemplates.Invoke);
         }
 
+        public void SetUndoState(bool enabled, string label)
+        {
+            ValidateReferences();
+            undoButton.interactable = enabled;
+            undoButtonLabel.text = string.IsNullOrWhiteSpace(label) ? "Undo" : label;
+        }
+
         public void Unbind()
         {
+            if (undoButton != null)
+            {
+                undoButton.onClick.RemoveAllListeners();
+                undoButton.interactable = false;
+            }
+
             if (resetButton != null)
             {
                 resetButton.onClick.RemoveAllListeners();

@@ -47,5 +47,10 @@ namespace ConsoleCards.GameTemplates
             CurrentMatch = replacement;
             return replacement;
         }
+
+        internal void ReplaceCurrentMatch(MatchState replacement)
+        {
+            CurrentMatch = replacement ?? throw new ArgumentNullException(nameof(replacement));
+        }
     }
 }

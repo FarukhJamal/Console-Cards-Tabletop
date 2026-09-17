@@ -51,7 +51,8 @@ namespace ConsoleCards.Application.UseCases
             }
 
             card.SetFace(command.TargetFace);
-            long revision = matchState.AdvanceRevision();
+            long revision = matchState.AdvanceRevision(
+                command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.FlipCard);
 
             return FlipCardResult.Accepted(revision);
         }

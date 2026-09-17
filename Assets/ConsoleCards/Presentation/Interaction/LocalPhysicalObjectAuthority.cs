@@ -53,13 +53,22 @@ namespace ConsoleCards.Presentation.Interaction
                 objects[i].Tick();
             }
         }
-        internal bool Commit(TabletopObjectView view, PhysicalObjectState state, int? value)
+        internal bool Commit(
+            TabletopObjectView view,
+            PhysicalObjectState state,
+            int? value,
+            AuthoritativeActionRecordMode recordMode)
         {
             if (!view.IsBound || !match.ContainsObject(view.ObjectId)
                 || !ReferenceEquals(view.BoundState, match.GetObject(view.ObjectId))) return false;
             return commits.Execute(match, actors, new CommitPhysicalObjectCommand(
                 new CommandContext(CommandId.New(), match.Id, state.ControllingPlayerId, match.Revision),
-                view.ObjectId, state, view.BoundState.PhysicalRevision, value)).Succeeded;
+                view.ObjectId, state, view.BoundState.PhysicalRevision, value, recordMode)).Succeeded;
+        }
+
+        internal bool Commit(TabletopObjectView view, PhysicalObjectState state, int? value)
+        {
+            return Commit(view, state, value, AuthoritativeActionRecordMode.None);
         }
         internal void SetContainedCollisions(PhysicalLooseObject target, bool isContained)
         {

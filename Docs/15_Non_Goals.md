@@ -1,7 +1,7 @@
 # Console Cards — Non-Goals
 
 **Document ID:** 15_Non_Goals  
-**Version:** 1.5
+**Version:** 1.6
 
 **Status:** Approved
 
@@ -61,7 +61,8 @@ The initial foundation is not building:
 - Fog of war.
 - Spectator mode.
 - Replay viewer.
-- Complete undo history.
+- Redo.
+- Persistent or cross-session Undo history that can restore a previous Game, Template, or cleared session.
 - Seamless host migration unless included in an approved networking milestone.
 - Host secrecy from the player acting as authority.
 - Persistent online Matches running without any Player.
@@ -127,6 +128,8 @@ Player-enforced rules do not weaken authoritative state. Freeform Actions still 
 ADR-025 explicitly removes loose Card/Pawn/Token/Die Rigidbody physics and settled-face Dice results from the Non-Goals. Approved scope includes real Table/Board collision surfaces, surface-raycast placement, controlled/kinematic holding, gravity/collision/velocity/torque on release, natural off-table falling without snap-back, and separate authoritative 3D physical pose/state alongside unchanged authored/layout `TabletopPose`. Standard d4/d6/d8/d10/d12/d20 use explicit authored face/value mappings. Contained Cards remain layout-controlled with loose physics disabled; Deck/Stack/Console bodies are not converted.
 
 Runtime State, IDs, actor-aware Commands/Application Use Cases, and Match revisions remain authoritative. Future host/server physics determines accepted outcomes; clients do not independently decide results. This approval does not authorize networking packages, full-scene simulation, or new Game rules/content. Roadmap scope and acceptance are recorded under the ADR-025 physical-object integration gate.
+
+ADR-028 removes active-session authoritative Undo from the former `Complete undo history` Non-Goal. The approved scope is a linear Undo history for the current session back to its State 0 baseline. It does not approve Redo, replay, persistence of Undo history across application/session boundaries, restoration across Game/Template replacement, or a final multiplayer permission policy.
 
 ## 8. Change Process
 

@@ -123,7 +123,8 @@ namespace ConsoleCards.Application.UseCases
 
             DieRoll roll = new Die(dieState.SideCount).Roll(randomValueSource);
             dieState.SetAcceptedRoll(roll);
-            long revision = matchState.AdvanceRevision();
+            long revision = matchState.AdvanceRevision(
+                request.Context.Id, request.Context.RequestedByPlayerId, AuthoritativeActionKind.PhysicalObjectSettled);
             return RollDieResult.Accepted(revision, roll);
         }
 

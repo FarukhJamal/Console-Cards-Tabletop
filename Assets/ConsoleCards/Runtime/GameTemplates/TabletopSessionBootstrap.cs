@@ -268,6 +268,17 @@ namespace ConsoleCards.GameTemplates
             CurrentMatch = replacement;
             return replacement;
         }
+
+        public void ReplaceCurrentMatch(MatchState replacement)
+        {
+            if (replacement == null) throw new ArgumentNullException(nameof(replacement));
+            if (replacement.Id != CurrentMatch.Id)
+                throw new ArgumentException("Replacement Match must preserve the active session Match ID.", nameof(replacement));
+            if (replacement.GameTemplateId != CurrentMatch.GameTemplateId)
+                throw new ArgumentException("Replacement Match must preserve the active session Game Template ID.", nameof(replacement));
+            CurrentMatch = replacement;
+            gameTemplateSession?.ReplaceCurrentMatch(replacement);
+        }
     }
 
     /// <summary>

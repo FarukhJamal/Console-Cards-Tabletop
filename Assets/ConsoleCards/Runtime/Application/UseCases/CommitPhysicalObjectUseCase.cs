@@ -19,16 +19,19 @@ namespace ConsoleCards.Application.UseCases
     public sealed class CommitPhysicalObjectCommand : ITabletopCommand
     {
         public CommitPhysicalObjectCommand(CommandContext context, TabletopObjectId objectId,
-            PhysicalObjectState state, long expectedPhysicalRevision, int? settledDieValue = null)
+            PhysicalObjectState state, long expectedPhysicalRevision, int? settledDieValue = null,
+            AuthoritativeActionRecordMode recordMode = AuthoritativeActionRecordMode.None)
         {
             Context = context; ObjectId = objectId; State = state; ExpectedPhysicalRevision = expectedPhysicalRevision;
             SettledDieValue = settledDieValue;
+            RecordMode = recordMode;
         }
         public CommandContext Context { get; }
         public TabletopObjectId ObjectId { get; }
         public PhysicalObjectState State { get; }
         public long ExpectedPhysicalRevision { get; }
         public int? SettledDieValue { get; }
+        public AuthoritativeActionRecordMode RecordMode { get; }
     }
 
     /// <summary>Accepts outcomes only from the authority's simulation adapter. No surface check on release/settlement.</summary>
@@ -69,7 +72,11 @@ namespace ConsoleCards.Application.UseCases
             obj.SetPhysicalState(command.State);
             if (die != null) die.SetAcceptedRoll(new DieRoll(die.SideCount, command.SettledDieValue.Value));
             match.RecordPhysicalCommand(command.Context.Id);
-            return CommandResult.Accepted(match.AdvanceRevision());
+            return CommandResult.Accepted(match.AdvanceRevision(
+                command.Context.Id,
+                command.Context.RequestedByPlayerId,
+                AuthoritativeActionKind.PhysicalObjectSettled,
+                command.RecordMode));
         }
     }
 }

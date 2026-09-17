@@ -171,6 +171,30 @@ namespace ConsoleCards.Games.TrapFloor
             LastResolvedXAxisPhysicalState = null;
             LastResolvedYAxisPhysicalState = null;
         }
+
+        internal void Restore(
+            IEnumerable<TrapFloorCollapsedFloorState> restoredFloors,
+            bool isPending,
+            PlayerId pendingActorPlayerId,
+            TrapFloorCollapseRollState lastRoll,
+            PhysicalObjectState lastXAxisState,
+            PhysicalObjectState lastYAxisState)
+        {
+            if (restoredFloors == null) throw new ArgumentNullException(nameof(restoredFloors));
+            Clear();
+            foreach (TrapFloorCollapsedFloorState floor in restoredFloors)
+            {
+                if (floor == null || collapsedById.ContainsKey(floor.FloorCardId))
+                    throw new ArgumentException("Collapse snapshot contains an invalid Floor.", nameof(restoredFloors));
+                collapsedFloors.Add(floor);
+                collapsedById.Add(floor.FloorCardId, floor);
+            }
+            IsCollapsePending = isPending;
+            PendingActorPlayerId = isPending ? pendingActorPlayerId : PlayerId.Empty;
+            LastRoll = lastRoll;
+            LastResolvedXAxisPhysicalState = lastXAxisState;
+            LastResolvedYAxisPhysicalState = lastYAxisState;
+        }
     }
 
     public sealed class TrapFloorBeginCollapseCommand : ITabletopCommand
@@ -298,7 +322,7 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(TrapFloorCollapseError.OfficialDiceUnavailable);
             if (matchState.Revision == long.MaxValue) return Failure(TrapFloorCollapseError.RevisionOverflow);
 
-            long revision = matchState.AdvanceRevision();
+            long revision = checked(matchState.Revision + 1L);
             state.Begin(
                 command.Context.RequestedByPlayerId,
                 xAxisDie.BaseState.PhysicalState,
@@ -308,6 +332,11 @@ namespace ConsoleCards.Games.TrapFloor
                 command.Context.RequestedByPlayerId,
                 template.FloorfallXAxisDieId,
                 template.FloorfallYAxisDieId);
+            matchState.AdvanceRevision(
+                command.Context.Id,
+                command.Context.RequestedByPlayerId,
+                AuthoritativeActionKind.TrapFloorCollapse,
+                AuthoritativeActionRecordMode.Intermediate);
             return TrapFloorCollapseResult.Accepted(revision);
         }
 
@@ -337,7 +366,7 @@ namespace ConsoleCards.Games.TrapFloor
             if (matchState.Revision == long.MaxValue) return Failure(TrapFloorCollapseError.RevisionOverflow);
 
             bool rerollRequired = state.IsCollapsed(floorCardId);
-            long revision = matchState.AdvanceRevision();
+            long revision = checked(matchState.Revision + 1L);
             TrapFloorCollapseRollState roll = state.RecordRoll(
                 xAxisDie, yAxisDie, coordinate, floorCardId, rerollRequired);
             activityFeed.RecordFloorfallRoll(
@@ -350,6 +379,11 @@ namespace ConsoleCards.Games.TrapFloor
                 yAxisDie.CurrentValue);
             if (rerollRequired)
             {
+                matchState.AdvanceRevision(
+                    command.Context.Id,
+                    command.Context.RequestedByPlayerId,
+                    AuthoritativeActionKind.TrapFloorCollapse,
+                    AuthoritativeActionRecordMode.Intermediate);
                 return TrapFloorCollapseResult.Accepted(revision, roll, rerollRequired: true);
             }
 
@@ -368,6 +402,11 @@ namespace ConsoleCards.Games.TrapFloor
                 template.FloorfallYAxisDieId,
                 xAxisDie.CurrentValue,
                 yAxisDie.CurrentValue);
+            matchState.AdvanceRevision(
+                command.Context.Id,
+                command.Context.RequestedByPlayerId,
+                AuthoritativeActionKind.TrapFloorCollapse,
+                AuthoritativeActionRecordMode.Transaction);
             return TrapFloorCollapseResult.Accepted(
                 revision,
                 roll,
