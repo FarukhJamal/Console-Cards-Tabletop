@@ -21,6 +21,8 @@ namespace ConsoleCards.Tests.PlayMode.Games.TrapFloor
             MatchState match = CreateMatch(template);
             Dictionary<TrapFloorFloorContentCategory, int> counts =
                 new Dictionary<TrapFloorFloorContentCategory, int>();
+            Dictionary<TrapFloorFloorContentSource, int> sourceCounts =
+                new Dictionary<TrapFloorFloorContentSource, int>();
 
             foreach (TabletopObjectId floorCardId in template.FloorCardIds.Values)
             {
@@ -29,8 +31,34 @@ namespace ConsoleCards.Tests.PlayMode.Games.TrapFloor
                     Is.True);
                 Assert.That(floorCard.IsRevealed, Is.False);
                 Assert.That(match.Cards[floorCardId].Face, Is.EqualTo(CardFace.FaceDown));
+                Assert.That(floorCard.Content.DisplayName, Is.Not.Empty);
+                Assert.That(floorCard.Content.DisplayText, Is.Not.Empty);
                 counts.TryGetValue(floorCard.Content.Category, out int count);
                 counts[floorCard.Content.Category] = count + 1;
+                sourceCounts.TryGetValue(floorCard.Content.ContentSource, out int sourceCount);
+                sourceCounts[floorCard.Content.ContentSource] = sourceCount + 1;
+
+                switch (floorCard.Content.Category)
+                {
+                    case TrapFloorFloorContentCategory.Trap:
+                        Assert.That(floorCard.Content.DisplayText, Does.Contain("Challenge:"));
+                        break;
+                    case TrapFloorFloorContentCategory.Friend:
+                        Assert.That(floorCard.Content.DisplayText, Does.Contain("One-time manual effect:"));
+                        break;
+                    case TrapFloorFloorContentCategory.Key:
+                        Assert.That(floorCard.Content.DisplayText, Does.Contain("Claim Key"));
+                        break;
+                    case TrapFloorFloorContentCategory.SecretExit:
+                        Assert.That(floorCard.Content.DisplayText, Does.Contain("Attempt Escape"));
+                        break;
+                    case TrapFloorFloorContentCategory.Entry:
+                        Assert.That(floorCard.Content.DisplayText, Does.Contain("PROVISIONAL STAGE-03 REFERENCE"));
+                        break;
+                    case TrapFloorFloorContentCategory.Ability:
+                        Assert.That(floorCard.Content.DisplayText, Does.Contain("One-time manual ability:"));
+                        break;
+                }
             }
 
             Assert.That(template.FloorCardIds.Count, Is.EqualTo(36));
@@ -40,6 +68,8 @@ namespace ConsoleCards.Tests.PlayMode.Games.TrapFloor
             Assert.That(counts[TrapFloorFloorContentCategory.SecretExit], Is.EqualTo(1));
             Assert.That(counts[TrapFloorFloorContentCategory.Entry], Is.EqualTo(1));
             Assert.That(counts[TrapFloorFloorContentCategory.Ability], Is.EqualTo(6));
+            Assert.That(sourceCounts[TrapFloorFloorContentSource.CurrentStage03Reference], Is.EqualTo(7));
+            Assert.That(sourceCounts[TrapFloorFloorContentSource.ProvisionalStage03], Is.EqualTo(29));
         }
 
         [Test]

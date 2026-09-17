@@ -3773,10 +3773,13 @@ namespace ConsoleCards.Presentation.Prototype
                 return description;
             }
 
-            if (floorCard.Content.Category == TrapFloorFloorContentCategory.Key
-                && trapFloorObjectiveState.TryGetClaim(floorCard.ObjectId, out TrapFloorCollectedKeyState claim))
+            if (floorCard.Content.Category == TrapFloorFloorContentCategory.Key)
             {
-                return $"{description}\nClaimed by {FormatPlayerName(claim.ClaimedByPlayerId)}.";
+                return trapFloorObjectiveState.TryGetClaim(
+                        floorCard.ObjectId,
+                        out TrapFloorCollectedKeyState claim)
+                    ? $"{description}\nKEY STATUS: CLAIMED by {FormatPlayerName(claim.ClaimedByPlayerId)}."
+                    : $"{description}\nKEY STATUS: UNCLAIMED — use Claim Key to collect it.";
             }
 
             if (floorCard.Content.Category == TrapFloorFloorContentCategory.SecretExit)
@@ -3835,8 +3838,19 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            CloseContextMenu();
+            bool keepInspectOpen = inspectedCardId == floorCardId;
+            if (!keepInspectOpen)
+            {
+                CloseContextMenu();
+            }
+
+            RefreshTrapFloorFloorCardPresentation(floorCardId);
             RefreshTrapFloorStatusUi();
+            if (keepInspectOpen)
+            {
+                RefreshCardInspectPopup();
+            }
+
             ShowMessage(
                 $"{FormatPlayerName(result.Activity.ActorPlayerId)} claimed "
                 + $"{result.FloorCard.Content.DisplayName}. "
@@ -3859,8 +3873,8 @@ namespace ConsoleCards.Presentation.Prototype
                 if (result.Error == TrapFloorObjectiveError.RequiredKeysMissing)
                 {
                     ShowMessage(
-                        $"Attempt Escape rejected: KEYS {result.CollectedKeyCount} / "
-                        + $"{result.RequiredKeyCount}.");
+                        $"Attempt Escape rejected: Need {result.RequiredKeyCount} Keys — "
+                        + $"{result.CollectedKeyCount} claimed.");
                 }
                 else
                 {
@@ -4106,7 +4120,33 @@ namespace ConsoleCards.Presentation.Prototype
                     ? string.Empty
                     : $"Revealed by: {FormatPlayerName(revealActivity.ActorPlayerId)}\n"
                         + $"Floor coordinate: {floorCard.Coordinate}\n";
-                string frontBody = $"{revealContext}"
+                string objectiveContext = string.Empty;
+                string frontTitle = floorCard.Content.DisplayName;
+                PrototypePopupActionOption? primaryAction = null;
+                if (floorCard.Content.Category == TrapFloorFloorContentCategory.Key
+                    && trapFloorObjectiveState != null)
+                {
+                    if (trapFloorObjectiveState.TryGetClaim(
+                            targetCardId,
+                            out TrapFloorCollectedKeyState claim))
+                    {
+                        frontTitle = "KEY — CLAIMED";
+                        objectiveContext = $"Key status: CLAIMED\n"
+                            + $"Claimed by: {FormatPlayerName(claim.ClaimedByPlayerId)}\n";
+                    }
+                    else
+                    {
+                        frontTitle = "KEY — UNCLAIMED";
+                        objectiveContext = "Key status: UNCLAIMED\n"
+                            + "Claim this Key before attempting to escape.\n";
+                        primaryAction = new PrototypePopupActionOption(
+                            "Claim Key",
+                            !trapFloorObjectiveState.IsWon,
+                            () => ClaimTrapFloorKey(targetCardId));
+                    }
+                }
+
+                string frontBody = $"{revealContext}{objectiveContext}"
                     + $"Category: {floorCard.Content.Category}\n"
                     + $"Content: {floorCard.Content.DisplayName}\n\n"
                     + floorCard.Content.DisplayText;
@@ -4114,7 +4154,7 @@ namespace ConsoleCards.Presentation.Prototype
                     $"Floor {floorCard.Coordinate} | {targetCardId}",
                     card.Face,
                     new PrototypeCardInspectSideModel(
-                        floorCard.Content.DisplayName,
+                        frontTitle,
                         frontBody,
                         null,
                         TrapFloorContentColor(floorCard.Content.Category),
@@ -4125,7 +4165,8 @@ namespace ConsoleCards.Presentation.Prototype
                         null,
                         new Color(0.10f, 0.19f, 0.42f),
                         Color.white),
-                    false);
+                    false,
+                    primaryAction);
                 return true;
             }
 
@@ -6777,8 +6818,19 @@ namespace ConsoleCards.Presentation.Prototype
                 else
                 {
                     frontColor = TrapFloorContentColor(floorCard.Content.Category);
-                    frontLabel = $"{floorCard.Content.Category.ToString().ToUpperInvariant()}\n"
-                        + floorCard.Content.DisplayName;
+                    if (floorCard.Content.Category == TrapFloorFloorContentCategory.Key
+                        && trapFloorObjectiveState != null)
+                    {
+                        bool isClaimed = trapFloorObjectiveState.TryGetClaim(card.BaseState.Id, out _);
+                        frontLabel = isClaimed
+                            ? $"KEY — CLAIMED\n{floorCard.Content.DisplayName}"
+                            : $"KEY — UNCLAIMED\n{floorCard.Content.DisplayName}";
+                    }
+                    else
+                    {
+                        frontLabel = $"{floorCard.Content.Category.ToString().ToUpperInvariant()}\n"
+                            + floorCard.Content.DisplayName;
+                    }
                 }
             }
 
@@ -7067,6 +7119,21 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 CloseCardInspect();
             }
+        }
+
+        private void RefreshTrapFloorFloorCardPresentation(TabletopObjectId floorCardId)
+        {
+            if (!matchState.Cards.TryGetValue(floorCardId, out CardInstanceState card)
+                || !TryGetCardVisualReferences(floorCardId, out PrototypeCardVisualReferences visualReferences))
+            {
+                return;
+            }
+
+            string label = labelsByCardId.TryGetValue(floorCardId, out string configuredLabel)
+                ? configuredLabel
+                : "FLOOR";
+            ConfigureCardVisuals(visualReferences, card, label);
+            visualReferences.SetCardContentVisible(ShouldShowCardContent(card));
         }
 
         private int CurrentFloorCardCount()

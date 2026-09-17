@@ -402,6 +402,8 @@ namespace ConsoleCards.Games.TrapFloor
             out DieState xAxisDie,
             out DieState yAxisDie)
         {
+            xAxisDie = null;
+            yAxisDie = null;
             return matchState.Dice.TryGetValue(template.FloorfallXAxisDieId, out xAxisDie)
                 && matchState.Dice.TryGetValue(template.FloorfallYAxisDieId, out yAxisDie)
                 && xAxisDie.SideCount == TrapFloorFloorfallService.DieSideCount

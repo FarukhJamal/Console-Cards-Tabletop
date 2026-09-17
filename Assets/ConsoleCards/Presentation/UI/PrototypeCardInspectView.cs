@@ -60,7 +60,6 @@ namespace ConsoleCards.Presentation.UI
             dismiss = dismissPopup ?? throw new ArgumentNullException(nameof(dismissPopup));
             BindButton(dismissOverlayButton, dismissPopup);
             BindButton(closeButton, dismissPopup);
-            BindButton(viewOtherSideButton, ToggleInspectionSide);
             panel.SetActive(true);
             gameObject.SetActive(true);
             ApplyModel();
@@ -136,10 +135,48 @@ namespace ConsoleCards.Presentation.UI
             artworkImage.sprite = side.Artwork;
             artworkImage.gameObject.SetActive(side.Artwork != null);
             iconsRoot.gameObject.SetActive(false);
-            viewOtherSideButton.gameObject.SetActive(model.CanViewOtherSide);
-            viewOtherSideButtonLabel.text = displayedFace == CardFace.FaceUp
-                ? "View Back (Inspection Only)"
-                : "View Front (Inspection Only)";
+            ConfigureAuxiliaryAction();
+        }
+
+        private void ConfigureAuxiliaryAction()
+        {
+            RemoveListeners(viewOtherSideButton);
+            bool hasPrimaryAction = model.PrimaryAction.HasValue;
+            bool showAuxiliaryButton = hasPrimaryAction || model.CanViewOtherSide;
+            viewOtherSideButton.gameObject.SetActive(showAuxiliaryButton);
+            viewOtherSideButton.interactable = !hasPrimaryAction || model.PrimaryAction.Value.Enabled;
+            if (hasPrimaryAction)
+            {
+                PrototypePopupActionOption action = model.PrimaryAction.Value;
+                viewOtherSideButtonLabel.text = action.Label;
+                BindButton(viewOtherSideButton, action.Selected);
+            }
+            else if (model.CanViewOtherSide)
+            {
+                viewOtherSideButtonLabel.text = displayedFace == CardFace.FaceUp
+                    ? "View Back (Inspection Only)"
+                    : "View Front (Inspection Only)";
+                BindButton(viewOtherSideButton, ToggleInspectionSide);
+            }
+
+            RectTransform auxiliaryRect = viewOtherSideButton.transform as RectTransform;
+            RectTransform closeRect = closeButton.transform as RectTransform;
+            if (auxiliaryRect != null)
+            {
+                Vector2 auxiliaryPosition = auxiliaryRect.anchoredPosition;
+                auxiliaryPosition.x = -125f;
+                auxiliaryRect.anchoredPosition = auxiliaryPosition;
+                Vector2 auxiliarySize = auxiliaryRect.sizeDelta;
+                auxiliarySize.x = 220f;
+                auxiliaryRect.sizeDelta = auxiliarySize;
+            }
+
+            if (closeRect != null)
+            {
+                Vector2 closePosition = closeRect.anchoredPosition;
+                closePosition.x = showAuxiliaryButton ? 125f : 0f;
+                closeRect.anchoredPosition = closePosition;
+            }
         }
 
         private void Update()
@@ -203,10 +240,34 @@ namespace ConsoleCards.Presentation.UI
             PrototypeCardInspectSideModel front,
             PrototypeCardInspectSideModel back,
             bool canViewOtherSide)
+            : this(
+                cardIdentity,
+                authoritativeFace,
+                front,
+                back,
+                canViewOtherSide,
+                null)
+        {
+        }
+
+        public PrototypeCardInspectModel(
+            string cardIdentity,
+            CardFace authoritativeFace,
+            PrototypeCardInspectSideModel front,
+            PrototypeCardInspectSideModel back,
+            bool canViewOtherSide,
+            PrototypePopupActionOption? primaryAction)
         {
             if (string.IsNullOrWhiteSpace(cardIdentity))
             {
                 throw new ArgumentException("Card inspection identity cannot be empty.", nameof(cardIdentity));
+            }
+
+            if (canViewOtherSide && primaryAction.HasValue)
+            {
+                throw new ArgumentException(
+                    "Card inspection cannot bind side-toggle and primary actions to the same control.",
+                    nameof(primaryAction));
             }
 
             CardIdentity = cardIdentity;
@@ -214,6 +275,7 @@ namespace ConsoleCards.Presentation.UI
             Front = front ?? throw new ArgumentNullException(nameof(front));
             Back = back ?? throw new ArgumentNullException(nameof(back));
             CanViewOtherSide = canViewOtherSide;
+            PrimaryAction = primaryAction;
         }
 
         public string CardIdentity { get; }
@@ -225,6 +287,8 @@ namespace ConsoleCards.Presentation.UI
         public PrototypeCardInspectSideModel Back { get; }
 
         public bool CanViewOtherSide { get; }
+
+        public PrototypePopupActionOption? PrimaryAction { get; }
     }
 
     public sealed class PrototypeCardInspectSideModel
