@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 namespace ConsoleCards.Presentation.UI
 {
-    public sealed class PrototypeQuantityPopupView : MonoBehaviour
+    public sealed class PrototypeQuantityPopupView : ReusableUiView
     {
         [SerializeField] private Button dismissOverlayButton;
         [SerializeField] private GameObject panel;
@@ -41,7 +41,7 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
-        public void Show(
+        public void Bind(
             string title,
             string description,
             string confirmText,
@@ -53,6 +53,7 @@ namespace ConsoleCards.Presentation.UI
             Action confirm,
             Action dismissPopup)
         {
+            RequireAcquired();
             if (string.IsNullOrWhiteSpace(title))
             {
                 throw new ArgumentException("Quantity popup requires a title.", nameof(title));
@@ -64,7 +65,7 @@ namespace ConsoleCards.Presentation.UI
             }
 
             ValidateReferences();
-            Close();
+            Unbind();
             dismiss = dismissPopup ?? throw new ArgumentNullException(nameof(dismissPopup));
             titleLabel.text = title;
             descriptionLabel.text = description ?? string.Empty;
@@ -76,7 +77,6 @@ namespace ConsoleCards.Presentation.UI
             BindButton(cancelButton, dismissPopup);
             SetQuantity(quantity, minimum, maximum);
             panel.SetActive(true);
-            gameObject.SetActive(true);
             ClearSelectedUiObject();
         }
 
@@ -90,7 +90,18 @@ namespace ConsoleCards.Presentation.UI
             confirmButton.interactable = clamped >= minimum && clamped <= maximum;
         }
 
-        public void Close()
+        public override void Hide()
+        {
+            if (panel != null)
+            {
+                panel.SetActive(false);
+            }
+
+            base.Hide();
+            ClearSelectedUiObject();
+        }
+
+        public override void Unbind()
         {
             RemoveListeners(dismissOverlayButton);
             RemoveListeners(decrementButton);
@@ -98,13 +109,11 @@ namespace ConsoleCards.Presentation.UI
             RemoveListeners(confirmButton);
             RemoveListeners(cancelButton);
             dismiss = null;
-            if (panel != null)
-            {
-                panel.SetActive(false);
-            }
-
-            gameObject.SetActive(false);
-            ClearSelectedUiObject();
+            if (titleLabel != null) titleLabel.text = string.Empty;
+            if (descriptionLabel != null) descriptionLabel.text = string.Empty;
+            if (countLabel != null) countLabel.text = string.Empty;
+            if (rangeLabel != null) rangeLabel.text = string.Empty;
+            if (confirmButtonLabel != null) confirmButtonLabel.text = string.Empty;
         }
 
         private void Update()
@@ -145,14 +154,5 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
-        private void OnDestroy()
-        {
-            RemoveListeners(dismissOverlayButton);
-            RemoveListeners(decrementButton);
-            RemoveListeners(incrementButton);
-            RemoveListeners(confirmButton);
-            RemoveListeners(cancelButton);
-            dismiss = null;
-        }
     }
 }

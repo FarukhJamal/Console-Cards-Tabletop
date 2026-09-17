@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 72c6dd5f348745f0ab42292ae00f62ce, type: 3}
+  m_Name: PrototypeUiPrefabCatalog
+  m_EditorClassIdentifier: ConsoleCards.Presentation::ConsoleCards.Presentation.UI.UiPrefabCatalog
+  entries:
+  - id: platform.component-toolbox
+    prefab: {fileID: 114000, guid: c5b19139ff4b4f52aad79ee919bb7397, type: 3}
+    layer: 1
+    retention: 0
+  - id: platform.tabletop-popup
+    prefab: {fileID: 114001, guid: 306faf8f74ea40c29778d2e89f85ec24, type: 3}
+    layer: 2
+    retention: 0
+  - id: platform.quantity-popup
+    prefab: {fileID: 114000, guid: 5bce6ed160af4b9da30a80cc6e3957d3, type: 3}
+    layer: 3
+    retention: 0
+  - id: platform.card-inspect
+    prefab: {fileID: 114000, guid: a4b986c16e8b42afb2a87e7189fd126d, type: 3}
+    layer: 3
+    retention: 0
+  - id: platform.interaction-guide
+    prefab: {fileID: 114000, guid: 18ff22796a2b4e2aaec1e8cd3a815910, type: 3}
+    layer: 1
+    retention: 0
+  - id: platform.popup-action-row
+    prefab: {fileID: 114003, guid: 7e02bb55013040a7879b457a2f45fd88, type: 3}
+    layer: 2
+    retention: 1
+  - id: platform.game-template-row
+    prefab: {fileID: 114004, guid: 775e290cd6544f5287c8c891adce0992, type: 3}
+    layer: 0
+    retention: 1
+  - id: trap-floor.hud
+    prefab: {fileID: 114000, guid: 93d8ee6f65234c63bdb3ced54189a2ad, type: 3}
+    layer: 1
+    retention: 0

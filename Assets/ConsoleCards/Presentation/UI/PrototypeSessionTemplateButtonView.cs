@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 namespace ConsoleCards.Presentation.UI
 {
-    public sealed class PrototypeSessionTemplateButtonView : MonoBehaviour
+    public sealed class PrototypeSessionTemplateButtonView : ReusableUiView
     {
         [SerializeField] private Button button;
         [SerializeField] private Text label;
@@ -26,6 +26,7 @@ namespace ConsoleCards.Presentation.UI
 
         public void Bind(string displayName, Action selected)
         {
+            RequireAcquired();
             if (string.IsNullOrWhiteSpace(displayName))
             {
                 throw new ArgumentException("A Game Template option requires a display name.", nameof(displayName));
@@ -42,17 +43,18 @@ namespace ConsoleCards.Presentation.UI
             button.onClick.AddListener(selected.Invoke);
         }
 
-        public void Unbind()
+        public override void Unbind()
         {
             if (button != null)
             {
                 button.onClick.RemoveAllListeners();
+                button.interactable = false;
             }
-        }
 
-        private void OnDestroy()
-        {
-            Unbind();
+            if (label != null)
+            {
+                label.text = string.Empty;
+            }
         }
     }
 }

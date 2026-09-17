@@ -25,7 +25,7 @@ namespace ConsoleCards.Presentation.UI
         public Action Selected { get; }
     }
 
-    public sealed class PrototypePopupActionRowView : MonoBehaviour
+    public sealed class PrototypePopupActionRowView : ReusableUiView
     {
         [SerializeField] private Button button;
         [SerializeField] private Text label;
@@ -41,6 +41,7 @@ namespace ConsoleCards.Presentation.UI
 
         public void Bind(PrototypePopupActionOption option)
         {
+            RequireAcquired();
             ValidateReferences();
             Unbind();
             label.text = option.Label;
@@ -48,17 +49,18 @@ namespace ConsoleCards.Presentation.UI
             button.onClick.AddListener(option.Selected.Invoke);
         }
 
-        public void Unbind()
+        public override void Unbind()
         {
             if (button != null)
             {
                 button.onClick.RemoveAllListeners();
+                button.interactable = false;
             }
-        }
 
-        private void OnDestroy()
-        {
-            Unbind();
+            if (label != null)
+            {
+                label.text = string.Empty;
+            }
         }
     }
 }

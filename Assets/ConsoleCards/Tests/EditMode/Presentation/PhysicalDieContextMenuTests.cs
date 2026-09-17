@@ -29,7 +29,7 @@ namespace ConsoleCards.Tests.EditMode.Presentation
         private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
         private readonly List<GameObject> objects = new List<GameObject>();
         private TabletopPrototypeComposition composition;
-        private PrototypeRuntimeUiRoot ui;
+        private PrototypeRuntimeUiController ui;
         private TabletopInputFrameCoordinator input;
         private EventSystem eventSystem;
         private EventSystem previousEventSystem;
@@ -42,18 +42,12 @@ namespace ConsoleCards.Tests.EditMode.Presentation
         public void SetUp()
         {
             previousEventSystem = EventSystem.current;
-            eventSystem = Create("UI Events").AddComponent<EventSystem>();
+            PrototypeRuntimeUiController uiPrefab = AssetDatabase.LoadAssetAtPath<PrototypeRuntimeUiController>(
+                "Assets/ConsoleCards/Content/Prefabs/Prototype/PrototypeRuntimeUiRoot.prefab");
+            ui = Object.Instantiate(uiPrefab);
+            objects.Add(ui.gameObject);
+            eventSystem = ui.GetComponentInChildren<EventSystem>(true);
             EventSystem.current = eventSystem;
-            GameObject canvasObject = Create("UI", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
-            canvasObject.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
-            ui = canvasObject.AddComponent<PrototypeRuntimeUiRoot>();
-            Set(ui, "tabletopPopupMount", canvasObject.transform);
-            Set(ui, "popupLayer", canvasObject);
-            Set(ui, "tabletopPopupPrefab", AssetDatabase.LoadAssetAtPath<PrototypeTabletopPopupView>(
-                "Assets/ConsoleCards/Content/Prefabs/Prototype/PrototypeTabletopPopup.prefab"));
-            GameObject hiddenHud = Create("Inactive HUD");
-            hiddenHud.SetActive(false);
-            Set(ui, "activeSessionHudLayer", hiddenHud);
 
             // Isolate popup orchestration without loading a scene or starting a Match session.
             GameObject compositionObject = Create("Composition");

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
@@ -7,36 +6,20 @@ using UnityEngine.UI;
 
 namespace ConsoleCards.Presentation.UI
 {
+    /// <summary>
+    /// Scene-authored generic runtime UI shell. It validates infrastructure and exposes the UI service.
+    /// </summary>
     public sealed class PrototypeRuntimeUiRoot : MonoBehaviour
     {
+        [Header("Authored UI infrastructure")]
         [SerializeField] private Canvas canvas;
         [SerializeField] private CanvasScaler canvasScaler;
         [SerializeField] private GraphicRaycaster graphicRaycaster;
         [SerializeField] private EventSystem eventSystem;
         [SerializeField] private InputSystemUIInputModule inputModule;
-        [SerializeField] private GameObject gameTemplatesLayer;
-        [SerializeField] private GameObject activeSessionHudLayer;
-        [SerializeField] private GameObject popupLayer;
-        [SerializeField] private PrototypeGameTemplatesPanelView gameTemplatesPanelView;
-        [SerializeField] private PrototypeActiveSessionToolbarView activeSessionToolbarView;
-        [SerializeField] private PrototypeStatusMessageView statusMessageView;
-        [SerializeField] private Transform componentToolboxMount;
-        [SerializeField] private PrototypeComponentToolboxView componentToolboxPrefab;
-        [SerializeField] private Transform tabletopPopupMount;
-        [SerializeField] private PrototypeTabletopPopupView tabletopPopupPrefab;
-        [SerializeField] private PrototypeQuantityPopupView quantityPopupPrefab;
-        [SerializeField] private PrototypeCardInspectView cardInspectPopupPrefab;
-        [SerializeField] private Transform trapFloorHudMount;
-        [SerializeField] private PrototypeTrapFloorHudView trapFloorHudPrefab;
-        [SerializeField] private Transform interactionGuideMount;
-        [SerializeField] private PrototypeInteractionGuide interactionGuidePrefab;
+        [SerializeField] private RuntimeUiManager uiManager;
 
-        private PrototypeComponentToolboxView componentToolboxView;
-        private PrototypeTabletopPopupView tabletopPopupView;
-        private PrototypeQuantityPopupView quantityPopupView;
-        private PrototypeCardInspectView cardInspectPopupView;
-        private PrototypeTrapFloorHudView trapFloorHudView;
-        private PrototypeInteractionGuide interactionGuideView;
+        public IRuntimeUiService UiService => uiManager;
 
         public void ValidateReferences()
         {
@@ -57,408 +40,21 @@ namespace ConsoleCards.Presentation.UI
                     "PrototypeRuntimeUiRoot requires a Screen Space Overlay Canvas using Scale With Screen Size.");
             }
 
-            if (gameTemplatesLayer == null
-                || activeSessionHudLayer == null
-                || popupLayer == null
-                || gameTemplatesPanelView == null
-                || activeSessionToolbarView == null
-                || statusMessageView == null
-                || componentToolboxMount == null
-                || componentToolboxPrefab == null
-                || tabletopPopupMount == null
-                || tabletopPopupPrefab == null
-                || quantityPopupPrefab == null
-                || cardInspectPopupPrefab == null
-                || trapFloorHudMount == null
-                || trapFloorHudPrefab == null
-                || interactionGuideMount == null
-                || interactionGuidePrefab == null)
+            if (uiManager == null)
             {
                 throw new InvalidOperationException(
-                    "PrototypeRuntimeUiRoot requires its authored layers and view references.");
+                    "PrototypeRuntimeUiRoot requires its scene-authored RuntimeUiManager component.");
             }
 
-            gameTemplatesPanelView.ValidateReferences();
-            activeSessionToolbarView.ValidateReferences();
-            statusMessageView.ValidateReferences();
-            componentToolboxPrefab.ValidateReferences();
-            tabletopPopupPrefab.ValidateReferences();
-            quantityPopupPrefab.ValidateReferences();
-            cardInspectPopupPrefab.ValidateReferences();
-            trapFloorHudPrefab.ValidateReferences();
-            interactionGuidePrefab.ValidateReferences();
+            uiManager.ValidateReferences();
         }
 
-        public void ShowGameTemplatesPanel(
-            Action clearTable,
-            IReadOnlyList<PrototypeGameTemplateOption> templateOptions,
-            string errorMessage)
-        {
-            ValidateReferences();
-            CloseTabletopPopup();
-            gameTemplatesLayer.SetActive(true);
-            gameTemplatesPanelView.Bind(clearTable, templateOptions, errorMessage);
-            ClearSelectedUiObject();
-        }
-
-        public void HideGameTemplatesPanel()
-        {
-            gameTemplatesPanelView?.Unbind();
-            if (gameTemplatesLayer != null)
-            {
-                gameTemplatesLayer.SetActive(false);
-            }
-
-            ClearSelectedUiObject();
-        }
-
-        public void ShowActiveSession(
-            string sessionTitle,
-            Action undo,
-            Action redo,
-            Action resetSession,
-            Action openGameTemplates,
-            string statusMessage,
-            PrototypeComponentToolboxBindings componentToolboxBindings)
-        {
-            ValidateReferences();
-            EnsureComponentToolboxView();
-            EnsureInteractionGuideView();
-            HideGameTemplatesPanel();
-            CloseTabletopPopup();
-            activeSessionHudLayer.SetActive(true);
-            activeSessionToolbarView.Bind(sessionTitle, undo, redo, resetSession, openGameTemplates);
-            componentToolboxView.Bind(componentToolboxBindings, CloseTabletopPopup);
-            interactionGuideView.Bind();
-            trapFloorHudView?.Hide();
-            statusMessageView.SetMessage(statusMessage);
-            ClearSelectedUiObject();
-        }
-
-        public void SetUndoState(bool enabled, string label)
-        {
-            if (activeSessionToolbarView != null)
-            {
-                activeSessionToolbarView.SetUndoState(enabled, label);
-            }
-        }
-
-        public void SetRedoState(bool enabled, string label)
-        {
-            if (activeSessionToolbarView != null)
-            {
-                activeSessionToolbarView.SetRedoState(enabled, label);
-            }
-        }
-
-        public void SetGameTemplatesError(string errorMessage)
-        {
-            gameTemplatesPanelView.SetError(errorMessage);
-        }
-
-        public void SetStatusMessage(string statusMessage)
-        {
-            if (!activeSessionHudLayer.activeSelf)
-            {
-                return;
-            }
-
-            statusMessageView.SetMessage(statusMessage);
-        }
-
-        public void ShowPlacementHint(string placementSubject, float rotationDegrees)
-        {
-            EnsureComponentToolboxView();
-            componentToolboxView.ShowPlacementHint(placementSubject, rotationDegrees);
-        }
-
-        public void ClearPlacementHint()
-        {
-            componentToolboxView?.ClearPlacementHint();
-        }
-
-        public void ShowContextMenu(
-            Vector2 screenPosition,
-            string title,
-            string body,
-            IReadOnlyList<PrototypePopupActionOption> actions,
-            Action dismiss,
-            Action<Vector2> secondaryDismiss)
-        {
-            EnsureTabletopPopupView();
-            quantityPopupView?.Close();
-            cardInspectPopupView?.Close();
-            componentToolboxView?.CloseToolbox();
-            popupLayer.SetActive(true);
-            tabletopPopupView.ShowContextMenu(
-                screenPosition,
-                title,
-                body,
-                actions,
-                dismiss,
-                secondaryDismiss);
-        }
-
-        public void ShowDrawCountPopup(
-            Vector2 screenPosition,
-            int selectedCount,
-            int availableCount,
-            Action decrement,
-            Action increment,
-            Action confirm,
-            Action cancel,
-            Action dismiss,
-            Action<Vector2> secondaryDismiss)
-        {
-            EnsureTabletopPopupView();
-            quantityPopupView?.Close();
-            cardInspectPopupView?.Close();
-            componentToolboxView?.CloseToolbox();
-            popupLayer.SetActive(true);
-            tabletopPopupView.ShowDrawCount(
-                screenPosition,
-                selectedCount,
-                availableCount,
-                decrement,
-                increment,
-                confirm,
-                cancel,
-                dismiss,
-                secondaryDismiss);
-        }
-
-        public void SetDrawCountPopupValue(int selectedCount, int availableCount)
-        {
-            tabletopPopupView?.SetDrawCount(selectedCount, availableCount);
-        }
-
-        public void ShowQuantityPopup(
-            string title,
-            string description,
-            string confirmText,
-            int quantity,
-            int minimum,
-            int maximum,
-            Action decrement,
-            Action increment,
-            Action confirm,
-            Action dismiss)
-        {
-            EnsureQuantityPopupView();
-            componentToolboxView?.CloseToolbox();
-            tabletopPopupView?.Close();
-            cardInspectPopupView?.Close();
-            popupLayer.SetActive(true);
-            quantityPopupView.Show(
-                title,
-                description,
-                confirmText,
-                quantity,
-                minimum,
-                maximum,
-                decrement,
-                increment,
-                confirm,
-                dismiss);
-        }
-
-        public void SetQuantityPopupValue(int quantity, int minimum, int maximum)
-        {
-            quantityPopupView?.SetQuantity(quantity, minimum, maximum);
-        }
-
-        public void ShowCardInspect(PrototypeCardInspectModel model, Action dismiss)
-        {
-            EnsureCardInspectPopupView();
-            componentToolboxView?.CloseToolbox();
-            tabletopPopupView?.Close();
-            quantityPopupView?.Close();
-            popupLayer.SetActive(true);
-            cardInspectPopupView.Show(model, dismiss);
-        }
-
-        public void RefreshCardInspect(PrototypeCardInspectModel model)
-        {
-            cardInspectPopupView?.Refresh(model);
-        }
-
-        public void CloseCardInspect()
-        {
-            cardInspectPopupView?.Close();
-            if (tabletopPopupView == null || !tabletopPopupView.gameObject.activeSelf)
-            {
-                if (quantityPopupView == null || !quantityPopupView.gameObject.activeSelf)
-                {
-                    popupLayer.SetActive(false);
-                }
-            }
-        }
-
-        public void ShowTrapFloorStatus(
-            PrototypeTrapFloorStatusModel status,
-            PrototypeFloorfallStatusModel floorfall,
-            IReadOnlyList<PrototypePopupActionOption> actions)
-        {
-            if (!activeSessionHudLayer.activeSelf)
-            {
-                return;
-            }
-
-            EnsureTrapFloorHudView();
-            trapFloorHudView.Show(status, floorfall, actions);
-        }
-
-        public void ShowTrapFloorObjective(
-            string keyProgress,
-            string collapseStatus,
-            bool isWon,
-            IReadOnlyList<PrototypePopupActionOption> actions)
-        {
-            if (!activeSessionHudLayer.activeSelf)
-            {
-                return;
-            }
-
-            EnsureTrapFloorHudView();
-            trapFloorHudView.ShowObjective(keyProgress, collapseStatus, isWon, actions);
-        }
-
-        public void HideTrapFloorStatus()
-        {
-            trapFloorHudView?.Hide();
-        }
-
-        public void ShowMergeDestinationPopup(
-            Vector2 screenPosition,
-            IReadOnlyList<PrototypePopupActionOption> destinations,
-            Action back,
-            Action dismiss,
-            Action<Vector2> secondaryDismiss)
-        {
-            EnsureTabletopPopupView();
-            quantityPopupView?.Close();
-            cardInspectPopupView?.Close();
-            componentToolboxView?.CloseToolbox();
-            popupLayer.SetActive(true);
-            tabletopPopupView.ShowMergeDestinations(
-                screenPosition,
-                destinations,
-                back,
-                dismiss,
-                secondaryDismiss);
-        }
-
-        public void CloseTabletopPopup()
-        {
-            tabletopPopupView?.Close();
-            quantityPopupView?.Close();
-            cardInspectPopupView?.Close();
-            if (popupLayer != null)
-            {
-                popupLayer.SetActive(false);
-            }
-        }
-
-        public void ClearActiveSessionTransientUi()
-        {
-            componentToolboxView?.CloseToolbox();
-            componentToolboxView?.ClearPlacementHint();
-            CloseTabletopPopup();
-        }
-
-        public void ReleaseBindings()
-        {
-            gameTemplatesPanelView?.Unbind();
-            activeSessionToolbarView?.Unbind();
-            componentToolboxView?.Unbind();
-            trapFloorHudView?.Hide();
-            interactionGuideView?.Hide();
-            CloseTabletopPopup();
-        }
-
-        private void EnsureComponentToolboxView()
-        {
-            if (componentToolboxView != null)
-            {
-                return;
-            }
-
-            componentToolboxView = Instantiate(componentToolboxPrefab, componentToolboxMount, false);
-            componentToolboxView.name = componentToolboxPrefab.name;
-            componentToolboxView.ValidateReferences();
-        }
-
-        private void EnsureTabletopPopupView()
-        {
-            if (tabletopPopupView != null)
-            {
-                return;
-            }
-
-            tabletopPopupView = Instantiate(tabletopPopupPrefab, tabletopPopupMount, false);
-            tabletopPopupView.name = tabletopPopupPrefab.name;
-            tabletopPopupView.ValidateReferences();
-        }
-
-        private void EnsureQuantityPopupView()
-        {
-            if (quantityPopupView != null)
-            {
-                return;
-            }
-
-            quantityPopupView = Instantiate(quantityPopupPrefab, tabletopPopupMount, false);
-            quantityPopupView.name = quantityPopupPrefab.name;
-            quantityPopupView.ValidateReferences();
-        }
-
-        private void EnsureCardInspectPopupView()
-        {
-            if (cardInspectPopupView != null)
-            {
-                return;
-            }
-
-            cardInspectPopupView = Instantiate(cardInspectPopupPrefab, tabletopPopupMount, false);
-            cardInspectPopupView.name = cardInspectPopupPrefab.name;
-            cardInspectPopupView.ValidateReferences();
-        }
-
-        private void EnsureTrapFloorHudView()
-        {
-            if (trapFloorHudView != null)
-            {
-                return;
-            }
-
-            trapFloorHudView = Instantiate(trapFloorHudPrefab, trapFloorHudMount, false);
-            trapFloorHudView.name = trapFloorHudPrefab.name;
-            trapFloorHudView.ValidateReferences();
-        }
-
-        private void EnsureInteractionGuideView()
-        {
-            if (interactionGuideView != null)
-            {
-                return;
-            }
-
-            interactionGuideView = Instantiate(interactionGuidePrefab, interactionGuideMount, false);
-            interactionGuideView.name = interactionGuidePrefab.name;
-            interactionGuideView.ValidateReferences();
-        }
-
-        private void ClearSelectedUiObject()
+        public void ClearSelectedUiObject()
         {
             if (eventSystem.currentSelectedGameObject != null)
             {
                 eventSystem.SetSelectedGameObject(null);
             }
-        }
-
-        private void OnDestroy()
-        {
-            ReleaseBindings();
         }
     }
 }

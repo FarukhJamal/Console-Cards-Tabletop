@@ -7,16 +7,9 @@ using UnityEngine.UI;
 
 namespace ConsoleCards.Presentation.UI
 {
-    public sealed class PrototypeTabletopPopupView : MonoBehaviour, IPointerClickHandler
+    public sealed class PrototypeTabletopPopupView : ReusableUiView, IPointerClickHandler
     {
-        private const float PanelWidth = 260f;
-        private const float PanelPadding = 12f;
-        private const float TitleHeight = 28f;
-        private const float ActionHeight = 44f;
-        private const float ActionSpacing = 6f;
-        private const float ElementSpacing = 8f;
         private const float PointerOffset = 8f;
-        private const float MergePanelMaximumHeight = 320f;
 
         [SerializeField] private RectTransform popupBounds;
         [SerializeField] private RectTransform contextPanel;
@@ -35,13 +28,18 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private RectTransform mergeActionsRoot;
         [SerializeField] private ScrollRect mergeScrollRect;
         [SerializeField] private Button mergeBackButton;
-        [SerializeField] private PrototypePopupActionRowView actionRowPrefab;
 
         private readonly List<PrototypePopupActionRowView> actionRows =
             new List<PrototypePopupActionRowView>();
         private Action dismiss;
         private Action<Vector2> secondaryDismiss;
         private Vector2 anchorScreenPosition;
+        private IRuntimeUiService uiManager;
+
+        public void Initialize(IRuntimeUiService manager)
+        {
+            uiManager = manager ?? throw new ArgumentNullException(nameof(manager));
+        }
 
         public void ValidateReferences()
         {
@@ -62,14 +60,11 @@ namespace ConsoleCards.Presentation.UI
                 || mergeActionsRoot == null
                 || mergeScrollRect == null
                 || mergeBackButton == null
-                || actionRowPrefab == null
-                || actionRowPrefab.gameObject.scene.IsValid())
+                || uiManager == null)
             {
                 throw new InvalidOperationException(
-                    "PrototypeTabletopPopupView requires its authored panels, controls, content roots, and action-row prefab asset.");
+                    "PrototypeTabletopPopupView requires its authored panels, controls, content roots, and runtime UI manager.");
             }
-
-            actionRowPrefab.ValidateReferences();
         }
 
         public void ShowContextMenu(
@@ -97,7 +92,7 @@ namespace ConsoleCards.Presentation.UI
             contextBodyLabel.text = hasBody ? body : string.Empty;
             contextBodyLabel.gameObject.SetActive(hasBody);
             RebuildRows(contextActionsRoot, actions);
-            LayoutContextPanel(hasBody, actions.Count);
+            base.Show();
             PositionPanel(contextPanel);
         }
 
@@ -119,6 +114,7 @@ namespace ConsoleCards.Presentation.UI
             BindButton(drawConfirmButton, confirm);
             BindButton(drawCancelButton, cancel);
             SetDrawCount(selectedCount, availableCount);
+            base.Show();
             PositionPanel(drawCountPanel);
         }
 
@@ -151,17 +147,13 @@ namespace ConsoleCards.Presentation.UI
             mergePanel.gameObject.SetActive(true);
             RebuildRows(mergeActionsRoot, destinations);
             BindButton(mergeBackButton, back);
-            LayoutMergePanel(destinations.Count);
             mergeScrollRect.verticalNormalizedPosition = 1f;
+            base.Show();
             PositionPanel(mergePanel);
         }
 
-        public void Close()
+        public override void Hide()
         {
-            ClearRows();
-            RemoveButtonListeners();
-            dismiss = null;
-            secondaryDismiss = null;
             if (contextPanel != null)
             {
                 contextPanel.gameObject.SetActive(false);
@@ -177,8 +169,21 @@ namespace ConsoleCards.Presentation.UI
                 mergePanel.gameObject.SetActive(false);
             }
 
-            gameObject.SetActive(false);
+            base.Hide();
             ClearSelectedUiObject();
+        }
+
+        public override void Unbind()
+        {
+            ClearRows();
+            RemoveButtonListeners();
+            dismiss = null;
+            secondaryDismiss = null;
+            if (contextTitleLabel != null) contextTitleLabel.text = string.Empty;
+            if (contextBodyLabel != null) contextBodyLabel.text = string.Empty;
+            if (drawCountLabel != null) drawCountLabel.text = string.Empty;
+            if (drawAvailableLabel != null) drawAvailableLabel.text = string.Empty;
+            anchorScreenPosition = Vector2.zero;
         }
 
         public void OnPointerClick(PointerEventData eventData)
@@ -214,21 +219,20 @@ namespace ConsoleCards.Presentation.UI
             Action dismissPopup,
             Action<Vector2> secondaryDismissPopup)
         {
+            RequireAcquired();
             if (dismissPopup == null)
             {
                 throw new ArgumentNullException(nameof(dismissPopup));
             }
 
             ValidateReferences();
-            ClearRows();
-            RemoveButtonListeners();
+            Unbind();
             dismiss = dismissPopup;
             secondaryDismiss = secondaryDismissPopup;
             anchorScreenPosition = screenPosition;
             contextPanel.gameObject.SetActive(false);
             drawCountPanel.gameObject.SetActive(false);
             mergePanel.gameObject.SetActive(false);
-            gameObject.SetActive(true);
         }
 
         private void RebuildRows(
@@ -237,61 +241,21 @@ namespace ConsoleCards.Presentation.UI
         {
             for (int i = 0; i < actions.Count; i++)
             {
-                PrototypePopupActionRowView row = Instantiate(actionRowPrefab, contentRoot, false);
-                row.name = actionRowPrefab.name;
+                PrototypePopupActionRowView row =
+                    uiManager.AcquirePooled<PrototypePopupActionRowView>(
+                        PrototypeUiPrefabIds.PopupActionRow,
+                        contentRoot);
                 row.Bind(actions[i]);
+                row.Show();
                 actionRows.Add(row);
             }
 
-            float height = actions.Count == 0
-                ? 0f
-                : (actions.Count * ActionHeight) + ((actions.Count - 1) * ActionSpacing);
-            contentRoot.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
-        }
-
-        private void LayoutContextPanel(bool hasBody, int actionCount)
-        {
-            float bodyHeight = 0f;
-            if (hasBody)
-            {
-                contextBodyLabel.rectTransform.SetSizeWithCurrentAnchors(
-                    RectTransform.Axis.Horizontal,
-                    PanelWidth - (PanelPadding * 2f));
-                bodyHeight = Mathf.Clamp(contextBodyLabel.preferredHeight, 20f, 96f);
-                contextBodyLabel.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, bodyHeight);
-            }
-
-            float actionsHeight = actionCount == 0
-                ? 0f
-                : (actionCount * ActionHeight) + ((actionCount - 1) * ActionSpacing);
-            float bodyBlock = hasBody ? bodyHeight + ElementSpacing : 0f;
-            float panelHeight = (PanelPadding * 2f) + TitleHeight + ElementSpacing + bodyBlock + actionsHeight;
-            contextPanel.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, PanelWidth);
-            contextPanel.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, panelHeight);
-
-            contextTitleLabel.rectTransform.anchoredPosition = new Vector2(PanelPadding, -PanelPadding);
-            contextBodyLabel.rectTransform.anchoredPosition =
-                new Vector2(PanelPadding, -(PanelPadding + TitleHeight + ElementSpacing));
-            contextActionsRoot.anchoredPosition = new Vector2(
-                PanelPadding,
-                -(PanelPadding + TitleHeight + ElementSpacing + bodyBlock));
-        }
-
-        private void LayoutMergePanel(int destinationCount)
-        {
-            float rowContentHeight = destinationCount == 0
-                ? ActionHeight
-                : (destinationCount * ActionHeight) + ((destinationCount - 1) * ActionSpacing);
-            float panelHeight = Mathf.Min(MergePanelMaximumHeight, 92f + rowContentHeight);
-            mergePanel.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, PanelWidth);
-            mergePanel.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, panelHeight);
-            mergeViewport.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, panelHeight - 92f);
-            mergeActionsRoot.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, rowContentHeight);
         }
 
         private void PositionPanel(RectTransform panel)
         {
             Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(panel);
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
                     popupBounds,
                     anchorScreenPosition,
@@ -330,15 +294,7 @@ namespace ConsoleCards.Presentation.UI
                     continue;
                 }
 
-                row.Unbind();
-                if (UnityEngine.Application.isPlaying)
-                {
-                    Destroy(row.gameObject);
-                }
-                else
-                {
-                    DestroyImmediate(row.gameObject);
-                }
+                uiManager.Release(row);
             }
 
             actionRows.Clear();
@@ -372,10 +328,5 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
-        private void OnDestroy()
-        {
-            ClearRows();
-            RemoveButtonListeners();
-        }
     }
 }

@@ -28,15 +28,20 @@ namespace ConsoleCards.Presentation.UI
     /// <summary>
     /// In-simulator browser for replacing the current table with an Empty Table or a registered Game Template.
     /// </summary>
-    public sealed class PrototypeGameTemplatesPanelView : MonoBehaviour
+    public sealed class PrototypeGameTemplatesPanelView : ReusableUiView
     {
         [SerializeField] private Button clearTableButton;
         [SerializeField] private Transform templateOptionsRoot;
-        [SerializeField] private PrototypeSessionTemplateButtonView templateOptionPrefab;
         [SerializeField] private Text errorLabel;
 
         private readonly List<PrototypeSessionTemplateButtonView> optionViews =
             new List<PrototypeSessionTemplateButtonView>();
+        private IRuntimeUiService uiManager;
+
+        public void Initialize(IRuntimeUiService manager)
+        {
+            uiManager = manager ?? throw new ArgumentNullException(nameof(manager));
+        }
 
         public void ValidateReferences()
         {
@@ -52,13 +57,12 @@ namespace ConsoleCards.Presentation.UI
                     "PrototypeGameTemplatesPanelView requires a template-options root.");
             }
 
-            if (templateOptionPrefab == null || templateOptionPrefab.gameObject.scene.IsValid())
+            if (uiManager == null)
             {
                 throw new InvalidOperationException(
-                    "PrototypeGameTemplatesPanelView requires an authored template-option prefab asset.");
+                    "PrototypeGameTemplatesPanelView requires the runtime UI manager.");
             }
 
-            templateOptionPrefab.ValidateReferences();
             if (errorLabel == null)
             {
                 throw new InvalidOperationException(
@@ -71,6 +75,7 @@ namespace ConsoleCards.Presentation.UI
             IReadOnlyList<PrototypeGameTemplateOption> templateOptions,
             string errorMessage)
         {
+            RequireAcquired();
             if (clearTable == null)
             {
                 throw new ArgumentNullException(nameof(clearTable));
@@ -87,12 +92,13 @@ namespace ConsoleCards.Presentation.UI
             for (int i = 0; i < templateOptions.Count; i++)
             {
                 PrototypeGameTemplateOption option = templateOptions[i];
-                PrototypeSessionTemplateButtonView optionView = Instantiate(
-                    templateOptionPrefab,
-                    templateOptionsRoot,
-                    false);
+                PrototypeSessionTemplateButtonView optionView =
+                    uiManager.AcquirePooled<PrototypeSessionTemplateButtonView>(
+                        PrototypeUiPrefabIds.GameTemplateRow,
+                        templateOptionsRoot);
                 optionView.name = $"GameTemplate_{i + 1}";
                 optionView.Bind(option.DisplayName, option.Selected);
+                optionView.Show();
                 optionViews.Add(optionView);
             }
 
@@ -111,7 +117,7 @@ namespace ConsoleCards.Presentation.UI
             errorLabel.gameObject.SetActive(hasError);
         }
 
-        public void Unbind()
+        public override void Unbind()
         {
             if (clearTableButton != null)
             {
@@ -126,17 +132,11 @@ namespace ConsoleCards.Presentation.UI
                     continue;
                 }
 
-                optionView.Unbind();
-                optionView.gameObject.SetActive(false);
-                Destroy(optionView.gameObject);
+                uiManager.Release(optionView);
             }
 
             optionViews.Clear();
-        }
-
-        private void OnDestroy()
-        {
-            Unbind();
+            SetError(string.Empty);
         }
     }
 }

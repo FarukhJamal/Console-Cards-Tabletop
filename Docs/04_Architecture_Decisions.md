@@ -519,3 +519,22 @@ This file records accepted or proposed Architecture Decision Records. A decision
 - Undo is global table history, not per-Player history.
 - Redo is not approved by this decision.
 - Persistent Undo history, replay, cross-session restoration, and final multiplayer Undo permissions remain future work.
+
+---
+
+## ADR-029 - Scene-Authored UI Shell and Prefab Reuse Lifetimes
+
+**Status:** Accepted
+
+**Approval source:** Runtime UI framework direction approved by the user on 2026-09-17.
+
+**Decision:** The persistent Runtime UI shell is authored directly in `TabletopPrototype.unity` and owns the Canvas, CanvasScaler, EventSystem/Input System UI module, persistent toolbar/status UI, and explicit Screen, HUD, Popup, Modal, and Notification mounts. `RuntimeUiManager` is a scene component with serialized references to that shell, its mounts, and the UI prefab catalog. A serialized UI prefab catalog maps stable presentation IDs to authored feature prefab references, layer ownership, and either cached-single-instance or pooled retention. Runtime UI code may instantiate catalogued feature prefabs, bind data/callbacks, show/hide them, and reuse them; it must not construct player-facing UI hierarchy through `new GameObject` or `AddComponent`.
+
+**Lifetime contract:** Reusable dynamic Views follow `Acquire -> Bind -> Show -> Hide -> Unbind -> Release`. Unbind removes listeners and transient data before a pooled instance becomes available again. Persistent/static UI already exists with the scene-authored shell, cached UI retains one reusable instance, and only repeated/high-churn rows or notifications use pools.
+
+**Boundaries and consequences:**
+
+- Generic UI management knows catalog entries, layers, retention, and prefab lifetimes; it does not know Game rules.
+- Feature Views and presenters retain their own binding logic. A Game-specific HUD is supplied as a catalogued prefab and bound by that Game's Presentation code, so adding a future Game HUD does not require changing the generic UI manager.
+- Responsive shell dimensions, anchors, Canvas scaling, and input-raycast isolation are scene-authored; dynamic feature layout remains prefab-authored. Runtime positioning is limited to genuinely pointer-positioned or world-following UI.
+- Game rules, Match State, Undo/Redo semantics, tabletop physics, and interaction authority are unchanged.

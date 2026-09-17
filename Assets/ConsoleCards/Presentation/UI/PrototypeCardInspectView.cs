@@ -7,7 +7,7 @@ using UnityEngine.UI;
 
 namespace ConsoleCards.Presentation.UI
 {
-    public sealed class PrototypeCardInspectView : MonoBehaviour
+    public sealed class PrototypeCardInspectView : ReusableUiView
     {
         [SerializeField] private Button dismissOverlayButton;
         [SerializeField] private GameObject panel;
@@ -46,22 +46,22 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
-        public void Show(PrototypeCardInspectModel inspectModel, Action dismissPopup)
+        public void Bind(PrototypeCardInspectModel inspectModel, Action dismissPopup)
         {
+            RequireAcquired();
             if (inspectModel == null)
             {
                 throw new ArgumentNullException(nameof(inspectModel));
             }
 
             ValidateReferences();
-            Close();
+            Unbind();
             model = inspectModel;
             displayedFace = inspectModel.AuthoritativeFace;
             dismiss = dismissPopup ?? throw new ArgumentNullException(nameof(dismissPopup));
             BindButton(dismissOverlayButton, dismissPopup);
             BindButton(closeButton, dismissPopup);
             panel.SetActive(true);
-            gameObject.SetActive(true);
             ApplyModel();
             ClearSelectedUiObject();
         }
@@ -88,20 +88,30 @@ namespace ConsoleCards.Presentation.UI
             ApplyModel();
         }
 
-        public void Close()
+        public override void Hide()
+        {
+            if (panel != null)
+            {
+                panel.SetActive(false);
+            }
+
+            base.Hide();
+            ClearSelectedUiObject();
+        }
+
+        public override void Unbind()
         {
             RemoveListeners(dismissOverlayButton);
             RemoveListeners(viewOtherSideButton);
             RemoveListeners(closeButton);
             model = null;
             dismiss = null;
-            if (panel != null)
-            {
-                panel.SetActive(false);
-            }
-
-            gameObject.SetActive(false);
-            ClearSelectedUiObject();
+            if (identityLabel != null) identityLabel.text = string.Empty;
+            if (faceStateLabel != null) faceStateLabel.text = string.Empty;
+            if (sideTitleLabel != null) sideTitleLabel.text = string.Empty;
+            if (sideBodyLabel != null) sideBodyLabel.text = string.Empty;
+            if (artworkImage != null) artworkImage.sprite = null;
+            if (viewOtherSideButtonLabel != null) viewOtherSideButtonLabel.text = string.Empty;
         }
 
         private void ToggleInspectionSide()
@@ -158,25 +168,6 @@ namespace ConsoleCards.Presentation.UI
                     : "View Front (Inspection Only)";
                 BindButton(viewOtherSideButton, ToggleInspectionSide);
             }
-
-            RectTransform auxiliaryRect = viewOtherSideButton.transform as RectTransform;
-            RectTransform closeRect = closeButton.transform as RectTransform;
-            if (auxiliaryRect != null)
-            {
-                Vector2 auxiliaryPosition = auxiliaryRect.anchoredPosition;
-                auxiliaryPosition.x = -125f;
-                auxiliaryRect.anchoredPosition = auxiliaryPosition;
-                Vector2 auxiliarySize = auxiliaryRect.sizeDelta;
-                auxiliarySize.x = 220f;
-                auxiliaryRect.sizeDelta = auxiliarySize;
-            }
-
-            if (closeRect != null)
-            {
-                Vector2 closePosition = closeRect.anchoredPosition;
-                closePosition.x = showAuxiliaryButton ? 125f : 0f;
-                closeRect.anchoredPosition = closePosition;
-            }
         }
 
         private void Update()
@@ -222,14 +213,6 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
-        private void OnDestroy()
-        {
-            RemoveListeners(dismissOverlayButton);
-            RemoveListeners(viewOtherSideButton);
-            RemoveListeners(closeButton);
-            model = null;
-            dismiss = null;
-        }
     }
 
     public sealed class PrototypeCardInspectModel

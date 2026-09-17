@@ -87,7 +87,7 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal ConsoleView sceneConsoleView;
         [SerializeField] internal ConsoleSlotView[] sceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
         [SerializeField] internal PrototypeConsoleSlotVisual[] sceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
-        [SerializeField] internal PrototypeRuntimeUiRoot runtimeUiPrefab;
+        [SerializeField] internal PrototypeRuntimeUiController runtimeUi;
 
         [SerializeField] internal LayerMask interactionLayerMask;
         [SerializeField] internal float maximumHitDistance = 100f;
@@ -154,7 +154,6 @@ namespace ConsoleCards.Presentation.Prototype
         private bool pawnViewBoundByComposition;
         private bool tokenViewBoundByComposition;
         private bool gameTemplatesPanelVisible;
-        private PrototypeRuntimeUiRoot runtimeUi;
         private readonly ActiveSessionUndoHistory<PrototypeSessionUndoSnapshot> undoHistory =
             new ActiveSessionUndoHistory<PrototypeSessionUndoSnapshot>();
         private MatchState undoTrackedMatch;
@@ -1740,7 +1739,7 @@ namespace ConsoleCards.Presentation.Prototype
 
             try
             {
-                CreateRuntimeUi();
+                InitializeRuntimeUi();
                 PrepareTemplateCatalog();
                 if (!TryReplaceTable(TabletopSessionSelection.EmptyCustom))
                 {
@@ -2934,18 +2933,15 @@ namespace ConsoleCards.Presentation.Prototype
                 });
         }
 
-        private void CreateRuntimeUi()
+        private void InitializeRuntimeUi()
         {
-            RequireReference(runtimeUiPrefab, nameof(runtimeUiPrefab));
-            if (runtimeUiPrefab.gameObject.scene.IsValid())
+            RequireReference(runtimeUi, nameof(runtimeUi));
+            if (!runtimeUi.gameObject.scene.IsValid())
             {
                 throw new InvalidOperationException(
-                    "TabletopPrototypeComposition requires runtimeUiPrefab to reference a prefab asset.");
+                    "TabletopPrototypeComposition requires runtimeUi to reference the scene-authored UI controller.");
             }
 
-            runtimeUiPrefab.ValidateReferences();
-            runtimeUi = Instantiate(runtimeUiPrefab, transform, false);
-            runtimeUi.name = runtimeUiPrefab.name;
             runtimeUi.ValidateReferences();
         }
 

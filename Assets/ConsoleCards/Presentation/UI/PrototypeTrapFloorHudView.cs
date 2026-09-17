@@ -59,7 +59,7 @@ namespace ConsoleCards.Presentation.UI
         public string Target { get; }
     }
 
-    public sealed class PrototypeTrapFloorHudView : MonoBehaviour
+    public sealed class PrototypeTrapFloorHudView : ReusableUiView
     {
         [SerializeField] private Text roundLabel;
         [SerializeField] private Text phaseLabel;
@@ -73,17 +73,15 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Transform actionsRoot;
         [SerializeField] private GameObject actionsTitle;
         [SerializeField] private Text actionHelpLabel;
-        [SerializeField] private PrototypePopupActionRowView actionRowPrefab;
 
         private readonly List<PrototypePopupActionRowView> actionRows =
             new List<PrototypePopupActionRowView>();
-        private float expandedHeight;
-        private bool objectiveLayoutCaptured;
-        private Vector2 expandedActionsTitlePosition;
-        private Vector2 expandedActionsPosition;
-        private Vector2 expandedActionsSize;
+        private IRuntimeUiService uiManager;
 
-        private const float ObjectivePanelHeight = 232f;
+        public void Initialize(IRuntimeUiService manager)
+        {
+            uiManager = manager ?? throw new ArgumentNullException(nameof(manager));
+        }
 
         public void ValidateReferences()
         {
@@ -99,13 +97,11 @@ namespace ConsoleCards.Presentation.UI
                 || actionsRoot == null
                 || actionsTitle == null
                 || actionHelpLabel == null
-                || actionRowPrefab == null)
+                || uiManager == null)
             {
                 throw new InvalidOperationException(
-                    "PrototypeTrapFloorHudView requires its authored status, Floorfall, action, and row-prefab references.");
+                    "PrototypeTrapFloorHudView requires its authored status, Floorfall, action references, and runtime UI manager.");
             }
-
-            actionRowPrefab.ValidateReferences();
         }
 
         public void Show(
@@ -113,15 +109,13 @@ namespace ConsoleCards.Presentation.UI
             PrototypeFloorfallStatusModel floorfall,
             IReadOnlyList<PrototypePopupActionOption> actions)
         {
+            RequireAcquired();
             if (actions == null)
             {
                 throw new ArgumentNullException(nameof(actions));
             }
 
             ValidateReferences();
-            gameObject.SetActive(true);
-            RestoreExpandedActionLayout();
-            SetCompact(false);
             roundLabel.text = status.Round;
             phaseLabel.text = status.Phase;
             searchProgressLabel.text = status.SearchProgress;
@@ -142,6 +136,7 @@ namespace ConsoleCards.Presentation.UI
             actionsTitle.SetActive(actions.Count > 0);
             actionsRoot.gameObject.SetActive(actions.Count > 0);
             BindActions(actions);
+            base.Show();
         }
 
         public void ShowObjective(
@@ -150,14 +145,13 @@ namespace ConsoleCards.Presentation.UI
             bool isWon,
             IReadOnlyList<PrototypePopupActionOption> actions)
         {
+            RequireAcquired();
             if (actions == null)
             {
                 throw new ArgumentNullException(nameof(actions));
             }
 
             ValidateReferences();
-            gameObject.SetActive(true);
-            SetCompact(true);
             roundLabel.gameObject.SetActive(true);
             roundLabel.text = keyProgress ?? string.Empty;
             phaseLabel.gameObject.SetActive(isWon);
@@ -167,25 +161,35 @@ namespace ConsoleCards.Presentation.UI
             detailLabel.gameObject.SetActive(false);
             containerCountsLabel.gameObject.SetActive(false);
             floorfallPanel.SetActive(false);
-            ConfigureObjectiveActionLayout();
             actionsTitle.SetActive(actions.Count > 0);
             actionsRoot.gameObject.SetActive(actions.Count > 0);
             actionHelpLabel.gameObject.SetActive(false);
             BindActions(actions);
+            base.Show();
         }
 
-        public void Hide()
+        public override void Unbind()
         {
             UnbindActions();
-            gameObject.SetActive(false);
+            if (roundLabel != null) roundLabel.text = string.Empty;
+            if (phaseLabel != null) phaseLabel.text = string.Empty;
+            if (searchProgressLabel != null) searchProgressLabel.text = string.Empty;
+            if (detailLabel != null) detailLabel.text = string.Empty;
+            if (containerCountsLabel != null) containerCountsLabel.text = string.Empty;
+            if (actionHelpLabel != null) actionHelpLabel.text = string.Empty;
+            if (floorfallDiceLabel != null) floorfallDiceLabel.text = string.Empty;
+            if (floorfallCoordinateLabel != null) floorfallCoordinateLabel.text = string.Empty;
+            if (floorfallTargetLabel != null) floorfallTargetLabel.text = string.Empty;
         }
 
         private void BindActions(IReadOnlyList<PrototypePopupActionOption> actions)
         {
             while (actionRows.Count < actions.Count)
             {
-                PrototypePopupActionRowView row = Instantiate(actionRowPrefab, actionsRoot, false);
-                row.name = actionRowPrefab.name;
+                PrototypePopupActionRowView row =
+                    uiManager.AcquirePooled<PrototypePopupActionRowView>(
+                        PrototypeUiPrefabIds.PopupActionRow,
+                        actionsRoot);
                 row.ValidateReferences();
                 actionRows.Add(row);
             }
@@ -195,107 +199,30 @@ namespace ConsoleCards.Presentation.UI
                 PrototypePopupActionRowView row = actionRows[i];
                 if (i < actions.Count)
                 {
-                    row.gameObject.SetActive(true);
                     row.Bind(actions[i]);
+                    row.Show();
                 }
                 else
                 {
-                    row.Unbind();
-                    row.gameObject.SetActive(false);
+                    uiManager.Release(row);
+                    actionRows.RemoveAt(i);
+                    i--;
                 }
             }
         }
 
         private void UnbindActions()
         {
-            for (int i = 0; i < actionRows.Count; i++)
+            for (int i = actionRows.Count - 1; i >= 0; i--)
             {
                 if (actionRows[i] != null)
                 {
-                    actionRows[i].Unbind();
+                    uiManager.Release(actionRows[i]);
                 }
             }
+
+            actionRows.Clear();
         }
 
-        private void SetCompact(bool compact)
-        {
-            RectTransform rectTransform = transform as RectTransform;
-            if (rectTransform == null)
-            {
-                return;
-            }
-
-            if (expandedHeight <= 0f)
-            {
-                expandedHeight = rectTransform.sizeDelta.y;
-            }
-
-            Vector2 size = rectTransform.sizeDelta;
-            size.y = compact ? ObjectivePanelHeight : expandedHeight;
-            rectTransform.sizeDelta = size;
-        }
-
-        private void ConfigureObjectiveActionLayout()
-        {
-            CaptureExpandedActionLayout();
-            RectTransform titleRect = actionsTitle.transform as RectTransform;
-            RectTransform actionsRect = actionsRoot as RectTransform;
-            if (titleRect != null)
-            {
-                titleRect.anchoredPosition = new Vector2(0f, -142f);
-            }
-
-            if (actionsRect != null)
-            {
-                actionsRect.anchoredPosition = new Vector2(0f, -166f);
-                actionsRect.sizeDelta = new Vector2(340f, 56f);
-            }
-        }
-
-        private void RestoreExpandedActionLayout()
-        {
-            if (!objectiveLayoutCaptured)
-            {
-                return;
-            }
-
-            RectTransform titleRect = actionsTitle.transform as RectTransform;
-            RectTransform actionsRect = actionsRoot as RectTransform;
-            if (titleRect != null)
-            {
-                titleRect.anchoredPosition = expandedActionsTitlePosition;
-            }
-
-            if (actionsRect != null)
-            {
-                actionsRect.anchoredPosition = expandedActionsPosition;
-                actionsRect.sizeDelta = expandedActionsSize;
-            }
-        }
-
-        private void CaptureExpandedActionLayout()
-        {
-            if (objectiveLayoutCaptured)
-            {
-                return;
-            }
-
-            RectTransform titleRect = actionsTitle.transform as RectTransform;
-            RectTransform actionsRect = actionsRoot as RectTransform;
-            if (titleRect == null || actionsRect == null)
-            {
-                return;
-            }
-
-            expandedActionsTitlePosition = titleRect.anchoredPosition;
-            expandedActionsPosition = actionsRect.anchoredPosition;
-            expandedActionsSize = actionsRect.sizeDelta;
-            objectiveLayoutCaptured = true;
-        }
-
-        private void OnDestroy()
-        {
-            UnbindActions();
-        }
     }
 }

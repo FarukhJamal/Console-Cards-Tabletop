@@ -40,7 +40,7 @@ namespace ConsoleCards.Presentation.UI
         public Action<int> PlaceDie { get; }
     }
 
-    public sealed class PrototypeComponentToolboxView : MonoBehaviour
+    public sealed class PrototypeComponentToolboxView : ReusableUiView
     {
         [SerializeField] private Button addComponentButton;
         [SerializeField] private GameObject toolboxOverlay;
@@ -94,6 +94,7 @@ namespace ConsoleCards.Presentation.UI
 
         public void Bind(PrototypeComponentToolboxBindings bindings, Action beforeOpenToolbox = null)
         {
+            RequireAcquired();
             if (bindings.PlaceCard == null
                 || bindings.PlaceDeck == null
                 || bindings.PlaceStack == null
@@ -178,7 +179,7 @@ namespace ConsoleCards.Presentation.UI
             ClearSelectedUiObject();
         }
 
-        public void Unbind()
+        public override void Unbind()
         {
             RemoveListeners(addComponentButton);
             RemoveListeners(dismissOverlayButton);
@@ -266,9 +267,5 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
-        private void OnDestroy()
-        {
-            Unbind();
-        }
     }
 }

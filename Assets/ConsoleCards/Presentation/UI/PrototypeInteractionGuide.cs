@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 namespace ConsoleCards.Presentation.UI
 {
-    public sealed class PrototypeInteractionGuide : MonoBehaviour
+    public sealed class PrototypeInteractionGuide : ReusableUiView
     {
         [SerializeField] private GameObject guidePanel;
         [SerializeField] private Button toggleButton;
@@ -47,17 +47,17 @@ namespace ConsoleCards.Presentation.UI
 
         public void Bind()
         {
+            RequireAcquired();
             ValidateReferences();
             Unbind();
             titleLabel.text = title;
             bodyLabel.text = guideText;
             toggleButton.onClick.AddListener(ToggleGuide);
             closeButton.onClick.AddListener(HideGuide);
-            gameObject.SetActive(true);
             SetGuideVisible(true);
         }
 
-        public void Unbind()
+        public override void Unbind()
         {
             if (toggleButton != null)
             {
@@ -68,12 +68,6 @@ namespace ConsoleCards.Presentation.UI
             {
                 closeButton.onClick.RemoveAllListeners();
             }
-        }
-
-        public void Hide()
-        {
-            Unbind();
-            gameObject.SetActive(false);
         }
 
         private void ToggleGuide()
@@ -92,9 +86,5 @@ namespace ConsoleCards.Presentation.UI
             toggleButtonLabel.text = visible ? "Hide Help" : "Show Help";
         }
 
-        private void OnDestroy()
-        {
-            Unbind();
-        }
     }
 }
