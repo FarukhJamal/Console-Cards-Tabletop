@@ -460,7 +460,7 @@ namespace ConsoleCards.Games.TrapFloor
 
             if (objectiveState.MatchId != matchState.Id
                 || objectiveState.RequiredKeyCount
-                    != template.Stage03Configuration.RequiredKeyCount)
+                    != template.ActiveMode.RequiredKeyCount)
             {
                 return TrapFloorObjectiveError.ObjectiveStateMismatch;
             }

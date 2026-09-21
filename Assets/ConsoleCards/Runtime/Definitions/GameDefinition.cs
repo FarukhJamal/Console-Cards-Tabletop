@@ -61,6 +61,7 @@ namespace ConsoleCards.Definitions
         [SerializeField] private GridDefinition playAreaDefinition;
         [SerializeField] private List<GameContentSet> contentSets = new List<GameContentSet>();
         [SerializeField] private List<ModeDefinition> modes = new List<ModeDefinition>();
+        [SerializeField] private string defaultModeStableId;
         [SerializeField] private List<AvatarDefinition> avatars = new List<AvatarDefinition>();
         [SerializeField] private ConsoleConfiguration consoleConfiguration;
         [SerializeField] private List<ControllerInput> inputVocabulary = new List<ControllerInput>();
@@ -107,6 +108,7 @@ namespace ConsoleCards.Definitions
             if (consoleConfiguration == null) throw new InvalidOperationException("Game Definition requires a Console Configuration.");
 
             List<CardDefinitionData> cardData = new List<CardDefinitionData>();
+            HashSet<string> addedCardIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             List<GameContentSetData> contentSetData = new List<GameContentSetData>(contentSets.Count);
             for (int setIndex = 0; setIndex < contentSets.Count; setIndex++)
             {
@@ -117,7 +119,10 @@ namespace ConsoleCards.Definitions
                 {
                     CardDefinition card = contentSet.Cards[cardIndex];
                     if (card == null) throw new InvalidOperationException("Game content sets cannot contain null Cards.");
-                    cardData.Add(card.ToData());
+                    if (addedCardIds.Add(card.StableId))
+                    {
+                        cardData.Add(card.ToData());
+                    }
                 }
             }
 
@@ -146,6 +151,7 @@ namespace ConsoleCards.Definitions
                 contentSetData,
                 avatarData,
                 modeData,
+                defaultModeStableId,
                 consoleConfiguration.ToData(),
                 inputVocabulary,
                 controllerConfiguration.ToData(),

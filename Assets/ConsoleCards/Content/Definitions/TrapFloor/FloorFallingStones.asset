@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22e99343c26241089ebf0c37ca115c09, type: 3}
+  m_Name: FloorFallingStones
+  m_EditorClassIdentifier: 
+  stableId: 54460015-4f4f-4000-8000-001500000005
+  displayName: Falling Stones
+  category: Trap
+  description: 'PROVISIONAL STAGE-03 - Challenge: roll 2d6. If either die shows 5 or 6, pass safely. Otherwise return your Pawn to Entry.'
+  frontArtwork: {fileID: 0}
+  frontArtworkReference: 
+  backArtwork: {fileID: 0}
+  backArtworkReference: 
+  quantity: 1
+  inputCost:
+    requirements: []
+  orientation: 0
+  preferredConsolePlacement: 
+  tags: [trap-floor, floor-content, provisional-stage03]

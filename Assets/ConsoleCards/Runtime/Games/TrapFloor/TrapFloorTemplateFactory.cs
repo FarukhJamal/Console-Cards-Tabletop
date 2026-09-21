@@ -13,22 +13,15 @@ using ConsoleCards.GameTemplates.Definitions;
 namespace ConsoleCards.Games.TrapFloor
 {
     /// <summary>
-    /// Builds the current four-Player Trap Floor starting setup.
-    /// Stable identities and layout are deterministic; hidden Floor content is assigned by the supplied authority random source.
-    /// Two- and three-Player authored Seat mappings remain intentionally unresolved.
+    /// Builds the current authored four-Player Trap Floor starting setup. Two- and three-Player
+    /// Seat layouts remain intentionally unresolved content work.
     /// </summary>
     public static class TrapFloorTemplateFactory
     {
-        public const int MinimumPlayerCount = 2;
-        public const int MaximumPlayerCount = 4;
         public const int PrototypePlayerCount = 4;
-        public const int BoardAxisSize = 6;
-        public const int FloorCardCount = 36;
-        public const int ItemSlotCountPerPlayer = 3;
-        public const int ConsoleSlotCountPerPlayer = 6;
+        public const string FloorContentSetId = "trap-floor-floor-pool";
+        public const string AbilityContentSetId = "trap-floor-abilities";
 
-        private const double FloorColumnSpacing = 0.72d;
-        private const double FloorRowSpacing = 1.0d;
         private const double PlayerConsoleRadius = 6.1d;
         private const double PlayerHandRadius = 4.15d;
         private const double ControllerDeckOffset = 3.2d;
@@ -39,91 +32,67 @@ namespace ConsoleCards.Games.TrapFloor
 
         public static TrapFloorTemplateDefinition CreateStandardFourPlayer()
         {
-            return CreateStandardFourPlayer(new SystemRandomValueSource(0));
+            throw MissingAuthoredDefinition();
         }
 
-        public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
-            IRandomValueSource randomValueSource)
+        public static TrapFloorTemplateDefinition CreateStandardFourPlayer(IRandomValueSource randomValueSource)
         {
-            return CreateStandardFourPlayer(
-                randomValueSource,
-                TrapFloorStage03Configuration.CreateDefault());
-        }
-
-        public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
-            IRandomValueSource randomValueSource,
-            GameDefinitionData gameDefinition)
-        {
-            return CreateStandardFourPlayer(
-                randomValueSource,
-                TrapFloorStage03Configuration.CreateDefault(),
-                gameDefinition);
+            throw MissingAuthoredDefinition();
         }
 
         public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
             IRandomValueSource randomValueSource,
             TrapFloorStage03Configuration stage03Configuration)
         {
-            return CreateStandardFourPlayer(randomValueSource, stage03Configuration, null);
+            throw MissingAuthoredDefinition();
         }
 
         public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
             IRandomValueSource randomValueSource,
-            TrapFloorStage03Configuration stage03Configuration,
             GameDefinitionData gameDefinition)
         {
-            if (randomValueSource == null)
-            {
-                throw new ArgumentNullException(nameof(randomValueSource));
-            }
+            return CreateStandardFourPlayer(randomValueSource, gameDefinition, null);
+        }
 
-            if (stage03Configuration == null)
-            {
-                throw new ArgumentNullException(nameof(stage03Configuration));
-            }
+        public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
+            IRandomValueSource randomValueSource,
+            GameDefinitionData gameDefinition,
+            string selectedModeStableId)
+        {
+            if (randomValueSource == null) throw new ArgumentNullException(nameof(randomValueSource));
+            if (gameDefinition == null) throw new ArgumentNullException(nameof(gameDefinition));
 
-            GridDefinitionData gridDefinition = gameDefinition?.Grid;
-            int controllerHandCapacity = gameDefinition?.ControllerConfiguration?.MaximumHandSize ?? 10;
-            if (gameDefinition != null)
-            {
-                ValidateGameDefinition(gameDefinition);
-            }
+            ModeDefinitionData activeMode = ValidateAndResolveMode(gameDefinition, selectedModeStableId);
+            Guid gameDefinitionId = ParseStableGuid(gameDefinition.StableId, "Game");
+            GridDefinitionData grid = gameDefinition.Grid;
+            IReadOnlyList<TrapFloorFloorContentDefinition> floorContent =
+                ResolveFloorContent(gameDefinition, activeMode, grid);
+            IReadOnlyList<CardDefinitionData> abilityDefinitions = ResolveAbilities(gameDefinition, activeMode);
+            ConsoleSlotDefinitionData mainSlot = ResolveConsoleSlot(gameDefinition.Console, "Main", 1);
+            ConsoleSlotDefinitionData sideSlots = ResolveConsoleSlot(gameDefinition.Console, "Side", 1);
+            if (mainSlot.PhysicalSlotCount != 1)
+                throw new ArgumentException("Trap Floor Console requires exactly one authored Main Slot.", nameof(gameDefinition));
+            if (activeMode.StartingAbilityCount > sideSlots.PhysicalSlotCount)
+                throw new ArgumentException(
+                    $"Trap Floor Mode '{activeMode.DisplayName}' requires more starting Abilities than authored Side Slots.",
+                    nameof(gameDefinition));
+            int controllerHandCapacity = gameDefinition.ControllerConfiguration?.MaximumHandSize ?? 0;
 
             PlayerLayoutDefinition playerLayout = PlayerLayoutPresets.StandardFourPlayer;
-            GameTemplateId templateId = new GameTemplateId(CreateGuid(1, 1));
+            GameTemplateId templateId = new GameTemplateId(
+                string.Equals(activeMode.StableId, gameDefinition.DefaultModeStableId, StringComparison.OrdinalIgnoreCase)
+                    ? gameDefinitionId
+                    : CreateGuid(1, StableStringHash(activeMode.StableId)));
             PlayAreaId boardPlayAreaId = new PlayAreaId(CreateGuid(2, 1));
-
-            ObjectDefinitionId avatarDefinitionId = new ObjectDefinitionId(CreateGuid(20, 5));
-            ObjectDefinitionId ruleDefinitionId = new ObjectDefinitionId(CreateGuid(20, 6));
-            ObjectDefinitionId modeDefinitionId = new ObjectDefinitionId(CreateGuid(20, 7));
+            ObjectDefinitionId avatarDefinitionId = ResolveAvatarDefinitionId(gameDefinition);
             ObjectDefinitionId pawnDefinitionId = new ObjectDefinitionId(CreateGuid(20, 8));
             ObjectDefinitionId dieDefinitionId = new ObjectDefinitionId(CreateGuid(20, 10));
 
-            IReadOnlyList<TrapFloorFloorContentDefinition> floorContentDefinitions =
-                TrapFloorStage03ContentPool.CreateDefinitions();
-            if (gameDefinition != null)
-            {
-                floorContentDefinitions = ApplyAuthoredCardDefinitions(
-                    floorContentDefinitions,
-                    gameDefinition);
-            }
-            List<GameTemplateObjectDefinition> objectDefinitions = new List<GameTemplateObjectDefinition>
-            {
-                new GameTemplateObjectDefinition(avatarDefinitionId, TabletopObjectKind.Card, "Avatar Card"),
-                new GameTemplateObjectDefinition(ruleDefinitionId, TabletopObjectKind.Card, "Rule Card"),
-                new GameTemplateObjectDefinition(modeDefinitionId, TabletopObjectKind.Card, "Mode Card"),
-                new GameTemplateObjectDefinition(pawnDefinitionId, TabletopObjectKind.Pawn, "Player Pawn"),
-                new GameTemplateObjectDefinition(dieDefinitionId, TabletopObjectKind.Die, "Six-sided Die"),
-            };
-            for (int i = 0; i < floorContentDefinitions.Count; i++)
-            {
-                TrapFloorFloorContentDefinition definition = floorContentDefinitions[i];
-                objectDefinitions.Add(new GameTemplateObjectDefinition(
-                    definition.Id,
-                    TabletopObjectKind.Card,
-                    definition.DisplayName));
-            }
-
+            List<GameTemplateObjectDefinition> objectDefinitions = BuildObjectDefinitions(
+                gameDefinition,
+                avatarDefinitionId,
+                pawnDefinitionId,
+                dieDefinitionId);
             List<GameTemplateSeatDefinition> seats = new List<GameTemplateSeatDefinition>(PrototypePlayerCount);
             List<GameTemplateContainerDefinition> containers = new List<GameTemplateContainerDefinition>();
             List<GameTemplateObjectInstanceDefinition> objects = new List<GameTemplateObjectInstanceDefinition>();
@@ -133,22 +102,14 @@ namespace ConsoleCards.Games.TrapFloor
             Dictionary<TrapFloorCoordinate, TabletopObjectId> floorCardIds =
                 new Dictionary<TrapFloorCoordinate, TabletopObjectId>();
 
-            CreateFloorBoard(
-                floorContentDefinitions,
-                gridDefinition,
-                randomValueSource,
-                floorCardIds,
-                labels,
-                objects);
+            CreateFloorBoard(floorContent, grid, randomValueSource, floorCardIds, labels, objects);
 
             TrapFloorCoordinate[] startingCorners =
             {
                 new TrapFloorCoordinate(1, 1),
-                new TrapFloorCoordinate(gridDefinition?.Columns ?? BoardAxisSize, 1),
-                new TrapFloorCoordinate(
-                    gridDefinition?.Columns ?? BoardAxisSize,
-                    gridDefinition?.Rows ?? BoardAxisSize),
-                new TrapFloorCoordinate(1, gridDefinition?.Rows ?? BoardAxisSize),
+                new TrapFloorCoordinate(grid.Columns, 1),
+                new TrapFloorCoordinate(grid.Columns, grid.Rows),
+                new TrapFloorCoordinate(1, grid.Rows),
             };
 
             for (int seatIndex = 0; seatIndex < PrototypePlayerCount; seatIndex++)
@@ -159,11 +120,13 @@ namespace ConsoleCards.Games.TrapFloor
                     layoutSeat,
                     startingCorners[seatIndex],
                     avatarDefinitionId,
-                    ruleDefinitionId,
-                    modeDefinitionId,
                     pawnDefinitionId,
-                    gridDefinition,
+                    grid,
+                    mainSlot,
+                    sideSlots,
                     controllerHandCapacity,
+                    abilityDefinitions,
+                    activeMode.StartingAbilityCount,
                     seats,
                     containers,
                     memberships,
@@ -185,34 +148,25 @@ namespace ConsoleCards.Games.TrapFloor
                 FloorfallDiceX + (FloorfallDiceSpacing * 0.5d),
                 FloorfallDiceY));
 
-            TabletopBounds boardBounds = new TabletopBounds(
-                new TableCoordinate(-2.35d, -3.1d),
-                new TableCoordinate(2.35d, 3.1d));
-            TabletopBounds boardFocus = new TabletopBounds(
-                new TableCoordinate(-2.15d, -2.85d),
-                new TableCoordinate(2.15d, 2.85d));
+            TabletopBounds boardBounds = CreateBoardBounds(grid);
             GameTemplate template = new GameTemplate(
                 templateId,
                 GameTemplate.CurrentSchemaVersion,
-                gameDefinition?.DisplayName ?? "Trap Floor",
-                gameDefinition?.ManualRules
-                    ?? "Approved four-Player Trap Floor starting setup. Gameplay rules are supplied separately.",
+                $"{gameDefinition.DisplayName} — {activeMode.DisplayName}",
+                gameDefinition.ManualRules,
                 playerLayout.Id,
                 PrototypePlayerCount,
                 seats,
                 containers,
                 objects,
                 memberships,
-                new[]
-                {
-                    new GameTemplatePlayAreaDefinition(boardPlayAreaId, boardBounds, boardFocus),
-                },
+                new[] { new GameTemplatePlayAreaDefinition(boardPlayAreaId, boardBounds, boardBounds) },
                 new[]
                 {
                     new GameTemplateCameraBookmarkDefinition(
                         "Trap Floor Tabletop",
-                        boardFocus.Center,
-                        PrototypeCameraOrthographicSize),
+                        boardBounds.Center,
+                        ScaleCameraSize(grid)),
                 });
             GameTemplateContentCatalog catalog = new GameTemplateContentCatalog(
                 objectDefinitions,
@@ -225,17 +179,377 @@ namespace ConsoleCards.Games.TrapFloor
 
             return new TrapFloorTemplateDefinition(
                 gameDefinition,
+                activeMode,
                 template,
                 catalog,
                 playerLayout,
                 boardPlayAreaId,
                 floorCardIds,
-                floorContentDefinitions,
-                stage03Configuration,
+                floorContent,
                 labels,
                 players,
                 floorfallXAxisDieId,
                 floorfallYAxisDieId);
+        }
+
+        public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
+            IRandomValueSource randomValueSource,
+            TrapFloorStage03Configuration stage03Configuration,
+            GameDefinitionData gameDefinition)
+        {
+            if (stage03Configuration == null) throw new ArgumentNullException(nameof(stage03Configuration));
+            TrapFloorTemplateDefinition template = CreateStandardFourPlayer(randomValueSource, gameDefinition);
+            if (template.ActiveMode.RequiredKeyCount != stage03Configuration.RequiredKeyCount)
+            {
+                throw new ArgumentException(
+                    "Legacy required-Key configuration does not match the authored active Mode.",
+                    nameof(stage03Configuration));
+            }
+
+            return template;
+        }
+
+        private static InvalidOperationException MissingAuthoredDefinition()
+        {
+            return new InvalidOperationException(
+                "Trap Floor Template construction requires an authored Game Definition. The former C# content fallback has been removed.");
+        }
+
+        private static ModeDefinitionData ValidateAndResolveMode(
+            GameDefinitionData definition,
+            string selectedModeStableId)
+        {
+            if (definition.Grid == null)
+                throw new ArgumentException("Trap Floor requires an authored Grid Definition.", nameof(definition));
+            if (definition.Console == null)
+                throw new ArgumentException("Trap Floor requires an authored Console Configuration.", nameof(definition));
+            if (definition.MinimumPlayers > PrototypePlayerCount || definition.MaximumPlayers < PrototypePlayerCount)
+            {
+                throw new ArgumentException(
+                    "Trap Floor's authored Player range must include the current four-Player layout.",
+                    nameof(definition));
+            }
+
+            string modeId = string.IsNullOrWhiteSpace(selectedModeStableId)
+                ? definition.DefaultModeStableId
+                : selectedModeStableId;
+            if (string.IsNullOrWhiteSpace(modeId) || !definition.TryGetMode(modeId, out ModeDefinitionData mode))
+            {
+                throw new ArgumentException(
+                    $"Trap Floor active Mode '{modeId}' is not present in the authored Game Definition.",
+                    nameof(definition));
+            }
+
+            return mode;
+        }
+
+        private static IReadOnlyList<TrapFloorFloorContentDefinition> ResolveFloorContent(
+            GameDefinitionData gameDefinition,
+            ModeDefinitionData activeMode,
+            GridDefinitionData grid)
+        {
+            if (!gameDefinition.TryGetContentSet(FloorContentSetId, out GameContentSetData contentSet))
+            {
+                throw new ArgumentException(
+                    $"Trap Floor requires authored content set '{FloorContentSetId}'.",
+                    nameof(gameDefinition));
+            }
+
+            List<TrapFloorFloorContentDefinition> expanded = new List<TrapFloorFloorContentDefinition>();
+            int keyCount = 0;
+            int exitCount = 0;
+            for (int i = 0; i < contentSet.CardDefinitionIds.Count; i++)
+            {
+                string cardId = contentSet.CardDefinitionIds[i];
+                if (!gameDefinition.TryGetCard(cardId, out CardDefinitionData card))
+                {
+                    throw new ArgumentException(
+                        $"Trap Floor Floor content set references missing Card Definition '{cardId}'.",
+                        nameof(gameDefinition));
+                }
+
+                TrapFloorFloorContentDefinition content = new TrapFloorFloorContentDefinition(card);
+                for (int copyIndex = 0; copyIndex < card.Quantity; copyIndex++) expanded.Add(content);
+                if (content.Category == TrapFloorFloorContentCategory.Key) keyCount += card.Quantity;
+                if (content.Category == TrapFloorFloorContentCategory.SecretExit) exitCount += card.Quantity;
+            }
+
+            if (expanded.Count != grid.CellCount)
+            {
+                throw new ArgumentException(
+                    $"Trap Floor Grid '{grid.StableId}' has {grid.CellCount} cells, but authored content set "
+                    + $"'{FloorContentSetId}' produces {expanded.Count} Floor Cards. Configure matching Card quantities.",
+                    nameof(gameDefinition));
+            }
+
+            if (activeMode.RequiredKeyCount > keyCount)
+            {
+                throw new ArgumentException(
+                    $"Trap Floor Mode '{activeMode.DisplayName}' requires {activeMode.RequiredKeyCount} Keys, "
+                    + $"but the authored Floor content produces {keyCount}.",
+                    nameof(gameDefinition));
+            }
+
+            if (exitCount < 1)
+            {
+                throw new ArgumentException(
+                    "Trap Floor's authored Floor content must produce at least one SecretExit Card.",
+                    nameof(gameDefinition));
+            }
+
+            return expanded;
+        }
+
+        private static IReadOnlyList<CardDefinitionData> ResolveAbilities(
+            GameDefinitionData gameDefinition,
+            ModeDefinitionData activeMode)
+        {
+            if (!gameDefinition.TryGetContentSet(AbilityContentSetId, out GameContentSetData contentSet))
+            {
+                throw new ArgumentException(
+                    $"Trap Floor requires authored content set '{AbilityContentSetId}'.",
+                    nameof(gameDefinition));
+            }
+
+            List<CardDefinitionData> abilities = new List<CardDefinitionData>(contentSet.CardDefinitionIds.Count);
+            for (int i = 0; i < contentSet.CardDefinitionIds.Count; i++)
+            {
+                if (!gameDefinition.TryGetCard(contentSet.CardDefinitionIds[i], out CardDefinitionData card))
+                    throw new ArgumentException("Trap Floor Ability content references a missing Card Definition.", nameof(gameDefinition));
+                if (!string.Equals(card.Category, "Ability", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(card.Category, "Action", StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException($"Starting Card '{card.DisplayName}' is not an Ability/Action.", nameof(gameDefinition));
+                abilities.Add(card);
+            }
+
+            if (activeMode.StartingAbilityCount > abilities.Count)
+            {
+                throw new ArgumentException(
+                    $"Trap Floor Mode '{activeMode.DisplayName}' requires {activeMode.StartingAbilityCount} starting Abilities, "
+                    + $"but '{AbilityContentSetId}' contains {abilities.Count} definitions.",
+                    nameof(gameDefinition));
+            }
+
+            return abilities;
+        }
+
+        private static ConsoleSlotDefinitionData ResolveConsoleSlot(
+            ConsoleConfigurationData configuration,
+            string role,
+            int minimumCount)
+        {
+            for (int i = 0; i < configuration.Slots.Count; i++)
+            {
+                ConsoleSlotDefinitionData candidate = configuration.Slots[i];
+                if (string.Equals(candidate.Role, role, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (candidate.PhysicalSlotCount < minimumCount)
+                        throw new ArgumentException($"Trap Floor Console role '{role}' has too few physical Slots.");
+                    return candidate;
+                }
+            }
+
+            throw new ArgumentException($"Trap Floor Console configuration is missing role '{role}'.");
+        }
+
+        private static ObjectDefinitionId ResolveAvatarDefinitionId(GameDefinitionData definition)
+        {
+            if (definition.Avatars.Count == 0)
+                throw new ArgumentException("Trap Floor requires at least one authored Avatar Definition.", nameof(definition));
+            return new ObjectDefinitionId(ParseStableGuid(definition.Avatars[0].StableId, "Avatar"));
+        }
+
+        private static List<GameTemplateObjectDefinition> BuildObjectDefinitions(
+            GameDefinitionData definition,
+            ObjectDefinitionId avatarDefinitionId,
+            ObjectDefinitionId pawnDefinitionId,
+            ObjectDefinitionId dieDefinitionId)
+        {
+            List<GameTemplateObjectDefinition> definitions = new List<GameTemplateObjectDefinition>
+            {
+                new GameTemplateObjectDefinition(avatarDefinitionId, TabletopObjectKind.Card, definition.Avatars[0].DisplayName),
+                new GameTemplateObjectDefinition(pawnDefinitionId, TabletopObjectKind.Pawn, "Player Pawn"),
+                new GameTemplateObjectDefinition(dieDefinitionId, TabletopObjectKind.Die, "Six-sided Die"),
+            };
+            HashSet<ObjectDefinitionId> seen = new HashSet<ObjectDefinitionId>
+            {
+                avatarDefinitionId,
+                pawnDefinitionId,
+                dieDefinitionId,
+            };
+            for (int i = 0; i < definition.Cards.Count; i++)
+            {
+                CardDefinitionData card = definition.Cards[i];
+                ObjectDefinitionId id = new ObjectDefinitionId(ParseStableGuid(card.StableId, $"Card '{card.DisplayName}'"));
+                if (seen.Add(id)) definitions.Add(new GameTemplateObjectDefinition(id, TabletopObjectKind.Card, card.DisplayName));
+            }
+            return definitions;
+        }
+
+        private static void CreateFloorBoard(
+            IReadOnlyList<TrapFloorFloorContentDefinition> contentDefinitions,
+            GridDefinitionData grid,
+            IRandomValueSource randomValueSource,
+            IDictionary<TrapFloorCoordinate, TabletopObjectId> floorCardIds,
+            IDictionary<TabletopObjectId, string> labels,
+            ICollection<GameTemplateObjectInstanceDefinition> objects)
+        {
+            List<TrapFloorFloorContentDefinition> shuffled = new List<TrapFloorFloorContentDefinition>(contentDefinitions);
+            for (int i = shuffled.Count - 1; i > 0; i--)
+            {
+                int swapIndex = randomValueSource.NextInt(0, i + 1);
+                TrapFloorFloorContentDefinition swap = shuffled[i];
+                shuffled[i] = shuffled[swapIndex];
+                shuffled[swapIndex] = swap;
+            }
+
+            int objectIndex = 0;
+            for (int y = TrapFloorCoordinate.MinimumAxisValue; y <= grid.Rows; y++)
+            {
+                for (int x = TrapFloorCoordinate.MinimumAxisValue; x <= grid.Columns; x++)
+                {
+                    TrapFloorCoordinate coordinate = new TrapFloorCoordinate(x, y);
+                    TabletopObjectId objectId = new TabletopObjectId(CreateGuid(30, ++objectIndex));
+                    TrapFloorFloorContentDefinition content = shuffled[objectIndex - 1];
+                    objects.Add(new GameTemplateObjectInstanceDefinition(
+                        objectId,
+                        content.Id,
+                        TabletopObjectKind.Card,
+                        CreateFloorPose(coordinate, grid, 2, objectIndex),
+                        SeatId.Empty,
+                        ObjectVisibility.Public,
+                        true,
+                        CardFace.FaceDown));
+                    floorCardIds.Add(coordinate, objectId);
+                    labels.Add(objectId, content.DisplayName);
+                }
+            }
+        }
+
+        private static void CreatePlayerSetup(
+            int seatIndex,
+            PlayerSeatLayoutEntry layoutSeat,
+            TrapFloorCoordinate startingCorner,
+            ObjectDefinitionId avatarDefinitionId,
+            ObjectDefinitionId pawnDefinitionId,
+            GridDefinitionData grid,
+            ConsoleSlotDefinitionData mainSlot,
+            ConsoleSlotDefinitionData sideSlot,
+            int controllerHandCapacity,
+            IReadOnlyList<CardDefinitionData> abilityDefinitions,
+            int startingAbilityCount,
+            ICollection<GameTemplateSeatDefinition> seats,
+            ICollection<GameTemplateContainerDefinition> containers,
+            ICollection<GameTemplateContainerMembership> memberships,
+            ICollection<GameTemplateObjectInstanceDefinition> objects,
+            IDictionary<TabletopObjectId, string> labels,
+            ICollection<TrapFloorPlayerSetupDefinition> players)
+        {
+            int playerNumber = seatIndex + 1;
+            int idBase = seatIndex * 20;
+            SeatId seatId = new SeatId(CreateGuid(40, playerNumber));
+            ContainerId handId = new ContainerId(CreateGuid(41, idBase + 1));
+            ContainerId mainSlotId = new ContainerId(CreateGuid(41, idBase + 2));
+            ContainerId[] sideSlotIds = new ContainerId[sideSlot.PhysicalSlotCount];
+            for (int i = 0; i < sideSlotIds.Length; i++)
+                sideSlotIds[i] = new ContainerId(CreateGuid(41, idBase + 3 + i));
+            ContainerId controllerDeckId = new ContainerId(CreateGuid(41, idBase + 19));
+
+            List<ContainerId> consoleSlotIds = new List<ContainerId>(1 + sideSlotIds.Length) { mainSlotId };
+            consoleSlotIds.AddRange(sideSlotIds);
+            seats.Add(new GameTemplateSeatDefinition(
+                seatId,
+                seatIndex,
+                handId,
+                consoleSlotIds,
+                GetConsolePose(layoutSeat)));
+            containers.Add(CreateContainer(handId, ContainerKind.Hand, seatId, ObjectVisibility.OwnerOnly, controllerHandCapacity));
+            containers.Add(CreateContainer(
+                mainSlotId,
+                ContainerKind.ConsoleSlot,
+                seatId,
+                ObjectVisibility.Public,
+                mainSlot.MaximumCardsPerSlot));
+            for (int i = 0; i < sideSlotIds.Length; i++)
+            {
+                containers.Add(CreateContainer(
+                    sideSlotIds[i],
+                    ContainerKind.ConsoleSlot,
+                    seatId,
+                    ObjectVisibility.Public,
+                    sideSlot.MaximumCardsPerSlot));
+            }
+
+            containers.Add(new GameTemplateContainerDefinition(
+                controllerDeckId,
+                ContainerKind.Deck,
+                seatId,
+                ObjectVisibility.Public,
+                0,
+                true,
+                OffsetBesideConsole(GetConsolePose(layoutSeat), ControllerDeckOffset)));
+
+            TabletopObjectId avatarId = new TabletopObjectId(CreateGuid(42, playerNumber));
+            TabletopObjectId pawnId = new TabletopObjectId(CreateGuid(45, playerNumber));
+            objects.Add(CreatePlayerCard(avatarId, avatarDefinitionId, seatId));
+            labels.Add(avatarId, $"P{playerNumber}\nAVATAR");
+            objects.Add(new GameTemplateObjectInstanceDefinition(
+                pawnId,
+                pawnDefinitionId,
+                TabletopObjectKind.Pawn,
+                CreateFloorPose(startingCorner, grid, 6, playerNumber),
+                seatId,
+                ObjectVisibility.Public,
+                false,
+                CardFace.FaceUp));
+
+            memberships.Add(new GameTemplateContainerMembership(mainSlotId, new[] { avatarId }));
+            for (int i = 0; i < sideSlotIds.Length; i++)
+            {
+                if (i < startingAbilityCount)
+                {
+                    CardDefinitionData ability = abilityDefinitions[i];
+                    TabletopObjectId abilityId = new TabletopObjectId(CreateGuid(46, (seatIndex * 100) + i + 1));
+                    ObjectDefinitionId abilityDefinitionId = new ObjectDefinitionId(
+                        ParseStableGuid(ability.StableId, $"Ability '{ability.DisplayName}'"));
+                    objects.Add(CreatePlayerCard(abilityId, abilityDefinitionId, seatId));
+                    labels.Add(abilityId, ability.DisplayName);
+                    memberships.Add(new GameTemplateContainerMembership(sideSlotIds[i], new[] { abilityId }));
+                }
+                else
+                {
+                    memberships.Add(new GameTemplateContainerMembership(sideSlotIds[i], Array.Empty<TabletopObjectId>()));
+                }
+            }
+
+            memberships.Add(new GameTemplateContainerMembership(controllerDeckId, Array.Empty<TabletopObjectId>()));
+            memberships.Add(new GameTemplateContainerMembership(handId, Array.Empty<TabletopObjectId>()));
+            players.Add(new TrapFloorPlayerSetupDefinition(
+                seatIndex,
+                seatId,
+                handId,
+                mainSlotId,
+                sideSlotIds,
+                controllerDeckId,
+                avatarId,
+                pawnId,
+                startingCorner));
+        }
+
+        private static GameTemplateObjectInstanceDefinition CreatePlayerCard(
+            TabletopObjectId id,
+            ObjectDefinitionId definitionId,
+            SeatId ownerSeatId)
+        {
+            return new GameTemplateObjectInstanceDefinition(
+                id,
+                definitionId,
+                TabletopObjectKind.Card,
+                TabletopPose.Default,
+                ownerSeatId,
+                ObjectVisibility.Public,
+                false,
+                CardFace.FaceUp);
         }
 
         private static GameTemplateObjectInstanceDefinition CreateFloorfallDie(
@@ -257,304 +571,57 @@ namespace ConsoleCards.Games.TrapFloor
                 1);
         }
 
-        private static void CreateFloorBoard(
-            IReadOnlyList<TrapFloorFloorContentDefinition> contentDefinitions,
-            GridDefinitionData gridDefinition,
-            IRandomValueSource randomValueSource,
-            IDictionary<TrapFloorCoordinate, TabletopObjectId> floorCardIds,
-            IDictionary<TabletopObjectId, string> labels,
-            ICollection<GameTemplateObjectInstanceDefinition> objects)
-        {
-            int rows = gridDefinition?.Rows ?? BoardAxisSize;
-            int columns = gridDefinition?.Columns ?? BoardAxisSize;
-            if (contentDefinitions == null || contentDefinitions.Count != checked(rows * columns))
-            {
-                throw new ArgumentException(
-                    "Trap Floor Board construction requires one content definition per authored Grid cell.");
-            }
-
-            double columnPitch = gridDefinition?.ColumnPitch ?? FloorColumnSpacing;
-            double rowPitch = gridDefinition?.RowPitch ?? FloorRowSpacing;
-            double originX = gridDefinition?.OriginX ?? 0d;
-            double originY = gridDefinition?.OriginY ?? 0d;
-
-            List<TrapFloorFloorContentDefinition> shuffledContent =
-                new List<TrapFloorFloorContentDefinition>(contentDefinitions);
-            for (int i = shuffledContent.Count - 1; i > 0; i--)
-            {
-                int swapIndex = randomValueSource.NextInt(0, i + 1);
-                TrapFloorFloorContentDefinition swap = shuffledContent[i];
-                shuffledContent[i] = shuffledContent[swapIndex];
-                shuffledContent[swapIndex] = swap;
-            }
-
-            int objectIndex = 0;
-            for (int y = TrapFloorCoordinate.MinimumAxisValue; y <= rows; y++)
-            {
-                for (int x = TrapFloorCoordinate.MinimumAxisValue; x <= columns; x++)
-                {
-                    TrapFloorCoordinate coordinate = new TrapFloorCoordinate(x, y);
-                    TabletopObjectId objectId = new TabletopObjectId(CreateGuid(30, ++objectIndex));
-                    TrapFloorFloorContentDefinition content = shuffledContent[objectIndex - 1];
-                    double tableX = originX + ((x - ((columns + 1d) * 0.5d)) * columnPitch);
-                    double tableY = originY + ((y - ((rows + 1d) * 0.5d)) * rowPitch);
-                    objects.Add(new GameTemplateObjectInstanceDefinition(
-                        objectId,
-                        content.Id,
-                        TabletopObjectKind.Card,
-                        new TabletopPose(new TableCoordinate(tableX, tableY), 0f, 2, objectIndex),
-                        SeatId.Empty,
-                        ObjectVisibility.Public,
-                        true,
-                        CardFace.FaceDown));
-                    floorCardIds.Add(coordinate, objectId);
-                    labels.Add(objectId, content.DisplayName);
-                }
-            }
-        }
-
-        private static void CreatePlayerSetup(
-            int seatIndex,
-            PlayerSeatLayoutEntry layoutSeat,
-            TrapFloorCoordinate startingCorner,
-            ObjectDefinitionId avatarDefinitionId,
-            ObjectDefinitionId ruleDefinitionId,
-            ObjectDefinitionId modeDefinitionId,
-            ObjectDefinitionId pawnDefinitionId,
-            GridDefinitionData gridDefinition,
-            int controllerHandCapacity,
-            ICollection<GameTemplateSeatDefinition> seats,
-            ICollection<GameTemplateContainerDefinition> containers,
-            ICollection<GameTemplateContainerMembership> memberships,
-            ICollection<GameTemplateObjectInstanceDefinition> objects,
-            IDictionary<TabletopObjectId, string> labels,
-            ICollection<TrapFloorPlayerSetupDefinition> players)
-        {
-            int playerNumber = seatIndex + 1;
-            SeatId seatId = new SeatId(CreateGuid(40, playerNumber));
-            ContainerId handId = new ContainerId(CreateGuid(41, (seatIndex * 10) + 1));
-            ContainerId mainSlotId = new ContainerId(CreateGuid(41, (seatIndex * 10) + 2));
-            ContainerId ruleSlotId = new ContainerId(CreateGuid(41, (seatIndex * 10) + 3));
-            ContainerId modeSlotId = new ContainerId(CreateGuid(41, (seatIndex * 10) + 4));
-            ContainerId[] itemSlotIds =
-            {
-                new ContainerId(CreateGuid(41, (seatIndex * 10) + 5)),
-                new ContainerId(CreateGuid(41, (seatIndex * 10) + 6)),
-                new ContainerId(CreateGuid(41, (seatIndex * 10) + 7)),
-            };
-            ContainerId controllerDeckId = new ContainerId(CreateGuid(41, (seatIndex * 10) + 8));
-
-            ContainerId[] consoleSlotIds =
-            {
-                mainSlotId,
-                ruleSlotId,
-                modeSlotId,
-                itemSlotIds[0],
-                itemSlotIds[1],
-                itemSlotIds[2],
-            };
-            seats.Add(new GameTemplateSeatDefinition(
-                seatId,
-                seatIndex,
-                handId,
-                consoleSlotIds,
-                GetConsolePose(layoutSeat)));
-            containers.Add(CreateContainer(
-                handId,
-                ContainerKind.Hand,
-                seatId,
-                ObjectVisibility.OwnerOnly,
-                controllerHandCapacity));
-            for (int i = 0; i < consoleSlotIds.Length; i++)
-            {
-                containers.Add(CreateContainer(
-                    consoleSlotIds[i],
-                    ContainerKind.ConsoleSlot,
-                    seatId,
-                    ObjectVisibility.Public,
-                    1));
-            }
-
-            TabletopPose controllerDeckPose = OffsetBesideConsole(
-                GetConsolePose(layoutSeat),
-                ControllerDeckOffset);
-            containers.Add(new GameTemplateContainerDefinition(
-                controllerDeckId,
-                ContainerKind.Deck,
-                seatId,
-                ObjectVisibility.Public,
-                0,
-                true,
-                controllerDeckPose));
-
-            TabletopObjectId avatarId = new TabletopObjectId(CreateGuid(42, playerNumber));
-            TabletopObjectId ruleId = new TabletopObjectId(CreateGuid(43, playerNumber));
-            TabletopObjectId modeId = new TabletopObjectId(CreateGuid(44, playerNumber));
-            TabletopObjectId pawnId = new TabletopObjectId(CreateGuid(45, playerNumber));
-            objects.Add(CreatePlayerCard(avatarId, avatarDefinitionId, seatId));
-            objects.Add(CreatePlayerCard(ruleId, ruleDefinitionId, seatId));
-            objects.Add(CreatePlayerCard(modeId, modeDefinitionId, seatId));
-            labels.Add(avatarId, $"P{playerNumber}\nAVATAR");
-            labels.Add(ruleId, $"P{playerNumber}\nRULE");
-            labels.Add(modeId, $"P{playerNumber}\nMODE");
-
-            TabletopPose pawnPose = CreateFloorPose(startingCorner, gridDefinition, 6, playerNumber);
-            objects.Add(new GameTemplateObjectInstanceDefinition(
-                pawnId,
-                pawnDefinitionId,
-                TabletopObjectKind.Pawn,
-                pawnPose,
-                seatId,
-                ObjectVisibility.Public,
-                false,
-                CardFace.FaceUp));
-
-            memberships.Add(new GameTemplateContainerMembership(mainSlotId, new[] { avatarId }));
-            memberships.Add(new GameTemplateContainerMembership(ruleSlotId, new[] { ruleId }));
-            memberships.Add(new GameTemplateContainerMembership(modeSlotId, new[] { modeId }));
-            for (int i = 0; i < itemSlotIds.Length; i++)
-            {
-                memberships.Add(new GameTemplateContainerMembership(itemSlotIds[i], Array.Empty<TabletopObjectId>()));
-            }
-
-            memberships.Add(new GameTemplateContainerMembership(controllerDeckId, Array.Empty<TabletopObjectId>()));
-            memberships.Add(new GameTemplateContainerMembership(handId, Array.Empty<TabletopObjectId>()));
-
-            players.Add(new TrapFloorPlayerSetupDefinition(
-                seatIndex,
-                seatId,
-                handId,
-                mainSlotId,
-                ruleSlotId,
-                modeSlotId,
-                itemSlotIds,
-                controllerDeckId,
-                avatarId,
-                ruleId,
-                modeId,
-                pawnId,
-                startingCorner));
-        }
-
-        private static GameTemplateObjectInstanceDefinition CreatePlayerCard(
-            TabletopObjectId id,
-            ObjectDefinitionId definitionId,
-            SeatId ownerSeatId)
-        {
-            return new GameTemplateObjectInstanceDefinition(
-                id,
-                definitionId,
-                TabletopObjectKind.Card,
-                TabletopPose.Default,
-                ownerSeatId,
-                ObjectVisibility.Public,
-                false,
-                CardFace.FaceUp);
-        }
-
         private static TabletopPose CreateFloorPose(
             TrapFloorCoordinate coordinate,
-            GridDefinitionData gridDefinition,
+            GridDefinitionData grid,
             int layer,
             int localOrder)
         {
-            int rows = gridDefinition?.Rows ?? BoardAxisSize;
-            int columns = gridDefinition?.Columns ?? BoardAxisSize;
-            double columnPitch = gridDefinition?.ColumnPitch ?? FloorColumnSpacing;
-            double rowPitch = gridDefinition?.RowPitch ?? FloorRowSpacing;
-            double originX = gridDefinition?.OriginX ?? 0d;
-            double originY = gridDefinition?.OriginY ?? 0d;
+            if (coordinate.X > grid.Columns || coordinate.Y > grid.Rows)
+                throw new ArgumentOutOfRangeException(nameof(coordinate), "Floor coordinate is outside the authored Grid.");
             return new TabletopPose(
                 new TableCoordinate(
-                    originX + ((coordinate.X - ((columns + 1d) * 0.5d)) * columnPitch),
-                    originY + ((coordinate.Y - ((rows + 1d) * 0.5d)) * rowPitch),
+                    grid.OriginX + ((coordinate.X - ((grid.Columns + 1d) * 0.5d)) * grid.ColumnPitch),
+                    grid.OriginY + ((coordinate.Y - ((grid.Rows + 1d) * 0.5d)) * grid.RowPitch)),
                 0f,
                 layer,
                 localOrder);
         }
 
-        private static void ValidateGameDefinition(GameDefinitionData definition)
+        private static TabletopBounds CreateBoardBounds(GridDefinitionData grid)
         {
-            if (definition.Grid == null)
-            {
-                throw new ArgumentException("Trap Floor requires an authored Grid Definition.", nameof(definition));
-            }
-
-            if (definition.MinimumPlayers > PrototypePlayerCount
-                || definition.MaximumPlayers < PrototypePlayerCount)
-            {
-                throw new ArgumentException(
-                    "Trap Floor's authored Player range must include the current four-Player layout.",
-                    nameof(definition));
-            }
-
-            if (definition.Grid.CellCount != TrapFloorStage03ContentPool.TotalCount)
-            {
-                throw new ArgumentException(
-                    "The current Trap Floor content pool requires one authored Grid cell per Floor Card.",
-                    nameof(definition));
-            }
+            double halfWidth = (((grid.Columns - 1) * grid.ColumnPitch) + grid.CellWidth) * 0.5d;
+            double halfHeight = (((grid.Rows - 1) * grid.RowPitch) + grid.CellHeight) * 0.5d;
+            return new TabletopBounds(
+                new TableCoordinate(grid.OriginX - halfWidth, grid.OriginY - halfHeight),
+                new TableCoordinate(grid.OriginX + halfWidth, grid.OriginY + halfHeight));
         }
 
-        private static IReadOnlyList<TrapFloorFloorContentDefinition> ApplyAuthoredCardDefinitions(
-            IReadOnlyList<TrapFloorFloorContentDefinition> defaults,
-            GameDefinitionData gameDefinition)
+        private static float ScaleCameraSize(GridDefinitionData grid)
         {
-            List<TrapFloorFloorContentDefinition> resolved =
-                new List<TrapFloorFloorContentDefinition>(defaults.Count);
-            for (int i = 0; i < defaults.Count; i++)
-            {
-                TrapFloorFloorContentDefinition fallback = defaults[i];
-                if (gameDefinition.TryGetCard(fallback.Id.ToString(), out CardDefinitionData authored))
-                {
-                    resolved.Add(new TrapFloorFloorContentDefinition(
-                        fallback.Id,
-                        fallback.Category,
-                        authored.DisplayName,
-                        authored.Description,
-                        fallback.ContentSource));
-                }
-                else
-                {
-                    resolved.Add(fallback);
-                }
-            }
-
-            return resolved;
+            double width = ((grid.Columns - 1) * grid.ColumnPitch) + grid.CellWidth;
+            double height = ((grid.Rows - 1) * grid.RowPitch) + grid.CellHeight;
+            double scale = Math.Max(width / 4.32d, height / 6d);
+            return (float)(PrototypeCameraOrthographicSize * scale);
         }
 
         public static TabletopPose GetConsolePose(PlayerSeatLayoutEntry layoutSeat)
         {
-            if (layoutSeat == null)
-            {
-                throw new ArgumentNullException(nameof(layoutSeat));
-            }
-
+            if (layoutSeat == null) throw new ArgumentNullException(nameof(layoutSeat));
             return ProjectToRadius(layoutSeat.ConsoleAnchorPose, PlayerConsoleRadius);
         }
 
         public static TabletopPose GetHandPose(PlayerSeatLayoutEntry layoutSeat)
         {
-            if (layoutSeat == null)
-            {
-                throw new ArgumentNullException(nameof(layoutSeat));
-            }
-
+            if (layoutSeat == null) throw new ArgumentNullException(nameof(layoutSeat));
             return ProjectToRadius(layoutSeat.HandAnchorPose, PlayerHandRadius);
         }
 
         private static TabletopPose ProjectToRadius(TabletopPose pose, double radius)
         {
-            double sourceRadius = Math.Sqrt(
-                (pose.Position.X * pose.Position.X)
-                + (pose.Position.Y * pose.Position.Y));
+            double sourceRadius = Math.Sqrt((pose.Position.X * pose.Position.X) + (pose.Position.Y * pose.Position.Y));
             if (sourceRadius <= 0d)
-            {
-                throw new ArgumentException(
-                    "Trap Floor player-area anchors must be offset from the Board center.",
-                    nameof(pose));
-            }
-
+                throw new ArgumentException("Trap Floor player-area anchors must be offset from the Board center.", nameof(pose));
             double scale = radius / sourceRadius;
             return new TabletopPose(
                 new TableCoordinate(pose.Position.X * scale, pose.Position.Y * scale),
@@ -592,6 +659,13 @@ namespace ConsoleCards.Games.TrapFloor
                 TabletopPose.Default);
         }
 
+        private static Guid ParseStableGuid(string stableId, string label)
+        {
+            if (!Guid.TryParse(stableId, out Guid id))
+                throw new ArgumentException($"{label} stable ID '{stableId}' must be a GUID.");
+            return id;
+        }
+
         private static Guid CreateGuid(int category, int index)
         {
             return new Guid(
@@ -606,6 +680,21 @@ namespace ConsoleCards.Games.TrapFloor
                 (byte)(index >> 16),
                 (byte)(index >> 8),
                 (byte)index);
+        }
+
+        private static int StableStringHash(string value)
+        {
+            unchecked
+            {
+                uint hash = 2166136261u;
+                for (int i = 0; i < value.Length; i++)
+                {
+                    hash ^= value[i];
+                    hash *= 16777619u;
+                }
+
+                return (int)hash;
+            }
         }
     }
 }

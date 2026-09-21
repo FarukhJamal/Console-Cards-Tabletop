@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22e99343c26241089ebf0c37ca115c09, type: 3}
+  m_Name: FloorKey02
+  m_EditorClassIdentifier: 
+  stableId: 54460015-4f4f-4000-8000-001500000018
+  displayName: Key 02
+  category: Key
+  description: 'CURRENT STAGE-03 OBJECTIVE - This revealed Key remains UNCLAIMED until a Player chooses Claim Key. A claimed Key contributes to the shared KEYS X / Y objective.'
+  frontArtwork: {fileID: 0}
+  frontArtworkReference: 
+  backArtwork: {fileID: 0}
+  backArtworkReference: 
+  quantity: 1
+  inputCost:
+    requirements: []
+  orientation: 0
+  preferredConsolePlacement: 
+  tags: [trap-floor, floor-content, current-stage03-reference]

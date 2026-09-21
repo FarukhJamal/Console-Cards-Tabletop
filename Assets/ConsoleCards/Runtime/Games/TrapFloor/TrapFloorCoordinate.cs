@@ -3,13 +3,12 @@ using System;
 namespace ConsoleCards.Games.TrapFloor
 {
     /// <summary>
-    /// Stable one-based coordinate of a Floor Card on the approved six-by-six Board.
-    /// This is setup/content identity only; Floorfall rules are intentionally not implemented here.
+    /// Stable one-based coordinate of a Floor Card. Active Grid dimensions belong to the
+    /// Trap Floor Template, while coordinate-generation strategies validate against its mapping.
     /// </summary>
     public readonly struct TrapFloorCoordinate : IEquatable<TrapFloorCoordinate>
     {
         public const int MinimumAxisValue = 1;
-        public const int MaximumAxisValue = 6;
 
         public TrapFloorCoordinate(int x, int y)
         {
@@ -55,11 +54,11 @@ namespace ConsoleCards.Games.TrapFloor
 
         private static void ValidateAxis(int value, string parameterName)
         {
-            if (value < MinimumAxisValue || value > MaximumAxisValue)
+            if (value < MinimumAxisValue)
             {
                 throw new ArgumentOutOfRangeException(
                     parameterName,
-                    $"Trap Floor coordinates must be between {MinimumAxisValue} and {MaximumAxisValue}.");
+                    $"Trap Floor coordinates must be at least {MinimumAxisValue}.");
             }
         }
     }

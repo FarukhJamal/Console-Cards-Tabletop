@@ -21,25 +21,27 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly ReadOnlyDictionary<TabletopObjectId, TrapFloorCoordinate> floorCoordinates;
         private readonly ReadOnlyDictionary<TabletopObjectId, string> cardLabels;
         private readonly ReadOnlyDictionary<ObjectDefinitionId, TrapFloorFloorContentDefinition> floorContentDefinitions;
+        private readonly int floorContentInstanceCount;
         private readonly ReadOnlyCollection<TrapFloorPlayerSetupDefinition> players;
         private readonly ReadOnlyDictionary<ObjectDefinitionId, TrapFloorFloormasterCardCategory> emptyFloormasterCategories;
         private readonly ReadOnlyCollection<TabletopObjectId> emptyObjectIds;
 
         internal TrapFloorTemplateDefinition(
             GameDefinitionData gameDefinition,
+            ModeDefinitionData activeMode,
             GameTemplate template,
             GameTemplateContentCatalog contentCatalog,
             PlayerLayoutDefinition playerLayout,
             PlayAreaId boardPlayAreaId,
             IDictionary<TrapFloorCoordinate, TabletopObjectId> floorCardIds,
             IEnumerable<TrapFloorFloorContentDefinition> floorContentDefinitions,
-            TrapFloorStage03Configuration stage03Configuration,
             IDictionary<TabletopObjectId, string> cardLabels,
             IEnumerable<TrapFloorPlayerSetupDefinition> players,
             TabletopObjectId floorfallXAxisDieId,
             TabletopObjectId floorfallYAxisDieId)
         {
-            GameDefinition = gameDefinition;
+            GameDefinition = gameDefinition ?? throw new ArgumentNullException(nameof(gameDefinition));
+            ActiveMode = activeMode ?? throw new ArgumentNullException(nameof(activeMode));
             Template = template ?? throw new ArgumentNullException(nameof(template));
             ContentCatalog = contentCatalog ?? throw new ArgumentNullException(nameof(contentCatalog));
             PlayerLayout = playerLayout ?? throw new ArgumentNullException(nameof(playerLayout));
@@ -54,10 +56,12 @@ namespace ConsoleCards.Games.TrapFloor
             this.cardLabels = new ReadOnlyDictionary<TabletopObjectId, string>(
                 new Dictionary<TabletopObjectId, string>(
                     cardLabels ?? throw new ArgumentNullException(nameof(cardLabels))));
+            List<TrapFloorFloorContentDefinition> floorContentInstances = new List<TrapFloorFloorContentDefinition>(
+                floorContentDefinitions ?? throw new ArgumentNullException(nameof(floorContentDefinitions)));
+            floorContentInstanceCount = floorContentInstances.Count;
             this.floorContentDefinitions = new ReadOnlyDictionary<ObjectDefinitionId, TrapFloorFloorContentDefinition>(
-                IndexFloorContentDefinitions(floorContentDefinitions));
-            Stage03Configuration = stage03Configuration
-                ?? throw new ArgumentNullException(nameof(stage03Configuration));
+                IndexFloorContentDefinitions(floorContentInstances));
+            Stage03Configuration = new TrapFloorStage03Configuration(ActiveMode.RequiredKeyCount);
             this.players = new ReadOnlyCollection<TrapFloorPlayerSetupDefinition>(
                 new List<TrapFloorPlayerSetupDefinition>(
                     players ?? throw new ArgumentNullException(nameof(players))));
@@ -74,11 +78,17 @@ namespace ConsoleCards.Games.TrapFloor
 
         public GameDefinitionData GameDefinition { get; }
 
-        public int MinimumPlayerCount => GameDefinition?.MinimumPlayers
-            ?? TrapFloorTemplateFactory.MinimumPlayerCount;
+        public ModeDefinitionData ActiveMode { get; }
 
-        public int MaximumPlayerCount => GameDefinition?.MaximumPlayers
-            ?? TrapFloorTemplateFactory.MaximumPlayerCount;
+        public GridDefinitionData Grid => GameDefinition.Grid;
+
+        public int GridRows => Grid.Rows;
+
+        public int GridColumns => Grid.Columns;
+
+        public int MinimumPlayerCount => GameDefinition.MinimumPlayers;
+
+        public int MaximumPlayerCount => GameDefinition.MaximumPlayers;
 
         public GameTemplateContentCatalog ContentCatalog { get; }
 
@@ -122,7 +132,18 @@ namespace ConsoleCards.Games.TrapFloor
 
         public bool TryGetFloorCardId(TrapFloorCoordinate coordinate, out TabletopObjectId objectId)
         {
+            if (!IsCoordinateInGrid(coordinate))
+            {
+                objectId = TabletopObjectId.Empty;
+                return false;
+            }
+
             return floorCardIds.TryGetValue(coordinate, out objectId);
+        }
+
+        public bool IsCoordinateInGrid(TrapFloorCoordinate coordinate)
+        {
+            return coordinate.X <= GridColumns && coordinate.Y <= GridRows;
         }
 
         public bool TryGetFloorCoordinate(TabletopObjectId objectId, out TrapFloorCoordinate coordinate)
@@ -216,14 +237,14 @@ namespace ConsoleCards.Games.TrapFloor
                 new Dictionary<ObjectDefinitionId, TrapFloorFloorContentDefinition>();
             foreach (TrapFloorFloorContentDefinition definition in definitions)
             {
-                if (definition == null || indexed.ContainsKey(definition.Id))
+                if (definition == null)
                 {
                     throw new ArgumentException(
-                        "Floor content definitions must be non-null and have unique stable IDs.",
+                        "Floor content definitions must be non-null.",
                         nameof(definitions));
                 }
 
-                indexed.Add(definition.Id, definition);
+                if (!indexed.ContainsKey(definition.Id)) indexed.Add(definition.Id, definition);
             }
 
             return indexed;
@@ -231,38 +252,41 @@ namespace ConsoleCards.Games.TrapFloor
 
         private void ValidateFloorContentAssignments()
         {
-            if (floorCardIds.Count != TrapFloorTemplateFactory.FloorCardCount)
-            {
-                throw new ArgumentException("Trap Floor requires exactly 36 coordinate-mapped Floor Cards.");
-            }
-
-            if (floorContentDefinitions.Count != TrapFloorStage03ContentPool.TotalCount)
-            {
-                throw new ArgumentException("Trap Floor requires the complete 36-entry Stage-03 content pool.");
-            }
-
-            Dictionary<TrapFloorFloorContentCategory, int> categoryCounts =
-                new Dictionary<TrapFloorFloorContentCategory, int>();
-            foreach (TrapFloorFloorContentDefinition definition in floorContentDefinitions.Values)
-            {
-                categoryCounts.TryGetValue(definition.Category, out int count);
-                categoryCounts[definition.Category] = count + 1;
-            }
-
-            RequireCategoryCount(categoryCounts, TrapFloorFloorContentCategory.Trap, TrapFloorStage03ContentPool.TrapCount);
-            RequireCategoryCount(categoryCounts, TrapFloorFloorContentCategory.Friend, TrapFloorStage03ContentPool.FriendCount);
-            RequireCategoryCount(categoryCounts, TrapFloorFloorContentCategory.Key, TrapFloorStage03ContentPool.KeyCount);
-            RequireCategoryCount(
-                categoryCounts,
-                TrapFloorFloorContentCategory.SecretExit,
-                TrapFloorStage03ContentPool.SecretExitCount);
-            RequireCategoryCount(categoryCounts, TrapFloorFloorContentCategory.Entry, TrapFloorStage03ContentPool.EntryCount);
-            RequireCategoryCount(categoryCounts, TrapFloorFloorContentCategory.Ability, TrapFloorStage03ContentPool.AbilityCount);
-
-            if (Stage03Configuration.RequiredKeyCount > TrapFloorStage03ContentPool.KeyCount)
+            if (floorCardIds.Count != Grid.CellCount)
             {
                 throw new ArgumentException(
-                    "Trap Floor required-Key count cannot exceed the configured Stage-03 Key pool.");
+                    $"Trap Floor Grid requires {Grid.CellCount} coordinate-mapped Floor Cards, but found {floorCardIds.Count}.");
+            }
+
+            int configuredKeyCount = 0;
+            foreach (KeyValuePair<TrapFloorCoordinate, TabletopObjectId> pair in floorCardIds)
+            {
+                GameTemplateObjectInstanceDefinition instance = null;
+                for (int i = 0; i < Template.Objects.Count; i++)
+                {
+                    if (Template.Objects[i].Id == pair.Value)
+                    {
+                        instance = Template.Objects[i];
+                        break;
+                    }
+                }
+
+                if (instance != null
+                    && floorContentDefinitions.TryGetValue(instance.DefinitionId, out TrapFloorFloorContentDefinition definition)
+                    && definition.Category == TrapFloorFloorContentCategory.Key)
+                    configuredKeyCount++;
+            }
+
+            if (floorContentInstanceCount != Grid.CellCount)
+            {
+                throw new ArgumentException(
+                    $"Authored Trap Floor content produces {floorContentInstanceCount} instances for a {Grid.CellCount}-cell Grid.");
+            }
+
+            if (ActiveMode.RequiredKeyCount > configuredKeyCount)
+            {
+                throw new ArgumentException(
+                    "Trap Floor active Mode requires more Keys than the authored Floor content produces.");
             }
 
             Dictionary<TabletopObjectId, GameTemplateObjectInstanceDefinition> templateObjects =
@@ -276,18 +300,20 @@ namespace ConsoleCards.Games.TrapFloor
                 }
             }
 
-            HashSet<ObjectDefinitionId> acceptedAssignments = new HashSet<ObjectDefinitionId>();
+            int acceptedAssignments = 0;
             foreach (KeyValuePair<TrapFloorCoordinate, TabletopObjectId> pair in floorCardIds)
             {
-                if (!templateObjects.TryGetValue(pair.Value, out GameTemplateObjectInstanceDefinition instance)
+                if (!IsCoordinateInGrid(pair.Key)
+                    || !templateObjects.TryGetValue(pair.Value, out GameTemplateObjectInstanceDefinition instance)
                     || instance.Kind != TabletopObjectKind.Card
                     || instance.InitialCardFace != CardFace.FaceDown
-                    || !floorContentDefinitions.ContainsKey(instance.DefinitionId)
-                    || !acceptedAssignments.Add(instance.DefinitionId))
+                    || !floorContentDefinitions.ContainsKey(instance.DefinitionId))
                 {
                     throw new ArgumentException(
-                        "Every Floor coordinate requires one unrevealed Card with one unique Stage-03 content assignment.");
+                        "Every authored Grid coordinate requires one unrevealed Card from the configured Floor content set.");
                 }
+
+                acceptedAssignments++;
 
                 if (!cardLabels.ContainsKey(pair.Value))
                 {
@@ -295,22 +321,9 @@ namespace ConsoleCards.Games.TrapFloor
                 }
             }
 
-            if (acceptedAssignments.Count != floorContentDefinitions.Count)
+            if (acceptedAssignments != Grid.CellCount)
             {
-                throw new ArgumentException("Every Stage-03 content definition must be assigned exactly once.");
-            }
-        }
-
-        private static void RequireCategoryCount(
-            IReadOnlyDictionary<TrapFloorFloorContentCategory, int> counts,
-            TrapFloorFloorContentCategory category,
-            int expected)
-        {
-            counts.TryGetValue(category, out int actual);
-            if (actual != expected)
-            {
-                throw new ArgumentException(
-                    $"Stage-03 {category} content count must be {expected}, but was {actual}.");
+                throw new ArgumentException("Every authored Grid cell must receive exactly one Floor content instance.");
             }
         }
 
@@ -380,13 +393,9 @@ namespace ConsoleCards.Games.TrapFloor
             SeatId seatId,
             ContainerId handContainerId,
             ContainerId mainSlotContainerId,
-            ContainerId ruleSlotContainerId,
-            ContainerId modeSlotContainerId,
-            IEnumerable<ContainerId> itemSlotContainerIds,
+            IEnumerable<ContainerId> sideSlotContainerIds,
             ContainerId controllerDeckId,
             TabletopObjectId avatarCardId,
-            TabletopObjectId ruleCardId,
-            TabletopObjectId modeCardId,
             TabletopObjectId pawnId,
             TrapFloorCoordinate startingCorner)
         {
@@ -394,14 +403,10 @@ namespace ConsoleCards.Games.TrapFloor
             SeatId = seatId;
             HandContainerId = handContainerId;
             MainSlotContainerId = mainSlotContainerId;
-            RuleSlotContainerId = ruleSlotContainerId;
-            ModeSlotContainerId = modeSlotContainerId;
-            ItemSlotContainerIds = new ReadOnlyCollection<ContainerId>(
-                new List<ContainerId>(itemSlotContainerIds));
+            SideSlotContainerIds = new ReadOnlyCollection<ContainerId>(
+                new List<ContainerId>(sideSlotContainerIds));
             ControllerDeckId = controllerDeckId;
             AvatarCardId = avatarCardId;
-            RuleCardId = ruleCardId;
-            ModeCardId = modeCardId;
             PawnId = pawnId;
             StartingCorner = startingCorner;
         }
@@ -410,15 +415,16 @@ namespace ConsoleCards.Games.TrapFloor
         public SeatId SeatId { get; }
         public ContainerId HandContainerId { get; }
         public ContainerId MainSlotContainerId { get; }
-        public ContainerId RuleSlotContainerId { get; }
-        public ContainerId ModeSlotContainerId { get; }
-        public IReadOnlyList<ContainerId> ItemSlotContainerIds { get; }
+        public IReadOnlyList<ContainerId> SideSlotContainerIds { get; }
+        public ContainerId RuleSlotContainerId => ContainerId.Empty;
+        public ContainerId ModeSlotContainerId => ContainerId.Empty;
+        public IReadOnlyList<ContainerId> ItemSlotContainerIds => SideSlotContainerIds;
         public ContainerId ControllerDeckId { get; }
         public ContainerId CoinStorageContainerId => ContainerId.Empty;
         public TabletopPose CoinStoragePose => TabletopPose.Default;
         public TabletopObjectId AvatarCardId { get; }
-        public TabletopObjectId RuleCardId { get; }
-        public TabletopObjectId ModeCardId { get; }
+        public TabletopObjectId RuleCardId => TabletopObjectId.Empty;
+        public TabletopObjectId ModeCardId => TabletopObjectId.Empty;
         public TabletopObjectId PawnId { get; }
         public TrapFloorCoordinate StartingCorner { get; }
     }

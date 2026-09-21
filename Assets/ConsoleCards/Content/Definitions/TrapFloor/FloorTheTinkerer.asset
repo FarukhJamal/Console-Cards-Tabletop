@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22e99343c26241089ebf0c37ca115c09, type: 3}
+  m_Name: FloorTheTinkerer
+  m_EditorClassIdentifier: 
+  stableId: 54460015-4f4f-4000-8000-001500000015
+  displayName: The Tinkerer
+  category: Friend
+  description: 'PROVISIONAL STAGE-03 - One-time manual effect: reroll one die from a Trap challenge and use the new result. Then treat this Friend effect as spent.'
+  frontArtwork: {fileID: 0}
+  frontArtworkReference: 
+  backArtwork: {fileID: 0}
+  backArtworkReference: 
+  quantity: 1
+  inputCost:
+    requirements: []
+  orientation: 0
+  preferredConsolePlacement: 
+  tags: [trap-floor, floor-content, provisional-stage03]

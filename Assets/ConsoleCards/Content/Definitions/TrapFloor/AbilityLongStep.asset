@@ -25,4 +25,4 @@ MonoBehaviour:
     requirements: []
   orientation: 0
   preferredConsolePlacement: Side
-  tags: [trap-floor, ability]
+  tags: [trap-floor, ability, floor-content, provisional-stage03]

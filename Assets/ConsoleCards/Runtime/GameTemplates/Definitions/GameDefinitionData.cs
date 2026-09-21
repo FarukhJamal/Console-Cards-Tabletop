@@ -71,6 +71,7 @@ namespace ConsoleCards.GameTemplates.Definitions
             IEnumerable<GameContentSetData> contentSets,
             IEnumerable<AvatarDefinitionData> avatars,
             IEnumerable<ModeDefinitionData> modes,
+            string defaultModeStableId,
             ConsoleConfigurationData console,
             IEnumerable<ControllerInput> inputVocabulary,
             ControllerConfigurationData controllerConfiguration,
@@ -93,6 +94,7 @@ namespace ConsoleCards.GameTemplates.Definitions
             this.contentSets = new ReadOnlyCollection<GameContentSetData>(new List<GameContentSetData>(contentSets ?? throw new ArgumentNullException(nameof(contentSets))));
             this.avatars = new ReadOnlyCollection<AvatarDefinitionData>(new List<AvatarDefinitionData>(avatars ?? throw new ArgumentNullException(nameof(avatars))));
             this.modes = new ReadOnlyCollection<ModeDefinitionData>(new List<ModeDefinitionData>(modes ?? throw new ArgumentNullException(nameof(modes))));
+            DefaultModeStableId = defaultModeStableId ?? string.Empty;
             Console = console;
             this.inputVocabulary = new ReadOnlyCollection<ControllerInput>(new List<ControllerInput>(inputVocabulary ?? throw new ArgumentNullException(nameof(inputVocabulary))));
             ControllerConfiguration = controllerConfiguration;
@@ -111,6 +113,7 @@ namespace ConsoleCards.GameTemplates.Definitions
         public IReadOnlyList<GameContentSetData> ContentSets => contentSets;
         public IReadOnlyList<AvatarDefinitionData> Avatars => avatars;
         public IReadOnlyList<ModeDefinitionData> Modes => modes;
+        public string DefaultModeStableId { get; }
         public ConsoleConfigurationData Console { get; }
         public IReadOnlyList<ControllerInput> InputVocabulary => inputVocabulary;
         public ControllerConfigurationData ControllerConfiguration { get; }
@@ -130,6 +133,36 @@ namespace ConsoleCards.GameTemplates.Definitions
             }
 
             definition = null;
+            return false;
+        }
+
+        public bool TryGetContentSet(string stableId, out GameContentSetData contentSet)
+        {
+            for (int i = 0; i < contentSets.Count; i++)
+            {
+                if (string.Equals(contentSets[i].StableId, stableId, StringComparison.OrdinalIgnoreCase))
+                {
+                    contentSet = contentSets[i];
+                    return true;
+                }
+            }
+
+            contentSet = null;
+            return false;
+        }
+
+        public bool TryGetMode(string stableId, out ModeDefinitionData mode)
+        {
+            for (int i = 0; i < modes.Count; i++)
+            {
+                if (string.Equals(modes[i].StableId, stableId, StringComparison.OrdinalIgnoreCase))
+                {
+                    mode = modes[i];
+                    return true;
+                }
+            }
+
+            mode = null;
             return false;
         }
     }

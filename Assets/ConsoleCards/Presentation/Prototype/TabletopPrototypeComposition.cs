@@ -33,7 +33,6 @@ namespace ConsoleCards.Presentation.Prototype
 {
     public sealed class TabletopPrototypeComposition : MonoBehaviour, IContainedCardDragFeedback
     {
-        private const int PrototypeConsoleSlotCount = TrapFloorTemplateFactory.ConsoleSlotCountPerPlayer;
         private const float TrapFloorCoinVisualScale = 0.34f;
         private const float TrapFloorCoinAreaLabelCharacterSize = 0.12f;
         private const int TrapFloorCoinAreaLabelFontSize = 56;
@@ -168,7 +167,8 @@ namespace ConsoleCards.Presentation.Prototype
         private TabletopSession activeSession;
         private TabletopSessionBootstrapService sessionBootstrapService;
         private GameTemplateCatalog sessionTemplateCatalog;
-        private TrapFloorTemplateDefinition availableTrapFloorTemplate;
+        private readonly Dictionary<GameTemplateId, TrapFloorTemplateDefinition> availableTrapFloorTemplates =
+            new Dictionary<GameTemplateId, TrapFloorTemplateDefinition>();
         private PlayerId tableActionActorId;
         private string templateCatalogError;
         private string gameTemplatesPanelError;
@@ -1769,7 +1769,7 @@ namespace ConsoleCards.Presentation.Prototype
 
             activeSession = null;
             sessionTemplateCatalog = null;
-            availableTrapFloorTemplate = null;
+            availableTrapFloorTemplates.Clear();
         }
 
         private void Update()
@@ -2908,17 +2908,17 @@ namespace ConsoleCards.Presentation.Prototype
             gameTemplatesPanelError = null;
             try
             {
-                RegisterFreshTrapFloorTemplate();
+                RegisterFreshTrapFloorTemplates();
             }
             catch (Exception exception)
             {
-                availableTrapFloorTemplate = null;
+                availableTrapFloorTemplates.Clear();
                 sessionTemplateCatalog = new GameTemplateCatalog(Array.Empty<GameTemplateRegistration>());
                 templateCatalogError = $"Trap Floor is unavailable: {exception.Message}";
             }
         }
 
-        private void RegisterFreshTrapFloorTemplate()
+        private void RegisterFreshTrapFloorTemplates()
         {
             RequireReference(trapFloorGameDefinition, nameof(trapFloorGameDefinition));
             if (authoritativeRandomValueSource == null)
@@ -2926,16 +2926,23 @@ namespace ConsoleCards.Presentation.Prototype
                 authoritativeRandomValueSource = new SystemRandomValueSource();
             }
 
-            availableTrapFloorTemplate = TrapFloorTemplateFactory.CreateStandardFourPlayer(
-                authoritativeRandomValueSource,
-                trapFloorGameDefinition.ToData());
-            sessionTemplateCatalog = new GameTemplateCatalog(
-                new[]
-                {
-                    new GameTemplateRegistration(
-                        availableTrapFloorTemplate.Template,
-                        availableTrapFloorTemplate.ContentCatalog),
-                });
+            var gameDefinition = trapFloorGameDefinition.ToData();
+            if (gameDefinition.Modes.Count == 0)
+                throw new InvalidOperationException("Trap Floor requires at least one authored Mode.");
+
+            availableTrapFloorTemplates.Clear();
+            List<GameTemplateRegistration> registrations = new List<GameTemplateRegistration>(gameDefinition.Modes.Count);
+            for (int i = 0; i < gameDefinition.Modes.Count; i++)
+            {
+                TrapFloorTemplateDefinition template = TrapFloorTemplateFactory.CreateStandardFourPlayer(
+                    authoritativeRandomValueSource,
+                    gameDefinition,
+                    gameDefinition.Modes[i].StableId);
+                availableTrapFloorTemplates.Add(template.Template.Id, template);
+                registrations.Add(new GameTemplateRegistration(template.Template, template.ContentCatalog));
+            }
+
+            sessionTemplateCatalog = new GameTemplateCatalog(registrations);
         }
 
         private void InitializeRuntimeUi()
@@ -3266,12 +3273,11 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             if (selection.Kind == TabletopSessionKind.GameTemplate
-                && availableTrapFloorTemplate != null
-                && selection.GameTemplateId == availableTrapFloorTemplate.Template.Id)
+                && availableTrapFloorTemplates.ContainsKey(selection.GameTemplateId))
             {
                 try
                 {
-                    RegisterFreshTrapFloorTemplate();
+                    RegisterFreshTrapFloorTemplates();
                 }
                 catch (Exception exception)
                 {
@@ -3303,14 +3309,14 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 if (selection.Kind == TabletopSessionKind.GameTemplate)
                 {
-                    if (availableTrapFloorTemplate == null
-                        || selection.GameTemplateId != availableTrapFloorTemplate.Template.Id)
+                    if (!availableTrapFloorTemplates.TryGetValue(
+                            selection.GameTemplateId,
+                            out candidateTemplate))
                     {
                         throw new InvalidOperationException(
                             "The selected Game Template has no registered prototype Presentation wiring.");
                     }
 
-                    candidateTemplate = availableTrapFloorTemplate;
                     candidateContext = CreateTrapFloorPrototypeContext(
                         result.Session,
                         candidateTemplate,
@@ -5484,7 +5490,7 @@ namespace ConsoleCards.Presentation.Prototype
                     trapFloorTemplate.FloorCardIds.Count);
                 trapFloorObjectiveState = new TrapFloorObjectiveState(
                     matchState.Id,
-                    trapFloorTemplate.Stage03Configuration.RequiredKeyCount);
+                    trapFloorTemplate.ActiveMode.RequiredKeyCount);
             }
             trapFloorCollapseUseCase = new TrapFloorCollapseUseCase(
                 trapFloorTemplate,
@@ -5966,10 +5972,11 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             ConsoleSlotView[] slotViews = prototypeConsolePrefab.GetComponentsInChildren<ConsoleSlotView>(true);
-            if (slotViews.Length != PrototypeConsoleSlotCount)
+            int expectedSlotCount = ActiveTrapFloorConsoleSlotCount();
+            if (slotViews.Length != expectedSlotCount)
             {
                 throw new InvalidOperationException(
-                    $"The prototype Console prefab requires exactly {PrototypeConsoleSlotCount} Console Slots.");
+                    $"The prototype Console prefab requires exactly {expectedSlotCount} authored Console Slots.");
             }
 
             for (int i = 0; i < slotViews.Length; i++)
@@ -7145,10 +7152,11 @@ namespace ConsoleCards.Presentation.Prototype
                 seat.ConsolePose,
                 seat.ConsoleSurfaceHeight);
             ConsoleSlotView[] slotViews = view.GetComponentsInChildren<ConsoleSlotView>(true);
-            if (slotViews.Length != PrototypeConsoleSlotCount)
+            int expectedSlotCount = ActiveTrapFloorConsoleSlotCount();
+            if (slotViews.Length != expectedSlotCount)
             {
                 throw new InvalidOperationException(
-                    $"Runtime Trap Floor Consoles require exactly {PrototypeConsoleSlotCount} Slots.");
+                    $"Runtime Trap Floor Consoles require exactly {expectedSlotCount} authored Slots.");
             }
 
             Array.Sort(slotViews, (left, right) => left.transform.GetSiblingIndex().CompareTo(right.transform.GetSiblingIndex()));
@@ -7171,28 +7179,33 @@ namespace ConsoleCards.Presentation.Prototype
             GameObject root = PrepareRuntimeRoot(view.gameObject, name);
             ApplyConsolePose(root.transform, placedConsole.Pose, placedConsole.SurfaceHeight);
             ConsoleSlotView[] slotViews = view.GetComponentsInChildren<ConsoleSlotView>(true);
-            if (slotViews.Length != placedConsole.Console.SlotCount)
+            if (slotViews.Length < placedConsole.Console.SlotCount)
             {
                 throw new InvalidOperationException(
-                    "Runtime freeform Console prefab Slot count must match authoritative Console state.");
+                    "Runtime freeform Console prefab does not contain enough authored Slots for authoritative Console state.");
             }
 
             Array.Sort(
                 slotViews,
                 (left, right) => left.transform.GetSiblingIndex().CompareTo(right.transform.GetSiblingIndex()));
-            PrototypeConsoleSlotVisual[] slotVisuals = new PrototypeConsoleSlotVisual[slotViews.Length];
-            for (int i = 0; i < slotViews.Length; i++)
+            int visibleSlotCount = placedConsole.Console.SlotCount;
+            ConsoleSlotView[] visibleSlotViews = new ConsoleSlotView[visibleSlotCount];
+            PrototypeConsoleSlotVisual[] slotVisuals = new PrototypeConsoleSlotVisual[visibleSlotCount];
+            for (int i = 0; i < visibleSlotCount; i++)
             {
                 slotVisuals[i] = slotViews[i].GetComponent<PrototypeConsoleSlotVisual>();
                 RequireReference(slotVisuals[i], $"Runtime freeform Console Slot visual {i}");
                 slotVisuals[i].ValidateReferences();
+                visibleSlotViews[i] = slotViews[i];
             }
+
+            for (int i = visibleSlotCount; i < slotViews.Length; i++) slotViews[i].gameObject.SetActive(false);
 
             return new RuntimeConsoleInstance(
                 root,
                 view,
                 -1,
-                slotViews,
+                visibleSlotViews,
                 slotVisuals,
                 placedConsole.Id);
         }
@@ -7582,9 +7595,13 @@ namespace ConsoleCards.Presentation.Prototype
 
             string usable = $"USABLE FLOORS {trapFloorCollapseState.UsableFloorCount}"
                 + $" / {trapFloorCollapseState.TotalFloorCount}";
-            return roll == null
+            string collapse = roll == null
                 ? usable
                 : $"{usable} | LAST {roll.XAxisResult}/{roll.YAxisResult} → {roll.Coordinate}";
+            if (trapFloorTemplate == null) return collapse;
+            return $"{trapFloorTemplate.ActiveMode.DisplayName.ToUpperInvariant()} | "
+                + $"{trapFloorTemplate.ActiveMode.Behavior} | "
+                + $"{trapFloorTemplate.ActiveMode.Collapse.ScheduleKind} | {collapse}";
         }
 
         private void ApplyCollapsedFloorPresentation(TabletopObjectId floorCardId)
@@ -8436,10 +8453,11 @@ namespace ConsoleCards.Presentation.Prototype
         {
             RequireReference(sceneConsoleView, nameof(sceneConsoleView));
             resolvedSceneConsoleSlotViews = ResolveSceneConsoleSlotViews();
-            resolvedSceneConsoleSlotVisuals = new PrototypeConsoleSlotVisual[PrototypeConsoleSlotCount];
+            int expectedSlotCount = ActiveTrapFloorConsoleSlotCount();
+            resolvedSceneConsoleSlotVisuals = new PrototypeConsoleSlotVisual[expectedSlotCount];
 
             HashSet<ConsoleSlotView> seenViews = new HashSet<ConsoleSlotView>();
-            for (int i = 0; i < PrototypeConsoleSlotCount; i++)
+            for (int i = 0; i < expectedSlotCount; i++)
             {
                 ConsoleSlotView slotView = resolvedSceneConsoleSlotViews[i];
                 if (!seenViews.Add(slotView))
@@ -8494,9 +8512,10 @@ namespace ConsoleCards.Presentation.Prototype
 
         private ConsoleSlotView[] ResolveSceneConsoleSlotViews()
         {
+            int expectedSlotCount = ActiveTrapFloorConsoleSlotCount();
             ConsoleSlotView[] resolvedViews;
             if (sceneConsoleSlotViews != null
-                && sceneConsoleSlotViews.Length == PrototypeConsoleSlotCount
+                && sceneConsoleSlotViews.Length == expectedSlotCount
                 && Array.TrueForAll(sceneConsoleSlotViews, view => view != null))
             {
                 resolvedViews = (ConsoleSlotView[])sceneConsoleSlotViews.Clone();
@@ -8506,10 +8525,10 @@ namespace ConsoleCards.Presentation.Prototype
                 resolvedViews = sceneConsoleView.GetComponentsInChildren<ConsoleSlotView>(true);
             }
 
-            if (resolvedViews.Length != PrototypeConsoleSlotCount)
+            if (resolvedViews.Length != expectedSlotCount)
             {
                 throw new InvalidOperationException(
-                    $"Expected exactly {PrototypeConsoleSlotCount} ConsoleSlotView components under sceneConsoleView.");
+                    $"Expected exactly {expectedSlotCount} ConsoleSlotView components under sceneConsoleView.");
             }
 
             for (int i = 0; i < resolvedViews.Length; i++)
@@ -8529,6 +8548,13 @@ namespace ConsoleCards.Presentation.Prototype
                 resolvedViews,
                 (left, right) => CompareConsoleHierarchyOrder(left.transform, right.transform));
             return resolvedViews;
+        }
+
+        private int ActiveTrapFloorConsoleSlotCount()
+        {
+            if (trapFloorTemplate == null || trapFloorTemplate.Players.Count == 0)
+                throw new InvalidOperationException("Trap Floor Console validation requires an active authored Template.");
+            return 1 + trapFloorTemplate.Players[0].SideSlotContainerIds.Count;
         }
 
         private PrototypeConsoleSlotVisual ResolveSceneConsoleSlotVisual(ConsoleSlotView slotView)

@@ -148,9 +148,9 @@ namespace ConsoleCards.Presentation.Views.Containers
                 return;
             }
 
-            if (slotAnchors.Length != expectedCount)
+            if (slotAnchors.Length < expectedCount)
             {
-                throw new InvalidOperationException("ConsoleView authored Slot anchor count must match Console slot count.");
+                throw new InvalidOperationException("ConsoleView must author at least one Slot anchor per Runtime Console slot.");
             }
 
             HashSet<Transform> seenAnchors = new HashSet<Transform>();
