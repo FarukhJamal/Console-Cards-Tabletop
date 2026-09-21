@@ -402,10 +402,13 @@ namespace ConsoleCards.Presentation.Prototype
 
             try
             {
+                // Restore authoritative state and its authored Template/Mode metadata before any
+                // Presentation validation asks the active definition for Console or Board data.
+                RestorePrototypeTemplateContext(restoreInitialBaseline);
                 ValidateTrapFloorConfiguration();
                 presentationTransitions = new TabletopPresentationTransitionController();
                 ReactivateSceneOwnedObjectViews();
-                BuildRuntimeGraph(restoreInitialBaseline);
+                BuildRuntimeGraph();
                 BuildToolboxRuntime();
                 BuildFloorfallRuntime();
                 ProjectTrapFloorCameraBookmark();
@@ -436,7 +439,9 @@ namespace ConsoleCards.Presentation.Prototype
             }
             catch
             {
-                Shutdown();
+                // Keep the selected session context available so the caller can reconstruct the
+                // previous authoritative state if this Presentation build did not complete.
+                Shutdown(true);
                 throw;
             }
         }
@@ -960,8 +965,20 @@ namespace ConsoleCards.Presentation.Prototype
         public void ResetPrototype()
         {
             EnsureInitialized();
-            Shutdown(true);
-            InitializeActiveSession(true);
+            MatchState previousMatch = activeSession.CurrentMatch;
+            PrototypeSessionUndoSnapshot previousSnapshot = CaptureUndoSnapshot();
+            try
+            {
+                Shutdown(true);
+                InitializeActiveSession(true);
+            }
+            catch (Exception exception)
+            {
+                RestorePresentationAfterFailedRebuild(previousMatch, previousSnapshot, "Reset");
+                Debug.LogError($"Reset Presentation rebuild failed: {exception.Message}", this);
+                throw;
+            }
+
             RefreshTrapFloorStatusUi();
         }
 
@@ -1012,6 +1029,8 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             rebuildingFromUndo = true;
+            MatchState previousMatch = activeSession.CurrentMatch;
+            PrototypeSessionUndoSnapshot previousSnapshot = CaptureUndoSnapshot();
             try
             {
                 Shutdown(true);
@@ -1031,6 +1050,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
             catch (Exception exception)
             {
+                RestorePresentationAfterFailedRebuild(previousMatch, previousSnapshot, "Undo");
                 Debug.LogError($"Undo Presentation rebuild failed: {exception.Message}", this);
                 throw;
             }
@@ -1083,6 +1103,8 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             rebuildingFromUndo = true;
+            MatchState previousMatch = activeSession.CurrentMatch;
+            PrototypeSessionUndoSnapshot previousSnapshot = CaptureUndoSnapshot();
             try
             {
                 Shutdown(true);
@@ -1097,6 +1119,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
             catch (Exception exception)
             {
+                RestorePresentationAfterFailedRebuild(previousMatch, previousSnapshot, "Redo");
                 Debug.LogError($"Redo Presentation rebuild failed: {exception.Message}", this);
                 throw;
             }
@@ -5454,7 +5477,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
-        private void BuildRuntimeGraph(bool restoreInitialBaseline)
+        private void BuildRuntimeGraph()
         {
             interactionOwnerId = InteractionOwnerId.New();
             coordinateConverter = PhysicalTabletopSurfaces.CreateTemplateLayoutConverter(
@@ -5468,7 +5491,6 @@ namespace ConsoleCards.Presentation.Prototype
                 throw new InvalidOperationException("Trap Floor Presentation requires a selected Template session context.");
             }
 
-            RestorePrototypeTemplateContext(restoreInitialBaseline);
             BuildTrapFloorRevealRuntime();
             ProjectTemplateBoardSurface();
             ProjectPrototypePlayerLayout(localSeatLayout);
@@ -5948,6 +5970,37 @@ namespace ConsoleCards.Presentation.Prototype
             foreach (KeyValuePair<ObjectDefinitionId, ButtonCardDefinition> definition in context.ButtonDefinitions)
             {
                 buttonDefinitions.Add(definition.Key, definition.Value);
+            }
+        }
+
+        private void RestorePresentationAfterFailedRebuild(
+            MatchState previousMatch,
+            PrototypeSessionUndoSnapshot previousSnapshot,
+            string operationName)
+        {
+            bool wasRebuildingFromUndo = rebuildingFromUndo;
+            try
+            {
+                Shutdown(true);
+                activeSession.ReplaceCurrentMatch(previousMatch);
+                pendingRestoredTrapFloorState = previousSnapshot.TrapFloor?.Restore();
+                rebuildingFromUndo = true;
+                InitializeActiveSession(false);
+                Debug.LogWarning(
+                    $"{operationName} Presentation rebuild failed; the previous authoritative state and Presentation were restored.",
+                    this);
+            }
+            catch (Exception recoveryException)
+            {
+                Debug.LogError(
+                    $"{operationName} Presentation recovery failed: {recoveryException.Message}",
+                    this);
+            }
+            finally
+            {
+                pendingRestoredTrapFloorState = null;
+                rebuildingFromUndo = wasRebuildingFromUndo;
+                RefreshUndoUi();
             }
         }
 
