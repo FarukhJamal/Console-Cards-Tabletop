@@ -1,7 +1,7 @@
 # Console Cards — Product Vision
 
 **Document ID:** 00_Product_Vision  
-**Version:** 1.9
+**Version:** 2.0
 
 **Status:** Approved
 **Purpose:** Define what Console Cards is, what experience it must create, and which product boundaries must remain stable before architecture and implementation begin.
@@ -72,21 +72,20 @@ The software should make physical tabletop actions easier and clearer. It does n
 
 ---
 
-## 3. Universal Console Cards Identity
+## 3. Console Cards Identity and Optional Controller Tools
 
-Console Cards is not only a generic tabletop simulator. Its identity is built around universal Console Cards systems.
+Console Cards is a freeform virtual tabletop simulator first. Its shared Console Cards systems include:
 
 These include:
 
-- Button Cards.
 - Player hands.
-- Button Card decks.
 - Discard piles.
 - Player Consoles.
-- Move Cards or other cards stored on Consoles.
+- Cards stored on Consoles.
 - Shared tabletop interaction.
+- Optional Controller Cards and Controller Mapping tools.
 
-The universal Button Cards are:
+The Controller input vocabulary is:
 
 - Up
 - Down
@@ -97,7 +96,7 @@ The universal Button Cards are:
 - X
 - Y
 
-Their meaning may change between games. The physical Button Cards remain universal.
+Their meaning may change between Games. Physical Controller Cards and Controller Mapping are optional tools: a cartridge may use fixed mappings, Player mappings, Controller Cards, or no mapping. Trap Floor and Super Leroy Sisters do not currently require the Controller Mapping Board to function.
 
 ### 3.1 Shared Visual and Physical Framework
 
@@ -557,4 +556,4 @@ The foundation is successful when a group can:
 
 ## 17. Product Statement
 
-> **Console Cards is a multiplayer, top-down freeform Virtual Tabletop platform centered around Button Cards and Player Consoles. It allows groups to load official Game Templates, modify them, create custom setups, or use an empty table while interpreting and enforcing their own rules. The Platform synchronizes authoritative physical tabletop state; optional assistance and configured restrictions may be added without replacing manual play.**
+> **Console Cards is a multiplayer, top-down freeform Virtual Tabletop platform with reusable Components and configurable Player Consoles. It allows groups to load official Game Templates, modify them, create custom setups, or use an empty table while interpreting and enforcing their own rules. The Platform synchronizes authoritative physical tabletop state; optional Controller tools, assistance, and configured restrictions may be added without replacing manual play.**

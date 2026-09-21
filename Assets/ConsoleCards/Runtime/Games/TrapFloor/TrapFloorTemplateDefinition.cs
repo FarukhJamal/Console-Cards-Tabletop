@@ -7,6 +7,7 @@ using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Domain.PlayerLayouts;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates;
+using ConsoleCards.GameTemplates.Definitions;
 
 namespace ConsoleCards.Games.TrapFloor
 {
@@ -25,6 +26,7 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly ReadOnlyCollection<TabletopObjectId> emptyObjectIds;
 
         internal TrapFloorTemplateDefinition(
+            GameDefinitionData gameDefinition,
             GameTemplate template,
             GameTemplateContentCatalog contentCatalog,
             PlayerLayoutDefinition playerLayout,
@@ -37,6 +39,7 @@ namespace ConsoleCards.Games.TrapFloor
             TabletopObjectId floorfallXAxisDieId,
             TabletopObjectId floorfallYAxisDieId)
         {
+            GameDefinition = gameDefinition;
             Template = template ?? throw new ArgumentNullException(nameof(template));
             ContentCatalog = contentCatalog ?? throw new ArgumentNullException(nameof(contentCatalog));
             PlayerLayout = playerLayout ?? throw new ArgumentNullException(nameof(playerLayout));
@@ -69,9 +72,13 @@ namespace ConsoleCards.Games.TrapFloor
 
         public GameTemplate Template { get; }
 
-        public int MinimumPlayerCount => TrapFloorTemplateFactory.MinimumPlayerCount;
+        public GameDefinitionData GameDefinition { get; }
 
-        public int MaximumPlayerCount => TrapFloorTemplateFactory.MaximumPlayerCount;
+        public int MinimumPlayerCount => GameDefinition?.MinimumPlayers
+            ?? TrapFloorTemplateFactory.MinimumPlayerCount;
+
+        public int MaximumPlayerCount => GameDefinition?.MaximumPlayers
+            ?? TrapFloorTemplateFactory.MaximumPlayerCount;
 
         public GameTemplateContentCatalog ContentCatalog { get; }
 

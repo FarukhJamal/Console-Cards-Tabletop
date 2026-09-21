@@ -1,7 +1,7 @@
 # Console Cards — Game Template Architecture
 
 **Document ID:** 08_Game_Template_Architecture  
-**Version:** 1.5
+**Version:** 1.6
 
 **Status:** Approved
 
@@ -47,6 +47,10 @@ GameTemplate
 - Content Dependencies
 - Initial Snapshot Metadata
 ```
+
+A Game Definition supplies the reusable authored identity/configuration referenced by a Game Template: player range, Play Area/Grid definition, content sets, Modes, Avatars, Console configuration, input vocabulary, optional Controller mapping, presentation references, and optional assistance configuration. A Game Template uses those Definitions to establish an initial arrangement; it does not turn them into restrictive gameplay state.
+
+Grid rows, columns, cell size, spacing, and origin/layout metadata are authored per Game. `6 x 6` is Trap Floor content, not a Platform constant.
 
 ## 4. Template Loading
 
@@ -154,6 +158,8 @@ Future custom creation may allow:
 - Defining default Policies.
 
 The foundation must support serialized custom data but does not need a complete editor in the first milestone.
+
+Future player-created Games use plain serializable Definition data with the same stable-ID contracts as designer-authored content. They do not require runtime-created `ScriptableObject` assets. Manual rules are informational and Player-enforced unless a supported Platform feature explicitly assists them; custom content does not require a programming language or general executable rules engine.
 
 ## 10. Content References
 

@@ -1,7 +1,7 @@
 # Console Cards — Terminology
 
 **Document ID:** 02_Terminology  
-**Version:** 1.7
+**Version:** 1.8
 
 **Status:** Approved
 **Depends on:** `00_Product_Vision.md`  
@@ -714,12 +714,12 @@ A Card following the shared Console Cards visual framework. System Cards use pok
 
 ---
 
-## 6.7 Button Card
+## 6.7 Controller Input and Controller Card
 
-**Definition:**  
-A universal Console Cards card representing one console input.
+**Controller Input definition:**
+One value in the shared input vocabulary.
 
-Canonical Button Cards:
+Canonical Controller Inputs:
 
 - Up
 - Down
@@ -730,7 +730,8 @@ Canonical Button Cards:
 - X
 - Y
 
-The meaning of a Button Card is determined by the Game or Rulebook.
+**Controller Card definition:**
+An optional physical Card representing a Controller Input. A Game may use fixed mappings, Player mappings, Controller Cards, or no mapping. Controller Mapping is likewise optional and is not required by Trap Floor or Super Leroy Sisters. Existing prototype code may retain `ButtonCard` naming as a legacy implementation term until a focused migration.
 
 ---
 

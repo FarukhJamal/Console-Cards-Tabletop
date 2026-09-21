@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e5f7b5f5532f4bc3881944db039f9bdd, type: 3}
+  m_Name: TrapFloorConsole
+  m_EditorClassIdentifier: 
+  stableId: trap-floor-console
+  slots:
+  - role: Main
+    physicalSlotCount: 1
+    stackingPolicy: 0
+    maximumCardsPerSlot: 1
+    allowedCategories:
+    - Avatar
+    orientation: 0
+    layoutMetadata: Central Avatar slot.
+  - role: Side
+    physicalSlotCount: 8
+    stackingPolicy: 1
+    maximumCardsPerSlot: 0
+    allowedCategories:
+    - Ability
+    - Action
+    orientation: 0
+    layoutMetadata: Four Side Slots per side; each physical Slot may contain a Card stack.
+  hudAreaMetadata: Configurable Trap Floor HUD mount.
+  statAreaMetadata: Configurable Avatar and Mode statistics.
+  componentAreaMetadata: Additional Game components remain configurable.

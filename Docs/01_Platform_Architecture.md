@@ -1,7 +1,7 @@
 # Console Cards — Platform Architecture
 
 **Document ID:** 01_Platform_Architecture  
-**Version:** 1.4
+**Version:** 1.5
 
 **Status:** Approved with Open Decisions
 **Depends on:** `00_Product_Vision.md`, `02_Terminology.md`, `03_Project_Principles.md`
@@ -273,7 +273,7 @@ Owns:
 - Console slots and layout.
 - Personal focus targets.
 - Transfer between Hand, Tabletop, and Console.
-- Universal Button Card presentation.
+- Reusable optional Controller Card presentation for the shared input vocabulary.
 - A universal Console contract that remains separate from the Game-specific central Game Board.
 
 ### 6.7 Game Templates

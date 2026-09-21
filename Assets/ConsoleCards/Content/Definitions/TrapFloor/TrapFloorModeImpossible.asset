@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c629385016c4d1a8ace7c7b65be1d5c, type: 3}
+  m_Name: TrapFloorModeImpossible
+  m_EditorClassIdentifier: 
+  stableId: trap-floor-mode-impossible
+  displayName: Impossible
+  objectiveConfiguration: Survive while finding three required Keys and reaching the Exit.
+  requiredKeyCount: 3
+  startingAbilityCount: 0
+  collapseSchedule: 2
+  collapseInterval: 0
+  collapseMetadata: Real-time Collapse; exact interval remains authored later.
+  behavior: 1
+  modeMetadata: Survival mode.

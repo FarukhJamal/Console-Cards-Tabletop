@@ -8,6 +8,7 @@ using ConsoleCards.Core.Domain.PlayerLayouts;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Core.Randomness;
 using ConsoleCards.GameTemplates;
+using ConsoleCards.GameTemplates.Definitions;
 
 namespace ConsoleCards.Games.TrapFloor
 {
@@ -51,7 +52,25 @@ namespace ConsoleCards.Games.TrapFloor
 
         public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
             IRandomValueSource randomValueSource,
+            GameDefinitionData gameDefinition)
+        {
+            return CreateStandardFourPlayer(
+                randomValueSource,
+                TrapFloorStage03Configuration.CreateDefault(),
+                gameDefinition);
+        }
+
+        public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
+            IRandomValueSource randomValueSource,
             TrapFloorStage03Configuration stage03Configuration)
+        {
+            return CreateStandardFourPlayer(randomValueSource, stage03Configuration, null);
+        }
+
+        public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
+            IRandomValueSource randomValueSource,
+            TrapFloorStage03Configuration stage03Configuration,
+            GameDefinitionData gameDefinition)
         {
             if (randomValueSource == null)
             {
@@ -61,6 +80,13 @@ namespace ConsoleCards.Games.TrapFloor
             if (stage03Configuration == null)
             {
                 throw new ArgumentNullException(nameof(stage03Configuration));
+            }
+
+            GridDefinitionData gridDefinition = gameDefinition?.Grid;
+            int controllerHandCapacity = gameDefinition?.ControllerConfiguration?.MaximumHandSize ?? 10;
+            if (gameDefinition != null)
+            {
+                ValidateGameDefinition(gameDefinition);
             }
 
             PlayerLayoutDefinition playerLayout = PlayerLayoutPresets.StandardFourPlayer;
@@ -75,6 +101,12 @@ namespace ConsoleCards.Games.TrapFloor
 
             IReadOnlyList<TrapFloorFloorContentDefinition> floorContentDefinitions =
                 TrapFloorStage03ContentPool.CreateDefinitions();
+            if (gameDefinition != null)
+            {
+                floorContentDefinitions = ApplyAuthoredCardDefinitions(
+                    floorContentDefinitions,
+                    gameDefinition);
+            }
             List<GameTemplateObjectDefinition> objectDefinitions = new List<GameTemplateObjectDefinition>
             {
                 new GameTemplateObjectDefinition(avatarDefinitionId, TabletopObjectKind.Card, "Avatar Card"),
@@ -103,6 +135,7 @@ namespace ConsoleCards.Games.TrapFloor
 
             CreateFloorBoard(
                 floorContentDefinitions,
+                gridDefinition,
                 randomValueSource,
                 floorCardIds,
                 labels,
@@ -111,9 +144,11 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorCoordinate[] startingCorners =
             {
                 new TrapFloorCoordinate(1, 1),
-                new TrapFloorCoordinate(6, 1),
-                new TrapFloorCoordinate(6, 6),
-                new TrapFloorCoordinate(1, 6),
+                new TrapFloorCoordinate(gridDefinition?.Columns ?? BoardAxisSize, 1),
+                new TrapFloorCoordinate(
+                    gridDefinition?.Columns ?? BoardAxisSize,
+                    gridDefinition?.Rows ?? BoardAxisSize),
+                new TrapFloorCoordinate(1, gridDefinition?.Rows ?? BoardAxisSize),
             };
 
             for (int seatIndex = 0; seatIndex < PrototypePlayerCount; seatIndex++)
@@ -127,6 +162,8 @@ namespace ConsoleCards.Games.TrapFloor
                     ruleDefinitionId,
                     modeDefinitionId,
                     pawnDefinitionId,
+                    gridDefinition,
+                    controllerHandCapacity,
                     seats,
                     containers,
                     memberships,
@@ -157,8 +194,9 @@ namespace ConsoleCards.Games.TrapFloor
             GameTemplate template = new GameTemplate(
                 templateId,
                 GameTemplate.CurrentSchemaVersion,
-                "Trap Floor",
-                "Approved four-Player Trap Floor starting setup. Gameplay rules are supplied separately.",
+                gameDefinition?.DisplayName ?? "Trap Floor",
+                gameDefinition?.ManualRules
+                    ?? "Approved four-Player Trap Floor starting setup. Gameplay rules are supplied separately.",
                 playerLayout.Id,
                 PrototypePlayerCount,
                 seats,
@@ -186,6 +224,7 @@ namespace ConsoleCards.Games.TrapFloor
                 });
 
             return new TrapFloorTemplateDefinition(
+                gameDefinition,
                 template,
                 catalog,
                 playerLayout,
@@ -220,15 +259,24 @@ namespace ConsoleCards.Games.TrapFloor
 
         private static void CreateFloorBoard(
             IReadOnlyList<TrapFloorFloorContentDefinition> contentDefinitions,
+            GridDefinitionData gridDefinition,
             IRandomValueSource randomValueSource,
             IDictionary<TrapFloorCoordinate, TabletopObjectId> floorCardIds,
             IDictionary<TabletopObjectId, string> labels,
             ICollection<GameTemplateObjectInstanceDefinition> objects)
         {
-            if (contentDefinitions == null || contentDefinitions.Count != FloorCardCount)
+            int rows = gridDefinition?.Rows ?? BoardAxisSize;
+            int columns = gridDefinition?.Columns ?? BoardAxisSize;
+            if (contentDefinitions == null || contentDefinitions.Count != checked(rows * columns))
             {
-                throw new ArgumentException("Trap Floor Board construction requires exactly 36 content definitions.");
+                throw new ArgumentException(
+                    "Trap Floor Board construction requires one content definition per authored Grid cell.");
             }
+
+            double columnPitch = gridDefinition?.ColumnPitch ?? FloorColumnSpacing;
+            double rowPitch = gridDefinition?.RowPitch ?? FloorRowSpacing;
+            double originX = gridDefinition?.OriginX ?? 0d;
+            double originY = gridDefinition?.OriginY ?? 0d;
 
             List<TrapFloorFloorContentDefinition> shuffledContent =
                 new List<TrapFloorFloorContentDefinition>(contentDefinitions);
@@ -241,15 +289,15 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             int objectIndex = 0;
-            for (int y = TrapFloorCoordinate.MinimumAxisValue; y <= TrapFloorCoordinate.MaximumAxisValue; y++)
+            for (int y = TrapFloorCoordinate.MinimumAxisValue; y <= rows; y++)
             {
-                for (int x = TrapFloorCoordinate.MinimumAxisValue; x <= TrapFloorCoordinate.MaximumAxisValue; x++)
+                for (int x = TrapFloorCoordinate.MinimumAxisValue; x <= columns; x++)
                 {
                     TrapFloorCoordinate coordinate = new TrapFloorCoordinate(x, y);
                     TabletopObjectId objectId = new TabletopObjectId(CreateGuid(30, ++objectIndex));
                     TrapFloorFloorContentDefinition content = shuffledContent[objectIndex - 1];
-                    double tableX = (x - 3.5d) * FloorColumnSpacing;
-                    double tableY = (y - 3.5d) * FloorRowSpacing;
+                    double tableX = originX + ((x - ((columns + 1d) * 0.5d)) * columnPitch);
+                    double tableY = originY + ((y - ((rows + 1d) * 0.5d)) * rowPitch);
                     objects.Add(new GameTemplateObjectInstanceDefinition(
                         objectId,
                         content.Id,
@@ -273,6 +321,8 @@ namespace ConsoleCards.Games.TrapFloor
             ObjectDefinitionId ruleDefinitionId,
             ObjectDefinitionId modeDefinitionId,
             ObjectDefinitionId pawnDefinitionId,
+            GridDefinitionData gridDefinition,
+            int controllerHandCapacity,
             ICollection<GameTemplateSeatDefinition> seats,
             ICollection<GameTemplateContainerDefinition> containers,
             ICollection<GameTemplateContainerMembership> memberships,
@@ -309,7 +359,12 @@ namespace ConsoleCards.Games.TrapFloor
                 handId,
                 consoleSlotIds,
                 GetConsolePose(layoutSeat)));
-            containers.Add(CreateContainer(handId, ContainerKind.Hand, seatId, ObjectVisibility.OwnerOnly, 10));
+            containers.Add(CreateContainer(
+                handId,
+                ContainerKind.Hand,
+                seatId,
+                ObjectVisibility.OwnerOnly,
+                controllerHandCapacity));
             for (int i = 0; i < consoleSlotIds.Length; i++)
             {
                 containers.Add(CreateContainer(
@@ -343,7 +398,7 @@ namespace ConsoleCards.Games.TrapFloor
             labels.Add(ruleId, $"P{playerNumber}\nRULE");
             labels.Add(modeId, $"P{playerNumber}\nMODE");
 
-            TabletopPose pawnPose = CreateFloorPose(startingCorner, 6, playerNumber);
+            TabletopPose pawnPose = CreateFloorPose(startingCorner, gridDefinition, 6, playerNumber);
             objects.Add(new GameTemplateObjectInstanceDefinition(
                 pawnId,
                 pawnDefinitionId,
@@ -399,16 +454,73 @@ namespace ConsoleCards.Games.TrapFloor
 
         private static TabletopPose CreateFloorPose(
             TrapFloorCoordinate coordinate,
+            GridDefinitionData gridDefinition,
             int layer,
             int localOrder)
         {
+            int rows = gridDefinition?.Rows ?? BoardAxisSize;
+            int columns = gridDefinition?.Columns ?? BoardAxisSize;
+            double columnPitch = gridDefinition?.ColumnPitch ?? FloorColumnSpacing;
+            double rowPitch = gridDefinition?.RowPitch ?? FloorRowSpacing;
+            double originX = gridDefinition?.OriginX ?? 0d;
+            double originY = gridDefinition?.OriginY ?? 0d;
             return new TabletopPose(
                 new TableCoordinate(
-                    (coordinate.X - 3.5d) * FloorColumnSpacing,
-                    (coordinate.Y - 3.5d) * FloorRowSpacing),
+                    originX + ((coordinate.X - ((columns + 1d) * 0.5d)) * columnPitch),
+                    originY + ((coordinate.Y - ((rows + 1d) * 0.5d)) * rowPitch),
                 0f,
                 layer,
                 localOrder);
+        }
+
+        private static void ValidateGameDefinition(GameDefinitionData definition)
+        {
+            if (definition.Grid == null)
+            {
+                throw new ArgumentException("Trap Floor requires an authored Grid Definition.", nameof(definition));
+            }
+
+            if (definition.MinimumPlayers > PrototypePlayerCount
+                || definition.MaximumPlayers < PrototypePlayerCount)
+            {
+                throw new ArgumentException(
+                    "Trap Floor's authored Player range must include the current four-Player layout.",
+                    nameof(definition));
+            }
+
+            if (definition.Grid.CellCount != TrapFloorStage03ContentPool.TotalCount)
+            {
+                throw new ArgumentException(
+                    "The current Trap Floor content pool requires one authored Grid cell per Floor Card.",
+                    nameof(definition));
+            }
+        }
+
+        private static IReadOnlyList<TrapFloorFloorContentDefinition> ApplyAuthoredCardDefinitions(
+            IReadOnlyList<TrapFloorFloorContentDefinition> defaults,
+            GameDefinitionData gameDefinition)
+        {
+            List<TrapFloorFloorContentDefinition> resolved =
+                new List<TrapFloorFloorContentDefinition>(defaults.Count);
+            for (int i = 0; i < defaults.Count; i++)
+            {
+                TrapFloorFloorContentDefinition fallback = defaults[i];
+                if (gameDefinition.TryGetCard(fallback.Id.ToString(), out CardDefinitionData authored))
+                {
+                    resolved.Add(new TrapFloorFloorContentDefinition(
+                        fallback.Id,
+                        fallback.Category,
+                        authored.DisplayName,
+                        authored.Description,
+                        fallback.ContentSource));
+                }
+                else
+                {
+                    resolved.Add(fallback);
+                }
+            }
+
+            return resolved;
         }
 
         public static TabletopPose GetConsolePose(PlayerSeatLayoutEntry layoutSeat)

@@ -1,7 +1,7 @@
 # Console Cards — Core Data Model
 
 **Document ID:** 05_Core_Data_Model  
-**Version:** 1.3
+**Version:** 1.4
 **Status:** Approved
 
 > **Contract note:** Code blocks, type names, interfaces, field lists, and diagrams in this document are illustrative unless explicitly labelled **Approved Contract**. Codex must not treat illustrative examples as fixed public APIs.
@@ -85,6 +85,10 @@ This section approves the state separation and authority model, not a fixed API 
 
 ## 4. Definitions
 
+Authored Definition Data describes what a Game, Card, Avatar, Mode, Grid, Console configuration, or other content item is. It is separate from both the Game Template's initial instance arrangement and the mutable Runtime Match State created from that arrangement.
+
+Developer-authored/default content uses compositional Unity `ScriptableObject` assets. The same definition model must also have plain serializable data representations, using stable IDs and asset-reference IDs rather than Unity object references, so future player-created content can be stored as JSON, synchronized, and shared without creating `ScriptableObject` instances at runtime.
+
 ### 4.1 Object Definition
 
 ```text
@@ -123,6 +127,8 @@ Definitions must not contain:
 - Current visibility.
 - Current face state.
 - Current stack order.
+
+Definitions may contain authored defaults such as Card text/art references and input costs, Avatar stats and base Abilities, configurable Grid dimensions, Mode objectives and Collapse schedules, and Console Slot policies. Loading those defaults creates or configures Runtime State; the Definition asset itself is never mutated to record Match progress.
 
 ## 5. Runtime Object State
 

@@ -3362,6 +3362,7 @@ MonoBehaviour:
   - {fileID: 4100000021}
   - {fileID: 4100000031}
   runtimeUi: {fileID: 114010}
+  trapFloorGameDefinition: {fileID: 11400000, guid: 5e5f408633e24bd6bc2b38a0b430ffb3, type: 2}
   interactionLayerMask:
     serializedVersion: 2
     m_Bits: 256

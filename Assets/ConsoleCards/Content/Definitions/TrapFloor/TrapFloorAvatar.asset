@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 35a590c4883b4a5394fe0bd2eb7eb4df, type: 3}
+  m_Name: TrapFloorAvatar
+  m_EditorClassIdentifier: 
+  stableId: 54460014-4f4f-4000-8000-001400000005
+  displayName: Trap Floor Avatar
+  artwork: {fileID: 0}
+  artworkReference: 
+  stats: []
+  startingAbilities: []

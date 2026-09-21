@@ -5,6 +5,7 @@
     "ConsoleCards.Core",
     "ConsoleCards.Application",
     "ConsoleCards.GameTemplates",
+    "ConsoleCards.Definitions",
     "ConsoleCards.TrapFloor",
     "Unity.InputSystem",
     "UnityEngine.UI"

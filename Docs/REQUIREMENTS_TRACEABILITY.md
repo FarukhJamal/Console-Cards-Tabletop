@@ -1,10 +1,10 @@
 # Console Cards — Requirements Traceability
 
-**Version:** 1.10
+**Version:** 1.11
 
 **Status:** Approved
 
-The source, scope, repository status, milestone, and unresolved-decision trace for `Consolecards_LayoutRef_doc.pdf` and the latest Russell/Milanote Trap Floor direction in `18_Trap_Floor_Game_Requirements.md` is maintained in `17_Layout_Design_Requirements_Matrix.md`.
+The source, scope, repository status, milestone, and unresolved-decision trace for the user-approved Console Cards System & Games direction supplied 2026-09-21 is maintained in `17_Layout_Design_Requirements_Matrix.md`. Historical external references remain supporting material only where not superseded.
 
 | ID | Requirement | Architecture Owner | Planned Milestone | Evidence |
 |---|---|---|---|---|
@@ -13,7 +13,7 @@ The source, scope, repository status, milestone, and unresolved-decision trace f
 | PR-003 | One-to-eight configurable Seats and Player Layouts | Core Data + Play Areas + Multiplayer | M0, M4, M7 | Seat state evidence; Player Layout tests; multiplayer join test |
 | PR-004 | Private Hands | Core Data + Multiplayer | M3, M7 | Visibility tests; multiplayer filtering |
 | PR-005 | Personal Consoles separate from Hands | Core Data + Interaction | M3 | Console transfer and UI tests |
-| PR-006 | Universal Button Cards | Product Vision + Game Templates | M3 | Definition and deck tests |
+| PR-006 | Shared Up/Down/Left/Right/A/B/X/Y input vocabulary; optional Controller Cards and Controller Mapping | Product Vision + Game Definitions | Foundation plus per-Game use | Definition-data validation; no cartridge is required to use physical Controller Cards or a Mapping Board |
 | PR-007 | Reusable loose Card/Pawn/Token/Die physics: controlled/kinematic holding, dynamic gravity/collision/velocity/torque on release, and authoritative settled 3D state | ADR-025 + Interaction Design + Core Data | M2 historical foundation; ADR-025 integration gate | Existing controlled interaction source remains historical evidence. Pending physical acceptance: preserved throw momentum, no off-table snap-back, separate physical state alongside unchanged layout TabletopPose, actor/revision settlement, contained-Card physics disable/extraction, and unchanged Container-body positioning |
 | PR-008 | Cards can flip, rotate, stack, and transfer | Interaction + Core Data | M2, M3 | Rotation, flip, stack, and transfer source exists under `Assets/ConsoleCards/Runtime/Application/` and `Assets/ConsoleCards/Presentation/`; current M3 verification evidence is not recorded by this documentation pass |
 | PR-009 | Deck draw, move, shuffle, split/merge | Interaction + Core Data | M3 | Commands, use cases, prototype Views, context controls, and lifecycle source exist; current M3 verification evidence remains to be updated |

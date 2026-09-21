@@ -1,0 +1,17 @@
+{
+  "name": "ConsoleCards.Definitions",
+  "rootNamespace": "ConsoleCards.Definitions",
+  "references": [
+    "ConsoleCards.Core",
+    "ConsoleCards.GameTemplates"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

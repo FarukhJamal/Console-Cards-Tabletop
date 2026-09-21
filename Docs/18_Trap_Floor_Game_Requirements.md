@@ -1,16 +1,16 @@
 # Console Cards - Trap Floor Game Requirements
 
 **Document ID:** 18_Trap_Floor_Game_Requirements
-**Version:** 1.3
+**Version:** 1.4
 **Status:** Approved with Open Decisions
-**Authoritative source:** Latest Russell/Milanote Trap Floor direction supplied 2026-09-08, with the freeform tabletop rule philosophy supplied 2026-08-11
+**Authoritative source:** User-approved Console Cards System & Games direction supplied 2026-09-21, superseding conflicting historical Trap Floor direction
 **Purpose:** Define the current approved minimum Game-specific direction for Trap Floor while keeping provisional design values open and preserving manual tabletop play.
 
 ## 1. Authority and Supersession
 
 The approved Game name is **Trap Floor**.
 
-This revision supersedes the former Trap Floor build based on a shared 50-coin pool, a 36-Card Floormaster's Deck composed of 14 Trap, 14 Coin, and 8 Item Cards, Controller Deck requirements, fixed Console Slot usage beyond the Main Slot, a fixed 10-round loop, and the associated Floormaster draw/discard lifecycle. Those elements may remain in the current prototype or implementation history, but they are outdated design reference and are not authority for future Trap Floor content or rules.
+This revision supersedes the former Trap Floor build based on a shared 50-coin pool, a 36-Card Floormaster's Deck composed of 14 Trap, 14 Coin, and 8 Item Cards, a fixed 10-round loop, and the associated Floormaster draw/discard lifecycle. Those elements may remain in the current prototype or implementation history, but they are outdated design reference and are not authority for future Trap Floor content or rules. It also supersedes the previous prohibition on authored Modes, Controller hand configuration, Ability/Action Card input costs, and Console Side Slot configuration.
 
 The latest Russell/Milanote direction expressly uses Keys and an Exit as Trap Floor concepts. Earlier documentation that excluded all Key/Exit concepts as belonging only to **Trap Door** is superseded. The obsolete **Trap Door** terminology, sequential Level Deck, dungeon/room progression, enemies, and reveal-next-Level-Card loop remain non-authoritative unless separately approved later.
 
@@ -40,7 +40,7 @@ The exact authored Seat mappings for two and three Players remain unresolved und
 
 ## 4. Game Board and Floor Cards
 
-- The Game Board/Play Area is a fixed `6 x 6` grid made from **36 Floor Cards**.
+- The current Trap Floor Game Board/Play Area is a `6 x 6` grid made from **36 Floor Cards**. Grid dimensions are Game-authored data; `6 x 6` is not a Platform constant.
 - Floor Cards are Board tiles, not a drawable sequential Level Deck.
 - Each Floor Card occupies a stable X/Y grid coordinate.
 - Players may share the same Floor tile.
@@ -59,7 +59,7 @@ The exact authored Seat mappings for two and three Players remain unresolved und
 ## 6. Objective and Loss Conditions
 
 - The objective is to find all required Keys and bring them to the Exit.
-- The number of required Keys is provisional.
+- The selected Mode supplies the required-Key count: Easy requires 1; Hard and Impossible require 3.
 - Players lose by failing a Trap or by running out of usable Floor.
 - Exact Trap failure costs/consequences, falling rules, and the detailed determination of "running out of usable Floor" remain provisional.
 
@@ -70,7 +70,7 @@ Players apply these written rules and consequences manually unless optional assi
 - Floor Collapse is a distinct operation from Search.
 - At intervals, Collapse uses `2d6` to identify an X/Y Floor position.
 - The identified Floor becomes a permanent hole/unusable space.
-- Collapse timing, frequency, protection/reroll conditions, falling consequences, and interaction with any action economy remain provisional.
+- Collapse schedule kind is authored per Mode: Easy and Hard default to round-based Collapse; Impossible defaults to real-time Collapse. Exact interval/frequency, protection/reroll conditions, falling consequences, and interaction with any action economy remain provisional.
 
 The existing prototype's **Floorfall** targeting may be treated as optional assistance for identifying a `2d6` Floor coordinate, but its old round schedule and old lifecycle do not define current Game Rules.
 
@@ -78,11 +78,32 @@ The existing prototype's **Floorfall** targeting may be treated as optional assi
 
 - Each Player uses the universal configurable Console.
 - The **Main Console Slot contains the Avatar**.
-- Avatar stats and abilities remain provisional.
-- Other Console Slot usage is not currently hard-locked. Do not infer Rule, Mode, Item, Side, Cube, Dice, or other Slot assignments from the former prototype setup.
-- A Game Template should configure only the Slots required by the confirmed current content.
+- The Trap Floor Console has **eight Side Slots** accepting Ability/Action Cards.
+- Side Slots support Card stacking. Physical Slot count is independent of total Card capacity.
+- Cards in Console Slots may remain face-up or be flipped through generic tabletop interaction.
+- Other HUD/stat/component areas remain configurable authored data.
+- Controller Mapping is optional and is not required for Trap Floor to function.
 
-## 9. Current Content Reference and Provisional Structure
+## 9. Controller Hand, Costs, and Modes
+
+The available Controller input vocabulary is **Up, Down, Left, Right, A, B, X, Y**.
+
+- Maximum Controller hand size is 10.
+- At the start of a Player turn, draw up to 10; unused Controller Cards carry over. For example, a hand of four draws six.
+- Ability/Action Card costs are authored collections of Controller inputs and may repeat an input, such as Right x2 and A x1.
+- Costs are all-or-nothing. Partial payment is not permitted.
+- Players do not contribute Controller Cards to another Player's purchase.
+- A future cartridge may use fixed mappings, Player mappings, Controller Cards, or no mapping.
+
+Trap Floor currently defines:
+
+- **Easy:** Team behavior, 1 required Key, 2 starting Abilities, round-based Collapse default.
+- **Hard:** Team behavior, 3 required Keys, 1 starting Ability, round-based Collapse default.
+- **Impossible:** Survival behavior, 3 required Keys, 0 starting Abilities, real-time Collapse default.
+
+Changing a Card cost, Grid dimension, Mode value, or Console placement rule is an authored Definition-data change and must not require changing generic Platform code.
+
+## 10. Current Content Reference and Provisional Structure
 
 Use the latest Milanote card-set structure as the current content reference.
 
@@ -91,37 +112,28 @@ The following are explicitly not fixed by this requirements revision:
 - exact Card counts;
 - exact Card names and text not otherwise confirmed here;
 - exact distribution of Keys, Traps, or other Floor effects;
-- Controller Deck existence, composition, or costs;
-- Skill/Ability Card architecture;
-- Hand, draw, discard, or reshuffle rules;
-- mode structure;
+- exact Ability/Action Card cost values not explicitly authored in current content;
+- Controller Deck composition and reshuffle details;
+- exact Avatar stats and starting/base Ability assignments;
 - a round limit;
-- Console Slot usage beyond Avatar in the Main Slot.
+- detailed HUD/stat/component area layout.
 
 The former 14 Trap + 14 Coin + 8 Item Floormaster Deck and shared 50-coin setup are legacy implementation/reference material only. They must not be used to fill gaps in the current card set.
 
-## 10. Flexible and Provisional Rules
+## 11. Flexible and Provisional Rules
 
 Keep the following explicitly flexible until separately confirmed:
 
 - Avatar stats and abilities;
 - exact movement values, while preserving orthogonal movement and the general no-more-than-three guidance;
 - Trap costs and consequences;
-- number of required Keys;
-- Collapse timing and frequency;
+- exact Collapse interval/frequency within the authored schedule kind;
 - falling rules;
 - action economy.
 
-Do not hard-lock:
+Do not hard-lock a round limit or still-provisional detailed content. The approved Controller hand, input-cost, Console Slot, and Mode values above are authored defaults, not Platform restrictions on freeform play.
 
-- a Controller Deck;
-- Skill/Ability architecture;
-- other Console Slot usage;
-- Hand/draw/discard rules;
-- modes;
-- a round limit.
-
-## 11. Freeform Play and Optional Assistance
+## 12. Freeform Play and Optional Assistance
 
 Trap Floor remains playable as people would play it at a physical table:
 
@@ -137,7 +149,7 @@ The distinction is:
 
 Assistance may fail or decline when Players use house rules, substitute Components, or alter the official setup beyond recognition. It must not prevent continued manual play.
 
-### 11.1 Existing Assistance Disposition
+### 12.1 Existing Assistance Disposition
 
 Completed implementation history is classified as follows:
 
@@ -147,7 +159,7 @@ Completed implementation history is classified as follows:
 
 None of these systems may block the current manual Search, movement, Key, Exit, Trap, or Collapse flow.
 
-## 12. Manually Playable Completion Criteria
+## 13. Manually Playable Completion Criteria
 
 Trap Floor may be considered playable when:
 
@@ -164,8 +176,8 @@ This playable milestone does not require comprehensive Card-effect automation, a
 
 After this manually playable state is reached, the next Trap Floor work is a dedicated polishing pass rather than deeper mandatory rules-engine implementation.
 
-## 13. Explicit Exclusions
+## 14. Explicit Exclusions
 
-Do not restore the superseded 50-coin objective/economy, 14 Trap + 14 Coin + 8 Item Floormaster Deck, Floormaster draw/discard Search lifecycle, mandatory Controller Deck, fixed six-Slot Trap Floor Console allocation, Easy/Hard mode rules, or fixed 10-round sequence as current authority.
+Do not restore the superseded 50-coin objective/economy, 14 Trap + 14 Coin + 8 Item Floormaster Deck, Floormaster draw/discard Search lifecycle, fixed six-Slot Trap Floor Console allocation, or fixed 10-round sequence as current authority. The Easy/Hard/Impossible Mode definitions in §9 replace conflicting historical Mode direction.
 
 Do not infer the current content counts or provisional rules from either the old Trap Floor prototype or the older Trap Door concept. Keys and the Exit are current Trap Floor concepts; the obsolete sequential Level Deck/dungeon progression and enemies are not.

@@ -1,7 +1,7 @@
 # Console Cards — Milestones and Roadmap
 
 **Document ID:** 16_Milestones_And_Roadmap  
-**Version:** 1.13
+**Version:** 1.14
 
 **Status:** Approved
 **Planning basis:** One developer, approximately 30–35 focused hours per week.
@@ -146,7 +146,7 @@ Delivered in current source:
 - Discard Pile.
 - Private Hand and natural Hand reorder.
 - Console and Slots.
-- Universal Button Card definitions.
+- Reusable optional Controller Card definitions for the shared input vocabulary.
 - Atomic Card transfers.
 - Player-facing prototype context controls.
 
@@ -306,12 +306,12 @@ Complete Trap Floor as a manually playable Game Template by prioritizing the sha
 - Load the approved starting Template through the in-simulator Games / Templates panel.
 - Present the fixed `6 x 6` Floor Card Board and current required physical Components readably.
 - Use the latest Milanote card-set structure as the current content reference while leaving unconfirmed counts/content provisional; do not preserve the old 14 Trap + 14 Coin + 8 Item Floormaster Deck as authority.
-- Present the universal Console with Avatar in the Main Slot, without hard-locking other Slot use, Controller Decks, Skill/Ability architecture, Hands, modes, or a round limit.
+- Present the universal Console with Avatar in the Main Slot and eight stack-capable Side Slots for Ability/Action Cards. Controller Mapping remains optional and is not required by Trap Floor.
 - Support `2d6` starting-position setup, orthogonal movement, shared Floor-tile occupancy, and flexible normal movement generally no more than three tiles.
 - Make Search readable and manually usable as flipping/revealing the interacted Floor Card, including Keys, Traps, and other current effects.
 - Support the objective of finding all required Keys and bringing them to the Exit, with loss by Trap failure or running out of usable Floor.
 - Keep Floor Collapse separate from Search: at provisional intervals, `2d6` identifies a Floor that becomes a permanent hole/unusable space.
-- Keep Avatar stats/abilities, exact movement values, Trap costs, Key count, Collapse timing, falling rules, and action economy explicitly provisional.
+- Keep exact movement values, Trap consequences, detailed Collapse frequency, falling rules, and action economy explicitly provisional. Use the approved Easy/Hard/Impossible authored Mode defaults, Controller hand configuration, input-cost model, and configurable Collapse schedule kinds without turning them into mandatory Platform enforcement.
 - Ensure Players can manually flip, move, stack, transfer, roll/reposition Dice, move Pawns/Tokens, and manipulate current Components as the confirmed flow requires.
 - Keep Reset, Clear Table, and in-simulator Template replacement behavior coherent.
 - Ensure optional assistance never prevents manual play, including after house-rule modification or Component substitution.

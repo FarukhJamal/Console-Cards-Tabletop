@@ -15,6 +15,7 @@ using ConsoleCards.Core.Domain.PlayAreas;
 using ConsoleCards.Core.Domain.PlayerLayouts;
 using ConsoleCards.Core.Domain.Seats;
 using ConsoleCards.Core.Identifiers;
+using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Coordinates;
@@ -88,6 +89,8 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal ConsoleSlotView[] sceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
         [SerializeField] internal PrototypeConsoleSlotVisual[] sceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
         [SerializeField] internal PrototypeRuntimeUiController runtimeUi;
+        [Tooltip("Designer-authored Trap Floor identity, content, Grid, Mode, Console, and presentation data.")]
+        [SerializeField] private GameDefinition trapFloorGameDefinition;
 
         [SerializeField] internal LayerMask interactionLayerMask;
         [SerializeField] internal float maximumHitDistance = 100f;
@@ -2917,13 +2920,15 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void RegisterFreshTrapFloorTemplate()
         {
+            RequireReference(trapFloorGameDefinition, nameof(trapFloorGameDefinition));
             if (authoritativeRandomValueSource == null)
             {
                 authoritativeRandomValueSource = new SystemRandomValueSource();
             }
 
             availableTrapFloorTemplate = TrapFloorTemplateFactory.CreateStandardFourPlayer(
-                authoritativeRandomValueSource);
+                authoritativeRandomValueSource,
+                trapFloorGameDefinition.ToData());
             sessionTemplateCatalog = new GameTemplateCatalog(
                 new[]
                 {
@@ -4487,6 +4492,11 @@ namespace ConsoleCards.Presentation.Prototype
                         + $"Floor coordinate: {floorCard.Coordinate}\n";
                 string objectiveContext = string.Empty;
                 string frontTitle = floorCard.Content.DisplayName;
+                string inputCostContext = TryGetAuthoredCardDefinition(
+                        card.BaseState.DefinitionId,
+                        out CardDefinition floorCardDefinition)
+                    ? FormatInputCost(floorCardDefinition.InputCost)
+                    : string.Empty;
                 PrototypePopupActionOption? primaryAction = null;
                 if (floorCard.Content.Category == TrapFloorFloorContentCategory.Key
                     && trapFloorObjectiveState != null)
@@ -4514,7 +4524,8 @@ namespace ConsoleCards.Presentation.Prototype
                 string frontBody = $"{revealContext}{objectiveContext}"
                     + $"Category: {floorCard.Content.Category}\n"
                     + $"Content: {floorCard.Content.DisplayName}\n\n"
-                    + floorCard.Content.DisplayText;
+                    + floorCard.Content.DisplayText
+                    + inputCostContext;
                 model = new PrototypeCardInspectModel(
                     $"Floor {floorCard.Coordinate} | {targetCardId}",
                     card.Face,
@@ -4540,12 +4551,21 @@ namespace ConsoleCards.Presentation.Prototype
                 : new Color(0.95f, 0.88f, 0.42f);
             bool contentVisible = ShouldShowCardContent(card);
             string obscuredContent = "Content is currently obscured by its Container.";
+            bool hasAuthoredDefinition = TryGetAuthoredCardDefinition(
+                card.BaseState.DefinitionId,
+                out CardDefinition authoredDefinition);
+            string authoredFrontTitle = hasAuthoredDefinition
+                ? authoredDefinition.DisplayName
+                : "FRONT";
+            string authoredFrontBody = hasAuthoredDefinition
+                ? authoredDefinition.Description + FormatInputCost(authoredDefinition.InputCost)
+                : visualReferences.FrontLabel.text;
             model = new PrototypeCardInspectModel(
                 targetCardId.ToString(),
                 card.Face,
                 new PrototypeCardInspectSideModel(
-                    "FRONT",
-                    contentVisible ? visualReferences.FrontLabel.text : obscuredContent,
+                    authoredFrontTitle,
+                    contentVisible ? authoredFrontBody : obscuredContent,
                     null,
                     frontSurface,
                     new Color(0.06f, 0.08f, 0.10f)),
@@ -5084,6 +5104,7 @@ namespace ConsoleCards.Presentation.Prototype
             RequireReference(gameBoardPhysicalSurface, nameof(gameBoardPhysicalSurface));
             RequireReference(gameBoardVisualRoot, nameof(gameBoardVisualRoot));
             RequireReference(gameBoardVisualMaterial, nameof(gameBoardVisualMaterial));
+            RequireReference(trapFloorGameDefinition, nameof(trapFloorGameDefinition));
             if (!gameBoardVisualRoot.IsChildOf(gameBoardPhysicalSurface.transform))
             {
                 throw new InvalidOperationException(
@@ -7214,6 +7235,12 @@ namespace ConsoleCards.Presentation.Prototype
             string frontLabel = label;
             string backLabel = isFloorCard ? "MYSTERY" : visualReferences.BackLabel.text;
             Color backColor = new Color(0.10f, 0.19f, 0.42f);
+            if (TryGetAuthoredCardDefinition(card.BaseState.DefinitionId, out CardDefinition authoredDefinition))
+            {
+                frontLabel = authoredDefinition.DisplayName;
+                ApplyCardArtwork(visualReferences.FaceUpRenderer, authoredDefinition.FrontArtwork);
+                ApplyCardArtwork(visualReferences.FaceDownRenderer, authoredDefinition.BackArtwork);
+            }
             if (isFloorCard
                 && trapFloorTemplate.TryGetFloorCardState(
                     matchState,
@@ -7319,6 +7346,52 @@ namespace ConsoleCards.Presentation.Prototype
             properties.SetFloat("_Metallic", 0f);
             properties.SetFloat("_Smoothness", 0.12f);
             renderer.SetPropertyBlock(properties);
+        }
+
+        private static void ApplyCardArtwork(Renderer renderer, Texture2D artwork)
+        {
+            if (artwork == null)
+            {
+                return;
+            }
+
+            MaterialPropertyBlock properties = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(properties);
+            properties.SetTexture("_BaseMap", artwork);
+            properties.SetTexture("_MainTex", artwork);
+            renderer.SetPropertyBlock(properties);
+        }
+
+        private bool TryGetAuthoredCardDefinition(
+            ObjectDefinitionId definitionId,
+            out CardDefinition definition)
+        {
+            if (trapFloorTemplate != null
+                && trapFloorGameDefinition != null
+                && trapFloorGameDefinition.TryGetCard(definitionId, out definition))
+            {
+                return true;
+            }
+
+            definition = null;
+            return false;
+        }
+
+        private static string FormatInputCost(InputCostDefinition inputCost)
+        {
+            if (inputCost == null || inputCost.Requirements.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            List<string> entries = new List<string>(inputCost.Requirements.Count);
+            for (int i = 0; i < inputCost.Requirements.Count; i++)
+            {
+                InputRequirement requirement = inputCost.Requirements[i];
+                entries.Add($"{requirement.Input} x{requirement.Count}");
+            }
+
+            return $"\n\nInput Cost: {string.Join(", ", entries)}";
         }
 
         private StackRuntimeView CreateStackRuntimeView(

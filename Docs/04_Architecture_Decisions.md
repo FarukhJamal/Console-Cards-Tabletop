@@ -1,7 +1,7 @@
 # Console Cards — Architecture Decisions
 
 **Document ID:** 04_Architecture_Decisions  
-**Version:** 1.11
+**Version:** 1.12
 
 **Status:** Approved with Open Decisions
 
@@ -538,3 +538,23 @@ This file records accepted or proposed Architecture Decision Records. A decision
 - Feature Views and presenters retain their own binding logic. A Game-specific HUD is supplied as a catalogued prefab and bound by that Game's Presentation code, so adding a future Game HUD does not require changing the generic UI manager.
 - Responsive shell dimensions, anchors, Canvas scaling, and input-raycast isolation are scene-authored; dynamic feature layout remains prefab-authored. Runtime positioning is limited to genuinely pointer-positioned or world-following UI.
 - Game rules, Match State, Undo/Redo semantics, tabletop physics, and interaction authority are unchanged.
+
+---
+
+## ADR-030 - Authored Game Definitions and Serializable Definition Data
+
+**Status:** Accepted
+
+**Approval source:** Data-driven Game-definition direction approved by the user on 2026-09-21.
+
+**Decision:** Separate immutable authored Definition Data from the Game Template's initial instance arrangement and from mutable Runtime Match State. Developer/default content is composed in Unity `ScriptableObject` assets. Those assets export plain serializable data containing stable IDs and asset-reference IDs so future player-created Games can use JSON, persistence, synchronization, and sharing without runtime-created `ScriptableObject` instances.
+
+Game Definitions compose configurable Grid, Card, Avatar, Mode, Console, input-vocabulary, optional Controller-mapping, presentation, and optional assistance data. A Template uses these values to establish a starting setup only. Generic Platform interaction remains freeform and does not infer or enforce Game Rules from the Definition.
+
+**Consequences:**
+
+- Definitions never store positions, Card face state, Container membership/order, ownership, physical settled state, Dice results, Key claims, collapsed Floors, current hand, or victory/session state.
+- Grid dimensions are per-Game data; Trap Floor's current `6 x 6` Board is not a Platform constant.
+- Card presentation resolves authored name, description, artwork, back artwork, quantity, input cost, orientation, placement metadata, and tags by stable Definition ID.
+- Controller Mapping remains optional. A cartridge may use fixed mappings, Player mappings, Controller Cards, or no mapping.
+- Custom Game data is descriptive and Player-enforced unless an explicit supported assistance feature consumes it; this decision does not introduce a rules programming language.

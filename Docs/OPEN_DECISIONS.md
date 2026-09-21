@@ -1,6 +1,6 @@
 # Console Cards — Open Decisions
 
-**Version:** 1.8
+**Version:** 1.9
 
 **Status:** Approved with Open Decisions  
 **Purpose:** Record resolved and deferred decisions so Codex does not infer them.
@@ -135,7 +135,7 @@ See `TECHNICAL_BASELINE.md`.
 
 ### OD-018 - Trap Floor Remaining Game Rules and Content
 
-**Status:** Deferred where details remain unresolved; blocks only missing readable content or physical setup required for a claimed G1 play configuration, not comprehensive automation
+**Status:** Partially resolved; remaining detailed content values are deferred and do not require comprehensive automation
 
 **Resolved direction:** `18_Trap_Floor_Game_Requirements.md` approves the two-to-four-Player range; fixed 36-Card `6 x 6` Floor Card Board; `2d6` setup positioning; orthogonal movement; shared Floor-tile occupancy; flexible movement generally no more than three tiles; Search as flipping/revealing the interacted Floor Card; Keys, Traps, and other reveal effects; collecting all required Keys at the Exit as the objective; loss by Trap failure or exhaustion of usable Floor; separate interval-based `2d6` Floor Collapse creating permanent holes; and Avatar in the Main Console Slot. The latest Milanote card-set structure is the current content reference.
 
@@ -145,12 +145,13 @@ See `TECHNICAL_BASELINE.md`.
 - Avatar stats and abilities.
 - Exact movement values and any Avatar-specific variation.
 - Trap costs and consequences.
-- Number of required Keys.
-- Collapse timing/frequency and protection/reroll conditions.
+- Detailed Collapse timing/frequency and protection/reroll conditions beyond each Mode's approved schedule kind.
 - Falling rules and the detailed usable-Floor exhaustion condition.
 - Action economy.
 
-**Rule:** Do not restore the former 50-coin objective/economy, 14 Trap + 14 Coin + 8 Item Floormaster Deck, Floormaster draw/discard Search lifecycle, mandatory Controller Deck, fixed Trap Floor Console allocation beyond Avatar in Main, Easy/Hard modes, or fixed 10-round loop as current authority. Do not hard-lock Controller Deck, Skill/Ability architecture, other Console Slot usage, Hand/draw/discard rules, modes, or a round limit. Resolve provisional dependencies before authoring affected content or assistance; do not infer them from either the old Trap Floor prototype or obsolete Trap Door material. Comprehensive coded Game-rule enforcement is not required for manually playable G1 acceptance.
+**Resolved direction:** Trap Floor uses the universal Up/Down/Left/Right/A/B/X/Y vocabulary; a maximum Controller hand size of 10 with draw-up-to-10 at the start of a Player turn and unused Cards carrying over; all-or-nothing, non-shared Card costs; an Avatar Main Slot plus eight stack-capable Side Slots for Ability/Action Cards; and Easy, Hard, and Impossible authored Modes. Easy is Team/1 Key/2 starting Abilities/round-based Collapse; Hard is Team/3 Keys/1 starting Ability/round-based Collapse; Impossible is Survival/3 Keys/0 starting Abilities/real-time Collapse. Controller Mapping is optional and is not required for Trap Floor.
+
+**Rule:** Do not restore the former 50-coin objective/economy, 14 Trap + 14 Coin + 8 Item Floormaster Deck, Floormaster draw/discard Search lifecycle, or fixed 10-round loop. Resolve still-provisional dependencies before authoring affected content or assistance; do not infer them from either the old Trap Floor prototype or obsolete Trap Door material. Comprehensive coded Game-rule enforcement is not required for manually playable G1 acceptance.
 
 ### OD-019 - Super Leroy Sisters Minimum Playable Rules
 
