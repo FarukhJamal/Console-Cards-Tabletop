@@ -39,6 +39,7 @@ Transform:
   - {fileID: 400500}
   - {fileID: 400600}
   - {fileID: 400700}
+  - {fileID: 400800}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &114100
@@ -53,8 +54,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5aec478be8b44aab9f771270d72cf254, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  layoutAnchor: {fileID: 400100}
-  verticalOffset: 0.01
+  layoutAnchor: {fileID: 400800}
+  verticalOffset: 0.02
+  placementPreviewLift: 0.08
+  extractionLift: 0.06
 --- !u!65 &650100
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -93,13 +96,44 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   slotView: {fileID: 114100}
-  layoutAnchor: {fileID: 400100}
+  layoutAnchor: {fileID: 400800}
   targetCollider: {fileID: 650100}
   dropTarget: {fileID: 114101}
   emptyStateRoot: {fileID: 100400}
   validTargetFeedbackRoot: {fileID: 100500}
   sourceTargetFeedbackRoot: {fileID: 100600}
   invalidTargetFeedbackRoot: {fileID: 100700}
+--- !u!1 &100800
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 400800}
+  m_Layer: 8
+  m_Name: CardRestAnchor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &400800
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100800}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.025, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 400100}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &100200
 GameObject:
   m_ObjectHideFlags: 0

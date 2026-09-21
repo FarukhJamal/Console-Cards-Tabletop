@@ -142,6 +142,24 @@ namespace ConsoleCards.Presentation.Interaction
             transform.position = target;
         }
 
+        internal bool BeginContainedPickup(float lift)
+        {
+            if (OwnsLooseTransform || !BeginHold()) return false;
+            Vector3 target = transform.position + (Vector3.up * Mathf.Max(0f, lift));
+            body.position = target;
+            transform.position = target;
+            return true;
+        }
+
+        internal bool SnapHeldPreview(Vector3 position, Quaternion rotation)
+        {
+            if (!held && !BeginHold()) return false;
+            body.position = position;
+            body.rotation = rotation;
+            transform.SetPositionAndRotation(position, rotation);
+            return true;
+        }
+
         public PhysicalObjectState ReleaseState()
         {
             releaseMotion.GetRelease(Time.unscaledTime, out Vector3 velocity, out Vector3 angularVelocity);

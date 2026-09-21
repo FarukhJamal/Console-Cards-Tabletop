@@ -282,7 +282,11 @@ namespace ConsoleCards.Presentation.Interaction
             if (view.PhysicalObject != null)
             {
                 view.PhysicalObject.Follow(screenPosition);
-                if (view is CardView) UpdateCardTargetFeedback(screenPosition);
+                if (view is CardView physicalCardView)
+                {
+                    TryApplyConsolePlacementPreview(physicalCardView, screenPosition);
+                    UpdateCardTargetFeedback(screenPosition);
+                }
                 return true;
             }
 
@@ -294,6 +298,12 @@ namespace ConsoleCards.Presentation.Interaction
 
             if (view is CardView cardView)
             {
+                if (TryApplyConsolePlacementPreview(cardView, screenPosition))
+                {
+                    UpdateCardTargetFeedback(screenPosition);
+                    return true;
+                }
+
                 TabletopPose acceptedPose = cardView.CardState.BaseState.Pose;
                 TabletopPose previewPose = new TabletopPose(
                     coordinate,
@@ -817,6 +827,31 @@ namespace ConsoleCards.Presentation.Interaction
                 Mathf.LerpAngle(previewPose.RotationDegrees, stackPose.RotationDegrees, strength),
                 previewPose.Layer,
                 previewPose.LocalOrder);
+        }
+
+        private bool TryApplyConsolePlacementPreview(CardView view, Vector2 screenPosition)
+        {
+            if (cardDropTargetResolver == null
+                || layoutViewLookup == null
+                || !cardDropTargetResolver.TryResolve(screenPosition, out CardDropTarget target)
+                || target.Kind != CardDropTargetKind.Container
+                || !TargetWouldAccept(target)
+                || !layoutViewLookup.TryGet(target.ContainerId, out IContainerLayoutView layoutView)
+                || !(layoutView is ConsoleSlotView consoleSlotView))
+            {
+                return false;
+            }
+
+            if (view.PhysicalObject != null)
+            {
+                Quaternion currentOrientation = Quaternion.Euler(0f, view.transform.eulerAngles.y, 0f);
+                return view.PhysicalObject.SnapHeldPreview(
+                    consoleSlotView.PlacementPreviewWorldPosition(),
+                    currentOrientation);
+            }
+
+            previewSession.UpdatePose(consoleSlotView.CreatePlacementPreviewPose(view));
+            return true;
         }
 
         private TabletopObjectView GetActiveView()

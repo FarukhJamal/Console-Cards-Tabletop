@@ -25,6 +25,8 @@ namespace ConsoleCards.Games.TrapFloor
         private const double PlayerConsoleRadius = 6.1d;
         private const double PlayerHandRadius = 4.15d;
         private const double ControllerDeckOffset = 3.2d;
+        private const double StartingAbilityStagingSideOffset = -3.2d;
+        private const double StartingAbilityStagingSpacing = 1.15d;
         private const double FloorfallDiceX = 3.45d;
         private const double FloorfallDiceY = 3.45d;
         private const double FloorfallDiceSpacing = 0.9d;
@@ -72,10 +74,6 @@ namespace ConsoleCards.Games.TrapFloor
             ConsoleSlotDefinitionData sideSlots = ResolveConsoleSlot(gameDefinition.Console, "Side", 1);
             if (mainSlot.PhysicalSlotCount != 1)
                 throw new ArgumentException("Trap Floor Console requires exactly one authored Main Slot.", nameof(gameDefinition));
-            if (activeMode.StartingAbilityCount > sideSlots.PhysicalSlotCount)
-                throw new ArgumentException(
-                    $"Trap Floor Mode '{activeMode.DisplayName}' requires more starting Abilities than authored Side Slots.",
-                    nameof(gameDefinition));
             int controllerHandCapacity = gameDefinition.ControllerConfiguration?.MaximumHandSize ?? 0;
 
             PlayerLayoutDefinition playerLayout = PlayerLayoutPresets.StandardFourPlayer;
@@ -491,7 +489,8 @@ namespace ConsoleCards.Games.TrapFloor
 
             TabletopObjectId avatarId = new TabletopObjectId(CreateGuid(42, playerNumber));
             TabletopObjectId pawnId = new TabletopObjectId(CreateGuid(45, playerNumber));
-            objects.Add(CreatePlayerCard(avatarId, avatarDefinitionId, seatId));
+            TabletopPose consolePose = GetConsolePose(layoutSeat);
+            objects.Add(CreatePlayerCard(avatarId, avatarDefinitionId, seatId, TabletopPose.Default));
             labels.Add(avatarId, $"P{playerNumber}\nAVATAR");
             objects.Add(new GameTemplateObjectInstanceDefinition(
                 pawnId,
@@ -506,20 +505,22 @@ namespace ConsoleCards.Games.TrapFloor
             memberships.Add(new GameTemplateContainerMembership(mainSlotId, new[] { avatarId }));
             for (int i = 0; i < sideSlotIds.Length; i++)
             {
-                if (i < startingAbilityCount)
-                {
-                    CardDefinitionData ability = abilityDefinitions[i];
-                    TabletopObjectId abilityId = new TabletopObjectId(CreateGuid(46, (seatIndex * 100) + i + 1));
-                    ObjectDefinitionId abilityDefinitionId = new ObjectDefinitionId(
-                        ParseStableGuid(ability.StableId, $"Ability '{ability.DisplayName}'"));
-                    objects.Add(CreatePlayerCard(abilityId, abilityDefinitionId, seatId));
-                    labels.Add(abilityId, ability.DisplayName);
-                    memberships.Add(new GameTemplateContainerMembership(sideSlotIds[i], new[] { abilityId }));
-                }
-                else
-                {
-                    memberships.Add(new GameTemplateContainerMembership(sideSlotIds[i], Array.Empty<TabletopObjectId>()));
-                }
+                memberships.Add(new GameTemplateContainerMembership(sideSlotIds[i], Array.Empty<TabletopObjectId>()));
+            }
+
+            for (int i = 0; i < startingAbilityCount; i++)
+            {
+                CardDefinitionData ability = abilityDefinitions[i];
+                TabletopObjectId abilityId = new TabletopObjectId(CreateGuid(46, (seatIndex * 100) + i + 1));
+                ObjectDefinitionId abilityDefinitionId = new ObjectDefinitionId(
+                    ParseStableGuid(ability.StableId, $"Ability '{ability.DisplayName}'"));
+                TabletopPose stagingPose = CreateStartingAbilityStagingPose(
+                    consolePose,
+                    i,
+                    startingAbilityCount,
+                    ability.Orientation);
+                objects.Add(CreatePlayerCard(abilityId, abilityDefinitionId, seatId, stagingPose));
+                labels.Add(abilityId, ability.DisplayName);
             }
 
             memberships.Add(new GameTemplateContainerMembership(controllerDeckId, Array.Empty<TabletopObjectId>()));
@@ -539,17 +540,41 @@ namespace ConsoleCards.Games.TrapFloor
         private static GameTemplateObjectInstanceDefinition CreatePlayerCard(
             TabletopObjectId id,
             ObjectDefinitionId definitionId,
-            SeatId ownerSeatId)
+            SeatId ownerSeatId,
+            TabletopPose pose)
         {
             return new GameTemplateObjectInstanceDefinition(
                 id,
                 definitionId,
                 TabletopObjectKind.Card,
-                TabletopPose.Default,
+                pose,
                 ownerSeatId,
                 ObjectVisibility.Public,
                 false,
                 CardFace.FaceUp);
+        }
+
+        private static TabletopPose CreateStartingAbilityStagingPose(
+            TabletopPose consolePose,
+            int abilityIndex,
+            int abilityCount,
+            CardOrientation orientation)
+        {
+            double radians = consolePose.RotationDegrees * (Math.PI / 180d);
+            double centeredIndex = abilityIndex - ((abilityCount - 1d) * 0.5d);
+            double rowOffset = centeredIndex * StartingAbilityStagingSpacing;
+            float orientationOffset = orientation == CardOrientation.Landscape ? 90f : 0f;
+            return new TabletopPose(
+                new TableCoordinate(
+                    consolePose.Position.X
+                        + (Math.Cos(radians) * StartingAbilityStagingSideOffset)
+                        + (Math.Sin(radians) * rowOffset),
+                    consolePose.Position.Y
+                        - (Math.Sin(radians) * StartingAbilityStagingSideOffset)
+                        + (Math.Cos(radians) * rowOffset)),
+                consolePose.RotationDegrees + orientationOffset,
+                consolePose.Layer,
+                abilityIndex);
         }
 
         private static GameTemplateObjectInstanceDefinition CreateFloorfallDie(

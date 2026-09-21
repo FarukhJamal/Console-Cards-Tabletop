@@ -206,6 +206,11 @@ namespace ConsoleCards.Presentation.Interaction
                 sourceLayoutView = currentSourceLayout;
                 releasesLockOnCompletion = acquiredByThisCall;
                 previewSession.BeginPress(cardView);
+                if (currentSourceLayout is ConsoleSlotView consoleSlotView
+                    && cardView.PhysicalObject != null)
+                {
+                    cardView.PhysicalObject.BeginContainedPickup(consoleSlotView.ExtractionLift);
+                }
                 feedback?.Begin(sourceContainerId);
                 return true;
             }
@@ -239,6 +244,7 @@ namespace ConsoleCards.Presentation.Interaction
             {
                 if (startedDragging) previewSession.Begin(view);
                 view.PhysicalObject.Follow(screenPosition);
+                TryApplyConsolePlacementPreview(view, screenPosition);
                 UpdateHandReorderPreview(view, view.PhysicalObject.LayoutCoordinate, screenPosition);
                 UpdateFeedback(screenPosition);
                 return;
@@ -253,6 +259,13 @@ namespace ConsoleCards.Presentation.Interaction
             if (startedDragging)
             {
                 previewSession.Begin(view);
+            }
+
+            if (TryApplyConsolePlacementPreview(view, screenPosition))
+            {
+                UpdateHandReorderPreview(view, coordinate, screenPosition);
+                UpdateFeedback(screenPosition);
+                return;
             }
 
             TabletopPose acceptedPose = view.CardState.BaseState.Pose;
@@ -678,6 +691,29 @@ namespace ConsoleCards.Presentation.Interaction
                 Mathf.LerpAngle(previewPose.RotationDegrees, stackPose.RotationDegrees, strength),
                 previewPose.Layer,
                 previewPose.LocalOrder);
+        }
+
+        private bool TryApplyConsolePlacementPreview(CardView view, Vector2 screenPosition)
+        {
+            if (!dropTargetResolver.TryResolve(screenPosition, sourceContainerId, out CardDropTarget target)
+                || target.Kind != CardDropTargetKind.Container
+                || !TargetWouldAccept(target)
+                || !layoutViewLookup.TryGet(target.ContainerId, out IContainerLayoutView layoutView)
+                || !(layoutView is ConsoleSlotView consoleSlotView))
+            {
+                return false;
+            }
+
+            if (view.PhysicalObject != null)
+            {
+                Quaternion currentOrientation = Quaternion.Euler(0f, view.transform.eulerAngles.y, 0f);
+                return view.PhysicalObject.SnapHeldPreview(
+                    consoleSlotView.PlacementPreviewWorldPosition(),
+                    currentOrientation);
+            }
+
+            previewSession.UpdatePose(consoleSlotView.CreatePlacementPreviewPose(view));
+            return true;
         }
 
         private void UpdateFeedback(Vector2 screenPosition)

@@ -60,14 +60,19 @@ namespace ConsoleCards.Presentation.Views.Containers
             for (int i = 0; i < slotViews.Count; i++)
             {
                 ConsoleSlotView slotView = slotViews[i];
+                bool anchorBelongsToSlot = slotView.LayoutAnchor == slotView.transform
+                    || slotView.LayoutAnchor.IsChildOf(slotView.transform);
+                Transform slotPlacement = anchorBelongsToSlot
+                    ? slotView.transform
+                    : slotView.LayoutAnchor;
                 if (slotAnchors.Length > 0)
                 {
-                    slotView.LayoutAnchor.SetPositionAndRotation(slotAnchors[i].position, slotAnchors[i].rotation);
+                    slotPlacement.SetPositionAndRotation(slotAnchors[i].position, slotAnchors[i].rotation);
                 }
                 else
                 {
                     float centeredIndex = i - center;
-                    slotView.LayoutAnchor.SetPositionAndRotation(
+                    slotPlacement.SetPositionAndRotation(
                         layoutAnchor.position + (layoutAnchor.right * centeredIndex * slotSpacing),
                         layoutAnchor.rotation);
                 }
