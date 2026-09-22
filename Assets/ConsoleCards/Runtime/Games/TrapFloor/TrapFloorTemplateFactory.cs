@@ -77,8 +77,6 @@ namespace ConsoleCards.Games.TrapFloor
             ConsoleSlotDefinitionData sideSlots = ResolveConsoleSlot(gameDefinition.Console, "Side", 1);
             if (mainSlot.PhysicalSlotCount != 1)
                 throw new ArgumentException("Trap Floor Console requires exactly one authored Main Slot.", nameof(gameDefinition));
-            int controllerHandCapacity = gameDefinition.ControllerConfiguration?.MaximumHandSize ?? 0;
-
             PlayerLayoutDefinition playerLayout = PlayerLayoutPresets.StandardFourPlayer;
             GameTemplateId templateId = new GameTemplateId(
                 string.Equals(activeMode.StableId, gameDefinition.DefaultModeStableId, StringComparison.OrdinalIgnoreCase)
@@ -125,7 +123,6 @@ namespace ConsoleCards.Games.TrapFloor
                     grid,
                     mainSlot,
                     sideSlots,
-                    controllerHandCapacity,
                     controllerInputCards,
                     abilityDefinitions,
                     activeMode.StartingAbilityCount,
@@ -519,7 +516,6 @@ namespace ConsoleCards.Games.TrapFloor
             GridDefinitionData grid,
             ConsoleSlotDefinitionData mainSlot,
             ConsoleSlotDefinitionData sideSlot,
-            int controllerHandCapacity,
             IReadOnlyList<CardDefinitionData> controllerInputCards,
             IReadOnlyList<CardDefinitionData> abilityDefinitions,
             int startingAbilityCount,
@@ -549,7 +545,9 @@ namespace ConsoleCards.Games.TrapFloor
                 handId,
                 consoleSlotIds,
                 GetConsolePose(layoutSeat)));
-            containers.Add(CreateContainer(handId, ContainerKind.Hand, seatId, ObjectVisibility.OwnerOnly, controllerHandCapacity));
+            // The authored maximum is an assisted draw target, not a physical capacity. Zero keeps
+            // the Hand technically unbounded for freeform draws beyond that recommendation.
+            containers.Add(CreateContainer(handId, ContainerKind.Hand, seatId, ObjectVisibility.OwnerOnly, 0));
             containers.Add(CreateContainer(
                 mainSlotId,
                 ContainerKind.ConsoleSlot,

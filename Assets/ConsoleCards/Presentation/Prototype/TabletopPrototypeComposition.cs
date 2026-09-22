@@ -3851,7 +3851,10 @@ namespace ConsoleCards.Presentation.Prototype
                     ShowDeckContextMenu();
                     break;
                 case PrototypeContextMenuMode.DrawCards:
-                    ShowDrawCountPopup();
+                    ShowControllerDrawPopup();
+                    break;
+                case PrototypeContextMenuMode.CustomDrawCards:
+                    ShowCustomControllerDrawPopup();
                     break;
                 case PrototypeContextMenuMode.PopulateDeck:
                     ShowPopulateDeckQuantityPopup();
@@ -3906,6 +3909,8 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 AddInspectAction(actions, contextMenuCardId);
             }
+
+            AddControllerDrawAction(actions, targetDeckId);
 
             if (targetDeck.Count == 0)
             {
@@ -4008,9 +4013,53 @@ namespace ConsoleCards.Presentation.Prototype
             ShowMessage($"Deleted {result.ComponentKind}.");
         }
 
-        private void ShowDrawCountPopup()
+        private void ShowControllerDrawPopup()
         {
-            int availableCount = AvailableDrawableCount(contextMenuContainerId);
+            ContainerId targetDeckId = contextMenuContainerId;
+            int availableCount = AvailableControllerDeckCount(targetDeckId);
+            ControllerConfigurationData configuration =
+                trapFloorTemplate.GameDefinition.ControllerConfiguration;
+            List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>
+            {
+                new PrototypePopupActionOption(
+                    "Draw 1",
+                    availableCount > 0,
+                    () => DrawControllerCardsFromContext(targetDeckId, 1)),
+                new PrototypePopupActionOption(
+                    "Draw 5",
+                    availableCount > 0,
+                    () => DrawControllerCardsFromContext(targetDeckId, 5)),
+                new PrototypePopupActionOption(
+                    "Draw To Hand Limit",
+                    configuration != null && configuration.DrawToMaximumAtTurnStart,
+                    () => DrawUpToConfiguredHandLimitFromContext(targetDeckId)),
+                new PrototypePopupActionOption(
+                    "Custom",
+                    availableCount > 0,
+                    () =>
+                    {
+                        selectedDrawCount = Mathf.Clamp(
+                            selectedDrawCount,
+                            1,
+                            Math.Max(1, AvailableControllerDeckCount(targetDeckId)));
+                        SetContextMenuMode(PrototypeContextMenuMode.CustomDrawCards);
+                    }),
+            };
+
+            runtimeUi.ShowContextMenu(
+                contextMenuAnchorScreenPosition,
+                "DRAW",
+                availableCount == 1
+                    ? "1 Card remaining in Controller Deck."
+                    : $"{availableCount} Cards remaining in Controller Deck.",
+                actions,
+                CloseContextMenu,
+                DismissPopupFromSecondary);
+        }
+
+        private void ShowCustomControllerDrawPopup()
+        {
+            int availableCount = AvailableControllerDeckCount(contextMenuContainerId);
             selectedDrawCount = availableCount > 0
                 ? Mathf.Clamp(selectedDrawCount, 1, availableCount)
                 : 0;
@@ -4018,17 +4067,17 @@ namespace ConsoleCards.Presentation.Prototype
                 contextMenuAnchorScreenPosition,
                 selectedDrawCount,
                 availableCount,
-                () => ChangeSelectedDrawCount(-1),
-                () => ChangeSelectedDrawCount(1),
-                ConfirmSelectedDrawCount,
+                () => ChangeSelectedControllerDrawCount(-1),
+                () => ChangeSelectedControllerDrawCount(1),
+                ConfirmSelectedControllerDrawCount,
                 CloseContextMenu,
                 CloseContextMenu,
                 DismissPopupFromSecondary);
         }
 
-        private void ChangeSelectedDrawCount(int delta)
+        private void ChangeSelectedControllerDrawCount(int delta)
         {
-            int availableCount = AvailableDrawableCount(contextMenuContainerId);
+            int availableCount = AvailableControllerDeckCount(contextMenuContainerId);
             if (availableCount <= 0)
             {
                 selectedDrawCount = 0;
@@ -4040,21 +4089,18 @@ namespace ConsoleCards.Presentation.Prototype
             runtimeUi?.SetDrawCountPopupValue(selectedDrawCount, availableCount);
         }
 
-        private void ConfirmSelectedDrawCount()
+        private void ConfirmSelectedControllerDrawCount()
         {
-            int availableCount = AvailableDrawableCount(contextMenuContainerId);
+            int availableCount = AvailableControllerDeckCount(contextMenuContainerId);
             if (availableCount <= 0)
             {
                 runtimeUi?.SetDrawCountPopupValue(0, 0);
                 return;
             }
 
-            int count = Mathf.Clamp(selectedDrawCount, 1, availableCount);
-            DrawCardsResult result = DrawCards(contextMenuContainerId, count);
-            if (result.Succeeded)
-            {
-                CloseContextMenu();
-            }
+            DrawControllerCardsFromContext(
+                contextMenuContainerId,
+                Mathf.Clamp(selectedDrawCount, 1, availableCount));
         }
 
         private void ShowPopulateDeckQuantityPopup()
@@ -4863,6 +4909,64 @@ namespace ConsoleCards.Presentation.Prototype
                 DismissPopupFromSecondary);
         }
 
+        private void AddControllerDrawAction(
+            List<PrototypePopupActionOption> actions,
+            ContainerId targetDeckId)
+        {
+            if (!IsLocalControllerDeck(targetDeckId))
+            {
+                return;
+            }
+
+            actions.Add(new PrototypePopupActionOption(
+                "Draw...",
+                true,
+                () => SetContextMenuMode(PrototypeContextMenuMode.DrawCards)));
+        }
+
+        private void DrawControllerCardsFromContext(ContainerId targetDeckId, int requestedCount)
+        {
+            TrapFloorPlayerSetupDefinition player = GetLocalTrapFloorPlayerSetup();
+            if (requestedCount <= 0
+                || !IsLocalControllerDeck(targetDeckId)
+                || handContainerId != player.HandContainerId
+                || contextMenuContainerId != targetDeckId)
+            {
+                CloseContextMenu();
+                return;
+            }
+
+            int drawCount = Math.Min(requestedCount, AvailableControllerDeckCount(targetDeckId));
+            if (drawCount <= 0)
+            {
+                ShowMessage("Controller Deck is empty.");
+                CloseContextMenu();
+                return;
+            }
+
+            DrawCardsResult result = DrawCards(targetDeckId, drawCount);
+            if (result.Succeeded)
+            {
+                CloseContextMenu();
+            }
+        }
+
+        private void DrawUpToConfiguredHandLimitFromContext(ContainerId targetDeckId)
+        {
+            if (!IsLocalControllerDeck(targetDeckId)
+                || contextMenuContainerId != targetDeckId)
+            {
+                CloseContextMenu();
+                return;
+            }
+
+            ControllerInputHandDrawResult result = DrawUpToConfiguredHandLimit();
+            if (result.Succeeded)
+            {
+                CloseContextMenu();
+            }
+        }
+
         private void OpenActionAbilityPurchase()
         {
             CloseContextMenu();
@@ -5005,6 +5109,22 @@ namespace ConsoleCards.Presentation.Prototype
             return false;
         }
 
+        private bool IsLocalControllerDeck(ContainerId containerId)
+        {
+            if (trapFloorTemplate == null || containerId.IsEmpty)
+            {
+                return false;
+            }
+
+            TrapFloorPlayerSetupDefinition player = GetLocalTrapFloorPlayerSetup();
+            return player.ControllerDeckId == containerId
+                && matchState.Containers.TryGetValue(containerId, out ContainerState container)
+                && container.Kind == ContainerKind.Deck
+                && container.OwnerSeatId == player.SeatId
+                && matchState.Seats.TryGetValue(player.SeatId, out SeatState seat)
+                && seat.OccupantPlayerId == localPlayerId;
+        }
+
         private void RollContextDie(TabletopObjectId targetDieId)
         {
             // Ignore callbacks retained from a closed/replaced menu; one accepted click launches once.
@@ -5116,7 +5236,6 @@ namespace ConsoleCards.Presentation.Prototype
             switch (contextMenuMode)
             {
                 case PrototypeContextMenuMode.Deck:
-                case PrototypeContextMenuMode.DrawCards:
                 case PrototypeContextMenuMode.PopulateDeck:
                     return !contextMenuContainerId.IsEmpty
                         && matchState.Containers.TryGetValue(contextMenuContainerId, out ContainerState deck)
@@ -5125,6 +5244,10 @@ namespace ConsoleCards.Presentation.Prototype
                         && (contextMenuCardId.IsEmpty
                             || (IsCurrentContextCardInContainer(contextMenuContainerId)
                                 && TryGetCardView(contextMenuCardId, out _)))
+                        && TryGetDeckPresentation(contextMenuContainerId, out _, out _);
+                case PrototypeContextMenuMode.DrawCards:
+                case PrototypeContextMenuMode.CustomDrawCards:
+                    return IsLocalControllerDeck(contextMenuContainerId)
                         && TryGetDeckPresentation(contextMenuContainerId, out _, out _);
                 case PrototypeContextMenuMode.TabletopCard:
                     return IsCurrentContextCardInContainer(ContainerId.Empty)
@@ -8072,6 +8195,13 @@ namespace ConsoleCards.Presentation.Prototype
             return Math.Min(deck.Count, handSpace);
         }
 
+        private int AvailableControllerDeckCount(ContainerId sourceDeckContainerId)
+        {
+            return IsLocalControllerDeck(sourceDeckContainerId)
+                ? matchState.GetContainer(sourceDeckContainerId).Count
+                : 0;
+        }
+
         private TrapFloorPlayerSetupDefinition GetLocalTrapFloorPlayerSetup()
         {
             if (trapFloorTemplate == null)
@@ -9036,6 +9166,7 @@ namespace ConsoleCards.Presentation.Prototype
             None,
             Deck,
             DrawCards,
+            CustomDrawCards,
             PopulateDeck,
             TabletopCard,
             FloorCard,
