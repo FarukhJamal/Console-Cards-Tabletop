@@ -22,7 +22,11 @@ MonoBehaviour:
   backArtworkReference: 
   quantity: 1
   inputCost:
-    requirements: []
+    requirements:
+    - input: 5
+      count: 1
+    - input: 2
+      count: 1
   orientation: 0
   preferredConsolePlacement: Side
-  tags: [trap-floor, ability, floor-content, provisional-stage03]
+  tags: [trap-floor, ability, floor-content, provisional-stage03, provisional-input-cost]

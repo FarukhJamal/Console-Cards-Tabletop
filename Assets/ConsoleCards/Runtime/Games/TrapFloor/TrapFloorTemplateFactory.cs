@@ -21,6 +21,7 @@ namespace ConsoleCards.Games.TrapFloor
         public const int PrototypePlayerCount = 4;
         public const string FloorContentSetId = "trap-floor-floor-pool";
         public const string AbilityContentSetId = "trap-floor-abilities";
+        public const string ControllerInputContentSetId = "trap-floor-controller-inputs";
 
         private const double PlayerConsoleRadius = 6.1d;
         private const double PlayerHandRadius = 4.15d;
@@ -337,13 +338,30 @@ namespace ConsoleCards.Games.TrapFloor
         private static IReadOnlyList<CardDefinitionData> ResolveControllerInputCards(
             GameDefinitionData gameDefinition)
         {
-            List<CardDefinitionData> expanded = new List<CardDefinitionData>();
-            for (int i = 0; i < gameDefinition.Cards.Count; i++)
+            if (!gameDefinition.TryGetContentSet(ControllerInputContentSetId, out GameContentSetData contentSet))
             {
-                CardDefinitionData card = gameDefinition.Cards[i];
+                throw new ArgumentException(
+                    $"Trap Floor requires authored content set '{ControllerInputContentSetId}'.",
+                    nameof(gameDefinition));
+            }
+
+            List<CardDefinitionData> definitions = new List<CardDefinitionData>(contentSet.CardDefinitionIds.Count);
+            HashSet<ControllerInput> representedInputs = new HashSet<ControllerInput>();
+            int maximumQuantity = 0;
+            for (int i = 0; i < contentSet.CardDefinitionIds.Count; i++)
+            {
+                if (!gameDefinition.TryGetCard(contentSet.CardDefinitionIds[i], out CardDefinitionData card))
+                {
+                    throw new ArgumentException(
+                        "Trap Floor Controller-input content references a missing Card Definition.",
+                        nameof(gameDefinition));
+                }
+
                 if (!card.RepresentedControllerInput.HasValue)
                 {
-                    continue;
+                    throw new ArgumentException(
+                        $"Controller Card '{card.DisplayName}' does not declare its represented input.",
+                        nameof(gameDefinition));
                 }
 
                 bool vocabularyContainsInput = false;
@@ -365,9 +383,34 @@ namespace ConsoleCards.Games.TrapFloor
                         nameof(gameDefinition));
                 }
 
-                for (int copyIndex = 0; copyIndex < card.Quantity; copyIndex++)
+                if (!representedInputs.Add(card.RepresentedControllerInput.Value))
                 {
-                    expanded.Add(card);
+                    throw new ArgumentException(
+                        $"Trap Floor Controller-input content contains more than one definition for '{card.RepresentedControllerInput.Value}'.",
+                        nameof(gameDefinition));
+                }
+
+                definitions.Add(card);
+                maximumQuantity = Math.Max(maximumQuantity, card.Quantity);
+            }
+
+            for (int i = 0; i < gameDefinition.InputVocabulary.Count; i++)
+            {
+                if (!representedInputs.Contains(gameDefinition.InputVocabulary[i]))
+                {
+                    throw new ArgumentException(
+                        $"Trap Floor Controller-input content is missing '{gameDefinition.InputVocabulary[i]}'.",
+                        nameof(gameDefinition));
+                }
+            }
+
+            List<CardDefinitionData> expanded = new List<CardDefinitionData>();
+            for (int copyIndex = 0; copyIndex < maximumQuantity; copyIndex++)
+            {
+                for (int definitionIndex = 0; definitionIndex < definitions.Count; definitionIndex++)
+                {
+                    CardDefinitionData card = definitions[definitionIndex];
+                    if (copyIndex < card.Quantity) expanded.Add(card);
                 }
             }
 

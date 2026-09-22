@@ -29,6 +29,10 @@ MonoBehaviour:
     prefab: {fileID: 114000, guid: a4b986c16e8b42afb2a87e7189fd126d, type: 3}
     layer: 3
     retention: 0
+  - id: platform.action-ability-purchase
+    prefab: {fileID: 114000, guid: e8bbd25402d845509d0e63d57b4d2ac1, type: 3}
+    layer: 3
+    retention: 0
   - id: platform.interaction-guide
     prefab: {fileID: 114000, guid: 18ff22796a2b4e2aaec1e8cd3a815910, type: 3}
     layer: 1

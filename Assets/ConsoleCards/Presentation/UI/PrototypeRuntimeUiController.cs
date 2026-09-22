@@ -24,6 +24,7 @@ namespace ConsoleCards.Presentation.UI
         private PrototypeTabletopPopupView tabletopPopupView;
         private PrototypeQuantityPopupView quantityPopupView;
         private PrototypeCardInspectView cardInspectPopupView;
+        private PrototypeActionAbilityPurchasePopupView actionAbilityPurchasePopupView;
         private PrototypeTrapFloorHudView trapFloorHudView;
         private PrototypeInteractionGuide interactionGuideView;
 
@@ -238,6 +239,34 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
+        public void ShowActionAbilityPurchase(
+            IReadOnlyList<PrototypeActionAbilityPurchaseOption> options,
+            Action<string> purchase,
+            Action dismiss,
+            string statusMessage = "")
+        {
+            ReleaseView(tabletopPopupView);
+            popupLayer.SetActive(false);
+            ReleaseModalViews();
+            EnsureActionAbilityPurchasePopupView();
+            componentToolboxView?.CloseToolbox();
+            modalLayer.SetActive(true);
+            actionAbilityPurchasePopupView.Bind(options, purchase, dismiss, statusMessage);
+            actionAbilityPurchasePopupView.Show();
+        }
+
+        public void CloseActionAbilityPurchase()
+        {
+            ReleaseView(actionAbilityPurchasePopupView);
+            if (!IsVisible(quantityPopupView) && !IsVisible(cardInspectPopupView))
+            {
+                modalLayer.SetActive(false);
+            }
+        }
+
+        public void SetActionAbilityPurchaseStatus(string message) =>
+            actionAbilityPurchasePopupView?.SetStatus(message);
+
         public void ShowTrapFloorStatus(
             PrototypeTrapFloorStatusModel status,
             PrototypeFloorfallStatusModel floorfall,
@@ -356,6 +385,16 @@ namespace ConsoleCards.Presentation.UI
             cardInspectPopupView.ValidateReferences();
         }
 
+        private void EnsureActionAbilityPurchasePopupView()
+        {
+            EnsureService();
+            actionAbilityPurchasePopupView =
+                uiService.AcquireCached<PrototypeActionAbilityPurchasePopupView>(
+                    PrototypeUiPrefabIds.ActionAbilityPurchase);
+            actionAbilityPurchasePopupView.Initialize(uiService);
+            actionAbilityPurchasePopupView.ValidateReferences();
+        }
+
         private void EnsureTrapFloorHudView()
         {
             EnsureService();
@@ -377,6 +416,7 @@ namespace ConsoleCards.Presentation.UI
         {
             ReleaseView(quantityPopupView);
             ReleaseView(cardInspectPopupView);
+            ReleaseView(actionAbilityPurchasePopupView);
             modalLayer?.SetActive(false);
         }
 

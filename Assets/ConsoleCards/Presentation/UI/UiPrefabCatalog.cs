@@ -93,6 +93,7 @@ namespace ConsoleCards.Presentation.UI
         public const string TabletopPopup = "platform.tabletop-popup";
         public const string QuantityPopup = "platform.quantity-popup";
         public const string CardInspect = "platform.card-inspect";
+        public const string ActionAbilityPurchase = "platform.action-ability-purchase";
         public const string InteractionGuide = "platform.interaction-guide";
         public const string PopupActionRow = "platform.popup-action-row";
         public const string GameTemplateRow = "platform.game-template-row";

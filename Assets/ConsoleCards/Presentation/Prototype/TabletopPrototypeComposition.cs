@@ -4832,13 +4832,19 @@ namespace ConsoleCards.Presentation.Prototype
         {
             ConsoleId targetConsoleId = contextMenuConsoleId;
             ContainerId targetSlotContainerId = contextMenuContainerId;
-            List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>
+            List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
+            if (IsLocalTrapFloorConsoleSlot(targetSlotContainerId))
             {
-                new PrototypePopupActionOption(
-                    "Move",
+                actions.Add(new PrototypePopupActionOption(
+                    "Buy Ability",
                     true,
-                    () => BeginConsoleMove(targetSlotContainerId)),
-            };
+                    OpenActionAbilityPurchase));
+            }
+
+            actions.Add(new PrototypePopupActionOption(
+                "Move",
+                true,
+                () => BeginConsoleMove(targetSlotContainerId)));
             if (!targetConsoleId.IsEmpty)
             {
                 AddDeleteActionIfRuntime(
@@ -4855,6 +4861,148 @@ namespace ConsoleCards.Presentation.Prototype
                 actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);
+        }
+
+        private void OpenActionAbilityPurchase()
+        {
+            CloseContextMenu();
+            ShowActionAbilityPurchase(string.Empty);
+        }
+
+        private void ShowActionAbilityPurchase(string statusMessage)
+        {
+            if (runtimeUi == null || trapFloorTemplate == null)
+            {
+                return;
+            }
+
+            runtimeUi.ShowActionAbilityPurchase(
+                BuildActionAbilityPurchaseOptions(),
+                TryPurchaseActionAbilityFromPopup,
+                runtimeUi.CloseActionAbilityPurchase,
+                statusMessage);
+        }
+
+        private void TryPurchaseActionAbilityFromPopup(string cardDefinitionStableId)
+        {
+            ActionAbilityPurchaseResult result = PurchaseActionOrAbility(cardDefinitionStableId);
+            if (result.Succeeded)
+            {
+                runtimeUi?.CloseActionAbilityPurchase();
+                return;
+            }
+
+            string rejection = result.Error == ActionAbilityPurchaseError.CannotAfford
+                ? $"Purchase rejected. Need: {FindPurchaseCost(cardDefinitionStableId)}"
+                : $"Purchase rejected: {result.Error}.";
+            runtimeUi?.SetActionAbilityPurchaseStatus(rejection);
+        }
+
+        private List<PrototypeActionAbilityPurchaseOption> BuildActionAbilityPurchaseOptions()
+        {
+            List<PrototypeActionAbilityPurchaseOption> options =
+                new List<PrototypeActionAbilityPurchaseOption>();
+            GameDefinitionData gameDefinition = trapFloorTemplate.GameDefinition;
+            TrapFloorPlayerSetupDefinition player = GetLocalTrapFloorPlayerSetup();
+            ContainerState hand = matchState.GetContainer(player.HandContainerId);
+            ControllerInputCostEvaluator evaluator = new ControllerInputCostEvaluator();
+
+            for (int i = 0; i < gameDefinition.Cards.Count; i++)
+            {
+                CardDefinitionData definition = gameDefinition.Cards[i];
+                if (definition.Quantity < 1
+                    || definition.RepresentedControllerInput.HasValue
+                    || definition.InputCost == null
+                    || definition.InputCost.IsEmpty)
+                {
+                    continue;
+                }
+
+                string cost = FormatPurchaseInputCost(definition.InputCost);
+                ControllerInputCostEvaluation evaluation = evaluator.Evaluate(
+                    matchState,
+                    hand,
+                    definition.InputCost,
+                    gameDefinition);
+                string affordability = evaluation.CanPay
+                    ? "Can afford"
+                    : evaluation.Error == ControllerInputCostEvaluationError.InsufficientInput
+                        ? $"Cannot afford. Need: {cost}"
+                        : $"Unavailable: {evaluation.Error}";
+                options.Add(new PrototypeActionAbilityPurchaseOption(
+                    definition.StableId,
+                    definition.DisplayName,
+                    definition.Description,
+                    cost,
+                    evaluation.CanPay,
+                    affordability));
+            }
+
+            return options;
+        }
+
+        private string FindPurchaseCost(string cardDefinitionStableId)
+        {
+            if (trapFloorTemplate != null
+                && trapFloorTemplate.GameDefinition.TryGetCard(
+                    cardDefinitionStableId,
+                    out CardDefinitionData definition)
+                && definition.InputCost != null)
+            {
+                return FormatPurchaseInputCost(definition.InputCost);
+            }
+
+            return "the authored input cost";
+        }
+
+        private static string FormatPurchaseInputCost(InputCostData cost)
+        {
+            Dictionary<ControllerInput, int> totals = new Dictionary<ControllerInput, int>();
+            List<ControllerInput> authoredOrder = new List<ControllerInput>();
+            for (int i = 0; i < cost.Requirements.Count; i++)
+            {
+                InputRequirementData requirement = cost.Requirements[i];
+                if (!totals.ContainsKey(requirement.Input))
+                {
+                    totals.Add(requirement.Input, 0);
+                    authoredOrder.Add(requirement.Input);
+                }
+
+                totals[requirement.Input] = checked(totals[requirement.Input] + requirement.Count);
+            }
+
+            List<string> entries = new List<string>(authoredOrder.Count);
+            for (int i = 0; i < authoredOrder.Count; i++)
+            {
+                ControllerInput input = authoredOrder[i];
+                entries.Add($"{input} ×{totals[input]}");
+            }
+
+            return string.Join(", ", entries);
+        }
+
+        private bool IsLocalTrapFloorConsoleSlot(ContainerId slotContainerId)
+        {
+            if (trapFloorTemplate == null || slotContainerId.IsEmpty)
+            {
+                return false;
+            }
+
+            TrapFloorPlayerSetupDefinition player = GetLocalTrapFloorPlayerSetup();
+            if (player.MainSlotContainerId == slotContainerId)
+            {
+                return true;
+            }
+
+            for (int i = 0; i < player.SideSlotContainerIds.Count; i++)
+            {
+                if (player.SideSlotContainerIds[i] == slotContainerId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void RollContextDie(TabletopObjectId targetDieId)
