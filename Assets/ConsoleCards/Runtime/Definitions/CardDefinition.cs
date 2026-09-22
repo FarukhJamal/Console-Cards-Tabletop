@@ -22,6 +22,8 @@ namespace ConsoleCards.Definitions
         [SerializeField] private CardOrientation orientation;
         [SerializeField] private string preferredConsolePlacement;
         [SerializeField] private List<string> tags = new List<string>();
+        [SerializeField] private bool representsControllerInput;
+        [SerializeField] private ControllerInput representedControllerInput;
 
         public string StableId => stableId;
         public string DisplayName => displayName;
@@ -34,6 +36,8 @@ namespace ConsoleCards.Definitions
         public CardOrientation Orientation => orientation;
         public string PreferredConsolePlacement => preferredConsolePlacement;
         public IReadOnlyList<string> Tags => tags;
+        public ControllerInput? RepresentedControllerInput =>
+            representsControllerInput ? representedControllerInput : (ControllerInput?)null;
 
         public bool TryGetObjectDefinitionId(out ObjectDefinitionId id)
         {
@@ -60,7 +64,8 @@ namespace ConsoleCards.Definitions
                 inputCost.ToData(),
                 orientation,
                 preferredConsolePlacement,
-                tags);
+                tags,
+                RepresentedControllerInput);
         }
     }
 }

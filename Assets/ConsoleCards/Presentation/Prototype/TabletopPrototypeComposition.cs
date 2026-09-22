@@ -17,6 +17,8 @@ using ConsoleCards.Core.Domain.Seats;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
+using ConsoleCards.GameTemplates.ControllerInputs;
+using ConsoleCards.GameTemplates.Definitions;
 using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Coordinates;
 using ConsoleCards.Presentation.Input;
@@ -820,6 +822,87 @@ namespace ConsoleCards.Presentation.Prototype
             return DrawCards(deckContainerId, count);
         }
 
+        public ControllerInputHandDrawResult DrawUpToConfiguredHandLimit()
+        {
+            EnsureInitialized();
+            TrapFloorPlayerSetupDefinition player = GetLocalTrapFloorPlayerSetup();
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
+                CaptureContainerCardTransforms(player.ControllerDeckId, player.HandContainerId);
+            ControllerInputHandDrawResult result = new ControllerInputHandService()
+                .DrawUpToConfiguredHandLimit(
+                    matchState,
+                    trapFloorTemplate.GameDefinition,
+                    new DrawUpToConfiguredHandLimitCommand(
+                        CreateCommandContext(),
+                        player.SeatId,
+                        player.ControllerDeckId));
+            ApplyLayout(player.ControllerDeckId);
+            ApplyLayout(player.HandContainerId);
+            presentationTransitions.AnimateCardsFromCurrentResults(
+                transitionStarts,
+                result.Succeeded ? handReflowDuration : returnDuration,
+                0.035f);
+            ShowMessage(result.Succeeded
+                ? result.Changed
+                    ? $"Drew {result.DrawnCount} Controller Card{(result.DrawnCount == 1 ? string.Empty : "s")}."
+                    : "Controller Hand is already at its configured limit or the Deck is empty."
+                : $"Controller draw rejected: {result.Error}.");
+            return result;
+        }
+
+        public ActionAbilityPurchaseResult PurchaseActionOrAbility(string cardDefinitionStableId)
+        {
+            EnsureInitialized();
+            TrapFloorPlayerSetupDefinition player = GetLocalTrapFloorPlayerSetup();
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
+                CaptureContainerCardTransforms(player.HandContainerId, player.ActionAbilityAreaContainerId);
+            ActionAbilityPurchaseResult result = new ActionAbilityPurchaseService().Purchase(
+                matchState,
+                trapFloorTemplate.GameDefinition,
+                new PurchaseActionOrAbilityCommand(
+                    CreateCommandContext(),
+                    player.SeatId,
+                    player.ActionAbilityAreaContainerId,
+                    cardDefinitionStableId,
+                    TabletopObjectId.New()));
+            if (!result.Succeeded)
+            {
+                ApplyLayout(player.HandContainerId);
+                ApplyLayout(player.ActionAbilityAreaContainerId);
+                presentationTransitions.AnimateCardsFromCurrentResults(transitionStarts, returnDuration);
+                ShowMessage($"Purchase rejected: {result.Error}.");
+                return result;
+            }
+
+            for (int i = 0; i < result.ConsumedCardIds.Count; i++)
+            {
+                ReleaseRuntimeCardInstance(result.ConsumedCardIds[i]);
+            }
+
+            if (!trapFloorTemplate.GameDefinition.TryGetCard(
+                    cardDefinitionStableId,
+                    out CardDefinitionData purchasedDefinition))
+            {
+                throw new InvalidOperationException("Accepted purchase lost its authored Card Definition.");
+            }
+
+            labelsByCardId[result.GrantedCardId] = purchasedDefinition.DisplayName;
+            CardView grantedView = CreateCardView(
+                matchState.Cards[result.GrantedCardId],
+                purchasedDefinition.DisplayName,
+                out TabletopSelectionVisual selectionVisual);
+            cardViews.Add(grantedView);
+            cardSelectionVisuals.Add(selectionVisual);
+            physicalAuthority?.Register(grantedView);
+            RefreshContainerCardViewSources();
+            ApplyLayout(player.HandContainerId);
+            ApplyLayout(player.ActionAbilityAreaContainerId);
+            RefreshSelectionPresenterAfterRuntimeProjection();
+            presentationTransitions.Appear(grantedView.transform, settleDuration);
+            ShowMessage($"Purchased {purchasedDefinition.DisplayName}.");
+            return result;
+        }
+
         private DrawCardsResult DrawCards(ContainerId sourceDeckContainerId, int count)
         {
             EnsureInitialized();
@@ -1302,6 +1385,7 @@ namespace ConsoleCards.Presentation.Prototype
                 case AuthoritativeActionKind.TrapFloorClaimKey: return $"{actor} claimed a Key";
                 case AuthoritativeActionKind.TrapFloorAttemptEscape: return $"{actor} attempted Escape";
                 case AuthoritativeActionKind.TrapFloorCollapse: return $"{actor} collapsed a Floor";
+                case AuthoritativeActionKind.PurchaseActionOrAbility: return $"{actor} purchased an Action/Ability Card";
                 default: return $"{actor} performed a table action";
             }
         }
@@ -5676,7 +5760,47 @@ namespace ConsoleCards.Presentation.Prototype
                 localPlayer.PawnId,
                 TabletopObjectId.Empty,
                 templateDefinition.CardLabels,
-                new Dictionary<ObjectDefinitionId, ButtonCardDefinition>());
+                CreateControllerInputDefinitions(templateDefinition.GameDefinition));
+        }
+
+        private static Dictionary<ObjectDefinitionId, ButtonCardDefinition> CreateControllerInputDefinitions(
+            GameDefinitionData gameDefinition)
+        {
+            Dictionary<ObjectDefinitionId, ButtonCardDefinition> definitions =
+                new Dictionary<ObjectDefinitionId, ButtonCardDefinition>();
+            for (int i = 0; i < gameDefinition.Cards.Count; i++)
+            {
+                CardDefinitionData card = gameDefinition.Cards[i];
+                if (!card.RepresentedControllerInput.HasValue)
+                {
+                    continue;
+                }
+
+                if (!Guid.TryParse(card.StableId, out Guid stableId))
+                    throw new InvalidOperationException($"Controller Card '{card.DisplayName}' has an invalid stable ID.");
+                ObjectDefinitionId definitionId = new ObjectDefinitionId(stableId);
+                definitions.Add(
+                    definitionId,
+                    new ButtonCardDefinition(definitionId, ToButtonCardKind(card.RepresentedControllerInput.Value)));
+            }
+
+            return definitions;
+        }
+
+        private static ButtonCardKind ToButtonCardKind(ControllerInput input)
+        {
+            switch (input)
+            {
+                case ControllerInput.Up: return ButtonCardKind.Up;
+                case ControllerInput.Down: return ButtonCardKind.Down;
+                case ControllerInput.Left: return ButtonCardKind.Left;
+                case ControllerInput.Right: return ButtonCardKind.Right;
+                case ControllerInput.A: return ButtonCardKind.A;
+                case ControllerInput.B: return ButtonCardKind.B;
+                case ControllerInput.X: return ButtonCardKind.X;
+                case ControllerInput.Y: return ButtonCardKind.Y;
+                default: throw new ArgumentOutOfRangeException(nameof(input));
+            }
         }
 
         private void ProjectPrototypePlayerLayout(PlayerSeatLayoutEntry seatLayout)
@@ -6167,6 +6291,12 @@ namespace ConsoleCards.Presentation.Prototype
                     player.ControllerDeckId);
                 runtimeDeckInstances.Add(controllerDeck);
                 controllerDeckViews.Add(controllerDeck.View);
+                ContainerId actionAreaId = player.ActionAbilityAreaContainerId;
+                StackRuntimeView actionArea = CreateStackRuntimeView(
+                    $"P{playerIndex + 1} ACTIONS",
+                    matchState.GetContainer(actionAreaId),
+                    matchState.ContainerPlacements[actionAreaId]);
+                stackViewsByContainerId.Add(actionAreaId, actionArea);
 
                 if (player.LayoutSeatIndex == localPlayerLayoutSeatIndex)
                 {
@@ -7792,6 +7922,22 @@ namespace ConsoleCards.Presentation.Prototype
                 ? deck.Count
                 : Math.Max(0, hand.Capacity - hand.Count);
             return Math.Min(deck.Count, handSpace);
+        }
+
+        private TrapFloorPlayerSetupDefinition GetLocalTrapFloorPlayerSetup()
+        {
+            if (trapFloorTemplate == null)
+                throw new InvalidOperationException("Controller assistance requires an active authored Game Template.");
+            for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+            {
+                TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[i];
+                if (player.SeatId == localSeatId)
+                {
+                    return player;
+                }
+            }
+
+            throw new InvalidOperationException("The local Player has no authored Controller Hand setup.");
         }
 
         private void ShowMessage(string message)

@@ -2,7 +2,8 @@
   "name": "ConsoleCards.GameTemplates",
   "rootNamespace": "ConsoleCards.GameTemplates",
   "references": [
-    "ConsoleCards.Core"
+    "ConsoleCards.Core",
+    "ConsoleCards.Application"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

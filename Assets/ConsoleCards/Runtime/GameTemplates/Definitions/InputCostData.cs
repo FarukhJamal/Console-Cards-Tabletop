@@ -9,6 +9,11 @@ namespace ConsoleCards.GameTemplates.Definitions
     {
         public InputRequirementData(ControllerInput input, int count)
         {
+            if (!Enum.IsDefined(typeof(ControllerInput), input))
+            {
+                throw new ArgumentOutOfRangeException(nameof(input));
+            }
+
             if (count < 1)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));

@@ -25,6 +25,7 @@ namespace ConsoleCards.Games.TrapFloor
         private const double PlayerConsoleRadius = 6.1d;
         private const double PlayerHandRadius = 4.15d;
         private const double ControllerDeckOffset = 3.2d;
+        private const double PurchasedAbilityAreaOffset = -4.45d;
         private const double StartingAbilityStagingSideOffset = -3.2d;
         private const double StartingAbilityStagingSpacing = 1.15d;
         private const double FloorfallDiceX = 3.45d;
@@ -70,6 +71,7 @@ namespace ConsoleCards.Games.TrapFloor
             IReadOnlyList<TrapFloorFloorContentDefinition> floorContent =
                 ResolveFloorContent(gameDefinition, activeMode, grid);
             IReadOnlyList<CardDefinitionData> abilityDefinitions = ResolveAbilities(gameDefinition, activeMode);
+            IReadOnlyList<CardDefinitionData> controllerInputCards = ResolveControllerInputCards(gameDefinition);
             ConsoleSlotDefinitionData mainSlot = ResolveConsoleSlot(gameDefinition.Console, "Main", 1);
             ConsoleSlotDefinitionData sideSlots = ResolveConsoleSlot(gameDefinition.Console, "Side", 1);
             if (mainSlot.PhysicalSlotCount != 1)
@@ -123,6 +125,7 @@ namespace ConsoleCards.Games.TrapFloor
                     mainSlot,
                     sideSlots,
                     controllerHandCapacity,
+                    controllerInputCards,
                     abilityDefinitions,
                     activeMode.StartingAbilityCount,
                     seats,
@@ -331,6 +334,46 @@ namespace ConsoleCards.Games.TrapFloor
             return abilities;
         }
 
+        private static IReadOnlyList<CardDefinitionData> ResolveControllerInputCards(
+            GameDefinitionData gameDefinition)
+        {
+            List<CardDefinitionData> expanded = new List<CardDefinitionData>();
+            for (int i = 0; i < gameDefinition.Cards.Count; i++)
+            {
+                CardDefinitionData card = gameDefinition.Cards[i];
+                if (!card.RepresentedControllerInput.HasValue)
+                {
+                    continue;
+                }
+
+                bool vocabularyContainsInput = false;
+                for (int vocabularyIndex = 0;
+                     vocabularyIndex < gameDefinition.InputVocabulary.Count;
+                     vocabularyIndex++)
+                {
+                    if (gameDefinition.InputVocabulary[vocabularyIndex] == card.RepresentedControllerInput.Value)
+                    {
+                        vocabularyContainsInput = true;
+                        break;
+                    }
+                }
+
+                if (!vocabularyContainsInput)
+                {
+                    throw new ArgumentException(
+                        $"Controller Card '{card.DisplayName}' represents an input outside the Game vocabulary.",
+                        nameof(gameDefinition));
+                }
+
+                for (int copyIndex = 0; copyIndex < card.Quantity; copyIndex++)
+                {
+                    expanded.Add(card);
+                }
+            }
+
+            return expanded;
+        }
+
         private static ConsoleSlotDefinitionData ResolveConsoleSlot(
             ConsoleConfigurationData configuration,
             string role,
@@ -434,6 +477,7 @@ namespace ConsoleCards.Games.TrapFloor
             ConsoleSlotDefinitionData mainSlot,
             ConsoleSlotDefinitionData sideSlot,
             int controllerHandCapacity,
+            IReadOnlyList<CardDefinitionData> controllerInputCards,
             IReadOnlyList<CardDefinitionData> abilityDefinitions,
             int startingAbilityCount,
             ICollection<GameTemplateSeatDefinition> seats,
@@ -452,6 +496,7 @@ namespace ConsoleCards.Games.TrapFloor
             for (int i = 0; i < sideSlotIds.Length; i++)
                 sideSlotIds[i] = new ContainerId(CreateGuid(41, idBase + 3 + i));
             ContainerId controllerDeckId = new ContainerId(CreateGuid(41, idBase + 19));
+            ContainerId actionAbilityAreaId = new ContainerId(CreateGuid(41, idBase + 18));
 
             List<ContainerId> consoleSlotIds = new List<ContainerId>(1 + sideSlotIds.Length) { mainSlotId };
             consoleSlotIds.AddRange(sideSlotIds);
@@ -478,6 +523,14 @@ namespace ConsoleCards.Games.TrapFloor
                     sideSlot.MaximumCardsPerSlot));
             }
 
+            containers.Add(new GameTemplateContainerDefinition(
+                actionAbilityAreaId,
+                ContainerKind.Stack,
+                seatId,
+                ObjectVisibility.Public,
+                0,
+                true,
+                OffsetBesideConsole(GetConsolePose(layoutSeat), PurchasedAbilityAreaOffset)));
             containers.Add(new GameTemplateContainerDefinition(
                 controllerDeckId,
                 ContainerKind.Deck,
@@ -523,7 +576,29 @@ namespace ConsoleCards.Games.TrapFloor
                 labels.Add(abilityId, ability.DisplayName);
             }
 
-            memberships.Add(new GameTemplateContainerMembership(controllerDeckId, Array.Empty<TabletopObjectId>()));
+            List<TabletopObjectId> controllerCardIds = new List<TabletopObjectId>(controllerInputCards.Count);
+            for (int i = 0; i < controllerInputCards.Count; i++)
+            {
+                CardDefinitionData controllerCard = controllerInputCards[i];
+                TabletopObjectId controllerCardId = new TabletopObjectId(
+                    CreateGuid(47, (seatIndex * 10000) + i + 1));
+                ObjectDefinitionId controllerDefinitionId = new ObjectDefinitionId(
+                    ParseStableGuid(controllerCard.StableId, $"Controller Card '{controllerCard.DisplayName}'"));
+                objects.Add(new GameTemplateObjectInstanceDefinition(
+                    controllerCardId,
+                    controllerDefinitionId,
+                    TabletopObjectKind.Card,
+                    TabletopPose.Default,
+                    seatId,
+                    ObjectVisibility.OwnerOnly,
+                    false,
+                    CardFace.FaceDown));
+                controllerCardIds.Add(controllerCardId);
+                labels.Add(controllerCardId, controllerCard.DisplayName);
+            }
+
+            memberships.Add(new GameTemplateContainerMembership(controllerDeckId, controllerCardIds));
+            memberships.Add(new GameTemplateContainerMembership(actionAbilityAreaId, Array.Empty<TabletopObjectId>()));
             memberships.Add(new GameTemplateContainerMembership(handId, Array.Empty<TabletopObjectId>()));
             players.Add(new TrapFloorPlayerSetupDefinition(
                 seatIndex,
@@ -532,6 +607,7 @@ namespace ConsoleCards.Games.TrapFloor
                 mainSlotId,
                 sideSlotIds,
                 controllerDeckId,
+                actionAbilityAreaId,
                 avatarId,
                 pawnId,
                 startingCorner));

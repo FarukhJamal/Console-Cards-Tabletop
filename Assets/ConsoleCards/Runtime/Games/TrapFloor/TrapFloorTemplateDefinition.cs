@@ -395,6 +395,7 @@ namespace ConsoleCards.Games.TrapFloor
             ContainerId mainSlotContainerId,
             IEnumerable<ContainerId> sideSlotContainerIds,
             ContainerId controllerDeckId,
+            ContainerId actionAbilityAreaContainerId,
             TabletopObjectId avatarCardId,
             TabletopObjectId pawnId,
             TrapFloorCoordinate startingCorner)
@@ -406,6 +407,7 @@ namespace ConsoleCards.Games.TrapFloor
             SideSlotContainerIds = new ReadOnlyCollection<ContainerId>(
                 new List<ContainerId>(sideSlotContainerIds));
             ControllerDeckId = controllerDeckId;
+            ActionAbilityAreaContainerId = actionAbilityAreaContainerId;
             AvatarCardId = avatarCardId;
             PawnId = pawnId;
             StartingCorner = startingCorner;
@@ -420,6 +422,7 @@ namespace ConsoleCards.Games.TrapFloor
         public ContainerId ModeSlotContainerId => ContainerId.Empty;
         public IReadOnlyList<ContainerId> ItemSlotContainerIds => SideSlotContainerIds;
         public ContainerId ControllerDeckId { get; }
+        public ContainerId ActionAbilityAreaContainerId { get; }
         public ContainerId CoinStorageContainerId => ContainerId.Empty;
         public TabletopPose CoinStoragePose => TabletopPose.Default;
         public TabletopObjectId AvatarCardId { get; }

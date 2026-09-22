@@ -20,7 +20,8 @@ namespace ConsoleCards.GameTemplates.Definitions
             InputCostData inputCost,
             CardOrientation orientation,
             string preferredConsolePlacement,
-            IEnumerable<string> tags)
+            IEnumerable<string> tags,
+            ControllerInput? representedControllerInput = null)
         {
             if (string.IsNullOrWhiteSpace(stableId)) throw new ArgumentException("Card ID is required.", nameof(stableId));
             if (string.IsNullOrWhiteSpace(displayName)) throw new ArgumentException("Card name is required.", nameof(displayName));
@@ -37,6 +38,13 @@ namespace ConsoleCards.GameTemplates.Definitions
             Orientation = orientation;
             PreferredConsolePlacement = preferredConsolePlacement ?? string.Empty;
             this.tags = new ReadOnlyCollection<string>(new List<string>(tags ?? throw new ArgumentNullException(nameof(tags))));
+            if (representedControllerInput.HasValue
+                && !Enum.IsDefined(typeof(ControllerInput), representedControllerInput.Value))
+            {
+                throw new ArgumentOutOfRangeException(nameof(representedControllerInput));
+            }
+
+            RepresentedControllerInput = representedControllerInput;
         }
 
         public string StableId { get; }
@@ -50,5 +58,6 @@ namespace ConsoleCards.GameTemplates.Definitions
         public CardOrientation Orientation { get; }
         public string PreferredConsolePlacement { get; }
         public IReadOnlyList<string> Tags => tags;
+        public ControllerInput? RepresentedControllerInput { get; }
     }
 }
