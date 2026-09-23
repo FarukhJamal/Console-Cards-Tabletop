@@ -3300,6 +3300,18 @@ namespace ConsoleCards.Presentation.Prototype
             if (trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn)
             {
                 actions.Add(new PrototypePopupActionOption(
+                    "Search / Reveal",
+                    true,
+                    SearchSelectedTrapFloorCard));
+                actions.Add(new PrototypePopupActionOption(
+                    "Buy Ability",
+                    true,
+                    OpenActionAbilityPurchase));
+                actions.Add(new PrototypePopupActionOption(
+                    "Skip Turn",
+                    true,
+                    SkipTrapFloorTurn));
+                actions.Add(new PrototypePopupActionOption(
                     "End Turn",
                     true,
                     AdvanceTrapFloorTurn));
@@ -3324,6 +3336,16 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void AdvanceTrapFloorTurn()
         {
+            AdvanceTrapFloorTurn(false);
+        }
+
+        private void SkipTrapFloorTurn()
+        {
+            AdvanceTrapFloorTurn(true);
+        }
+
+        private void AdvanceTrapFloorTurn(bool skipped)
+        {
             EnsureInitialized();
             if (trapFloorTurnState == null || trapFloorTurnService == null)
             {
@@ -3343,15 +3365,16 @@ namespace ConsoleCards.Presentation.Prototype
 
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(affectedContainers.ToArray());
-            TrapFloorTurnAdvanceResult result = trapFloorTurnService.Advance(
-                matchState,
-                CreateCommandContext(actor));
+            TrapFloorTurnAdvanceResult result = skipped
+                ? trapFloorTurnService.Skip(matchState, CreateCommandContext(actor))
+                : trapFloorTurnService.Advance(matchState, CreateCommandContext(actor));
             if (!result.Succeeded)
             {
                 presentationTransitions.AnimateCardsFromCurrentResults(transitionStarts, returnDuration);
+                string action = skipped ? "Skip Turn" : "End Turn";
                 ShowMessage(result.Error == TrapFloorTurnAdvanceError.ControllerDrawRejected
-                    ? $"End Turn rejected: Controller draw failed ({result.DrawError})."
-                    : $"End Turn rejected: {result.Error}.");
+                    ? $"{action} rejected: Controller draw failed ({result.DrawError})."
+                    : $"{action} rejected: {result.Error}.");
                 return;
             }
 
@@ -3365,17 +3388,18 @@ namespace ConsoleCards.Presentation.Prototype
                 handReflowDuration,
                 0.035f);
             RefreshTrapFloorStatusUi();
+            string skip = skipped ? $"{FormatPlayerName(actor)} skipped. " : string.Empty;
             if (trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
             {
                 ShowMessage(
-                    $"Floor Turn — {FormatPlayerName(trapFloorTurnState.FloorOperatorPlayerId)} resolves the Floor.");
+                    $"{skip}Floor Turn — {FormatPlayerName(trapFloorTurnState.FloorOperatorPlayerId)} resolves the Floor.");
             }
             else
             {
                 string draw = result.DrawnCount > 0
                     ? $" Drew {result.DrawnCount} Controller Card{(result.DrawnCount == 1 ? string.Empty : "s")}."
                     : string.Empty;
-                ShowMessage($"{FormatPlayerName(trapFloorTurnState.ActivePlayerId)} turn.{draw}");
+                ShowMessage($"{skip}{FormatPlayerName(trapFloorTurnState.ActivePlayerId)} turn.{draw}");
             }
         }
 
@@ -4343,7 +4367,10 @@ namespace ConsoleCards.Presentation.Prototype
             List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
             bool isCollapsed = trapFloorCollapseState != null
                 && trapFloorCollapseState.IsCollapsed(targetCardId);
-            if (!floorCard.IsRevealed && !isCollapsed)
+            if (!floorCard.IsRevealed
+                && !isCollapsed
+                && trapFloorTurnState != null
+                && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn)
             {
                 actions.Add(new PrototypePopupActionOption(
                     "Search / Reveal",
@@ -4420,15 +4447,19 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void SearchAndRevealFloorCard(TabletopObjectId floorCardId)
         {
-            if (trapFloorRevealFloorUseCase == null)
+            if (trapFloorRevealFloorUseCase == null
+                || trapFloorTurnState == null
+                || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
             {
-                ShowMessage("Search / Reveal unavailable outside Trap Floor.");
+                ShowMessage("Search / Reveal is available only during an active Player turn.");
                 return;
             }
 
             TrapFloorRevealFloorResult result = trapFloorRevealFloorUseCase.Execute(
                 matchState,
-                new TrapFloorRevealFloorCommand(CreateCommandContext(), floorCardId));
+                new TrapFloorRevealFloorCommand(
+                    CreateCommandContext(trapFloorTurnState.ActivePlayerId),
+                    floorCardId));
             if (!result.Succeeded)
             {
                 ShowMessage($"Search / Reveal rejected: {result.Error}.");
@@ -4446,6 +4477,26 @@ namespace ConsoleCards.Presentation.Prototype
             ShowMessage(
                 $"{FormatPlayerName(result.RevealedActivity.ActorPlayerId)} revealed "
                 + $"{result.FloorCard.Content.DisplayName} at Floor {result.FloorCard.Coordinate}.");
+        }
+
+        private void SearchSelectedTrapFloorCard()
+        {
+            CardView selectedCard = selectionState?.SelectedView as CardView;
+            if (selectedCard == null
+                || selectedCard.CardState == null
+                || !trapFloorTemplate.TryGetFloorCardState(
+                    matchState,
+                    selectedCard.CardState.BaseState.Id,
+                    out TrapFloorFloorCardState floorCard)
+                || floorCard.IsRevealed
+                || (trapFloorCollapseState != null
+                    && trapFloorCollapseState.IsCollapsed(floorCard.ObjectId)))
+            {
+                ShowMessage("Select a face-down, usable Floor Card, then choose Search / Reveal.");
+                return;
+            }
+
+            SearchAndRevealFloorCard(floorCard.ObjectId);
         }
 
         private void ClaimTrapFloorKey(TabletopObjectId floorCardId)
@@ -6014,7 +6065,8 @@ namespace ConsoleCards.Presentation.Prototype
             trapFloorTurnService = new TrapFloorTurnService(
                 trapFloorTemplate,
                 trapFloorTurnState,
-                controllerInputHandService);
+                controllerInputHandService,
+                trapFloorActivityFeed);
             if (pendingRestoredTrapFloorState == null)
             {
                 ControllerInputHandDrawResult initialDraw = trapFloorTurnService.DrawForCurrentPlayer(
@@ -8148,6 +8200,9 @@ namespace ConsoleCards.Presentation.Prototype
                         break;
                     case TrapFloorActivityKind.CollapsedFloor:
                         line = $"Floor {entry.Coordinate} collapsed";
+                        break;
+                    case TrapFloorActivityKind.SkippedTurn:
+                        line = $"{FormatPlayerName(entry.ActorPlayerId)} skipped their turn";
                         break;
                     default:
                         line = string.Empty;

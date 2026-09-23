@@ -18,6 +18,7 @@ namespace ConsoleCards.Games.TrapFloor
         TriggeredFloorfall = 4,
         RolledFloorfall = 5,
         CollapsedFloor = 6,
+        SkippedTurn = 7,
     }
 
     /// <summary>
@@ -90,7 +91,10 @@ namespace ConsoleCards.Games.TrapFloor
             bool floorfallActivity = kind == TrapFloorActivityKind.TriggeredFloorfall
                 || kind == TrapFloorActivityKind.RolledFloorfall
                 || kind == TrapFloorActivityKind.CollapsedFloor;
-            if (floorCardId.IsEmpty && kind != TrapFloorActivityKind.TriggeredFloorfall)
+            bool turnActivity = kind == TrapFloorActivityKind.SkippedTurn;
+            if (floorCardId.IsEmpty
+                && kind != TrapFloorActivityKind.TriggeredFloorfall
+                && !turnActivity)
             {
                 throw new ArgumentException("Activity Floor Card ID cannot be empty.", nameof(floorCardId));
             }
@@ -107,7 +111,7 @@ namespace ConsoleCards.Games.TrapFloor
                 throw new ArgumentException("Resolved Floorfall activity requires Dice results and a Floor coordinate.");
             }
 
-            if (!floorfallActivity && content == null)
+            if (!floorfallActivity && !turnActivity && content == null)
             {
                 throw new ArgumentNullException(nameof(content));
             }
@@ -304,6 +308,40 @@ namespace ConsoleCards.Games.TrapFloor
                 yAxisResult);
             entries.Add(entry);
             return entry;
+        }
+
+        internal TrapFloorActivityEntry RecordSkippedTurn(
+            long acceptedRevision,
+            PlayerId actorPlayerId)
+        {
+            TrapFloorActivityEntry entry = new TrapFloorActivityEntry(
+                entries.Count + 1L,
+                MatchId,
+                acceptedRevision,
+                actorPlayerId,
+                TabletopObjectId.Empty,
+                default,
+                false,
+                TrapFloorActivityKind.SkippedTurn,
+                null,
+                TabletopObjectId.Empty,
+                TabletopObjectId.Empty,
+                null,
+                null);
+            entries.Add(entry);
+            return entry;
+        }
+
+        internal void RemoveLast(TrapFloorActivityEntry expectedEntry)
+        {
+            if (expectedEntry == null
+                || entries.Count == 0
+                || !ReferenceEquals(entries[entries.Count - 1], expectedEntry))
+            {
+                throw new InvalidOperationException("Only the latest Trap Floor activity may be rolled back.");
+            }
+
+            entries.RemoveAt(entries.Count - 1);
         }
 
         public void Clear()

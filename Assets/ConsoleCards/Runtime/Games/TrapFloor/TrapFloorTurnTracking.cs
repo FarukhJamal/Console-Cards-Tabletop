@@ -147,6 +147,7 @@ namespace ConsoleCards.Games.TrapFloor
         ActorIsNotFloorOperator = 4,
         PlayerSetupMissing = 5,
         ControllerDrawRejected = 6,
+        ActivityFeedMismatch = 7,
     }
 
     public readonly struct TrapFloorTurnAdvanceResult
@@ -189,15 +190,18 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly TrapFloorTemplateDefinition template;
         private readonly TrapFloorTurnState state;
         private readonly ControllerInputHandService handService;
+        private readonly TrapFloorActivityFeedState activityFeed;
 
         public TrapFloorTurnService(
             TrapFloorTemplateDefinition template,
             TrapFloorTurnState state,
-            ControllerInputHandService handService)
+            ControllerInputHandService handService,
+            TrapFloorActivityFeedState activityFeed)
         {
             this.template = template ?? throw new ArgumentNullException(nameof(template));
             this.state = state ?? throw new ArgumentNullException(nameof(state));
             this.handService = handService ?? throw new ArgumentNullException(nameof(handService));
+            this.activityFeed = activityFeed ?? throw new ArgumentNullException(nameof(activityFeed));
         }
 
         public ControllerInputHandDrawResult DrawForCurrentPlayer(
@@ -221,8 +225,25 @@ namespace ConsoleCards.Games.TrapFloor
 
         public TrapFloorTurnAdvanceResult Advance(MatchState matchState, CommandContext context)
         {
+            return Advance(matchState, context, false);
+        }
+
+        public TrapFloorTurnAdvanceResult Skip(MatchState matchState, CommandContext context)
+        {
+            if (state.Phase != TrapFloorTurnPhase.PlayerTurn)
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.ActorIsNotActivePlayer);
+            return Advance(matchState, context, true);
+        }
+
+        private TrapFloorTurnAdvanceResult Advance(
+            MatchState matchState,
+            CommandContext context,
+            bool recordSkip)
+        {
             if (matchState == null || context.MatchId != matchState.Id || state.MatchId != matchState.Id)
                 return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.MatchMismatch);
+            if (activityFeed.MatchId != matchState.Id)
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.ActivityFeedMismatch);
             if (context.ExpectedRevision.HasValue && context.ExpectedRevision.Value != matchState.Revision)
                 return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.RevisionConflict);
             if (state.Phase == TrapFloorTurnPhase.PlayerTurn
@@ -237,12 +258,21 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             TrapFloorTurnPosition previous = state.CapturePosition();
+            TrapFloorActivityEntry skippedActivity = null;
+            if (recordSkip)
+            {
+                skippedActivity = activityFeed.RecordSkippedTurn(
+                    checked(matchState.Revision + 1L),
+                    context.RequestedByPlayerId);
+            }
+
             state.Advance();
             if (state.Phase == TrapFloorTurnPhase.PlayerTurn)
             {
                 if (!TryGetPlayerSetup(matchState, state.ActivePlayerId, out TrapFloorPlayerSetupDefinition player))
                 {
                     state.RestorePosition(previous);
+                    if (skippedActivity != null) activityFeed.RemoveLast(skippedActivity);
                     return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.PlayerSetupMissing);
                 }
 
@@ -261,6 +291,7 @@ namespace ConsoleCards.Games.TrapFloor
                 if (!draw.Succeeded)
                 {
                     state.RestorePosition(previous);
+                    if (skippedActivity != null) activityFeed.RemoveLast(skippedActivity);
                     return TrapFloorTurnAdvanceResult.Failure(
                         TrapFloorTurnAdvanceError.ControllerDrawRejected,
                         draw.Error);
