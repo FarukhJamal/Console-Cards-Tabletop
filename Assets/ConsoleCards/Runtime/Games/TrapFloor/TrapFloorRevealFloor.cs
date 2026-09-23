@@ -19,6 +19,8 @@ namespace ConsoleCards.Games.TrapFloor
         RolledFloorfall = 5,
         CollapsedFloor = 6,
         SkippedTurn = 7,
+        PlayerEliminated = 8,
+        AllPlayersEliminated = 9,
     }
 
     /// <summary>
@@ -91,7 +93,9 @@ namespace ConsoleCards.Games.TrapFloor
             bool floorfallActivity = kind == TrapFloorActivityKind.TriggeredFloorfall
                 || kind == TrapFloorActivityKind.RolledFloorfall
                 || kind == TrapFloorActivityKind.CollapsedFloor;
-            bool turnActivity = kind == TrapFloorActivityKind.SkippedTurn;
+            bool turnActivity = kind == TrapFloorActivityKind.SkippedTurn
+                || kind == TrapFloorActivityKind.PlayerEliminated
+                || kind == TrapFloorActivityKind.AllPlayersEliminated;
             if (floorCardId.IsEmpty
                 && kind != TrapFloorActivityKind.TriggeredFloorfall
                 && !turnActivity)
@@ -314,6 +318,37 @@ namespace ConsoleCards.Games.TrapFloor
             long acceptedRevision,
             PlayerId actorPlayerId)
         {
+            return RecordPlayerActivity(
+                acceptedRevision,
+                actorPlayerId,
+                TrapFloorActivityKind.SkippedTurn);
+        }
+
+        internal TrapFloorActivityEntry RecordPlayerEliminated(
+            long acceptedRevision,
+            PlayerId actorPlayerId)
+        {
+            return RecordPlayerActivity(
+                acceptedRevision,
+                actorPlayerId,
+                TrapFloorActivityKind.PlayerEliminated);
+        }
+
+        internal TrapFloorActivityEntry RecordAllPlayersEliminated(
+            long acceptedRevision,
+            PlayerId actorPlayerId)
+        {
+            return RecordPlayerActivity(
+                acceptedRevision,
+                actorPlayerId,
+                TrapFloorActivityKind.AllPlayersEliminated);
+        }
+
+        private TrapFloorActivityEntry RecordPlayerActivity(
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TrapFloorActivityKind kind)
+        {
             TrapFloorActivityEntry entry = new TrapFloorActivityEntry(
                 entries.Count + 1L,
                 MatchId,
@@ -322,7 +357,7 @@ namespace ConsoleCards.Games.TrapFloor
                 TabletopObjectId.Empty,
                 default,
                 false,
-                TrapFloorActivityKind.SkippedTurn,
+                kind,
                 null,
                 TabletopObjectId.Empty,
                 TabletopObjectId.Empty,

@@ -26,6 +26,8 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly TrapFloorTurnPhase turnPhase;
         private readonly int activeTurnPlayerIndex;
         private readonly int floorOperatorIndex;
+        private readonly PlayerId[] eliminatedTurnPlayerIds;
+        private readonly bool isCurrentFloorFailed;
 
         private TrapFloorSessionStateSnapshot(
             TrapFloorActivityFeedState activity,
@@ -53,6 +55,8 @@ namespace ConsoleCards.Games.TrapFloor
             turnPhase = turnPosition.Phase;
             activeTurnPlayerIndex = turnPosition.ActivePlayerIndex;
             floorOperatorIndex = turnPosition.FloorOperatorIndex;
+            eliminatedTurnPlayerIds = turn.CopyEliminatedPlayerIds();
+            isCurrentFloorFailed = turn.IsCurrentFloorFailed;
         }
 
         public MatchId MatchId { get; }
@@ -94,7 +98,9 @@ namespace ConsoleCards.Games.TrapFloor
                 turnRound,
                 turnPhase,
                 activeTurnPlayerIndex,
-                floorOperatorIndex);
+                floorOperatorIndex,
+                eliminatedTurnPlayerIds,
+                isCurrentFloorFailed);
             return new TrapFloorSessionState(activity, objective, collapse, turn);
         }
 

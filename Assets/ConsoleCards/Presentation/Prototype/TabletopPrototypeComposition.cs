@@ -3155,11 +3155,14 @@ namespace ConsoleCards.Presentation.Prototype
 
             if (trapFloorObjectiveState != null && trapFloorTurnState != null)
             {
-                string phase = trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
-                    ? $"{FormatPlayerName(trapFloorTurnState.ActivePlayerId).ToUpperInvariant()} TURN"
-                    : "FLOOR TURN";
+                string phase = trapFloorTurnState.IsCurrentFloorFailed
+                    ? "ALL PLAYERS ELIMINATED"
+                    : trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                        ? $"{FormatPlayerName(trapFloorTurnState.ActivePlayerId).ToUpperInvariant()} TURN"
+                        : "FLOOR TURN";
                 string detail = CurrentTrapFloorCollapseStatusText();
-                if (trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
+                if (!trapFloorTurnState.IsCurrentFloorFailed
+                    && trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
                 {
                     detail += $"\nOperator: {FormatPlayerName(trapFloorTurnState.FloorOperatorPlayerId)}";
                 }
@@ -3168,9 +3171,11 @@ namespace ConsoleCards.Presentation.Prototype
                     $"ROUND {trapFloorTurnState.CurrentRound}",
                     phase,
                     $"KEYS {trapFloorObjectiveState.CollectedKeyCount} / "
-                        + trapFloorObjectiveState.RequiredKeyCount,
+                        + $"{trapFloorObjectiveState.RequiredKeyCount}\n{CurrentTrapFloorPlayerStatesText()}",
                     detail,
-                    trapFloorObjectiveState.IsWon ? "VICTORY" : string.Empty,
+                    trapFloorTurnState.IsCurrentFloorFailed
+                        ? "ALL PLAYERS ELIMINATED"
+                        : trapFloorObjectiveState.IsWon ? "VICTORY" : string.Empty,
                     "Turn tracking is optional assistance; freeform tabletop actions remain available.");
                 runtimeUi.ShowTrapFloorStatus(
                     status,
@@ -3297,6 +3302,11 @@ namespace ConsoleCards.Presentation.Prototype
                 return actions;
             }
 
+            if (trapFloorTurnState.IsCurrentFloorFailed)
+            {
+                return actions;
+            }
+
             if (trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn)
             {
                 actions.Add(new PrototypePopupActionOption(
@@ -3307,6 +3317,10 @@ namespace ConsoleCards.Presentation.Prototype
                     "Buy Ability",
                     true,
                     OpenActionAbilityPurchase));
+                actions.Add(new PrototypePopupActionOption(
+                    "Eliminate Player",
+                    true,
+                    EliminateTrapFloorActivePlayer));
                 actions.Add(new PrototypePopupActionOption(
                     "Skip Turn",
                     true,
@@ -3350,6 +3364,11 @@ namespace ConsoleCards.Presentation.Prototype
             if (trapFloorTurnState == null || trapFloorTurnService == null)
             {
                 ShowMessage("Turn tracking is unavailable outside Trap Floor.");
+                return;
+            }
+            if (trapFloorTurnState.IsCurrentFloorFailed)
+            {
+                ShowMessage("ALL PLAYERS ELIMINATED");
                 return;
             }
 
@@ -3400,6 +3419,75 @@ namespace ConsoleCards.Presentation.Prototype
                     ? $" Drew {result.DrawnCount} Controller Card{(result.DrawnCount == 1 ? string.Empty : "s")}."
                     : string.Empty;
                 ShowMessage($"{skip}{FormatPlayerName(trapFloorTurnState.ActivePlayerId)} turn.{draw}");
+            }
+        }
+
+        private void EliminateTrapFloorActivePlayer()
+        {
+            EnsureInitialized();
+            if (trapFloorTurnState == null || trapFloorTurnService == null)
+            {
+                ShowMessage("Player elimination is unavailable outside Trap Floor.");
+                return;
+            }
+            if (trapFloorTurnState.IsCurrentFloorFailed
+                || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
+            {
+                ShowMessage("Only the active Player can be eliminated during a Player turn.");
+                return;
+            }
+
+            PlayerId eliminatedPlayerId = trapFloorTurnState.ActivePlayerId;
+            List<ContainerId> affectedContainers = new List<ContainerId>();
+            for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+            {
+                affectedContainers.Add(trapFloorTemplate.Players[i].ControllerDeckId);
+                affectedContainers.Add(trapFloorTemplate.Players[i].HandContainerId);
+            }
+
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
+                CaptureContainerCardTransforms(affectedContainers.ToArray());
+            TrapFloorTurnAdvanceResult result = trapFloorTurnService.EliminateCurrentPlayer(
+                matchState,
+                CreateCommandContext(eliminatedPlayerId));
+            if (!result.Succeeded)
+            {
+                presentationTransitions.AnimateCardsFromCurrentResults(transitionStarts, returnDuration);
+                ShowMessage(result.Error == TrapFloorTurnAdvanceError.ControllerDrawRejected
+                    ? $"Eliminate Player rejected: Controller draw failed ({result.DrawError})."
+                    : $"Eliminate Player rejected: {result.Error}.");
+                return;
+            }
+
+            for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+            {
+                ApplyLayout(trapFloorTemplate.Players[i].ControllerDeckId);
+                ApplyLayout(trapFloorTemplate.Players[i].HandContainerId);
+            }
+            presentationTransitions.AnimateCardsFromCurrentResults(
+                transitionStarts,
+                handReflowDuration,
+                0.035f);
+            RefreshTrapFloorStatusUi();
+
+            if (trapFloorTurnState.IsCurrentFloorFailed)
+            {
+                ShowMessage("ALL PLAYERS ELIMINATED");
+            }
+            else if (trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
+            {
+                ShowMessage(
+                    $"{FormatPlayerName(eliminatedPlayerId)} eliminated. Floor Turn — "
+                    + $"{FormatPlayerName(trapFloorTurnState.FloorOperatorPlayerId)} resolves the Floor.");
+            }
+            else
+            {
+                string draw = result.DrawnCount > 0
+                    ? $" Drew {result.DrawnCount} Controller Card{(result.DrawnCount == 1 ? string.Empty : "s")}."
+                    : string.Empty;
+                ShowMessage(
+                    $"{FormatPlayerName(eliminatedPlayerId)} eliminated. "
+                    + $"{FormatPlayerName(trapFloorTurnState.ActivePlayerId)} turn.{draw}");
             }
         }
 
@@ -4370,6 +4458,7 @@ namespace ConsoleCards.Presentation.Prototype
             if (!floorCard.IsRevealed
                 && !isCollapsed
                 && trapFloorTurnState != null
+                && !trapFloorTurnState.IsCurrentFloorFailed
                 && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn)
             {
                 actions.Add(new PrototypePopupActionOption(
@@ -4449,6 +4538,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             if (trapFloorRevealFloorUseCase == null
                 || trapFloorTurnState == null
+                || trapFloorTurnState.IsCurrentFloorFailed
                 || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
             {
                 ShowMessage("Search / Reveal is available only during an active Player turn.");
@@ -5259,7 +5349,9 @@ namespace ConsoleCards.Presentation.Prototype
                 return false;
             }
 
-            if (trapFloorTurnState == null || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
+            if (trapFloorTurnState == null
+                || trapFloorTurnState.IsCurrentFloorFailed
+                || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
             {
                 return false;
             }
@@ -5288,7 +5380,9 @@ namespace ConsoleCards.Presentation.Prototype
                 return false;
             }
 
-            if (trapFloorTurnState == null || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
+            if (trapFloorTurnState == null
+                || trapFloorTurnState.IsCurrentFloorFailed
+                || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
             {
                 return false;
             }
@@ -8204,6 +8298,12 @@ namespace ConsoleCards.Presentation.Prototype
                     case TrapFloorActivityKind.SkippedTurn:
                         line = $"{FormatPlayerName(entry.ActorPlayerId)} skipped their turn";
                         break;
+                    case TrapFloorActivityKind.PlayerEliminated:
+                        line = $"{FormatPlayerName(entry.ActorPlayerId)} eliminated for the current Floor";
+                        break;
+                    case TrapFloorActivityKind.AllPlayersEliminated:
+                        line = "ALL PLAYERS ELIMINATED";
+                        break;
                     default:
                         line = string.Empty;
                         break;
@@ -8224,7 +8324,29 @@ namespace ConsoleCards.Presentation.Prototype
 
             string keys =
                 $"KEYS {trapFloorObjectiveState.CollectedKeyCount} / {trapFloorObjectiveState.RequiredKeyCount}";
+            if (trapFloorTurnState != null && trapFloorTurnState.IsCurrentFloorFailed)
+            {
+                return $"{keys} | ALL PLAYERS ELIMINATED";
+            }
             return trapFloorObjectiveState.IsWon ? $"{keys} | VICTORY" : keys;
+        }
+
+        private string CurrentTrapFloorPlayerStatesText()
+        {
+            if (trapFloorTurnState == null) return string.Empty;
+
+            string text = "PLAYERS ";
+            for (int i = 0; i < trapFloorTurnState.PlayerOrder.Count; i++)
+            {
+                PlayerId playerId = trapFloorTurnState.PlayerOrder[i];
+                string state = trapFloorTurnState.GetPlayerState(playerId)
+                    == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentFloor
+                    ? "ELIMINATED"
+                    : "ACTIVE";
+                if (i > 0) text += " | ";
+                text += $"{FormatPlayerName(playerId)} {state}";
+            }
+            return text;
         }
 
         private string CurrentTrapFloorCollapseStatusText()
@@ -8406,6 +8528,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             if (trapFloorTemplate == null
                 || trapFloorTurnState == null
+                || trapFloorTurnState.IsCurrentFloorFailed
                 || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
             {
                 throw new InvalidOperationException(
