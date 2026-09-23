@@ -182,6 +182,10 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorObjectiveUseCase trapFloorObjectiveUseCase;
         private TrapFloorCollapseState trapFloorCollapseState;
         private TrapFloorCollapseUseCase trapFloorCollapseUseCase;
+        private TrapFloorTurnState trapFloorTurnState;
+        private TrapFloorTurnService trapFloorTurnService;
+        private readonly ControllerInputHandService controllerInputHandService =
+            new ControllerInputHandService();
         private TrapFloorActivityEntry activeFloorRevealActivity;
         private TrapFloorFloorfallState floorfallState;
         private TrapFloorFloorfallService floorfallService;
@@ -284,6 +288,8 @@ namespace ConsoleCards.Presentation.Prototype
         public TrapFloorObjectiveState TrapFloorObjectiveState => trapFloorObjectiveState;
 
         public TrapFloorCollapseState TrapFloorCollapseState => trapFloorCollapseState;
+
+        public TrapFloorTurnState TrapFloorTurnState => trapFloorTurnState;
 
         public PlayerLayoutDefinition PlayerLayout => playerLayout;
 
@@ -648,6 +654,8 @@ namespace ConsoleCards.Presentation.Prototype
             trapFloorCollapseState?.Clear();
             trapFloorCollapseState = null;
             trapFloorCollapseUseCase = null;
+            trapFloorTurnState = null;
+            trapFloorTurnService = null;
             activeFloorRevealActivity = null;
             floorfallState = null;
             floorfallService = null;
@@ -825,17 +833,12 @@ namespace ConsoleCards.Presentation.Prototype
         public ControllerInputHandDrawResult DrawUpToConfiguredHandLimit()
         {
             EnsureInitialized();
-            TrapFloorPlayerSetupDefinition player = GetLocalTrapFloorPlayerSetup();
+            TrapFloorPlayerSetupDefinition player = GetAssistedTrapFloorPlayerSetup();
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(player.ControllerDeckId, player.HandContainerId);
-            ControllerInputHandDrawResult result = new ControllerInputHandService()
-                .DrawUpToConfiguredHandLimit(
-                    matchState,
-                    trapFloorTemplate.GameDefinition,
-                    new DrawUpToConfiguredHandLimitCommand(
-                        CreateCommandContext(),
-                        player.SeatId,
-                        player.ControllerDeckId));
+            ControllerInputHandDrawResult result = trapFloorTurnService.DrawForCurrentPlayer(
+                matchState,
+                CreateCommandContext(trapFloorTurnState.ActivePlayerId));
             ApplyLayout(player.ControllerDeckId);
             ApplyLayout(player.HandContainerId);
             presentationTransitions.AnimateCardsFromCurrentResults(
@@ -853,14 +856,14 @@ namespace ConsoleCards.Presentation.Prototype
         public ActionAbilityPurchaseResult PurchaseActionOrAbility(string cardDefinitionStableId)
         {
             EnsureInitialized();
-            TrapFloorPlayerSetupDefinition player = GetLocalTrapFloorPlayerSetup();
+            TrapFloorPlayerSetupDefinition player = GetAssistedTrapFloorPlayerSetup();
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(player.HandContainerId, player.ActionAbilityAreaContainerId);
             ActionAbilityPurchaseResult result = new ActionAbilityPurchaseService().Purchase(
                 matchState,
                 trapFloorTemplate.GameDefinition,
                 new PurchaseActionOrAbilityCommand(
-                    CreateCommandContext(),
+                    CreateCommandContext(trapFloorTurnState.ActivePlayerId),
                     player.SeatId,
                     player.ActionAbilityAreaContainerId,
                     cardDefinitionStableId,
@@ -1348,7 +1351,8 @@ namespace ConsoleCards.Presentation.Prototype
                 matchState,
                 trapFloorActivityFeed,
                 trapFloorObjectiveState,
-                trapFloorCollapseState);
+                trapFloorCollapseState,
+                trapFloorTurnState);
         }
 
         private static string FormatUndoObjectIds(GameTemplateInitialSnapshot snapshot)
@@ -1386,7 +1390,10 @@ namespace ConsoleCards.Presentation.Prototype
                 case AuthoritativeActionKind.TrapFloorAttemptEscape: return $"{actor} attempted Escape";
                 case AuthoritativeActionKind.TrapFloorCollapse: return $"{actor} collapsed a Floor";
                 case AuthoritativeActionKind.PurchaseActionOrAbility: return $"{actor} purchased an Action/Ability Card";
-                default: return $"{actor} performed a table action";
+                default:
+                    return trapFloorTurnState == null
+                        ? $"{actor} performed a table action"
+                        : $"{actor} advanced the Trap Floor turn";
             }
         }
 
@@ -1495,7 +1502,9 @@ namespace ConsoleCards.Presentation.Prototype
         {
             if (physicalFloorCollapsePending
                 || trapFloorCollapseState == null
-                || trapFloorCollapseUseCase == null)
+                || trapFloorCollapseUseCase == null
+                || trapFloorTurnState == null
+                || trapFloorTurnState.Phase != TrapFloorTurnPhase.FloorTurn)
             {
                 return false;
             }
@@ -1512,7 +1521,7 @@ namespace ConsoleCards.Presentation.Prototype
                 return false;
             }
 
-            PlayerId actor = localPlayerId;
+            PlayerId actor = trapFloorTurnState.FloorOperatorPlayerId;
             if (!LaunchPhysicalFloorCollapseDice(xAxisDieView, yAxisDieView, actor))
             {
                 ShowMessage("Collapse Floor rejected: both official d6 must be loose and available.");
@@ -3144,14 +3153,29 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            if (trapFloorObjectiveState != null)
+            if (trapFloorObjectiveState != null && trapFloorTurnState != null)
             {
-                runtimeUi.ShowTrapFloorObjective(
+                string phase = trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                    ? $"{FormatPlayerName(trapFloorTurnState.ActivePlayerId).ToUpperInvariant()} TURN"
+                    : "FLOOR TURN";
+                string detail = CurrentTrapFloorCollapseStatusText();
+                if (trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
+                {
+                    detail += $"\nOperator: {FormatPlayerName(trapFloorTurnState.FloorOperatorPlayerId)}";
+                }
+
+                PrototypeTrapFloorStatusModel status = new PrototypeTrapFloorStatusModel(
+                    $"ROUND {trapFloorTurnState.CurrentRound}",
+                    phase,
                     $"KEYS {trapFloorObjectiveState.CollectedKeyCount} / "
                         + trapFloorObjectiveState.RequiredKeyCount,
-                    CurrentTrapFloorCollapseStatusText(),
-                    trapFloorObjectiveState.IsWon,
-                    BuildTrapFloorCollapseActions());
+                    detail,
+                    trapFloorObjectiveState.IsWon ? "VICTORY" : string.Empty,
+                    "Turn tracking is optional assistance; freeform tabletop actions remain available.");
+                runtimeUi.ShowTrapFloorStatus(
+                    status,
+                    BuildFloorfallStatusModel(),
+                    BuildTrapFloorTurnActions());
                 return;
             }
 
@@ -3265,20 +3289,94 @@ namespace ConsoleCards.Presentation.Prototype
             return actions;
         }
 
-        private List<PrototypePopupActionOption> BuildTrapFloorCollapseActions()
+        private List<PrototypePopupActionOption> BuildTrapFloorTurnActions()
         {
             List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
-            if (trapFloorCollapseState == null)
+            if (trapFloorTurnState == null)
             {
                 return actions;
             }
 
+            if (trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn)
+            {
+                actions.Add(new PrototypePopupActionOption(
+                    "End Turn",
+                    true,
+                    AdvanceTrapFloorTurn));
+                return actions;
+            }
+
+            if (trapFloorCollapseState != null)
+            {
+                actions.Add(new PrototypePopupActionOption(
+                    "Collapse Floor",
+                    !trapFloorCollapseState.IsCollapsePending
+                        && !trapFloorCollapseState.IsBoardExhausted,
+                    () => BeginPhysicalFloorCollapse()));
+            }
+
             actions.Add(new PrototypePopupActionOption(
-                "Collapse Floor",
-                !trapFloorCollapseState.IsCollapsePending
-                    && !trapFloorCollapseState.IsBoardExhausted,
-                () => BeginPhysicalFloorCollapse()));
+                "End Floor Turn",
+                trapFloorCollapseState == null || !trapFloorCollapseState.IsCollapsePending,
+                AdvanceTrapFloorTurn));
             return actions;
+        }
+
+        private void AdvanceTrapFloorTurn()
+        {
+            EnsureInitialized();
+            if (trapFloorTurnState == null || trapFloorTurnService == null)
+            {
+                ShowMessage("Turn tracking is unavailable outside Trap Floor.");
+                return;
+            }
+
+            PlayerId actor = trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                ? trapFloorTurnState.ActivePlayerId
+                : trapFloorTurnState.FloorOperatorPlayerId;
+            List<ContainerId> affectedContainers = new List<ContainerId>();
+            for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+            {
+                affectedContainers.Add(trapFloorTemplate.Players[i].ControllerDeckId);
+                affectedContainers.Add(trapFloorTemplate.Players[i].HandContainerId);
+            }
+
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
+                CaptureContainerCardTransforms(affectedContainers.ToArray());
+            TrapFloorTurnAdvanceResult result = trapFloorTurnService.Advance(
+                matchState,
+                CreateCommandContext(actor));
+            if (!result.Succeeded)
+            {
+                presentationTransitions.AnimateCardsFromCurrentResults(transitionStarts, returnDuration);
+                ShowMessage(result.Error == TrapFloorTurnAdvanceError.ControllerDrawRejected
+                    ? $"End Turn rejected: Controller draw failed ({result.DrawError})."
+                    : $"End Turn rejected: {result.Error}.");
+                return;
+            }
+
+            for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+            {
+                ApplyLayout(trapFloorTemplate.Players[i].ControllerDeckId);
+                ApplyLayout(trapFloorTemplate.Players[i].HandContainerId);
+            }
+            presentationTransitions.AnimateCardsFromCurrentResults(
+                transitionStarts,
+                handReflowDuration,
+                0.035f);
+            RefreshTrapFloorStatusUi();
+            if (trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
+            {
+                ShowMessage(
+                    $"Floor Turn — {FormatPlayerName(trapFloorTurnState.FloorOperatorPlayerId)} resolves the Floor.");
+            }
+            else
+            {
+                string draw = result.DrawnCount > 0
+                    ? $" Drew {result.DrawnCount} Controller Card{(result.DrawnCount == 1 ? string.Empty : "s")}."
+                    : string.Empty;
+                ShowMessage($"{FormatPlayerName(trapFloorTurnState.ActivePlayerId)} turn.{draw}");
+            }
         }
 
         private string TrapFloorActionHelpText()
@@ -4879,7 +4977,7 @@ namespace ConsoleCards.Presentation.Prototype
             ConsoleId targetConsoleId = contextMenuConsoleId;
             ContainerId targetSlotContainerId = contextMenuContainerId;
             List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
-            if (IsLocalTrapFloorConsoleSlot(targetSlotContainerId))
+            if (IsAssistedTrapFloorConsoleSlot(targetSlotContainerId))
             {
                 actions.Add(new PrototypePopupActionOption(
                     "Buy Ability",
@@ -4913,7 +5011,7 @@ namespace ConsoleCards.Presentation.Prototype
             List<PrototypePopupActionOption> actions,
             ContainerId targetDeckId)
         {
-            if (!IsLocalControllerDeck(targetDeckId))
+            if (!IsAssistedControllerDeck(targetDeckId))
             {
                 return;
             }
@@ -4926,10 +5024,9 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void DrawControllerCardsFromContext(ContainerId targetDeckId, int requestedCount)
         {
-            TrapFloorPlayerSetupDefinition player = GetLocalTrapFloorPlayerSetup();
+            TrapFloorPlayerSetupDefinition player = GetAssistedTrapFloorPlayerSetup();
             if (requestedCount <= 0
-                || !IsLocalControllerDeck(targetDeckId)
-                || handContainerId != player.HandContainerId
+                || !IsAssistedControllerDeck(targetDeckId)
                 || contextMenuContainerId != targetDeckId)
             {
                 CloseContextMenu();
@@ -4944,16 +5041,35 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            DrawCardsResult result = DrawCards(targetDeckId, drawCount);
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
+                CaptureContainerCardTransforms(targetDeckId, player.HandContainerId);
+            DrawCardsResult result = new DrawCardsUseCase().Execute(
+                matchState,
+                new DrawCardsCommand(
+                    CreateCommandContext(trapFloorTurnState.ActivePlayerId),
+                    targetDeckId,
+                    player.HandContainerId,
+                    drawCount));
+            ApplyLayout(targetDeckId);
+            ApplyLayout(player.HandContainerId);
+            presentationTransitions.AnimateCardsFromCurrentResults(
+                transitionStarts,
+                result.Succeeded ? handReflowDuration : returnDuration,
+                result.Succeeded ? 0.035f : 0f);
             if (result.Succeeded)
             {
+                ShowMessage($"Drew {drawCount} Controller Card{(drawCount == 1 ? string.Empty : "s")}.");
                 CloseContextMenu();
+            }
+            else
+            {
+                ShowMessage($"Controller draw rejected: {result.Error}.");
             }
         }
 
         private void DrawUpToConfiguredHandLimitFromContext(ContainerId targetDeckId)
         {
-            if (!IsLocalControllerDeck(targetDeckId)
+            if (!IsAssistedControllerDeck(targetDeckId)
                 || contextMenuContainerId != targetDeckId)
             {
                 CloseContextMenu();
@@ -5007,7 +5123,7 @@ namespace ConsoleCards.Presentation.Prototype
             List<PrototypeActionAbilityPurchaseOption> options =
                 new List<PrototypeActionAbilityPurchaseOption>();
             GameDefinitionData gameDefinition = trapFloorTemplate.GameDefinition;
-            TrapFloorPlayerSetupDefinition player = GetLocalTrapFloorPlayerSetup();
+            TrapFloorPlayerSetupDefinition player = GetAssistedTrapFloorPlayerSetup();
             ContainerState hand = matchState.GetContainer(player.HandContainerId);
             ControllerInputCostEvaluator evaluator = new ControllerInputCostEvaluator();
 
@@ -5085,14 +5201,19 @@ namespace ConsoleCards.Presentation.Prototype
             return string.Join(", ", entries);
         }
 
-        private bool IsLocalTrapFloorConsoleSlot(ContainerId slotContainerId)
+        private bool IsAssistedTrapFloorConsoleSlot(ContainerId slotContainerId)
         {
             if (trapFloorTemplate == null || slotContainerId.IsEmpty)
             {
                 return false;
             }
 
-            TrapFloorPlayerSetupDefinition player = GetLocalTrapFloorPlayerSetup();
+            if (trapFloorTurnState == null || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
+            {
+                return false;
+            }
+
+            TrapFloorPlayerSetupDefinition player = GetAssistedTrapFloorPlayerSetup();
             if (player.MainSlotContainerId == slotContainerId)
             {
                 return true;
@@ -5109,20 +5230,25 @@ namespace ConsoleCards.Presentation.Prototype
             return false;
         }
 
-        private bool IsLocalControllerDeck(ContainerId containerId)
+        private bool IsAssistedControllerDeck(ContainerId containerId)
         {
             if (trapFloorTemplate == null || containerId.IsEmpty)
             {
                 return false;
             }
 
-            TrapFloorPlayerSetupDefinition player = GetLocalTrapFloorPlayerSetup();
+            if (trapFloorTurnState == null || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
+            {
+                return false;
+            }
+
+            TrapFloorPlayerSetupDefinition player = GetAssistedTrapFloorPlayerSetup();
             return player.ControllerDeckId == containerId
                 && matchState.Containers.TryGetValue(containerId, out ContainerState container)
                 && container.Kind == ContainerKind.Deck
                 && container.OwnerSeatId == player.SeatId
                 && matchState.Seats.TryGetValue(player.SeatId, out SeatState seat)
-                && seat.OccupantPlayerId == localPlayerId;
+                && seat.OccupantPlayerId == trapFloorTurnState.ActivePlayerId;
         }
 
         private void RollContextDie(TabletopObjectId targetDieId)
@@ -5247,7 +5373,7 @@ namespace ConsoleCards.Presentation.Prototype
                         && TryGetDeckPresentation(contextMenuContainerId, out _, out _);
                 case PrototypeContextMenuMode.DrawCards:
                 case PrototypeContextMenuMode.CustomDrawCards:
-                    return IsLocalControllerDeck(contextMenuContainerId)
+                    return IsAssistedControllerDeck(contextMenuContainerId)
                         && TryGetDeckPresentation(contextMenuContainerId, out _, out _);
                 case PrototypeContextMenuMode.TabletopCard:
                     return IsCurrentContextCardInContainer(ContainerId.Empty)
@@ -5858,6 +5984,7 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorActivityFeed = pendingRestoredTrapFloorState.Activity;
                 trapFloorCollapseState = pendingRestoredTrapFloorState.Collapse;
                 trapFloorObjectiveState = pendingRestoredTrapFloorState.Objective;
+                trapFloorTurnState = pendingRestoredTrapFloorState.Turn;
             }
             else
             {
@@ -5868,6 +5995,9 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorObjectiveState = new TrapFloorObjectiveState(
                     matchState.Id,
                     trapFloorTemplate.ActiveMode.RequiredKeyCount);
+                trapFloorTurnState = new TrapFloorTurnState(
+                    matchState.Id,
+                    activeSession.Request.ActivePlayerIds);
             }
             trapFloorCollapseUseCase = new TrapFloorCollapseUseCase(
                 trapFloorTemplate,
@@ -5881,6 +6011,21 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorTemplate,
                 trapFloorObjectiveState,
                 trapFloorActivityFeed);
+            trapFloorTurnService = new TrapFloorTurnService(
+                trapFloorTemplate,
+                trapFloorTurnState,
+                controllerInputHandService);
+            if (pendingRestoredTrapFloorState == null)
+            {
+                ControllerInputHandDrawResult initialDraw = trapFloorTurnService.DrawForCurrentPlayer(
+                    matchState,
+                    CreateCommandContext(trapFloorTurnState.ActivePlayerId));
+                if (!initialDraw.Succeeded)
+                {
+                    throw new InvalidOperationException(
+                        $"Trap Floor could not start the first Player turn: {initialDraw.Error}.");
+                }
+            }
             activeFloorRevealActivity = null;
         }
 
@@ -8197,25 +8342,32 @@ namespace ConsoleCards.Presentation.Prototype
 
         private int AvailableControllerDeckCount(ContainerId sourceDeckContainerId)
         {
-            return IsLocalControllerDeck(sourceDeckContainerId)
+            return IsAssistedControllerDeck(sourceDeckContainerId)
                 ? matchState.GetContainer(sourceDeckContainerId).Count
                 : 0;
         }
 
-        private TrapFloorPlayerSetupDefinition GetLocalTrapFloorPlayerSetup()
+        private TrapFloorPlayerSetupDefinition GetAssistedTrapFloorPlayerSetup()
         {
-            if (trapFloorTemplate == null)
-                throw new InvalidOperationException("Controller assistance requires an active authored Game Template.");
+            if (trapFloorTemplate == null
+                || trapFloorTurnState == null
+                || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
+            {
+                throw new InvalidOperationException(
+                    "Controller assistance requires an active Trap Floor Player turn.");
+            }
+
             for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
             {
                 TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[i];
-                if (player.SeatId == localSeatId)
+                if (matchState.Seats.TryGetValue(player.SeatId, out SeatState seat)
+                    && seat.OccupantPlayerId == trapFloorTurnState.ActivePlayerId)
                 {
                     return player;
                 }
             }
 
-            throw new InvalidOperationException("The local Player has no authored Controller Hand setup.");
+            throw new InvalidOperationException("The active Player has no authored Controller Hand setup.");
         }
 
         private void ShowMessage(string message)

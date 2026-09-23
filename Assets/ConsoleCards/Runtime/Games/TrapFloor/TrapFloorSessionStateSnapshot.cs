@@ -21,11 +21,17 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly TrapFloorCollapseRollState lastRoll;
         private readonly PhysicalObjectState lastXAxisState;
         private readonly PhysicalObjectState lastYAxisState;
+        private readonly PlayerId[] turnPlayerOrder;
+        private readonly int turnRound;
+        private readonly TrapFloorTurnPhase turnPhase;
+        private readonly int activeTurnPlayerIndex;
+        private readonly int floorOperatorIndex;
 
         private TrapFloorSessionStateSnapshot(
             TrapFloorActivityFeedState activity,
             TrapFloorObjectiveState objective,
-            TrapFloorCollapseState collapse)
+            TrapFloorCollapseState collapse,
+            TrapFloorTurnState turn)
         {
             MatchId = activity.MatchId;
             activityEntries = Copy(activity.Entries);
@@ -41,6 +47,12 @@ namespace ConsoleCards.Games.TrapFloor
             lastRoll = collapse.LastRoll;
             lastXAxisState = collapse.LastResolvedXAxisPhysicalState;
             lastYAxisState = collapse.LastResolvedYAxisPhysicalState;
+            turnPlayerOrder = Copy(turn.PlayerOrder);
+            TrapFloorTurnPosition turnPosition = turn.CapturePosition();
+            turnRound = turnPosition.Round;
+            turnPhase = turnPosition.Phase;
+            activeTurnPlayerIndex = turnPosition.ActivePlayerIndex;
+            floorOperatorIndex = turnPosition.FloorOperatorIndex;
         }
 
         public MatchId MatchId { get; }
@@ -48,14 +60,18 @@ namespace ConsoleCards.Games.TrapFloor
         public static TrapFloorSessionStateSnapshot Capture(
             TrapFloorActivityFeedState activity,
             TrapFloorObjectiveState objective,
-            TrapFloorCollapseState collapse)
+            TrapFloorCollapseState collapse,
+            TrapFloorTurnState turn)
         {
             if (activity == null) throw new ArgumentNullException(nameof(activity));
             if (objective == null) throw new ArgumentNullException(nameof(objective));
             if (collapse == null) throw new ArgumentNullException(nameof(collapse));
-            if (activity.MatchId != objective.MatchId || activity.MatchId != collapse.MatchId)
+            if (turn == null) throw new ArgumentNullException(nameof(turn));
+            if (activity.MatchId != objective.MatchId
+                || activity.MatchId != collapse.MatchId
+                || activity.MatchId != turn.MatchId)
                 throw new ArgumentException("Trap Floor snapshot state must belong to one Match.");
-            return new TrapFloorSessionStateSnapshot(activity, objective, collapse);
+            return new TrapFloorSessionStateSnapshot(activity, objective, collapse, turn);
         }
 
         public TrapFloorSessionState Restore()
@@ -72,7 +88,14 @@ namespace ConsoleCards.Games.TrapFloor
                 lastRoll,
                 lastXAxisState,
                 lastYAxisState);
-            return new TrapFloorSessionState(activity, objective, collapse);
+            TrapFloorTurnState turn = new TrapFloorTurnState(
+                MatchId,
+                turnPlayerOrder,
+                turnRound,
+                turnPhase,
+                activeTurnPlayerIndex,
+                floorOperatorIndex);
+            return new TrapFloorSessionState(activity, objective, collapse, turn);
         }
 
         private static T[] Copy<T>(IReadOnlyList<T> source)
@@ -88,15 +111,18 @@ namespace ConsoleCards.Games.TrapFloor
         internal TrapFloorSessionState(
             TrapFloorActivityFeedState activity,
             TrapFloorObjectiveState objective,
-            TrapFloorCollapseState collapse)
+            TrapFloorCollapseState collapse,
+            TrapFloorTurnState turn)
         {
             Activity = activity;
             Objective = objective;
             Collapse = collapse;
+            Turn = turn;
         }
 
         public TrapFloorActivityFeedState Activity { get; }
         public TrapFloorObjectiveState Objective { get; }
         public TrapFloorCollapseState Collapse { get; }
+        public TrapFloorTurnState Turn { get; }
     }
 }
