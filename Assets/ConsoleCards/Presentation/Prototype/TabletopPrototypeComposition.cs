@@ -3160,25 +3160,25 @@ namespace ConsoleCards.Presentation.Prototype
                     : trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
                         ? $"{FormatPlayerName(trapFloorTurnState.ActivePlayerId).ToUpperInvariant()} TURN"
                         : "FLOOR TURN";
-                string detail = CurrentTrapFloorCollapseStatusText();
+                string turnDetail = CurrentTrapFloorCollapseStatusText();
                 if (!trapFloorTurnState.IsCurrentFloorFailed
                     && trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
                 {
-                    detail += $"\nOperator: {FormatPlayerName(trapFloorTurnState.FloorOperatorPlayerId)}";
+                    turnDetail += $"\nOperator: {FormatPlayerName(trapFloorTurnState.FloorOperatorPlayerId)}";
                 }
 
-                PrototypeTrapFloorStatusModel status = new PrototypeTrapFloorStatusModel(
+                PrototypeTrapFloorStatusModel turnStatus = new PrototypeTrapFloorStatusModel(
                     $"ROUND {trapFloorTurnState.CurrentRound}",
                     phase,
                     $"KEYS {trapFloorObjectiveState.CollectedKeyCount} / "
                         + $"{trapFloorObjectiveState.RequiredKeyCount}\n{CurrentTrapFloorPlayerStatesText()}",
-                    detail,
+                    turnDetail,
                     trapFloorTurnState.IsCurrentFloorFailed
                         ? "ALL PLAYERS ELIMINATED"
                         : trapFloorObjectiveState.IsWon ? "VICTORY" : string.Empty,
                     "Turn tracking is optional assistance; freeform tabletop actions remain available.");
                 runtimeUi.ShowTrapFloorStatus(
-                    status,
+                    turnStatus,
                     BuildFloorfallStatusModel(),
                     BuildTrapFloorTurnActions());
                 return;
