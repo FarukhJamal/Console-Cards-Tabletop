@@ -338,6 +338,7 @@ namespace ConsoleCards.Games.TrapFloor
         NoUnresolvedTrap = 5,
         NoPendingTrapConsequence = 6,
         PawnFloorUnavailable = 7,
+        NoValidDodgeDestination = 8,
     }
 
     public readonly struct TrapFloorAbilityActivationResult
@@ -482,6 +483,12 @@ namespace ConsoleCards.Games.TrapFloor
                     TrapFloorAbilityActivationError.PawnFloorUnavailable,
                     effect);
             }
+            if (dodgeAssistance != null && dodgeAssistance.TargetFloorCardIds.Count == 0)
+            {
+                return TrapFloorAbilityActivationResult.Failure(
+                    TrapFloorAbilityActivationError.NoValidDodgeDestination,
+                    effect);
+            }
 
             trap.SetDisposition(
                 effect == TrapFloorAbilityEffect.Dodge
@@ -496,8 +503,7 @@ namespace ConsoleCards.Games.TrapFloor
             if (dodgeAssistance != null)
             {
                 state.ClearDodgeAssistance();
-                if (dodgeAssistance.TargetFloorCardIds.Count > 0)
-                    state.BeginDodgeAssistance(dodgeAssistance);
+                state.BeginDodgeAssistance(dodgeAssistance);
             }
             activityFeed.RecordAbilityUsed(
                 insertion.AcceptedRevision,

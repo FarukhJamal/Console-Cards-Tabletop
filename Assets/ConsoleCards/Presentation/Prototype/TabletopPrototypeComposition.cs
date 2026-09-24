@@ -8317,6 +8317,8 @@ namespace ConsoleCards.Presentation.Prototype
                     return $"{effect} assistance activates only for the active Player.";
                 case TrapFloorAbilityActivationError.PawnFloorUnavailable:
                     return "Dodge could not identify the active Player's current Floor.";
+                case TrapFloorAbilityActivationError.NoValidDodgeDestination:
+                    return "Dodge unavailable — no adjacent Floor.";
                 default:
                     return $"{effect} assistance could not resolve ({error}).";
             }
