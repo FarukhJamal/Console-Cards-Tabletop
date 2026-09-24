@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using ConsoleCards.Application.Commands;
+using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Events;
 using ConsoleCards.Core.Identifiers;
@@ -25,6 +26,53 @@ namespace ConsoleCards.Games.TrapFloor
         Resolved = 1,
         Disarmed = 2,
         Shielded = 3,
+        Dodged = 4,
+    }
+
+    public sealed class TrapFloorDodgeAssistanceState
+    {
+        private readonly ReadOnlyCollection<TabletopObjectId> targetFloorCardIds;
+
+        internal TrapFloorDodgeAssistanceState(
+            PlayerId playerId,
+            TabletopObjectId pawnId,
+            TableCoordinate pawnStartPosition,
+            TrapFloorCoordinate originCoordinate,
+            IEnumerable<TabletopObjectId> targetFloorCardIds)
+        {
+            if (playerId.IsEmpty) throw new ArgumentException("Dodge Player ID cannot be empty.", nameof(playerId));
+            if (pawnId.IsEmpty) throw new ArgumentException("Dodge Pawn ID cannot be empty.", nameof(pawnId));
+            if (targetFloorCardIds == null) throw new ArgumentNullException(nameof(targetFloorCardIds));
+
+            List<TabletopObjectId> targets = new List<TabletopObjectId>();
+            HashSet<TabletopObjectId> uniqueTargets = new HashSet<TabletopObjectId>();
+            foreach (TabletopObjectId targetFloorCardId in targetFloorCardIds)
+            {
+                if (targetFloorCardId.IsEmpty || !uniqueTargets.Add(targetFloorCardId))
+                    throw new ArgumentException("Dodge target Floor IDs must be non-empty and unique.", nameof(targetFloorCardIds));
+                targets.Add(targetFloorCardId);
+            }
+
+            PlayerId = playerId;
+            PawnId = pawnId;
+            PawnStartPosition = pawnStartPosition;
+            OriginCoordinate = originCoordinate;
+            this.targetFloorCardIds = new ReadOnlyCollection<TabletopObjectId>(targets);
+        }
+
+        public PlayerId PlayerId { get; }
+        public TabletopObjectId PawnId { get; }
+        public TableCoordinate PawnStartPosition { get; }
+        public TrapFloorCoordinate OriginCoordinate { get; }
+        public IReadOnlyList<TabletopObjectId> TargetFloorCardIds => targetFloorCardIds;
+
+        internal TrapFloorDodgeAssistanceState Copy() =>
+            new TrapFloorDodgeAssistanceState(
+                PlayerId,
+                PawnId,
+                PawnStartPosition,
+                OriginCoordinate,
+                targetFloorCardIds);
     }
 
     public readonly struct TrapFloorAbilityActivationRecord : IEquatable<TrapFloorAbilityActivationRecord>
@@ -125,6 +173,7 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly ReadOnlyCollection<TrapFloorTrapResolutionRecord> readOnlyTrapRecords;
         private readonly HashSet<TrapFloorAbilityActivationRecord> abilityActivations =
             new HashSet<TrapFloorAbilityActivationRecord>();
+        private TrapFloorDodgeAssistanceState activeDodgeAssistance;
 
         public TrapFloorAbilityResolutionState(MatchId matchId)
         {
@@ -135,6 +184,7 @@ namespace ConsoleCards.Games.TrapFloor
 
         public MatchId MatchId { get; }
         public IReadOnlyList<TrapFloorTrapResolutionRecord> TrapRecords => readOnlyTrapRecords;
+        public TrapFloorDodgeAssistanceState ActiveDodgeAssistance => activeDodgeAssistance;
         public bool HasAbilityActivatedThisTurn(
             TabletopObjectId cardInstanceId,
             PlayerId playerId,
@@ -210,6 +260,22 @@ namespace ConsoleCards.Games.TrapFloor
                 new TrapFloorAbilityActivationRecord(abilityCardId, playerId, round));
         }
 
+        internal void BeginDodgeAssistance(TrapFloorDodgeAssistanceState assistance)
+        {
+            activeDodgeAssistance = assistance?.Copy()
+                ?? throw new ArgumentNullException(nameof(assistance));
+        }
+
+        internal bool ClearDodgeAssistance()
+        {
+            if (activeDodgeAssistance == null) return false;
+            activeDodgeAssistance = null;
+            return true;
+        }
+
+        internal TrapFloorDodgeAssistanceState CopyDodgeAssistance() =>
+            activeDodgeAssistance?.Copy();
+
         internal TrapFloorTrapResolutionRecord[] CopyTrapRecords()
         {
             TrapFloorTrapResolutionRecord[] copy = new TrapFloorTrapResolutionRecord[trapRecords.Count];
@@ -227,7 +293,8 @@ namespace ConsoleCards.Games.TrapFloor
 
         internal void Restore(
             IEnumerable<TrapFloorTrapResolutionRecord> restoredTrapRecords,
-            IEnumerable<TrapFloorAbilityActivationRecord> restoredAbilityActivations)
+            IEnumerable<TrapFloorAbilityActivationRecord> restoredAbilityActivations,
+            TrapFloorDodgeAssistanceState restoredDodgeAssistance)
         {
             if (restoredTrapRecords == null) throw new ArgumentNullException(nameof(restoredTrapRecords));
             if (restoredAbilityActivations == null) throw new ArgumentNullException(nameof(restoredAbilityActivations));
@@ -256,6 +323,8 @@ namespace ConsoleCards.Games.TrapFloor
                         nameof(restoredAbilityActivations));
                 }
             }
+
+            activeDodgeAssistance = restoredDodgeAssistance?.Copy();
         }
     }
 
@@ -268,6 +337,7 @@ namespace ConsoleCards.Games.TrapFloor
         CardIdentityMismatch = 4,
         NoUnresolvedTrap = 5,
         NoPendingTrapConsequence = 6,
+        PawnFloorUnavailable = 7,
     }
 
     public readonly struct TrapFloorAbilityActivationResult
@@ -312,17 +382,35 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly TrapFloorAbilityResolutionState state;
         private readonly TrapFloorTurnState turnState;
         private readonly TrapFloorActivityFeedState activityFeed;
+        private readonly TrapFloorTemplateDefinition template;
+        private readonly TrapFloorCollapseState collapseState;
 
         public TrapFloorAbilityResolutionService(
             TrapFloorAbilityResolutionState state,
             TrapFloorTurnState turnState,
             TrapFloorActivityFeedState activityFeed)
+            : this(state, turnState, activityFeed, null, null)
+        {
+        }
+
+        public TrapFloorAbilityResolutionService(
+            TrapFloorAbilityResolutionState state,
+            TrapFloorTurnState turnState,
+            TrapFloorActivityFeedState activityFeed,
+            TrapFloorTemplateDefinition template,
+            TrapFloorCollapseState collapseState)
         {
             this.state = state ?? throw new ArgumentNullException(nameof(state));
             this.turnState = turnState ?? throw new ArgumentNullException(nameof(turnState));
             this.activityFeed = activityFeed ?? throw new ArgumentNullException(nameof(activityFeed));
+            this.template = template;
+            this.collapseState = collapseState;
+            if ((template == null) != (collapseState == null))
+                throw new ArgumentException("Dodge assistance requires both Template and Collapse state.");
             if (state.MatchId != turnState.MatchId || state.MatchId != activityFeed.MatchId)
                 throw new ArgumentException("Trap Floor Ability services must belong to one Match.");
+            if (collapseState != null && collapseState.MatchId != state.MatchId)
+                throw new ArgumentException("Trap Floor Dodge state must belong to the same Match.");
         }
 
         public TrapFloorAbilityActivationResult Activate(
@@ -335,7 +423,9 @@ namespace ConsoleCards.Games.TrapFloor
             if (cardDefinition == null) throw new ArgumentNullException(nameof(cardDefinition));
 
             TrapFloorAbilityEffect effect = ResolveEffect(cardDefinition.EffectMetadata);
-            if (effect != TrapFloorAbilityEffect.Disarm && effect != TrapFloorAbilityEffect.Shield)
+            if (effect != TrapFloorAbilityEffect.Disarm
+                && effect != TrapFloorAbilityEffect.Shield
+                && effect != TrapFloorAbilityEffect.Dodge)
                 return TrapFloorAbilityActivationResult.Failure(
                     TrapFloorAbilityActivationError.UnsupportedAbility,
                     effect);
@@ -357,7 +447,9 @@ namespace ConsoleCards.Games.TrapFloor
                     effect);
             if (turnState.Phase != TrapFloorTurnPhase.PlayerTurn
                 || turnState.IsCurrentFloorFailed
-                || insertion.ActorPlayerId != turnState.ActivePlayerId)
+                || insertion.ActorPlayerId != turnState.ActivePlayerId
+                || (effect == TrapFloorAbilityEffect.Dodge
+                    && insertion.ConsoleOwnerPlayerId != turnState.ActivePlayerId))
                 return TrapFloorAbilityActivationResult.Failure(
                     TrapFloorAbilityActivationError.ActorIsNotActivePlayer,
                     effect);
@@ -382,22 +474,147 @@ namespace ConsoleCards.Games.TrapFloor
                     effect);
             }
 
+            TrapFloorDodgeAssistanceState dodgeAssistance = null;
+            if (effect == TrapFloorAbilityEffect.Dodge
+                && !TryCreateDodgeAssistance(matchState, turnState.ActivePlayerId, out dodgeAssistance))
+            {
+                return TrapFloorAbilityActivationResult.Failure(
+                    TrapFloorAbilityActivationError.PawnFloorUnavailable,
+                    effect);
+            }
+
             trap.SetDisposition(
-                shield
-                    ? TrapFloorTrapResolutionDisposition.Shielded
-                    : TrapFloorTrapResolutionDisposition.Disarmed);
+                effect == TrapFloorAbilityEffect.Dodge
+                    ? TrapFloorTrapResolutionDisposition.Dodged
+                    : shield
+                        ? TrapFloorTrapResolutionDisposition.Shielded
+                        : TrapFloorTrapResolutionDisposition.Disarmed);
             state.RecordAbilityActivation(
                 insertion.CardInstanceId,
                 turnState.ActivePlayerId,
                 turnState.CurrentRound);
+            if (dodgeAssistance != null)
+            {
+                state.ClearDodgeAssistance();
+                if (dodgeAssistance.TargetFloorCardIds.Count > 0)
+                    state.BeginDodgeAssistance(dodgeAssistance);
+            }
             activityFeed.RecordAbilityUsed(
                 insertion.AcceptedRevision,
                 insertion.ActorPlayerId,
                 trap,
-                shield
-                    ? TrapFloorActivityKind.UsedShield
-                    : TrapFloorActivityKind.UsedDisarm);
+                effect == TrapFloorAbilityEffect.Dodge
+                    ? TrapFloorActivityKind.UsedDodge
+                    : shield
+                        ? TrapFloorActivityKind.UsedShield
+                        : TrapFloorActivityKind.UsedDisarm);
             return TrapFloorAbilityActivationResult.Accepted(effect, trap);
+        }
+
+        public bool ClearDodgeAssistance() => state.ClearDodgeAssistance();
+
+        public bool ClearDodgeAssistanceIfPawnMoved(MatchState matchState)
+        {
+            TrapFloorDodgeAssistanceState assistance = state.ActiveDodgeAssistance;
+            if (assistance == null
+                || matchState == null
+                || matchState.Id != state.MatchId
+                || !matchState.Pawns.TryGetValue(assistance.PawnId, out PawnState pawn)
+                || pawn.BaseState.Pose.Position == assistance.PawnStartPosition)
+            {
+                return false;
+            }
+
+            return state.ClearDodgeAssistance();
+        }
+
+        private bool TryCreateDodgeAssistance(
+            MatchState matchState,
+            PlayerId playerId,
+            out TrapFloorDodgeAssistanceState assistance)
+        {
+            assistance = null;
+            if (template == null || collapseState == null) return false;
+
+            TrapFloorPlayerSetupDefinition player = null;
+            for (int i = 0; i < template.Players.Count; i++)
+            {
+                TrapFloorPlayerSetupDefinition candidate = template.Players[i];
+                if (matchState.GetSeat(candidate.SeatId).OccupantPlayerId == playerId)
+                {
+                    player = candidate;
+                    break;
+                }
+            }
+
+            if (player == null
+                || !matchState.Pawns.TryGetValue(player.PawnId, out PawnState pawn)
+                || !TryGetPawnFloorCoordinate(matchState, pawn, out TrapFloorCoordinate origin))
+            {
+                return false;
+            }
+
+            List<TabletopObjectId> targets = new List<TabletopObjectId>(4);
+            AddDodgeTarget(origin.X, origin.Y + 1, targets);
+            if (origin.Y > TrapFloorCoordinate.MinimumAxisValue)
+                AddDodgeTarget(origin.X, origin.Y - 1, targets);
+            if (origin.X > TrapFloorCoordinate.MinimumAxisValue)
+                AddDodgeTarget(origin.X - 1, origin.Y, targets);
+            AddDodgeTarget(origin.X + 1, origin.Y, targets);
+            assistance = new TrapFloorDodgeAssistanceState(
+                playerId,
+                player.PawnId,
+                pawn.BaseState.Pose.Position,
+                origin,
+                targets);
+            return true;
+        }
+
+        private bool TryGetPawnFloorCoordinate(
+            MatchState matchState,
+            PawnState pawn,
+            out TrapFloorCoordinate coordinate)
+        {
+            TableCoordinate pawnPosition = pawn.BaseState.Pose.Position;
+            double halfWidth = template.Grid.CellWidth * 0.5d;
+            double halfHeight = template.Grid.CellHeight * 0.5d;
+            double nearestDistanceSquared = double.MaxValue;
+            bool found = false;
+            coordinate = default;
+            foreach (KeyValuePair<TrapFloorCoordinate, TabletopObjectId> floor in template.FloorCardIds)
+            {
+                if (!matchState.Cards.TryGetValue(floor.Value, out CardInstanceState floorCard)) continue;
+                TableCoordinate floorPosition = floorCard.BaseState.Pose.Position;
+                double deltaX = pawnPosition.X - floorPosition.X;
+                double deltaY = pawnPosition.Y - floorPosition.Y;
+                double distanceSquared = (deltaX * deltaX) + (deltaY * deltaY);
+                if (Math.Abs(deltaX) <= halfWidth
+                    && Math.Abs(deltaY) <= halfHeight
+                    && distanceSquared < nearestDistanceSquared)
+                {
+                    coordinate = floor.Key;
+                    nearestDistanceSquared = distanceSquared;
+                    found = true;
+                }
+            }
+
+            return found;
+        }
+
+        private void AddDodgeTarget(int x, int y, ICollection<TabletopObjectId> targets)
+        {
+            if (x < TrapFloorCoordinate.MinimumAxisValue
+                || y < TrapFloorCoordinate.MinimumAxisValue)
+            {
+                return;
+            }
+
+            TrapFloorCoordinate coordinate = new TrapFloorCoordinate(x, y);
+            if (template.TryGetFloorCardId(coordinate, out TabletopObjectId floorCardId)
+                && !collapseState.IsCollapsed(floorCardId))
+            {
+                targets.Add(floorCardId);
+            }
         }
 
         public TrapFloorTurnAdvanceResult ResolveSupportedTrap(

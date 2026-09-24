@@ -33,6 +33,7 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly bool isCurrentFloorFailed;
         private readonly TrapFloorTrapResolutionRecord[] trapResolutionRecords;
         private readonly TrapFloorAbilityActivationRecord[] abilityActivations;
+        private readonly TrapFloorDodgeAssistanceState dodgeAssistance;
 
         private TrapFloorSessionStateSnapshot(
             TrapFloorActivityFeedState activity,
@@ -67,6 +68,7 @@ namespace ConsoleCards.Games.TrapFloor
             isCurrentFloorFailed = turn.IsCurrentFloorFailed;
             trapResolutionRecords = abilityResolution.CopyTrapRecords();
             abilityActivations = abilityResolution.CopyAbilityActivations();
+            dodgeAssistance = abilityResolution.CopyDodgeAssistance();
         }
 
         public MatchId MatchId { get; }
@@ -124,7 +126,7 @@ namespace ConsoleCards.Games.TrapFloor
                 isCurrentFloorFailed);
             TrapFloorAbilityResolutionState abilityResolution =
                 new TrapFloorAbilityResolutionState(MatchId);
-            abilityResolution.Restore(trapResolutionRecords, abilityActivations);
+            abilityResolution.Restore(trapResolutionRecords, abilityActivations, dodgeAssistance);
             return new TrapFloorSessionState(activity, objective, collapse, turn, abilityResolution);
         }
 
