@@ -10,12 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 35a590c4883b4a5394fe0bd2eb7eb4df, type: 3}
-  m_Name: TrapFloorAvatarClairvoyant
-  m_EditorClassIdentifier: 
-  stableId: 54460014-4f4f-4000-8000-001400000005
-  displayName: Clairvoyant
+  m_Name: TrapFloorAvatarEngineer
+  m_EditorClassIdentifier:
+  stableId: 54460014-4f4f-4000-8000-001400000007
+  displayName: Engineer
   artwork: {fileID: 0}
-  artworkReference: 
+  artworkReference:
   stats: []
   startingAbilities:
-  - {fileID: 11400000, guid: a1111111111141118111111111111111, type: 2}
+  - {fileID: 11400000, guid: a5555555555545558555555555555555, type: 2}

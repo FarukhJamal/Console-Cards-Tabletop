@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates.Definitions;
 using UnityEngine;
@@ -20,8 +21,11 @@ namespace ConsoleCards.Definitions
         [SerializeField, Min(0)] private int quantity = 1;
         [SerializeField] private InputCostDefinition inputCost = new InputCostDefinition();
         [SerializeField] private CardOrientation orientation;
+        [SerializeField] private CardFace defaultFace = CardFace.FaceUp;
         [SerializeField] private string preferredConsolePlacement;
         [SerializeField] private List<string> tags = new List<string>();
+        [SerializeField, TextArea] private string effectMetadata;
+        [SerializeField, TextArea] private string objectiveMetadata;
         [SerializeField] private bool representsControllerInput;
         [SerializeField] private ControllerInput representedControllerInput;
 
@@ -34,8 +38,11 @@ namespace ConsoleCards.Definitions
         public int Quantity => quantity;
         public InputCostDefinition InputCost => inputCost;
         public CardOrientation Orientation => orientation;
+        public CardFace DefaultFace => defaultFace;
         public string PreferredConsolePlacement => preferredConsolePlacement;
         public IReadOnlyList<string> Tags => tags;
+        public string EffectMetadata => effectMetadata;
+        public string ObjectiveMetadata => objectiveMetadata;
         public ControllerInput? RepresentedControllerInput =>
             representsControllerInput ? representedControllerInput : (ControllerInput?)null;
 
@@ -65,7 +72,10 @@ namespace ConsoleCards.Definitions
                 orientation,
                 preferredConsolePlacement,
                 tags,
-                RepresentedControllerInput);
+                RepresentedControllerInput,
+                defaultFace,
+                effectMetadata,
+                objectiveMetadata);
         }
     }
 }

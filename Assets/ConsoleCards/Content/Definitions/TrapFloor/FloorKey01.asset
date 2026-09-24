@@ -13,16 +13,16 @@ MonoBehaviour:
   m_Name: FloorKey01
   m_EditorClassIdentifier: 
   stableId: 54460015-4f4f-4000-8000-001500000017
-  displayName: Key 01
+  displayName: Bronze Key
   category: Key
   description: 'CURRENT STAGE-03 OBJECTIVE - This revealed Key remains UNCLAIMED until a Player chooses Claim Key. A claimed Key contributes to the shared KEYS X / Y objective.'
   frontArtwork: {fileID: 0}
   frontArtworkReference: 
   backArtwork: {fileID: 0}
   backArtworkReference: 
-  quantity: 1
+  quantity: 2
   inputCost:
     requirements: []
   orientation: 0
   preferredConsolePlacement: 
-  tags: [trap-floor, floor-content, current-stage03-reference]
+  tags: [trap-floor, floor-content, key, bronze-key, current-stage03-reference]

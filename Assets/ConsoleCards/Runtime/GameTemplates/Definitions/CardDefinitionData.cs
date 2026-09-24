@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using ConsoleCards.Core.Domain;
 
 namespace ConsoleCards.GameTemplates.Definitions
 {
@@ -21,7 +22,10 @@ namespace ConsoleCards.GameTemplates.Definitions
             CardOrientation orientation,
             string preferredConsolePlacement,
             IEnumerable<string> tags,
-            ControllerInput? representedControllerInput = null)
+            ControllerInput? representedControllerInput = null,
+            CardFace defaultFace = CardFace.FaceUp,
+            string effectMetadata = "",
+            string objectiveMetadata = "")
         {
             if (string.IsNullOrWhiteSpace(stableId)) throw new ArgumentException("Card ID is required.", nameof(stableId));
             if (string.IsNullOrWhiteSpace(displayName)) throw new ArgumentException("Card name is required.", nameof(displayName));
@@ -36,6 +40,9 @@ namespace ConsoleCards.GameTemplates.Definitions
             Quantity = quantity;
             InputCost = inputCost ?? throw new ArgumentNullException(nameof(inputCost));
             Orientation = orientation;
+            if (!Enum.IsDefined(typeof(CardFace), defaultFace))
+                throw new ArgumentOutOfRangeException(nameof(defaultFace));
+            DefaultFace = defaultFace;
             PreferredConsolePlacement = preferredConsolePlacement ?? string.Empty;
             this.tags = new ReadOnlyCollection<string>(new List<string>(tags ?? throw new ArgumentNullException(nameof(tags))));
             if (representedControllerInput.HasValue
@@ -45,6 +52,8 @@ namespace ConsoleCards.GameTemplates.Definitions
             }
 
             RepresentedControllerInput = representedControllerInput;
+            EffectMetadata = effectMetadata ?? string.Empty;
+            ObjectiveMetadata = objectiveMetadata ?? string.Empty;
         }
 
         public string StableId { get; }
@@ -56,8 +65,11 @@ namespace ConsoleCards.GameTemplates.Definitions
         public int Quantity { get; }
         public InputCostData InputCost { get; }
         public CardOrientation Orientation { get; }
+        public CardFace DefaultFace { get; }
         public string PreferredConsolePlacement { get; }
         public IReadOnlyList<string> Tags => tags;
         public ControllerInput? RepresentedControllerInput { get; }
+        public string EffectMetadata { get; }
+        public string ObjectiveMetadata { get; }
     }
 }

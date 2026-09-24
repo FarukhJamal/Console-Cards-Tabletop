@@ -14,8 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   stableId: trap-floor-mode-easy
   displayName: Easy
-  objectiveConfiguration: Find the required Key and bring it to the Exit.
+  objectiveConfiguration: Find any one authored Key and bring it to an applicable Exit.
   requiredKeyCount: 1
+  keyObjectiveRequirementKind: 0
+  specificKeyRequirements: []
   startingAbilityCount: 2
   collapseSchedule: 1
   collapseInterval: 0

@@ -21,11 +21,24 @@ namespace ConsoleCards.Games.TrapFloor
     }
 
     /// <summary>
+    /// Small authored assistance category for Trap consequences. The Card's readable text remains
+    /// authoritative for manual resolution; only explicitly supported categories gain automation.
+    /// </summary>
+    public enum TrapFloorTrapEffectCategory
+    {
+        InformationalManual = 0,
+        EliminateForCurrentRound = 1,
+    }
+
+    /// <summary>
     /// Trap Floor interpretation of one authored Card Definition used in the Floor content set.
     /// Effect execution remains player-enforced or feature-specific assistance.
     /// </summary>
     public sealed class TrapFloorFloorContentDefinition
     {
+        public const string EliminateForCurrentRoundEffectTag =
+            "trap-effect-eliminate-for-current-round";
+
         public TrapFloorFloorContentDefinition(CardDefinitionData card)
         {
             if (card == null) throw new ArgumentNullException(nameof(card));
@@ -50,6 +63,7 @@ namespace ConsoleCards.Games.TrapFloor
             ContentSource = HasTag(card, "current-stage03-reference")
                 ? TrapFloorFloorContentSource.CurrentStage03Reference
                 : TrapFloorFloorContentSource.ProvisionalStage03;
+            TrapEffect = ResolveTrapEffect(card, category);
             AuthoredCard = card;
         }
 
@@ -58,13 +72,19 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorFloorContentCategory category,
             string displayName,
             string displayText,
-            TrapFloorFloorContentSource contentSource = TrapFloorFloorContentSource.ProvisionalStage03)
+            TrapFloorFloorContentSource contentSource = TrapFloorFloorContentSource.ProvisionalStage03,
+            TrapFloorTrapEffectCategory trapEffect = TrapFloorTrapEffectCategory.InformationalManual)
         {
             if (id.IsEmpty) throw new ArgumentException("Floor content Definition ID cannot be empty.", nameof(id));
             if (!Enum.IsDefined(typeof(TrapFloorFloorContentCategory), category))
                 throw new ArgumentOutOfRangeException(nameof(category));
             if (!Enum.IsDefined(typeof(TrapFloorFloorContentSource), contentSource))
                 throw new ArgumentOutOfRangeException(nameof(contentSource));
+            if (!Enum.IsDefined(typeof(TrapFloorTrapEffectCategory), trapEffect))
+                throw new ArgumentOutOfRangeException(nameof(trapEffect));
+            if (category != TrapFloorFloorContentCategory.Trap
+                && trapEffect != TrapFloorTrapEffectCategory.InformationalManual)
+                throw new ArgumentException("Only Trap Floor Trap content can define an assisted Trap effect.", nameof(trapEffect));
             if (string.IsNullOrWhiteSpace(displayName))
                 throw new ArgumentException("Floor content display name cannot be empty.", nameof(displayName));
 
@@ -73,6 +93,7 @@ namespace ConsoleCards.Games.TrapFloor
             DisplayName = displayName;
             DisplayText = displayText ?? throw new ArgumentNullException(nameof(displayText));
             ContentSource = contentSource;
+            TrapEffect = trapEffect;
         }
 
         public ObjectDefinitionId Id { get; }
@@ -80,7 +101,24 @@ namespace ConsoleCards.Games.TrapFloor
         public string DisplayName { get; }
         public string DisplayText { get; }
         public TrapFloorFloorContentSource ContentSource { get; }
+        public TrapFloorTrapEffectCategory TrapEffect { get; }
         public CardDefinitionData AuthoredCard { get; }
+
+        public bool HasSupportedAssistedTrapEffect =>
+            Category == TrapFloorFloorContentCategory.Trap
+            && TrapEffect == TrapFloorTrapEffectCategory.EliminateForCurrentRound;
+
+        private static TrapFloorTrapEffectCategory ResolveTrapEffect(
+            CardDefinitionData card,
+            TrapFloorFloorContentCategory category)
+        {
+            if (category != TrapFloorFloorContentCategory.Trap)
+                return TrapFloorTrapEffectCategory.InformationalManual;
+
+            return HasTag(card, EliminateForCurrentRoundEffectTag)
+                ? TrapFloorTrapEffectCategory.EliminateForCurrentRound
+                : TrapFloorTrapEffectCategory.InformationalManual;
+        }
 
         private static bool HasTag(CardDefinitionData card, string tag)
         {

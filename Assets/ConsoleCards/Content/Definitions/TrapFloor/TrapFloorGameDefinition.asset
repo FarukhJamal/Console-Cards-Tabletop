@@ -47,17 +47,8 @@ MonoBehaviour:
     - {fileID: 11400000, guid: b0000000000000000000000000000017, type: 2}
     - {fileID: 11400000, guid: b0000000000000000000000000000018, type: 2}
     - {fileID: 11400000, guid: b0000000000000000000000000000019, type: 2}
-    - {fileID: 11400000, guid: b000000000000000000000000000001a, type: 2}
-    - {fileID: 11400000, guid: b000000000000000000000000000001b, type: 2}
-    - {fileID: 11400000, guid: b000000000000000000000000000001c, type: 2}
     - {fileID: 11400000, guid: b000000000000000000000000000001d, type: 2}
     - {fileID: 11400000, guid: b000000000000000000000000000001e, type: 2}
-    - {fileID: 11400000, guid: a1111111111141118111111111111111, type: 2}
-    - {fileID: 11400000, guid: a2222222222242228222222222222222, type: 2}
-    - {fileID: 11400000, guid: a3333333333343338333333333333333, type: 2}
-    - {fileID: 11400000, guid: a4444444444444448444444444444444, type: 2}
-    - {fileID: 11400000, guid: a5555555555545558555555555555555, type: 2}
-    - {fileID: 11400000, guid: a6666666666646668666666666666666, type: 2}
   - stableId: trap-floor-abilities
     displayName: Trap Floor Abilities
     cards:
@@ -66,7 +57,6 @@ MonoBehaviour:
     - {fileID: 11400000, guid: a3333333333343338333333333333333, type: 2}
     - {fileID: 11400000, guid: a4444444444444448444444444444444, type: 2}
     - {fileID: 11400000, guid: a5555555555545558555555555555555, type: 2}
-    - {fileID: 11400000, guid: a6666666666646668666666666666666, type: 2}
   - stableId: trap-floor-controller-inputs
     displayName: Trap Floor Controller Inputs
     cards:
@@ -85,6 +75,9 @@ MonoBehaviour:
   defaultModeStableId: trap-floor-mode-easy
   avatars:
   - {fileID: 11400000, guid: 87d4588b09104a59b049d98f4d3f51c1, type: 2}
+  - {fileID: 11400000, guid: 91a2b3c4d5e64f708192a3b4c5d6e7f8, type: 2}
+  - {fileID: 11400000, guid: a2b3c4d5e6f7418092a3b4c5d6e7f809, type: 2}
+  - {fileID: 11400000, guid: b3c4d5e6f7084192a3b4c5d6e7f8091a, type: 2}
   consoleConfiguration: {fileID: 11400000, guid: c68969506b5d405e88dfb4f30fe321c8, type: 2}
   inputVocabulary:
   - 0

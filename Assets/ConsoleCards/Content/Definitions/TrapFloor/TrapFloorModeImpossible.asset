@@ -14,8 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   stableId: trap-floor-mode-impossible
   displayName: Impossible
-  objectiveConfiguration: Survive while finding three required Keys and reaching the Exit.
+  objectiveConfiguration: Survive while finding any three authored Keys and reaching an applicable Exit.
   requiredKeyCount: 3
+  keyObjectiveRequirementKind: 0
+  specificKeyRequirements: []
   startingAbilityCount: 0
   collapseSchedule: 2
   collapseInterval: 0

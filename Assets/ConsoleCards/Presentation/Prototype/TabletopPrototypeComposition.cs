@@ -4410,7 +4410,14 @@ namespace ConsoleCards.Presentation.Prototype
                     true,
                     () => SearchAndRevealFloorCard(targetCardId)));
             }
-
+            else if (floorCard.IsRevealed
+                && floorCard.Content.HasSupportedAssistedTrapEffect)
+            {
+                actions.Add(new PrototypePopupActionOption(
+                    "Resolve Trap",
+                    CanResolveTrapFloorTrap(),
+                    () => ResolveTrapFloorTrap(targetCardId)));
+            }
             else if (trapFloorObjectiveState != null && trapFloorObjectiveUseCase != null)
             {
                 if (floorCard.Content.Category == TrapFloorFloorContentCategory.Key
@@ -4455,6 +4462,10 @@ namespace ConsoleCards.Presentation.Prototype
         {
             string description =
                 $"Revealed: {floorCard.Content.Category} — {floorCard.Content.DisplayName}";
+            if (floorCard.Content.Category == TrapFloorFloorContentCategory.Trap)
+            {
+                return $"{description}\n{TrapFloorTrapEffectDescription(floorCard.Content)}";
+            }
             if (trapFloorObjectiveState == null)
             {
                 return description;
@@ -4476,6 +4487,53 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             return description;
+        }
+
+        private bool CanResolveTrapFloorTrap()
+        {
+            return trapFloorTurnState != null
+                && trapFloorTurnService != null
+                && !trapFloorTurnState.IsCurrentFloorFailed
+                && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn;
+        }
+
+        private static string TrapFloorTrapEffectDescription(
+            TrapFloorFloorContentDefinition content)
+        {
+            return content.TrapEffect == TrapFloorTrapEffectCategory.EliminateForCurrentRound
+                ? "Assisted consequence: eliminate the resolving Player for the current Round."
+                : "Manual consequence: follow the authored Trap text.";
+        }
+
+        private void ResolveTrapFloorTrap(TabletopObjectId floorCardId)
+        {
+            if (!CanResolveTrapFloorTrap()
+                || !trapFloorTemplate.TryGetFloorCardState(
+                    matchState,
+                    floorCardId,
+                    out TrapFloorFloorCardState floorCard)
+                || !floorCard.IsRevealed
+                || !floorCard.Content.HasSupportedAssistedTrapEffect)
+            {
+                ShowMessage("Resolve Trap is unavailable for this Trap or assistance state.");
+                return;
+            }
+
+            PlayerId affectedPlayerId = trapFloorTurnState.ActivePlayerId;
+            TrapFloorTurnAdvanceResult result = trapFloorTurnService.MarkPlayerEliminatedForCurrentRound(
+                matchState,
+                CreateCommandContext(affectedPlayerId),
+                affectedPlayerId);
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Resolve Trap rejected: {result.Error}.");
+                return;
+            }
+
+            CloseContextMenu();
+            CloseCardInspect();
+            RefreshTrapFloorStatusUi();
+            ShowMessage($"{FormatPlayerName(affectedPlayerId).ToUpperInvariant()} ELIMINATED");
         }
 
         private void SearchAndRevealFloorCard(TabletopObjectId floorCardId)
@@ -4853,7 +4911,18 @@ namespace ConsoleCards.Presentation.Prototype
                     ? FormatInputCost(floorCardDefinition.InputCost)
                     : string.Empty;
                 PrototypePopupActionOption? primaryAction = null;
-                if (floorCard.Content.Category == TrapFloorFloorContentCategory.Key
+                if (floorCard.Content.Category == TrapFloorFloorContentCategory.Trap)
+                {
+                    objectiveContext = TrapFloorTrapEffectDescription(floorCard.Content) + "\n";
+                    if (floorCard.Content.HasSupportedAssistedTrapEffect)
+                    {
+                        primaryAction = new PrototypePopupActionOption(
+                            "Resolve Trap",
+                            CanResolveTrapFloorTrap(),
+                            () => ResolveTrapFloorTrap(targetCardId));
+                    }
+                }
+                else if (floorCard.Content.Category == TrapFloorFloorContentCategory.Key
                     && trapFloorObjectiveState != null)
                 {
                     if (trapFloorObjectiveState.TryGetClaim(

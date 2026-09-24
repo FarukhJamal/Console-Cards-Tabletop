@@ -24,6 +24,12 @@ namespace ConsoleCards.GameTemplates.Definitions
         Survival = 1,
     }
 
+    public enum KeyObjectiveRequirementKind
+    {
+        AnyKeyCount = 0,
+        SpecificKeyTypes = 1,
+    }
+
     public enum CollapseScheduleKind
     {
         None = 0,

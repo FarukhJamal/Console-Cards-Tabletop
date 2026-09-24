@@ -14,9 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   stableId: trap-floor-mode-hard
   displayName: Hard
-  objectiveConfiguration: Find three required Keys and bring them to the Exit.
+  objectiveConfiguration: Find any three authored Keys and bring them to an applicable Exit.
   requiredKeyCount: 3
-  startingAbilityCount: 1
+  keyObjectiveRequirementKind: 0
+  specificKeyRequirements: []
+  startingAbilityCount: 0
   collapseSchedule: 1
   collapseInterval: 0
   collapseMetadata: Round-based Collapse; exact interval remains authored later.
