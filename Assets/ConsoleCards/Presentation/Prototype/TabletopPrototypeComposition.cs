@@ -185,6 +185,8 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorCollapseUseCase trapFloorCollapseUseCase;
         private TrapFloorTurnState trapFloorTurnState;
         private TrapFloorTurnService trapFloorTurnService;
+        private TrapFloorAbilityResolutionState trapFloorAbilityResolutionState;
+        private TrapFloorAbilityResolutionService trapFloorAbilityResolutionService;
         private readonly ControllerInputHandService controllerInputHandService =
             new ControllerInputHandService();
         private TrapFloorActivityEntry activeFloorRevealActivity;
@@ -659,6 +661,9 @@ namespace ConsoleCards.Presentation.Prototype
             trapFloorCollapseUseCase = null;
             trapFloorTurnState = null;
             trapFloorTurnService = null;
+            ConsoleCardInteractionAccepted -= HandleTrapFloorConsoleCardInteractionAccepted;
+            trapFloorAbilityResolutionState = null;
+            trapFloorAbilityResolutionService = null;
             activeFloorRevealActivity = null;
             floorfallState = null;
             floorfallService = null;
@@ -1355,7 +1360,8 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorActivityFeed,
                 trapFloorObjectiveState,
                 trapFloorCollapseState,
-                trapFloorTurnState);
+                trapFloorTurnState,
+                trapFloorAbilityResolutionState);
         }
 
         private static string FormatUndoObjectIds(GameTemplateInitialSnapshot snapshot)
@@ -4418,7 +4424,7 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 actions.Add(new PrototypePopupActionOption(
                     "Resolve Trap",
-                    CanResolveTrapFloorTrap(),
+                    CanResolveTrapFloorTrap(targetCardId),
                     () => ResolveTrapFloorTrap(targetCardId)));
             }
             else if (trapFloorObjectiveState != null && trapFloorObjectiveUseCase != null)
@@ -4492,12 +4498,19 @@ namespace ConsoleCards.Presentation.Prototype
             return description;
         }
 
-        private bool CanResolveTrapFloorTrap()
+        private bool CanResolveTrapFloorTrap(TabletopObjectId floorCardId)
         {
             return trapFloorTurnState != null
                 && trapFloorTurnService != null
+                && trapFloorAbilityResolutionService != null
+                && trapFloorAbilityResolutionState != null
                 && !trapFloorTurnState.IsCurrentFloorFailed
-                && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn;
+                && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                && trapFloorAbilityResolutionState.TryGetTrap(
+                    floorCardId,
+                    out TrapFloorTrapResolutionRecord trap)
+                && trap.IsPending
+                && trap.AffectedPlayerId == trapFloorTurnState.ActivePlayerId;
         }
 
         private static string TrapFloorTrapEffectDescription(
@@ -4510,7 +4523,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ResolveTrapFloorTrap(TabletopObjectId floorCardId)
         {
-            if (!CanResolveTrapFloorTrap()
+            if (!CanResolveTrapFloorTrap(floorCardId)
                 || !trapFloorTemplate.TryGetFloorCardState(
                     matchState,
                     floorCardId,
@@ -4523,10 +4536,11 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             PlayerId affectedPlayerId = trapFloorTurnState.ActivePlayerId;
-            TrapFloorTurnAdvanceResult result = trapFloorTurnService.MarkPlayerEliminatedForCurrentRound(
+            TrapFloorTurnAdvanceResult result = trapFloorAbilityResolutionService.ResolveSupportedTrap(
                 matchState,
                 CreateCommandContext(affectedPlayerId),
-                affectedPlayerId);
+                floorCardId,
+                trapFloorTurnService);
             if (!result.Succeeded)
             {
                 ShowMessage($"Resolve Trap rejected: {result.Error}.");
@@ -4921,7 +4935,7 @@ namespace ConsoleCards.Presentation.Prototype
                     {
                         primaryAction = new PrototypePopupActionOption(
                             "Resolve Trap",
-                            CanResolveTrapFloorTrap(),
+                            CanResolveTrapFloorTrap(targetCardId),
                             () => ResolveTrapFloorTrap(targetCardId));
                     }
                 }
@@ -6159,6 +6173,7 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorCollapseState = pendingRestoredTrapFloorState.Collapse;
                 trapFloorObjectiveState = pendingRestoredTrapFloorState.Objective;
                 trapFloorTurnState = pendingRestoredTrapFloorState.Turn;
+                trapFloorAbilityResolutionState = pendingRestoredTrapFloorState.AbilityResolution;
             }
             else
             {
@@ -6173,6 +6188,8 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorTurnState = new TrapFloorTurnState(
                     matchState.Id,
                     activeSession.Request.ActivePlayerIds);
+                trapFloorAbilityResolutionState =
+                    new TrapFloorAbilityResolutionState(matchState.Id);
             }
             trapFloorCollapseUseCase = new TrapFloorCollapseUseCase(
                 trapFloorTemplate,
@@ -6181,7 +6198,8 @@ namespace ConsoleCards.Presentation.Prototype
             trapFloorRevealFloorUseCase = new TrapFloorRevealFloorUseCase(
                 trapFloorTemplate,
                 trapFloorActivityFeed,
-                trapFloorCollapseState);
+                trapFloorCollapseState,
+                trapFloorAbilityResolutionState);
             trapFloorObjectiveUseCase = new TrapFloorObjectiveUseCase(
                 trapFloorTemplate,
                 trapFloorObjectiveState,
@@ -6191,6 +6209,12 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorTurnState,
                 controllerInputHandService,
                 trapFloorActivityFeed);
+            trapFloorAbilityResolutionService = new TrapFloorAbilityResolutionService(
+                trapFloorAbilityResolutionState,
+                trapFloorTurnState,
+                trapFloorActivityFeed);
+            ConsoleCardInteractionAccepted -= HandleTrapFloorConsoleCardInteractionAccepted;
+            ConsoleCardInteractionAccepted += HandleTrapFloorConsoleCardInteractionAccepted;
             activeFloorRevealActivity = null;
         }
 
@@ -8170,6 +8194,12 @@ namespace ConsoleCards.Presentation.Prototype
                 cardName = definition.DisplayName;
             }
 
+            bool inserted = interaction is ConsoleCardInserted;
+            string verb = inserted ? "inserted" : "removed";
+            string direction = inserted ? "into" : "from";
+            ShowMessage(
+                $"{FormatPlayerName(interaction.ActorPlayerId)} {verb} {cardName} {direction} Console");
+
             try
             {
                 ConsoleCardInteractionAccepted?.Invoke(interaction, behavior);
@@ -8178,12 +8208,76 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 Debug.LogException(exception, this);
             }
+        }
 
-            bool inserted = interaction is ConsoleCardInserted;
-            string verb = inserted ? "inserted" : "removed";
-            string direction = inserted ? "into" : "from";
+        private void HandleTrapFloorConsoleCardInteractionAccepted(
+            IConsoleCardInteraction interaction,
+            ConsoleCardBehavior behavior)
+        {
+            if (!(interaction is ConsoleCardInserted insertion)
+                || behavior != ConsoleCardBehavior.ActivateOnInsert
+                || trapFloorAbilityResolutionService == null
+                || !TryGetAuthoredCardDefinition(
+                    interaction.CardDefinitionId,
+                    out CardDefinition definition))
+            {
+                return;
+            }
+
+            TrapFloorAbilityEffect effect =
+                TrapFloorAbilityResolutionService.ResolveEffect(definition.EffectMetadata);
+            if (effect != TrapFloorAbilityEffect.Disarm
+                && effect != TrapFloorAbilityEffect.Shield)
+            {
+                return;
+            }
+
+            TrapFloorAbilityActivationResult result = trapFloorAbilityResolutionService.Activate(
+                matchState,
+                insertion,
+                definition.ToData());
+            if (!result.Succeeded)
+            {
+                ShowMessage(TrapFloorAbilityRejectionMessage(effect, result.Error));
+                return;
+            }
+
+            if (undoTrackedMatch == matchState && undoHistory.CurrentStateIndex >= 0)
+            {
+                // The accepted transfer already owns this transaction. Replace its After snapshot
+                // with the Trap Floor interpretation instead of creating a second history entry.
+                undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
+                RefreshUndoUi();
+            }
+
+            CloseContextMenu();
+            CloseCardInspect();
+            RefreshTrapFloorStatusUi();
+            string action = effect == TrapFloorAbilityEffect.Disarm
+                ? "used Disarm on"
+                : "used Shield against";
             ShowMessage(
-                $"{FormatPlayerName(interaction.ActorPlayerId)} {verb} {cardName} {direction} Console");
+                $"{FormatPlayerShortName(interaction.ActorPlayerId)} {action} "
+                + result.Trap.Content.DisplayName);
+        }
+
+        private static string TrapFloorAbilityRejectionMessage(
+            TrapFloorAbilityEffect effect,
+            TrapFloorAbilityActivationError error)
+        {
+            switch (error)
+            {
+                case TrapFloorAbilityActivationError.NoUnresolvedTrap:
+                    return "Disarm has no revealed unresolved Trap for the active Player.";
+                case TrapFloorAbilityActivationError.NoPendingTrapConsequence:
+                    return "Shield has no pending assisted Trap consequence for the active Player.";
+                case TrapFloorAbilityActivationError.AbilityAlreadyUsed:
+                    return $"This {effect} Card has already activated.";
+                case TrapFloorAbilityActivationError.ActorIsNotActivePlayer:
+                    return $"{effect} assistance activates only for the active Player.";
+                default:
+                    return $"{effect} assistance could not resolve ({error}).";
+            }
         }
 
         private static string FormatInputCost(InputCostDefinition inputCost)
@@ -8360,6 +8454,12 @@ namespace ConsoleCards.Presentation.Prototype
                         break;
                     case TrapFloorActivityKind.PlayersReactivated:
                         line = "ALL PLAYERS REACTIVATED";
+                        break;
+                    case TrapFloorActivityKind.UsedDisarm:
+                        line = $"{FormatPlayerShortName(entry.ActorPlayerId)} used Disarm on {entry.ContentName}";
+                        break;
+                    case TrapFloorActivityKind.UsedShield:
+                        line = $"{FormatPlayerShortName(entry.ActorPlayerId)} used Shield against {entry.ContentName}";
                         break;
                     default:
                         line = string.Empty;
@@ -8564,6 +8664,23 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             return "Participating Player";
+        }
+
+        private string FormatPlayerShortName(PlayerId playerId)
+        {
+            if (trapFloorTemplate != null && matchState != null)
+            {
+                for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+                {
+                    TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[i];
+                    if (matchState.GetSeat(player.SeatId).OccupantPlayerId == playerId)
+                    {
+                        return $"P{player.LayoutSeatIndex + 1}";
+                    }
+                }
+            }
+
+            return "Player";
         }
 
         private int AvailableDrawableCount()

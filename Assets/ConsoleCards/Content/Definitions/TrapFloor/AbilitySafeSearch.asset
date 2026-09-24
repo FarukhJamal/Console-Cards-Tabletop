@@ -25,4 +25,6 @@ MonoBehaviour:
     requirements: []
   orientation: 0
   preferredConsolePlacement: Side
+  consoleBehavior: 1
   tags: [trap-floor, ability, disarm]
+  effectMetadata: trap-floor-ability-disarm

@@ -24,14 +24,20 @@ namespace ConsoleCards.Presentation.Prototype
             TrapFloorActivityFeedState activity,
             TrapFloorObjectiveState objective,
             TrapFloorCollapseState collapse,
-            TrapFloorTurnState turn)
+            TrapFloorTurnState turn,
+            TrapFloorAbilityResolutionState abilityResolution)
         {
             TrapFloorSessionStateSnapshot trapFloor = null;
-            if (activity != null || objective != null || collapse != null || turn != null)
+            if (activity != null || objective != null || collapse != null || turn != null || abilityResolution != null)
             {
-                if (activity == null || objective == null || collapse == null || turn == null)
+                if (activity == null || objective == null || collapse == null || turn == null || abilityResolution == null)
                     throw new InvalidOperationException("Trap Floor Undo capture requires its complete Match-scoped state.");
-                trapFloor = TrapFloorSessionStateSnapshot.Capture(activity, objective, collapse, turn);
+                trapFloor = TrapFloorSessionStateSnapshot.Capture(
+                    activity,
+                    objective,
+                    collapse,
+                    turn,
+                    abilityResolution);
             }
 
             return new PrototypeSessionUndoSnapshot(GameTemplateInitialSnapshot.Capture(match), trapFloor);

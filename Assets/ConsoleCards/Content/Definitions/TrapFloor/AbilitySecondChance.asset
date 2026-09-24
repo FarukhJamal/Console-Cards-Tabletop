@@ -29,4 +29,6 @@ MonoBehaviour:
       count: 1
   orientation: 0
   preferredConsolePlacement: Side
+  consoleBehavior: 1
   tags: [trap-floor, ability, shield, provisional-input-cost]
+  effectMetadata: trap-floor-ability-shield

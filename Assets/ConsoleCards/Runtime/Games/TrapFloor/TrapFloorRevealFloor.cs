@@ -23,6 +23,8 @@ namespace ConsoleCards.Games.TrapFloor
         AllPlayersEliminated = 9,
         PlayersReactivated = 10,
         PlayerEscaped = 11,
+        UsedDisarm = 12,
+        UsedShield = 13,
     }
 
     /// <summary>
@@ -371,6 +373,34 @@ namespace ConsoleCards.Games.TrapFloor
                 TrapFloorActivityKind.PlayersReactivated);
         }
 
+        internal TrapFloorActivityEntry RecordAbilityUsed(
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TrapFloorTrapResolutionRecord trap,
+            TrapFloorActivityKind kind)
+        {
+            if (trap == null) throw new ArgumentNullException(nameof(trap));
+            if (kind != TrapFloorActivityKind.UsedDisarm
+                && kind != TrapFloorActivityKind.UsedShield)
+                throw new ArgumentOutOfRangeException(nameof(kind));
+            TrapFloorActivityEntry entry = new TrapFloorActivityEntry(
+                entries.Count + 1L,
+                MatchId,
+                acceptedRevision,
+                actorPlayerId,
+                trap.FloorCardId,
+                default,
+                false,
+                kind,
+                trap.Content,
+                TabletopObjectId.Empty,
+                TabletopObjectId.Empty,
+                null,
+                null);
+            entries.Add(entry);
+            return entry;
+        }
+
         private TrapFloorActivityEntry RecordPlayerActivity(
             long acceptedRevision,
             PlayerId actorPlayerId,
@@ -573,11 +603,12 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly TrapFloorTemplateDefinition template;
         private readonly TrapFloorActivityFeedState activityFeed;
         private readonly TrapFloorCollapseState collapseState;
+        private readonly TrapFloorAbilityResolutionState abilityResolutionState;
 
         public TrapFloorRevealFloorUseCase(
             TrapFloorTemplateDefinition template,
             TrapFloorActivityFeedState activityFeed)
-            : this(template, activityFeed, null)
+            : this(template, activityFeed, null, null)
         {
         }
 
@@ -585,10 +616,20 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorTemplateDefinition template,
             TrapFloorActivityFeedState activityFeed,
             TrapFloorCollapseState collapseState)
+            : this(template, activityFeed, collapseState, null)
+        {
+        }
+
+        public TrapFloorRevealFloorUseCase(
+            TrapFloorTemplateDefinition template,
+            TrapFloorActivityFeedState activityFeed,
+            TrapFloorCollapseState collapseState,
+            TrapFloorAbilityResolutionState abilityResolutionState)
         {
             this.template = template ?? throw new ArgumentNullException(nameof(template));
             this.activityFeed = activityFeed ?? throw new ArgumentNullException(nameof(activityFeed));
             this.collapseState = collapseState;
+            this.abilityResolutionState = abilityResolutionState;
         }
 
         public TrapFloorRevealFloorResult Execute(
@@ -672,6 +713,10 @@ namespace ConsoleCards.Games.TrapFloor
                 revealedFloorCard,
                 out TrapFloorActivityEntry searchedActivity,
                 out TrapFloorActivityEntry revealedActivity);
+            abilityResolutionState?.RecordRevealedTrap(
+                acceptedRevision,
+                command.Context.RequestedByPlayerId,
+                revealedFloorCard);
             matchState.AdvanceRevision(
                 command.Context.Id,
                 command.Context.RequestedByPlayerId,
