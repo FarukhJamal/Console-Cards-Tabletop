@@ -6,6 +6,7 @@ using ConsoleCards.Application.UseCases;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Match;
+using ConsoleCards.Core.Events;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Presentation.Views;
 using ConsoleCards.Presentation.Views.Containers;
@@ -23,6 +24,7 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly float settleDuration;
         private readonly float returnDuration;
         private readonly float handReflowDuration;
+        private readonly Action<IConsoleCardInteraction> consoleInteractionAccepted;
 
         public CardTransferInteractionCoordinator(
             MatchState matchState,
@@ -51,6 +53,7 @@ namespace ConsoleCards.Presentation.Interaction
             settleDuration = 0f;
             returnDuration = 0f;
             handReflowDuration = 0f;
+            consoleInteractionAccepted = null;
 
             RequestedByPlayerId = requestedByPlayerId;
             InteractionOwnerId = interactionOwnerId;
@@ -67,7 +70,8 @@ namespace ConsoleCards.Presentation.Interaction
             TabletopPresentationTransitionController transitions,
             float settleDuration,
             float returnDuration,
-            float handReflowDuration)
+            float handReflowDuration,
+            Action<IConsoleCardInteraction> consoleInteractionAccepted = null)
             : this(
                 matchState,
                 requestedByPlayerId,
@@ -81,6 +85,7 @@ namespace ConsoleCards.Presentation.Interaction
             this.settleDuration = ValidateNonNegative(settleDuration, nameof(settleDuration));
             this.returnDuration = ValidateNonNegative(returnDuration, nameof(returnDuration));
             this.handReflowDuration = ValidateNonNegative(handReflowDuration, nameof(handReflowDuration));
+            this.consoleInteractionAccepted = consoleInteractionAccepted;
         }
 
         public MatchState MatchState { get; }
@@ -202,6 +207,8 @@ namespace ConsoleCards.Presentation.Interaction
                         : 0f;
                     transitions.AnimateCardsFromCurrentResults(transitionStarts, duration, arcHeight);
                 }
+
+                NotifyConsoleInteractions(transferResult);
 
                 return CardTransferInteractionResult.FromTransferResult(transferResult);
             }
@@ -442,6 +449,19 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             return value;
+        }
+
+        private void NotifyConsoleInteractions(TransferCardResult transferResult)
+        {
+            if (!transferResult.Succeeded || consoleInteractionAccepted == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < transferResult.ConsoleInteractions.Count; i++)
+            {
+                consoleInteractionAccepted(transferResult.ConsoleInteractions[i]);
+            }
         }
     }
 }

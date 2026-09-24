@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
 using ConsoleCards.Core.Coordinates;
@@ -5,6 +6,7 @@ using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Cards;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Match;
+using ConsoleCards.Core.Events;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Core.Results;
 
@@ -159,7 +161,9 @@ namespace ConsoleCards.Application.UseCases
 
                 long revision = matchState.AdvanceRevision(
                     command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.TransferCard);
-                return TransferCardResult.Accepted(revision);
+                IReadOnlyList<IConsoleCardInteraction> consoleInteractions =
+                    CreateConsoleInteractions(matchState, command, cardObject, revision);
+                return TransferCardResult.Accepted(revision, consoleInteractions);
             }
             catch
             {
@@ -319,6 +323,81 @@ namespace ConsoleCards.Application.UseCases
                         CommandResultStatus.Rejected,
                         TransferCardError.SourceContainerMismatch);
             }
+        }
+
+        private static IReadOnlyList<IConsoleCardInteraction> CreateConsoleInteractions(
+            MatchState matchState,
+            TransferCardCommand command,
+            TabletopObjectState cardObject,
+            long acceptedRevision)
+        {
+            List<IConsoleCardInteraction> interactions = new List<IConsoleCardInteraction>(2);
+            DomainEventContext eventContext = new DomainEventContext(matchState.Id, acceptedRevision);
+
+            if (TryResolveConsoleSlot(
+                matchState,
+                command.ExpectedSourceContainerId,
+                out PlayerId sourceConsoleOwner))
+            {
+                interactions.Add(new ConsoleCardRemoved(
+                    eventContext,
+                    command.Context.RequestedByPlayerId,
+                    cardObject.Id,
+                    cardObject.DefinitionId,
+                    sourceConsoleOwner,
+                    command.ExpectedSourceContainerId));
+            }
+
+            if (TryResolveConsoleSlot(
+                matchState,
+                command.DestinationContainerId,
+                out PlayerId destinationConsoleOwner))
+            {
+                interactions.Add(new ConsoleCardInserted(
+                    eventContext,
+                    command.Context.RequestedByPlayerId,
+                    cardObject.Id,
+                    cardObject.DefinitionId,
+                    destinationConsoleOwner,
+                    command.DestinationContainerId));
+            }
+
+            return interactions;
+        }
+
+        private static bool TryResolveConsoleSlot(
+            MatchState matchState,
+            ContainerId containerId,
+            out PlayerId consoleOwnerPlayerId)
+        {
+            consoleOwnerPlayerId = PlayerId.Empty;
+            if (containerId.IsEmpty
+                || !matchState.Containers.TryGetValue(containerId, out ContainerState container)
+                || container.Kind != ContainerKind.ConsoleSlot)
+            {
+                return false;
+            }
+
+            foreach (var seat in matchState.Seats.Values)
+            {
+                if (!seat.Console.ContainsSlot(containerId))
+                {
+                    continue;
+                }
+
+                consoleOwnerPlayerId = seat.OccupantPlayerId;
+                return true;
+            }
+
+            foreach (var placedConsole in matchState.PlacedConsoles.Values)
+            {
+                if (placedConsole.Console.ContainsSlot(containerId))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private readonly struct TabletopPoseSnapshot

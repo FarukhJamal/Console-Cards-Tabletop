@@ -23,6 +23,7 @@ namespace ConsoleCards.Definitions
         [SerializeField] private CardOrientation orientation;
         [SerializeField] private CardFace defaultFace = CardFace.FaceUp;
         [SerializeField] private string preferredConsolePlacement;
+        [SerializeField] private ConsoleCardBehavior consoleBehavior;
         [SerializeField] private List<string> tags = new List<string>();
         [SerializeField, TextArea] private string effectMetadata;
         [SerializeField, TextArea] private string objectiveMetadata;
@@ -40,6 +41,7 @@ namespace ConsoleCards.Definitions
         public CardOrientation Orientation => orientation;
         public CardFace DefaultFace => defaultFace;
         public string PreferredConsolePlacement => preferredConsolePlacement;
+        public ConsoleCardBehavior ConsoleBehavior => consoleBehavior;
         public IReadOnlyList<string> Tags => tags;
         public string EffectMetadata => effectMetadata;
         public string ObjectiveMetadata => objectiveMetadata;
@@ -75,7 +77,8 @@ namespace ConsoleCards.Definitions
                 RepresentedControllerInput,
                 defaultFace,
                 effectMetadata,
-                objectiveMetadata);
+                objectiveMetadata,
+                consoleBehavior);
         }
     }
 }

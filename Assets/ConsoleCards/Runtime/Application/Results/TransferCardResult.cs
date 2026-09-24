@@ -1,18 +1,32 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using ConsoleCards.Core.Events;
 
 namespace ConsoleCards.Application.Results
 {
     public readonly struct TransferCardResult : IEquatable<TransferCardResult>
     {
-        private TransferCardResult(CommandResult commandResult, TransferCardError error)
+        private static readonly IReadOnlyList<IConsoleCardInteraction> NoConsoleInteractions =
+            Array.Empty<IConsoleCardInteraction>();
+        private readonly IReadOnlyList<IConsoleCardInteraction> consoleInteractions;
+
+        private TransferCardResult(
+            CommandResult commandResult,
+            TransferCardError error,
+            IReadOnlyList<IConsoleCardInteraction> consoleInteractions)
         {
             CommandResult = commandResult;
             Error = error;
+            this.consoleInteractions = consoleInteractions ?? NoConsoleInteractions;
         }
 
         public CommandResult CommandResult { get; }
 
         public TransferCardError Error { get; }
+
+        public IReadOnlyList<IConsoleCardInteraction> ConsoleInteractions =>
+            consoleInteractions ?? NoConsoleInteractions;
 
         public bool Succeeded => CommandResult.Succeeded;
 
@@ -20,9 +34,16 @@ namespace ConsoleCards.Application.Results
 
         public long Revision => CommandResult.Revision;
 
-        public static TransferCardResult Accepted(long revision)
+        public static TransferCardResult Accepted(
+            long revision,
+            IEnumerable<IConsoleCardInteraction> consoleInteractions = null)
         {
-            return new TransferCardResult(CommandResult.Accepted(revision), TransferCardError.None);
+            IReadOnlyList<IConsoleCardInteraction> copiedInteractions =
+                CopyConsoleInteractions(consoleInteractions, revision);
+            return new TransferCardResult(
+                CommandResult.Accepted(revision),
+                TransferCardError.None,
+                copiedInteractions);
         }
 
         public static TransferCardResult Failure(CommandResultStatus status, TransferCardError error)
@@ -37,7 +58,10 @@ namespace ConsoleCards.Application.Results
                 throw new ArgumentException("Transfer card failure must include an error.", nameof(error));
             }
 
-            return new TransferCardResult(CommandResult.Failure(status), error);
+            return new TransferCardResult(
+                CommandResult.Failure(status),
+                error,
+                NoConsoleInteractions);
         }
 
         public bool Equals(TransferCardResult other)
@@ -58,7 +82,7 @@ namespace ConsoleCards.Application.Results
 
         public override string ToString()
         {
-            return $"CommandResult: {CommandResult}, Error: {Error}";
+            return $"CommandResult: {CommandResult}, Error: {Error}, ConsoleInteractions: {ConsoleInteractions.Count}";
         }
 
         public static bool operator ==(TransferCardResult left, TransferCardResult right)
@@ -69,6 +93,38 @@ namespace ConsoleCards.Application.Results
         public static bool operator !=(TransferCardResult left, TransferCardResult right)
         {
             return !left.Equals(right);
+        }
+
+        private static IReadOnlyList<IConsoleCardInteraction> CopyConsoleInteractions(
+            IEnumerable<IConsoleCardInteraction> interactions,
+            long revision)
+        {
+            if (interactions == null)
+            {
+                return NoConsoleInteractions;
+            }
+
+            List<IConsoleCardInteraction> copied = new List<IConsoleCardInteraction>();
+            foreach (IConsoleCardInteraction interaction in interactions)
+            {
+                if (interaction == null)
+                {
+                    throw new ArgumentException("Console interactions cannot contain null entries.", nameof(interactions));
+                }
+
+                if (interaction.AcceptedRevision != revision)
+                {
+                    throw new ArgumentException(
+                        "Console interaction revision must match the accepted transfer revision.",
+                        nameof(interactions));
+                }
+
+                copied.Add(interaction);
+            }
+
+            return copied.Count == 0
+                ? NoConsoleInteractions
+                : new ReadOnlyCollection<IConsoleCardInteraction>(copied);
         }
     }
 }

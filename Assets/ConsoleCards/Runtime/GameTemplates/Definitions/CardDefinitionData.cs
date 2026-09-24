@@ -25,7 +25,8 @@ namespace ConsoleCards.GameTemplates.Definitions
             ControllerInput? representedControllerInput = null,
             CardFace defaultFace = CardFace.FaceUp,
             string effectMetadata = "",
-            string objectiveMetadata = "")
+            string objectiveMetadata = "",
+            ConsoleCardBehavior consoleBehavior = ConsoleCardBehavior.None)
         {
             if (string.IsNullOrWhiteSpace(stableId)) throw new ArgumentException("Card ID is required.", nameof(stableId));
             if (string.IsNullOrWhiteSpace(displayName)) throw new ArgumentException("Card name is required.", nameof(displayName));
@@ -54,6 +55,12 @@ namespace ConsoleCards.GameTemplates.Definitions
             RepresentedControllerInput = representedControllerInput;
             EffectMetadata = effectMetadata ?? string.Empty;
             ObjectiveMetadata = objectiveMetadata ?? string.Empty;
+            if (!Enum.IsDefined(typeof(ConsoleCardBehavior), consoleBehavior))
+            {
+                throw new ArgumentOutOfRangeException(nameof(consoleBehavior));
+            }
+
+            ConsoleBehavior = consoleBehavior;
         }
 
         public string StableId { get; }
@@ -71,5 +78,6 @@ namespace ConsoleCards.GameTemplates.Definitions
         public ControllerInput? RepresentedControllerInput { get; }
         public string EffectMetadata { get; }
         public string ObjectiveMetadata { get; }
+        public ConsoleCardBehavior ConsoleBehavior { get; }
     }
 }

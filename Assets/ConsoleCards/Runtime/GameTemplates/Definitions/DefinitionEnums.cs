@@ -18,6 +18,18 @@ namespace ConsoleCards.GameTemplates.Definitions
         Landscape = 1,
     }
 
+    public enum ConsoleCardBehavior
+    {
+        // Console placement is only physical organization.
+        None = 0,
+
+        // An accepted insertion may be interpreted once by the active Game.
+        ActivateOnInsert = 1,
+
+        // Presence in the Console may be interpreted until an accepted removal.
+        ActiveWhileInserted = 2,
+    }
+
     public enum ModeBehavior
     {
         Team = 0,

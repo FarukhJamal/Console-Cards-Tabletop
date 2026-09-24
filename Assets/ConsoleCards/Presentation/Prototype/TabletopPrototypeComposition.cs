@@ -14,6 +14,7 @@ using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Domain.PlayAreas;
 using ConsoleCards.Core.Domain.PlayerLayouts;
 using ConsoleCards.Core.Domain.Seats;
+using ConsoleCards.Core.Events;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
@@ -284,6 +285,8 @@ namespace ConsoleCards.Presentation.Prototype
         public TrapFloorRoundState TrapFloorRoundState => trapFloorRoundState;
 
         public TrapFloorActivityFeedState TrapFloorActivityFeed => trapFloorActivityFeed;
+
+        public event Action<IConsoleCardInteraction, ConsoleCardBehavior> ConsoleCardInteractionAccepted;
 
         public TrapFloorObjectiveState TrapFloorObjectiveState => trapFloorObjectiveState;
 
@@ -7091,7 +7094,8 @@ namespace ConsoleCards.Presentation.Prototype
                 presentationTransitions,
                 settleDuration,
                 returnDuration,
-                handReflowDuration);
+                handReflowDuration,
+                HandleConsoleCardInteractionAccepted);
             containedCardDragCoordinator = handView != null
                 ? new ContainedCardDragCoordinator(
                     interactionOwnerId,
@@ -8149,6 +8153,37 @@ namespace ConsoleCards.Presentation.Prototype
 
             definition = null;
             return false;
+        }
+
+        private void HandleConsoleCardInteractionAccepted(IConsoleCardInteraction interaction)
+        {
+            if (interaction == null)
+            {
+                return;
+            }
+
+            ConsoleCardBehavior behavior = ConsoleCardBehavior.None;
+            string cardName = "Card";
+            if (TryGetAuthoredCardDefinition(interaction.CardDefinitionId, out CardDefinition definition))
+            {
+                behavior = definition.ConsoleBehavior;
+                cardName = definition.DisplayName;
+            }
+
+            try
+            {
+                ConsoleCardInteractionAccepted?.Invoke(interaction, behavior);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception, this);
+            }
+
+            bool inserted = interaction is ConsoleCardInserted;
+            string verb = inserted ? "inserted" : "removed";
+            string direction = inserted ? "into" : "from";
+            ShowMessage(
+                $"{FormatPlayerName(interaction.ActorPlayerId)} {verb} {cardName} {direction} Console");
         }
 
         private static string FormatInputCost(InputCostDefinition inputCost)
