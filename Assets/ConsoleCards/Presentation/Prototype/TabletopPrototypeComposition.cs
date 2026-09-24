@@ -3170,8 +3170,7 @@ namespace ConsoleCards.Presentation.Prototype
                 PrototypeTrapFloorStatusModel turnStatus = new PrototypeTrapFloorStatusModel(
                     $"ROUND {trapFloorTurnState.CurrentRound}",
                     phase,
-                    $"KEYS {trapFloorObjectiveState.CollectedKeyCount} / "
-                        + $"{trapFloorObjectiveState.RequiredKeyCount}\n{CurrentTrapFloorPlayerStatesText()}",
+                    $"{CurrentTrapFloorObjectiveProgressText()}\n{CurrentTrapFloorPlayerStatesText()}",
                     turnDetail,
                     trapFloorTurnState.IsCurrentFloorFailed
                         ? "ALL PLAYERS ELIMINATED"
@@ -4589,6 +4588,10 @@ namespace ConsoleCards.Presentation.Prototype
                         $"Attempt Escape rejected: Need {result.RequiredKeyCount} Keys — "
                         + $"{result.CollectedKeyCount} claimed.");
                 }
+                else if (result.Error == TrapFloorObjectiveError.PlayerAlreadyEscaped)
+                {
+                    ShowMessage("Attempt Escape rejected: This Player has already escaped.");
+                }
                 else
                 {
                     ShowMessage($"Attempt Escape rejected: {result.Error}.");
@@ -4597,11 +4600,20 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            ShowTrapFloorVictory(result);
+            if (result.IsWon)
+            {
+                ShowTrapFloorVictory(result);
+            }
+            else
+            {
+                CloseContextMenu();
+            }
             RefreshTrapFloorStatusUi();
-            ShowMessage(
-                $"{FormatPlayerName(result.Activity.ActorPlayerId)} completed Trap Floor. "
-                + $"KEYS {result.CollectedKeyCount} / {result.RequiredKeyCount}.");
+            string escapedPlayer = FormatPlayerName(result.EscapedActivity.ActorPlayerId);
+            ShowMessage(result.IsWon
+                ? $"{escapedPlayer} escaped. TRAP FLOOR VICTORY."
+                : $"{escapedPlayer} escaped. ESCAPED {result.EscapedPlayerCount} / "
+                    + $"{result.ParticipatingPlayerCount}.");
         }
 
         private void ShowTrapFloorVictory(TrapFloorObjectiveResult result)
@@ -4612,9 +4624,9 @@ namespace ConsoleCards.Presentation.Prototype
             runtimeUi.ShowContextMenu(
                 popupPosition,
                 "TRAP FLOOR VICTORY",
-                $"{FormatPlayerName(result.Activity.ActorPlayerId)} escaped through "
+                $"{FormatPlayerName(result.EscapedActivity.ActorPlayerId)} escaped through "
                     + $"Floor {result.FloorCard.Coordinate}.\n"
-                    + $"KEYS {result.CollectedKeyCount} / {result.RequiredKeyCount}",
+                    + $"{CurrentTrapFloorObjectiveProgressText()}",
                 new[]
                 {
                     new PrototypePopupActionOption("Close", true, closeVictory),
@@ -6084,7 +6096,8 @@ namespace ConsoleCards.Presentation.Prototype
                     trapFloorTemplate.FloorCardIds.Count);
                 trapFloorObjectiveState = new TrapFloorObjectiveState(
                     matchState.Id,
-                    trapFloorTemplate.ActiveMode.RequiredKeyCount);
+                    trapFloorTemplate.ActiveMode.RequiredKeyCount,
+                    trapFloorTemplate.ActiveMode.Behavior);
                 trapFloorTurnState = new TrapFloorTurnState(
                     matchState.Id,
                     activeSession.Request.ActivePlayerIds);
@@ -8217,7 +8230,10 @@ namespace ConsoleCards.Presentation.Prototype
                         line = $"{FormatPlayerName(entry.ActorPlayerId)} claimed {entry.ContentName}";
                         break;
                     case TrapFloorActivityKind.WonGame:
-                        line = $"{FormatPlayerName(entry.ActorPlayerId)} escaped at Floor {entry.Coordinate}";
+                        line = "TRAP FLOOR VICTORY";
+                        break;
+                    case TrapFloorActivityKind.PlayerEscaped:
+                        line = $"{FormatPlayerName(entry.ActorPlayerId).ToUpperInvariant()} ESCAPED";
                         break;
                     case TrapFloorActivityKind.TriggeredFloorfall:
                         line = $"{FormatPlayerName(entry.ActorPlayerId)} triggered Floorfall";
@@ -8259,13 +8275,22 @@ namespace ConsoleCards.Presentation.Prototype
                 return string.Empty;
             }
 
-            string keys =
-                $"KEYS {trapFloorObjectiveState.CollectedKeyCount} / {trapFloorObjectiveState.RequiredKeyCount}";
+            string progress = CurrentTrapFloorObjectiveProgressText();
             if (trapFloorTurnState != null && trapFloorTurnState.IsCurrentFloorFailed)
             {
-                return $"{keys} | ALL PLAYERS ELIMINATED";
+                return $"{progress} | ALL PLAYERS ELIMINATED";
             }
-            return trapFloorObjectiveState.IsWon ? $"{keys} | VICTORY" : keys;
+            return trapFloorObjectiveState.IsWon ? $"{progress} | VICTORY" : progress;
+        }
+
+        private string CurrentTrapFloorObjectiveProgressText()
+        {
+            string keys =
+                $"KEYS {trapFloorObjectiveState.CollectedKeyCount} / {trapFloorObjectiveState.RequiredKeyCount}";
+            return trapFloorObjectiveState.ModeBehavior == ModeBehavior.Survival
+                ? $"{keys}\nESCAPED {trapFloorObjectiveState.EscapedPlayerCount} / "
+                    + $"{activeSession.Request.ActivePlayerIds.Count}"
+                : keys;
         }
 
         private string CurrentTrapFloorPlayerStatesText()
@@ -8276,10 +8301,13 @@ namespace ConsoleCards.Presentation.Prototype
             for (int i = 0; i < trapFloorTurnState.PlayerOrder.Count; i++)
             {
                 PlayerId playerId = trapFloorTurnState.PlayerOrder[i];
-                string state = trapFloorTurnState.GetPlayerState(playerId)
-                    == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound
-                    ? "ELIMINATED"
-                    : "ACTIVE";
+                string state = trapFloorObjectiveState != null
+                    && trapFloorObjectiveState.IsPlayerEscaped(playerId)
+                        ? "ESCAPED"
+                        : trapFloorTurnState.GetPlayerState(playerId)
+                            == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound
+                            ? "ELIMINATED"
+                            : "ACTIVE";
                 if (i > 0) text += " | ";
                 text += $"{FormatPlayerName(playerId)} {state}";
             }

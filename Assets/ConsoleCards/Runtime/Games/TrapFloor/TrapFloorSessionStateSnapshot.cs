@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Identifiers;
+using ConsoleCards.GameTemplates.Definitions;
 
 namespace ConsoleCards.Games.TrapFloor
 {
@@ -12,6 +13,8 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly TrapFloorCollectedKeyState[] collectedKeys;
         private readonly TrapFloorCollapsedFloorState[] collapsedFloors;
         private readonly int requiredKeyCount;
+        private readonly ModeBehavior modeBehavior;
+        private readonly PlayerId[] escapedPlayerIds;
         private readonly int totalFloorCount;
         private readonly bool isWon;
         private readonly PlayerId winningPlayerId;
@@ -40,6 +43,8 @@ namespace ConsoleCards.Games.TrapFloor
             collectedKeys = Copy(objective.CollectedKeys);
             collapsedFloors = Copy(collapse.CollapsedFloors);
             requiredKeyCount = objective.RequiredKeyCount;
+            modeBehavior = objective.ModeBehavior;
+            escapedPlayerIds = Copy(objective.EscapedPlayerIds);
             totalFloorCount = collapse.TotalFloorCount;
             isWon = objective.IsWon;
             winningPlayerId = objective.WinningPlayerId;
@@ -82,8 +87,16 @@ namespace ConsoleCards.Games.TrapFloor
         {
             TrapFloorActivityFeedState activity = new TrapFloorActivityFeedState(MatchId);
             activity.RestoreEntries(activityEntries);
-            TrapFloorObjectiveState objective = new TrapFloorObjectiveState(MatchId, requiredKeyCount);
-            objective.Restore(collectedKeys, isWon, winningPlayerId, exitFloorCardId);
+            TrapFloorObjectiveState objective = new TrapFloorObjectiveState(
+                MatchId,
+                requiredKeyCount,
+                modeBehavior);
+            objective.Restore(
+                collectedKeys,
+                escapedPlayerIds,
+                isWon,
+                winningPlayerId,
+                exitFloorCardId);
             TrapFloorCollapseState collapse = new TrapFloorCollapseState(MatchId, totalFloorCount);
             collapse.Restore(
                 collapsedFloors,

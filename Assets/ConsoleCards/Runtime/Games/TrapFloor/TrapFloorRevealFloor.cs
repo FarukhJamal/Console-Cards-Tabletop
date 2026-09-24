@@ -22,6 +22,7 @@ namespace ConsoleCards.Games.TrapFloor
         PlayerEliminated = 8,
         AllPlayersEliminated = 9,
         PlayersReactivated = 10,
+        PlayerEscaped = 11,
     }
 
     /// <summary>
@@ -249,6 +250,20 @@ namespace ConsoleCards.Games.TrapFloor
                 actorPlayerId,
                 floorCard,
                 TrapFloorActivityKind.WonGame);
+            entries.Add(entry);
+            return entry;
+        }
+
+        internal TrapFloorActivityEntry RecordPlayerEscaped(
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TrapFloorFloorCardState floorCard)
+        {
+            TrapFloorActivityEntry entry = CreateEntry(
+                acceptedRevision,
+                actorPlayerId,
+                floorCard,
+                TrapFloorActivityKind.PlayerEscaped);
             entries.Add(entry);
             return entry;
         }

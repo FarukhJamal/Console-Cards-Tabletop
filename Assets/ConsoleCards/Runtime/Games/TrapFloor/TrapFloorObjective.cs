@@ -5,6 +5,7 @@ using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Identifiers;
+using ConsoleCards.GameTemplates.Definitions;
 
 namespace ConsoleCards.Games.TrapFloor
 {
@@ -42,8 +43,21 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly ReadOnlyCollection<TrapFloorCollectedKeyState> readOnlyCollectedKeys;
         private readonly Dictionary<TabletopObjectId, TrapFloorCollectedKeyState> claimsByFloorCardId =
             new Dictionary<TabletopObjectId, TrapFloorCollectedKeyState>();
+        private readonly List<PlayerId> escapedPlayerIds = new List<PlayerId>();
+        private readonly ReadOnlyCollection<PlayerId> readOnlyEscapedPlayerIds;
 
         public TrapFloorObjectiveState(MatchId matchId, int requiredKeyCount)
+            : this(
+                matchId,
+                requiredKeyCount,
+                ConsoleCards.GameTemplates.Definitions.ModeBehavior.Team)
+        {
+        }
+
+        public TrapFloorObjectiveState(
+            MatchId matchId,
+            int requiredKeyCount,
+            ModeBehavior modeBehavior)
         {
             if (matchId.IsEmpty)
             {
@@ -55,14 +69,23 @@ namespace ConsoleCards.Games.TrapFloor
                 throw new ArgumentOutOfRangeException(nameof(requiredKeyCount));
             }
 
+            if (!Enum.IsDefined(typeof(ModeBehavior), modeBehavior))
+            {
+                throw new ArgumentOutOfRangeException(nameof(modeBehavior));
+            }
+
             MatchId = matchId;
             RequiredKeyCount = requiredKeyCount;
+            ModeBehavior = modeBehavior;
             readOnlyCollectedKeys = collectedKeys.AsReadOnly();
+            readOnlyEscapedPlayerIds = escapedPlayerIds.AsReadOnly();
         }
 
         public MatchId MatchId { get; }
 
         public int RequiredKeyCount { get; }
+
+        public ModeBehavior ModeBehavior { get; }
 
         public IReadOnlyList<TrapFloorCollectedKeyState> CollectedKeys => readOnlyCollectedKeys;
 
@@ -70,11 +93,20 @@ namespace ConsoleCards.Games.TrapFloor
 
         public bool HasRequiredKeys => CollectedKeyCount >= RequiredKeyCount;
 
+        public IReadOnlyList<PlayerId> EscapedPlayerIds => readOnlyEscapedPlayerIds;
+
+        public int EscapedPlayerCount => escapedPlayerIds.Count;
+
         public bool IsWon { get; private set; }
 
         public PlayerId WinningPlayerId { get; private set; }
 
         public TabletopObjectId ExitFloorCardId { get; private set; }
+
+        public bool IsPlayerEscaped(PlayerId playerId)
+        {
+            return escapedPlayerIds.Contains(playerId);
+        }
 
         public bool TryGetClaim(
             TabletopObjectId floorCardId,
@@ -98,19 +130,28 @@ namespace ConsoleCards.Games.TrapFloor
             return claim;
         }
 
-        internal void RecordVictory(
+        internal void RecordEscape(
             TabletopObjectId exitFloorCardId,
-            PlayerId actorPlayerId)
+            PlayerId actorPlayerId,
+            int participatingPlayerCount)
         {
-            IsWon = true;
-            WinningPlayerId = actorPlayerId;
-            ExitFloorCardId = exitFloorCardId;
+            escapedPlayerIds.Add(actorPlayerId);
+            bool completesGame = ModeBehavior
+                    == ConsoleCards.GameTemplates.Definitions.ModeBehavior.Team
+                || escapedPlayerIds.Count >= participatingPlayerCount;
+            if (completesGame)
+            {
+                IsWon = true;
+                WinningPlayerId = actorPlayerId;
+                ExitFloorCardId = exitFloorCardId;
+            }
         }
 
         public void Clear()
         {
             collectedKeys.Clear();
             claimsByFloorCardId.Clear();
+            escapedPlayerIds.Clear();
             IsWon = false;
             WinningPlayerId = PlayerId.Empty;
             ExitFloorCardId = TabletopObjectId.Empty;
@@ -118,11 +159,13 @@ namespace ConsoleCards.Games.TrapFloor
 
         internal void Restore(
             IEnumerable<TrapFloorCollectedKeyState> claims,
+            IEnumerable<PlayerId> escapedPlayers,
             bool isWon,
             PlayerId winningPlayerId,
             TabletopObjectId exitFloorCardId)
         {
             if (claims == null) throw new ArgumentNullException(nameof(claims));
+            if (escapedPlayers == null) throw new ArgumentNullException(nameof(escapedPlayers));
             Clear();
             foreach (TrapFloorCollectedKeyState claim in claims)
             {
@@ -131,9 +174,17 @@ namespace ConsoleCards.Games.TrapFloor
                 collectedKeys.Add(claim);
                 claimsByFloorCardId.Add(claim.FloorCardId, claim);
             }
+            foreach (PlayerId playerId in escapedPlayers)
+            {
+                if (playerId.IsEmpty || escapedPlayerIds.Contains(playerId))
+                    throw new ArgumentException("Objective snapshot contains an invalid escaped Player.", nameof(escapedPlayers));
+                escapedPlayerIds.Add(playerId);
+            }
             if (isWon)
             {
-                if (winningPlayerId.IsEmpty || exitFloorCardId.IsEmpty)
+                if (winningPlayerId.IsEmpty
+                    || exitFloorCardId.IsEmpty
+                    || escapedPlayerIds.Count == 0)
                     throw new ArgumentException("Won objective snapshot requires winner and Exit identities.");
                 IsWon = true;
                 WinningPlayerId = winningPlayerId;
@@ -197,6 +248,7 @@ namespace ConsoleCards.Games.TrapFloor
         RequiredKeysMissing,
         GameAlreadyWon,
         RevisionOverflow,
+        PlayerAlreadyEscaped,
     }
 
     public readonly struct TrapFloorObjectiveResult
@@ -207,8 +259,13 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorFloorCardState floorCard,
             TrapFloorCollectedKeyState claimedKey,
             TrapFloorActivityEntry activity,
+            TrapFloorActivityEntry escapedActivity,
+            TrapFloorActivityEntry victoryActivity,
             int collectedKeyCount,
             int requiredKeyCount,
+            int escapedPlayerCount,
+            int participatingPlayerCount,
+            ModeBehavior modeBehavior,
             bool isWon)
         {
             CommandResult = commandResult;
@@ -216,8 +273,13 @@ namespace ConsoleCards.Games.TrapFloor
             FloorCard = floorCard;
             ClaimedKey = claimedKey;
             Activity = activity;
+            EscapedActivity = escapedActivity;
+            VictoryActivity = victoryActivity;
             CollectedKeyCount = collectedKeyCount;
             RequiredKeyCount = requiredKeyCount;
+            EscapedPlayerCount = escapedPlayerCount;
+            ParticipatingPlayerCount = participatingPlayerCount;
+            ModeBehavior = modeBehavior;
             IsWon = isWon;
         }
 
@@ -235,9 +297,19 @@ namespace ConsoleCards.Games.TrapFloor
 
         public TrapFloorActivityEntry Activity { get; }
 
+        public TrapFloorActivityEntry EscapedActivity { get; }
+
+        public TrapFloorActivityEntry VictoryActivity { get; }
+
         public int CollectedKeyCount { get; }
 
         public int RequiredKeyCount { get; }
+
+        public int EscapedPlayerCount { get; }
+
+        public int ParticipatingPlayerCount { get; }
+
+        public ModeBehavior ModeBehavior { get; }
 
         public bool IsWon { get; }
 
@@ -246,7 +318,10 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorFloorCardState floorCard,
             TrapFloorCollectedKeyState claimedKey,
             TrapFloorActivityEntry activity,
-            TrapFloorObjectiveState objectiveState)
+            TrapFloorObjectiveState objectiveState,
+            int participatingPlayerCount,
+            TrapFloorActivityEntry escapedActivity = null,
+            TrapFloorActivityEntry victoryActivity = null)
         {
             return new TrapFloorObjectiveResult(
                 CommandResult.Accepted(revision),
@@ -254,8 +329,13 @@ namespace ConsoleCards.Games.TrapFloor
                 floorCard,
                 claimedKey,
                 activity,
+                escapedActivity,
+                victoryActivity,
                 objectiveState.CollectedKeyCount,
                 objectiveState.RequiredKeyCount,
+                objectiveState.EscapedPlayerCount,
+                participatingPlayerCount,
+                objectiveState.ModeBehavior,
                 objectiveState.IsWon);
         }
 
@@ -280,8 +360,14 @@ namespace ConsoleCards.Games.TrapFloor
                 null,
                 null,
                 null,
+                null,
+                null,
                 objectiveState?.CollectedKeyCount ?? 0,
                 objectiveState?.RequiredKeyCount ?? 0,
+                objectiveState?.EscapedPlayerCount ?? 0,
+                0,
+                objectiveState?.ModeBehavior
+                    ?? ConsoleCards.GameTemplates.Definitions.ModeBehavior.Team,
                 objectiveState?.IsWon ?? false);
         }
     }
@@ -362,7 +448,8 @@ namespace ConsoleCards.Games.TrapFloor
                 floorCard,
                 claim,
                 activity,
-                objectiveState);
+                objectiveState,
+                CountParticipatingPlayers(matchState));
         }
 
         public TrapFloorObjectiveResult AttemptEscape(
@@ -402,29 +489,43 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(CommandResultStatus.Rejected, TrapFloorObjectiveError.RequiredKeysMissing);
             }
 
+            PlayerId escapingPlayerId = command.Context.RequestedByPlayerId;
+            if (objectiveState.IsPlayerEscaped(escapingPlayerId))
+            {
+                return Failure(CommandResultStatus.Rejected, TrapFloorObjectiveError.PlayerAlreadyEscaped);
+            }
+
             if (matchState.Revision == long.MaxValue)
             {
                 return Failure(CommandResultStatus.Conflict, TrapFloorObjectiveError.RevisionOverflow);
             }
 
             long acceptedRevision = checked(matchState.Revision + 1L);
-            objectiveState.RecordVictory(
+            int participatingPlayerCount = CountParticipatingPlayers(matchState);
+            objectiveState.RecordEscape(
                 floorCard.ObjectId,
-                command.Context.RequestedByPlayerId);
-            TrapFloorActivityEntry activity = activityFeed.RecordVictory(
+                escapingPlayerId,
+                participatingPlayerCount);
+            TrapFloorActivityEntry escapedActivity = activityFeed.RecordPlayerEscaped(
                 acceptedRevision,
-                command.Context.RequestedByPlayerId,
+                escapingPlayerId,
                 floorCard);
+            TrapFloorActivityEntry victoryActivity = objectiveState.IsWon
+                ? activityFeed.RecordVictory(acceptedRevision, escapingPlayerId, floorCard)
+                : null;
             matchState.AdvanceRevision(
                 command.Context.Id,
-                command.Context.RequestedByPlayerId,
+                escapingPlayerId,
                 AuthoritativeActionKind.TrapFloorAttemptEscape);
             return TrapFloorObjectiveResult.Accepted(
                 acceptedRevision,
                 floorCard,
                 null,
-                activity,
-                objectiveState);
+                victoryActivity ?? escapedActivity,
+                objectiveState,
+                participatingPlayerCount,
+                escapedActivity,
+                victoryActivity);
         }
 
         private TrapFloorObjectiveError ValidateCommand(
@@ -460,7 +561,8 @@ namespace ConsoleCards.Games.TrapFloor
 
             if (objectiveState.MatchId != matchState.Id
                 || objectiveState.RequiredKeyCount
-                    != template.ActiveMode.RequiredKeyCount)
+                    != template.ActiveMode.RequiredKeyCount
+                || objectiveState.ModeBehavior != template.ActiveMode.Behavior)
             {
                 return TrapFloorObjectiveError.ObjectiveStateMismatch;
             }
@@ -508,6 +610,20 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             return false;
+        }
+
+        private static int CountParticipatingPlayers(MatchState matchState)
+        {
+            int count = 0;
+            foreach (var seat in matchState.Seats.Values)
+            {
+                if (!seat.OccupantPlayerId.IsEmpty)
+                {
+                    count++;
+                }
+            }
+
+            return count;
         }
 
         private static CommandResultStatus StatusFor(TrapFloorObjectiveError error)
