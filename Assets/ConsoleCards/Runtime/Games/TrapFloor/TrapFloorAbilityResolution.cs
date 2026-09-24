@@ -27,6 +27,46 @@ namespace ConsoleCards.Games.TrapFloor
         Shielded = 3,
     }
 
+    public readonly struct TrapFloorAbilityActivationRecord : IEquatable<TrapFloorAbilityActivationRecord>
+    {
+        public TrapFloorAbilityActivationRecord(
+            TabletopObjectId cardInstanceId,
+            PlayerId playerId,
+            int round)
+        {
+            if (cardInstanceId.IsEmpty) throw new ArgumentException("Ability Card ID cannot be empty.", nameof(cardInstanceId));
+            if (playerId.IsEmpty) throw new ArgumentException("Player ID cannot be empty.", nameof(playerId));
+            if (round < 1) throw new ArgumentOutOfRangeException(nameof(round));
+
+            CardInstanceId = cardInstanceId;
+            PlayerId = playerId;
+            Round = round;
+        }
+
+        public TabletopObjectId CardInstanceId { get; }
+        public PlayerId PlayerId { get; }
+        public int Round { get; }
+
+        public bool Equals(TrapFloorAbilityActivationRecord other) =>
+            CardInstanceId == other.CardInstanceId
+            && PlayerId == other.PlayerId
+            && Round == other.Round;
+
+        public override bool Equals(object obj) =>
+            obj is TrapFloorAbilityActivationRecord other && Equals(other);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hashCode = CardInstanceId.GetHashCode();
+                hashCode = (hashCode * 397) ^ PlayerId.GetHashCode();
+                hashCode = (hashCode * 397) ^ Round;
+                return hashCode;
+            }
+        }
+    }
+
     public sealed class TrapFloorTrapResolutionRecord
     {
         internal TrapFloorTrapResolutionRecord(
@@ -83,8 +123,8 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly List<TrapFloorTrapResolutionRecord> trapRecords =
             new List<TrapFloorTrapResolutionRecord>();
         private readonly ReadOnlyCollection<TrapFloorTrapResolutionRecord> readOnlyTrapRecords;
-        private readonly HashSet<TabletopObjectId> usedAbilityCardIds =
-            new HashSet<TabletopObjectId>();
+        private readonly HashSet<TrapFloorAbilityActivationRecord> abilityActivations =
+            new HashSet<TrapFloorAbilityActivationRecord>();
 
         public TrapFloorAbilityResolutionState(MatchId matchId)
         {
@@ -95,7 +135,12 @@ namespace ConsoleCards.Games.TrapFloor
 
         public MatchId MatchId { get; }
         public IReadOnlyList<TrapFloorTrapResolutionRecord> TrapRecords => readOnlyTrapRecords;
-        public bool IsAbilityCardUsed(TabletopObjectId cardId) => usedAbilityCardIds.Contains(cardId);
+        public bool HasAbilityActivatedThisTurn(
+            TabletopObjectId cardInstanceId,
+            PlayerId playerId,
+            int round) =>
+            abilityActivations.Contains(
+                new TrapFloorAbilityActivationRecord(cardInstanceId, playerId, round));
 
         internal void RecordRevealedTrap(
             long acceptedRevision,
@@ -156,10 +201,13 @@ namespace ConsoleCards.Games.TrapFloor
             return false;
         }
 
-        internal void MarkAbilityUsed(TabletopObjectId abilityCardId)
+        internal void RecordAbilityActivation(
+            TabletopObjectId abilityCardId,
+            PlayerId playerId,
+            int round)
         {
-            if (abilityCardId.IsEmpty) throw new ArgumentException("Ability Card ID cannot be empty.", nameof(abilityCardId));
-            usedAbilityCardIds.Add(abilityCardId);
+            abilityActivations.Add(
+                new TrapFloorAbilityActivationRecord(abilityCardId, playerId, round));
         }
 
         internal TrapFloorTrapResolutionRecord[] CopyTrapRecords()
@@ -169,19 +217,20 @@ namespace ConsoleCards.Games.TrapFloor
             return copy;
         }
 
-        internal TabletopObjectId[] CopyUsedAbilityCardIds()
+        internal TrapFloorAbilityActivationRecord[] CopyAbilityActivations()
         {
-            TabletopObjectId[] copy = new TabletopObjectId[usedAbilityCardIds.Count];
-            usedAbilityCardIds.CopyTo(copy);
+            TrapFloorAbilityActivationRecord[] copy =
+                new TrapFloorAbilityActivationRecord[abilityActivations.Count];
+            abilityActivations.CopyTo(copy);
             return copy;
         }
 
         internal void Restore(
             IEnumerable<TrapFloorTrapResolutionRecord> restoredTrapRecords,
-            IEnumerable<TabletopObjectId> restoredUsedAbilityCardIds)
+            IEnumerable<TrapFloorAbilityActivationRecord> restoredAbilityActivations)
         {
             if (restoredTrapRecords == null) throw new ArgumentNullException(nameof(restoredTrapRecords));
-            if (restoredUsedAbilityCardIds == null) throw new ArgumentNullException(nameof(restoredUsedAbilityCardIds));
+            if (restoredAbilityActivations == null) throw new ArgumentNullException(nameof(restoredAbilityActivations));
             trapRecords.Clear();
             foreach (TrapFloorTrapResolutionRecord record in restoredTrapRecords)
             {
@@ -189,11 +238,23 @@ namespace ConsoleCards.Games.TrapFloor
                 trapRecords.Add(record.Copy());
             }
 
-            usedAbilityCardIds.Clear();
-            foreach (TabletopObjectId cardId in restoredUsedAbilityCardIds)
+            abilityActivations.Clear();
+            foreach (TrapFloorAbilityActivationRecord activation in restoredAbilityActivations)
             {
-                if (cardId.IsEmpty) throw new ArgumentException("Restored Ability Card ID cannot be empty.", nameof(restoredUsedAbilityCardIds));
-                usedAbilityCardIds.Add(cardId);
+                if (activation.CardInstanceId.IsEmpty
+                    || activation.PlayerId.IsEmpty
+                    || activation.Round < 1)
+                {
+                    throw new ArgumentException(
+                        "Restored Ability activation context is invalid.",
+                        nameof(restoredAbilityActivations));
+                }
+                if (!abilityActivations.Add(activation))
+                {
+                    throw new ArgumentException(
+                        "Restored Ability activations must be unique.",
+                        nameof(restoredAbilityActivations));
+                }
             }
         }
     }
@@ -300,7 +361,10 @@ namespace ConsoleCards.Games.TrapFloor
                 return TrapFloorAbilityActivationResult.Failure(
                     TrapFloorAbilityActivationError.ActorIsNotActivePlayer,
                     effect);
-            if (state.IsAbilityCardUsed(insertion.CardInstanceId))
+            if (state.HasAbilityActivatedThisTurn(
+                    insertion.CardInstanceId,
+                    turnState.ActivePlayerId,
+                    turnState.CurrentRound))
                 return TrapFloorAbilityActivationResult.Failure(
                     TrapFloorAbilityActivationError.AbilityAlreadyUsed,
                     effect);
@@ -322,7 +386,10 @@ namespace ConsoleCards.Games.TrapFloor
                 shield
                     ? TrapFloorTrapResolutionDisposition.Shielded
                     : TrapFloorTrapResolutionDisposition.Disarmed);
-            state.MarkAbilityUsed(insertion.CardInstanceId);
+            state.RecordAbilityActivation(
+                insertion.CardInstanceId,
+                turnState.ActivePlayerId,
+                turnState.CurrentRound);
             activityFeed.RecordAbilityUsed(
                 insertion.AcceptedRevision,
                 insertion.ActorPlayerId,

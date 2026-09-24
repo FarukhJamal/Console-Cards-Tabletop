@@ -32,7 +32,7 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly PlayerId[] eliminatedTurnPlayerIds;
         private readonly bool isCurrentFloorFailed;
         private readonly TrapFloorTrapResolutionRecord[] trapResolutionRecords;
-        private readonly TabletopObjectId[] usedAbilityCardIds;
+        private readonly TrapFloorAbilityActivationRecord[] abilityActivations;
 
         private TrapFloorSessionStateSnapshot(
             TrapFloorActivityFeedState activity,
@@ -66,7 +66,7 @@ namespace ConsoleCards.Games.TrapFloor
             eliminatedTurnPlayerIds = turn.CopyEliminatedPlayerIds();
             isCurrentFloorFailed = turn.IsCurrentFloorFailed;
             trapResolutionRecords = abilityResolution.CopyTrapRecords();
-            usedAbilityCardIds = abilityResolution.CopyUsedAbilityCardIds();
+            abilityActivations = abilityResolution.CopyAbilityActivations();
         }
 
         public MatchId MatchId { get; }
@@ -124,7 +124,7 @@ namespace ConsoleCards.Games.TrapFloor
                 isCurrentFloorFailed);
             TrapFloorAbilityResolutionState abilityResolution =
                 new TrapFloorAbilityResolutionState(MatchId);
-            abilityResolution.Restore(trapResolutionRecords, usedAbilityCardIds);
+            abilityResolution.Restore(trapResolutionRecords, abilityActivations);
             return new TrapFloorSessionState(activity, objective, collapse, turn, abilityResolution);
         }
 
