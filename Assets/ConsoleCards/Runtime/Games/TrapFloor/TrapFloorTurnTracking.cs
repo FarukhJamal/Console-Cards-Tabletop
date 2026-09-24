@@ -17,7 +17,7 @@ namespace ConsoleCards.Games.TrapFloor
     public enum TrapFloorCurrentFloorPlayerState
     {
         Active = 0,
-        EliminatedForCurrentFloor = 1,
+        EliminatedForCurrentRound = 1,
     }
 
     /// <summary>Match-scoped assistance state. It never restricts freeform tabletop actions.</summary>
@@ -81,7 +81,7 @@ namespace ConsoleCards.Games.TrapFloor
             if (isCurrentFloorFailed != (eliminated.Count == players.Count))
             {
                 throw new ArgumentException(
-                    "A failed Trap Floor requires every participating Player to be eliminated for the current Floor.",
+                    "A failed Trap Floor round requires every participating Player to be eliminated for the current round.",
                     nameof(isCurrentFloorFailed));
             }
 
@@ -144,12 +144,14 @@ namespace ConsoleCards.Games.TrapFloor
                 ? playerOrder[floorOperatorIndex]
                 : PlayerId.Empty;
 
+        internal bool ContainsPlayer(PlayerId playerId) => playerOrder.Contains(playerId);
+
         public TrapFloorCurrentFloorPlayerState GetPlayerState(PlayerId playerId)
         {
             if (!playerOrder.Contains(playerId))
                 throw new ArgumentException("Player is not part of this Trap Floor session.", nameof(playerId));
             return eliminatedPlayerIds.Contains(playerId)
-                ? TrapFloorCurrentFloorPlayerState.EliminatedForCurrentFloor
+                ? TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound
                 : TrapFloorCurrentFloorPlayerState.Active;
         }
 
@@ -173,11 +175,11 @@ namespace ConsoleCards.Games.TrapFloor
 
         internal void Advance()
         {
-            if (IsCurrentFloorFailed)
-                throw new InvalidOperationException("Assisted turns cannot advance after all Players are eliminated.");
-
             if (Phase == TrapFloorTurnPhase.PlayerTurn)
             {
+                if (IsCurrentFloorFailed)
+                    throw new InvalidOperationException("A failed Trap Floor round must be completed from Floor Turn.");
+
                 int nextPlayerIndex = FindNextActivePlayerIndex(activePlayerIndex + 1, false);
                 if (nextPlayerIndex >= 0)
                 {
@@ -192,43 +194,43 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             CurrentRound = checked(CurrentRound + 1);
-            Phase = TrapFloorTurnPhase.PlayerTurn;
-            activePlayerIndex = FindNextActivePlayerIndex(0, false);
-            floorOperatorIndex = -1;
-        }
-
-        internal PlayerId EliminateActivePlayerForCurrentFloor()
-        {
-            if (IsCurrentFloorFailed || Phase != TrapFloorTurnPhase.PlayerTurn)
-                throw new InvalidOperationException("Only the active Player can be eliminated during a Player turn.");
-
-            PlayerId eliminatedPlayerId = playerOrder[activePlayerIndex];
-            if (!eliminatedPlayerIds.Add(eliminatedPlayerId))
-                throw new InvalidOperationException("The active Player is already eliminated for this Floor.");
-
-            if (eliminatedPlayerIds.Count == playerOrder.Count)
-            {
-                IsCurrentFloorFailed = true;
-                activePlayerIndex = -1;
-                floorOperatorIndex = -1;
-                return eliminatedPlayerId;
-            }
-
-            Advance();
-            return eliminatedPlayerId;
-        }
-
-        /// <summary>
-        /// State hook for a future authoritative new-Floor operation. It does not itself advance
-        /// the Match revision or implement Floor progression.
-        /// </summary>
-        internal void RestoreAllPlayersForNewFloor()
-        {
             eliminatedPlayerIds.Clear();
             IsCurrentFloorFailed = false;
             Phase = TrapFloorTurnPhase.PlayerTurn;
             activePlayerIndex = 0;
             floorOperatorIndex = -1;
+        }
+
+        internal PlayerId MarkPlayerEliminatedForCurrentRound(PlayerId playerId)
+        {
+            int playerIndex = playerOrder.IndexOf(playerId);
+            if (playerIndex < 0)
+                throw new ArgumentException("Player is not part of this Trap Floor session.", nameof(playerId));
+            if (IsCurrentFloorFailed)
+                throw new InvalidOperationException("Every Player is already eliminated for the current round.");
+
+            if (!eliminatedPlayerIds.Add(playerId))
+                throw new InvalidOperationException("The Player is already eliminated for the current round.");
+
+            if (eliminatedPlayerIds.Count == playerOrder.Count)
+            {
+                IsCurrentFloorFailed = true;
+                Phase = TrapFloorTurnPhase.FloorTurn;
+                activePlayerIndex = -1;
+                floorOperatorIndex = -1;
+                return playerId;
+            }
+
+            if (Phase == TrapFloorTurnPhase.PlayerTurn && playerIndex == activePlayerIndex)
+            {
+                Advance();
+            }
+            else if (Phase == TrapFloorTurnPhase.FloorTurn && playerIndex == floorOperatorIndex)
+            {
+                floorOperatorIndex = FindNextActivePlayerIndex(playerIndex + 1, true);
+            }
+
+            return playerId;
         }
 
         internal void RollBackElimination(PlayerId playerId, TrapFloorTurnPosition previousPosition)
@@ -295,6 +297,8 @@ namespace ConsoleCards.Games.TrapFloor
         ControllerDrawRejected = 6,
         ActivityFeedMismatch = 7,
         CurrentFloorFailed = 8,
+        PlayerIsNotParticipant = 9,
+        PlayerAlreadyEliminatedForCurrentRound = 10,
     }
 
     public readonly struct TrapFloorTurnAdvanceResult
@@ -329,8 +333,7 @@ namespace ConsoleCards.Games.TrapFloor
     }
 
     /// <summary>
-    /// Advances only the optional Trap Floor turn helper. The next Player's existing configured
-    /// hand draw is included in the same accepted history snapshot as the turn change.
+    /// Advances only the optional Trap Floor turn helper. It never draws or moves tabletop objects.
     /// </summary>
     public sealed class TrapFloorTurnService
     {
@@ -382,37 +385,31 @@ namespace ConsoleCards.Games.TrapFloor
             return Advance(matchState, context, true);
         }
 
-        public TrapFloorTurnAdvanceResult EliminateCurrentPlayer(
+        /// <summary>
+        /// Authoritative boundary for Trap resolution to mark its affected Player eliminated.
+        /// Trap failure conditions remain outside this service until they are explicitly authored.
+        /// </summary>
+        public TrapFloorTurnAdvanceResult MarkPlayerEliminatedForCurrentRound(
             MatchState matchState,
-            CommandContext context)
+            CommandContext context,
+            PlayerId affectedPlayerId)
         {
-            TrapFloorTurnAdvanceResult validation = ValidateTurnActor(matchState, context);
+            TrapFloorTurnAdvanceResult validation = ValidateSessionOperation(matchState, context);
             if (!validation.Succeeded) return validation;
-            if (state.Phase != TrapFloorTurnPhase.PlayerTurn)
-                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.ActorIsNotActivePlayer);
+            if (!state.ContainsPlayer(affectedPlayerId))
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.PlayerIsNotParticipant);
+            if (state.GetPlayerState(affectedPlayerId)
+                == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound)
+                return TrapFloorTurnAdvanceResult.Failure(
+                    TrapFloorTurnAdvanceError.PlayerAlreadyEliminatedForCurrentRound);
 
             long acceptedRevision = checked(matchState.Revision + 1L);
-            TrapFloorTurnPosition previous = state.CapturePosition();
-            PlayerId eliminatedPlayerId = state.EliminateActivePlayerForCurrentFloor();
-            TrapFloorActivityEntry eliminatedActivity = activityFeed.RecordPlayerEliminated(
+            state.MarkPlayerEliminatedForCurrentRound(affectedPlayerId);
+            activityFeed.RecordPlayerEliminated(
                 acceptedRevision,
-                eliminatedPlayerId);
-            TrapFloorActivityEntry failedActivity = state.IsCurrentFloorFailed
-                ? activityFeed.RecordAllPlayersEliminated(acceptedRevision, eliminatedPlayerId)
-                : null;
-
-            if (!state.IsCurrentFloorFailed && state.Phase == TrapFloorTurnPhase.PlayerTurn)
-            {
-                TrapFloorTurnAdvanceResult drawResult = DrawForAdvancedPlayer(matchState);
-                if (!drawResult.Succeeded)
-                {
-                    if (failedActivity != null) activityFeed.RemoveLast(failedActivity);
-                    activityFeed.RemoveLast(eliminatedActivity);
-                    state.RollBackElimination(eliminatedPlayerId, previous);
-                    return drawResult;
-                }
-                if (drawResult.Revision >= 0) return drawResult;
-            }
+                affectedPlayerId);
+            if (state.IsCurrentFloorFailed)
+                activityFeed.RecordAllPlayersEliminated(acceptedRevision, affectedPlayerId);
 
             long revision = matchState.AdvanceRevision(
                 context.Id,
@@ -429,26 +426,21 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorTurnAdvanceResult validation = ValidateTurnActor(matchState, context);
             if (!validation.Succeeded) return validation;
 
-            TrapFloorTurnPosition previous = state.CapturePosition();
-            TrapFloorActivityEntry skippedActivity = null;
             if (recordSkip)
             {
-                skippedActivity = activityFeed.RecordSkippedTurn(
+                activityFeed.RecordSkippedTurn(
                     checked(matchState.Revision + 1L),
                     context.RequestedByPlayerId);
             }
 
+            bool startsNextRound = state.Phase == TrapFloorTurnPhase.FloorTurn;
+            bool reactivatesPlayers = startsNextRound && state.CopyEliminatedPlayerIds().Length > 0;
             state.Advance();
-            if (state.Phase == TrapFloorTurnPhase.PlayerTurn)
+            if (reactivatesPlayers)
             {
-                TrapFloorTurnAdvanceResult drawResult = DrawForAdvancedPlayer(matchState);
-                if (!drawResult.Succeeded)
-                {
-                    state.RestorePosition(previous);
-                    if (skippedActivity != null) activityFeed.RemoveLast(skippedActivity);
-                    return drawResult;
-                }
-                if (drawResult.Revision >= 0) return drawResult;
+                activityFeed.RecordPlayersReactivated(
+                    checked(matchState.Revision + 1L),
+                    context.RequestedByPlayerId);
             }
 
             long revision = matchState.AdvanceRevision(
@@ -462,14 +454,15 @@ namespace ConsoleCards.Games.TrapFloor
             MatchState matchState,
             CommandContext context)
         {
-            if (matchState == null || context.MatchId != matchState.Id || state.MatchId != matchState.Id)
-                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.MatchMismatch);
-            if (activityFeed.MatchId != matchState.Id)
-                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.ActivityFeedMismatch);
-            if (context.ExpectedRevision.HasValue && context.ExpectedRevision.Value != matchState.Revision)
-                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.RevisionConflict);
+            TrapFloorTurnAdvanceResult validation = ValidateSessionOperation(matchState, context);
+            if (!validation.Succeeded) return validation;
             if (state.IsCurrentFloorFailed)
-                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.CurrentFloorFailed);
+            {
+                return state.Phase == TrapFloorTurnPhase.FloorTurn
+                    && state.ContainsPlayer(context.RequestedByPlayerId)
+                        ? TrapFloorTurnAdvanceResult.Accepted(-1, 0)
+                        : TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.CurrentFloorFailed);
+            }
             if (state.Phase == TrapFloorTurnPhase.PlayerTurn
                 && context.RequestedByPlayerId != state.ActivePlayerId)
                 return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.ActorIsNotActivePlayer);
@@ -479,32 +472,17 @@ namespace ConsoleCards.Games.TrapFloor
             return TrapFloorTurnAdvanceResult.Accepted(-1, 0);
         }
 
-        private TrapFloorTurnAdvanceResult DrawForAdvancedPlayer(MatchState matchState)
+        private TrapFloorTurnAdvanceResult ValidateSessionOperation(
+            MatchState matchState,
+            CommandContext context)
         {
-            if (!TryGetPlayerSetup(matchState, state.ActivePlayerId, out TrapFloorPlayerSetupDefinition player))
-                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.PlayerSetupMissing);
-
-            CommandContext drawContext = new CommandContext(
-                CommandId.New(),
-                matchState.Id,
-                state.ActivePlayerId,
-                matchState.Revision);
-            ControllerInputHandDrawResult draw = handService.DrawUpToConfiguredHandLimit(
-                matchState,
-                template.GameDefinition,
-                new DrawUpToConfiguredHandLimitCommand(
-                    drawContext,
-                    player.SeatId,
-                    player.ControllerDeckId));
-            if (!draw.Succeeded)
-            {
-                return TrapFloorTurnAdvanceResult.Failure(
-                    TrapFloorTurnAdvanceError.ControllerDrawRejected,
-                    draw.Error);
-            }
-            return draw.Changed
-                ? TrapFloorTurnAdvanceResult.Accepted(draw.Revision, draw.DrawnCount)
-                : TrapFloorTurnAdvanceResult.Accepted(-1, 0);
+            if (matchState == null || context.MatchId != matchState.Id || state.MatchId != matchState.Id)
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.MatchMismatch);
+            if (activityFeed.MatchId != matchState.Id)
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.ActivityFeedMismatch);
+            if (context.ExpectedRevision.HasValue && context.ExpectedRevision.Value != matchState.Revision)
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.RevisionConflict);
+            return TrapFloorTurnAdvanceResult.Accepted(-1, 0);
         }
 
         private bool TryGetPlayerSetup(

@@ -21,6 +21,7 @@ namespace ConsoleCards.Games.TrapFloor
         SkippedTurn = 7,
         PlayerEliminated = 8,
         AllPlayersEliminated = 9,
+        PlayersReactivated = 10,
     }
 
     /// <summary>
@@ -95,7 +96,8 @@ namespace ConsoleCards.Games.TrapFloor
                 || kind == TrapFloorActivityKind.CollapsedFloor;
             bool turnActivity = kind == TrapFloorActivityKind.SkippedTurn
                 || kind == TrapFloorActivityKind.PlayerEliminated
-                || kind == TrapFloorActivityKind.AllPlayersEliminated;
+                || kind == TrapFloorActivityKind.AllPlayersEliminated
+                || kind == TrapFloorActivityKind.PlayersReactivated;
             if (floorCardId.IsEmpty
                 && kind != TrapFloorActivityKind.TriggeredFloorfall
                 && !turnActivity)
@@ -342,6 +344,16 @@ namespace ConsoleCards.Games.TrapFloor
                 acceptedRevision,
                 actorPlayerId,
                 TrapFloorActivityKind.AllPlayersEliminated);
+        }
+
+        internal TrapFloorActivityEntry RecordPlayersReactivated(
+            long acceptedRevision,
+            PlayerId actorPlayerId)
+        {
+            return RecordPlayerActivity(
+                acceptedRevision,
+                actorPlayerId,
+                TrapFloorActivityKind.PlayersReactivated);
         }
 
         private TrapFloorActivityEntry RecordPlayerActivity(
