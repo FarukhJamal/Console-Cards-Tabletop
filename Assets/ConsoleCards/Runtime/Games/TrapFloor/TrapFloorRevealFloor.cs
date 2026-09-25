@@ -27,6 +27,7 @@ namespace ConsoleCards.Games.TrapFloor
         UsedShield = 13,
         UsedDodge = 14,
         UsedRush = 15,
+        UsedCheck = 16,
     }
 
     /// <summary>
@@ -385,7 +386,8 @@ namespace ConsoleCards.Games.TrapFloor
             if (trap == null) throw new ArgumentNullException(nameof(trap));
             if (kind != TrapFloorActivityKind.UsedDisarm
                 && kind != TrapFloorActivityKind.UsedShield
-                && kind != TrapFloorActivityKind.UsedDodge)
+                && kind != TrapFloorActivityKind.UsedDodge
+                && kind != TrapFloorActivityKind.UsedCheck)
                 throw new ArgumentOutOfRangeException(nameof(kind));
             TrapFloorActivityEntry entry = new TrapFloorActivityEntry(
                 entries.Count + 1L,

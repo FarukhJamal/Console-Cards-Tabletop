@@ -97,10 +97,13 @@ namespace ConsoleCards.Presentation.Prototype
         private static readonly int BaseColorProperty = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorProperty = Shader.PropertyToID("_Color");
         private static readonly Color TargetColor = new Color(0.14f, 0.86f, 0.92f, 1f);
+        private static readonly Color NeutralizedColor = new Color(0.32f, 0.58f, 0.48f, 1f);
 
         private readonly Dictionary<TabletopObjectId, TargetRenderer[]> renderers =
             new Dictionary<TabletopObjectId, TargetRenderer[]>();
         private readonly List<TabletopObjectId> currentTargetIds = new List<TabletopObjectId>();
+        private readonly HashSet<TabletopObjectId> neutralizedFloorCardIds =
+            new HashSet<TabletopObjectId>();
 
         public void Register(TabletopObjectId floorCardId, params Renderer[] floorRenderers)
         {
@@ -135,23 +138,50 @@ namespace ConsoleCards.Presentation.Prototype
                     throw new InvalidOperationException("Ability target has no active Floor Card renderer.");
                 }
 
-                for (int rendererIndex = 0; rendererIndex < targets.Length; rendererIndex++)
-                {
-                    TargetRenderer target = targets[rendererIndex];
-                    if (target.Renderer == null) continue;
-                    MaterialPropertyBlock highlighted = new MaterialPropertyBlock();
-                    target.Renderer.GetPropertyBlock(highlighted);
-                    highlighted.SetColor(BaseColorProperty, TargetColor);
-                    highlighted.SetColor(ColorProperty, TargetColor);
-                    target.Renderer.SetPropertyBlock(highlighted);
-                }
+                ApplyColor(targets, TargetColor);
                 currentTargetIds.Add(floorCardId);
+            }
+        }
+
+        public void ShowNeutralized(IReadOnlyList<TabletopObjectId> floorCardIds)
+        {
+            if (floorCardIds == null) throw new ArgumentNullException(nameof(floorCardIds));
+
+            foreach (TabletopObjectId floorCardId in neutralizedFloorCardIds)
+            {
+                if (!currentTargetIds.Contains(floorCardId)
+                    && renderers.TryGetValue(floorCardId, out TargetRenderer[] targets))
+                {
+                    RestoreBaseline(targets);
+                }
+            }
+
+            neutralizedFloorCardIds.Clear();
+            for (int i = 0; i < floorCardIds.Count; i++)
+            {
+                TabletopObjectId floorCardId = floorCardIds[i];
+                if (!floorCardId.IsEmpty) neutralizedFloorCardIds.Add(floorCardId);
+            }
+
+            foreach (TabletopObjectId floorCardId in neutralizedFloorCardIds)
+            {
+                if (!currentTargetIds.Contains(floorCardId)
+                    && renderers.TryGetValue(floorCardId, out TargetRenderer[] targets))
+                {
+                    ApplyColor(targets, NeutralizedColor);
+                }
             }
         }
 
         public void Clear()
         {
             ClearCurrent();
+            foreach (TabletopObjectId floorCardId in neutralizedFloorCardIds)
+            {
+                if (renderers.TryGetValue(floorCardId, out TargetRenderer[] targets))
+                    RestoreBaseline(targets);
+            }
+            neutralizedFloorCardIds.Clear();
             renderers.Clear();
         }
 
@@ -164,14 +194,35 @@ namespace ConsoleCards.Presentation.Prototype
                     continue;
                 }
 
-                for (int rendererIndex = 0; rendererIndex < targets.Length; rendererIndex++)
-                {
-                    TargetRenderer target = targets[rendererIndex];
-                    if (target.Renderer != null)
-                        target.Renderer.SetPropertyBlock(target.Baseline);
-                }
+                RestoreBaseline(targets);
+                if (neutralizedFloorCardIds.Contains(currentTargetIds[i]))
+                    ApplyColor(targets, NeutralizedColor);
             }
             currentTargetIds.Clear();
+        }
+
+        private static void ApplyColor(TargetRenderer[] targets, Color color)
+        {
+            for (int rendererIndex = 0; rendererIndex < targets.Length; rendererIndex++)
+            {
+                TargetRenderer target = targets[rendererIndex];
+                if (target.Renderer == null) continue;
+                MaterialPropertyBlock highlighted = new MaterialPropertyBlock();
+                target.Renderer.GetPropertyBlock(highlighted);
+                highlighted.SetColor(BaseColorProperty, color);
+                highlighted.SetColor(ColorProperty, color);
+                target.Renderer.SetPropertyBlock(highlighted);
+            }
+        }
+
+        private static void RestoreBaseline(TargetRenderer[] targets)
+        {
+            for (int rendererIndex = 0; rendererIndex < targets.Length; rendererIndex++)
+            {
+                TargetRenderer target = targets[rendererIndex];
+                if (target.Renderer != null)
+                    target.Renderer.SetPropertyBlock(target.Baseline);
+            }
         }
 
         private sealed class TargetRenderer

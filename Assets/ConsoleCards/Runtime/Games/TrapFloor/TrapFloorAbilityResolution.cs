@@ -29,6 +29,7 @@ namespace ConsoleCards.Games.TrapFloor
         Disarmed = 2,
         Shielded = 3,
         Dodged = 4,
+        Neutralized = 5,
     }
 
     public sealed class TrapFloorDodgeAssistanceState
@@ -508,7 +509,8 @@ namespace ConsoleCards.Games.TrapFloor
             if (effect != TrapFloorAbilityEffect.Disarm
                 && effect != TrapFloorAbilityEffect.Shield
                 && effect != TrapFloorAbilityEffect.Dodge
-                && effect != TrapFloorAbilityEffect.Rush)
+                && effect != TrapFloorAbilityEffect.Rush
+                && effect != TrapFloorAbilityEffect.Check)
                 return TrapFloorAbilityActivationResult.Failure(
                     TrapFloorAbilityActivationError.UnsupportedAbility,
                     effect);
@@ -593,12 +595,23 @@ namespace ConsoleCards.Games.TrapFloor
 
             if (!rush)
             {
-                trap.SetDisposition(
-                    effect == TrapFloorAbilityEffect.Dodge
-                        ? TrapFloorTrapResolutionDisposition.Dodged
-                        : shield
-                            ? TrapFloorTrapResolutionDisposition.Shielded
-                            : TrapFloorTrapResolutionDisposition.Disarmed);
+                TrapFloorTrapResolutionDisposition disposition;
+                switch (effect)
+                {
+                    case TrapFloorAbilityEffect.Check:
+                        disposition = TrapFloorTrapResolutionDisposition.Neutralized;
+                        break;
+                    case TrapFloorAbilityEffect.Dodge:
+                        disposition = TrapFloorTrapResolutionDisposition.Dodged;
+                        break;
+                    case TrapFloorAbilityEffect.Shield:
+                        disposition = TrapFloorTrapResolutionDisposition.Shielded;
+                        break;
+                    default:
+                        disposition = TrapFloorTrapResolutionDisposition.Disarmed;
+                        break;
+                }
+                trap.SetDisposition(disposition);
             }
             state.RecordAbilityActivation(
                 insertion.CardInstanceId,
@@ -625,13 +638,24 @@ namespace ConsoleCards.Games.TrapFloor
                     insertion.AcceptedRevision,
                     insertion.ActorPlayerId,
                     trap,
-                    effect == TrapFloorAbilityEffect.Dodge
-                        ? TrapFloorActivityKind.UsedDodge
-                        : shield
-                            ? TrapFloorActivityKind.UsedShield
-                            : TrapFloorActivityKind.UsedDisarm);
+                    AbilityActivityKind(effect));
             }
             return TrapFloorAbilityActivationResult.Accepted(effect, trap);
+        }
+
+        private static TrapFloorActivityKind AbilityActivityKind(TrapFloorAbilityEffect effect)
+        {
+            switch (effect)
+            {
+                case TrapFloorAbilityEffect.Check:
+                    return TrapFloorActivityKind.UsedCheck;
+                case TrapFloorAbilityEffect.Dodge:
+                    return TrapFloorActivityKind.UsedDodge;
+                case TrapFloorAbilityEffect.Shield:
+                    return TrapFloorActivityKind.UsedShield;
+                default:
+                    return TrapFloorActivityKind.UsedDisarm;
+            }
         }
 
         public bool ClearMovementAssistance() => state.ClearMovementAssistance();

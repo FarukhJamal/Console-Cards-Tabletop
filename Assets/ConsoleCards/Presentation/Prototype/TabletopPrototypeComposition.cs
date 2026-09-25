@@ -447,6 +447,7 @@ namespace ConsoleCards.Presentation.Prototype
                 }
 
                 selectionPresenter.Refresh();
+                RefreshNeutralizedTrapPresentation();
                 RefreshMovementAssistancePresentation();
                 ShowMessage("Trap Floor tabletop foundation ready.");
                 IsInitialized = true;
@@ -4440,7 +4441,8 @@ namespace ConsoleCards.Presentation.Prototype
                     () => SearchAndRevealFloorCard(targetCardId)));
             }
             else if (floorCard.IsRevealed
-                && floorCard.Content.HasSupportedAssistedTrapEffect)
+                && floorCard.Content.HasSupportedAssistedTrapEffect
+                && !IsTrapFloorTrapNeutralized(targetCardId))
             {
                 actions.Add(new PrototypePopupActionOption(
                     "Resolve Trap",
@@ -4493,6 +4495,10 @@ namespace ConsoleCards.Presentation.Prototype
                 $"Revealed: {floorCard.Content.Category} — {floorCard.Content.DisplayName}";
             if (floorCard.Content.Category == TrapFloorFloorContentCategory.Trap)
             {
+                if (IsTrapFloorTrapNeutralized(floorCard.ObjectId))
+                {
+                    return $"{description}\nTRAP NEUTRALIZED — this Floor is safe from assisted Trap consequences.";
+                }
                 return $"{description}\n{TrapFloorTrapEffectDescription(floorCard.Content)}";
             }
             if (trapFloorObjectiveState == null)
@@ -4950,8 +4956,15 @@ namespace ConsoleCards.Presentation.Prototype
                 PrototypePopupActionOption? primaryAction = null;
                 if (floorCard.Content.Category == TrapFloorFloorContentCategory.Trap)
                 {
-                    objectiveContext = TrapFloorTrapEffectDescription(floorCard.Content) + "\n";
-                    if (floorCard.Content.HasSupportedAssistedTrapEffect)
+                    bool neutralized = IsTrapFloorTrapNeutralized(targetCardId);
+                    objectiveContext = neutralized
+                        ? "TRAP NEUTRALIZED\nThis Floor is safe from assisted Trap consequences.\n"
+                        : TrapFloorTrapEffectDescription(floorCard.Content) + "\n";
+                    if (neutralized)
+                    {
+                        frontTitle = $"{floorCard.Content.DisplayName} — SAFE";
+                    }
+                    else if (floorCard.Content.HasSupportedAssistedTrapEffect)
                     {
                         primaryAction = new PrototypePopupActionOption(
                             "Resolve Trap",
@@ -8256,7 +8269,8 @@ namespace ConsoleCards.Presentation.Prototype
             if (effect != TrapFloorAbilityEffect.Disarm
                 && effect != TrapFloorAbilityEffect.Shield
                 && effect != TrapFloorAbilityEffect.Dodge
-                && effect != TrapFloorAbilityEffect.Rush)
+                && effect != TrapFloorAbilityEffect.Rush
+                && effect != TrapFloorAbilityEffect.Check)
             {
                 return;
             }
@@ -8292,6 +8306,13 @@ namespace ConsoleCards.Presentation.Prototype
                 RefreshMovementAssistancePresentation();
                 ShowMessage("RUSH — Move up to 3 spaces");
             }
+            else if (effect == TrapFloorAbilityEffect.Check)
+            {
+                RefreshNeutralizedTrapPresentation();
+                ShowMessage(
+                    $"{FormatPlayerShortName(interaction.ActorPlayerId)} checked "
+                    + $"{result.Trap.Content.DisplayName} — Trap neutralized");
+            }
             else
             {
                 string action = effect == TrapFloorAbilityEffect.Disarm
@@ -8310,7 +8331,9 @@ namespace ConsoleCards.Presentation.Prototype
             switch (error)
             {
                 case TrapFloorAbilityActivationError.NoUnresolvedTrap:
-                    return $"{effect} has no revealed unresolved Trap for the active Player.";
+                    return effect == TrapFloorAbilityEffect.Check
+                        ? "Check unavailable — no unresolved Trap."
+                        : $"{effect} has no revealed unresolved Trap for the active Player.";
                 case TrapFloorAbilityActivationError.NoPendingTrapConsequence:
                     return "Shield has no pending assisted Trap consequence for the active Player.";
                 case TrapFloorAbilityActivationError.AbilityAlreadyUsed:
@@ -8341,6 +8364,32 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             abilityTargetPresenter.Show(targetFloorCardIds);
+        }
+
+        private void RefreshNeutralizedTrapPresentation()
+        {
+            if (abilityTargetPresenter == null) return;
+            List<TabletopObjectId> neutralizedFloorCardIds = new List<TabletopObjectId>();
+            if (trapFloorAbilityResolutionState != null)
+            {
+                for (int i = 0; i < trapFloorAbilityResolutionState.TrapRecords.Count; i++)
+                {
+                    TrapFloorTrapResolutionRecord trap =
+                        trapFloorAbilityResolutionState.TrapRecords[i];
+                    if (trap.Disposition == TrapFloorTrapResolutionDisposition.Neutralized)
+                        neutralizedFloorCardIds.Add(trap.FloorCardId);
+                }
+            }
+            abilityTargetPresenter.ShowNeutralized(neutralizedFloorCardIds);
+        }
+
+        private bool IsTrapFloorTrapNeutralized(TabletopObjectId floorCardId)
+        {
+            return trapFloorAbilityResolutionState != null
+                && trapFloorAbilityResolutionState.TryGetTrap(
+                    floorCardId,
+                    out TrapFloorTrapResolutionRecord trap)
+                && trap.Disposition == TrapFloorTrapResolutionDisposition.Neutralized;
         }
 
         private static string FormatInputCost(InputCostDefinition inputCost)
@@ -8529,6 +8578,10 @@ namespace ConsoleCards.Presentation.Prototype
                         break;
                     case TrapFloorActivityKind.UsedRush:
                         line = $"{FormatPlayerShortName(entry.ActorPlayerId)} activated Rush";
+                        break;
+                    case TrapFloorActivityKind.UsedCheck:
+                        line = $"{FormatPlayerShortName(entry.ActorPlayerId)} checked "
+                            + $"{entry.ContentName} — Trap neutralized";
                         break;
                     default:
                         line = string.Empty;
