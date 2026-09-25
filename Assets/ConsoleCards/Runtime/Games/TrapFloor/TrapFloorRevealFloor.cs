@@ -30,6 +30,7 @@ namespace ConsoleCards.Games.TrapFloor
         UsedCheck = 16,
         BlindApplied = 17,
         BlindDirectionRolled = 18,
+        SlowApplied = 19,
     }
 
     /// <summary>
@@ -492,6 +493,30 @@ namespace ConsoleCards.Games.TrapFloor
                 dieId,
                 TabletopObjectId.Empty,
                 d4Result,
+                null);
+            entries.Add(entry);
+            return entry;
+        }
+
+        internal TrapFloorActivityEntry RecordSlowApplied(
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TrapFloorTrapResolutionRecord trap)
+        {
+            if (trap == null) throw new ArgumentNullException(nameof(trap));
+            TrapFloorActivityEntry entry = new TrapFloorActivityEntry(
+                entries.Count + 1L,
+                MatchId,
+                acceptedRevision,
+                actorPlayerId,
+                trap.FloorCardId,
+                default,
+                false,
+                TrapFloorActivityKind.SlowApplied,
+                trap.Content,
+                TabletopObjectId.Empty,
+                TabletopObjectId.Empty,
+                null,
                 null);
             entries.Add(entry);
             return entry;

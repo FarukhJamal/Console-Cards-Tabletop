@@ -29,6 +29,7 @@ namespace ConsoleCards.Games.TrapFloor
         InformationalManual = 0,
         EliminateForCurrentRound = 1,
         BlindNextRound = 2,
+        SlowNextRound = 3,
     }
 
     public enum TrapFloorBlindMovementDirection
@@ -76,7 +77,9 @@ namespace ConsoleCards.Games.TrapFloor
         public const string EliminateForCurrentRoundEffectMetadata =
             "trap-effect-eliminate-for-current-round";
         public const string BlindNextRoundEffectMetadata = "trap-effect-blind-next-round";
+        public const string SlowNextRoundEffectMetadata = "trap-effect-slow-next-round";
         private const string BlindDirectionMappingPrefix = "d4-directions=";
+        private const string MovementModifierPrefix = "movement-modifier=";
 
         public TrapFloorFloorContentDefinition(CardDefinitionData card)
         {
@@ -106,6 +109,9 @@ namespace ConsoleCards.Games.TrapFloor
             BlindDirectionMapping = TrapEffect == TrapFloorTrapEffectCategory.BlindNextRound
                 ? ParseBlindDirectionMapping(card.EffectMetadata)
                 : null;
+            MovementModifier = TrapEffect == TrapFloorTrapEffectCategory.SlowNextRound
+                ? ParseMovementModifier(card.EffectMetadata)
+                : (int?)null;
             AuthoredCard = card;
         }
 
@@ -116,7 +122,8 @@ namespace ConsoleCards.Games.TrapFloor
             string displayText,
             TrapFloorFloorContentSource contentSource = TrapFloorFloorContentSource.ProvisionalStage03,
             TrapFloorTrapEffectCategory trapEffect = TrapFloorTrapEffectCategory.InformationalManual,
-            TrapFloorBlindDirectionMapping blindDirectionMapping = null)
+            TrapFloorBlindDirectionMapping blindDirectionMapping = null,
+            int? movementModifier = null)
         {
             if (id.IsEmpty) throw new ArgumentException("Floor content Definition ID cannot be empty.", nameof(id));
             if (!Enum.IsDefined(typeof(TrapFloorFloorContentCategory), category))
@@ -130,6 +137,9 @@ namespace ConsoleCards.Games.TrapFloor
                 throw new ArgumentException("Only Trap Floor Trap content can define an assisted Trap effect.", nameof(trapEffect));
             if ((trapEffect == TrapFloorTrapEffectCategory.BlindNextRound) != (blindDirectionMapping != null))
                 throw new ArgumentException("Blind Trap assistance requires exactly one authored d4 direction mapping.", nameof(blindDirectionMapping));
+            if ((trapEffect == TrapFloorTrapEffectCategory.SlowNextRound) != movementModifier.HasValue
+                || movementModifier == 0)
+                throw new ArgumentException("Slow Trap assistance requires one non-zero authored movement modifier.", nameof(movementModifier));
             if (string.IsNullOrWhiteSpace(displayName))
                 throw new ArgumentException("Floor content display name cannot be empty.", nameof(displayName));
 
@@ -140,6 +150,7 @@ namespace ConsoleCards.Games.TrapFloor
             ContentSource = contentSource;
             TrapEffect = trapEffect;
             BlindDirectionMapping = blindDirectionMapping?.Copy();
+            MovementModifier = movementModifier;
         }
 
         public ObjectDefinitionId Id { get; }
@@ -149,12 +160,14 @@ namespace ConsoleCards.Games.TrapFloor
         public TrapFloorFloorContentSource ContentSource { get; }
         public TrapFloorTrapEffectCategory TrapEffect { get; }
         public TrapFloorBlindDirectionMapping BlindDirectionMapping { get; }
+        public int? MovementModifier { get; }
         public CardDefinitionData AuthoredCard { get; }
 
         public bool HasSupportedAssistedTrapEffect =>
             Category == TrapFloorFloorContentCategory.Trap
             && (TrapEffect == TrapFloorTrapEffectCategory.EliminateForCurrentRound
-                || TrapEffect == TrapFloorTrapEffectCategory.BlindNextRound);
+                || TrapEffect == TrapFloorTrapEffectCategory.BlindNextRound
+                || TrapEffect == TrapFloorTrapEffectCategory.SlowNextRound);
 
         private static TrapFloorTrapEffectCategory ResolveTrapEffect(
             CardDefinitionData card,
@@ -171,11 +184,16 @@ namespace ConsoleCards.Games.TrapFloor
             {
                 return TrapFloorTrapEffectCategory.EliminateForCurrentRound;
             }
-            return string.Equals(
+            if (string.Equals(
                     effectIdentifier,
                     BlindNextRoundEffectMetadata,
+                    StringComparison.OrdinalIgnoreCase))
+                return TrapFloorTrapEffectCategory.BlindNextRound;
+            return string.Equals(
+                    effectIdentifier,
+                    SlowNextRoundEffectMetadata,
                     StringComparison.OrdinalIgnoreCase)
-                ? TrapFloorTrapEffectCategory.BlindNextRound
+                ? TrapFloorTrapEffectCategory.SlowNextRound
                 : TrapFloorTrapEffectCategory.InformationalManual;
         }
 
@@ -224,6 +242,26 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             throw new ArgumentException("Blind Trap effect metadata requires an authored d4 direction mapping.", nameof(metadata));
+        }
+
+        private static int ParseMovementModifier(string metadata)
+        {
+            string[] segments = (metadata ?? string.Empty).Split(';');
+            for (int i = 1; i < segments.Length; i++)
+            {
+                string segment = segments[i].Trim();
+                if (!segment.StartsWith(MovementModifierPrefix, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (int.TryParse(
+                        segment.Substring(MovementModifierPrefix.Length).Trim(),
+                        out int modifier)
+                    && modifier != 0)
+                    return modifier;
+                break;
+            }
+
+            throw new ArgumentException("Slow Trap effect metadata requires a non-zero authored movement modifier.", nameof(metadata));
         }
 
         private static bool HasTag(CardDefinitionData card, string tag)

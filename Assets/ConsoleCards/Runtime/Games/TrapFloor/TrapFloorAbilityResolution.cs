@@ -272,6 +272,40 @@ namespace ConsoleCards.Games.TrapFloor
                 MovementDirection);
     }
 
+    /// <summary>Authoritative next-Round movement guidance from one resolved Slow Trap.</summary>
+    public sealed class TrapFloorSlowStatusState
+    {
+        internal TrapFloorSlowStatusState(
+            PlayerId playerId,
+            int appliesInRound,
+            int movementModifier,
+            TabletopObjectId sourceTrapFloorCardId)
+        {
+            if (playerId.IsEmpty) throw new ArgumentException("Slow Player ID cannot be empty.", nameof(playerId));
+            if (appliesInRound < 2) throw new ArgumentOutOfRangeException(nameof(appliesInRound));
+            if (movementModifier == 0) throw new ArgumentOutOfRangeException(nameof(movementModifier));
+            if (sourceTrapFloorCardId.IsEmpty)
+                throw new ArgumentException("Slow source Trap Floor Card ID cannot be empty.", nameof(sourceTrapFloorCardId));
+
+            PlayerId = playerId;
+            AppliesInRound = appliesInRound;
+            MovementModifier = movementModifier;
+            SourceTrapFloorCardId = sourceTrapFloorCardId;
+        }
+
+        public PlayerId PlayerId { get; }
+        public int AppliesInRound { get; }
+        public int MovementModifier { get; }
+        public TabletopObjectId SourceTrapFloorCardId { get; }
+
+        internal TrapFloorSlowStatusState Copy() =>
+            new TrapFloorSlowStatusState(
+                PlayerId,
+                AppliesInRound,
+                MovementModifier,
+                SourceTrapFloorCardId);
+    }
+
     /// <summary>
     /// Match-scoped Trap/Ability assistance only. It never constrains physical tabletop interaction.
     /// </summary>
@@ -285,6 +319,9 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly List<TrapFloorBlindStatusState> blindStatuses =
             new List<TrapFloorBlindStatusState>();
         private readonly ReadOnlyCollection<TrapFloorBlindStatusState> readOnlyBlindStatuses;
+        private readonly List<TrapFloorSlowStatusState> slowStatuses =
+            new List<TrapFloorSlowStatusState>();
+        private readonly ReadOnlyCollection<TrapFloorSlowStatusState> readOnlySlowStatuses;
         private TrapFloorDodgeAssistanceState activeDodgeAssistance;
         private TrapFloorRushAssistanceState activeRushAssistance;
 
@@ -294,11 +331,13 @@ namespace ConsoleCards.Games.TrapFloor
             MatchId = matchId;
             readOnlyTrapRecords = trapRecords.AsReadOnly();
             readOnlyBlindStatuses = blindStatuses.AsReadOnly();
+            readOnlySlowStatuses = slowStatuses.AsReadOnly();
         }
 
         public MatchId MatchId { get; }
         public IReadOnlyList<TrapFloorTrapResolutionRecord> TrapRecords => readOnlyTrapRecords;
         public IReadOnlyList<TrapFloorBlindStatusState> BlindStatuses => readOnlyBlindStatuses;
+        public IReadOnlyList<TrapFloorSlowStatusState> SlowStatuses => readOnlySlowStatuses;
         public TrapFloorDodgeAssistanceState ActiveDodgeAssistance => activeDodgeAssistance;
         public TrapFloorRushAssistanceState ActiveRushAssistance => activeRushAssistance;
         public bool HasAbilityActivatedThisTurn(
@@ -439,6 +478,59 @@ namespace ConsoleCards.Games.TrapFloor
             return status.ResolveDirection(dieId, d4Result);
         }
 
+        public bool TryGetSlowStatus(
+            PlayerId playerId,
+            int round,
+            out TrapFloorSlowStatusState status)
+        {
+            for (int i = slowStatuses.Count - 1; i >= 0; i--)
+            {
+                TrapFloorSlowStatusState candidate = slowStatuses[i];
+                if (candidate.PlayerId == playerId && candidate.AppliesInRound == round)
+                {
+                    status = candidate;
+                    return true;
+                }
+            }
+
+            status = null;
+            return false;
+        }
+
+        internal void ScheduleSlow(
+            PlayerId playerId,
+            int appliesInRound,
+            int movementModifier,
+            TabletopObjectId sourceTrapFloorCardId)
+        {
+            for (int i = slowStatuses.Count - 1; i >= 0; i--)
+            {
+                if (slowStatuses[i].PlayerId == playerId
+                    && slowStatuses[i].AppliesInRound == appliesInRound)
+                    slowStatuses.RemoveAt(i);
+            }
+
+            slowStatuses.Add(new TrapFloorSlowStatusState(
+                playerId,
+                appliesInRound,
+                movementModifier,
+                sourceTrapFloorCardId));
+        }
+
+        internal bool ExpireSlowBeforeRound(int currentRound)
+        {
+            bool removed = false;
+            for (int i = slowStatuses.Count - 1; i >= 0; i--)
+            {
+                if (slowStatuses[i].AppliesInRound < currentRound)
+                {
+                    slowStatuses.RemoveAt(i);
+                    removed = true;
+                }
+            }
+            return removed;
+        }
+
         internal void BeginDodgeAssistance(TrapFloorDodgeAssistanceState assistance)
         {
             activeDodgeAssistance = assistance?.Copy()
@@ -503,16 +595,25 @@ namespace ConsoleCards.Games.TrapFloor
             return copy;
         }
 
+        internal TrapFloorSlowStatusState[] CopySlowStatuses()
+        {
+            TrapFloorSlowStatusState[] copy = new TrapFloorSlowStatusState[slowStatuses.Count];
+            for (int i = 0; i < slowStatuses.Count; i++) copy[i] = slowStatuses[i].Copy();
+            return copy;
+        }
+
         internal void Restore(
             IEnumerable<TrapFloorTrapResolutionRecord> restoredTrapRecords,
             IEnumerable<TrapFloorAbilityActivationRecord> restoredAbilityActivations,
             TrapFloorDodgeAssistanceState restoredDodgeAssistance,
             TrapFloorRushAssistanceState restoredRushAssistance,
-            IEnumerable<TrapFloorBlindStatusState> restoredBlindStatuses)
+            IEnumerable<TrapFloorBlindStatusState> restoredBlindStatuses,
+            IEnumerable<TrapFloorSlowStatusState> restoredSlowStatuses)
         {
             if (restoredTrapRecords == null) throw new ArgumentNullException(nameof(restoredTrapRecords));
             if (restoredAbilityActivations == null) throw new ArgumentNullException(nameof(restoredAbilityActivations));
             if (restoredBlindStatuses == null) throw new ArgumentNullException(nameof(restoredBlindStatuses));
+            if (restoredSlowStatuses == null) throw new ArgumentNullException(nameof(restoredSlowStatuses));
             trapRecords.Clear();
             foreach (TrapFloorTrapResolutionRecord record in restoredTrapRecords)
             {
@@ -556,6 +657,20 @@ namespace ConsoleCards.Games.TrapFloor
                         throw new ArgumentException("Restored Blind statuses must be unique per Player and Round.", nameof(restoredBlindStatuses));
                 }
                 blindStatuses.Add(status.Copy());
+            }
+
+            slowStatuses.Clear();
+            foreach (TrapFloorSlowStatusState status in restoredSlowStatuses)
+            {
+                if (status == null)
+                    throw new ArgumentException("Restored Slow status cannot be null.", nameof(restoredSlowStatuses));
+                for (int i = 0; i < slowStatuses.Count; i++)
+                {
+                    if (slowStatuses[i].PlayerId == status.PlayerId
+                        && slowStatuses[i].AppliesInRound == status.AppliesInRound)
+                        throw new ArgumentException("Restored Slow statuses must be unique per Player and Round.", nameof(restoredSlowStatuses));
+                }
+                slowStatuses.Add(status.Copy());
             }
         }
     }
@@ -1142,8 +1257,11 @@ namespace ConsoleCards.Games.TrapFloor
                 return elimination;
             }
 
-            if (trap.Content.TrapEffect != TrapFloorTrapEffectCategory.BlindNextRound
-                || trap.Content.BlindDirectionMapping == null
+            bool isBlind = trap.Content.TrapEffect == TrapFloorTrapEffectCategory.BlindNextRound
+                && trap.Content.BlindDirectionMapping != null;
+            bool isSlow = trap.Content.TrapEffect == TrapFloorTrapEffectCategory.SlowNextRound
+                && trap.Content.MovementModifier.HasValue;
+            if ((!isBlind && !isSlow)
                 || matchState.Id != state.MatchId
                 || context.MatchId != matchState.Id)
                 return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.MatchMismatch);
@@ -1156,15 +1274,30 @@ namespace ConsoleCards.Games.TrapFloor
 
             int appliesInRound = checked(turnState.CurrentRound + 1);
             trap.SetDisposition(TrapFloorTrapResolutionDisposition.Resolved);
-            state.ScheduleBlind(
-                trap.AffectedPlayerId,
-                appliesInRound,
-                trap.Content.BlindDirectionMapping);
             long acceptedRevision = checked(matchState.Revision + 1L);
-            activityFeed.RecordBlindApplied(
-                acceptedRevision,
-                trap.AffectedPlayerId,
-                trap);
+            if (isBlind)
+            {
+                state.ScheduleBlind(
+                    trap.AffectedPlayerId,
+                    appliesInRound,
+                    trap.Content.BlindDirectionMapping);
+                activityFeed.RecordBlindApplied(
+                    acceptedRevision,
+                    trap.AffectedPlayerId,
+                    trap);
+            }
+            else
+            {
+                state.ScheduleSlow(
+                    trap.AffectedPlayerId,
+                    appliesInRound,
+                    trap.Content.MovementModifier.Value,
+                    trap.FloorCardId);
+                activityFeed.RecordSlowApplied(
+                    acceptedRevision,
+                    trap.AffectedPlayerId,
+                    trap);
+            }
             long revision = matchState.AdvanceRevision(
                 context.Id,
                 context.RequestedByPlayerId,

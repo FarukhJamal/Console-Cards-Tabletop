@@ -3525,12 +3525,19 @@ namespace ConsoleCards.Presentation.Prototype
 
             int handLimit = trapFloorTemplate.GameDefinition.ControllerConfiguration.MaximumHandSize;
             string standardGuidance = $"Draw up to {handLimit} if needed\nMove / Search / Buy / Skip";
-            if (!TryGetActiveBlindStatus(out TrapFloorBlindStatusState blindStatus))
-                return standardGuidance;
+            bool isBlind = TryGetActiveBlindStatus(out TrapFloorBlindStatusState blindStatus);
+            bool isSlow = TryGetActiveSlowStatus(out TrapFloorSlowStatusState slowStatus);
+            string slowGuidance = isSlow
+                ? $"SLOW — Movement {FormatSignedModifier(slowStatus.MovementModifier)} this round"
+                : string.Empty;
+            if (!isBlind)
+                return isSlow ? $"{slowGuidance}\n{standardGuidance}" : standardGuidance;
             string directionGuidance = blindStatus.IsDirectionResolved
                 ? $"BLIND DIRECTION: {blindStatus.MovementDirection.Value.ToString().ToUpperInvariant()}"
                 : "BLIND — Roll d4 for movement direction";
-            return $"BLIND — No draw this round\n{directionGuidance}\nMove / Search / Buy / Skip";
+            return isSlow
+                ? $"BLIND — No draw this round\n{directionGuidance}\n{slowGuidance}\nMove / Search / Buy / Skip"
+                : $"BLIND — No draw this round\n{directionGuidance}\nMove / Search / Buy / Skip";
         }
 
         private bool TryGetActiveBlindStatus(out TrapFloorBlindStatusState status)
@@ -3550,6 +3557,27 @@ namespace ConsoleCards.Presentation.Prototype
             status = null;
             return false;
         }
+
+        private bool TryGetActiveSlowStatus(out TrapFloorSlowStatusState status)
+        {
+            if (trapFloorAbilityResolutionState != null
+                && trapFloorTurnState != null
+                && !trapFloorTurnState.IsCurrentFloorFailed
+                && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                && trapFloorAbilityResolutionState.TryGetSlowStatus(
+                    trapFloorTurnState.ActivePlayerId,
+                    trapFloorTurnState.CurrentRound,
+                    out status))
+            {
+                return true;
+            }
+
+            status = null;
+            return false;
+        }
+
+        private static string FormatSignedModifier(int modifier) =>
+            modifier > 0 ? $"+{modifier}" : modifier.ToString();
 
         private bool HasEliminatedTrapFloorPlayers()
         {
@@ -4718,6 +4746,8 @@ namespace ConsoleCards.Presentation.Prototype
                     return "Assisted consequence: eliminate the resolving Player for the current Round.";
                 case TrapFloorTrapEffectCategory.BlindNextRound:
                     return "Assisted consequence: no Controller Card draw next Round; roll a d4 for movement direction.";
+                case TrapFloorTrapEffectCategory.SlowNextRound:
+                    return $"Assisted consequence: movement {FormatSignedModifier(content.MovementModifier.Value)} next Round.";
                 default:
                     return "Manual consequence: follow the authored Trap text.";
             }
@@ -4757,6 +4787,12 @@ namespace ConsoleCards.Presentation.Prototype
                 ShowMessage(
                     $"{FormatPlayerShortName(affectedPlayerId)} will be BLIND during "
                     + $"Round {trapFloorTurnState.CurrentRound + 1}.");
+            }
+            else if (floorCard.Content.TrapEffect == TrapFloorTrapEffectCategory.SlowNextRound)
+            {
+                ShowMessage(
+                    $"{FormatPlayerShortName(affectedPlayerId)} will be SLOWED "
+                    + $"during Round {trapFloorTurnState.CurrentRound + 1}.");
             }
             else
             {
@@ -8802,6 +8838,10 @@ namespace ConsoleCards.Presentation.Prototype
                         line = $"{FormatPlayerShortName(entry.ActorPlayerId)} rolled "
                             + $"{entry.BlindDirectionResult} for Blind direction";
                         break;
+                    case TrapFloorActivityKind.SlowApplied:
+                        line = $"{FormatPlayerShortName(entry.ActorPlayerId)} resolved "
+                            + $"{entry.ContentName} — Slow applies next Round";
+                        break;
                     default:
                         line = string.Empty;
                         break;
@@ -8860,6 +8900,14 @@ namespace ConsoleCards.Presentation.Prototype
                         out _))
                 {
                     state += " / BLIND";
+                }
+                if (trapFloorAbilityResolutionState != null
+                    && trapFloorAbilityResolutionState.TryGetSlowStatus(
+                        playerId,
+                        trapFloorTurnState.CurrentRound,
+                        out _))
+                {
+                    state += " / SLOW";
                 }
                 if (i > 0) text += " | ";
                 text += $"{FormatPlayerName(playerId)} {state}";

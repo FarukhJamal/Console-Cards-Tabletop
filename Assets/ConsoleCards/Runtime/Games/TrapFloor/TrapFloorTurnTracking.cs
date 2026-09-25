@@ -474,7 +474,10 @@ namespace ConsoleCards.Games.TrapFloor
             bool reactivatesPlayers = startsNextRound && state.CopyEliminatedPlayerIds().Length > 0;
             state.Advance();
             if (startsNextRound)
+            {
                 abilityResolutionState?.ExpireBlindBeforeRound(state.CurrentRound);
+                abilityResolutionState?.ExpireSlowBeforeRound(state.CurrentRound);
+            }
             if (reactivatesPlayers)
             {
                 activityFeed.RecordPlayersReactivated(
