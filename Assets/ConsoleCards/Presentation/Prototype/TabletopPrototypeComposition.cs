@@ -267,6 +267,11 @@ namespace ConsoleCards.Presentation.Prototype
         private long contextMenuRenderedRevision = -1;
         private TabletopObjectId inspectedCardId;
         private long inspectedCardRenderedRevision = -1;
+        private TrapFloorSearchKind pendingSearchKind;
+        private readonly List<TabletopObjectId> selectedSearchPaymentCardIds =
+            new List<TabletopObjectId>();
+        private readonly Dictionary<TabletopObjectId, SearchPaymentCardVisualState> searchPaymentVisuals =
+            new Dictionary<TabletopObjectId, SearchPaymentCardVisualState>();
 
         private DeckView deckView;
         private HandView handView;
@@ -3477,9 +3482,13 @@ namespace ConsoleCards.Presentation.Prototype
                         () => BeginPhysicalBlindDirection()));
                 }
                 actions.Add(new PrototypePopupActionOption(
-                    "Search / Reveal",
+                    "Search",
                     true,
                     SearchSelectedTrapFloorCard));
+                actions.Add(new PrototypePopupActionOption(
+                    "Careful Search",
+                    true,
+                    CarefulSearchSelectedTrapFloorCard));
                 actions.Add(new PrototypePopupActionOption(
                     "Buy Ability",
                     true,
@@ -4210,6 +4219,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void CloseContextMenu()
         {
+            ClearSearchPaymentPresentation();
             contextMenuMode = PrototypeContextMenuMode.None;
             contextMenuCardId = TabletopObjectId.Empty;
             contextMenuDieId = TabletopObjectId.Empty;
@@ -4276,6 +4286,9 @@ namespace ConsoleCards.Presentation.Prototype
                     break;
                 case PrototypeContextMenuMode.FloorCard:
                     ShowFloorCardContextMenu();
+                    break;
+                case PrototypeContextMenuMode.SearchPayment:
+                    ShowSearchPaymentPopup();
                     break;
                 case PrototypeContextMenuMode.PendingFloormasterCard:
                     ShowPendingFloormasterCardContextMenu();
@@ -4664,9 +4677,13 @@ namespace ConsoleCards.Presentation.Prototype
                 && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn)
             {
                 actions.Add(new PrototypePopupActionOption(
-                    "Search / Reveal",
+                    "Search",
                     true,
-                    () => SearchAndRevealFloorCard(targetCardId)));
+                    () => BeginTrapFloorSearch(targetCardId, TrapFloorSearchKind.Normal)));
+                actions.Add(new PrototypePopupActionOption(
+                    "Careful Search",
+                    true,
+                    () => BeginTrapFloorSearch(targetCardId, TrapFloorSearchKind.Careful)));
             }
             else if (floorCard.IsRevealed
                 && floorCard.Content.HasSupportedAssistedTrapEffect
@@ -4711,7 +4728,7 @@ namespace ConsoleCards.Presentation.Prototype
                     ? $"COLLAPSED HOLE — Floor {floorCard.Coordinate} is permanently unusable."
                     : floorCard.IsRevealed
                     ? FloorCardContextDescription(floorCard)
-                    : "MYSTERY — content is hidden until Search / Reveal is accepted.",
+                    : "MYSTERY — content is hidden until Search is accepted.",
                 actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);
@@ -4723,6 +4740,10 @@ namespace ConsoleCards.Presentation.Prototype
                 $"Revealed: {floorCard.Content.Category} — {floorCard.Content.DisplayName}";
             if (floorCard.Content.Category == TrapFloorFloorContentCategory.Trap)
             {
+                if (WasTrapSafelyRevealed(floorCard.ObjectId))
+                {
+                    return $"{description}\nCAREFUL SEARCH — this reveal did not trigger the Trap; it remains a Trap.";
+                }
                 if (IsTrapFloorTrapNeutralized(floorCard.ObjectId))
                 {
                     return $"{description}\nTRAP NEUTRALIZED — this Floor is safe from assisted Trap consequences.";
@@ -4842,42 +4863,79 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
-        private void SearchAndRevealFloorCard(TabletopObjectId floorCardId)
+        private void BeginTrapFloorSearch(
+            TabletopObjectId floorCardId,
+            TrapFloorSearchKind searchKind)
         {
             if (trapFloorRevealFloorUseCase == null
                 || trapFloorTurnState == null
                 || trapFloorTurnState.IsCurrentFloorFailed
                 || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
             {
-                ShowMessage("Search / Reveal is available only during an active Player turn.");
+                ShowMessage("Search is available only during an active Player turn.");
                 return;
             }
 
-            TrapFloorRevealFloorResult result = trapFloorRevealFloorUseCase.Execute(
-                matchState,
-                new TrapFloorRevealFloorCommand(
-                    CreateCommandContext(trapFloorTurnState.ActivePlayerId),
-                    floorCardId));
-            if (!result.Succeeded)
+            if (!trapFloorTemplate.TryGetFloorCardState(
+                    matchState,
+                    floorCardId,
+                    out TrapFloorFloorCardState floorCard)
+                || floorCard.IsRevealed
+                || (trapFloorCollapseState != null && trapFloorCollapseState.IsCollapsed(floorCardId)))
             {
-                ShowMessage($"Search / Reveal rejected: {result.Error}.");
+                ShowMessage("Select an unrevealed, usable Floor before searching.");
                 return;
             }
 
-            if (TryGetCardView(floorCardId, out CardView floorCardView))
+            pendingSearchKind = searchKind;
+            if (!TryBuildSearchPaymentOptions(
+                    out TrapFloorSearchConfiguration configuration,
+                    out _,
+                    out List<SearchPaymentCardOption> options))
             {
-                floorCardView.ApplyAcceptedState();
+                ShowMessage("Search assistance is unavailable because its authored configuration is invalid.");
+                return;
             }
 
-            RefreshCardContentVisibility();
-            selectionPresenter?.Refresh();
-            ShowTrapFloorReveal(result);
-            ShowMessage(
-                $"{FormatPlayerName(result.RevealedActivity.ActorPlayerId)} revealed "
-                + $"{result.FloorCard.Content.DisplayName} at Floor {result.FloorCard.Coordinate}.");
+            if (searchKind == TrapFloorSearchKind.Normal)
+            {
+                bool hasEligible = false;
+                for (int i = 0; i < options.Count; i++) hasEligible |= options[i].Eligible;
+                if (!hasEligible)
+                {
+                    ShowMessage("Search requires A, B, X, or Y in your Hand.");
+                    return;
+                }
+            }
+            else
+            {
+                string missing = MissingCarefulSearchRequirements(configuration, options);
+                if (!string.IsNullOrEmpty(missing))
+                {
+                    ShowMessage($"Careful Search requires A + B + X + Y in your Hand. Missing: {missing}.");
+                    return;
+                }
+            }
+
+            contextMenuCardId = floorCardId;
+            selectedSearchPaymentCardIds.Clear();
+            if (searchKind == TrapFloorSearchKind.Careful)
+                PreselectUnambiguousCarefulPayment(configuration, options);
+            CaptureSearchPaymentPresentation(options);
+            SetContextMenuMode(PrototypeContextMenuMode.SearchPayment);
         }
 
         private void SearchSelectedTrapFloorCard()
+        {
+            SearchSelectedTrapFloorCard(TrapFloorSearchKind.Normal);
+        }
+
+        private void CarefulSearchSelectedTrapFloorCard()
+        {
+            SearchSelectedTrapFloorCard(TrapFloorSearchKind.Careful);
+        }
+
+        private void SearchSelectedTrapFloorCard(TrapFloorSearchKind searchKind)
         {
             CardView selectedCard = selectionState?.SelectedView as CardView;
             if (selectedCard == null
@@ -4890,11 +4948,351 @@ namespace ConsoleCards.Presentation.Prototype
                 || (trapFloorCollapseState != null
                     && trapFloorCollapseState.IsCollapsed(floorCard.ObjectId)))
             {
-                ShowMessage("Select a face-down, usable Floor Card, then choose Search / Reveal.");
+                ShowMessage("Select a face-down, usable Floor Card, then choose Search.");
                 return;
             }
 
-            SearchAndRevealFloorCard(floorCard.ObjectId);
+            contextMenuAnchorScreenPosition = targetCamera.WorldToScreenPoint(selectedCard.transform.position);
+            BeginTrapFloorSearch(floorCard.ObjectId, searchKind);
+        }
+
+        private void ShowSearchPaymentPopup()
+        {
+            if (!TryBuildSearchPaymentOptions(
+                    out TrapFloorSearchConfiguration configuration,
+                    out _,
+                    out List<SearchPaymentCardOption> options))
+            {
+                CloseContextMenu();
+                ShowMessage("Search assistance is unavailable because its authored configuration is invalid.");
+                return;
+            }
+
+            RefreshSearchPaymentPresentation(options);
+            List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
+            for (int i = 0; i < options.Count; i++)
+            {
+                SearchPaymentCardOption option = options[i];
+                if (!option.Eligible) continue;
+                TabletopObjectId cardId = option.CardId;
+                ControllerInput input = option.Input.Value;
+                bool selected = selectedSearchPaymentCardIds.Contains(cardId);
+                actions.Add(new PrototypePopupActionOption(
+                    $"{(selected ? "✓ " : string.Empty)}{input} — {option.DisplayName} ({ShortObjectId(cardId)})",
+                    true,
+                    () => ToggleSearchPaymentCard(cardId, input)));
+            }
+
+            bool ready = IsSearchPaymentReady(configuration, options);
+            string selection = SearchPaymentSelectionSummary(options);
+            actions.Add(new PrototypePopupActionOption(
+                pendingSearchKind == TrapFloorSearchKind.Careful
+                    ? "Confirm Careful Search"
+                    : "Confirm Search",
+                ready,
+                ConfirmTrapFloorSearch));
+            actions.Add(new PrototypePopupActionOption("Cancel", true, CloseContextMenu));
+            runtimeUi.ShowContextMenu(
+                contextMenuAnchorScreenPosition,
+                pendingSearchKind == TrapFloorSearchKind.Careful
+                    ? "CAREFUL SEARCH — HAND PAYMENT"
+                    : "SEARCH — HAND PAYMENT",
+                pendingSearchKind == TrapFloorSearchKind.Careful
+                    ? $"Choose exact A, B, X, and Y Card instances from the active Player's Hand.\nSelected: {selection}"
+                    : $"Choose one A, B, X, or Y Card instance from the active Player's Hand.\nSelected: {selection}",
+                actions,
+                CloseContextMenu,
+                DismissPopupFromSecondary);
+        }
+
+        private void ToggleSearchPaymentCard(TabletopObjectId cardId, ControllerInput input)
+        {
+            if (selectedSearchPaymentCardIds.Contains(cardId))
+            {
+                selectedSearchPaymentCardIds.Remove(cardId);
+            }
+            else if (pendingSearchKind == TrapFloorSearchKind.Normal)
+            {
+                selectedSearchPaymentCardIds.Clear();
+                selectedSearchPaymentCardIds.Add(cardId);
+            }
+            else
+            {
+                RemoveSelectedSearchInput(input);
+                selectedSearchPaymentCardIds.Add(cardId);
+            }
+            RenderOpenTabletopPopup();
+        }
+
+        private void ConfirmTrapFloorSearch()
+        {
+            if (!TryBuildSearchPaymentOptions(
+                    out TrapFloorSearchConfiguration configuration,
+                    out ContainerState hand,
+                    out List<SearchPaymentCardOption> options)
+                || !IsSearchPaymentReady(configuration, options))
+            {
+                ShowMessage("Search payment is incomplete.");
+                return;
+            }
+
+            TabletopObjectId floorCardId = contextMenuCardId;
+            TrapFloorSearchKind searchKind = pendingSearchKind;
+            List<TabletopObjectId> payment = new List<TabletopObjectId>(selectedSearchPaymentCardIds);
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
+                CaptureContainerCardTransforms(hand.Id);
+            ClearSearchPaymentPresentation();
+            TrapFloorRevealFloorResult result = trapFloorRevealFloorUseCase.Execute(
+                matchState,
+                new TrapFloorRevealFloorCommand(
+                    CreateCommandContext(trapFloorTurnState.ActivePlayerId),
+                    floorCardId,
+                    searchKind,
+                    payment));
+            if (!result.Succeeded)
+            {
+                CloseContextMenu();
+                ApplyLayout(hand.Id);
+                presentationTransitions.AnimateCardsFromCurrentResults(transitionStarts, returnDuration);
+                ShowMessage($"Search rejected: {result.Error}.");
+                return;
+            }
+
+            for (int i = 0; i < result.ConsumedCardIds.Count; i++)
+                ReleaseRuntimeCardInstance(result.ConsumedCardIds[i]);
+            RefreshContainerCardViewSources();
+            ApplyLayout(hand.Id);
+            RefreshSelectionPresenterAfterRuntimeProjection();
+            presentationTransitions.AnimateCardsFromCurrentResults(transitionStarts, handReflowDuration, 0.035f);
+            if (TryGetCardView(floorCardId, out CardView floorCardView))
+                floorCardView.ApplyAcceptedState();
+            RefreshCardContentVisibility();
+            selectionPresenter?.Refresh();
+            ShowTrapFloorReveal(result);
+            if (result.TrapSuppressed)
+            {
+                ShowMessage(
+                    $"{FormatPlayerShortName(result.RevealedActivity.ActorPlayerId)} revealed "
+                    + $"{result.FloorCard.Content.DisplayName} safely.");
+            }
+            else if (result.SearchKind == TrapFloorSearchKind.Careful)
+            {
+                ShowMessage(
+                    $"{FormatPlayerShortName(result.RevealedActivity.ActorPlayerId)} carefully searched "
+                    + $"Floor {result.FloorCard.Coordinate}.");
+            }
+            else
+            {
+                ShowMessage(
+                    $"{FormatPlayerShortName(result.RevealedActivity.ActorPlayerId)} searched "
+                    + $"Floor {result.FloorCard.Coordinate} using {result.SearchedActivity.PaymentInputs[0]}.");
+            }
+        }
+
+        private bool TryBuildSearchPaymentOptions(
+            out TrapFloorSearchConfiguration configuration,
+            out ContainerState hand,
+            out List<SearchPaymentCardOption> options)
+        {
+            configuration = null;
+            options = new List<SearchPaymentCardOption>();
+            hand = null;
+            if (trapFloorTemplate == null
+                || trapFloorTurnState == null
+                || !TrapFloorSearchConfiguration.TryCreate(
+                    trapFloorTemplate.GameDefinition,
+                    out configuration)
+                || !ControllerInputCardCatalog.TryCreate(
+                    trapFloorTemplate.GameDefinition,
+                    out ControllerInputCardCatalog catalog))
+                return false;
+
+            TrapFloorPlayerSetupDefinition player = GetAssistedTrapFloorPlayerSetup();
+            if (!matchState.Containers.TryGetValue(player.HandContainerId, out hand)
+                || hand.Kind != ContainerKind.Hand)
+                return false;
+
+            for (int i = 0; i < hand.Count; i++)
+            {
+                TabletopObjectId cardId = hand.GetObjectAt(i);
+                if (!matchState.Cards.TryGetValue(cardId, out CardInstanceState card)) return false;
+                ControllerInput? input = catalog.TryGetInput(
+                    card.BaseState.DefinitionId,
+                    out ControllerInput resolvedInput)
+                    ? resolvedInput
+                    : (ControllerInput?)null;
+                bool eligible = input.HasValue
+                    && (pendingSearchKind == TrapFloorSearchKind.Normal
+                        ? configuration.IsNormalSearchInput(input.Value)
+                        : configuration.RequiredCarefulCount(input.Value) > 0);
+                string displayName = TryGetAuthoredCardDefinition(
+                        card.BaseState.DefinitionId,
+                        out CardDefinition definition)
+                    ? definition.DisplayName
+                    : "Controller Card";
+                options.Add(new SearchPaymentCardOption(cardId, input, displayName, eligible));
+            }
+            return true;
+        }
+
+        private static string MissingCarefulSearchRequirements(
+            TrapFloorSearchConfiguration configuration,
+            IReadOnlyList<SearchPaymentCardOption> options)
+        {
+            List<string> missing = new List<string>();
+            for (int requirementIndex = 0;
+                requirementIndex < configuration.CarefulRequirements.Count;
+                requirementIndex++)
+            {
+                InputRequirementData requirement = configuration.CarefulRequirements[requirementIndex];
+                int available = 0;
+                for (int optionIndex = 0; optionIndex < options.Count; optionIndex++)
+                {
+                    if (options[optionIndex].Input == requirement.Input) available++;
+                }
+                if (available < requirement.Count) missing.Add(requirement.Input.ToString());
+            }
+            return string.Join(", ", missing);
+        }
+
+        private void PreselectUnambiguousCarefulPayment(
+            TrapFloorSearchConfiguration configuration,
+            IReadOnlyList<SearchPaymentCardOption> options)
+        {
+            for (int requirementIndex = 0;
+                requirementIndex < configuration.CarefulRequirements.Count;
+                requirementIndex++)
+            {
+                InputRequirementData requirement = configuration.CarefulRequirements[requirementIndex];
+                List<TabletopObjectId> candidates = new List<TabletopObjectId>();
+                for (int optionIndex = 0; optionIndex < options.Count; optionIndex++)
+                {
+                    SearchPaymentCardOption option = options[optionIndex];
+                    if (option.Input == requirement.Input) candidates.Add(option.CardId);
+                }
+                if (candidates.Count == requirement.Count)
+                    selectedSearchPaymentCardIds.AddRange(candidates);
+            }
+        }
+
+        private bool IsSearchPaymentReady(
+            TrapFloorSearchConfiguration configuration,
+            IReadOnlyList<SearchPaymentCardOption> options)
+        {
+            if (pendingSearchKind == TrapFloorSearchKind.Normal)
+                return selectedSearchPaymentCardIds.Count == 1;
+
+            int requiredTotal = 0;
+            for (int requirementIndex = 0;
+                requirementIndex < configuration.CarefulRequirements.Count;
+                requirementIndex++)
+            {
+                InputRequirementData requirement = configuration.CarefulRequirements[requirementIndex];
+                requiredTotal += requirement.Count;
+                int selected = 0;
+                for (int optionIndex = 0; optionIndex < options.Count; optionIndex++)
+                {
+                    SearchPaymentCardOption option = options[optionIndex];
+                    if (option.Input == requirement.Input
+                        && selectedSearchPaymentCardIds.Contains(option.CardId))
+                        selected++;
+                }
+                if (selected != requirement.Count) return false;
+            }
+            return selectedSearchPaymentCardIds.Count == requiredTotal;
+        }
+
+        private void RemoveSelectedSearchInput(ControllerInput input)
+        {
+            if (!TryBuildSearchPaymentOptions(out _, out _, out List<SearchPaymentCardOption> options))
+                return;
+            for (int i = selectedSearchPaymentCardIds.Count - 1; i >= 0; i--)
+            {
+                TabletopObjectId selectedId = selectedSearchPaymentCardIds[i];
+                for (int optionIndex = 0; optionIndex < options.Count; optionIndex++)
+                {
+                    if (options[optionIndex].CardId == selectedId
+                        && options[optionIndex].Input == input)
+                    {
+                        selectedSearchPaymentCardIds.RemoveAt(i);
+                        break;
+                    }
+                }
+            }
+        }
+
+        private string SearchPaymentSelectionSummary(IReadOnlyList<SearchPaymentCardOption> options)
+        {
+            if (selectedSearchPaymentCardIds.Count == 0) return "None";
+            List<string> selected = new List<string>();
+            for (int i = 0; i < selectedSearchPaymentCardIds.Count; i++)
+            {
+                TabletopObjectId selectedId = selectedSearchPaymentCardIds[i];
+                for (int optionIndex = 0; optionIndex < options.Count; optionIndex++)
+                {
+                    SearchPaymentCardOption option = options[optionIndex];
+                    if (option.CardId == selectedId)
+                    {
+                        selected.Add($"{option.Input} ({ShortObjectId(option.CardId)})");
+                        break;
+                    }
+                }
+            }
+            return string.Join(" + ", selected);
+        }
+
+        private static string ShortObjectId(TabletopObjectId objectId)
+        {
+            string text = objectId.ToString();
+            return text.Length <= 6 ? text : text.Substring(text.Length - 6);
+        }
+
+        private void CaptureSearchPaymentPresentation(IReadOnlyList<SearchPaymentCardOption> options)
+        {
+            RestoreSearchPaymentVisuals();
+            for (int i = 0; i < options.Count; i++)
+            {
+                SearchPaymentCardOption option = options[i];
+                if (TryGetCardVisualReferences(
+                    option.CardId,
+                    out PrototypeCardVisualReferences visualReferences))
+                {
+                    searchPaymentVisuals.Add(
+                        option.CardId,
+                        new SearchPaymentCardVisualState(visualReferences));
+                }
+            }
+            RefreshSearchPaymentPresentation(options);
+        }
+
+        private void RefreshSearchPaymentPresentation(IReadOnlyList<SearchPaymentCardOption> options)
+        {
+            for (int i = 0; i < options.Count; i++)
+            {
+                SearchPaymentCardOption option = options[i];
+                if (searchPaymentVisuals.TryGetValue(
+                    option.CardId,
+                    out SearchPaymentCardVisualState visual))
+                {
+                    visual.Apply(
+                        option.Eligible,
+                        selectedSearchPaymentCardIds.Contains(option.CardId));
+                }
+            }
+        }
+
+        private void ClearSearchPaymentPresentation()
+        {
+            RestoreSearchPaymentVisuals();
+            selectedSearchPaymentCardIds.Clear();
+            selectionPresenter?.Refresh();
+        }
+
+        private void RestoreSearchPaymentVisuals()
+        {
+            foreach (SearchPaymentCardVisualState visual in searchPaymentVisuals.Values)
+                visual.Restore();
+            searchPaymentVisuals.Clear();
         }
 
         private void ClaimTrapFloorKey(TabletopObjectId floorCardId)
@@ -5219,11 +5617,18 @@ namespace ConsoleCards.Presentation.Prototype
                 PrototypePopupActionOption? primaryAction = null;
                 if (floorCard.Content.Category == TrapFloorFloorContentCategory.Trap)
                 {
+                    bool safelyRevealed = WasTrapSafelyRevealed(targetCardId);
                     bool neutralized = IsTrapFloorTrapNeutralized(targetCardId);
-                    objectiveContext = neutralized
+                    objectiveContext = safelyRevealed
+                        ? "CAREFUL SEARCH — Trap did not trigger during this reveal.\nThe Floor remains a Trap.\n"
+                        : neutralized
                         ? "TRAP NEUTRALIZED\nThis Floor is safe from assisted Trap consequences.\n"
                         : TrapFloorTrapEffectDescription(floorCard.Content) + "\n";
-                    if (neutralized)
+                    if (safelyRevealed)
+                    {
+                        frontTitle = $"{floorCard.Content.DisplayName} — REVEALED SAFELY";
+                    }
+                    else if (neutralized)
                     {
                         frontTitle = $"{floorCard.Content.DisplayName} — SAFE";
                     }
@@ -5279,7 +5684,7 @@ namespace ConsoleCards.Presentation.Prototype
                         new Color(0.04f, 0.06f, 0.08f)),
                     new PrototypeCardInspectSideModel(
                         "MYSTERY",
-                        $"Floor {floorCard.Coordinate}\nContent remains hidden until Search / Reveal.",
+                        $"Floor {floorCard.Coordinate}\nContent remains hidden until Search.",
                         null,
                         new Color(0.10f, 0.19f, 0.42f),
                         Color.white),
@@ -5872,6 +6277,18 @@ namespace ConsoleCards.Presentation.Prototype
                         && matchState.Cards.ContainsKey(contextMenuCardId)
                         && trapFloorTemplate.IsFloorCard(contextMenuCardId)
                         && TryGetCardView(contextMenuCardId, out _);
+                case PrototypeContextMenuMode.SearchPayment:
+                    return trapFloorTemplate != null
+                        && trapFloorTurnState != null
+                        && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                        && !trapFloorTurnState.IsCurrentFloorFailed
+                        && trapFloorTemplate.TryGetFloorCardState(
+                            matchState,
+                            contextMenuCardId,
+                            out TrapFloorFloorCardState searchFloor)
+                        && !searchFloor.IsRevealed
+                        && (trapFloorCollapseState == null
+                            || !trapFloorCollapseState.IsCollapsed(contextMenuCardId));
                 case PrototypeContextMenuMode.PendingFloormasterCard:
                     return floormasterLifecycleState?.PendingCard != null
                         && floormasterLifecycleState.PendingCard.CardId == contextMenuCardId
@@ -6500,7 +6917,8 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorTemplate,
                 trapFloorActivityFeed,
                 trapFloorCollapseState,
-                trapFloorAbilityResolutionState);
+                trapFloorAbilityResolutionState,
+                trapFloorTurnState);
             trapFloorObjectiveUseCase = new TrapFloorObjectiveUseCase(
                 trapFloorTemplate,
                 trapFloorObjectiveState,
@@ -8661,6 +9079,22 @@ namespace ConsoleCards.Presentation.Prototype
                 && trap.Disposition == TrapFloorTrapResolutionDisposition.Neutralized;
         }
 
+        private bool WasTrapSafelyRevealed(TabletopObjectId floorCardId)
+        {
+            if (trapFloorAbilityResolutionState != null
+                && trapFloorAbilityResolutionState.TryGetTrap(floorCardId, out _))
+                return false;
+            if (trapFloorActivityFeed == null) return false;
+            for (int i = trapFloorActivityFeed.Entries.Count - 1; i >= 0; i--)
+            {
+                TrapFloorActivityEntry entry = trapFloorActivityFeed.Entries[i];
+                if (entry.FloorCardId == floorCardId
+                    && entry.Kind == TrapFloorActivityKind.SafelyRevealedTrap)
+                    return true;
+            }
+            return false;
+        }
+
         private bool IsTrapFloorTrapPending(TabletopObjectId floorCardId)
         {
             return trapFloorAbilityResolutionState != null
@@ -8817,11 +9251,18 @@ namespace ConsoleCards.Presentation.Prototype
                 switch (entry.Kind)
                 {
                     case TrapFloorActivityKind.SearchedFloor:
-                        line = $"{FormatPlayerName(entry.ActorPlayerId)} searched Floor {entry.Coordinate}";
+                        line = $"{FormatPlayerName(entry.ActorPlayerId)} searched Floor {entry.Coordinate}"
+                            + (entry.PaymentInputs.Count > 0 ? $" using {entry.PaymentInputs[0]}" : string.Empty);
+                        break;
+                    case TrapFloorActivityKind.CarefullySearchedFloor:
+                        line = $"{FormatPlayerName(entry.ActorPlayerId)} carefully searched Floor {entry.Coordinate}";
                         break;
                     case TrapFloorActivityKind.RevealedFloorContent:
                         line = $"{FormatPlayerName(entry.ActorPlayerId)} revealed "
                             + $"{entry.ContentName} [{entry.ContentCategory}]";
+                        break;
+                    case TrapFloorActivityKind.SafelyRevealedTrap:
+                        line = $"{FormatPlayerName(entry.ActorPlayerId)} revealed {entry.ContentName} safely";
                         break;
                     case TrapFloorActivityKind.ClaimedKey:
                         line = $"{FormatPlayerName(entry.ActorPlayerId)} claimed {entry.ContentName}";
@@ -10128,6 +10569,91 @@ namespace ConsoleCards.Presentation.Prototype
             public bool WasActive { get; }
         }
 
+        private readonly struct SearchPaymentCardOption
+        {
+            public SearchPaymentCardOption(
+                TabletopObjectId cardId,
+                ControllerInput? input,
+                string displayName,
+                bool eligible)
+            {
+                CardId = cardId;
+                Input = input;
+                DisplayName = displayName ?? "Controller Card";
+                Eligible = eligible;
+            }
+
+            public TabletopObjectId CardId { get; }
+            public ControllerInput? Input { get; }
+            public string DisplayName { get; }
+            public bool Eligible { get; }
+        }
+
+        private sealed class SearchPaymentCardVisualState
+        {
+            private readonly PrototypeCardVisualReferences visualReferences;
+            private readonly Vector3 baselineScale;
+            private readonly MaterialPropertyBlock faceUpBaseline = new MaterialPropertyBlock();
+            private readonly MaterialPropertyBlock faceDownBaseline = new MaterialPropertyBlock();
+            private readonly bool baselineSelected;
+
+            public SearchPaymentCardVisualState(PrototypeCardVisualReferences visualReferences)
+            {
+                this.visualReferences = visualReferences
+                    ?? throw new ArgumentNullException(nameof(visualReferences));
+                baselineScale = visualReferences.transform.localScale;
+                baselineSelected = visualReferences.SelectionVisual.IsSelected;
+                visualReferences.FaceUpRenderer.GetPropertyBlock(faceUpBaseline);
+                visualReferences.FaceDownRenderer.GetPropertyBlock(faceDownBaseline);
+            }
+
+            public void Apply(bool eligible, bool selected)
+            {
+                visualReferences.transform.localScale = baselineScale
+                    * (selected ? 1.09f : eligible ? 1.04f : 1f);
+                ApplyDimmed(
+                    visualReferences.FaceUpRenderer,
+                    faceUpBaseline,
+                    !eligible);
+                ApplyDimmed(
+                    visualReferences.FaceDownRenderer,
+                    faceDownBaseline,
+                    !eligible);
+                visualReferences.SelectionVisual.SetSelected(selected);
+            }
+
+            public void Restore()
+            {
+                if (visualReferences == null) return;
+                visualReferences.transform.localScale = baselineScale;
+                visualReferences.FaceUpRenderer.SetPropertyBlock(faceUpBaseline);
+                visualReferences.FaceDownRenderer.SetPropertyBlock(faceDownBaseline);
+                if (visualReferences.SelectionVisual != null
+                    && visualReferences.SelectionVisual.IsConfigured)
+                    visualReferences.SelectionVisual.SetSelected(baselineSelected);
+            }
+
+            private static void ApplyDimmed(
+                Renderer renderer,
+                MaterialPropertyBlock baseline,
+                bool dimmed)
+            {
+                renderer.SetPropertyBlock(baseline);
+                if (!dimmed) return;
+                MaterialPropertyBlock properties = new MaterialPropertyBlock();
+                renderer.GetPropertyBlock(properties);
+                Color baseColor = properties.GetColor("_BaseColor");
+                Color color = properties.GetColor("_Color");
+                properties.SetColor(
+                    "_BaseColor",
+                    new Color(baseColor.r * 0.32f, baseColor.g * 0.32f, baseColor.b * 0.32f, baseColor.a));
+                properties.SetColor(
+                    "_Color",
+                    new Color(color.r * 0.32f, color.g * 0.32f, color.b * 0.32f, color.a));
+                renderer.SetPropertyBlock(properties);
+            }
+        }
+
         private enum PrototypeContextMenuMode
         {
             None,
@@ -10137,6 +10663,7 @@ namespace ConsoleCards.Presentation.Prototype
             PopulateDeck,
             TabletopCard,
             FloorCard,
+            SearchPayment,
             PendingFloormasterCard,
             StackCard,
             ContainedCard,

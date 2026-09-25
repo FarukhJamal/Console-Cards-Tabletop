@@ -96,4 +96,4 @@ MonoBehaviour:
     sharedPaymentAllowed: 0
   controllerMappingKind: 0
   presentationReference: trap-floor-default-presentation
-  assistanceConfiguration: Optional reveal, Key, Exit, and Collapse assistance may consume this data but must not block freeform actions.
+  assistanceConfiguration: Optional reveal, Key, Exit, and Collapse assistance may consume this data but must not block freeform actions.;trap-floor-search-normal-any=A,B,X,Y;trap-floor-search-careful=A+B+X+Y;trap-floor-careful-trap-suppression=true
