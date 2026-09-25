@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: FloorWebSnare
   m_EditorClassIdentifier: 
   stableId: 54460015-4f4f-4000-8000-001500000007
-  displayName: Web Snare
+  displayName: Sticky Trap
   category: Trap
-  description: 'PROVISIONAL STAGE-03 - Challenge: roll 1d6. On 3-6, break free. On 1-2, leave your Pawn here until another Player completes a Search.'
+  description: 'The affected Player is stuck in place during their next Round.'
   frontArtwork: {fileID: 0}
   frontArtworkReference: 
   backArtwork: {fileID: 0}
@@ -25,4 +25,5 @@ MonoBehaviour:
     requirements: []
   orientation: 0
   preferredConsolePlacement: 
-  tags: [trap-floor, floor-content, provisional-stage03]
+  tags: [trap-floor, floor-content, sticky-trap]
+  effectMetadata: 'trap-effect-sticky-next-round;movement-allowed=false'

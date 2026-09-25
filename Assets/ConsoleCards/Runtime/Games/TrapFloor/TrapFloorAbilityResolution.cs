@@ -306,6 +306,40 @@ namespace ConsoleCards.Games.TrapFloor
                 SourceTrapFloorCardId);
     }
 
+    /// <summary>Authoritative next-Round stay-in-place guidance from one resolved Sticky Trap.</summary>
+    public sealed class TrapFloorStickyStatusState
+    {
+        internal TrapFloorStickyStatusState(
+            PlayerId playerId,
+            int appliesInRound,
+            bool movementAllowed,
+            TabletopObjectId sourceTrapFloorCardId)
+        {
+            if (playerId.IsEmpty) throw new ArgumentException("Sticky Player ID cannot be empty.", nameof(playerId));
+            if (appliesInRound < 2) throw new ArgumentOutOfRangeException(nameof(appliesInRound));
+            if (movementAllowed) throw new ArgumentException("Sticky guidance must disallow movement.", nameof(movementAllowed));
+            if (sourceTrapFloorCardId.IsEmpty)
+                throw new ArgumentException("Sticky source Trap Floor Card ID cannot be empty.", nameof(sourceTrapFloorCardId));
+
+            PlayerId = playerId;
+            AppliesInRound = appliesInRound;
+            MovementAllowed = movementAllowed;
+            SourceTrapFloorCardId = sourceTrapFloorCardId;
+        }
+
+        public PlayerId PlayerId { get; }
+        public int AppliesInRound { get; }
+        public bool MovementAllowed { get; }
+        public TabletopObjectId SourceTrapFloorCardId { get; }
+
+        internal TrapFloorStickyStatusState Copy() =>
+            new TrapFloorStickyStatusState(
+                PlayerId,
+                AppliesInRound,
+                MovementAllowed,
+                SourceTrapFloorCardId);
+    }
+
     /// <summary>
     /// Match-scoped Trap/Ability assistance only. It never constrains physical tabletop interaction.
     /// </summary>
@@ -322,6 +356,9 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly List<TrapFloorSlowStatusState> slowStatuses =
             new List<TrapFloorSlowStatusState>();
         private readonly ReadOnlyCollection<TrapFloorSlowStatusState> readOnlySlowStatuses;
+        private readonly List<TrapFloorStickyStatusState> stickyStatuses =
+            new List<TrapFloorStickyStatusState>();
+        private readonly ReadOnlyCollection<TrapFloorStickyStatusState> readOnlyStickyStatuses;
         private TrapFloorDodgeAssistanceState activeDodgeAssistance;
         private TrapFloorRushAssistanceState activeRushAssistance;
 
@@ -332,12 +369,14 @@ namespace ConsoleCards.Games.TrapFloor
             readOnlyTrapRecords = trapRecords.AsReadOnly();
             readOnlyBlindStatuses = blindStatuses.AsReadOnly();
             readOnlySlowStatuses = slowStatuses.AsReadOnly();
+            readOnlyStickyStatuses = stickyStatuses.AsReadOnly();
         }
 
         public MatchId MatchId { get; }
         public IReadOnlyList<TrapFloorTrapResolutionRecord> TrapRecords => readOnlyTrapRecords;
         public IReadOnlyList<TrapFloorBlindStatusState> BlindStatuses => readOnlyBlindStatuses;
         public IReadOnlyList<TrapFloorSlowStatusState> SlowStatuses => readOnlySlowStatuses;
+        public IReadOnlyList<TrapFloorStickyStatusState> StickyStatuses => readOnlyStickyStatuses;
         public TrapFloorDodgeAssistanceState ActiveDodgeAssistance => activeDodgeAssistance;
         public TrapFloorRushAssistanceState ActiveRushAssistance => activeRushAssistance;
         public bool HasAbilityActivatedThisTurn(
@@ -531,6 +570,59 @@ namespace ConsoleCards.Games.TrapFloor
             return removed;
         }
 
+        public bool TryGetStickyStatus(
+            PlayerId playerId,
+            int round,
+            out TrapFloorStickyStatusState status)
+        {
+            for (int i = stickyStatuses.Count - 1; i >= 0; i--)
+            {
+                TrapFloorStickyStatusState candidate = stickyStatuses[i];
+                if (candidate.PlayerId == playerId && candidate.AppliesInRound == round)
+                {
+                    status = candidate;
+                    return true;
+                }
+            }
+
+            status = null;
+            return false;
+        }
+
+        internal void ScheduleSticky(
+            PlayerId playerId,
+            int appliesInRound,
+            bool movementAllowed,
+            TabletopObjectId sourceTrapFloorCardId)
+        {
+            for (int i = stickyStatuses.Count - 1; i >= 0; i--)
+            {
+                if (stickyStatuses[i].PlayerId == playerId
+                    && stickyStatuses[i].AppliesInRound == appliesInRound)
+                    stickyStatuses.RemoveAt(i);
+            }
+
+            stickyStatuses.Add(new TrapFloorStickyStatusState(
+                playerId,
+                appliesInRound,
+                movementAllowed,
+                sourceTrapFloorCardId));
+        }
+
+        internal bool ExpireStickyBeforeRound(int currentRound)
+        {
+            bool removed = false;
+            for (int i = stickyStatuses.Count - 1; i >= 0; i--)
+            {
+                if (stickyStatuses[i].AppliesInRound < currentRound)
+                {
+                    stickyStatuses.RemoveAt(i);
+                    removed = true;
+                }
+            }
+            return removed;
+        }
+
         internal void BeginDodgeAssistance(TrapFloorDodgeAssistanceState assistance)
         {
             activeDodgeAssistance = assistance?.Copy()
@@ -602,18 +694,27 @@ namespace ConsoleCards.Games.TrapFloor
             return copy;
         }
 
+        internal TrapFloorStickyStatusState[] CopyStickyStatuses()
+        {
+            TrapFloorStickyStatusState[] copy = new TrapFloorStickyStatusState[stickyStatuses.Count];
+            for (int i = 0; i < stickyStatuses.Count; i++) copy[i] = stickyStatuses[i].Copy();
+            return copy;
+        }
+
         internal void Restore(
             IEnumerable<TrapFloorTrapResolutionRecord> restoredTrapRecords,
             IEnumerable<TrapFloorAbilityActivationRecord> restoredAbilityActivations,
             TrapFloorDodgeAssistanceState restoredDodgeAssistance,
             TrapFloorRushAssistanceState restoredRushAssistance,
             IEnumerable<TrapFloorBlindStatusState> restoredBlindStatuses,
-            IEnumerable<TrapFloorSlowStatusState> restoredSlowStatuses)
+            IEnumerable<TrapFloorSlowStatusState> restoredSlowStatuses,
+            IEnumerable<TrapFloorStickyStatusState> restoredStickyStatuses)
         {
             if (restoredTrapRecords == null) throw new ArgumentNullException(nameof(restoredTrapRecords));
             if (restoredAbilityActivations == null) throw new ArgumentNullException(nameof(restoredAbilityActivations));
             if (restoredBlindStatuses == null) throw new ArgumentNullException(nameof(restoredBlindStatuses));
             if (restoredSlowStatuses == null) throw new ArgumentNullException(nameof(restoredSlowStatuses));
+            if (restoredStickyStatuses == null) throw new ArgumentNullException(nameof(restoredStickyStatuses));
             trapRecords.Clear();
             foreach (TrapFloorTrapResolutionRecord record in restoredTrapRecords)
             {
@@ -671,6 +772,20 @@ namespace ConsoleCards.Games.TrapFloor
                         throw new ArgumentException("Restored Slow statuses must be unique per Player and Round.", nameof(restoredSlowStatuses));
                 }
                 slowStatuses.Add(status.Copy());
+            }
+
+            stickyStatuses.Clear();
+            foreach (TrapFloorStickyStatusState status in restoredStickyStatuses)
+            {
+                if (status == null)
+                    throw new ArgumentException("Restored Sticky status cannot be null.", nameof(restoredStickyStatuses));
+                for (int i = 0; i < stickyStatuses.Count; i++)
+                {
+                    if (stickyStatuses[i].PlayerId == status.PlayerId
+                        && stickyStatuses[i].AppliesInRound == status.AppliesInRound)
+                        throw new ArgumentException("Restored Sticky statuses must be unique per Player and Round.", nameof(restoredStickyStatuses));
+                }
+                stickyStatuses.Add(status.Copy());
             }
         }
     }
@@ -1261,7 +1376,9 @@ namespace ConsoleCards.Games.TrapFloor
                 && trap.Content.BlindDirectionMapping != null;
             bool isSlow = trap.Content.TrapEffect == TrapFloorTrapEffectCategory.SlowNextRound
                 && trap.Content.MovementModifier.HasValue;
-            if ((!isBlind && !isSlow)
+            bool isSticky = trap.Content.TrapEffect == TrapFloorTrapEffectCategory.StickyNextRound
+                && trap.Content.MovementAllowed.HasValue;
+            if ((!isBlind && !isSlow && !isSticky)
                 || matchState.Id != state.MatchId
                 || context.MatchId != matchState.Id)
                 return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.MatchMismatch);
@@ -1286,7 +1403,7 @@ namespace ConsoleCards.Games.TrapFloor
                     trap.AffectedPlayerId,
                     trap);
             }
-            else
+            else if (isSlow)
             {
                 state.ScheduleSlow(
                     trap.AffectedPlayerId,
@@ -1294,6 +1411,18 @@ namespace ConsoleCards.Games.TrapFloor
                     trap.Content.MovementModifier.Value,
                     trap.FloorCardId);
                 activityFeed.RecordSlowApplied(
+                    acceptedRevision,
+                    trap.AffectedPlayerId,
+                    trap);
+            }
+            else
+            {
+                state.ScheduleSticky(
+                    trap.AffectedPlayerId,
+                    appliesInRound,
+                    trap.Content.MovementAllowed.Value,
+                    trap.FloorCardId);
+                activityFeed.RecordStickyApplied(
                     acceptedRevision,
                     trap.AffectedPlayerId,
                     trap);

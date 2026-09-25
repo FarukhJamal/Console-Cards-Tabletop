@@ -30,6 +30,7 @@ namespace ConsoleCards.Games.TrapFloor
         EliminateForCurrentRound = 1,
         BlindNextRound = 2,
         SlowNextRound = 3,
+        StickyNextRound = 4,
     }
 
     public enum TrapFloorBlindMovementDirection
@@ -78,8 +79,10 @@ namespace ConsoleCards.Games.TrapFloor
             "trap-effect-eliminate-for-current-round";
         public const string BlindNextRoundEffectMetadata = "trap-effect-blind-next-round";
         public const string SlowNextRoundEffectMetadata = "trap-effect-slow-next-round";
+        public const string StickyNextRoundEffectMetadata = "trap-effect-sticky-next-round";
         private const string BlindDirectionMappingPrefix = "d4-directions=";
         private const string MovementModifierPrefix = "movement-modifier=";
+        private const string MovementAllowedPrefix = "movement-allowed=";
 
         public TrapFloorFloorContentDefinition(CardDefinitionData card)
         {
@@ -112,6 +115,9 @@ namespace ConsoleCards.Games.TrapFloor
             MovementModifier = TrapEffect == TrapFloorTrapEffectCategory.SlowNextRound
                 ? ParseMovementModifier(card.EffectMetadata)
                 : (int?)null;
+            MovementAllowed = TrapEffect == TrapFloorTrapEffectCategory.StickyNextRound
+                ? ParseMovementAllowed(card.EffectMetadata)
+                : (bool?)null;
             AuthoredCard = card;
         }
 
@@ -123,7 +129,8 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorFloorContentSource contentSource = TrapFloorFloorContentSource.ProvisionalStage03,
             TrapFloorTrapEffectCategory trapEffect = TrapFloorTrapEffectCategory.InformationalManual,
             TrapFloorBlindDirectionMapping blindDirectionMapping = null,
-            int? movementModifier = null)
+            int? movementModifier = null,
+            bool? movementAllowed = null)
         {
             if (id.IsEmpty) throw new ArgumentException("Floor content Definition ID cannot be empty.", nameof(id));
             if (!Enum.IsDefined(typeof(TrapFloorFloorContentCategory), category))
@@ -140,6 +147,9 @@ namespace ConsoleCards.Games.TrapFloor
             if ((trapEffect == TrapFloorTrapEffectCategory.SlowNextRound) != movementModifier.HasValue
                 || movementModifier == 0)
                 throw new ArgumentException("Slow Trap assistance requires one non-zero authored movement modifier.", nameof(movementModifier));
+            if ((trapEffect == TrapFloorTrapEffectCategory.StickyNextRound) != movementAllowed.HasValue
+                || movementAllowed == true)
+                throw new ArgumentException("Sticky Trap assistance requires authored movement-allowed=false guidance.", nameof(movementAllowed));
             if (string.IsNullOrWhiteSpace(displayName))
                 throw new ArgumentException("Floor content display name cannot be empty.", nameof(displayName));
 
@@ -151,6 +161,7 @@ namespace ConsoleCards.Games.TrapFloor
             TrapEffect = trapEffect;
             BlindDirectionMapping = blindDirectionMapping?.Copy();
             MovementModifier = movementModifier;
+            MovementAllowed = movementAllowed;
         }
 
         public ObjectDefinitionId Id { get; }
@@ -161,13 +172,15 @@ namespace ConsoleCards.Games.TrapFloor
         public TrapFloorTrapEffectCategory TrapEffect { get; }
         public TrapFloorBlindDirectionMapping BlindDirectionMapping { get; }
         public int? MovementModifier { get; }
+        public bool? MovementAllowed { get; }
         public CardDefinitionData AuthoredCard { get; }
 
         public bool HasSupportedAssistedTrapEffect =>
             Category == TrapFloorFloorContentCategory.Trap
             && (TrapEffect == TrapFloorTrapEffectCategory.EliminateForCurrentRound
                 || TrapEffect == TrapFloorTrapEffectCategory.BlindNextRound
-                || TrapEffect == TrapFloorTrapEffectCategory.SlowNextRound);
+                || TrapEffect == TrapFloorTrapEffectCategory.SlowNextRound
+                || TrapEffect == TrapFloorTrapEffectCategory.StickyNextRound);
 
         private static TrapFloorTrapEffectCategory ResolveTrapEffect(
             CardDefinitionData card,
@@ -189,11 +202,16 @@ namespace ConsoleCards.Games.TrapFloor
                     BlindNextRoundEffectMetadata,
                     StringComparison.OrdinalIgnoreCase))
                 return TrapFloorTrapEffectCategory.BlindNextRound;
-            return string.Equals(
+            if (string.Equals(
                     effectIdentifier,
                     SlowNextRoundEffectMetadata,
+                    StringComparison.OrdinalIgnoreCase))
+                return TrapFloorTrapEffectCategory.SlowNextRound;
+            return string.Equals(
+                    effectIdentifier,
+                    StickyNextRoundEffectMetadata,
                     StringComparison.OrdinalIgnoreCase)
-                ? TrapFloorTrapEffectCategory.SlowNextRound
+                ? TrapFloorTrapEffectCategory.StickyNextRound
                 : TrapFloorTrapEffectCategory.InformationalManual;
         }
 
@@ -262,6 +280,26 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             throw new ArgumentException("Slow Trap effect metadata requires a non-zero authored movement modifier.", nameof(metadata));
+        }
+
+        private static bool ParseMovementAllowed(string metadata)
+        {
+            string[] segments = (metadata ?? string.Empty).Split(';');
+            for (int i = 1; i < segments.Length; i++)
+            {
+                string segment = segments[i].Trim();
+                if (!segment.StartsWith(MovementAllowedPrefix, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (bool.TryParse(
+                        segment.Substring(MovementAllowedPrefix.Length).Trim(),
+                        out bool movementAllowed)
+                    && !movementAllowed)
+                    return false;
+                break;
+            }
+
+            throw new ArgumentException("Sticky Trap effect metadata requires movement-allowed=false.", nameof(metadata));
         }
 
         private static bool HasTag(CardDefinitionData card, string tag)

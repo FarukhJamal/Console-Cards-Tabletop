@@ -37,6 +37,7 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly TrapFloorRushAssistanceState rushAssistance;
         private readonly TrapFloorBlindStatusState[] blindStatuses;
         private readonly TrapFloorSlowStatusState[] slowStatuses;
+        private readonly TrapFloorStickyStatusState[] stickyStatuses;
 
         private TrapFloorSessionStateSnapshot(
             TrapFloorActivityFeedState activity,
@@ -75,6 +76,7 @@ namespace ConsoleCards.Games.TrapFloor
             rushAssistance = abilityResolution.CopyRushAssistance();
             blindStatuses = abilityResolution.CopyBlindStatuses();
             slowStatuses = abilityResolution.CopySlowStatuses();
+            stickyStatuses = abilityResolution.CopyStickyStatuses();
         }
 
         public MatchId MatchId { get; }
@@ -138,7 +140,8 @@ namespace ConsoleCards.Games.TrapFloor
                 dodgeAssistance,
                 rushAssistance,
                 blindStatuses,
-                slowStatuses);
+                slowStatuses,
+                stickyStatuses);
             return new TrapFloorSessionState(activity, objective, collapse, turn, abilityResolution);
         }
 

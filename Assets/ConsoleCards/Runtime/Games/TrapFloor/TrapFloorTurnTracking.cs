@@ -477,6 +477,7 @@ namespace ConsoleCards.Games.TrapFloor
             {
                 abilityResolutionState?.ExpireBlindBeforeRound(state.CurrentRound);
                 abilityResolutionState?.ExpireSlowBeforeRound(state.CurrentRound);
+                abilityResolutionState?.ExpireStickyBeforeRound(state.CurrentRound);
             }
             if (reactivatesPlayers)
             {
