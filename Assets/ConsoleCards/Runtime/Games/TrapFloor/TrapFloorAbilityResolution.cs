@@ -4,6 +4,8 @@ using System.Collections.ObjectModel;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Containers;
+using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Events;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates.Definitions;
