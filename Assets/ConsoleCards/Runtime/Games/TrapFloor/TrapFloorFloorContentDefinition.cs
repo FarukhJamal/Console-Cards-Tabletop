@@ -28,6 +28,43 @@ namespace ConsoleCards.Games.TrapFloor
     {
         InformationalManual = 0,
         EliminateForCurrentRound = 1,
+        BlindNextRound = 2,
+    }
+
+    public enum TrapFloorBlindMovementDirection
+    {
+        Up = 0,
+        Right = 1,
+        Down = 2,
+        Left = 3,
+    }
+
+    /// <summary>Authored d4 interpretation for the Blind Trap; it is Game data, not Presentation logic.</summary>
+    public sealed class TrapFloorBlindDirectionMapping
+    {
+        private readonly TrapFloorBlindMovementDirection[] directions;
+
+        public TrapFloorBlindDirectionMapping(
+            TrapFloorBlindMovementDirection one,
+            TrapFloorBlindMovementDirection two,
+            TrapFloorBlindMovementDirection three,
+            TrapFloorBlindMovementDirection four)
+        {
+            directions = new[] { one, two, three, four };
+        }
+
+        public TrapFloorBlindMovementDirection Resolve(int d4Result)
+        {
+            if (d4Result < 1 || d4Result > 4) throw new ArgumentOutOfRangeException(nameof(d4Result));
+            return directions[d4Result - 1];
+        }
+
+        internal TrapFloorBlindDirectionMapping Copy() =>
+            new TrapFloorBlindDirectionMapping(
+                directions[0],
+                directions[1],
+                directions[2],
+                directions[3]);
     }
 
     /// <summary>
@@ -38,6 +75,8 @@ namespace ConsoleCards.Games.TrapFloor
     {
         public const string EliminateForCurrentRoundEffectMetadata =
             "trap-effect-eliminate-for-current-round";
+        public const string BlindNextRoundEffectMetadata = "trap-effect-blind-next-round";
+        private const string BlindDirectionMappingPrefix = "d4-directions=";
 
         public TrapFloorFloorContentDefinition(CardDefinitionData card)
         {
@@ -64,6 +103,9 @@ namespace ConsoleCards.Games.TrapFloor
                 ? TrapFloorFloorContentSource.CurrentStage03Reference
                 : TrapFloorFloorContentSource.ProvisionalStage03;
             TrapEffect = ResolveTrapEffect(card, category);
+            BlindDirectionMapping = TrapEffect == TrapFloorTrapEffectCategory.BlindNextRound
+                ? ParseBlindDirectionMapping(card.EffectMetadata)
+                : null;
             AuthoredCard = card;
         }
 
@@ -73,7 +115,8 @@ namespace ConsoleCards.Games.TrapFloor
             string displayName,
             string displayText,
             TrapFloorFloorContentSource contentSource = TrapFloorFloorContentSource.ProvisionalStage03,
-            TrapFloorTrapEffectCategory trapEffect = TrapFloorTrapEffectCategory.InformationalManual)
+            TrapFloorTrapEffectCategory trapEffect = TrapFloorTrapEffectCategory.InformationalManual,
+            TrapFloorBlindDirectionMapping blindDirectionMapping = null)
         {
             if (id.IsEmpty) throw new ArgumentException("Floor content Definition ID cannot be empty.", nameof(id));
             if (!Enum.IsDefined(typeof(TrapFloorFloorContentCategory), category))
@@ -85,6 +128,8 @@ namespace ConsoleCards.Games.TrapFloor
             if (category != TrapFloorFloorContentCategory.Trap
                 && trapEffect != TrapFloorTrapEffectCategory.InformationalManual)
                 throw new ArgumentException("Only Trap Floor Trap content can define an assisted Trap effect.", nameof(trapEffect));
+            if ((trapEffect == TrapFloorTrapEffectCategory.BlindNextRound) != (blindDirectionMapping != null))
+                throw new ArgumentException("Blind Trap assistance requires exactly one authored d4 direction mapping.", nameof(blindDirectionMapping));
             if (string.IsNullOrWhiteSpace(displayName))
                 throw new ArgumentException("Floor content display name cannot be empty.", nameof(displayName));
 
@@ -94,6 +139,7 @@ namespace ConsoleCards.Games.TrapFloor
             DisplayText = displayText ?? throw new ArgumentNullException(nameof(displayText));
             ContentSource = contentSource;
             TrapEffect = trapEffect;
+            BlindDirectionMapping = blindDirectionMapping?.Copy();
         }
 
         public ObjectDefinitionId Id { get; }
@@ -102,11 +148,13 @@ namespace ConsoleCards.Games.TrapFloor
         public string DisplayText { get; }
         public TrapFloorFloorContentSource ContentSource { get; }
         public TrapFloorTrapEffectCategory TrapEffect { get; }
+        public TrapFloorBlindDirectionMapping BlindDirectionMapping { get; }
         public CardDefinitionData AuthoredCard { get; }
 
         public bool HasSupportedAssistedTrapEffect =>
             Category == TrapFloorFloorContentCategory.Trap
-            && TrapEffect == TrapFloorTrapEffectCategory.EliminateForCurrentRound;
+            && (TrapEffect == TrapFloorTrapEffectCategory.EliminateForCurrentRound
+                || TrapEffect == TrapFloorTrapEffectCategory.BlindNextRound);
 
         private static TrapFloorTrapEffectCategory ResolveTrapEffect(
             CardDefinitionData card,
@@ -115,12 +163,67 @@ namespace ConsoleCards.Games.TrapFloor
             if (category != TrapFloorFloorContentCategory.Trap)
                 return TrapFloorTrapEffectCategory.InformationalManual;
 
-            return string.Equals(
-                    card.EffectMetadata,
+            string effectIdentifier = EffectIdentifier(card.EffectMetadata);
+            if (string.Equals(
+                    effectIdentifier,
                     EliminateForCurrentRoundEffectMetadata,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return TrapFloorTrapEffectCategory.EliminateForCurrentRound;
+            }
+            return string.Equals(
+                    effectIdentifier,
+                    BlindNextRoundEffectMetadata,
                     StringComparison.OrdinalIgnoreCase)
-                ? TrapFloorTrapEffectCategory.EliminateForCurrentRound
+                ? TrapFloorTrapEffectCategory.BlindNextRound
                 : TrapFloorTrapEffectCategory.InformationalManual;
+        }
+
+        private static string EffectIdentifier(string metadata)
+        {
+            if (string.IsNullOrWhiteSpace(metadata)) return string.Empty;
+            int separator = metadata.IndexOf(';');
+            return (separator < 0 ? metadata : metadata.Substring(0, separator)).Trim();
+        }
+
+        private static TrapFloorBlindDirectionMapping ParseBlindDirectionMapping(string metadata)
+        {
+            string[] segments = (metadata ?? string.Empty).Split(';');
+            for (int i = 1; i < segments.Length; i++)
+            {
+                string segment = segments[i].Trim();
+                if (!segment.StartsWith(BlindDirectionMappingPrefix, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string[] authoredDirections = segment.Substring(BlindDirectionMappingPrefix.Length).Split(',');
+                TrapFloorBlindMovementDirection[] mapping = new TrapFloorBlindMovementDirection[4];
+                bool[] assigned = new bool[4];
+                for (int directionIndex = 0; directionIndex < authoredDirections.Length; directionIndex++)
+                {
+                    string[] pair = authoredDirections[directionIndex].Split(':');
+                    if (pair.Length != 2
+                        || !int.TryParse(pair[0].Trim(), out int result)
+                        || result < 1
+                        || result > 4
+                        || assigned[result - 1]
+                        || !Enum.TryParse(pair[1].Trim(), true, out TrapFloorBlindMovementDirection direction)
+                        || !Enum.IsDefined(typeof(TrapFloorBlindMovementDirection), direction))
+                    {
+                        throw new ArgumentException("Blind Trap d4 direction mapping is invalid.", nameof(metadata));
+                    }
+                    mapping[result - 1] = direction;
+                    assigned[result - 1] = true;
+                }
+
+                for (int resultIndex = 0; resultIndex < assigned.Length; resultIndex++)
+                {
+                    if (!assigned[resultIndex])
+                        throw new ArgumentException("Blind Trap d4 direction mapping must author all four results.", nameof(metadata));
+                }
+                return new TrapFloorBlindDirectionMapping(mapping[0], mapping[1], mapping[2], mapping[3]);
+            }
+
+            throw new ArgumentException("Blind Trap effect metadata requires an authored d4 direction mapping.", nameof(metadata));
         }
 
         private static bool HasTag(CardDefinitionData card, string tag)

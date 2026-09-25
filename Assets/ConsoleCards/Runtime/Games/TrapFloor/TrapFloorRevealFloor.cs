@@ -28,6 +28,8 @@ namespace ConsoleCards.Games.TrapFloor
         UsedDodge = 14,
         UsedRush = 15,
         UsedCheck = 16,
+        BlindApplied = 17,
+        BlindDirectionRolled = 18,
     }
 
     /// <summary>
@@ -104,7 +106,8 @@ namespace ConsoleCards.Games.TrapFloor
                 || kind == TrapFloorActivityKind.PlayerEliminated
                 || kind == TrapFloorActivityKind.AllPlayersEliminated
                 || kind == TrapFloorActivityKind.PlayersReactivated
-                || kind == TrapFloorActivityKind.UsedRush;
+                || kind == TrapFloorActivityKind.UsedRush
+                || kind == TrapFloorActivityKind.BlindDirectionRolled;
             if (floorCardId.IsEmpty
                 && kind != TrapFloorActivityKind.TriggeredFloorfall
                 && !turnActivity)
@@ -180,6 +183,9 @@ namespace ConsoleCards.Games.TrapFloor
         public int? XAxisResult { get; }
 
         public int? YAxisResult { get; }
+
+        public int? BlindDirectionResult =>
+            Kind == TrapFloorActivityKind.BlindDirectionRolled ? XAxisResult : null;
     }
 
     /// <summary>
@@ -439,6 +445,56 @@ namespace ConsoleCards.Games.TrapFloor
                 acceptedRevision,
                 actorPlayerId,
                 TrapFloorActivityKind.UsedRush);
+        }
+
+        internal TrapFloorActivityEntry RecordBlindApplied(
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TrapFloorTrapResolutionRecord trap)
+        {
+            if (trap == null) throw new ArgumentNullException(nameof(trap));
+            TrapFloorActivityEntry entry = new TrapFloorActivityEntry(
+                entries.Count + 1L,
+                MatchId,
+                acceptedRevision,
+                actorPlayerId,
+                trap.FloorCardId,
+                default,
+                false,
+                TrapFloorActivityKind.BlindApplied,
+                trap.Content,
+                TabletopObjectId.Empty,
+                TabletopObjectId.Empty,
+                null,
+                null);
+            entries.Add(entry);
+            return entry;
+        }
+
+        internal TrapFloorActivityEntry RecordBlindDirectionRolled(
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TabletopObjectId dieId,
+            int d4Result)
+        {
+            if (dieId.IsEmpty) throw new ArgumentException("Blind direction Die ID cannot be empty.", nameof(dieId));
+            if (d4Result < 1 || d4Result > 4) throw new ArgumentOutOfRangeException(nameof(d4Result));
+            TrapFloorActivityEntry entry = new TrapFloorActivityEntry(
+                entries.Count + 1L,
+                MatchId,
+                acceptedRevision,
+                actorPlayerId,
+                TabletopObjectId.Empty,
+                default,
+                false,
+                TrapFloorActivityKind.BlindDirectionRolled,
+                null,
+                dieId,
+                TabletopObjectId.Empty,
+                d4Result,
+                null);
+            entries.Add(entry);
+            return entry;
         }
 
         private TrapFloorActivityEntry RecordPlayerActivity(

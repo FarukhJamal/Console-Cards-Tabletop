@@ -5,6 +5,7 @@ using ConsoleCards.Application.Commands;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Containers;
+using ConsoleCards.Core.Domain.Dice;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Events;
 using ConsoleCards.Core.Identifiers;
@@ -212,6 +213,65 @@ namespace ConsoleCards.Games.TrapFloor
                 Disposition);
     }
 
+    /// <summary>Small authoritative next-Round status owned by Trap Floor assistance.</summary>
+    public sealed class TrapFloorBlindStatusState
+    {
+        internal TrapFloorBlindStatusState(
+            PlayerId playerId,
+            int appliesInRound,
+            TrapFloorBlindDirectionMapping directionMapping,
+            TabletopObjectId directionDieId = default,
+            int? directionRoll = null,
+            TrapFloorBlindMovementDirection? movementDirection = null)
+        {
+            if (playerId.IsEmpty) throw new ArgumentException("Blind Player ID cannot be empty.", nameof(playerId));
+            if (appliesInRound < 2) throw new ArgumentOutOfRangeException(nameof(appliesInRound));
+            if (directionMapping == null) throw new ArgumentNullException(nameof(directionMapping));
+            if (directionRoll.HasValue != movementDirection.HasValue
+                || directionRoll.HasValue != !directionDieId.IsEmpty
+                || (directionRoll.HasValue && (directionRoll.Value < 1 || directionRoll.Value > 4)))
+                throw new ArgumentException("Resolved Blind direction state must contain one complete d4 result.");
+
+            PlayerId = playerId;
+            AppliesInRound = appliesInRound;
+            DirectionMapping = directionMapping.Copy();
+            DirectionDieId = directionDieId;
+            DirectionRoll = directionRoll;
+            MovementDirection = movementDirection;
+        }
+
+        public PlayerId PlayerId { get; }
+        public int AppliesInRound { get; }
+        public bool NoDrawNextRound => true;
+        public TrapFloorBlindDirectionMapping DirectionMapping { get; }
+        public TabletopObjectId DirectionDieId { get; private set; }
+        public int? DirectionRoll { get; private set; }
+        public TrapFloorBlindMovementDirection? MovementDirection { get; private set; }
+        public bool IsDirectionResolved => DirectionRoll.HasValue;
+
+        internal TrapFloorBlindMovementDirection ResolveDirection(
+            TabletopObjectId directionDieId,
+            int d4Result)
+        {
+            if (directionDieId.IsEmpty) throw new ArgumentException("Blind direction Die ID cannot be empty.", nameof(directionDieId));
+            if (IsDirectionResolved) throw new InvalidOperationException("Blind direction is already resolved for this Round.");
+            TrapFloorBlindMovementDirection direction = DirectionMapping.Resolve(d4Result);
+            DirectionDieId = directionDieId;
+            DirectionRoll = d4Result;
+            MovementDirection = direction;
+            return direction;
+        }
+
+        internal TrapFloorBlindStatusState Copy() =>
+            new TrapFloorBlindStatusState(
+                PlayerId,
+                AppliesInRound,
+                DirectionMapping,
+                DirectionDieId,
+                DirectionRoll,
+                MovementDirection);
+    }
+
     /// <summary>
     /// Match-scoped Trap/Ability assistance only. It never constrains physical tabletop interaction.
     /// </summary>
@@ -222,6 +282,9 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly ReadOnlyCollection<TrapFloorTrapResolutionRecord> readOnlyTrapRecords;
         private readonly HashSet<TrapFloorAbilityActivationRecord> abilityActivations =
             new HashSet<TrapFloorAbilityActivationRecord>();
+        private readonly List<TrapFloorBlindStatusState> blindStatuses =
+            new List<TrapFloorBlindStatusState>();
+        private readonly ReadOnlyCollection<TrapFloorBlindStatusState> readOnlyBlindStatuses;
         private TrapFloorDodgeAssistanceState activeDodgeAssistance;
         private TrapFloorRushAssistanceState activeRushAssistance;
 
@@ -230,10 +293,12 @@ namespace ConsoleCards.Games.TrapFloor
             if (matchId.IsEmpty) throw new ArgumentException("Match ID cannot be empty.", nameof(matchId));
             MatchId = matchId;
             readOnlyTrapRecords = trapRecords.AsReadOnly();
+            readOnlyBlindStatuses = blindStatuses.AsReadOnly();
         }
 
         public MatchId MatchId { get; }
         public IReadOnlyList<TrapFloorTrapResolutionRecord> TrapRecords => readOnlyTrapRecords;
+        public IReadOnlyList<TrapFloorBlindStatusState> BlindStatuses => readOnlyBlindStatuses;
         public TrapFloorDodgeAssistanceState ActiveDodgeAssistance => activeDodgeAssistance;
         public TrapFloorRushAssistanceState ActiveRushAssistance => activeRushAssistance;
         public bool HasAbilityActivatedThisTurn(
@@ -311,6 +376,69 @@ namespace ConsoleCards.Games.TrapFloor
                 new TrapFloorAbilityActivationRecord(abilityCardId, playerId, round));
         }
 
+        public bool TryGetBlindStatus(
+            PlayerId playerId,
+            int round,
+            out TrapFloorBlindStatusState status)
+        {
+            for (int i = blindStatuses.Count - 1; i >= 0; i--)
+            {
+                TrapFloorBlindStatusState candidate = blindStatuses[i];
+                if (candidate.PlayerId == playerId && candidate.AppliesInRound == round)
+                {
+                    status = candidate;
+                    return true;
+                }
+            }
+
+            status = null;
+            return false;
+        }
+
+        internal void ScheduleBlind(
+            PlayerId playerId,
+            int appliesInRound,
+            TrapFloorBlindDirectionMapping directionMapping)
+        {
+            for (int i = blindStatuses.Count - 1; i >= 0; i--)
+            {
+                if (blindStatuses[i].PlayerId == playerId
+                    && blindStatuses[i].AppliesInRound == appliesInRound)
+                {
+                    blindStatuses.RemoveAt(i);
+                }
+            }
+            blindStatuses.Add(new TrapFloorBlindStatusState(
+                playerId,
+                appliesInRound,
+                directionMapping));
+        }
+
+        internal bool ExpireBlindBeforeRound(int currentRound)
+        {
+            bool removed = false;
+            for (int i = blindStatuses.Count - 1; i >= 0; i--)
+            {
+                if (blindStatuses[i].AppliesInRound < currentRound)
+                {
+                    blindStatuses.RemoveAt(i);
+                    removed = true;
+                }
+            }
+            return removed;
+        }
+
+        internal TrapFloorBlindMovementDirection ResolveBlindDirection(
+            PlayerId playerId,
+            int round,
+            TabletopObjectId dieId,
+            int d4Result)
+        {
+            if (!TryGetBlindStatus(playerId, round, out TrapFloorBlindStatusState status))
+                throw new InvalidOperationException("The Player has no active Blind status for this Round.");
+            return status.ResolveDirection(dieId, d4Result);
+        }
+
         internal void BeginDodgeAssistance(TrapFloorDodgeAssistanceState assistance)
         {
             activeDodgeAssistance = assistance?.Copy()
@@ -368,14 +496,23 @@ namespace ConsoleCards.Games.TrapFloor
             return copy;
         }
 
+        internal TrapFloorBlindStatusState[] CopyBlindStatuses()
+        {
+            TrapFloorBlindStatusState[] copy = new TrapFloorBlindStatusState[blindStatuses.Count];
+            for (int i = 0; i < blindStatuses.Count; i++) copy[i] = blindStatuses[i].Copy();
+            return copy;
+        }
+
         internal void Restore(
             IEnumerable<TrapFloorTrapResolutionRecord> restoredTrapRecords,
             IEnumerable<TrapFloorAbilityActivationRecord> restoredAbilityActivations,
             TrapFloorDodgeAssistanceState restoredDodgeAssistance,
-            TrapFloorRushAssistanceState restoredRushAssistance)
+            TrapFloorRushAssistanceState restoredRushAssistance,
+            IEnumerable<TrapFloorBlindStatusState> restoredBlindStatuses)
         {
             if (restoredTrapRecords == null) throw new ArgumentNullException(nameof(restoredTrapRecords));
             if (restoredAbilityActivations == null) throw new ArgumentNullException(nameof(restoredAbilityActivations));
+            if (restoredBlindStatuses == null) throw new ArgumentNullException(nameof(restoredBlindStatuses));
             trapRecords.Clear();
             foreach (TrapFloorTrapResolutionRecord record in restoredTrapRecords)
             {
@@ -406,6 +543,20 @@ namespace ConsoleCards.Games.TrapFloor
             activeRushAssistance = restoredRushAssistance?.Copy();
             if (activeDodgeAssistance != null && activeRushAssistance != null)
                 throw new ArgumentException("Only one Trap Floor movement assistance may be active.");
+
+            blindStatuses.Clear();
+            foreach (TrapFloorBlindStatusState status in restoredBlindStatuses)
+            {
+                if (status == null)
+                    throw new ArgumentException("Restored Blind status cannot be null.", nameof(restoredBlindStatuses));
+                for (int i = 0; i < blindStatuses.Count; i++)
+                {
+                    if (blindStatuses[i].PlayerId == status.PlayerId
+                        && blindStatuses[i].AppliesInRound == status.AppliesInRound)
+                        throw new ArgumentException("Restored Blind statuses must be unique per Player and Round.", nameof(restoredBlindStatuses));
+                }
+                blindStatuses.Add(status.Copy());
+            }
         }
     }
 
@@ -451,6 +602,48 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorAbilityActivationError error,
             TrapFloorAbilityEffect effect = TrapFloorAbilityEffect.None) =>
             new TrapFloorAbilityActivationResult(false, error, effect, null);
+    }
+
+    public enum TrapFloorBlindDirectionRollError
+    {
+        None = 0,
+        MatchMismatch = 1,
+        RevisionConflict = 2,
+        ActorIsNotActivePlayer = 3,
+        NoActiveBlindStatus = 4,
+        DirectionAlreadyResolved = 5,
+        DieUnavailable = 6,
+        DieMustBeD4 = 7,
+        DieNotSettled = 8,
+    }
+
+    public readonly struct TrapFloorBlindDirectionRollResult
+    {
+        private TrapFloorBlindDirectionRollResult(
+            bool succeeded,
+            long revision,
+            TrapFloorBlindMovementDirection direction,
+            TrapFloorBlindDirectionRollError error)
+        {
+            Succeeded = succeeded;
+            Revision = revision;
+            Direction = direction;
+            Error = error;
+        }
+
+        public bool Succeeded { get; }
+        public long Revision { get; }
+        public TrapFloorBlindMovementDirection Direction { get; }
+        public TrapFloorBlindDirectionRollError Error { get; }
+
+        internal static TrapFloorBlindDirectionRollResult Accepted(
+            long revision,
+            TrapFloorBlindMovementDirection direction) =>
+            new TrapFloorBlindDirectionRollResult(true, revision, direction, TrapFloorBlindDirectionRollError.None);
+
+        internal static TrapFloorBlindDirectionRollResult Failure(
+            TrapFloorBlindDirectionRollError error) =>
+            new TrapFloorBlindDirectionRollResult(false, -1, default, error);
     }
 
     /// <summary>Trap Floor-owned interpretation of accepted generic Console insertions.</summary>
@@ -936,15 +1129,95 @@ namespace ConsoleCards.Games.TrapFloor
                 return TrapFloorTurnAdvanceResult.Failure(
                     TrapFloorTurnAdvanceError.ActorIsNotActivePlayer);
 
+            if (trap.Content.TrapEffect == TrapFloorTrapEffectCategory.EliminateForCurrentRound)
+            {
+                trap.SetDisposition(TrapFloorTrapResolutionDisposition.Resolved);
+                TrapFloorTurnAdvanceResult elimination = turnService.MarkPlayerEliminatedForCurrentRound(
+                    matchState,
+                    context,
+                    trap.AffectedPlayerId,
+                    trap);
+                if (!elimination.Succeeded)
+                    trap.SetDisposition(TrapFloorTrapResolutionDisposition.Pending);
+                return elimination;
+            }
+
+            if (trap.Content.TrapEffect != TrapFloorTrapEffectCategory.BlindNextRound
+                || trap.Content.BlindDirectionMapping == null
+                || matchState.Id != state.MatchId
+                || context.MatchId != matchState.Id)
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.MatchMismatch);
+            if (context.ExpectedRevision.HasValue && context.ExpectedRevision.Value != matchState.Revision)
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.RevisionConflict);
+            if (turnState.Phase != TrapFloorTurnPhase.PlayerTurn
+                || turnState.IsCurrentFloorFailed
+                || context.RequestedByPlayerId != turnState.ActivePlayerId)
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.ActorIsNotActivePlayer);
+
+            int appliesInRound = checked(turnState.CurrentRound + 1);
             trap.SetDisposition(TrapFloorTrapResolutionDisposition.Resolved);
-            TrapFloorTurnAdvanceResult result = turnService.MarkPlayerEliminatedForCurrentRound(
-                matchState,
-                context,
+            state.ScheduleBlind(
+                trap.AffectedPlayerId,
+                appliesInRound,
+                trap.Content.BlindDirectionMapping);
+            long acceptedRevision = checked(matchState.Revision + 1L);
+            activityFeed.RecordBlindApplied(
+                acceptedRevision,
                 trap.AffectedPlayerId,
                 trap);
-            if (!result.Succeeded)
-                trap.SetDisposition(TrapFloorTrapResolutionDisposition.Pending);
-            return result;
+            long revision = matchState.AdvanceRevision(
+                context.Id,
+                context.RequestedByPlayerId,
+                AuthoritativeActionKind.Unspecified);
+            return TrapFloorTurnAdvanceResult.Accepted(revision, 0);
+        }
+
+        public TrapFloorBlindDirectionRollResult ResolveBlindDirection(
+            MatchState matchState,
+            CommandContext context,
+            TabletopObjectId dieId)
+        {
+            if (matchState == null
+                || matchState.Id != state.MatchId
+                || context.MatchId != matchState.Id)
+                return TrapFloorBlindDirectionRollResult.Failure(TrapFloorBlindDirectionRollError.MatchMismatch);
+            if (context.ExpectedRevision.HasValue && context.ExpectedRevision.Value != matchState.Revision)
+                return TrapFloorBlindDirectionRollResult.Failure(TrapFloorBlindDirectionRollError.RevisionConflict);
+            if (turnState.IsCurrentFloorFailed
+                || turnState.Phase != TrapFloorTurnPhase.PlayerTurn
+                || context.RequestedByPlayerId != turnState.ActivePlayerId)
+                return TrapFloorBlindDirectionRollResult.Failure(TrapFloorBlindDirectionRollError.ActorIsNotActivePlayer);
+            if (!state.TryGetBlindStatus(
+                    turnState.ActivePlayerId,
+                    turnState.CurrentRound,
+                    out TrapFloorBlindStatusState blindStatus))
+                return TrapFloorBlindDirectionRollResult.Failure(TrapFloorBlindDirectionRollError.NoActiveBlindStatus);
+            if (blindStatus.IsDirectionResolved)
+                return TrapFloorBlindDirectionRollResult.Failure(TrapFloorBlindDirectionRollError.DirectionAlreadyResolved);
+            if (!matchState.Dice.TryGetValue(dieId, out DieState die))
+                return TrapFloorBlindDirectionRollResult.Failure(TrapFloorBlindDirectionRollError.DieUnavailable);
+            if (die.SideCount != 4)
+                return TrapFloorBlindDirectionRollResult.Failure(TrapFloorBlindDirectionRollError.DieMustBeD4);
+            if (die.BaseState.PhysicalState == null
+                || die.BaseState.PhysicalState.Mode != PhysicalObjectMode.Sleeping)
+                return TrapFloorBlindDirectionRollResult.Failure(TrapFloorBlindDirectionRollError.DieNotSettled);
+
+            TrapFloorBlindMovementDirection direction = state.ResolveBlindDirection(
+                turnState.ActivePlayerId,
+                turnState.CurrentRound,
+                dieId,
+                die.CurrentValue);
+            long acceptedRevision = checked(matchState.Revision + 1L);
+            activityFeed.RecordBlindDirectionRolled(
+                acceptedRevision,
+                turnState.ActivePlayerId,
+                dieId,
+                die.CurrentValue);
+            long revision = matchState.AdvanceRevision(
+                context.Id,
+                context.RequestedByPlayerId,
+                AuthoritativeActionKind.PhysicalObjectSettled);
+            return TrapFloorBlindDirectionRollResult.Accepted(revision, direction);
         }
 
         public static TrapFloorAbilityEffect ResolveEffect(string effectMetadata)

@@ -70,6 +70,9 @@ namespace ConsoleCards.Presentation.Prototype
         private PlayerId physicalFloorfallActor;
         private bool physicalFloorCollapsePending;
         private PlayerId physicalFloorCollapseActor;
+        private bool physicalBlindDirectionPending;
+        private PlayerId physicalBlindDirectionActor;
+        private TabletopObjectId physicalBlindDirectionDieId;
         [SerializeField] internal PrototypeFixedContainerVisual prototypeDeckPrefab;
         [SerializeField] internal ConsoleView prototypeConsolePrefab;
         [SerializeField] internal CardView cardView;
@@ -521,6 +524,9 @@ namespace ConsoleCards.Presentation.Prototype
             physicalFloorfallActor = PlayerId.Empty;
             physicalFloorCollapsePending = false;
             physicalFloorCollapseActor = PlayerId.Empty;
+            physicalBlindDirectionPending = false;
+            physicalBlindDirectionActor = PlayerId.Empty;
+            physicalBlindDirectionDieId = TabletopObjectId.Empty;
             physicalAuthority?.Shutdown();
             physicalAuthority = null;
             SetGameBoardActive(false);
@@ -1640,6 +1646,133 @@ namespace ConsoleCards.Presentation.Prototype
                 + (result.BoardExhausted ? " The Board is exhausted." : string.Empty));
         }
 
+        private bool BeginPhysicalBlindDirection()
+        {
+            if (physicalBlindDirectionPending
+                || trapFloorAbilityResolutionService == null
+                || !TryGetActiveBlindStatus(out TrapFloorBlindStatusState blindStatus)
+                || blindStatus.IsDirectionResolved)
+            {
+                ShowMessage("Roll Blind Direction is unavailable.");
+                return false;
+            }
+
+            if (!TryGetAvailableBlindD4(out TabletopObjectId dieId, out DieView dieView))
+            {
+                ShowMessage("Roll Blind Direction requires an available loose physical d4.");
+                return false;
+            }
+
+            PlayerId actor = trapFloorTurnState.ActivePlayerId;
+            if (!dieView.PhysicalObject.Roll(actor, true))
+            {
+                ShowMessage("Roll Blind Direction rejected: the d4 is unavailable or controlled.");
+                return false;
+            }
+
+            physicalBlindDirectionPending = true;
+            physicalBlindDirectionActor = actor;
+            physicalBlindDirectionDieId = dieId;
+            ShowMessage("BLIND — rolling physical d4; waiting for it to settle.");
+            return true;
+        }
+
+        private void CompletePhysicalBlindDirectionIfSettled()
+        {
+            if (!physicalBlindDirectionPending) return;
+            if (matchState == null
+                || trapFloorAbilityResolutionService == null
+                || !TryGetActiveBlindStatus(out TrapFloorBlindStatusState blindStatus)
+                || blindStatus.IsDirectionResolved
+                || physicalBlindDirectionActor != trapFloorTurnState.ActivePlayerId
+                || !matchState.Dice.TryGetValue(physicalBlindDirectionDieId, out DieState die))
+            {
+                CancelPhysicalBlindDirection("Blind direction roll cancelled because its active status changed.");
+                return;
+            }
+
+            PhysicalObjectState physicalState = die.BaseState.PhysicalState;
+            if (physicalState == null
+                || (physicalState.Mode != PhysicalObjectMode.Sleeping
+                    && physicalState.Mode != PhysicalObjectMode.SleepingUnresolved))
+            {
+                return;
+            }
+
+            if (physicalState.Mode == PhysicalObjectMode.SleepingUnresolved)
+            {
+                if (TryGetDieView(physicalBlindDirectionDieId, out DieView unresolvedDieView)
+                    && unresolvedDieView.PhysicalObject != null
+                    && unresolvedDieView.PhysicalObject.Roll(physicalBlindDirectionActor, true))
+                {
+                    ShowMessage("Blind d4 is cocked; rolling it again.");
+                    return;
+                }
+                CancelPhysicalBlindDirection("Blind direction roll could not resolve the cocked d4.");
+                return;
+            }
+
+            TrapFloorBlindDirectionRollResult result =
+                trapFloorAbilityResolutionService.ResolveBlindDirection(
+                    matchState,
+                    CreateCommandContext(physicalBlindDirectionActor),
+                    physicalBlindDirectionDieId);
+            if (!result.Succeeded)
+            {
+                CancelPhysicalBlindDirection($"Blind direction rejected: {result.Error}.");
+                return;
+            }
+
+            physicalBlindDirectionPending = false;
+            physicalBlindDirectionActor = PlayerId.Empty;
+            physicalBlindDirectionDieId = TabletopObjectId.Empty;
+            RefreshTrapFloorStatusUi();
+            ShowMessage($"BLIND DIRECTION: {result.Direction.ToString().ToUpperInvariant()}");
+        }
+
+        private void CancelPhysicalBlindDirection(string message)
+        {
+            PlayerId actor = physicalBlindDirectionActor;
+            physicalBlindDirectionPending = false;
+            physicalBlindDirectionActor = PlayerId.Empty;
+            physicalBlindDirectionDieId = TabletopObjectId.Empty;
+            if (undoTransactionInProgress && matchState != null && !actor.IsEmpty)
+            {
+                matchState.AdvanceRevision(
+                    CommandId.New(),
+                    actor,
+                    AuthoritativeActionKind.Unspecified,
+                    AuthoritativeActionRecordMode.CancelTransaction);
+            }
+            ShowMessage(message);
+        }
+
+        private bool TryGetAvailableBlindD4(
+            out TabletopObjectId dieId,
+            out DieView dieView)
+        {
+            if (matchState != null)
+            {
+                foreach (KeyValuePair<TabletopObjectId, DieState> pair in matchState.Dice)
+                {
+                    if (pair.Value.SideCount == 4
+                        && TryGetDieView(pair.Key, out DieView candidate)
+                        && candidate.PhysicalObject != null
+                        && candidate.PhysicalObject.OwnsLooseTransform
+                        && !candidate.PhysicalObject.IsHeld)
+                    {
+                        dieId = pair.Key;
+                        dieView = candidate;
+                        return true;
+                    }
+                }
+            }
+
+            dieId = TabletopObjectId.Empty;
+            dieView = null;
+            return false;
+        }
+
         private bool TryGetOfficialFloorfallDieViews(
             out DieView xAxisDieView,
             out DieView yAxisDieView)
@@ -1917,6 +2050,7 @@ namespace ConsoleCards.Presentation.Prototype
             physicalAuthority?.Tick();
             CompletePhysicalFloorfallIfSettled();
             CompletePhysicalFloorCollapseIfSettled();
+            CompletePhysicalBlindDirectionIfSettled();
             presentationTransitions?.Tick(Time.unscaledDeltaTime);
             RefreshCardContentVisibility();
             if (feedbackHoldUntil > 0f && Time.unscaledTime >= feedbackHoldUntil)
@@ -3334,6 +3468,14 @@ namespace ConsoleCards.Presentation.Prototype
 
             if (trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn)
             {
+                if (TryGetActiveBlindStatus(out TrapFloorBlindStatusState blindStatus)
+                    && !blindStatus.IsDirectionResolved)
+                {
+                    actions.Add(new PrototypePopupActionOption(
+                        "Roll Blind Direction",
+                        !physicalBlindDirectionPending,
+                        () => BeginPhysicalBlindDirection()));
+                }
                 actions.Add(new PrototypePopupActionOption(
                     "Search / Reveal",
                     true,
@@ -3382,7 +3524,31 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             int handLimit = trapFloorTemplate.GameDefinition.ControllerConfiguration.MaximumHandSize;
-            return $"Draw up to {handLimit} if needed\nMove / Search / Buy / Skip";
+            string standardGuidance = $"Draw up to {handLimit} if needed\nMove / Search / Buy / Skip";
+            if (!TryGetActiveBlindStatus(out TrapFloorBlindStatusState blindStatus))
+                return standardGuidance;
+            string directionGuidance = blindStatus.IsDirectionResolved
+                ? $"BLIND DIRECTION: {blindStatus.MovementDirection.Value.ToString().ToUpperInvariant()}"
+                : "BLIND — Roll d4 for movement direction";
+            return $"BLIND — No draw this round\n{directionGuidance}\nMove / Search / Buy / Skip";
+        }
+
+        private bool TryGetActiveBlindStatus(out TrapFloorBlindStatusState status)
+        {
+            if (trapFloorAbilityResolutionState != null
+                && trapFloorTurnState != null
+                && !trapFloorTurnState.IsCurrentFloorFailed
+                && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                && trapFloorAbilityResolutionState.TryGetBlindStatus(
+                    trapFloorTurnState.ActivePlayerId,
+                    trapFloorTurnState.CurrentRound,
+                    out status))
+            {
+                return true;
+            }
+
+            status = null;
+            return false;
         }
 
         private bool HasEliminatedTrapFloorPlayers()
@@ -4546,9 +4712,15 @@ namespace ConsoleCards.Presentation.Prototype
         private static string TrapFloorTrapEffectDescription(
             TrapFloorFloorContentDefinition content)
         {
-            return content.TrapEffect == TrapFloorTrapEffectCategory.EliminateForCurrentRound
-                ? "Assisted consequence: eliminate the resolving Player for the current Round."
-                : "Manual consequence: follow the authored Trap text.";
+            switch (content.TrapEffect)
+            {
+                case TrapFloorTrapEffectCategory.EliminateForCurrentRound:
+                    return "Assisted consequence: eliminate the resolving Player for the current Round.";
+                case TrapFloorTrapEffectCategory.BlindNextRound:
+                    return "Assisted consequence: no Controller Card draw next Round; roll a d4 for movement direction.";
+                default:
+                    return "Manual consequence: follow the authored Trap text.";
+            }
         }
 
         private void ResolveTrapFloorTrap(TabletopObjectId floorCardId)
@@ -4580,7 +4752,16 @@ namespace ConsoleCards.Presentation.Prototype
             CloseContextMenu();
             CloseCardInspect();
             RefreshTrapFloorStatusUi();
-            ShowMessage($"{FormatPlayerName(affectedPlayerId).ToUpperInvariant()} ELIMINATED");
+            if (floorCard.Content.TrapEffect == TrapFloorTrapEffectCategory.BlindNextRound)
+            {
+                ShowMessage(
+                    $"{FormatPlayerShortName(affectedPlayerId)} will be BLIND during "
+                    + $"Round {trapFloorTurnState.CurrentRound + 1}.");
+            }
+            else
+            {
+                ShowMessage($"{FormatPlayerName(affectedPlayerId).ToUpperInvariant()} ELIMINATED");
+            }
         }
 
         private void SearchAndRevealFloorCard(TabletopObjectId floorCardId)
@@ -6250,7 +6431,8 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorTemplate,
                 trapFloorTurnState,
                 controllerInputHandService,
-                trapFloorActivityFeed);
+                trapFloorActivityFeed,
+                trapFloorAbilityResolutionState);
             trapFloorAbilityResolutionService = new TrapFloorAbilityResolutionService(
                 trapFloorAbilityResolutionState,
                 trapFloorTurnState,
@@ -8612,6 +8794,14 @@ namespace ConsoleCards.Presentation.Prototype
                         line = $"{FormatPlayerShortName(entry.ActorPlayerId)} checked "
                             + $"{entry.ContentName} — Trap neutralized";
                         break;
+                    case TrapFloorActivityKind.BlindApplied:
+                        line = $"{FormatPlayerShortName(entry.ActorPlayerId)} resolved "
+                            + $"{entry.ContentName} — Blind applies next Round";
+                        break;
+                    case TrapFloorActivityKind.BlindDirectionRolled:
+                        line = $"{FormatPlayerShortName(entry.ActorPlayerId)} rolled "
+                            + $"{entry.BlindDirectionResult} for Blind direction";
+                        break;
                     default:
                         line = string.Empty;
                         break;
@@ -8663,6 +8853,14 @@ namespace ConsoleCards.Presentation.Prototype
                             == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound
                             ? "ELIMINATED"
                             : "ACTIVE";
+                if (trapFloorAbilityResolutionState != null
+                    && trapFloorAbilityResolutionState.TryGetBlindStatus(
+                        playerId,
+                        trapFloorTurnState.CurrentRound,
+                        out _))
+                {
+                    state += " / BLIND";
+                }
                 if (i > 0) text += " | ";
                 text += $"{FormatPlayerName(playerId)} {state}";
             }

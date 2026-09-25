@@ -341,17 +341,31 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly TrapFloorTurnState state;
         private readonly ControllerInputHandService handService;
         private readonly TrapFloorActivityFeedState activityFeed;
+        private readonly TrapFloorAbilityResolutionState abilityResolutionState;
 
         public TrapFloorTurnService(
             TrapFloorTemplateDefinition template,
             TrapFloorTurnState state,
             ControllerInputHandService handService,
             TrapFloorActivityFeedState activityFeed)
+            : this(template, state, handService, activityFeed, null)
+        {
+        }
+
+        public TrapFloorTurnService(
+            TrapFloorTemplateDefinition template,
+            TrapFloorTurnState state,
+            ControllerInputHandService handService,
+            TrapFloorActivityFeedState activityFeed,
+            TrapFloorAbilityResolutionState abilityResolutionState)
         {
             this.template = template ?? throw new ArgumentNullException(nameof(template));
             this.state = state ?? throw new ArgumentNullException(nameof(state));
             this.handService = handService ?? throw new ArgumentNullException(nameof(handService));
             this.activityFeed = activityFeed ?? throw new ArgumentNullException(nameof(activityFeed));
+            this.abilityResolutionState = abilityResolutionState;
+            if (abilityResolutionState != null && abilityResolutionState.MatchId != state.MatchId)
+                throw new ArgumentException("Trap Floor temporary status state must belong to the same Match.", nameof(abilityResolutionState));
         }
 
         public ControllerInputHandDrawResult DrawForCurrentPlayer(
@@ -459,6 +473,8 @@ namespace ConsoleCards.Games.TrapFloor
             bool startsNextRound = state.Phase == TrapFloorTurnPhase.FloorTurn;
             bool reactivatesPlayers = startsNextRound && state.CopyEliminatedPlayerIds().Length > 0;
             state.Advance();
+            if (startsNextRound)
+                abilityResolutionState?.ExpireBlindBeforeRound(state.CurrentRound);
             if (reactivatesPlayers)
             {
                 activityFeed.RecordPlayersReactivated(

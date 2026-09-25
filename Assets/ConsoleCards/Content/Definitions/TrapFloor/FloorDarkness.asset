@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: FloorDarkness
   m_EditorClassIdentifier: 
   stableId: 54460015-4f4f-4000-8000-001500000010
-  displayName: Darkness
+  displayName: Blind Trap
   category: Trap
-  description: 'PROVISIONAL STAGE-03 - Challenge: roll 1d6. On 3-6, pass safely. On 1-2, do not Search again until another Player reveals a Floor.'
+  description: 'During your next Round, do not draw Controller Cards. Roll a d4 for your movement direction.'
   frontArtwork: {fileID: 0}
   frontArtworkReference: 
   backArtwork: {fileID: 0}
@@ -25,4 +25,5 @@ MonoBehaviour:
     requirements: []
   orientation: 0
   preferredConsolePlacement: 
-  tags: [trap-floor, floor-content, provisional-stage03]
+  tags: [trap-floor, floor-content, blind-trap]
+  effectMetadata: 'trap-effect-blind-next-round;d4-directions=1:Up,2:Right,3:Down,4:Left'
