@@ -36,7 +36,7 @@ namespace ConsoleCards.Games.TrapFloor
     /// </summary>
     public sealed class TrapFloorFloorContentDefinition
     {
-        public const string EliminateForCurrentRoundEffectTag =
+        public const string EliminateForCurrentRoundEffectMetadata =
             "trap-effect-eliminate-for-current-round";
 
         public TrapFloorFloorContentDefinition(CardDefinitionData card)
@@ -115,7 +115,10 @@ namespace ConsoleCards.Games.TrapFloor
             if (category != TrapFloorFloorContentCategory.Trap)
                 return TrapFloorTrapEffectCategory.InformationalManual;
 
-            return HasTag(card, EliminateForCurrentRoundEffectTag)
+            return string.Equals(
+                    card.EffectMetadata,
+                    EliminateForCurrentRoundEffectMetadata,
+                    StringComparison.OrdinalIgnoreCase)
                 ? TrapFloorTrapEffectCategory.EliminateForCurrentRound
                 : TrapFloorTrapEffectCategory.InformationalManual;
         }

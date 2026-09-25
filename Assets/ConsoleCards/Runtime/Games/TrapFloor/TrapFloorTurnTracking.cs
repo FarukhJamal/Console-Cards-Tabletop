@@ -394,6 +394,19 @@ namespace ConsoleCards.Games.TrapFloor
             CommandContext context,
             PlayerId affectedPlayerId)
         {
+            return MarkPlayerEliminatedForCurrentRound(
+                matchState,
+                context,
+                affectedPlayerId,
+                null);
+        }
+
+        internal TrapFloorTurnAdvanceResult MarkPlayerEliminatedForCurrentRound(
+            MatchState matchState,
+            CommandContext context,
+            PlayerId affectedPlayerId,
+            TrapFloorTrapResolutionRecord trap)
+        {
             TrapFloorTurnAdvanceResult validation = ValidateSessionOperation(matchState, context);
             if (!validation.Succeeded) return validation;
             if (!state.ContainsPlayer(affectedPlayerId))
@@ -405,9 +418,19 @@ namespace ConsoleCards.Games.TrapFloor
 
             long acceptedRevision = checked(matchState.Revision + 1L);
             state.MarkPlayerEliminatedForCurrentRound(affectedPlayerId);
-            activityFeed.RecordPlayerEliminated(
-                acceptedRevision,
-                affectedPlayerId);
+            if (trap == null)
+            {
+                activityFeed.RecordPlayerEliminated(
+                    acceptedRevision,
+                    affectedPlayerId);
+            }
+            else
+            {
+                activityFeed.RecordPlayerEliminated(
+                    acceptedRevision,
+                    affectedPlayerId,
+                    trap);
+            }
             if (state.IsCurrentFloorFailed)
                 activityFeed.RecordAllPlayersEliminated(acceptedRevision, affectedPlayerId);
 

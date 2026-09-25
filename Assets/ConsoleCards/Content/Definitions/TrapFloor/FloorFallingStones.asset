@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: FloorFallingStones
   m_EditorClassIdentifier: 
   stableId: 54460015-4f4f-4000-8000-001500000005
-  displayName: Falling Stones
+  displayName: Fall Trap
   category: Trap
-  description: 'PROVISIONAL STAGE-03 - Challenge: roll 2d6. If either die shows 5 or 6, pass safely. Otherwise return your Pawn to Entry.'
+  description: 'If unresolved, the affected Player is eliminated for the current Round.'
   frontArtwork: {fileID: 0}
   frontArtworkReference: 
   backArtwork: {fileID: 0}
@@ -25,4 +25,5 @@ MonoBehaviour:
     requirements: []
   orientation: 0
   preferredConsolePlacement: 
-  tags: [trap-floor, floor-content, provisional-stage03]
+  tags: [trap-floor, floor-content, fall-trap]
+  effectMetadata: trap-effect-eliminate-for-current-round

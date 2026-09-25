@@ -357,6 +357,30 @@ namespace ConsoleCards.Games.TrapFloor
                 TrapFloorActivityKind.PlayerEliminated);
         }
 
+        internal TrapFloorActivityEntry RecordPlayerEliminated(
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TrapFloorTrapResolutionRecord trap)
+        {
+            if (trap == null) throw new ArgumentNullException(nameof(trap));
+            TrapFloorActivityEntry entry = new TrapFloorActivityEntry(
+                entries.Count + 1L,
+                MatchId,
+                acceptedRevision,
+                actorPlayerId,
+                trap.FloorCardId,
+                default,
+                false,
+                TrapFloorActivityKind.PlayerEliminated,
+                trap.Content,
+                TabletopObjectId.Empty,
+                TabletopObjectId.Empty,
+                null,
+                null);
+            entries.Add(entry);
+            return entry;
+        }
+
         internal TrapFloorActivityEntry RecordAllPlayersEliminated(
             long acceptedRevision,
             PlayerId actorPlayerId)

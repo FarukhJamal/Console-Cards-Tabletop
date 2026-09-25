@@ -4442,7 +4442,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
             else if (floorCard.IsRevealed
                 && floorCard.Content.HasSupportedAssistedTrapEffect
-                && !IsTrapFloorTrapNeutralized(targetCardId))
+                && IsTrapFloorTrapPending(targetCardId))
             {
                 actions.Add(new PrototypePopupActionOption(
                     "Resolve Trap",
@@ -4498,6 +4498,10 @@ namespace ConsoleCards.Presentation.Prototype
                 if (IsTrapFloorTrapNeutralized(floorCard.ObjectId))
                 {
                     return $"{description}\nTRAP NEUTRALIZED — this Floor is safe from assisted Trap consequences.";
+                }
+                if (IsTrapFloorTrapResolved(floorCard.ObjectId))
+                {
+                    return $"{description}\nTRAP RESOLVED — its assisted consequence has already been applied or prevented.";
                 }
                 return $"{description}\n{TrapFloorTrapEffectDescription(floorCard.Content)}";
             }
@@ -4963,6 +4967,11 @@ namespace ConsoleCards.Presentation.Prototype
                     if (neutralized)
                     {
                         frontTitle = $"{floorCard.Content.DisplayName} — SAFE";
+                    }
+                    else if (IsTrapFloorTrapResolved(targetCardId))
+                    {
+                        frontTitle = $"{floorCard.Content.DisplayName} — RESOLVED";
+                        objectiveContext = "TRAP RESOLVED\nIts assisted consequence has already been applied or prevented.\n";
                     }
                     else if (floorCard.Content.HasSupportedAssistedTrapEffect)
                     {
@@ -8392,6 +8401,24 @@ namespace ConsoleCards.Presentation.Prototype
                 && trap.Disposition == TrapFloorTrapResolutionDisposition.Neutralized;
         }
 
+        private bool IsTrapFloorTrapPending(TabletopObjectId floorCardId)
+        {
+            return trapFloorAbilityResolutionState != null
+                && trapFloorAbilityResolutionState.TryGetTrap(
+                    floorCardId,
+                    out TrapFloorTrapResolutionRecord trap)
+                && trap.IsPending;
+        }
+
+        private bool IsTrapFloorTrapResolved(TabletopObjectId floorCardId)
+        {
+            return trapFloorAbilityResolutionState != null
+                && trapFloorAbilityResolutionState.TryGetTrap(
+                    floorCardId,
+                    out TrapFloorTrapResolutionRecord trap)
+                && !trap.IsPending;
+        }
+
         private static string FormatInputCost(InputCostDefinition inputCost)
         {
             if (inputCost == null || inputCost.Requirements.Count == 0)
@@ -8559,7 +8586,9 @@ namespace ConsoleCards.Presentation.Prototype
                         line = $"{FormatPlayerName(entry.ActorPlayerId)} skipped their turn";
                         break;
                     case TrapFloorActivityKind.PlayerEliminated:
-                        line = $"{FormatPlayerName(entry.ActorPlayerId).ToUpperInvariant()} ELIMINATED";
+                        line = entry.ContentDefinitionId.IsEmpty
+                            ? $"{FormatPlayerName(entry.ActorPlayerId).ToUpperInvariant()} ELIMINATED"
+                            : $"{FormatPlayerShortName(entry.ActorPlayerId)} was eliminated by {entry.ContentName}";
                         break;
                     case TrapFloorActivityKind.AllPlayersEliminated:
                         line = "ALL PLAYERS ELIMINATED";

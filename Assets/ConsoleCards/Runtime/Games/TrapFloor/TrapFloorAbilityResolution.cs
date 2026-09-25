@@ -940,7 +940,8 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorTurnAdvanceResult result = turnService.MarkPlayerEliminatedForCurrentRound(
                 matchState,
                 context,
-                trap.AffectedPlayerId);
+                trap.AffectedPlayerId,
+                trap);
             if (!result.Succeeded)
                 trap.SetDisposition(TrapFloorTrapResolutionDisposition.Pending);
             return result;
