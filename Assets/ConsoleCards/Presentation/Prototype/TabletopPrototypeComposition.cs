@@ -193,7 +193,7 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorFloorfallState floorfallState;
         private TrapFloorFloorfallService floorfallService;
         private TrapFloorFloorfallTargetPresenter floorfallTargetPresenter;
-        private TrapFloorDodgeTargetPresenter dodgeTargetPresenter;
+        private TrapFloorAbilityTargetPresenter abilityTargetPresenter;
         private TrapFloorFloormasterLifecycleState floormasterLifecycleState;
         private TrapFloorFloormasterLifecycleService floormasterLifecycleService;
         private TrapFloorRoundState trapFloorRoundState;
@@ -447,7 +447,7 @@ namespace ConsoleCards.Presentation.Prototype
                 }
 
                 selectionPresenter.Refresh();
-                RefreshDodgeAssistancePresentation();
+                RefreshMovementAssistancePresentation();
                 ShowMessage("Trap Floor tabletop foundation ready.");
                 IsInitialized = true;
                 BeginUndoTrackingForCurrentMatch();
@@ -525,7 +525,7 @@ namespace ConsoleCards.Presentation.Prototype
             SetGameBoardActive(false);
             ClearFeedback();
             floorfallTargetPresenter?.Clear();
-            dodgeTargetPresenter?.Clear();
+            abilityTargetPresenter?.Clear();
             floorfallState?.Clear();
 
             if (frameCoordinatorEnabledByComposition && inputFrameCoordinator != null)
@@ -671,7 +671,7 @@ namespace ConsoleCards.Presentation.Prototype
             floorfallState = null;
             floorfallService = null;
             floorfallTargetPresenter = null;
-            dodgeTargetPresenter = null;
+            abilityTargetPresenter = null;
             floormasterLifecycleState = null;
             floormasterLifecycleService = null;
             trapFloorRoundState = null;
@@ -1320,9 +1320,9 @@ namespace ConsoleCards.Presentation.Prototype
             if ((acceptance.Kind == AuthoritativeActionKind.MoveObject
                     || acceptance.Kind == AuthoritativeActionKind.PhysicalObjectSettled)
                 && trapFloorAbilityResolutionService != null
-                && trapFloorAbilityResolutionService.ClearDodgeAssistanceIfPawnMoved(matchState))
+                && trapFloorAbilityResolutionService.ClearMovementAssistanceIfPawnMoved(matchState))
             {
-                dodgeTargetPresenter?.ClearCurrent();
+                abilityTargetPresenter?.ClearCurrent();
             }
 
             switch (acceptance.RecordMode)
@@ -3434,9 +3434,9 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             if (trapFloorAbilityResolutionService != null
-                && trapFloorAbilityResolutionService.ClearDodgeAssistance())
+                && trapFloorAbilityResolutionService.ClearMovementAssistance())
             {
-                dodgeTargetPresenter?.ClearCurrent();
+                abilityTargetPresenter?.ClearCurrent();
                 if (undoTrackedMatch == matchState && undoHistory.CurrentStateIndex >= 0)
                     undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
             }
@@ -6249,7 +6249,7 @@ namespace ConsoleCards.Presentation.Prototype
                 authoritativeRandomValueSource,
                 floorfallState);
             floorfallTargetPresenter = new TrapFloorFloorfallTargetPresenter();
-            dodgeTargetPresenter = new TrapFloorDodgeTargetPresenter();
+            abilityTargetPresenter = new TrapFloorAbilityTargetPresenter();
         }
 
         private void BuildFloormasterLifecycleRuntime()
@@ -7719,7 +7719,7 @@ namespace ConsoleCards.Presentation.Prototype
                 floorfallTargetPresenter.Register(
                     card.BaseState.Id,
                     createdVisualReferences.FaceUpRenderer);
-                dodgeTargetPresenter.Register(
+                abilityTargetPresenter.Register(
                     card.BaseState.Id,
                     createdVisualReferences.FaceUpRenderer,
                     createdVisualReferences.FaceDownRenderer);
@@ -8255,7 +8255,8 @@ namespace ConsoleCards.Presentation.Prototype
                 TrapFloorAbilityResolutionService.ResolveEffect(definition.EffectMetadata);
             if (effect != TrapFloorAbilityEffect.Disarm
                 && effect != TrapFloorAbilityEffect.Shield
-                && effect != TrapFloorAbilityEffect.Dodge)
+                && effect != TrapFloorAbilityEffect.Dodge
+                && effect != TrapFloorAbilityEffect.Rush)
             {
                 return;
             }
@@ -8283,12 +8284,13 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshTrapFloorStatusUi();
             if (effect == TrapFloorAbilityEffect.Dodge)
             {
-                RefreshDodgeAssistancePresentation();
-                TrapFloorDodgeAssistanceState assistance =
-                    trapFloorAbilityResolutionState.ActiveDodgeAssistance;
-                ShowMessage(assistance != null && assistance.TargetFloorCardIds.Count > 0
-                    ? "DODGE — Move to a highlighted adjacent Floor"
-                    : "Dodge resolved the Trap, but there are no valid adjacent Floors.");
+                RefreshMovementAssistancePresentation();
+                ShowMessage("DODGE — Move to a highlighted adjacent Floor");
+            }
+            else if (effect == TrapFloorAbilityEffect.Rush)
+            {
+                RefreshMovementAssistancePresentation();
+                ShowMessage("RUSH — Move up to 3 spaces");
             }
             else
             {
@@ -8316,26 +8318,29 @@ namespace ConsoleCards.Presentation.Prototype
                 case TrapFloorAbilityActivationError.ActorIsNotActivePlayer:
                     return $"{effect} assistance activates only for the active Player.";
                 case TrapFloorAbilityActivationError.PawnFloorUnavailable:
-                    return "Dodge could not identify the active Player's current Floor.";
+                    return $"{effect} could not identify the active Player's current Floor.";
                 case TrapFloorAbilityActivationError.NoValidDodgeDestination:
                     return "Dodge unavailable — no adjacent Floor.";
+                case TrapFloorAbilityActivationError.NoValidRushDestination:
+                    return "Rush unavailable — no reachable Floor.";
                 default:
                     return $"{effect} assistance could not resolve ({error}).";
             }
         }
 
-        private void RefreshDodgeAssistancePresentation()
+        private void RefreshMovementAssistancePresentation()
         {
-            if (dodgeTargetPresenter == null) return;
-            TrapFloorDodgeAssistanceState assistance =
-                trapFloorAbilityResolutionState?.ActiveDodgeAssistance;
-            if (assistance == null)
+            if (abilityTargetPresenter == null) return;
+            IReadOnlyList<TabletopObjectId> targetFloorCardIds =
+                trapFloorAbilityResolutionState?.ActiveRushAssistance?.TargetFloorCardIds
+                ?? trapFloorAbilityResolutionState?.ActiveDodgeAssistance?.TargetFloorCardIds;
+            if (targetFloorCardIds == null)
             {
-                dodgeTargetPresenter.ClearCurrent();
+                abilityTargetPresenter.ClearCurrent();
                 return;
             }
 
-            dodgeTargetPresenter.Show(assistance.TargetFloorCardIds);
+            abilityTargetPresenter.Show(targetFloorCardIds);
         }
 
         private static string FormatInputCost(InputCostDefinition inputCost)
@@ -8521,6 +8526,9 @@ namespace ConsoleCards.Presentation.Prototype
                         break;
                     case TrapFloorActivityKind.UsedDodge:
                         line = $"{FormatPlayerShortName(entry.ActorPlayerId)} used Dodge on {entry.ContentName}";
+                        break;
+                    case TrapFloorActivityKind.UsedRush:
+                        line = $"{FormatPlayerShortName(entry.ActorPlayerId)} activated Rush";
                         break;
                     default:
                         line = string.Empty;

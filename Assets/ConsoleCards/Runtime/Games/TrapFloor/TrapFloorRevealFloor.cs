@@ -26,6 +26,7 @@ namespace ConsoleCards.Games.TrapFloor
         UsedDisarm = 12,
         UsedShield = 13,
         UsedDodge = 14,
+        UsedRush = 15,
     }
 
     /// <summary>
@@ -101,7 +102,8 @@ namespace ConsoleCards.Games.TrapFloor
             bool turnActivity = kind == TrapFloorActivityKind.SkippedTurn
                 || kind == TrapFloorActivityKind.PlayerEliminated
                 || kind == TrapFloorActivityKind.AllPlayersEliminated
-                || kind == TrapFloorActivityKind.PlayersReactivated;
+                || kind == TrapFloorActivityKind.PlayersReactivated
+                || kind == TrapFloorActivityKind.UsedRush;
             if (floorCardId.IsEmpty
                 && kind != TrapFloorActivityKind.TriggeredFloorfall
                 && !turnActivity)
@@ -401,6 +403,16 @@ namespace ConsoleCards.Games.TrapFloor
                 null);
             entries.Add(entry);
             return entry;
+        }
+
+        internal TrapFloorActivityEntry RecordRushActivated(
+            long acceptedRevision,
+            PlayerId actorPlayerId)
+        {
+            return RecordPlayerActivity(
+                acceptedRevision,
+                actorPlayerId,
+                TrapFloorActivityKind.UsedRush);
         }
 
         private TrapFloorActivityEntry RecordPlayerActivity(

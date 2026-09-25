@@ -77,6 +77,52 @@ namespace ConsoleCards.Games.TrapFloor
                 targetFloorCardIds);
     }
 
+    public sealed class TrapFloorRushAssistanceState
+    {
+        private readonly ReadOnlyCollection<TabletopObjectId> targetFloorCardIds;
+
+        internal TrapFloorRushAssistanceState(
+            PlayerId playerId,
+            TabletopObjectId pawnId,
+            TableCoordinate pawnStartPosition,
+            TrapFloorCoordinate originCoordinate,
+            IEnumerable<TabletopObjectId> targetFloorCardIds)
+        {
+            if (playerId.IsEmpty) throw new ArgumentException("Rush Player ID cannot be empty.", nameof(playerId));
+            if (pawnId.IsEmpty) throw new ArgumentException("Rush Pawn ID cannot be empty.", nameof(pawnId));
+            if (targetFloorCardIds == null) throw new ArgumentNullException(nameof(targetFloorCardIds));
+
+            List<TabletopObjectId> targets = new List<TabletopObjectId>();
+            HashSet<TabletopObjectId> uniqueTargets = new HashSet<TabletopObjectId>();
+            foreach (TabletopObjectId targetFloorCardId in targetFloorCardIds)
+            {
+                if (targetFloorCardId.IsEmpty || !uniqueTargets.Add(targetFloorCardId))
+                    throw new ArgumentException("Rush target Floor IDs must be non-empty and unique.", nameof(targetFloorCardIds));
+                targets.Add(targetFloorCardId);
+            }
+
+            PlayerId = playerId;
+            PawnId = pawnId;
+            PawnStartPosition = pawnStartPosition;
+            OriginCoordinate = originCoordinate;
+            this.targetFloorCardIds = new ReadOnlyCollection<TabletopObjectId>(targets);
+        }
+
+        public PlayerId PlayerId { get; }
+        public TabletopObjectId PawnId { get; }
+        public TableCoordinate PawnStartPosition { get; }
+        public TrapFloorCoordinate OriginCoordinate { get; }
+        public IReadOnlyList<TabletopObjectId> TargetFloorCardIds => targetFloorCardIds;
+
+        internal TrapFloorRushAssistanceState Copy() =>
+            new TrapFloorRushAssistanceState(
+                PlayerId,
+                PawnId,
+                PawnStartPosition,
+                OriginCoordinate,
+                targetFloorCardIds);
+    }
+
     public readonly struct TrapFloorAbilityActivationRecord : IEquatable<TrapFloorAbilityActivationRecord>
     {
         public TrapFloorAbilityActivationRecord(
@@ -176,6 +222,7 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly HashSet<TrapFloorAbilityActivationRecord> abilityActivations =
             new HashSet<TrapFloorAbilityActivationRecord>();
         private TrapFloorDodgeAssistanceState activeDodgeAssistance;
+        private TrapFloorRushAssistanceState activeRushAssistance;
 
         public TrapFloorAbilityResolutionState(MatchId matchId)
         {
@@ -187,6 +234,7 @@ namespace ConsoleCards.Games.TrapFloor
         public MatchId MatchId { get; }
         public IReadOnlyList<TrapFloorTrapResolutionRecord> TrapRecords => readOnlyTrapRecords;
         public TrapFloorDodgeAssistanceState ActiveDodgeAssistance => activeDodgeAssistance;
+        public TrapFloorRushAssistanceState ActiveRushAssistance => activeRushAssistance;
         public bool HasAbilityActivatedThisTurn(
             TabletopObjectId cardInstanceId,
             PlayerId playerId,
@@ -266,6 +314,14 @@ namespace ConsoleCards.Games.TrapFloor
         {
             activeDodgeAssistance = assistance?.Copy()
                 ?? throw new ArgumentNullException(nameof(assistance));
+            activeRushAssistance = null;
+        }
+
+        internal void BeginRushAssistance(TrapFloorRushAssistanceState assistance)
+        {
+            activeRushAssistance = assistance?.Copy()
+                ?? throw new ArgumentNullException(nameof(assistance));
+            activeDodgeAssistance = null;
         }
 
         internal bool ClearDodgeAssistance()
@@ -275,8 +331,26 @@ namespace ConsoleCards.Games.TrapFloor
             return true;
         }
 
+        internal bool ClearRushAssistance()
+        {
+            if (activeRushAssistance == null) return false;
+            activeRushAssistance = null;
+            return true;
+        }
+
+        internal bool ClearMovementAssistance()
+        {
+            bool cleared = activeDodgeAssistance != null || activeRushAssistance != null;
+            activeDodgeAssistance = null;
+            activeRushAssistance = null;
+            return cleared;
+        }
+
         internal TrapFloorDodgeAssistanceState CopyDodgeAssistance() =>
             activeDodgeAssistance?.Copy();
+
+        internal TrapFloorRushAssistanceState CopyRushAssistance() =>
+            activeRushAssistance?.Copy();
 
         internal TrapFloorTrapResolutionRecord[] CopyTrapRecords()
         {
@@ -296,7 +370,8 @@ namespace ConsoleCards.Games.TrapFloor
         internal void Restore(
             IEnumerable<TrapFloorTrapResolutionRecord> restoredTrapRecords,
             IEnumerable<TrapFloorAbilityActivationRecord> restoredAbilityActivations,
-            TrapFloorDodgeAssistanceState restoredDodgeAssistance)
+            TrapFloorDodgeAssistanceState restoredDodgeAssistance,
+            TrapFloorRushAssistanceState restoredRushAssistance)
         {
             if (restoredTrapRecords == null) throw new ArgumentNullException(nameof(restoredTrapRecords));
             if (restoredAbilityActivations == null) throw new ArgumentNullException(nameof(restoredAbilityActivations));
@@ -327,6 +402,9 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             activeDodgeAssistance = restoredDodgeAssistance?.Copy();
+            activeRushAssistance = restoredRushAssistance?.Copy();
+            if (activeDodgeAssistance != null && activeRushAssistance != null)
+                throw new ArgumentException("Only one Trap Floor movement assistance may be active.");
         }
     }
 
@@ -341,6 +419,7 @@ namespace ConsoleCards.Games.TrapFloor
         NoPendingTrapConsequence = 6,
         PawnFloorUnavailable = 7,
         NoValidDodgeDestination = 8,
+        NoValidRushDestination = 9,
     }
 
     public readonly struct TrapFloorAbilityActivationResult
@@ -409,11 +488,11 @@ namespace ConsoleCards.Games.TrapFloor
             this.template = template;
             this.collapseState = collapseState;
             if ((template == null) != (collapseState == null))
-                throw new ArgumentException("Dodge assistance requires both Template and Collapse state.");
+                throw new ArgumentException("Movement assistance requires both Template and Collapse state.");
             if (state.MatchId != turnState.MatchId || state.MatchId != activityFeed.MatchId)
                 throw new ArgumentException("Trap Floor Ability services must belong to one Match.");
             if (collapseState != null && collapseState.MatchId != state.MatchId)
-                throw new ArgumentException("Trap Floor Dodge state must belong to the same Match.");
+                throw new ArgumentException("Trap Floor movement state must belong to the same Match.");
         }
 
         public TrapFloorAbilityActivationResult Activate(
@@ -428,7 +507,8 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorAbilityEffect effect = ResolveEffect(cardDefinition.EffectMetadata);
             if (effect != TrapFloorAbilityEffect.Disarm
                 && effect != TrapFloorAbilityEffect.Shield
-                && effect != TrapFloorAbilityEffect.Dodge)
+                && effect != TrapFloorAbilityEffect.Dodge
+                && effect != TrapFloorAbilityEffect.Rush)
                 return TrapFloorAbilityActivationResult.Failure(
                     TrapFloorAbilityActivationError.UnsupportedAbility,
                     effect);
@@ -451,7 +531,8 @@ namespace ConsoleCards.Games.TrapFloor
             if (turnState.Phase != TrapFloorTurnPhase.PlayerTurn
                 || turnState.IsCurrentFloorFailed
                 || insertion.ActorPlayerId != turnState.ActivePlayerId
-                || (effect == TrapFloorAbilityEffect.Dodge
+                || ((effect == TrapFloorAbilityEffect.Dodge
+                        || effect == TrapFloorAbilityEffect.Rush)
                     && insertion.ConsoleOwnerPlayerId != turnState.ActivePlayerId))
                 return TrapFloorAbilityActivationResult.Failure(
                     TrapFloorAbilityActivationError.ActorIsNotActivePlayer,
@@ -464,11 +545,14 @@ namespace ConsoleCards.Games.TrapFloor
                     TrapFloorAbilityActivationError.AbilityAlreadyUsed,
                     effect);
 
+            bool rush = effect == TrapFloorAbilityEffect.Rush;
             bool shield = effect == TrapFloorAbilityEffect.Shield;
-            if (!state.TryGetLatestPendingTrap(
+            TrapFloorTrapResolutionRecord trap = null;
+            if (!rush
+                && !state.TryGetLatestPendingTrap(
                     turnState.ActivePlayerId,
                     shield,
-                    out TrapFloorTrapResolutionRecord trap))
+                    out trap))
             {
                 return TrapFloorAbilityActivationResult.Failure(
                     shield
@@ -492,48 +576,94 @@ namespace ConsoleCards.Games.TrapFloor
                     effect);
             }
 
-            trap.SetDisposition(
-                effect == TrapFloorAbilityEffect.Dodge
-                    ? TrapFloorTrapResolutionDisposition.Dodged
-                    : shield
-                        ? TrapFloorTrapResolutionDisposition.Shielded
-                        : TrapFloorTrapResolutionDisposition.Disarmed);
+            TrapFloorRushAssistanceState rushAssistance = null;
+            if (rush
+                && !TryCreateRushAssistance(matchState, turnState.ActivePlayerId, out rushAssistance))
+            {
+                return TrapFloorAbilityActivationResult.Failure(
+                    TrapFloorAbilityActivationError.PawnFloorUnavailable,
+                    effect);
+            }
+            if (rushAssistance != null && rushAssistance.TargetFloorCardIds.Count == 0)
+            {
+                return TrapFloorAbilityActivationResult.Failure(
+                    TrapFloorAbilityActivationError.NoValidRushDestination,
+                    effect);
+            }
+
+            if (!rush)
+            {
+                trap.SetDisposition(
+                    effect == TrapFloorAbilityEffect.Dodge
+                        ? TrapFloorTrapResolutionDisposition.Dodged
+                        : shield
+                            ? TrapFloorTrapResolutionDisposition.Shielded
+                            : TrapFloorTrapResolutionDisposition.Disarmed);
+            }
             state.RecordAbilityActivation(
                 insertion.CardInstanceId,
                 turnState.ActivePlayerId,
                 turnState.CurrentRound);
             if (dodgeAssistance != null)
             {
-                state.ClearDodgeAssistance();
                 state.BeginDodgeAssistance(dodgeAssistance);
             }
-            activityFeed.RecordAbilityUsed(
-                insertion.AcceptedRevision,
-                insertion.ActorPlayerId,
-                trap,
-                effect == TrapFloorAbilityEffect.Dodge
-                    ? TrapFloorActivityKind.UsedDodge
-                    : shield
-                        ? TrapFloorActivityKind.UsedShield
-                        : TrapFloorActivityKind.UsedDisarm);
+            else if (rushAssistance != null)
+            {
+                state.BeginRushAssistance(rushAssistance);
+            }
+
+            if (rush)
+            {
+                activityFeed.RecordRushActivated(
+                    insertion.AcceptedRevision,
+                    insertion.ActorPlayerId);
+            }
+            else
+            {
+                activityFeed.RecordAbilityUsed(
+                    insertion.AcceptedRevision,
+                    insertion.ActorPlayerId,
+                    trap,
+                    effect == TrapFloorAbilityEffect.Dodge
+                        ? TrapFloorActivityKind.UsedDodge
+                        : shield
+                            ? TrapFloorActivityKind.UsedShield
+                            : TrapFloorActivityKind.UsedDisarm);
+            }
             return TrapFloorAbilityActivationResult.Accepted(effect, trap);
         }
 
-        public bool ClearDodgeAssistance() => state.ClearDodgeAssistance();
+        public bool ClearMovementAssistance() => state.ClearMovementAssistance();
 
-        public bool ClearDodgeAssistanceIfPawnMoved(MatchState matchState)
+        public bool ClearMovementAssistanceIfPawnMoved(MatchState matchState)
         {
-            TrapFloorDodgeAssistanceState assistance = state.ActiveDodgeAssistance;
-            if (assistance == null
-                || matchState == null
-                || matchState.Id != state.MatchId
-                || !matchState.Pawns.TryGetValue(assistance.PawnId, out PawnState pawn)
-                || pawn.BaseState.Pose.Position == assistance.PawnStartPosition)
+            TabletopObjectId pawnId;
+            TableCoordinate pawnStartPosition;
+            if (state.ActiveDodgeAssistance != null)
+            {
+                pawnId = state.ActiveDodgeAssistance.PawnId;
+                pawnStartPosition = state.ActiveDodgeAssistance.PawnStartPosition;
+            }
+            else if (state.ActiveRushAssistance != null)
+            {
+                pawnId = state.ActiveRushAssistance.PawnId;
+                pawnStartPosition = state.ActiveRushAssistance.PawnStartPosition;
+            }
+            else
             {
                 return false;
             }
 
-            return state.ClearDodgeAssistance();
+            if (matchState == null
+                || matchState.Id != state.MatchId
+                || !matchState.Pawns.TryGetValue(pawnId, out PawnState pawn)
+                || pawn.BaseState.Pose.Position == pawnStartPosition)
+            {
+                return false;
+            }
+
+            return state.ClearMovementAssistance();
         }
 
         private bool TryCreateDodgeAssistance(
@@ -576,6 +706,111 @@ namespace ConsoleCards.Games.TrapFloor
                 origin,
                 targets);
             return true;
+        }
+
+        private bool TryCreateRushAssistance(
+            MatchState matchState,
+            PlayerId playerId,
+            out TrapFloorRushAssistanceState assistance)
+        {
+            assistance = null;
+            if (template == null || collapseState == null) return false;
+
+            TrapFloorPlayerSetupDefinition player = null;
+            for (int i = 0; i < template.Players.Count; i++)
+            {
+                TrapFloorPlayerSetupDefinition candidate = template.Players[i];
+                if (matchState.GetSeat(candidate.SeatId).OccupantPlayerId == playerId)
+                {
+                    player = candidate;
+                    break;
+                }
+            }
+
+            if (player == null
+                || !matchState.Pawns.TryGetValue(player.PawnId, out PawnState pawn)
+                || !TryGetPawnFloorCoordinate(matchState, pawn, out TrapFloorCoordinate origin))
+            {
+                return false;
+            }
+
+            List<TabletopObjectId> targets = FindRushTargets(matchState, origin);
+            assistance = new TrapFloorRushAssistanceState(
+                playerId,
+                player.PawnId,
+                pawn.BaseState.Pose.Position,
+                origin,
+                targets);
+            return true;
+        }
+
+        private List<TabletopObjectId> FindRushTargets(
+            MatchState matchState,
+            TrapFloorCoordinate origin)
+        {
+            List<TabletopObjectId> targets = new List<TabletopObjectId>();
+            HashSet<TabletopObjectId> uniqueTargets = new HashSet<TabletopObjectId>();
+            Queue<RushPathNode> pending = new Queue<RushPathNode>();
+            HashSet<RushPathNode> visited = new HashSet<RushPathNode>();
+            RushPathNode start = new RushPathNode(origin.X, origin.Y, 0, 0);
+            pending.Enqueue(start);
+            visited.Add(start);
+
+            while (pending.Count > 0)
+            {
+                RushPathNode current = pending.Dequeue();
+                if (current.Steps == 3) continue;
+
+                AddRushStep(matchState, origin, current, 0, 1, pending, visited, targets, uniqueTargets);
+                AddRushStep(matchState, origin, current, 0, -1, pending, visited, targets, uniqueTargets);
+                AddRushStep(matchState, origin, current, -1, 0, pending, visited, targets, uniqueTargets);
+                AddRushStep(matchState, origin, current, 1, 0, pending, visited, targets, uniqueTargets);
+            }
+
+            return targets;
+        }
+
+        private void AddRushStep(
+            MatchState matchState,
+            TrapFloorCoordinate origin,
+            RushPathNode current,
+            int deltaX,
+            int deltaY,
+            Queue<RushPathNode> pending,
+            ISet<RushPathNode> visited,
+            ICollection<TabletopObjectId> targets,
+            ISet<TabletopObjectId> uniqueTargets)
+        {
+            int x = current.X + deltaX;
+            int y = current.Y + deltaY;
+            if (x < TrapFloorCoordinate.MinimumAxisValue
+                || y < TrapFloorCoordinate.MinimumAxisValue
+                || x > template.GridColumns
+                || y > template.GridRows)
+            {
+                return;
+            }
+
+            TrapFloorCoordinate coordinate = new TrapFloorCoordinate(x, y);
+            bool usable = template.TryGetFloorCardId(coordinate, out TabletopObjectId floorCardId)
+                && matchState.Cards.ContainsKey(floorCardId)
+                && !collapseState.IsCollapsed(floorCardId);
+            int crossedMissingFloors = current.CrossedMissingFloors + (usable ? 0 : 1);
+            if (crossedMissingFloors > 1) return;
+
+            RushPathNode next = new RushPathNode(
+                x,
+                y,
+                current.Steps + 1,
+                crossedMissingFloors);
+            if (visited.Add(next)) pending.Enqueue(next);
+
+            if (usable
+                && coordinate != origin
+                && uniqueTargets.Add(floorCardId))
+            {
+                targets.Add(floorCardId);
+            }
         }
 
         private bool TryGetPawnFloorCoordinate(
@@ -622,6 +857,43 @@ namespace ConsoleCards.Games.TrapFloor
                 && !collapseState.IsCollapsed(floorCardId))
             {
                 targets.Add(floorCardId);
+            }
+        }
+
+        private readonly struct RushPathNode : IEquatable<RushPathNode>
+        {
+            public RushPathNode(int x, int y, int steps, int crossedMissingFloors)
+            {
+                X = x;
+                Y = y;
+                Steps = steps;
+                CrossedMissingFloors = crossedMissingFloors;
+            }
+
+            public int X { get; }
+            public int Y { get; }
+            public int Steps { get; }
+            public int CrossedMissingFloors { get; }
+
+            public bool Equals(RushPathNode other) =>
+                X == other.X
+                && Y == other.Y
+                && Steps == other.Steps
+                && CrossedMissingFloors == other.CrossedMissingFloors;
+
+            public override bool Equals(object obj) =>
+                obj is RushPathNode other && Equals(other);
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    int hashCode = X;
+                    hashCode = (hashCode * 397) ^ Y;
+                    hashCode = (hashCode * 397) ^ Steps;
+                    hashCode = (hashCode * 397) ^ CrossedMissingFloors;
+                    return hashCode;
+                }
             }
         }
 

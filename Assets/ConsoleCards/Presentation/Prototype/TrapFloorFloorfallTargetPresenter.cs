@@ -91,8 +91,8 @@ namespace ConsoleCards.Presentation.Prototype
         }
     }
 
-    /// <summary>Projects temporary, non-enforcing Dodge destination guidance onto Floor Cards.</summary>
-    internal sealed class TrapFloorDodgeTargetPresenter
+    /// <summary>Projects temporary, non-enforcing Ability destination guidance onto Floor Cards.</summary>
+    internal sealed class TrapFloorAbilityTargetPresenter
     {
         private static readonly int BaseColorProperty = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorProperty = Shader.PropertyToID("_Color");
@@ -107,15 +107,15 @@ namespace ConsoleCards.Presentation.Prototype
             if (floorCardId.IsEmpty)
                 throw new ArgumentException("Floor Card ID cannot be empty.", nameof(floorCardId));
             if (floorRenderers == null || floorRenderers.Length == 0)
-                throw new ArgumentException("Dodge requires at least one Floor renderer.", nameof(floorRenderers));
+                throw new ArgumentException("Ability guidance requires at least one Floor renderer.", nameof(floorRenderers));
             if (renderers.ContainsKey(floorCardId))
-                throw new InvalidOperationException("A Dodge target renderer is already registered.");
+                throw new InvalidOperationException("An Ability target renderer is already registered.");
 
             TargetRenderer[] targets = new TargetRenderer[floorRenderers.Length];
             for (int i = 0; i < floorRenderers.Length; i++)
             {
                 Renderer renderer = floorRenderers[i]
-                    ?? throw new ArgumentException("Dodge Floor renderers cannot contain null.", nameof(floorRenderers));
+                    ?? throw new ArgumentException("Ability Floor renderers cannot contain null.", nameof(floorRenderers));
                 MaterialPropertyBlock baseline = new MaterialPropertyBlock();
                 renderer.GetPropertyBlock(baseline);
                 targets[i] = new TargetRenderer(renderer, baseline);
@@ -132,7 +132,7 @@ namespace ConsoleCards.Presentation.Prototype
                 TabletopObjectId floorCardId = floorCardIds[i];
                 if (!renderers.TryGetValue(floorCardId, out TargetRenderer[] targets))
                 {
-                    throw new InvalidOperationException("Dodge target has no active Floor Card renderer.");
+                    throw new InvalidOperationException("Ability target has no active Floor Card renderer.");
                 }
 
                 for (int rendererIndex = 0; rendererIndex < targets.Length; rendererIndex++)
