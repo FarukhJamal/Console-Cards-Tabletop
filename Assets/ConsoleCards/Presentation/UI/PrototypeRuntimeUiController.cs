@@ -25,6 +25,7 @@ namespace ConsoleCards.Presentation.UI
         private PrototypeQuantityPopupView quantityPopupView;
         private PrototypeCardInspectView cardInspectPopupView;
         private PrototypeActionAbilityPurchasePopupView actionAbilityPurchasePopupView;
+        private PrototypeFocusedCardSelectionView focusedCardSelectionView;
         private PrototypeTrapFloorHudView trapFloorHudView;
         private PrototypeInteractionGuide interactionGuideView;
 
@@ -267,6 +268,41 @@ namespace ConsoleCards.Presentation.UI
         public void SetActionAbilityPurchaseStatus(string message) =>
             actionAbilityPurchasePopupView?.SetStatus(message);
 
+        public void ShowFocusedCardSelection(PrototypeFocusedCardSelectionModel model)
+        {
+            ReleaseView(tabletopPopupView);
+            popupLayer.SetActive(false);
+            ReleaseModalViews();
+            EnsureFocusedCardSelectionView();
+            componentToolboxView?.CloseToolbox();
+            modalLayer.SetActive(true);
+            focusedCardSelectionView.Bind(model);
+            focusedCardSelectionView.Show();
+        }
+
+        public void ShowFocusedCardReveal(PrototypeFocusedCardRevealModel model)
+        {
+            ReleaseView(tabletopPopupView);
+            popupLayer.SetActive(false);
+            ReleaseModalViews();
+            EnsureFocusedCardSelectionView();
+            componentToolboxView?.CloseToolbox();
+            modalLayer.SetActive(true);
+            focusedCardSelectionView.Show();
+            focusedCardSelectionView.ShowReveal(model);
+        }
+
+        public void CloseFocusedCardSelection()
+        {
+            ReleaseView(focusedCardSelectionView);
+            if (!IsVisible(quantityPopupView)
+                && !IsVisible(cardInspectPopupView)
+                && !IsVisible(actionAbilityPurchasePopupView))
+            {
+                modalLayer.SetActive(false);
+            }
+        }
+
         public void ShowTrapFloorStatus(
             PrototypeTrapFloorStatusModel status,
             PrototypeFloorfallStatusModel floorfall,
@@ -395,6 +431,16 @@ namespace ConsoleCards.Presentation.UI
             actionAbilityPurchasePopupView.ValidateReferences();
         }
 
+        private void EnsureFocusedCardSelectionView()
+        {
+            EnsureService();
+            focusedCardSelectionView =
+                uiService.AcquireCached<PrototypeFocusedCardSelectionView>(
+                    PrototypeUiPrefabIds.FocusedCardSelection);
+            focusedCardSelectionView.Initialize(uiService);
+            focusedCardSelectionView.ValidateReferences();
+        }
+
         private void EnsureTrapFloorHudView()
         {
             EnsureService();
@@ -417,6 +463,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(quantityPopupView);
             ReleaseView(cardInspectPopupView);
             ReleaseView(actionAbilityPurchasePopupView);
+            ReleaseView(focusedCardSelectionView);
             modalLayer?.SetActive(false);
         }
 

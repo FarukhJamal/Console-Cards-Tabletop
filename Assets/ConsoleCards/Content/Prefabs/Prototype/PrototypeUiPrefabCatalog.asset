@@ -33,6 +33,10 @@ MonoBehaviour:
     prefab: {fileID: 114000, guid: e8bbd25402d845509d0e63d57b4d2ac1, type: 3}
     layer: 3
     retention: 0
+  - id: platform.focused-card-selection
+    prefab: {fileID: 114001, guid: e8bbd25402d845509d0e63d57b4d2ac1, type: 3}
+    layer: 3
+    retention: 0
   - id: platform.interaction-guide
     prefab: {fileID: 114000, guid: 18ff22796a2b4e2aaec1e8cd3a815910, type: 3}
     layer: 1
@@ -40,6 +44,10 @@ MonoBehaviour:
   - id: platform.popup-action-row
     prefab: {fileID: 114003, guid: 7e02bb55013040a7879b457a2f45fd88, type: 3}
     layer: 2
+    retention: 1
+  - id: platform.focused-card-option
+    prefab: {fileID: 114006, guid: 7e02bb55013040a7879b457a2f45fd88, type: 3}
+    layer: 3
     retention: 1
   - id: platform.game-template-row
     prefab: {fileID: 114004, guid: 775e290cd6544f5287c8c891adce0992, type: 3}

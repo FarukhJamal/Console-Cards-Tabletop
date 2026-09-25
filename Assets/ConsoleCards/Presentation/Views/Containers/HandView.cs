@@ -14,11 +14,29 @@ namespace ConsoleCards.Presentation.Views.Containers
         [SerializeField] private float horizontalSpacing = 0.75f;
         [SerializeField] private float fanAngleDegrees = 12f;
         [SerializeField] private float verticalOffset = 0.005f;
+        [SerializeField] private float hoverLiftDistance = 0.14f;
+        [SerializeField] private float selectedLiftDistance = 0.42f;
+        [SerializeField] private float hoverWorldHeight = 0.025f;
+        [SerializeField] private float selectedWorldHeight = 0.065f;
+        [SerializeField] private float hoverScale = 1.025f;
+        [SerializeField] private float selectedScale = 1.06f;
+        [SerializeField] private float interactionResponse = 18f;
 
         private readonly List<CardView> suppliedCardViews = new List<CardView>();
         private readonly List<CardView> layoutAppliedCards = new List<CardView>();
+        private readonly Dictionary<TabletopObjectId, HandInteractionPose> interactionPoses =
+            new Dictionary<TabletopObjectId, HandInteractionPose>();
+        private readonly HashSet<TabletopObjectId> animatingCardIds =
+            new HashSet<TabletopObjectId>();
+        private readonly List<TabletopObjectId> interactionCleanup =
+            new List<TabletopObjectId>();
         private ContainerState containerState;
         private TabletopCoordinateConverter converter;
+        private TabletopObjectId hoveredCardId;
+        private TabletopObjectId selectedCardId;
+        private TabletopObjectId draggedCardId;
+        private readonly HashSet<TabletopObjectId> assistedSelectedCardIds =
+            new HashSet<TabletopObjectId>();
         private bool isBound;
 
         public bool IsBound => isBound;
@@ -76,9 +94,22 @@ namespace ConsoleCards.Presentation.Views.Containers
             ContainerViewBinding.ValidateConverter(coordinateConverter);
             ContainerViewBinding.ValidateFiniteNonNegative(horizontalSpacing, nameof(horizontalSpacing));
             ContainerViewBinding.ValidateFiniteNonNegative(verticalOffset, nameof(verticalOffset));
+            ContainerViewBinding.ValidateFiniteNonNegative(hoverLiftDistance, nameof(hoverLiftDistance));
+            ContainerViewBinding.ValidateFiniteNonNegative(selectedLiftDistance, nameof(selectedLiftDistance));
+            ContainerViewBinding.ValidateFiniteNonNegative(hoverWorldHeight, nameof(hoverWorldHeight));
+            ContainerViewBinding.ValidateFiniteNonNegative(selectedWorldHeight, nameof(selectedWorldHeight));
+            ContainerViewBinding.ValidateFiniteNonNegative(interactionResponse, nameof(interactionResponse));
             if (float.IsNaN(fanAngleDegrees) || float.IsInfinity(fanAngleDegrees))
             {
                 throw new ArgumentOutOfRangeException(nameof(fanAngleDegrees));
+            }
+            if (hoverScale < 1f || float.IsNaN(hoverScale) || float.IsInfinity(hoverScale))
+            {
+                throw new ArgumentOutOfRangeException(nameof(hoverScale));
+            }
+            if (selectedScale < 1f || float.IsNaN(selectedScale) || float.IsInfinity(selectedScale))
+            {
+                throw new ArgumentOutOfRangeException(nameof(selectedScale));
             }
 
             Dictionary<TabletopObjectId, CardView> lookup = ContainerViewBinding.BuildLookup(cardViews);
@@ -117,6 +148,41 @@ namespace ConsoleCards.Presentation.Views.Containers
             suppliedCardViews.Clear();
             suppliedCardViews.AddRange(cardViews);
             ApplyAcceptedLayout();
+        }
+
+        /// <summary>
+        /// Applies only reusable Hand presentation. Authoritative selection, dragging, and
+        /// transfer ownership remain outside this View.
+        /// </summary>
+        public void SetInteractionState(
+            TabletopObjectId hoveredId,
+            TabletopObjectId selectedId,
+            TabletopObjectId activelyDraggedId,
+            IReadOnlyList<TabletopObjectId> assistedSelectedIds = null)
+        {
+            if (!isBound) return;
+            MarkForReturn(hoveredCardId, hoveredId, selectedId);
+            MarkForReturn(selectedCardId, hoveredId, selectedId);
+            foreach (TabletopObjectId previousId in assistedSelectedCardIds)
+            {
+                if (!Contains(assistedSelectedIds, previousId)) animatingCardIds.Add(previousId);
+            }
+            assistedSelectedCardIds.Clear();
+            if (assistedSelectedIds != null)
+            {
+                for (int i = 0; i < assistedSelectedIds.Count; i++)
+                {
+                    TabletopObjectId assistedId = assistedSelectedIds[i];
+                    if (!assistedId.IsEmpty) assistedSelectedCardIds.Add(assistedId);
+                }
+            }
+            hoveredCardId = hoveredId;
+            selectedCardId = selectedId;
+            draggedCardId = activelyDraggedId;
+            if (!hoveredCardId.IsEmpty) animatingCardIds.Add(hoveredCardId);
+            if (!selectedCardId.IsEmpty) animatingCardIds.Add(selectedCardId);
+            foreach (TabletopObjectId assistedId in assistedSelectedCardIds)
+                animatingCardIds.Add(assistedId);
         }
 
         internal bool TryGetReorderTargetIndex(
@@ -187,12 +253,73 @@ namespace ConsoleCards.Presentation.Views.Containers
 
         public void Unbind()
         {
+            ResetInteractionPresentation();
             ContainerViewBinding.ClearAppliedCards(layoutAppliedCards);
             containerState = null;
             converter = null;
             suppliedCardViews.Clear();
             VisibleCardCount = 0;
             isBound = false;
+        }
+
+        private void LateUpdate()
+        {
+            if (!isBound || interactionPoses.Count == 0) return;
+            float blend = 1f - Mathf.Exp(-interactionResponse * Time.unscaledDeltaTime);
+            interactionCleanup.Clear();
+            foreach (KeyValuePair<TabletopObjectId, HandInteractionPose> pair in interactionPoses)
+            {
+                TabletopObjectId cardId = pair.Key;
+                HandInteractionPose pose = pair.Value;
+                CardView card = pose.CardView;
+                if (card == null
+                    || !card.IsBound
+                    || card.CardState == null
+                    || card.CardState.BaseState.ContainerId != containerState.Id)
+                {
+                    interactionCleanup.Add(cardId);
+                    continue;
+                }
+
+                if (cardId == draggedCardId || card.IsPreviewing)
+                {
+                    animatingCardIds.Remove(cardId);
+                    continue;
+                }
+
+                bool selected = cardId == selectedCardId || assistedSelectedCardIds.Contains(cardId);
+                bool hovered = !selected && cardId == hoveredCardId;
+                if (!selected && !hovered && !animatingCardIds.Contains(cardId)) continue;
+
+                float lift = selected ? selectedLiftDistance : hovered ? hoverLiftDistance : 0f;
+                float height = selected ? selectedWorldHeight : hovered ? hoverWorldHeight : 0f;
+                float scale = selected ? selectedScale : hovered ? hoverScale : 1f;
+                Vector3 targetPosition = pose.WorldPosition
+                    - (layoutAnchor.forward * lift)
+                    + (Vector3.up * height);
+                card.transform.position = Vector3.Lerp(card.transform.position, targetPosition, blend);
+                card.transform.rotation = Quaternion.Lerp(card.transform.rotation, pose.WorldRotation, blend);
+                card.transform.localScale = Vector3.Lerp(
+                    card.transform.localScale,
+                    pose.LocalScale * scale,
+                    blend);
+
+                if (!selected
+                    && !hovered
+                    && Vector3.SqrMagnitude(card.transform.position - pose.WorldPosition) < 0.000001f
+                    && Vector3.SqrMagnitude(card.transform.localScale - pose.LocalScale) < 0.000001f)
+                {
+                    card.transform.SetPositionAndRotation(pose.WorldPosition, pose.WorldRotation);
+                    card.transform.localScale = pose.LocalScale;
+                    animatingCardIds.Remove(cardId);
+                }
+            }
+
+            for (int i = 0; i < interactionCleanup.Count; i++)
+            {
+                interactionPoses.Remove(interactionCleanup[i]);
+                animatingCardIds.Remove(interactionCleanup[i]);
+            }
         }
 
         private List<CardLayoutPlan> BuildLayoutPlan(
@@ -220,6 +347,7 @@ namespace ConsoleCards.Presentation.Views.Containers
         {
             transform.SetPositionAndRotation(layoutAnchor.position, layoutAnchor.rotation);
             ContainerViewBinding.ApplyPlan(plan, layoutAppliedCards, containerState.Id);
+            UpdateInteractionPoses(plan, null);
             VisibleCardCount = plan.Count;
         }
 
@@ -236,6 +364,79 @@ namespace ConsoleCards.Presentation.Views.Containers
                     item.CardView.ApplyContainerLayoutPose(item.Pose, item.AdditionalWorldHeight);
                 }
             }
+            UpdateInteractionPoses(plan, movingCard);
+        }
+
+        private void UpdateInteractionPoses(
+            IReadOnlyList<CardLayoutPlan> plan,
+            CardView excludedCard)
+        {
+            interactionCleanup.Clear();
+            foreach (TabletopObjectId cardId in interactionPoses.Keys)
+                interactionCleanup.Add(cardId);
+
+            for (int i = 0; i < plan.Count; i++)
+            {
+                CardLayoutPlan item = plan[i];
+                TabletopObjectId cardId = item.CardView.ObjectId;
+                interactionCleanup.Remove(cardId);
+                if (ReferenceEquals(item.CardView, excludedCard)) continue;
+
+                Vector3 localScale = interactionPoses.TryGetValue(cardId, out HandInteractionPose existing)
+                    ? existing.LocalScale
+                    : item.CardView.transform.localScale;
+                interactionPoses[cardId] = new HandInteractionPose(
+                    item.CardView,
+                    item.CardView.transform.position,
+                    item.CardView.transform.rotation,
+                    localScale);
+            }
+
+            for (int i = 0; i < interactionCleanup.Count; i++)
+            {
+                interactionPoses.Remove(interactionCleanup[i]);
+                animatingCardIds.Remove(interactionCleanup[i]);
+            }
+        }
+
+        private void MarkForReturn(
+            TabletopObjectId previousId,
+            TabletopObjectId nextHoveredId,
+            TabletopObjectId nextSelectedId)
+        {
+            if (!previousId.IsEmpty
+                && previousId != nextHoveredId
+                && previousId != nextSelectedId)
+            {
+                animatingCardIds.Add(previousId);
+            }
+        }
+
+        private void ResetInteractionPresentation()
+        {
+            foreach (HandInteractionPose pose in interactionPoses.Values)
+            {
+                if (pose.CardView == null) continue;
+                pose.CardView.transform.SetPositionAndRotation(pose.WorldPosition, pose.WorldRotation);
+                pose.CardView.transform.localScale = pose.LocalScale;
+            }
+            interactionPoses.Clear();
+            animatingCardIds.Clear();
+            interactionCleanup.Clear();
+            hoveredCardId = TabletopObjectId.Empty;
+            selectedCardId = TabletopObjectId.Empty;
+            draggedCardId = TabletopObjectId.Empty;
+            assistedSelectedCardIds.Clear();
+        }
+
+        private static bool Contains(
+            IReadOnlyList<TabletopObjectId> cardIds,
+            TabletopObjectId cardId)
+        {
+            if (cardIds == null) return false;
+            for (int i = 0; i < cardIds.Count; i++)
+                if (cardIds[i] == cardId) return true;
+            return false;
         }
 
         private float CalculateFanRotation(float centeredIndex, int count)
@@ -259,6 +460,26 @@ namespace ConsoleCards.Presentation.Views.Containers
             {
                 throw new InvalidOperationException("HandView is not bound.");
             }
+        }
+
+        private sealed class HandInteractionPose
+        {
+            public HandInteractionPose(
+                CardView cardView,
+                Vector3 worldPosition,
+                Quaternion worldRotation,
+                Vector3 localScale)
+            {
+                CardView = cardView;
+                WorldPosition = worldPosition;
+                WorldRotation = worldRotation;
+                LocalScale = localScale;
+            }
+
+            public CardView CardView { get; }
+            public Vector3 WorldPosition { get; }
+            public Quaternion WorldRotation { get; }
+            public Vector3 LocalScale { get; }
         }
     }
 }

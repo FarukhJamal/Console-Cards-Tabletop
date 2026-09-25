@@ -47,6 +47,155 @@ namespace ConsoleCards.Games.TrapFloor
     }
 
     /// <summary>
+    /// Match-scoped assisted Search state. Card movement remains authoritative through the
+    /// normal Container transfer path; this state records only which exact selected Cards
+    /// have subsequently been inserted into the searching Player's Console Side Slots.
+    /// </summary>
+    public sealed class TrapFloorPendingSearchState
+    {
+        private readonly List<TabletopObjectId> selectedCardIds = new List<TabletopObjectId>();
+        private readonly HashSet<TabletopObjectId> insertedCardIds = new HashSet<TabletopObjectId>();
+
+        public TrapFloorPendingSearchState(MatchId matchId)
+        {
+            if (matchId.IsEmpty) throw new ArgumentException("Pending Search Match ID cannot be empty.", nameof(matchId));
+            MatchId = matchId;
+        }
+
+        public MatchId MatchId { get; }
+        public bool IsActive { get; private set; }
+        public PlayerId PlayerId { get; private set; }
+        public TrapFloorSearchKind SearchKind { get; private set; }
+        public IReadOnlyList<TabletopObjectId> SelectedCardIds => selectedCardIds.AsReadOnly();
+        public bool IsPaymentComplete => IsActive
+            && selectedCardIds.Count > 0
+            && insertedCardIds.Count == selectedCardIds.Count;
+
+        public bool IsInserted(TabletopObjectId cardId) => insertedCardIds.Contains(cardId);
+
+        public void Begin(
+            PlayerId playerId,
+            TrapFloorSearchKind searchKind,
+            IEnumerable<TabletopObjectId> paymentCardIds)
+        {
+            if (playerId.IsEmpty) throw new ArgumentException("Pending Search Player ID cannot be empty.", nameof(playerId));
+            if (!Enum.IsDefined(typeof(TrapFloorSearchKind), searchKind))
+                throw new ArgumentOutOfRangeException(nameof(searchKind));
+            if (paymentCardIds == null) throw new ArgumentNullException(nameof(paymentCardIds));
+
+            List<TabletopObjectId> payment = new List<TabletopObjectId>();
+            HashSet<TabletopObjectId> unique = new HashSet<TabletopObjectId>();
+            foreach (TabletopObjectId cardId in paymentCardIds)
+            {
+                if (cardId.IsEmpty || !unique.Add(cardId))
+                    throw new ArgumentException("Pending Search payment Card IDs must be non-empty and unique.", nameof(paymentCardIds));
+                payment.Add(cardId);
+            }
+            if (payment.Count == 0)
+                throw new ArgumentException("Pending Search requires at least one payment Card.", nameof(paymentCardIds));
+
+            selectedCardIds.Clear();
+            selectedCardIds.AddRange(payment);
+            insertedCardIds.Clear();
+            PlayerId = playerId;
+            SearchKind = searchKind;
+            IsActive = true;
+        }
+
+        public bool RecordConsoleInsertion(
+            PlayerId actorPlayerId,
+            PlayerId consoleOwnerPlayerId,
+            ContainerId slotContainerId,
+            TabletopObjectId cardId,
+            IReadOnlyList<ContainerId> allowedSideSlotIds)
+        {
+            if (!IsMatchingInteraction(
+                    actorPlayerId,
+                    consoleOwnerPlayerId,
+                    slotContainerId,
+                    cardId,
+                    allowedSideSlotIds,
+                    true))
+                return false;
+            return insertedCardIds.Add(cardId);
+        }
+
+        public bool RecordConsoleRemoval(
+            PlayerId actorPlayerId,
+            PlayerId consoleOwnerPlayerId,
+            ContainerId slotContainerId,
+            TabletopObjectId cardId,
+            IReadOnlyList<ContainerId> allowedSideSlotIds)
+        {
+            if (!IsMatchingInteraction(
+                    actorPlayerId,
+                    consoleOwnerPlayerId,
+                    slotContainerId,
+                    cardId,
+                    allowedSideSlotIds,
+                    false))
+                return false;
+            return insertedCardIds.Remove(cardId);
+        }
+
+        public void Clear()
+        {
+            selectedCardIds.Clear();
+            insertedCardIds.Clear();
+            PlayerId = ConsoleCards.Core.Identifiers.PlayerId.Empty;
+            SearchKind = TrapFloorSearchKind.Normal;
+            IsActive = false;
+        }
+
+        internal TabletopObjectId[] CopySelectedCardIds() => selectedCardIds.ToArray();
+
+        internal TabletopObjectId[] CopyInsertedCardIds()
+        {
+            List<TabletopObjectId> copy = new List<TabletopObjectId>();
+            for (int i = 0; i < selectedCardIds.Count; i++)
+                if (insertedCardIds.Contains(selectedCardIds[i])) copy.Add(selectedCardIds[i]);
+            return copy.ToArray();
+        }
+
+        internal void Restore(
+            bool isActive,
+            PlayerId playerId,
+            TrapFloorSearchKind searchKind,
+            IEnumerable<TabletopObjectId> paymentCardIds,
+            IEnumerable<TabletopObjectId> insertedPaymentCardIds)
+        {
+            Clear();
+            if (!isActive) return;
+            Begin(playerId, searchKind, paymentCardIds);
+            if (insertedPaymentCardIds == null) return;
+            foreach (TabletopObjectId cardId in insertedPaymentCardIds)
+            {
+                if (selectedCardIds.Contains(cardId)) insertedCardIds.Add(cardId);
+            }
+        }
+
+        private bool IsMatchingInteraction(
+            PlayerId actorPlayerId,
+            PlayerId consoleOwnerPlayerId,
+            ContainerId slotContainerId,
+            TabletopObjectId cardId,
+            IReadOnlyList<ContainerId> allowedSideSlotIds,
+            bool requirePendingPlayerActor)
+        {
+            if (!IsActive
+                || (requirePendingPlayerActor && actorPlayerId != PlayerId)
+                || consoleOwnerPlayerId != PlayerId
+                || cardId.IsEmpty
+                || !selectedCardIds.Contains(cardId)
+                || allowedSideSlotIds == null)
+                return false;
+            for (int i = 0; i < allowedSideSlotIds.Count; i++)
+                if (allowedSideSlotIds[i] == slotContainerId) return true;
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Replication-ready shared activity data. Display strings are derived by Presentation;
     /// identity and causality remain actor, Match, revision, definition, and Object ID based.
     /// </summary>
@@ -880,6 +1029,7 @@ namespace ConsoleCards.Games.TrapFloor
         HandMissing,
         PaymentCardCountInvalid,
         PaymentCardNotInHand,
+        PaymentCardNotInConsole,
         PaymentCardInvalid,
         PaymentCardLocked,
         PaymentDoesNotSatisfyCost,
@@ -1102,20 +1252,19 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(CommandResultStatus.Rejected, TrapFloorRevealFloorError.SearchConfigurationMissing);
             }
 
-            if (!TryGetPlayerHand(
+            if (!TryGetPlayerSetup(
                     matchState,
                     command.Context.RequestedByPlayerId,
-                    out ContainerState hand))
+                    out TrapFloorPlayerSetupDefinition player))
             {
                 return Failure(CommandResultStatus.Rejected, TrapFloorRevealFloorError.HandMissing);
             }
 
             if (!TryValidatePayment(
                     matchState,
-                    hand,
+                    player,
                     command,
                     searchConfiguration,
-                    out List<CardInstanceState> paymentCards,
                     out List<ControllerInput> paymentInputs,
                     out TrapFloorRevealFloorError paymentError))
             {
@@ -1131,21 +1280,10 @@ namespace ConsoleCards.Games.TrapFloor
             bool trapSuppressed = command.SearchKind == TrapFloorSearchKind.Careful
                 && searchConfiguration.CarefulSearchSuppressesTrap
                 && floorCard.Content.Category == TrapFloorFloorContentCategory.Trap;
-            List<TabletopObjectId> originalHandOrder = new List<TabletopObjectId>(hand.ObjectIds);
-            ContainerTransferService transfer = new ContainerTransferService();
             TrapFloorActivityEntry searchedActivity = null;
             TrapFloorActivityEntry revealedActivity = null;
             try
             {
-                for (int i = 0; i < paymentCards.Count; i++)
-                {
-                    CardInstanceState paymentCard = paymentCards[i];
-                    ContainerTransferResult removal = transfer.RemoveFromContainer(paymentCard.BaseState, hand);
-                    if (!removal.Succeeded)
-                        throw new InvalidOperationException($"Search payment removal failed: {removal.Error}.");
-                    matchState.RemoveObject(paymentCard.BaseState.Id);
-                }
-
                 matchState.Cards[command.FloorCardId].SetFace(CardFace.FaceUp);
                 activityFeed.RecordReveal(
                     acceptedRevision,
@@ -1163,7 +1301,6 @@ namespace ConsoleCards.Games.TrapFloor
                 if (revealedActivity != null) activityFeed.RemoveLast(revealedActivity);
                 if (searchedActivity != null) activityFeed.RemoveLast(searchedActivity);
                 matchState.Cards[command.FloorCardId].SetFace(CardFace.FaceDown);
-                RestorePayment(matchState, hand, paymentCards, originalHandOrder, transfer);
                 return Failure(CommandResultStatus.Rejected, TrapFloorRevealFloorError.MutationFailed);
             }
 
@@ -1190,35 +1327,33 @@ namespace ConsoleCards.Games.TrapFloor
                 trapSuppressed);
         }
 
-        private bool TryGetPlayerHand(
+        private bool TryGetPlayerSetup(
             MatchState matchState,
             PlayerId playerId,
-            out ContainerState hand)
+            out TrapFloorPlayerSetupDefinition resolvedPlayer)
         {
             for (int i = 0; i < template.Players.Count; i++)
             {
                 TrapFloorPlayerSetupDefinition player = template.Players[i];
                 if (matchState.Seats.TryGetValue(player.SeatId, out SeatState seat)
-                    && seat.OccupantPlayerId == playerId
-                    && matchState.Containers.TryGetValue(player.HandContainerId, out hand)
-                    && hand.Kind == ContainerKind.Hand
-                    && hand.OwnerSeatId == player.SeatId)
+                    && seat.OccupantPlayerId == playerId)
+                {
+                    resolvedPlayer = player;
                     return true;
+                }
             }
-            hand = null;
+            resolvedPlayer = null;
             return false;
         }
 
         private bool TryValidatePayment(
             MatchState matchState,
-            ContainerState hand,
+            TrapFloorPlayerSetupDefinition player,
             TrapFloorRevealFloorCommand command,
             TrapFloorSearchConfiguration configuration,
-            out List<CardInstanceState> cards,
             out List<ControllerInput> inputs,
             out TrapFloorRevealFloorError error)
         {
-            cards = new List<CardInstanceState>(command.PaymentCardIds.Count);
             inputs = new List<ControllerInput>(command.PaymentCardIds.Count);
             error = TrapFloorRevealFloorError.None;
             int requiredCount = command.SearchKind == TrapFloorSearchKind.Normal
@@ -1243,11 +1378,14 @@ namespace ConsoleCards.Games.TrapFloor
             {
                 TabletopObjectId cardId = command.PaymentCardIds[i];
                 if (cardId.IsEmpty || !seen.Add(cardId)
-                    || !hand.Contains(cardId)
-                    || !matchState.Cards.TryGetValue(cardId, out CardInstanceState card)
-                    || card.BaseState.ContainerId != hand.Id)
+                    || !matchState.Cards.TryGetValue(cardId, out CardInstanceState card))
                 {
-                    error = TrapFloorRevealFloorError.PaymentCardNotInHand;
+                    error = TrapFloorRevealFloorError.PaymentCardNotInConsole;
+                    return false;
+                }
+                if (!IsCardInPlayerSideSlot(matchState, player, card))
+                {
+                    error = TrapFloorRevealFloorError.PaymentCardNotInConsole;
                     return false;
                 }
                 if (card.BaseState.IsUserLocked)
@@ -1260,7 +1398,6 @@ namespace ConsoleCards.Games.TrapFloor
                     error = TrapFloorRevealFloorError.PaymentCardInvalid;
                     return false;
                 }
-                cards.Add(card);
                 inputs.Add(input);
                 paidCounts.TryGetValue(input, out int paidCount);
                 paidCounts[input] = checked(paidCount + 1);
@@ -1296,28 +1433,21 @@ namespace ConsoleCards.Games.TrapFloor
             return total;
         }
 
-        private static void RestorePayment(
+        private static bool IsCardInPlayerSideSlot(
             MatchState matchState,
-            ContainerState hand,
-            IReadOnlyList<CardInstanceState> paymentCards,
-            IReadOnlyList<TabletopObjectId> originalHandOrder,
-            ContainerTransferService transfer)
+            TrapFloorPlayerSetupDefinition player,
+            CardInstanceState card)
         {
-            for (int i = 0; i < paymentCards.Count; i++)
+            ContainerId containerId = card.BaseState.ContainerId;
+            for (int i = 0; i < player.SideSlotContainerIds.Count; i++)
             {
-                CardInstanceState card = paymentCards[i];
-                if (!matchState.ContainsObject(card.BaseState.Id)) matchState.AddUncontainedCard(card);
+                if (player.SideSlotContainerIds[i] != containerId) continue;
+                return matchState.Containers.TryGetValue(containerId, out ContainerState slot)
+                    && slot.Kind == ContainerKind.ConsoleSlot
+                    && slot.OwnerSeatId == player.SeatId
+                    && slot.Contains(card.BaseState.Id);
             }
-            for (int index = 0; index < originalHandOrder.Count; index++)
-            {
-                TabletopObjectId objectId = originalHandOrder[index];
-                if (!hand.Contains(objectId) && matchState.Cards.TryGetValue(objectId, out CardInstanceState card))
-                {
-                    ContainerTransferResult restored = transfer.PlaceIntoContainer(card.BaseState, hand, index);
-                    if (!restored.Succeeded)
-                        throw new InvalidOperationException($"Search payment rollback failed: {restored.Error}.");
-                }
-            }
+            return false;
         }
 
         private static bool MatchContainsPlayer(MatchState matchState, PlayerId playerId)

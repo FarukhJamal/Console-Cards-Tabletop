@@ -54,6 +54,13 @@ MonoBehaviour:
   horizontalSpacing: 0.75
   fanAngleDegrees: 12
   verticalOffset: 0.005
+  hoverLiftDistance: 0.14
+  selectedLiftDistance: 0.42
+  hoverWorldHeight: 0.025
+  selectedWorldHeight: 0.065
+  hoverScale: 1.025
+  selectedScale: 1.06
+  interactionResponse: 18
 --- !u!65 &650100
 BoxCollider:
   m_ObjectHideFlags: 0

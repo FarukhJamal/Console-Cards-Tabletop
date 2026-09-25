@@ -14,6 +14,8 @@ GameObject:
   - component: {fileID: 114002}
   - component: {fileID: 114003}
   - component: {fileID: 114004}
+  - component: {fileID: 114005}
+  - component: {fileID: 114006}
   m_Layer: 5
   m_Name: PrototypePopupActionRow
   m_TagString: Untagged
@@ -157,6 +159,51 @@ MonoBehaviour:
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
+--- !u!114 &114005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100000}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1344c3c82d62a2a41a3576d8abb8e3ea, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.RawImage
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 0
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Texture: {fileID: 0}
+  m_UVRect:
+    serializedVersion: 2
+    x: 0
+    y: 0
+    width: 1
+    height: 1
+--- !u!114 &114006
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b47a1e3d8f564712a32b51cd684fe390, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: ConsoleCards.Presentation::ConsoleCards.Presentation.UI.PrototypeFocusedCardOptionView
+  cardTransform: {fileID: 224000}
+  surface: {fileID: 114001}
+  artwork: {fileID: 114005}
+  button: {fileID: 114002}
+  label: {fileID: 114100}
+  layoutElement: {fileID: 114004}
 --- !u!1 &100100
 GameObject:
   m_ObjectHideFlags: 0
