@@ -14,6 +14,7 @@ namespace ConsoleCards.Presentation.UI
             string displayName,
             string description,
             string inputCost,
+            Texture artwork,
             bool canAfford,
             string affordabilityMessage)
         {
@@ -26,6 +27,7 @@ namespace ConsoleCards.Presentation.UI
             DisplayName = displayName;
             Description = description ?? string.Empty;
             InputCost = inputCost ?? string.Empty;
+            Artwork = artwork;
             CanAfford = canAfford;
             AffordabilityMessage = affordabilityMessage ?? string.Empty;
         }
@@ -37,6 +39,8 @@ namespace ConsoleCards.Presentation.UI
         public string Description { get; }
 
         public string InputCost { get; }
+
+        public Texture Artwork { get; }
 
         public bool CanAfford { get; }
 
@@ -54,6 +58,7 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private RectTransform catalogRowsRoot;
         [SerializeField] private ScrollRect catalogScrollRect;
         [SerializeField] private Text cardNameLabel;
+        [SerializeField] private RawImage artworkImage;
         [SerializeField] private Text descriptionLabel;
         [SerializeField] private Text inputCostLabel;
         [SerializeField] private Text affordabilityLabel;
@@ -82,6 +87,7 @@ namespace ConsoleCards.Presentation.UI
                 || catalogRowsRoot == null
                 || catalogScrollRect == null
                 || cardNameLabel == null
+                || artworkImage == null
                 || descriptionLabel == null
                 || inputCostLabel == null
                 || affordabilityLabel == null
@@ -161,6 +167,11 @@ namespace ConsoleCards.Presentation.UI
             purchase = null;
             dismiss = null;
             if (cardNameLabel != null) cardNameLabel.text = string.Empty;
+            if (artworkImage != null)
+            {
+                artworkImage.texture = null;
+                artworkImage.gameObject.SetActive(false);
+            }
             if (descriptionLabel != null) descriptionLabel.text = string.Empty;
             if (inputCostLabel != null) inputCostLabel.text = string.Empty;
             if (affordabilityLabel != null) affordabilityLabel.text = string.Empty;
@@ -190,6 +201,8 @@ namespace ConsoleCards.Presentation.UI
         {
             selectedOption = option ?? throw new ArgumentNullException(nameof(option));
             cardNameLabel.text = option.DisplayName;
+            artworkImage.texture = option.Artwork;
+            artworkImage.gameObject.SetActive(option.Artwork != null);
             descriptionLabel.text = option.Description;
             inputCostLabel.text = $"Cost: {option.InputCost}";
             affordabilityLabel.text = option.AffordabilityMessage;
@@ -201,6 +214,8 @@ namespace ConsoleCards.Presentation.UI
         {
             selectedOption = null;
             cardNameLabel.text = "No Purchasable Cards";
+            artworkImage.texture = null;
+            artworkImage.gameObject.SetActive(false);
             descriptionLabel.text = message ?? string.Empty;
             inputCostLabel.text = string.Empty;
             affordabilityLabel.text = string.Empty;

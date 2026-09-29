@@ -168,6 +168,7 @@ namespace ConsoleCards.Presentation.Prototype
         private bool undoTransactionInProgress;
         private bool rebuildingFromUndo;
         private TrapFloorSessionState pendingRestoredTrapFloorState;
+        private PendingControllerPurchaseState pendingRestoredControllerPurchaseState;
 
         private MatchState matchState;
         private TabletopSession activeSession;
@@ -191,6 +192,7 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorAbilityResolutionState trapFloorAbilityResolutionState;
         private TrapFloorAbilityResolutionService trapFloorAbilityResolutionService;
         private TrapFloorPendingSearchState trapFloorPendingSearchState;
+        private PendingControllerPurchaseState pendingControllerPurchaseState;
         private readonly ControllerInputHandService controllerInputHandService =
             new ControllerInputHandService();
         private TrapFloorActivityEntry activeFloorRevealActivity;
@@ -269,6 +271,9 @@ namespace ConsoleCards.Presentation.Prototype
         private TabletopObjectId inspectedCardId;
         private long inspectedCardRenderedRevision = -1;
         private TrapFloorSearchKind pendingSearchKind;
+        private string pendingPurchaseDefinitionStableId = string.Empty;
+        private readonly List<TabletopObjectId> assistedHandCardIds =
+            new List<TabletopObjectId>();
 
         private DeckView deckView;
         private HandView handView;
@@ -678,6 +683,10 @@ namespace ConsoleCards.Presentation.Prototype
             trapFloorAbilityResolutionService = null;
             trapFloorPendingSearchState?.Clear();
             trapFloorPendingSearchState = null;
+            pendingControllerPurchaseState?.Clear();
+            pendingControllerPurchaseState = null;
+            pendingPurchaseDefinitionStableId = string.Empty;
+            assistedHandCardIds.Clear();
             activeFloorRevealActivity = null;
             floorfallState = null;
             floorfallService = null;
@@ -879,31 +888,42 @@ namespace ConsoleCards.Presentation.Prototype
         public ActionAbilityPurchaseResult PurchaseActionOrAbility(string cardDefinitionStableId)
         {
             EnsureInitialized();
+            if (pendingControllerPurchaseState == null
+                || !pendingControllerPurchaseState.IsActive
+                || !pendingControllerPurchaseState.IsPaymentComplete
+                || pendingControllerPurchaseState.PurchasedCardDefinitionStableId
+                    != cardDefinitionStableId)
+            {
+                ShowMessage("Purchase rejected: physical Console payment is incomplete.");
+                return ActionAbilityPurchaseResult.Failure(
+                    ActionAbilityPurchaseError.PhysicalPaymentMissing);
+            }
+
             TrapFloorPlayerSetupDefinition player = GetAssistedTrapFloorPlayerSetup();
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
-                CaptureContainerCardTransforms(player.HandContainerId, player.ActionAbilityAreaContainerId);
-            ActionAbilityPurchaseResult result = new ActionAbilityPurchaseService().Purchase(
+                CaptureContainerCardTransforms(player.ActionAbilityAreaContainerId);
+            ActionAbilityPurchaseResult result =
+                new ActionAbilityPurchaseService().ConfirmPhysicalPaymentPurchase(
                 matchState,
                 trapFloorTemplate.GameDefinition,
-                new PurchaseActionOrAbilityCommand(
-                    CreateCommandContext(trapFloorTurnState.ActivePlayerId),
+                new ConfirmPhysicalActionOrAbilityPurchaseCommand(
+                    CreateCommandContext(pendingControllerPurchaseState.PlayerId),
                     player.SeatId,
                     player.ActionAbilityAreaContainerId,
                     cardDefinitionStableId,
-                    TabletopObjectId.New()));
+                    TabletopObjectId.New(),
+                    pendingControllerPurchaseState.SelectedCardIds,
+                    player.SideSlotContainerIds));
             if (!result.Succeeded)
             {
-                ApplyLayout(player.HandContainerId);
                 ApplyLayout(player.ActionAbilityAreaContainerId);
                 presentationTransitions.AnimateCardsFromCurrentResults(transitionStarts, returnDuration);
                 ShowMessage($"Purchase rejected: {result.Error}.");
                 return result;
             }
 
-            for (int i = 0; i < result.ConsumedCardIds.Count; i++)
-            {
-                ReleaseRuntimeCardInstance(result.ConsumedCardIds[i]);
-            }
+            pendingControllerPurchaseState.Clear();
+            ReplaceCurrentUndoStateForPurchaseAssistance();
 
             if (!trapFloorTemplate.GameDefinition.TryGetCard(
                     cardDefinitionStableId,
@@ -921,7 +941,6 @@ namespace ConsoleCards.Presentation.Prototype
             cardSelectionVisuals.Add(selectionVisual);
             physicalAuthority?.Register(grantedView);
             RefreshContainerCardViewSources();
-            ApplyLayout(player.HandContainerId);
             ApplyLayout(player.ActionAbilityAreaContainerId);
             RefreshSelectionPresenterAfterRuntimeProjection();
             presentationTransitions.Appear(grantedView.transform, settleDuration);
@@ -1126,10 +1145,12 @@ namespace ConsoleCards.Presentation.Prototype
 
             MatchState replacement;
             TrapFloorSessionState restoredTrapFloor = null;
+            PendingControllerPurchaseState restoredPurchase = null;
             try
             {
                 replacement = snapshot.Match.Restore(undoRevision);
                 restoredTrapFloor = snapshot.TrapFloor?.Restore();
+                restoredPurchase = snapshot.PendingControllerPurchase?.Restore();
             }
             catch (Exception exception)
             {
@@ -1145,6 +1166,7 @@ namespace ConsoleCards.Presentation.Prototype
                 Shutdown(true);
                 activeSession.ReplaceCurrentMatch(replacement);
                 pendingRestoredTrapFloorState = restoredTrapFloor;
+                pendingRestoredControllerPurchaseState = restoredPurchase;
                 InitializeActiveSession(false);
                 undoHistory.CommitUndo();
                 undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
@@ -1166,6 +1188,7 @@ namespace ConsoleCards.Presentation.Prototype
             finally
             {
                 pendingRestoredTrapFloorState = null;
+                pendingRestoredControllerPurchaseState = null;
                 rebuildingFromUndo = false;
                 RefreshUndoUi();
             }
@@ -1200,10 +1223,12 @@ namespace ConsoleCards.Presentation.Prototype
 
             MatchState replacement;
             TrapFloorSessionState restoredTrapFloor = null;
+            PendingControllerPurchaseState restoredPurchase = null;
             try
             {
                 replacement = snapshot.Match.Restore(redoRevision);
                 restoredTrapFloor = snapshot.TrapFloor?.Restore();
+                restoredPurchase = snapshot.PendingControllerPurchase?.Restore();
             }
             catch (Exception exception)
             {
@@ -1219,6 +1244,7 @@ namespace ConsoleCards.Presentation.Prototype
                 Shutdown(true);
                 activeSession.ReplaceCurrentMatch(replacement);
                 pendingRestoredTrapFloorState = restoredTrapFloor;
+                pendingRestoredControllerPurchaseState = restoredPurchase;
                 InitializeActiveSession(false);
                 undoHistory.CommitRedo();
                 undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
@@ -1235,6 +1261,7 @@ namespace ConsoleCards.Presentation.Prototype
             finally
             {
                 pendingRestoredTrapFloorState = null;
+                pendingRestoredControllerPurchaseState = null;
                 rebuildingFromUndo = false;
                 RefreshUndoUi();
             }
@@ -1385,7 +1412,8 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorCollapseState,
                 trapFloorTurnState,
                 trapFloorAbilityResolutionState,
-                trapFloorPendingSearchState);
+                trapFloorPendingSearchState,
+                pendingControllerPurchaseState);
         }
 
         private static string FormatUndoObjectIds(GameTemplateInitialSnapshot snapshot)
@@ -2081,15 +2109,34 @@ namespace ConsoleCards.Presentation.Prototype
                 ? selectionState.SelectedObjectId
                 : TabletopObjectId.Empty;
             CardView draggedCard = containedCardDragCoordinator?.ActiveCardView;
-            IReadOnlyList<TabletopObjectId> assistedSelectedCardIds =
-                trapFloorPendingSearchState != null && trapFloorPendingSearchState.IsActive
-                    ? trapFloorPendingSearchState.SelectedCardIds
-                    : null;
+            assistedHandCardIds.Clear();
+            if (trapFloorPendingSearchState != null && trapFloorPendingSearchState.IsActive)
+            {
+                AddUniqueCardIds(assistedHandCardIds, trapFloorPendingSearchState.SelectedCardIds);
+            }
+            if (pendingControllerPurchaseState != null
+                && pendingControllerPurchaseState.IsActive
+                && !pendingControllerPurchaseState.IsPaymentComplete)
+            {
+                AddUniqueCardIds(
+                    assistedHandCardIds,
+                    pendingControllerPurchaseState.SelectedCardIds);
+            }
             handView.SetInteractionState(
                 hoveredCardId,
                 selectedCardId,
                 draggedCard != null ? draggedCard.ObjectId : TabletopObjectId.Empty,
-                assistedSelectedCardIds);
+                assistedHandCardIds.Count > 0 ? assistedHandCardIds : null);
+        }
+
+        private static void AddUniqueCardIds(
+            List<TabletopObjectId> destination,
+            IReadOnlyList<TabletopObjectId> source)
+        {
+            for (int i = 0; i < source.Count; i++)
+            {
+                if (!destination.Contains(source[i])) destination.Add(source[i]);
+            }
         }
 
         private void OnGUI()
@@ -3520,10 +3567,27 @@ namespace ConsoleCards.Presentation.Prototype
                         true,
                         CancelFocusedTrapFloorSearch));
                 }
-                actions.Add(new PrototypePopupActionOption(
-                    "Buy Ability",
-                    true,
-                    OpenActionAbilityPurchase));
+                bool purchasePending = pendingControllerPurchaseState != null
+                    && pendingControllerPurchaseState.IsActive
+                    && pendingControllerPurchaseState.PlayerId == trapFloorTurnState.ActivePlayerId;
+                if (purchasePending)
+                {
+                    actions.Add(new PrototypePopupActionOption(
+                        "Confirm Purchase",
+                        pendingControllerPurchaseState.IsPaymentComplete,
+                        ConfirmPendingActionAbilityPurchase));
+                    actions.Add(new PrototypePopupActionOption(
+                        "Cancel Purchase",
+                        true,
+                        CancelPendingActionAbilityPurchase));
+                }
+                else
+                {
+                    actions.Add(new PrototypePopupActionOption(
+                        "Buy Ability",
+                        true,
+                        OpenActionAbilityPurchase));
+                }
                 actions.Add(new PrototypePopupActionOption(
                     "Skip Turn",
                     true,
@@ -3575,6 +3639,18 @@ namespace ConsoleCards.Presentation.Prototype
                 return trapFloorPendingSearchState.SearchKind == TrapFloorSearchKind.Careful
                     ? "CAREFUL SEARCH — Place A + B + X + Y in your Console"
                     : "SEARCH — Place the selected Card in your Console";
+            }
+
+            if (pendingControllerPurchaseState != null
+                && pendingControllerPurchaseState.IsActive
+                && pendingControllerPurchaseState.PlayerId == trapFloorTurnState.ActivePlayerId)
+            {
+                if (pendingControllerPurchaseState.IsPaymentComplete)
+                    return "PAYMENT READY — Confirm Purchase";
+                string abilityName = FindPurchaseDisplayName(
+                    pendingControllerPurchaseState.PurchasedCardDefinitionStableId)
+                    .ToUpperInvariant();
+                return $"BUY {abilityName} — Place the selected Cards in your Console";
             }
 
             int handLimit = trapFloorTemplate.GameDefinition.ControllerConfiguration.MaximumHandSize;
@@ -5145,6 +5221,13 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshUndoUi();
         }
 
+        private void ReplaceCurrentUndoStateForPurchaseAssistance()
+        {
+            if (undoTrackedMatch != matchState || undoHistory.CurrentStateIndex < 0) return;
+            undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
+            RefreshUndoUi();
+        }
+
         private bool TryBuildSearchPaymentOptions(
             out TrapFloorSearchConfiguration configuration,
             out ContainerState hand,
@@ -5960,6 +6043,12 @@ namespace ConsoleCards.Presentation.Prototype
         private void OpenActionAbilityPurchase()
         {
             CloseContextMenu();
+            if (pendingControllerPurchaseState != null
+                && pendingControllerPurchaseState.IsActive)
+            {
+                ShowMessage("Complete or cancel the current purchase first.");
+                return;
+            }
             ShowActionAbilityPurchase(string.Empty);
         }
 
@@ -5979,17 +6068,236 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void TryPurchaseActionAbilityFromPopup(string cardDefinitionStableId)
         {
-            ActionAbilityPurchaseResult result = PurchaseActionOrAbility(cardDefinitionStableId);
-            if (result.Succeeded)
+            if (pendingControllerPurchaseState != null
+                && pendingControllerPurchaseState.IsActive)
             {
-                runtimeUi?.CloseActionAbilityPurchase();
+                runtimeUi?.SetActionAbilityPurchaseStatus(
+                    "Complete or cancel the current purchase first.");
                 return;
             }
 
-            string rejection = result.Error == ActionAbilityPurchaseError.CannotAfford
-                ? $"Purchase rejected. Need: {FindPurchaseCost(cardDefinitionStableId)}"
-                : $"Purchase rejected: {result.Error}.";
-            runtimeUi?.SetActionAbilityPurchaseStatus(rejection);
+            if (!TryBuildPurchasePaymentOptions(
+                    cardDefinitionStableId,
+                    out CardDefinitionData purchasedDefinition,
+                    out List<PurchasePaymentCardOption> options,
+                    out string missing))
+            {
+                runtimeUi?.SetActionAbilityPurchaseStatus(
+                    "Purchase unavailable because its authored input cost is invalid.");
+                return;
+            }
+
+            pendingPurchaseDefinitionStableId = cardDefinitionStableId;
+            List<PrototypeFocusedCardOptionModel> cards =
+                new List<PrototypeFocusedCardOptionModel>(options.Count);
+            for (int i = 0; i < options.Count; i++)
+            {
+                PurchasePaymentCardOption option = options[i];
+                cards.Add(new PrototypeFocusedCardOptionModel(
+                    option.CardId,
+                    option.DisplayName,
+                    option.Input.HasValue ? option.Input.Value.ToString() : "Not eligible",
+                    option.Artwork,
+                    option.Eligible));
+            }
+
+            int requiredCardCount = PurchaseRequiredCardCount(purchasedDefinition.InputCost);
+            string status = string.IsNullOrEmpty(missing)
+                ? "Select the exact Controller Card instances for this purchase."
+                : $"Missing: {missing}";
+            runtimeUi.ShowFocusedCardSelection(new PrototypeFocusedCardSelectionModel(
+                $"BUY {purchasedDefinition.DisplayName.ToUpperInvariant()} — HAND",
+                $"Choose {FormatPurchaseInputCost(purchasedDefinition.InputCost)} from the active Player's Hand.",
+                status,
+                "Confirm Cards",
+                cards,
+                requiredCardCount,
+                IsPurchasePaymentReady,
+                ConfirmFocusedPurchasePayment,
+                CancelFocusedPurchaseSelection));
+        }
+
+        private bool TryBuildPurchasePaymentOptions(
+            string cardDefinitionStableId,
+            out CardDefinitionData purchasedDefinition,
+            out List<PurchasePaymentCardOption> options,
+            out string missingRequirements)
+        {
+            purchasedDefinition = null;
+            options = new List<PurchasePaymentCardOption>();
+            missingRequirements = string.Empty;
+            if (trapFloorTemplate == null
+                || !trapFloorTemplate.GameDefinition.TryGetCard(
+                    cardDefinitionStableId,
+                    out purchasedDefinition)
+                || purchasedDefinition.InputCost == null
+                || purchasedDefinition.InputCost.IsEmpty
+                || !ControllerInputCardCatalog.TryCreate(
+                    trapFloorTemplate.GameDefinition,
+                    out ControllerInputCardCatalog catalog))
+                return false;
+
+            TrapFloorPlayerSetupDefinition player = GetAssistedTrapFloorPlayerSetup();
+            if (!matchState.Containers.TryGetValue(player.HandContainerId, out ContainerState hand)
+                || hand.Kind != ContainerKind.Hand)
+                return false;
+
+            Dictionary<ControllerInput, int> required =
+                AggregatePurchaseRequirements(purchasedDefinition.InputCost);
+            Dictionary<ControllerInput, int> available = new Dictionary<ControllerInput, int>();
+            for (int i = 0; i < hand.Count; i++)
+            {
+                TabletopObjectId cardId = hand.GetObjectAt(i);
+                if (!matchState.Cards.TryGetValue(cardId, out CardInstanceState card)) return false;
+                ControllerInput? input = catalog.TryGetInput(
+                    card.BaseState.DefinitionId,
+                    out ControllerInput resolvedInput)
+                    ? resolvedInput
+                    : (ControllerInput?)null;
+                bool eligible = input.HasValue && required.ContainsKey(input.Value);
+                if (eligible)
+                {
+                    available.TryGetValue(input.Value, out int count);
+                    available[input.Value] = count + 1;
+                }
+
+                CardDefinition authoredDefinition = null;
+                string displayName = TryGetAuthoredCardDefinition(
+                        card.BaseState.DefinitionId,
+                        out authoredDefinition)
+                    ? authoredDefinition.DisplayName
+                    : "Controller Card";
+                options.Add(new PurchasePaymentCardOption(
+                    cardId,
+                    input,
+                    displayName,
+                    authoredDefinition != null ? authoredDefinition.FrontArtwork : null,
+                    eligible));
+            }
+
+            List<string> missing = new List<string>();
+            foreach (KeyValuePair<ControllerInput, int> requirement in required)
+            {
+                available.TryGetValue(requirement.Key, out int count);
+                if (count < requirement.Value)
+                    missing.Add($"{requirement.Key} ×{requirement.Value - count}");
+            }
+            missingRequirements = string.Join(", ", missing);
+            return true;
+        }
+
+        private bool IsPurchasePaymentReady(IReadOnlyList<TabletopObjectId> selectedCardIds)
+        {
+            if (string.IsNullOrWhiteSpace(pendingPurchaseDefinitionStableId)
+                || trapFloorTemplate == null
+                || !trapFloorTemplate.GameDefinition.TryGetCard(
+                    pendingPurchaseDefinitionStableId,
+                    out CardDefinitionData purchasedDefinition))
+                return false;
+
+            TrapFloorPlayerSetupDefinition player = GetAssistedTrapFloorPlayerSetup();
+            if (!matchState.Containers.TryGetValue(player.HandContainerId, out ContainerState hand))
+                return false;
+            for (int i = 0; i < selectedCardIds.Count; i++)
+                if (!hand.Contains(selectedCardIds[i])) return false;
+            return new ControllerInputCostEvaluator().EvaluateExact(
+                matchState,
+                selectedCardIds,
+                purchasedDefinition.InputCost,
+                trapFloorTemplate.GameDefinition).CanPay;
+        }
+
+        private void ConfirmFocusedPurchasePayment(
+            IReadOnlyList<TabletopObjectId> selectedCardIds)
+        {
+            if (!IsPurchasePaymentReady(selectedCardIds))
+            {
+                ShowMessage("Purchase payment selection is incomplete.");
+                return;
+            }
+
+            string definitionId = pendingPurchaseDefinitionStableId;
+            PlayerId playerId = trapFloorTurnState.ActivePlayerId;
+            pendingControllerPurchaseState.Begin(playerId, definitionId, selectedCardIds);
+            pendingPurchaseDefinitionStableId = string.Empty;
+            runtimeUi?.CloseFocusedCardSelection();
+            ReplaceCurrentUndoStateForPurchaseAssistance();
+            RefreshTrapFloorStatusUi();
+            ShowMessage(
+                $"BUY {FindPurchaseDisplayName(definitionId).ToUpperInvariant()} — "
+                + "Place the selected Cards in your Console");
+        }
+
+        private void CancelFocusedPurchaseSelection()
+        {
+            pendingPurchaseDefinitionStableId = string.Empty;
+            runtimeUi?.CloseFocusedCardSelection();
+            ShowMessage("Purchase selection cancelled.");
+        }
+
+        private void ConfirmPendingActionAbilityPurchase()
+        {
+            if (pendingControllerPurchaseState == null
+                || !pendingControllerPurchaseState.IsActive
+                || !pendingControllerPurchaseState.IsPaymentComplete
+                || trapFloorTurnState == null
+                || pendingControllerPurchaseState.PlayerId != trapFloorTurnState.ActivePlayerId)
+            {
+                ShowMessage("Purchase payment is not ready.");
+                return;
+            }
+
+            PurchaseActionOrAbility(
+                pendingControllerPurchaseState.PurchasedCardDefinitionStableId);
+            RefreshTrapFloorStatusUi();
+        }
+
+        private void CancelPendingActionAbilityPurchase()
+        {
+            pendingPurchaseDefinitionStableId = string.Empty;
+            runtimeUi?.CloseFocusedCardSelection();
+            runtimeUi?.CloseActionAbilityPurchase();
+            if (pendingControllerPurchaseState == null
+                || !pendingControllerPurchaseState.IsActive)
+                return;
+
+            pendingControllerPurchaseState.Clear();
+            ReplaceCurrentUndoStateForPurchaseAssistance();
+            RefreshTrapFloorStatusUi();
+            ShowMessage(
+                "Purchase assistance cancelled. Cards remain where the Player placed them.");
+        }
+
+        private string FindPurchaseDisplayName(string cardDefinitionStableId)
+        {
+            return trapFloorTemplate != null
+                && trapFloorTemplate.GameDefinition.TryGetCard(
+                    cardDefinitionStableId,
+                    out CardDefinitionData definition)
+                ? definition.DisplayName
+                : "ABILITY";
+        }
+
+        private static Dictionary<ControllerInput, int> AggregatePurchaseRequirements(
+            InputCostData cost)
+        {
+            Dictionary<ControllerInput, int> requirements =
+                new Dictionary<ControllerInput, int>();
+            for (int i = 0; i < cost.Requirements.Count; i++)
+            {
+                InputRequirementData requirement = cost.Requirements[i];
+                requirements.TryGetValue(requirement.Input, out int count);
+                requirements[requirement.Input] = checked(count + requirement.Count);
+            }
+            return requirements;
+        }
+
+        private static int PurchaseRequiredCardCount(InputCostData cost)
+        {
+            int count = 0;
+            for (int i = 0; i < cost.Requirements.Count; i++)
+                count = checked(count + cost.Requirements[i].Count);
+            return count;
         }
 
         private List<PrototypeActionAbilityPurchaseOption> BuildActionAbilityPurchaseOptions()
@@ -6023,30 +6331,25 @@ namespace ConsoleCards.Presentation.Prototype
                     : evaluation.Error == ControllerInputCostEvaluationError.InsufficientInput
                         ? $"Cannot afford. Need: {cost}"
                         : $"Unavailable: {evaluation.Error}";
+                Texture artwork = null;
+                if (Guid.TryParse(definition.StableId, out Guid definitionGuid)
+                    && TryGetAuthoredCardDefinition(
+                        new ObjectDefinitionId(definitionGuid),
+                        out CardDefinition authoredDefinition))
+                {
+                    artwork = authoredDefinition.FrontArtwork;
+                }
                 options.Add(new PrototypeActionAbilityPurchaseOption(
                     definition.StableId,
                     definition.DisplayName,
                     definition.Description,
                     cost,
+                    artwork,
                     evaluation.CanPay,
                     affordability));
             }
 
             return options;
-        }
-
-        private string FindPurchaseCost(string cardDefinitionStableId)
-        {
-            if (trapFloorTemplate != null
-                && trapFloorTemplate.GameDefinition.TryGetCard(
-                    cardDefinitionStableId,
-                    out CardDefinitionData definition)
-                && definition.InputCost != null)
-            {
-                return FormatPurchaseInputCost(definition.InputCost);
-            }
-
-            return "the authored input cost";
         }
 
         private static string FormatPurchaseInputCost(InputCostData cost)
@@ -6850,6 +7153,9 @@ namespace ConsoleCards.Presentation.Prototype
                 throw new InvalidOperationException("Trap Floor Presentation requires a selected Template session context.");
             }
 
+            pendingControllerPurchaseState = pendingRestoredControllerPurchaseState
+                ?? new PendingControllerPurchaseState(matchState.Id);
+
             BuildTrapFloorRevealRuntime();
             ProjectTemplateBoardSurface();
             ProjectPrototypePlayerLayout(localSeatLayout);
@@ -7410,6 +7716,8 @@ namespace ConsoleCards.Presentation.Prototype
                 Shutdown(true);
                 activeSession.ReplaceCurrentMatch(previousMatch);
                 pendingRestoredTrapFloorState = previousSnapshot.TrapFloor?.Restore();
+                pendingRestoredControllerPurchaseState =
+                    previousSnapshot.PendingControllerPurchase?.Restore();
                 rebuildingFromUndo = true;
                 InitializeActiveSession(false);
                 Debug.LogWarning(
@@ -7425,6 +7733,7 @@ namespace ConsoleCards.Presentation.Prototype
             finally
             {
                 pendingRestoredTrapFloorState = null;
+                pendingRestoredControllerPurchaseState = null;
                 rebuildingFromUndo = wasRebuildingFromUndo;
                 RefreshUndoUi();
             }
@@ -8915,6 +9224,7 @@ namespace ConsoleCards.Presentation.Prototype
             IConsoleCardInteraction interaction,
             ConsoleCardBehavior behavior)
         {
+            HandlePendingPurchaseConsoleInteraction(interaction);
             HandlePendingSearchConsoleInteraction(interaction);
 
             if (!(interaction is ConsoleCardInserted insertion)
@@ -8985,6 +9295,44 @@ namespace ConsoleCards.Presentation.Prototype
                     $"{FormatPlayerShortName(interaction.ActorPlayerId)} {action} "
                     + result.Trap.Content.DisplayName);
             }
+        }
+
+        private void HandlePendingPurchaseConsoleInteraction(
+            IConsoleCardInteraction interaction)
+        {
+            if (interaction == null
+                || pendingControllerPurchaseState == null
+                || !pendingControllerPurchaseState.IsActive
+                || !TryGetTrapFloorPlayerSetup(
+                    pendingControllerPurchaseState.PlayerId,
+                    out TrapFloorPlayerSetupDefinition player))
+            {
+                return;
+            }
+
+            bool changed = interaction is ConsoleCardInserted
+                ? pendingControllerPurchaseState.RecordConsoleInsertion(
+                    interaction.ActorPlayerId,
+                    interaction.ConsoleOwnerPlayerId,
+                    interaction.SlotContainerId,
+                    interaction.CardInstanceId,
+                    player.SideSlotContainerIds)
+                : interaction is ConsoleCardRemoved
+                    && pendingControllerPurchaseState.RecordConsoleRemoval(
+                        interaction.ActorPlayerId,
+                        interaction.ConsoleOwnerPlayerId,
+                        interaction.SlotContainerId,
+                        interaction.CardInstanceId,
+                        player.SideSlotContainerIds);
+            if (!changed) return;
+
+            ReplaceCurrentUndoStateForPurchaseAssistance();
+            RefreshTrapFloorStatusUi();
+            string abilityName = FindPurchaseDisplayName(
+                pendingControllerPurchaseState.PurchasedCardDefinitionStableId).ToUpperInvariant();
+            ShowMessage(pendingControllerPurchaseState.IsPaymentComplete
+                ? "PAYMENT READY — Confirm Purchase"
+                : $"BUY {abilityName} — Place the selected Cards in your Console");
         }
 
         private void HandlePendingSearchConsoleInteraction(IConsoleCardInteraction interaction)
@@ -10605,6 +10953,29 @@ namespace ConsoleCards.Presentation.Prototype
         private readonly struct SearchPaymentCardOption
         {
             public SearchPaymentCardOption(
+                TabletopObjectId cardId,
+                ControllerInput? input,
+                string displayName,
+                Texture artwork,
+                bool eligible)
+            {
+                CardId = cardId;
+                Input = input;
+                DisplayName = displayName ?? "Controller Card";
+                Artwork = artwork;
+                Eligible = eligible;
+            }
+
+            public TabletopObjectId CardId { get; }
+            public ControllerInput? Input { get; }
+            public string DisplayName { get; }
+            public Texture Artwork { get; }
+            public bool Eligible { get; }
+        }
+
+        private readonly struct PurchasePaymentCardOption
+        {
+            public PurchasePaymentCardOption(
                 TabletopObjectId cardId,
                 ControllerInput? input,
                 string displayName,

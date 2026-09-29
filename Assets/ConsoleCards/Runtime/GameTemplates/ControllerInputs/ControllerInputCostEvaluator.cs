@@ -181,6 +181,61 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
                 : ControllerInputCostEvaluation.Failure(ControllerInputCostEvaluationError.InsufficientInput);
         }
 
+        /// <summary>
+        /// Validates that the supplied authoritative Card instances exactly satisfy an authored
+        /// input cost. Their current Container is deliberately interpreted by the calling use case.
+        /// </summary>
+        public ControllerInputCostEvaluation EvaluateExact(
+            MatchState matchState,
+            IReadOnlyList<TabletopObjectId> selectedCardIds,
+            InputCostData cost,
+            GameDefinitionData gameDefinition)
+        {
+            if (matchState == null)
+                return ControllerInputCostEvaluation.Failure(ControllerInputCostEvaluationError.MatchMissing);
+            if (selectedCardIds == null)
+                return ControllerInputCostEvaluation.Failure(ControllerInputCostEvaluationError.InsufficientInput);
+            if (cost == null)
+                return ControllerInputCostEvaluation.Failure(ControllerInputCostEvaluationError.CostMissing);
+            if (!ControllerInputCardCatalog.TryCreate(gameDefinition, out ControllerInputCardCatalog catalog))
+            {
+                return ControllerInputCostEvaluation.Failure(
+                    ControllerInputCostEvaluationError.InvalidControllerCardDefinition);
+            }
+
+            Dictionary<ControllerInput, int> remaining = AggregateRequirements(cost);
+            HashSet<TabletopObjectId> unique = new HashSet<TabletopObjectId>();
+            List<TabletopObjectId> selected = new List<TabletopObjectId>(selectedCardIds.Count);
+            for (int i = 0; i < selectedCardIds.Count; i++)
+            {
+                TabletopObjectId objectId = selectedCardIds[i];
+                if (objectId.IsEmpty || !unique.Add(objectId))
+                    return ControllerInputCostEvaluation.Failure(
+                        ControllerInputCostEvaluationError.InsufficientInput);
+                if (!matchState.Cards.TryGetValue(objectId, out CardInstanceState card))
+                {
+                    return ControllerInputCostEvaluation.Failure(
+                        matchState.ContainsObject(objectId)
+                            ? ControllerInputCostEvaluationError.HandObjectNotCard
+                            : ControllerInputCostEvaluationError.HandObjectMissing);
+                }
+                if (!catalog.TryGetInput(card.BaseState.DefinitionId, out ControllerInput input)
+                    || !remaining.TryGetValue(input, out int requiredCount))
+                {
+                    return ControllerInputCostEvaluation.Failure(
+                        ControllerInputCostEvaluationError.InsufficientInput);
+                }
+
+                selected.Add(objectId);
+                if (requiredCount == 1) remaining.Remove(input);
+                else remaining[input] = requiredCount - 1;
+            }
+
+            return remaining.Count == 0
+                ? ControllerInputCostEvaluation.Affordable(selected)
+                : ControllerInputCostEvaluation.Failure(ControllerInputCostEvaluationError.InsufficientInput);
+        }
+
         private static Dictionary<ControllerInput, int> AggregateRequirements(InputCostData cost)
         {
             Dictionary<ControllerInput, int> requirements = new Dictionary<ControllerInput, int>();

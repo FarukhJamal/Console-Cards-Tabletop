@@ -1,6 +1,7 @@
 using System;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.GameTemplates;
+using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.Games.TrapFloor;
 
 namespace ConsoleCards.Presentation.Prototype
@@ -10,14 +11,17 @@ namespace ConsoleCards.Presentation.Prototype
     {
         private PrototypeSessionUndoSnapshot(
             GameTemplateInitialSnapshot match,
-            TrapFloorSessionStateSnapshot trapFloor)
+            TrapFloorSessionStateSnapshot trapFloor,
+            PendingControllerPurchaseStateSnapshot pendingControllerPurchase)
         {
             Match = match ?? throw new ArgumentNullException(nameof(match));
             TrapFloor = trapFloor;
+            PendingControllerPurchase = pendingControllerPurchase;
         }
 
         public GameTemplateInitialSnapshot Match { get; }
         public TrapFloorSessionStateSnapshot TrapFloor { get; }
+        public PendingControllerPurchaseStateSnapshot PendingControllerPurchase { get; }
 
         public static PrototypeSessionUndoSnapshot Capture(
             MatchState match,
@@ -26,7 +30,8 @@ namespace ConsoleCards.Presentation.Prototype
             TrapFloorCollapseState collapse,
             TrapFloorTurnState turn,
             TrapFloorAbilityResolutionState abilityResolution,
-            TrapFloorPendingSearchState pendingSearch)
+            TrapFloorPendingSearchState pendingSearch,
+            PendingControllerPurchaseState pendingControllerPurchase)
         {
             TrapFloorSessionStateSnapshot trapFloor = null;
             if (activity != null
@@ -52,7 +57,13 @@ namespace ConsoleCards.Presentation.Prototype
                     pendingSearch);
             }
 
-            return new PrototypeSessionUndoSnapshot(GameTemplateInitialSnapshot.Capture(match), trapFloor);
+            PendingControllerPurchaseStateSnapshot purchase = pendingControllerPurchase == null
+                ? null
+                : PendingControllerPurchaseStateSnapshot.Capture(pendingControllerPurchase);
+            return new PrototypeSessionUndoSnapshot(
+                GameTemplateInitialSnapshot.Capture(match),
+                trapFloor,
+                purchase);
         }
     }
 }
