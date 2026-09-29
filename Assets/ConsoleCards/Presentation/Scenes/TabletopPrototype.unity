@@ -3383,6 +3383,58 @@ MonoBehaviour:
     releaseAngularVelocityMultiplier: 0.25
     maximumReleaseAngularVelocity: 6
     releaseSampleTimeoutSeconds: 0.12
+    card:
+      heldFollowSmoothingSeconds: 0.025
+      heldClearance: 0.08
+      mass: 0.03
+      releaseVelocityMultiplier: 0.85
+      releaseAngularVelocityMultiplier: 0.4
+      maximumReleaseVelocity: 3.25
+      maximumReleaseAngularVelocity: 2.5
+      linearDamping: 1.5
+      angularDamping: 3.5
+      gentlePlacementSpeed: 0.45
+      gentlePlacementAngularSpeed: 1
+      stabilizeGentlePlacement: 1
+    die:
+      heldFollowSmoothingSeconds: 0.02
+      heldClearance: 0.1
+      mass: 0.12
+      releaseVelocityMultiplier: 1.4
+      releaseAngularVelocityMultiplier: 1.5
+      maximumReleaseVelocity: 4
+      maximumReleaseAngularVelocity: 6
+      linearDamping: 0.12
+      angularDamping: 0.12
+      gentlePlacementSpeed: 0
+      gentlePlacementAngularSpeed: 0
+      stabilizeGentlePlacement: 0
+    pawn:
+      heldFollowSmoothingSeconds: 0.025
+      heldClearance: 0.08
+      mass: 0.1
+      releaseVelocityMultiplier: 0.8
+      releaseAngularVelocityMultiplier: 0.25
+      maximumReleaseVelocity: 2.75
+      maximumReleaseAngularVelocity: 1.5
+      linearDamping: 2
+      angularDamping: 5
+      gentlePlacementSpeed: 0.5
+      gentlePlacementAngularSpeed: 1.25
+      stabilizeGentlePlacement: 1
+    token:
+      heldFollowSmoothingSeconds: 0.02
+      heldClearance: 0.06
+      mass: 0.05
+      releaseVelocityMultiplier: 0.9
+      releaseAngularVelocityMultiplier: 0.35
+      maximumReleaseVelocity: 3
+      maximumReleaseAngularVelocity: 2
+      linearDamping: 1.8
+      angularDamping: 4
+      gentlePlacementSpeed: 0.5
+      gentlePlacementAngularSpeed: 1.25
+      stabilizeGentlePlacement: 1
   prototypeDeckPrefab: {fileID: 114102, guid: e81b395902c476d7f8192a3b4c5d6e78, type: 3}
   prototypeConsolePrefab: {fileID: 114100, guid: e2283b6fd55d32c2417eb33679d3bb2b, type: 3}
   cardView: {fileID: 2100000102}

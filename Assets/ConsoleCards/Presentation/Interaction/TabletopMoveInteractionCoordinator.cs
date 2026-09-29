@@ -210,6 +210,33 @@ namespace ConsoleCards.Presentation.Interaction
 
         public TabletopInteractionPhase Phase => stateMachine.Phase;
 
+        public TabletopPointerObjectState PointerObjectState => selectionState.PointerObjectState;
+
+        public void UpdateHover(Vector2 screenPosition, bool pointerAvailable)
+        {
+            ValidateScreenPosition(screenPosition, nameof(screenPosition));
+            if (HasActiveInteraction)
+            {
+                return;
+            }
+
+            if (pointerAvailable
+                && hitResolver.TryResolve(screenPosition, out TabletopObjectView resolvedView)
+                && resolvedView.PhysicalObject != null
+                && !resolvedView.BoundState.IsUserLocked)
+            {
+                selectionState.SetHovered(resolvedView);
+                stateMachine.SetHoveredObject(resolvedView.ObjectId);
+                return;
+            }
+
+            selectionState.ClearHovered();
+            if (stateMachine.Phase == TabletopInteractionPhase.Hovering)
+            {
+                stateMachine.ClearHoveredObject();
+            }
+        }
+
         public bool TryBeginPress(Vector2 screenPosition)
         {
             ValidateScreenPosition(screenPosition, nameof(screenPosition));
@@ -238,6 +265,7 @@ namespace ConsoleCards.Presentation.Interaction
             try
             {
                 selectionState.Select(resolvedView);
+                selectionState.ClearHovered();
                 stateMachine.BeginPress(resolvedView.ObjectId, screenPosition);
                 activeView = resolvedView;
                 previewSession.BeginPress(resolvedView);
@@ -341,6 +369,11 @@ namespace ConsoleCards.Presentation.Interaction
                     lockService.Release(view.ObjectId, InteractionOwnerId);
                     activeView = null;
                     return MoveInteractionReleaseResult.ClickCompleted();
+                }
+
+                if (view.PhysicalObject != null)
+                {
+                    view.PhysicalObject.Follow(screenPosition);
                 }
 
                 stateMachine.ReleasePointer();

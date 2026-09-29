@@ -11,14 +11,20 @@ namespace ConsoleCards.Presentation.Interaction
     /// <summary>Shared Rigidbody adapter. The injected local authority owns lifecycle/settlement; no per-object Update.</summary>
     public sealed class PhysicalLooseObject : MonoBehaviour
     {
+        private const int SupportHitBufferCapacity = 32;
+
         private TabletopObjectView view;
         private Rigidbody body;
         private Collider physicalCollider;
         private LocalPhysicalObjectAuthority authority;
+        private PhysicalObjectInteractionProfile profile;
         private PhysicalObjectState applied;
         private bool held;
         private float holdDepth;
+        private Vector2 grabScreenOffset;
+        private bool hasPointerAnchor;
         private PhysicalReleaseMotion releaseMotion;
+        private readonly RaycastHit[] supportHitBuffer = new RaycastHit[SupportHitBufferCapacity];
         private float nextCheckpoint;
         private int dynamicFrames;
         private PlayerId actor;
@@ -43,6 +49,7 @@ namespace ConsoleCards.Presentation.Interaction
         internal void Initialize(TabletopObjectView view, LocalPhysicalObjectAuthority authority)
         {
             this.view = view; this.authority = authority;
+            profile = authority.InteractionConfig.ResolveProfile(view.BoundState.Kind);
             releaseMotion = new PhysicalReleaseMotion(authority.InteractionConfig);
             held = false;
             applied = null;
@@ -55,7 +62,9 @@ namespace ConsoleCards.Presentation.Interaction
             if (body == null) body = gameObject.AddComponent<Rigidbody>();
             body.isKinematic = true;
             body.useGravity = false;
-            body.mass = view is CardView ? 0.02f : 0.1f;
+            body.mass = profile.Mass;
+            body.linearDamping = profile.LinearDamping;
+            body.angularDamping = profile.AngularDamping;
             body.interpolation = RigidbodyInterpolation.Interpolate;
             body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
             body.maxAngularVelocity = 35f;
@@ -93,6 +102,7 @@ namespace ConsoleCards.Presentation.Interaction
         {
             if (body == null) return;
             held = false;
+            hasPointerAnchor = false;
             body.isKinematic = true;
             body.useGravity = false;
             // Retain raycast selection colliders, but exclude contained pieces from dynamic contacts.
@@ -120,8 +130,7 @@ namespace ConsoleCards.Presentation.Interaction
             body.useGravity = false;
             authority.SetContainedCollisions(this, false);
             authority.StopAnimation(transform);
-            Vector3 lifted = transform.position + Vector3.up * 0.8f;
-            holdDepth = authority.Camera.WorldToScreenPoint(lifted).z;
+            hasPointerAnchor = false;
             releaseMotion.Reset();
             return true;
         }
@@ -129,17 +138,27 @@ namespace ConsoleCards.Presentation.Interaction
         public void Follow(Vector2 screenPosition)
         {
             if (!held && !BeginHold()) return;
-            Vector3 target = authority.Camera.ScreenToWorldPoint(new Vector3(screenPosition.x, screenPosition.y, holdDepth));
-            // Sample pointer motion before automatic surface/obstacle clearance changes the held height.
-            releaseMotion.Sample(target, transform.rotation, Time.unscaledTime);
-            if (authority.Surfaces.TryPointer(screenPosition, out RaycastHit hit))
-                target.y = Mathf.Max(target.y, hit.point.y + 0.8f);
-            Ray ray = authority.Camera.ScreenPointToRay(screenPosition);
-            foreach (RaycastHit obstacle in Physics.RaycastAll(ray, 200f, ~0, QueryTriggerInteraction.Ignore))
-                if (obstacle.rigidbody != body && obstacle.collider != null)
-                    target.y = Mathf.Max(target.y, obstacle.point.y + 0.8f);
-            body.position = target;
-            transform.position = target;
+            if (!hasPointerAnchor) InitializePointerAnchor(screenPosition);
+
+            Vector2 anchoredScreenPosition = screenPosition + grabScreenOffset;
+            Vector3 target = authority.Camera.ScreenToWorldPoint(
+                new Vector3(anchoredScreenPosition.x, anchoredScreenPosition.y, holdDepth));
+            if (TryResolveSupportHeight(anchoredScreenPosition, out float supportHeight))
+                target.y = supportHeight + HeldHalfHeight() + profile.HeldClearance;
+
+            float smoothing = profile.HeldFollowSmoothingSeconds;
+            float blend = smoothing <= 0f || Time.unscaledDeltaTime <= 0f
+                ? 1f
+                : 1f - Mathf.Exp(-Time.unscaledDeltaTime / smoothing);
+            Vector3 next = Vector3.Lerp(body.position, target, blend);
+            body.position = next;
+            transform.position = next;
+
+            // Clearance/lift is Presentation assistance, not throw intent. Sample horizontal gesture motion.
+            releaseMotion.Sample(
+                new Vector3(target.x, 0f, target.z),
+                transform.rotation,
+                Time.unscaledTime);
         }
 
         internal bool BeginContainedPickup(float lift)
@@ -148,6 +167,8 @@ namespace ConsoleCards.Presentation.Interaction
             Vector3 target = transform.position + (Vector3.up * Mathf.Max(0f, lift));
             body.position = target;
             transform.position = target;
+            hasPointerAnchor = false;
+            releaseMotion.Reset();
             return true;
         }
 
@@ -157,12 +178,14 @@ namespace ConsoleCards.Presentation.Interaction
             body.position = position;
             body.rotation = rotation;
             transform.SetPositionAndRotation(position, rotation);
+            releaseMotion.Reset();
             return true;
         }
 
         public PhysicalObjectState ReleaseState()
         {
             releaseMotion.GetRelease(Time.unscaledTime, out Vector3 velocity, out Vector3 angularVelocity);
+            profile.ApplyRelease(ref velocity, ref angularVelocity);
             return State(transform.position, transform.rotation, velocity,
                 angularVelocity, PhysicalObjectMode.Dynamic, actor);
         }
@@ -172,6 +195,7 @@ namespace ConsoleCards.Presentation.Interaction
             if (!OwnsLooseTransform) return false;
             if (!Commit(ReleaseState(), null, AuthoritativeActionRecordMode.Intermediate)) { Cancel(); return false; }
             held = false;
+            hasPointerAnchor = false;
             body.isKinematic = false;
             body.useGravity = true;
             body.linearVelocity = Vector(applied.Velocity);
@@ -198,6 +222,7 @@ namespace ConsoleCards.Presentation.Interaction
                     Vector(grabOrigin.AngularVelocity), PhysicalObjectMode.Dynamic, actor), null,
                     AuthoritativeActionRecordMode.CancelTransaction);
             held = false;
+            hasPointerAnchor = false;
             userActionActive = false;
             compoundActionActive = false;
             applied = null;
@@ -303,6 +328,57 @@ namespace ConsoleCards.Presentation.Interaction
             view.RefreshAcceptedAppearance();
             return true;
         }
+
+        private void InitializePointerAnchor(Vector2 screenPosition)
+        {
+            Vector3 projected = authority.Camera.WorldToScreenPoint(body.position);
+            holdDepth = Mathf.Max(authority.Camera.nearClipPlane + 0.01f, projected.z);
+            grabScreenOffset = new Vector2(projected.x - screenPosition.x, projected.y - screenPosition.y);
+            hasPointerAnchor = true;
+        }
+
+        private bool TryResolveSupportHeight(Vector2 screenPosition, out float height)
+        {
+            Physics.SyncTransforms();
+            Ray ray = authority.Camera.ScreenPointToRay(screenPosition);
+            int hitCount = Physics.RaycastNonAlloc(
+                ray,
+                supportHitBuffer,
+                authority.Camera.farClipPlane,
+                ~0,
+                QueryTriggerInteraction.Ignore);
+            bool found = false;
+            height = float.MinValue;
+            float closestDistance = float.MaxValue;
+            for (int i = 0; i < hitCount; i++)
+            {
+                Collider candidate = supportHitBuffer[i].collider;
+                if (candidate == null
+                    || !candidate.enabled
+                    || candidate.transform == transform
+                    || candidate.transform.IsChildOf(transform))
+                {
+                    continue;
+                }
+
+                float candidateDistance = supportHitBuffer[i].distance;
+                if (!found || candidateDistance < closestDistance)
+                {
+                    found = true;
+                    closestDistance = candidateDistance;
+                    height = supportHitBuffer[i].point.y;
+                }
+            }
+
+            return found;
+        }
+
+        private float HeldHalfHeight()
+        {
+            Collider collider = PhysicalCollider;
+            return collider != null ? Mathf.Max(0f, collider.bounds.extents.y) : 0f;
+        }
+
         private PhysicalObjectState Capture(PhysicalObjectMode mode) =>
             State(body.position, body.rotation, body.linearVelocity, body.angularVelocity, mode, actor);
         public static PhysicalObjectState State(Vector3 p, Quaternion q, Vector3 v, Vector3 w, PhysicalObjectMode mode, PlayerId actor) =>

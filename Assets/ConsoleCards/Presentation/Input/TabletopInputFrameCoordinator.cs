@@ -262,6 +262,7 @@ namespace ConsoleCards.Presentation.Input
                     frame.RotateDelta,
                     objectInputAdapter.RotationStepDegrees))
             {
+                objectInputAdapter.UpdatePointerHover(frame.ScreenPosition, false);
                 if (selectionPresenter != null)
                 {
                     selectionPresenter.Refresh();
@@ -308,6 +309,10 @@ namespace ConsoleCards.Presentation.Input
             {
                 suppressObjectPointerUntilRelease = false;
             }
+
+            objectInputAdapter.UpdatePointerHover(
+                frame.ScreenPosition,
+                !pointerInsideBlockedUi && !suppressObjectPointer);
 
             MoveInteractionReleaseResult? releaseResult = objectInputAdapter.ApplyInputFrame(
                 frame.ScreenPosition,

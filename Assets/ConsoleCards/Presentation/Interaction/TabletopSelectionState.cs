@@ -4,6 +4,13 @@ using ConsoleCards.Presentation.Views;
 
 namespace ConsoleCards.Presentation.Interaction
 {
+    public enum TabletopPointerObjectState
+    {
+        Released,
+        HoverDraggable,
+        HoldingObject
+    }
+
     /// <summary>
     /// Local Presentation selection state for one hovered object and one primary selected object.
     /// </summary>
@@ -27,6 +34,23 @@ namespace ConsoleCards.Presentation.Interaction
         public TabletopObjectId SelectedObjectId => IsAvailable(selectedView)
             ? selectedView.ObjectId
             : TabletopObjectId.Empty;
+
+        public TabletopPointerObjectState PointerObjectState
+        {
+            get
+            {
+                if (IsAvailable(selectedView)
+                    && selectedView.PhysicalObject != null
+                    && selectedView.PhysicalObject.IsHeld)
+                {
+                    return TabletopPointerObjectState.HoldingObject;
+                }
+
+                return IsAvailable(hoveredView)
+                    ? TabletopPointerObjectState.HoverDraggable
+                    : TabletopPointerObjectState.Released;
+            }
+        }
 
         public void SetHovered(TabletopObjectView view)
         {

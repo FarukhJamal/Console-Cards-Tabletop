@@ -57,6 +57,10 @@ namespace ConsoleCards.Presentation.Input
 
         public float RotationStepDegrees => rotationStepDegrees;
 
+        public TabletopPointerObjectState PointerObjectState => moveCoordinator != null
+            ? moveCoordinator.PointerObjectState
+            : TabletopPointerObjectState.Released;
+
         public MoveInteractionReleaseResult? LastReleaseResult { get; private set; }
 
         public TabletopInteractionReleaseResult? LastInteractionReleaseResult { get; private set; }
@@ -231,14 +235,28 @@ namespace ConsoleCards.Presentation.Input
                 return;
             }
 
+            Vector2 screenPosition = pointAction.action.ReadValue<Vector2>();
+            UpdatePointerHover(screenPosition, true);
             ApplyInputFrame(
-                pointAction.action.ReadValue<Vector2>(),
+                screenPosition,
                 selectAction.action.WasPressedThisFrame(),
                 selectAction.action.IsPressed(),
                 selectAction.action.WasReleasedThisFrame(),
                 cancelAction.action.WasPressedThisFrame(),
                 0f,
                 false);
+        }
+
+        internal void UpdatePointerHover(Vector2 screenPosition, bool pointerAvailable)
+        {
+            if (!IsInitialized
+                || (interactionRouter != null && interactionRouter.HasActiveInteraction)
+                || moveCoordinator.HasActiveInteraction)
+            {
+                return;
+            }
+
+            moveCoordinator.UpdateHover(screenPosition, pointerAvailable);
         }
 
         internal void AttachExternalFrameDriver(TabletopInputFrameCoordinator frameDriver)

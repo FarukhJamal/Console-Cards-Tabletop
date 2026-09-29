@@ -304,6 +304,11 @@ namespace ConsoleCards.Presentation.Interaction
                 }
             }
 
+            if (view.PhysicalObject != null)
+            {
+                view.PhysicalObject.Follow(screenPosition);
+            }
+
             stateMachine.ReleasePointer();
             try
             {

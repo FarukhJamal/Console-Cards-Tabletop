@@ -51,6 +51,7 @@ namespace ConsoleCards.Presentation.Interaction
                 }
 
                 selectionState.Select(containedCardView);
+                selectionState.ClearHovered();
                 activeRoute = TabletopInteractionRoute.ContainedCardDrag;
                 return true;
             }
