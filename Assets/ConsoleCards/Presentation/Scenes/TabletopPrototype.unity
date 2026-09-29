@@ -3215,9 +3215,58 @@ MonoBehaviour:
   cameraRig: {fileID: 1862448551}
   worldUnitsPerTableUnit: 1
   cameraHeight: 14.3
+  initialDistance: 12
+  initialPitchDegrees: 78
+  initialYawDegrees: 0
+  tabletopHeight: 14.3
+  zoomWorldMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
   minimumOrthographicSize: 2
   maximumOrthographicSize: 20
   initialOrthographicSize: 5
+  minimumDistance: 3
+  maximumDistance: 32
+  zoomSpeed: 1
+  cursorZoomBias: 0.85
+  orbitDegreesPerPixel: 0.18
+  panDistanceScale: 0.085
+  minimumPitchDegrees: 32
+  maximumPitchDegrees: 89.5
+  motionSmoothing: 0.09
+  presetTransitionDuration: 0.32
+  closeView:
+    pitchDegrees: 78
+    yawOffsetDegrees: 0
+    framingPadding: 0.55
+    distanceMultiplier: 0.9
+    includeLocalPlayerArea: 1
+    includeBoardArea: 0
+    showControllerMappingArea: 1
+  midView:
+    pitchDegrees: 66
+    yawOffsetDegrees: 0
+    framingPadding: 0.8
+    distanceMultiplier: 1
+    includeLocalPlayerArea: 1
+    includeBoardArea: 1
+    showControllerMappingArea: 0
+  boardView:
+    pitchDegrees: 72
+    yawOffsetDegrees: 0
+    framingPadding: 1
+    distanceMultiplier: 1.08
+    includeLocalPlayerArea: 0
+    includeBoardArea: 1
+    showControllerMappingArea: 0
+  topDownView:
+    pitchDegrees: 89.5
+    yawOffsetDegrees: 0
+    framingPadding: 0.9
+    distanceMultiplier: 1
+    includeLocalPlayerArea: 0
+    includeBoardArea: 1
+    showControllerMappingArea: 0
 --- !u!114 &1862448553
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3362,6 +3411,7 @@ MonoBehaviour:
   - {fileID: 4100000021}
   - {fileID: 4100000031}
   runtimeUi: {fileID: 114010}
+  sceneControllerMappingArea: {fileID: 0}
   trapFloorGameDefinition: {fileID: 11400000, guid: 5e5f408633e24bd6bc2b38a0b430ffb3, type: 2}
   interactionLayerMask:
     serializedVersion: 2
@@ -3449,6 +3499,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   cameraInputAdapter: {fileID: 1862448553}
   objectInputAdapter: {fileID: 2100000022}
+  cameraOrbitDragThresholdPixels: 8
 --- !u!1 &2100000030
 GameObject:
   m_ObjectHideFlags: 0

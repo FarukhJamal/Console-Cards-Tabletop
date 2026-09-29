@@ -11,6 +11,7 @@ namespace ConsoleCards.Presentation.Input
     {
         [SerializeField] internal TabletopCameraInputAdapter cameraInputAdapter;
         [SerializeField] internal TabletopObjectInputAdapter objectInputAdapter;
+        [SerializeField] internal float cameraOrbitDragThresholdPixels = 8f;
 
         private bool isInitialized;
         private bool isAttached;
@@ -21,6 +22,11 @@ namespace ConsoleCards.Presentation.Input
         private EventSystem screenUiEventSystem;
         private PointerEventData screenUiPointerEventData;
         private Action<Vector2> secondaryPointerPressed;
+        private Func<Vector2, bool> cameraOrbitEligibility;
+        private bool secondaryPointerPending;
+        private bool secondaryOrbitEligible;
+        private bool secondaryOrbitDragging;
+        private Vector2 secondaryPressScreenPosition;
         private TabletopSelectionPresenter selectionPresenter;
         private TabletopComponentPlacementController componentPlacementController;
 
@@ -56,6 +62,13 @@ namespace ConsoleCards.Presentation.Input
 
         internal void ConfigurePrototypeUiInput(Action<Vector2> secondaryPointerPressedHandler)
         {
+            ConfigurePrototypeUiInput(secondaryPointerPressedHandler, null);
+        }
+
+        internal void ConfigurePrototypeUiInput(
+            Action<Vector2> secondaryPointerPressedHandler,
+            Func<Vector2, bool> cameraOrbitEligibilityHandler)
+        {
             if (secondaryPointerPressed != null)
             {
                 throw new InvalidOperationException(
@@ -64,12 +77,15 @@ namespace ConsoleCards.Presentation.Input
 
             secondaryPointerPressed = secondaryPointerPressedHandler
                 ?? throw new ArgumentNullException(nameof(secondaryPointerPressedHandler));
+            cameraOrbitEligibility = cameraOrbitEligibilityHandler;
         }
 
         internal void ClearPrototypeUiInput()
         {
             suppressObjectPointerUntilRelease = false;
             secondaryPointerPressed = null;
+            cameraOrbitEligibility = null;
+            ClearSecondaryPointerGesture();
         }
 
         internal void ConfigureComponentPlacement(
@@ -142,11 +158,13 @@ namespace ConsoleCards.Presentation.Input
 
         private void OnDisable()
         {
+            ClearSecondaryPointerGesture();
             DetachAdaptersIfNeeded();
         }
 
         private void OnDestroy()
         {
+            ClearSecondaryPointerGesture();
             DetachAdaptersIfNeeded();
         }
 
@@ -173,24 +191,30 @@ namespace ConsoleCards.Presentation.Input
 
             bool secondaryPressedThisFrame = Mouse.current != null
                 && Mouse.current.rightButton.wasPressedThisFrame;
+            bool secondaryHeld = Mouse.current != null
+                && Mouse.current.rightButton.isPressed;
+            bool secondaryReleasedThisFrame = Mouse.current != null
+                && Mouse.current.rightButton.wasReleasedThisFrame;
+            bool pointerInsideBlockedUi = IsInsideObjectInputBlockingGuiRect(screenPosition);
             bool placementCancelledBySecondary = secondaryPressedThisFrame
                 && componentPlacementController != null
                 && componentPlacementController.IsActive
-                && !IsInsideObjectInputBlockingGuiRect(screenPosition);
+                && !pointerInsideBlockedUi;
             if (placementCancelledBySecondary)
             {
                 componentPlacementController.Cancel();
+                ClearSecondaryPointerGesture();
                 dragHeld = false;
                 pointerDelta = Vector2.zero;
                 scrollDelta = 0f;
             }
-            else if (secondaryPressedThisFrame
-                && secondaryPointerPressed != null
-                && !HasActiveObjectInteraction()
-                && !IsInsideObjectInputBlockingGuiRect(screenPosition))
-            {
-                secondaryPointerPressed(screenPosition);
-            }
+            bool orbitHeld = !placementCancelledBySecondary
+                && UpdateSecondaryPointerGesture(
+                    screenPosition,
+                    secondaryPressedThisFrame,
+                    secondaryHeld,
+                    secondaryReleasedThisFrame,
+                    pointerInsideBlockedUi);
 
             ApplyInputFrame(new TabletopInputFrame(
                 keyboardPan,
@@ -203,7 +227,9 @@ namespace ConsoleCards.Presentation.Input
                 selectReleasedThisFrame,
                 cancelPressedThisFrame,
                 rotateDelta,
-                flipPressedThisFrame));
+                flipPressedThisFrame),
+                Time.unscaledDeltaTime,
+                orbitHeld);
         }
 
         internal MoveInteractionReleaseResult? ApplyInputFrame(TabletopInputFrame frame)
@@ -212,6 +238,14 @@ namespace ConsoleCards.Presentation.Input
         }
 
         internal MoveInteractionReleaseResult? ApplyInputFrame(TabletopInputFrame frame, float unscaledDeltaTime)
+        {
+            return ApplyInputFrame(frame, unscaledDeltaTime, false);
+        }
+
+        private MoveInteractionReleaseResult? ApplyInputFrame(
+            TabletopInputFrame frame,
+            float unscaledDeltaTime,
+            bool orbitHeld)
         {
             if (!IsFinite(unscaledDeltaTime) || unscaledDeltaTime < 0f)
             {
@@ -234,10 +268,12 @@ namespace ConsoleCards.Presentation.Input
                 }
 
                 cameraInputAdapter.ApplyInputFrame(
-                    frame.KeyboardPan,
+                    pointerInsideBlockedUi ? Vector2.zero : frame.KeyboardPan,
+                    false,
                     false,
                     Vector2.zero,
                     0f,
+                    frame.ScreenPosition,
                     unscaledDeltaTime);
                 return null;
             }
@@ -291,13 +327,72 @@ namespace ConsoleCards.Presentation.Input
                 ? 0f
                 : frame.ScrollDelta;
             cameraInputAdapter.ApplyInputFrame(
-                frame.KeyboardPan,
-                frame.DragHeld && !pointerInsideBlockedUi,
+                pointerInsideBlockedUi ? Vector2.zero : frame.KeyboardPan,
+                frame.DragHeld && !pointerInsideBlockedUi && !orbitHeld,
+                orbitHeld && !pointerInsideBlockedUi,
                 pointerInsideBlockedUi ? Vector2.zero : frame.PointerDelta,
                 effectiveScroll,
+                frame.ScreenPosition,
                 unscaledDeltaTime);
 
             return releaseResult;
+        }
+
+        private bool UpdateSecondaryPointerGesture(
+            Vector2 screenPosition,
+            bool pressedThisFrame,
+            bool held,
+            bool releasedThisFrame,
+            bool pointerInsideBlockedUi)
+        {
+            if (pressedThisFrame)
+            {
+                ClearSecondaryPointerGesture();
+                if (!pointerInsideBlockedUi && !HasActiveObjectInteraction())
+                {
+                    secondaryPointerPending = true;
+                    secondaryPressScreenPosition = screenPosition;
+                    secondaryOrbitEligible = cameraOrbitEligibility != null
+                        && cameraOrbitEligibility(screenPosition);
+                }
+            }
+
+            if (secondaryPointerPending
+                && held
+                && secondaryOrbitEligible
+                && !secondaryOrbitDragging
+                && Vector2.Distance(secondaryPressScreenPosition, screenPosition)
+                    >= cameraOrbitDragThresholdPixels)
+            {
+                secondaryOrbitDragging = true;
+            }
+
+            bool orbitActive = secondaryPointerPending
+                && secondaryOrbitDragging
+                && held
+                && !pointerInsideBlockedUi;
+
+            if (releasedThisFrame)
+            {
+                if (secondaryPointerPending
+                    && !secondaryOrbitDragging
+                    && !pointerInsideBlockedUi)
+                {
+                    secondaryPointerPressed?.Invoke(secondaryPressScreenPosition);
+                }
+
+                ClearSecondaryPointerGesture();
+            }
+
+            return orbitActive;
+        }
+
+        private void ClearSecondaryPointerGesture()
+        {
+            secondaryPointerPending = false;
+            secondaryOrbitEligible = false;
+            secondaryOrbitDragging = false;
+            secondaryPressScreenPosition = Vector2.zero;
         }
 
         private bool HasActiveObjectInteraction()
@@ -416,6 +511,14 @@ namespace ConsoleCards.Presentation.Input
             if (ReferenceEquals((Component)cameraInputAdapter, (Component)objectInputAdapter))
             {
                 LogConfigurationError("TabletopInputFrameCoordinator requires different adapter components.");
+                return false;
+            }
+
+            if (!IsFinite(cameraOrbitDragThresholdPixels)
+                || cameraOrbitDragThresholdPixels < 0f)
+            {
+                LogConfigurationError(
+                    "TabletopInputFrameCoordinator requires a finite non-negative Camera orbit drag threshold.");
                 return false;
             }
 

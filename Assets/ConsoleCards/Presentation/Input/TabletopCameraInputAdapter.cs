@@ -169,11 +169,32 @@ namespace ConsoleCards.Presentation.Input
             float zoomDelta,
             float unscaledDeltaTime)
         {
+            ApplyInputFrame(
+                keyboardPan,
+                dragPanHeld,
+                false,
+                pointerDelta,
+                zoomDelta,
+                new Vector2(Screen.width * 0.5f, Screen.height * 0.5f),
+                unscaledDeltaTime);
+        }
+
+        internal void ApplyInputFrame(
+            Vector2 keyboardPan,
+            bool dragPanHeld,
+            bool orbitHeld,
+            Vector2 pointerDelta,
+            float zoomDelta,
+            Vector2 screenPosition,
+            float unscaledDeltaTime)
+        {
             ValidateFinite(keyboardPan.x, nameof(keyboardPan));
             ValidateFinite(keyboardPan.y, nameof(keyboardPan));
             ValidateFinite(pointerDelta.x, nameof(pointerDelta));
             ValidateFinite(pointerDelta.y, nameof(pointerDelta));
             ValidateFinite(zoomDelta, nameof(zoomDelta));
+            ValidateFinite(screenPosition.x, nameof(screenPosition));
+            ValidateFinite(screenPosition.y, nameof(screenPosition));
 
             if (!IsFinite(unscaledDeltaTime) || unscaledDeltaTime < 0f)
             {
@@ -182,17 +203,26 @@ namespace ConsoleCards.Presentation.Input
 
             Vector2 clampedKeyboardPan = Vector2.ClampMagnitude(keyboardPan, 1f);
             Vector2 keyboardDelta = clampedKeyboardPan * keyboardPanSpeed * unscaledDeltaTime;
-            Vector2 dragDelta = dragPanHeld ? -pointerDelta * dragPanUnitsPerPixel : Vector2.zero;
-            Vector2 combinedPan = keyboardDelta + dragDelta;
-
-            if (combinedPan != Vector2.zero)
+            if (keyboardDelta != Vector2.zero)
             {
-                cameraController.Pan(combinedPan.x, combinedPan.y);
+                cameraController.PanFromScreen(keyboardDelta, true);
+            }
+
+            if (dragPanHeld && !orbitHeld && pointerDelta != Vector2.zero)
+            {
+                cameraController.PanFromScreen(pointerDelta * dragPanUnitsPerPixel, false);
+            }
+
+            if (orbitHeld && pointerDelta != Vector2.zero)
+            {
+                cameraController.Orbit(pointerDelta);
             }
 
             if (zoomDelta != 0f && ShouldApplyCameraZoom())
             {
-                cameraController.Zoom(-zoomDelta * zoomSensitivity);
+                cameraController.ZoomAtScreenPoint(
+                    screenPosition,
+                    -zoomDelta * zoomSensitivity);
             }
         }
 

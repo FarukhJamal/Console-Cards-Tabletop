@@ -9,27 +9,149 @@ using UnityCamera = UnityEngine.Camera;
 
 namespace ConsoleCards.Presentation.Camera
 {
+    public enum TabletopCameraPreset
+    {
+        Close,
+        Mid,
+        Board,
+        TopDown,
+    }
+
+    [Serializable]
+    public sealed class TabletopCameraPresetTuning
+    {
+        [SerializeField] internal float pitchDegrees = 72f;
+        [SerializeField] internal float yawOffsetDegrees;
+        [SerializeField] internal float framingPadding = 0.65f;
+        [SerializeField] internal float distanceMultiplier = 1f;
+        [SerializeField] internal bool includeLocalPlayerArea = true;
+        [SerializeField] internal bool includeBoardArea;
+        [SerializeField] internal bool showControllerMappingArea;
+
+        public float PitchDegrees => pitchDegrees;
+        public float YawOffsetDegrees => yawOffsetDegrees;
+        public float FramingPadding => framingPadding;
+        public float DistanceMultiplier => distanceMultiplier;
+        public bool IncludeLocalPlayerArea => includeLocalPlayerArea;
+        public bool IncludeBoardArea => includeBoardArea;
+        public bool ShowControllerMappingArea => showControllerMappingArea;
+    }
+
     /// <summary>
-    /// Applies local Tabletop Camera state to an explicitly assigned Camera and rig.
+    /// Owns the local, Presentation-only Tabletop Camera pose. Presets provide reusable
+    /// framing starts; free navigation always remains available afterward.
     /// </summary>
     public sealed class TabletopCameraController : MonoBehaviour
     {
+        [Header("Rig")]
         [SerializeField] internal UnityCamera targetCamera;
         [SerializeField] internal Transform cameraRig;
         [SerializeField] internal float worldUnitsPerTableUnit = 1f;
         [SerializeField] internal float cameraHeight = 10f;
+        [SerializeField] internal float initialDistance = 12f;
+        [SerializeField] internal float initialPitchDegrees = 78f;
+        [SerializeField] internal float initialYawDegrees;
+        [SerializeField] internal float tabletopHeight;
+        [SerializeField] internal LayerMask zoomWorldMask = ~0;
+
+        [Header("Zoom / Distance")]
         [SerializeField] internal float minimumOrthographicSize = 2f;
         [SerializeField] internal float maximumOrthographicSize = 20f;
         [SerializeField] internal float initialOrthographicSize = 5f;
+        [SerializeField] internal float minimumDistance = 3f;
+        [SerializeField] internal float maximumDistance = 32f;
+        [SerializeField] internal float zoomSpeed = 1f;
+        [SerializeField, Range(0f, 1f)] internal float cursorZoomBias = 0.85f;
+
+        [Header("Navigation")]
+        [SerializeField] internal float orbitDegreesPerPixel = 0.18f;
+        [SerializeField] internal float panDistanceScale = 0.085f;
+        [SerializeField] internal float minimumPitchDegrees = 32f;
+        [SerializeField] internal float maximumPitchDegrees = 89.5f;
+        [SerializeField] internal float motionSmoothing = 0.09f;
+        [SerializeField] internal float presetTransitionDuration = 0.32f;
+
+        [Header("Authored Views")]
+        [SerializeField] internal TabletopCameraPresetTuning closeView = new TabletopCameraPresetTuning
+        {
+            pitchDegrees = 78f,
+            framingPadding = 0.55f,
+            distanceMultiplier = 0.9f,
+            includeLocalPlayerArea = true,
+            includeBoardArea = false,
+            showControllerMappingArea = true,
+        };
+        [SerializeField] internal TabletopCameraPresetTuning midView = new TabletopCameraPresetTuning
+        {
+            pitchDegrees = 66f,
+            framingPadding = 0.8f,
+            distanceMultiplier = 1f,
+            includeLocalPlayerArea = true,
+            includeBoardArea = true,
+            showControllerMappingArea = false,
+        };
+        [SerializeField] internal TabletopCameraPresetTuning boardView = new TabletopCameraPresetTuning
+        {
+            pitchDegrees = 72f,
+            framingPadding = 1f,
+            distanceMultiplier = 1.08f,
+            includeLocalPlayerArea = false,
+            includeBoardArea = true,
+            showControllerMappingArea = false,
+        };
+        [SerializeField] internal TabletopCameraPresetTuning topDownView = new TabletopCameraPresetTuning
+        {
+            pitchDegrees = 89.5f,
+            framingPadding = 0.9f,
+            distanceMultiplier = 1f,
+            includeLocalPlayerArea = false,
+            includeBoardArea = true,
+            showControllerMappingArea = false,
+        };
+        private GameObject controllerMappingAreaRoot;
 
         private TabletopCoordinateConverter coordinateConverter;
         private bool isInitialized;
+        private bool hasLocalPlayerBounds;
+        private bool hasBoardBounds;
+        private bool hasControllerMappingBounds;
+        private Bounds localPlayerBounds;
+        private Bounds boardBounds;
+        private Bounds controllerMappingBounds;
+        private float localSeatYawDegrees;
+
+        private Vector3 currentPivot;
+        private Vector3 targetPivot;
+        private float currentYawDegrees;
+        private float targetYawDegrees;
+        private float currentPitchDegrees;
+        private float targetPitchDegrees;
+        private float currentDistance;
+        private float targetDistance;
+        private float currentOrthographicSize;
+        private float targetOrthographicSize;
+        private Vector3 pivotVelocity;
+        private float yawVelocity;
+        private float pitchVelocity;
+        private float distanceVelocity;
+        private float orthographicSizeVelocity;
+
+        private bool transitionActive;
+        private float transitionElapsed;
+        private float transitionDuration;
+        private Vector3 transitionStartPivot;
+        private float transitionStartYaw;
+        private float transitionStartPitch;
+        private float transitionStartDistance;
+        private float transitionStartOrthographicSize;
 
         public TabletopCameraState State { get; private set; }
-
         public UnityCamera TargetCamera => targetCamera;
-
         public Transform CameraRig => cameraRig;
+        public float YawDegrees => targetYawDegrees;
+        public float PitchDegrees => targetPitchDegrees;
+        public float Distance => targetDistance;
+        public bool HasFramingTargets => hasLocalPlayerBounds || hasBoardBounds;
 
         private void Awake()
         {
@@ -44,66 +166,574 @@ namespace ConsoleCards.Presentation.Camera
                 initialOrthographicSize,
                 minimumOrthographicSize,
                 maximumOrthographicSize);
-            coordinateConverter = new TabletopCoordinateConverter(worldUnitsPerTableUnit, 0f, 0f, 0f);
+            coordinateConverter = new TabletopCoordinateConverter(worldUnitsPerTableUnit, tabletopHeight, 0f, 0f);
+            currentPivot = targetPivot = coordinateConverter.ToWorldPosition(State.FocusCoordinate);
+            currentYawDegrees = targetYawDegrees = NormalizeYaw(initialYawDegrees);
+            currentPitchDegrees = targetPitchDegrees = ClampPitch(initialPitchDegrees);
+            currentDistance = targetDistance = Mathf.Clamp(initialDistance, minimumDistance, maximumDistance);
+            currentOrthographicSize = targetOrthographicSize = State.OrthographicSize;
             isInitialized = true;
 
-            ApplyState();
+            ApplyCurrentPose();
+        }
+
+        private void LateUpdate()
+        {
+            if (!isInitialized)
+            {
+                return;
+            }
+
+            float deltaTime = Time.unscaledDeltaTime;
+            if (transitionActive)
+            {
+                transitionElapsed += deltaTime;
+                float progress = transitionDuration <= 0f
+                    ? 1f
+                    : Mathf.Clamp01(transitionElapsed / transitionDuration);
+                float eased = progress * progress * (3f - (2f * progress));
+                currentPivot = Vector3.Lerp(transitionStartPivot, targetPivot, eased);
+                currentYawDegrees = Mathf.LerpAngle(transitionStartYaw, targetYawDegrees, eased);
+                currentPitchDegrees = Mathf.Lerp(transitionStartPitch, targetPitchDegrees, eased);
+                currentDistance = Mathf.Lerp(transitionStartDistance, targetDistance, eased);
+                currentOrthographicSize = Mathf.Lerp(
+                    transitionStartOrthographicSize,
+                    targetOrthographicSize,
+                    eased);
+                if (progress >= 1f)
+                {
+                    transitionActive = false;
+                    ResetSmoothingVelocities();
+                }
+            }
+            else
+            {
+                float smoothTime = Mathf.Max(0.0001f, motionSmoothing);
+                currentPivot = Vector3.SmoothDamp(
+                    currentPivot,
+                    targetPivot,
+                    ref pivotVelocity,
+                    smoothTime,
+                    Mathf.Infinity,
+                    deltaTime);
+                currentYawDegrees = Mathf.SmoothDampAngle(
+                    currentYawDegrees,
+                    targetYawDegrees,
+                    ref yawVelocity,
+                    smoothTime,
+                    Mathf.Infinity,
+                    deltaTime);
+                currentPitchDegrees = Mathf.SmoothDampAngle(
+                    currentPitchDegrees,
+                    targetPitchDegrees,
+                    ref pitchVelocity,
+                    smoothTime,
+                    Mathf.Infinity,
+                    deltaTime);
+                currentDistance = Mathf.SmoothDamp(
+                    currentDistance,
+                    targetDistance,
+                    ref distanceVelocity,
+                    smoothTime,
+                    Mathf.Infinity,
+                    deltaTime);
+                currentOrthographicSize = Mathf.SmoothDamp(
+                    currentOrthographicSize,
+                    targetOrthographicSize,
+                    ref orthographicSizeVelocity,
+                    smoothTime,
+                    Mathf.Infinity,
+                    deltaTime);
+            }
+
+            ApplyCurrentPose();
         }
 
         public void Pan(double deltaX, double deltaY)
         {
             EnsureInitialized();
-
             State.Pan(deltaX, deltaY);
-            ApplyState();
+            currentPivot = targetPivot = coordinateConverter.ToWorldPosition(State.FocusCoordinate);
+            CancelTransition();
+            ApplyCurrentPose();
         }
 
         public void Zoom(float delta)
         {
             EnsureInitialized();
-
             State.Zoom(delta);
-            ApplyState();
+            currentOrthographicSize = targetOrthographicSize = State.OrthographicSize;
+            currentDistance = targetDistance = DistanceForOrthographicSize(State.OrthographicSize);
+            CancelTransition();
+            ApplyCurrentPose();
         }
 
         public void Focus(TableCoordinate coordinate)
         {
             EnsureInitialized();
-
             State.SetFocus(coordinate);
-            ApplyState();
+            currentPivot = targetPivot = coordinateConverter.ToWorldPosition(coordinate);
+            CancelTransition();
+            ApplyCurrentPose();
         }
 
         public void Focus(TableCoordinate coordinate, float orthographicSize)
         {
             EnsureInitialized();
-
             State.SetFocus(coordinate, orthographicSize);
-            ApplyState();
+            currentPivot = targetPivot = coordinateConverter.ToWorldPosition(coordinate);
+            currentOrthographicSize = targetOrthographicSize = State.OrthographicSize;
+            currentDistance = targetDistance = DistanceForOrthographicSize(State.OrthographicSize);
+            CancelTransition();
+            ApplyCurrentPose();
         }
+
+        public void PanFromScreen(Vector2 screenDelta, bool keyboardInput)
+        {
+            EnsureInitialized();
+            ValidateFinite(screenDelta, nameof(screenDelta));
+            InterruptTransitionForNavigation();
+
+            Quaternion orientation = Quaternion.Euler(targetPitchDegrees, targetYawDegrees, 0f);
+            Vector3 right = Vector3.ProjectOnPlane(orientation * Vector3.right, Vector3.up).normalized;
+            Vector3 up = Vector3.ProjectOnPlane(orientation * Vector3.up, Vector3.up).normalized;
+            if (up.sqrMagnitude <= 0.0001f)
+            {
+                up = Vector3.ProjectOnPlane(orientation * Vector3.forward, Vector3.up).normalized;
+            }
+
+            float distanceScale = Mathf.Max(0.1f, targetDistance * panDistanceScale);
+            Vector3 worldDelta = keyboardInput
+                ? ((right * screenDelta.x) + (up * screenDelta.y)) * distanceScale
+                : ((right * -screenDelta.x) + (up * -screenDelta.y)) * distanceScale;
+            SetTargetPivot(targetPivot + worldDelta);
+        }
+
+        public void Orbit(Vector2 pointerDelta)
+        {
+            EnsureInitialized();
+            ValidateFinite(pointerDelta, nameof(pointerDelta));
+            InterruptTransitionForNavigation();
+            targetYawDegrees = NormalizeYaw(targetYawDegrees + (pointerDelta.x * orbitDegreesPerPixel));
+            targetPitchDegrees = ClampPitch(targetPitchDegrees - (pointerDelta.y * orbitDegreesPerPixel));
+        }
+
+        public void ZoomAtScreenPoint(Vector2 screenPosition, float inputDelta)
+        {
+            EnsureInitialized();
+            ValidateFinite(screenPosition, nameof(screenPosition));
+            ValidateFinite(inputDelta, nameof(inputDelta));
+            if (Mathf.Approximately(inputDelta, 0f))
+            {
+                return;
+            }
+
+            InterruptTransitionForNavigation();
+            float previousSize = targetOrthographicSize;
+            float nextSize = Mathf.Clamp(
+                previousSize + (inputDelta * zoomSpeed),
+                minimumOrthographicSize,
+                maximumOrthographicSize);
+            if (Mathf.Approximately(previousSize, nextSize))
+            {
+                return;
+            }
+
+            if (TryResolveZoomWorldPoint(screenPosition, out Vector3 zoomPoint))
+            {
+                float focusFraction = 1f - (nextSize / previousSize);
+                Vector3 planarOffset = Vector3.ProjectOnPlane(zoomPoint - targetPivot, Vector3.up);
+                SetTargetPivot(targetPivot + (planarOffset * focusFraction * cursorZoomBias));
+            }
+
+            targetOrthographicSize = nextSize;
+            targetDistance = DistanceForOrthographicSize(nextSize);
+            State.SetFocus(coordinateConverter.ToTableCoordinate(targetPivot));
+            State.SetOrthographicSize(nextSize);
+        }
+
+        public void ConfigureFramingTargets(
+            Bounds localBounds,
+            Bounds sharedBoardBounds,
+            float seatFacingYawDegrees,
+            Bounds? mappingAreaBounds = null,
+            GameObject mappingAreaRoot = null)
+        {
+            EnsureInitialized();
+            ValidateBounds(localBounds, nameof(localBounds));
+            ValidateBounds(sharedBoardBounds, nameof(sharedBoardBounds));
+            ValidateFinite(seatFacingYawDegrees, nameof(seatFacingYawDegrees));
+            if (mappingAreaBounds.HasValue)
+            {
+                ValidateBounds(mappingAreaBounds.Value, nameof(mappingAreaBounds));
+            }
+
+            localPlayerBounds = localBounds;
+            boardBounds = sharedBoardBounds;
+            controllerMappingBounds = mappingAreaBounds.GetValueOrDefault();
+            hasLocalPlayerBounds = true;
+            hasBoardBounds = true;
+            hasControllerMappingBounds = mappingAreaBounds.HasValue;
+            localSeatYawDegrees = NormalizeYaw(seatFacingYawDegrees);
+            controllerMappingAreaRoot = mappingAreaRoot;
+        }
+
+        public void ClearFramingTargets()
+        {
+            hasLocalPlayerBounds = false;
+            hasBoardBounds = false;
+            hasControllerMappingBounds = false;
+            localPlayerBounds = default;
+            boardBounds = default;
+            controllerMappingBounds = default;
+            localSeatYawDegrees = 0f;
+            if (controllerMappingAreaRoot != null)
+            {
+                controllerMappingAreaRoot.SetActive(false);
+            }
+            controllerMappingAreaRoot = null;
+
+        }
+
+        public bool ShowPreset(TabletopCameraPreset preset, bool immediate = false)
+        {
+            EnsureInitialized();
+            TabletopCameraPresetTuning tuning = ResolvePreset(preset);
+            if (!TryResolvePresetBounds(tuning, out Bounds framingBounds))
+            {
+                return false;
+            }
+
+            float pitch = ClampPitch(tuning.PitchDegrees);
+            float yaw = NormalizeYaw(localSeatYawDegrees + tuning.YawOffsetDegrees);
+            Quaternion rotation = Quaternion.Euler(pitch, yaw, 0f);
+            float size = CalculateOrthographicSize(
+                framingBounds,
+                rotation,
+                tuning.FramingPadding);
+            float distance = Mathf.Clamp(
+                DistanceForOrthographicSize(size) * Mathf.Max(0.01f, tuning.DistanceMultiplier),
+                minimumDistance,
+                maximumDistance);
+            Vector3 pivot = framingBounds.center;
+            pivot.y = tabletopHeight;
+
+            SetPresetTarget(pivot, yaw, pitch, distance, size, immediate);
+            if (controllerMappingAreaRoot != null)
+            {
+                controllerMappingAreaRoot.SetActive(tuning.ShowControllerMappingArea);
+            }
+
+            return true;
+        }
+
+        public bool ShowCloseView(bool immediate = false) =>
+            ShowPreset(TabletopCameraPreset.Close, immediate);
+
+        public bool ShowMidView(bool immediate = false) =>
+            ShowPreset(TabletopCameraPreset.Mid, immediate);
+
+        public bool ShowBoardView(bool immediate = false) =>
+            ShowPreset(TabletopCameraPreset.Board, immediate);
+
+        public bool ShowTopDownView(bool immediate = false) =>
+            ShowPreset(TabletopCameraPreset.TopDown, immediate);
+
+        public bool ReturnToLocalPlayer(bool immediate = false) => ShowCloseView(immediate);
 
         public TabletopCameraBookmark CaptureBookmark(string name)
         {
             EnsureInitialized();
-
             return new TabletopCameraBookmark(name, State.FocusCoordinate, State.OrthographicSize);
         }
 
         public void Focus(TabletopCameraBookmark bookmark)
         {
             EnsureInitialized();
+            Focus(bookmark.FocusCoordinate, bookmark.OrthographicSize);
+        }
 
-            State.SetFocus(bookmark.FocusCoordinate, bookmark.OrthographicSize);
-            ApplyState();
+        public void TransitionTo(TabletopCameraBookmark bookmark)
+        {
+            EnsureInitialized();
+            Vector3 pivot = coordinateConverter.ToWorldPosition(bookmark.FocusCoordinate);
+            float size = Mathf.Clamp(
+                bookmark.OrthographicSize,
+                minimumOrthographicSize,
+                maximumOrthographicSize);
+            SetPresetTarget(
+                pivot,
+                targetYawDegrees,
+                targetPitchDegrees,
+                DistanceForOrthographicSize(size),
+                size,
+                false);
         }
 
         public void ApplyState()
         {
             EnsureInitialized();
+            currentPivot = targetPivot = coordinateConverter.ToWorldPosition(State.FocusCoordinate);
+            currentOrthographicSize = targetOrthographicSize = State.OrthographicSize;
+            currentDistance = targetDistance = DistanceForOrthographicSize(State.OrthographicSize);
+            CancelTransition();
+            ApplyCurrentPose();
+        }
 
-            Vector3 convertedFocus = coordinateConverter.ToWorldPosition(State.FocusCoordinate);
-            cameraRig.position = new Vector3(convertedFocus.x, cameraHeight, convertedFocus.z);
-            targetCamera.orthographicSize = State.OrthographicSize;
+        private void SetPresetTarget(
+            Vector3 pivot,
+            float yaw,
+            float pitch,
+            float distance,
+            float orthographicSize,
+            bool immediate)
+        {
+            targetPivot = SanitizePivot(pivot);
+            targetYawDegrees = NormalizeYaw(yaw);
+            targetPitchDegrees = ClampPitch(pitch);
+            targetDistance = Mathf.Clamp(distance, minimumDistance, maximumDistance);
+            targetOrthographicSize = Mathf.Clamp(
+                orthographicSize,
+                minimumOrthographicSize,
+                maximumOrthographicSize);
+            State.SetFocus(coordinateConverter.ToTableCoordinate(targetPivot));
+            State.SetOrthographicSize(targetOrthographicSize);
+
+            if (immediate || presetTransitionDuration <= 0f)
+            {
+                currentPivot = targetPivot;
+                currentYawDegrees = targetYawDegrees;
+                currentPitchDegrees = targetPitchDegrees;
+                currentDistance = targetDistance;
+                currentOrthographicSize = targetOrthographicSize;
+                CancelTransition();
+                ApplyCurrentPose();
+                return;
+            }
+
+            transitionStartPivot = currentPivot;
+            transitionStartYaw = currentYawDegrees;
+            transitionStartPitch = currentPitchDegrees;
+            transitionStartDistance = currentDistance;
+            transitionStartOrthographicSize = currentOrthographicSize;
+            transitionElapsed = 0f;
+            transitionDuration = presetTransitionDuration;
+            transitionActive = true;
+            ResetSmoothingVelocities();
+        }
+
+        private bool TryResolvePresetBounds(
+            TabletopCameraPresetTuning tuning,
+            out Bounds resolvedBounds)
+        {
+            bool hasBounds = false;
+            resolvedBounds = default;
+            if (tuning.IncludeLocalPlayerArea && hasLocalPlayerBounds)
+            {
+                resolvedBounds = localPlayerBounds;
+                hasBounds = true;
+            }
+
+            if (tuning.IncludeBoardArea && hasBoardBounds)
+            {
+                if (hasBounds)
+                {
+                    resolvedBounds.Encapsulate(boardBounds);
+                }
+                else
+                {
+                    resolvedBounds = boardBounds;
+                    hasBounds = true;
+                }
+            }
+
+            if (tuning.ShowControllerMappingArea && hasControllerMappingBounds)
+            {
+                if (hasBounds)
+                {
+                    resolvedBounds.Encapsulate(controllerMappingBounds);
+                }
+                else
+                {
+                    resolvedBounds = controllerMappingBounds;
+                    hasBounds = true;
+                }
+            }
+
+            return hasBounds;
+        }
+
+        private float CalculateOrthographicSize(Bounds bounds, Quaternion rotation, float padding)
+        {
+            Vector3 right = rotation * Vector3.right;
+            Vector3 up = rotation * Vector3.up;
+            Vector3 extents = bounds.extents;
+            float projectedHalfWidth =
+                Mathf.Abs(right.x) * extents.x
+                + Mathf.Abs(right.y) * extents.y
+                + Mathf.Abs(right.z) * extents.z;
+            float projectedHalfHeight =
+                Mathf.Abs(up.x) * extents.x
+                + Mathf.Abs(up.y) * extents.y
+                + Mathf.Abs(up.z) * extents.z;
+            float aspect = targetCamera.aspect > 0f ? targetCamera.aspect : 1f;
+            float required = Mathf.Max(projectedHalfHeight, projectedHalfWidth / aspect)
+                + Mathf.Max(0f, padding);
+            return Mathf.Clamp(required, minimumOrthographicSize, maximumOrthographicSize);
+        }
+
+        private bool TryResolveZoomWorldPoint(Vector2 screenPosition, out Vector3 worldPoint)
+        {
+            Ray ray = targetCamera.ScreenPointToRay(screenPosition);
+            if (Physics.Raycast(
+                    ray,
+                    out RaycastHit hit,
+                    Mathf.Infinity,
+                    zoomWorldMask,
+                    QueryTriggerInteraction.Ignore))
+            {
+                worldPoint = hit.point;
+                return IsFinite(worldPoint);
+            }
+
+            Plane tabletopPlane = new Plane(Vector3.up, new Vector3(0f, tabletopHeight, 0f));
+            if (tabletopPlane.Raycast(ray, out float distance))
+            {
+                worldPoint = ray.GetPoint(distance);
+                return IsFinite(worldPoint);
+            }
+
+            worldPoint = targetPivot;
+            return false;
+        }
+
+        private void SetTargetPivot(Vector3 pivot)
+        {
+            targetPivot = SanitizePivot(pivot);
+            State.SetFocus(coordinateConverter.ToTableCoordinate(targetPivot));
+        }
+
+        private Vector3 SanitizePivot(Vector3 pivot)
+        {
+            if (!IsFinite(pivot))
+            {
+                return new Vector3(0f, tabletopHeight, 0f);
+            }
+
+            pivot.y = tabletopHeight;
+            return pivot;
+        }
+
+        private void ApplyCurrentPose()
+        {
+            Quaternion rotation = Quaternion.Euler(
+                ClampPitch(currentPitchDegrees),
+                NormalizeYaw(currentYawDegrees),
+                0f);
+            cameraRig.SetPositionAndRotation(currentPivot, rotation);
+            targetCamera.transform.localPosition = Vector3.back
+                * Mathf.Clamp(currentDistance, minimumDistance, maximumDistance);
+            targetCamera.transform.localRotation = Quaternion.identity;
+            targetCamera.orthographicSize = Mathf.Clamp(
+                currentOrthographicSize,
+                minimumOrthographicSize,
+                maximumOrthographicSize);
+        }
+
+        private void InterruptTransitionForNavigation()
+        {
+            if (!transitionActive)
+            {
+                return;
+            }
+
+            targetPivot = currentPivot;
+            targetYawDegrees = currentYawDegrees;
+            targetPitchDegrees = currentPitchDegrees;
+            targetDistance = currentDistance;
+            targetOrthographicSize = currentOrthographicSize;
+            State.SetFocus(coordinateConverter.ToTableCoordinate(targetPivot));
+            State.SetOrthographicSize(targetOrthographicSize);
+            CancelTransition();
+        }
+
+        private void CancelTransition()
+        {
+            transitionActive = false;
+            transitionElapsed = 0f;
+            transitionDuration = 0f;
+            ResetSmoothingVelocities();
+        }
+
+        private void ResetSmoothingVelocities()
+        {
+            pivotVelocity = Vector3.zero;
+            yawVelocity = 0f;
+            pitchVelocity = 0f;
+            distanceVelocity = 0f;
+            orthographicSizeVelocity = 0f;
+        }
+
+        private float DistanceForOrthographicSize(float orthographicSize)
+        {
+            float authoredInitialDistance = Mathf.Clamp(
+                initialDistance,
+                minimumDistance,
+                maximumDistance);
+            float authoredInitialSize = Mathf.Clamp(
+                initialOrthographicSize,
+                minimumOrthographicSize,
+                maximumOrthographicSize);
+            if (orthographicSize <= authoredInitialSize)
+            {
+                if (authoredInitialSize - minimumOrthographicSize <= Mathf.Epsilon)
+                {
+                    return authoredInitialDistance;
+                }
+
+                return Mathf.Lerp(
+                    minimumDistance,
+                    authoredInitialDistance,
+                    Mathf.InverseLerp(
+                        minimumOrthographicSize,
+                        authoredInitialSize,
+                        orthographicSize));
+            }
+
+            if (maximumOrthographicSize - authoredInitialSize <= Mathf.Epsilon)
+            {
+                return authoredInitialDistance;
+            }
+
+            return Mathf.Lerp(
+                authoredInitialDistance,
+                maximumDistance,
+                Mathf.InverseLerp(
+                    authoredInitialSize,
+                    maximumOrthographicSize,
+                    orthographicSize));
+        }
+
+        private TabletopCameraPresetTuning ResolvePreset(TabletopCameraPreset preset)
+        {
+            switch (preset)
+            {
+                case TabletopCameraPreset.Close: return closeView;
+                case TabletopCameraPreset.Mid: return midView;
+                case TabletopCameraPreset.Board: return boardView;
+                case TabletopCameraPreset.TopDown: return topDownView;
+                default: throw new ArgumentOutOfRangeException(nameof(preset));
+            }
+        }
+
+        private float ClampPitch(float value)
+        {
+            return Mathf.Clamp(value, minimumPitchDegrees, maximumPitchDegrees);
+        }
+
+        private static float NormalizeYaw(float value)
+        {
+            return Mathf.Repeat(value, 360f);
         }
 
         private bool ValidateConfiguration()
@@ -156,6 +786,63 @@ namespace ConsoleCards.Presentation.Camera
                 return false;
             }
 
+            if (!IsFinite(minimumDistance)
+                || !IsFinite(maximumDistance)
+                || minimumDistance <= 0f
+                || maximumDistance < minimumDistance)
+            {
+                LogConfigurationError("TabletopCameraController requires a valid positive Camera distance range.");
+                return false;
+            }
+
+            if (!IsFinite(initialDistance)
+                || initialDistance <= 0f
+                || !IsFinite(zoomSpeed)
+                || zoomSpeed < 0f
+                || !IsFinite(orbitDegreesPerPixel)
+                || orbitDegreesPerPixel < 0f
+                || !IsFinite(panDistanceScale)
+                || panDistanceScale < 0f
+                || !IsFinite(motionSmoothing)
+                || motionSmoothing < 0f
+                || !IsFinite(presetTransitionDuration)
+                || presetTransitionDuration < 0f
+                || !IsFinite(tabletopHeight))
+            {
+                LogConfigurationError("TabletopCameraController navigation tuning must be finite and non-negative.");
+                return false;
+            }
+
+            if (!IsFinite(minimumPitchDegrees)
+                || !IsFinite(maximumPitchDegrees)
+                || minimumPitchDegrees <= 0f
+                || maximumPitchDegrees >= 90f
+                || maximumPitchDegrees < minimumPitchDegrees)
+            {
+                LogConfigurationError("TabletopCameraController requires pitch limits above zero and below ninety degrees.");
+                return false;
+            }
+
+            return ValidatePreset(closeView, nameof(closeView))
+                && ValidatePreset(midView, nameof(midView))
+                && ValidatePreset(boardView, nameof(boardView))
+                && ValidatePreset(topDownView, nameof(topDownView));
+        }
+
+        private bool ValidatePreset(TabletopCameraPresetTuning preset, string fieldName)
+        {
+            if (preset == null
+                || !IsFinite(preset.PitchDegrees)
+                || !IsFinite(preset.YawOffsetDegrees)
+                || !IsFinite(preset.FramingPadding)
+                || preset.FramingPadding < 0f
+                || !IsFinite(preset.DistanceMultiplier)
+                || preset.DistanceMultiplier <= 0f)
+            {
+                LogConfigurationError($"TabletopCameraController {fieldName} tuning is invalid.");
+                return false;
+            }
+
             return true;
         }
 
@@ -170,6 +857,39 @@ namespace ConsoleCards.Presentation.Camera
         private void LogConfigurationError(string message)
         {
             Debug.LogError(message, this);
+        }
+
+        private static void ValidateBounds(Bounds bounds, string parameterName)
+        {
+            if (!IsFinite(bounds.center)
+                || !IsFinite(bounds.size)
+                || bounds.size.x < 0f
+                || bounds.size.y < 0f
+                || bounds.size.z < 0f)
+            {
+                throw new ArgumentOutOfRangeException(parameterName);
+            }
+        }
+
+        private static void ValidateFinite(Vector2 value, string parameterName)
+        {
+            if (!IsFinite(value.x) || !IsFinite(value.y))
+            {
+                throw new ArgumentOutOfRangeException(parameterName);
+            }
+        }
+
+        private static void ValidateFinite(float value, string parameterName)
+        {
+            if (!IsFinite(value))
+            {
+                throw new ArgumentOutOfRangeException(parameterName);
+            }
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
         }
 
         private static bool IsFinite(float value)

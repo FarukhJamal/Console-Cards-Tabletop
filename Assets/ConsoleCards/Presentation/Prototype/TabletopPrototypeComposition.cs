@@ -21,6 +21,7 @@ using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
 using ConsoleCards.Games.TrapFloor;
+using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Coordinates;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
@@ -94,6 +95,8 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal ConsoleSlotView[] sceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
         [SerializeField] internal PrototypeConsoleSlotVisual[] sceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
         [SerializeField] internal PrototypeRuntimeUiController runtimeUi;
+        [Tooltip("Optional authored local Controller Mapping area included by Camera presets that request it.")]
+        [SerializeField] private Transform sceneControllerMappingArea;
         [Tooltip("Designer-authored Trap Floor identity, content, Grid, Mode, Console, and presentation data.")]
         [SerializeField] private GameDefinition trapFloorGameDefinition;
 
@@ -435,14 +438,17 @@ namespace ConsoleCards.Presentation.Prototype
                 BuildRuntimeGraph();
                 BuildToolboxRuntime();
                 BuildFloorfallRuntime();
-                ProjectTrapFloorCameraBookmark();
                 BindObjectViews();
                 BuildContainerViews();
                 BindContainerViews();
+                ConfigureTabletopCameraFraming();
+                ProjectTrapFloorCameraBookmark();
                 RefreshCardContentVisibility();
                 ConfigureDropTargets();
                 BuildInteractionGraph();
-                inputFrameCoordinator.ConfigurePrototypeUiInput(HandleSecondaryPointerPressed);
+                inputFrameCoordinator.ConfigurePrototypeUiInput(
+                    HandleSecondaryPointerPressed,
+                    CanBeginCameraOrbit);
                 prototypeUiInputConfiguredByComposition = true;
                 ConfigureDeveloperControlsInputBlockIfNeeded();
 
@@ -490,11 +496,14 @@ namespace ConsoleCards.Presentation.Prototype
                     ? activeSession.Reset()
                     : activeSession.CurrentMatch;
                 localPlayerId = activeSession.Request.RequestingPlayerId;
+                cameraInputAdapter.CameraController.ClearFramingTargets();
                 BuildToolboxRuntime();
                 RebuildEmptyTableLooseObjectPresentation();
 
                 BuildInteractionGraph();
-                inputFrameCoordinator.ConfigurePrototypeUiInput(HandleSecondaryPointerPressed);
+                inputFrameCoordinator.ConfigurePrototypeUiInput(
+                    HandleSecondaryPointerPressed,
+                    CanBeginCameraOrbit);
                 prototypeUiInputConfiguredByComposition = true;
                 ConfigureDeveloperControlsInputBlockIfNeeded();
                 inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
@@ -536,6 +545,10 @@ namespace ConsoleCards.Presentation.Prototype
             physicalBlindDirectionDieId = TabletopObjectId.Empty;
             physicalAuthority?.Shutdown();
             physicalAuthority = null;
+            if (cameraInputAdapter != null && cameraInputAdapter.CameraController != null)
+            {
+                cameraInputAdapter.CameraController.ClearFramingTargets();
+            }
             SetGameBoardActive(false);
             ClearFeedback();
             floorfallTargetPresenter?.Clear();
@@ -4182,6 +4195,31 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
+        private bool CanBeginCameraOrbit(Vector2 screenPosition)
+        {
+            if (!IsInitialized
+                || hitResolver == null
+                || (interactionRouter != null && interactionRouter.HasActiveInteraction))
+            {
+                return false;
+            }
+
+            if (hitResolver.TryResolve(screenPosition, out _))
+            {
+                return false;
+            }
+
+            bool canOrbit = dropTargetResolver == null
+                || !dropTargetResolver.TryResolve(screenPosition, out CardDropTarget target)
+                || target.Kind != CardDropTargetKind.Container;
+            if (canOrbit)
+            {
+                CloseContextMenu();
+            }
+
+            return canOrbit;
+        }
+
         private bool TryOpenCardContextMenu(CardView hitCard, Vector2 screenPosition)
         {
             if (hitCard == null || !hitCard.IsBound || hitCard.CardState == null)
@@ -7423,8 +7461,140 @@ namespace ConsoleCards.Presentation.Prototype
                 seat.ConsoleSurfaceHeight);
         }
 
+        private void ConfigureTabletopCameraFraming()
+        {
+            if (cameraInputAdapter == null
+                || cameraInputAdapter.CameraController == null
+                || coordinateConverter == null
+                || localSeatLayout == null
+                || matchState == null
+                || centralPlayAreaId.IsEmpty)
+            {
+                return;
+            }
+
+            Bounds localBounds = CreatePresentationBounds(sceneHandVisual.transform, 0.75f);
+            localBounds.Encapsulate(CreatePresentationBounds(sceneConsoleView.transform, 0.75f));
+
+            PlayAreaState playArea = matchState.GetPlayArea(centralPlayAreaId);
+            Bounds sharedBounds = CreateWorldBounds(playArea.Bounds);
+            if (playerLayout != null)
+            {
+                for (int i = 0; i < playerLayout.Seats.Count; i++)
+                {
+                    PlayerSeatLayoutEntry seat = playerLayout.Seats[i];
+                    sharedBounds.Encapsulate(
+                        coordinateConverter.ToWorldPosition(seat.PlayerZonePose.Position));
+                    sharedBounds.Encapsulate(
+                        coordinateConverter.ToWorldPosition(seat.HandAnchorPose.Position));
+                    sharedBounds.Encapsulate(
+                        coordinateConverter.ToWorldPosition(seat.ConsoleAnchorPose.Position));
+                }
+            }
+
+            for (int i = 0; i < playerConsoleViews.Count; i++)
+            {
+                ConsoleView playerConsole = playerConsoleViews[i];
+                if (playerConsole != null && playerConsole.gameObject.activeInHierarchy)
+                {
+                    sharedBounds.Encapsulate(
+                        CreatePresentationBounds(playerConsole.transform, 0.5f));
+                }
+            }
+
+            Bounds? mappingBounds = null;
+            if (sceneControllerMappingArea != null)
+            {
+                mappingBounds = CreatePresentationBounds(sceneControllerMappingArea, 0.5f);
+            }
+
+            Quaternion seatRotation = coordinateConverter.ToWorldRotation(
+                new TabletopPose(
+                    TableCoordinate.Zero,
+                    localSeatLayout.FacingRotationDegrees,
+                    0,
+                    0));
+            cameraInputAdapter.CameraController.ConfigureFramingTargets(
+                localBounds,
+                sharedBounds,
+                seatRotation.eulerAngles.y,
+                mappingBounds,
+                sceneControllerMappingArea != null
+                    ? sceneControllerMappingArea.gameObject
+                    : null);
+        }
+
+        private Bounds CreateWorldBounds(TabletopBounds bounds)
+        {
+            Vector3 minimum = coordinateConverter.ToWorldPosition(bounds.Minimum);
+            Vector3 maximum = coordinateConverter.ToWorldPosition(bounds.Maximum);
+            Bounds worldBounds = new Bounds(minimum, Vector3.zero);
+            worldBounds.Encapsulate(maximum);
+            Vector3 size = worldBounds.size;
+            size.y = Mathf.Max(size.y, 0.1f);
+            worldBounds.size = size;
+            return worldBounds;
+        }
+
+        private static Bounds CreatePresentationBounds(Transform root, float minimumPlanarExtent)
+        {
+            bool found = false;
+            Bounds bounds = new Bounds(root.position, Vector3.zero);
+            Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer renderer = renderers[i];
+                if (renderer == null || !renderer.enabled)
+                {
+                    continue;
+                }
+
+                if (!found)
+                {
+                    bounds = renderer.bounds;
+                    found = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(renderer.bounds);
+                }
+            }
+
+            Collider[] colliders = root.GetComponentsInChildren<Collider>(true);
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                Collider collider = colliders[i];
+                if (collider == null || !collider.enabled)
+                {
+                    continue;
+                }
+
+                if (!found)
+                {
+                    bounds = collider.bounds;
+                    found = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(collider.bounds);
+                }
+            }
+
+            Vector3 extents = bounds.extents;
+            extents.x = Mathf.Max(extents.x, minimumPlanarExtent);
+            extents.y = Mathf.Max(extents.y, 0.05f);
+            extents.z = Mathf.Max(extents.z, minimumPlanarExtent);
+            bounds.extents = extents;
+            return bounds;
+        }
+
         private void ProjectTrapFloorCameraBookmark()
         {
+            if (cameraInputAdapter.CameraController.ShowBoardView())
+            {
+                return;
+            }
+
             IReadOnlyList<GameTemplateCameraBookmarkDefinition> bookmarks =
                 prototypeTemplateContext.Session.CameraBookmarks;
             if (bookmarks.Count == 0)
@@ -7433,9 +7603,11 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             GameTemplateCameraBookmarkDefinition bookmark = bookmarks[0];
-            cameraInputAdapter.CameraController.Focus(
-                bookmark.FocusCoordinate,
-                bookmark.OrthographicSize);
+            cameraInputAdapter.CameraController.TransitionTo(
+                new TabletopCameraBookmark(
+                    bookmark.Name,
+                    bookmark.FocusCoordinate,
+                    bookmark.OrthographicSize));
         }
 
         private void ApplyAuthoredPose(Transform target, TabletopPose pose)
