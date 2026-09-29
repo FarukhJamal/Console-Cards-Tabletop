@@ -3219,9 +3219,6 @@ MonoBehaviour:
   initialPitchDegrees: 78
   initialYawDegrees: 0
   tabletopHeight: 14.3
-  zoomWorldMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
   perspectiveFieldOfView: 50
   topDownUsesOrthographic: 1
   minimumOrthographicSize: 2
@@ -3230,7 +3227,6 @@ MonoBehaviour:
   minimumDistance: 3
   maximumDistance: 32
   zoomSpeed: 22.5
-  cursorZoomBias: 0.85
   orbitDegreesPerPixel: 0.18
   panDistanceScale: 0.085
   minimumPitchDegrees: 32

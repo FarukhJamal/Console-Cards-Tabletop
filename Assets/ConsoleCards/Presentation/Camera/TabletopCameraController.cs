@@ -52,7 +52,6 @@ namespace ConsoleCards.Presentation.Camera
         [SerializeField] internal float initialPitchDegrees = 78f;
         [SerializeField] internal float initialYawDegrees;
         [SerializeField] internal float tabletopHeight;
-        [SerializeField] internal LayerMask zoomWorldMask = ~0;
         [SerializeField, Range(1f, 179f)] internal float perspectiveFieldOfView = 50f;
         [SerializeField] internal bool topDownUsesOrthographic = true;
 
@@ -63,7 +62,6 @@ namespace ConsoleCards.Presentation.Camera
         [SerializeField] internal float minimumDistance = 3f;
         [SerializeField] internal float maximumDistance = 32f;
         [SerializeField] internal float zoomSpeed = 22.5f;
-        [SerializeField, Range(0f, 1f)] internal float cursorZoomBias = 0.85f;
 
         [Header("Navigation")]
         [SerializeField] internal float orbitDegreesPerPixel = 0.18f;
@@ -358,13 +356,6 @@ namespace ConsoleCards.Presentation.Camera
             if (Mathf.Approximately(previousZoom, nextZoom))
             {
                 return;
-            }
-
-            if (TryResolveZoomWorldPoint(screenPosition, out Vector3 zoomPoint))
-            {
-                float focusFraction = 1f - (nextZoom / previousZoom);
-                Vector3 planarOffset = Vector3.ProjectOnPlane(zoomPoint - targetPivot, Vector3.up);
-                SetTargetPivot(targetPivot + (planarOffset * focusFraction * cursorZoomBias));
             }
 
             if (usesOrthographicProjection)
@@ -842,31 +833,6 @@ namespace ConsoleCards.Presentation.Camera
             return Mathf.Abs(axis.x) * extents.x
                 + Mathf.Abs(axis.y) * extents.y
                 + Mathf.Abs(axis.z) * extents.z;
-        }
-
-        private bool TryResolveZoomWorldPoint(Vector2 screenPosition, out Vector3 worldPoint)
-        {
-            Ray ray = targetCamera.ScreenPointToRay(screenPosition);
-            if (Physics.Raycast(
-                    ray,
-                    out RaycastHit hit,
-                    Mathf.Infinity,
-                    zoomWorldMask,
-                    QueryTriggerInteraction.Ignore))
-            {
-                worldPoint = hit.point;
-                return IsFinite(worldPoint);
-            }
-
-            Plane tabletopPlane = new Plane(Vector3.up, new Vector3(0f, tabletopHeight, 0f));
-            if (tabletopPlane.Raycast(ray, out float distance))
-            {
-                worldPoint = ray.GetPoint(distance);
-                return IsFinite(worldPoint);
-            }
-
-            worldPoint = targetPivot;
-            return false;
         }
 
         private void SetTargetPivot(Vector3 pivot)
