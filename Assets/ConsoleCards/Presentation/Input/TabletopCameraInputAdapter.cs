@@ -79,6 +79,24 @@ namespace ConsoleCards.Presentation.Input
             IsInitialized = true;
         }
 
+        private void Start()
+        {
+            if (!IsInitialized)
+            {
+                return;
+            }
+
+            if (cameraController != null && cameraController.IsInitialized)
+            {
+                return;
+            }
+
+            LogConfigurationError(
+                "TabletopCameraInputAdapter requires an initialized TabletopCameraController.");
+            IsInitialized = false;
+            enabled = false;
+        }
+
         private void OnEnable()
         {
             if (!IsInitialized)
@@ -102,7 +120,13 @@ namespace ConsoleCards.Presentation.Input
 
         private void Update()
         {
-            if (!IsInitialized || IsExternallyDriven)
+            if (!IsInitialized)
+            {
+                return;
+            }
+
+            ApplyPresetKeyboardShortcuts();
+            if (IsExternallyDriven)
             {
                 return;
             }
@@ -113,6 +137,36 @@ namespace ConsoleCards.Presentation.Input
                 pointerDeltaAction.action.ReadValue<Vector2>(),
                 zoomAction.action.ReadValue<float>(),
                 Time.unscaledDeltaTime);
+        }
+
+        private void ApplyPresetKeyboardShortcuts()
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (keyboard == null)
+            {
+                return;
+            }
+
+            if (keyboard.digit1Key.wasPressedThisFrame)
+            {
+                LogPresetShortcut("[Camera] Key 1 -> Close");
+                cameraController.ShowCloseView();
+            }
+            else if (keyboard.digit2Key.wasPressedThisFrame)
+            {
+                LogPresetShortcut("[Camera] Key 2 -> Mid");
+                cameraController.ShowMidView();
+            }
+            else if (keyboard.digit3Key.wasPressedThisFrame)
+            {
+                LogPresetShortcut("[Camera] Key 3 -> Board");
+                cameraController.ShowBoardView();
+            }
+            else if (keyboard.digit4Key.wasPressedThisFrame)
+            {
+                LogPresetShortcut("[Camera] Key 4 -> TopDown");
+                cameraController.ShowTopDownView();
+            }
         }
 
         internal void AttachExternalFrameDriver(TabletopInputFrameCoordinator frameDriver)
@@ -338,6 +392,13 @@ namespace ConsoleCards.Presentation.Input
         private void LogConfigurationError(string message)
         {
             Debug.LogError(message, this);
+        }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void LogPresetShortcut(string message)
+        {
+            Debug.Log(message, this);
         }
 
         private static void ValidateFinite(float value, string parameterName)

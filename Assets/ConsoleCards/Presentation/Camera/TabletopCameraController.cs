@@ -53,6 +53,8 @@ namespace ConsoleCards.Presentation.Camera
         [SerializeField] internal float initialYawDegrees;
         [SerializeField] internal float tabletopHeight;
         [SerializeField] internal LayerMask zoomWorldMask = ~0;
+        [SerializeField, Range(1f, 179f)] internal float perspectiveFieldOfView = 50f;
+        [SerializeField] internal bool topDownUsesOrthographic = true;
 
         [Header("Zoom / Distance")]
         [SerializeField] internal float minimumOrthographicSize = 2f;
@@ -114,10 +116,14 @@ namespace ConsoleCards.Presentation.Camera
         private bool isInitialized;
         private bool hasLocalPlayerBounds;
         private bool hasBoardBounds;
+        private bool hasRelevantPlayerBounds;
         private bool hasControllerMappingBounds;
+        private bool hasLocalSeatAnchor;
         private Bounds localPlayerBounds;
         private Bounds boardBounds;
+        private Bounds relevantPlayerBounds;
         private Bounds controllerMappingBounds;
+        private Vector3 localSeatAnchor;
         private float localSeatYawDegrees;
 
         private Vector3 currentPivot;
@@ -144,6 +150,7 @@ namespace ConsoleCards.Presentation.Camera
         private float transitionStartPitch;
         private float transitionStartDistance;
         private float transitionStartOrthographicSize;
+        private bool usesOrthographicProjection;
 
         public TabletopCameraState State { get; private set; }
         public UnityCamera TargetCamera => targetCamera;
@@ -151,7 +158,11 @@ namespace ConsoleCards.Presentation.Camera
         public float YawDegrees => targetYawDegrees;
         public float PitchDegrees => targetPitchDegrees;
         public float Distance => targetDistance;
-        public bool HasFramingTargets => hasLocalPlayerBounds || hasBoardBounds;
+        public bool HasFramingTargets => hasLocalPlayerBounds
+            || hasBoardBounds
+            || hasRelevantPlayerBounds
+            || hasLocalSeatAnchor;
+        public bool IsInitialized => isInitialized;
 
         private void Awake()
         {
@@ -172,6 +183,7 @@ namespace ConsoleCards.Presentation.Camera
             currentPitchDegrees = targetPitchDegrees = ClampPitch(initialPitchDegrees);
             currentDistance = targetDistance = Mathf.Clamp(initialDistance, minimumDistance, maximumDistance);
             currentOrthographicSize = targetOrthographicSize = State.OrthographicSize;
+            usesOrthographicProjection = false;
             isInitialized = true;
 
             ApplyCurrentPose();
@@ -314,6 +326,7 @@ namespace ConsoleCards.Presentation.Camera
             EnsureInitialized();
             ValidateFinite(pointerDelta, nameof(pointerDelta));
             InterruptTransitionForNavigation();
+            SwitchProjection(false, true);
             targetYawDegrees = NormalizeYaw(targetYawDegrees + (pointerDelta.x * orbitDegreesPerPixel));
             targetPitchDegrees = ClampPitch(targetPitchDegrees - (pointerDelta.y * orbitDegreesPerPixel));
         }
@@ -329,51 +342,93 @@ namespace ConsoleCards.Presentation.Camera
             }
 
             InterruptTransitionForNavigation();
-            float previousSize = targetOrthographicSize;
-            float nextSize = Mathf.Clamp(
-                previousSize + (inputDelta * zoomSpeed),
-                minimumOrthographicSize,
-                maximumOrthographicSize);
-            if (Mathf.Approximately(previousSize, nextSize))
+            float previousZoom = usesOrthographicProjection
+                ? targetOrthographicSize
+                : targetDistance;
+            float nextZoom = usesOrthographicProjection
+                ? Mathf.Clamp(
+                    previousZoom + (inputDelta * zoomSpeed),
+                    minimumOrthographicSize,
+                    maximumOrthographicSize)
+                : Mathf.Clamp(
+                    previousZoom + (inputDelta * zoomSpeed),
+                    minimumDistance,
+                    maximumDistance);
+            if (Mathf.Approximately(previousZoom, nextZoom))
             {
                 return;
             }
 
             if (TryResolveZoomWorldPoint(screenPosition, out Vector3 zoomPoint))
             {
-                float focusFraction = 1f - (nextSize / previousSize);
+                float focusFraction = 1f - (nextZoom / previousZoom);
                 Vector3 planarOffset = Vector3.ProjectOnPlane(zoomPoint - targetPivot, Vector3.up);
                 SetTargetPivot(targetPivot + (planarOffset * focusFraction * cursorZoomBias));
             }
 
-            targetOrthographicSize = nextSize;
-            targetDistance = DistanceForOrthographicSize(nextSize);
+            if (usesOrthographicProjection)
+            {
+                targetOrthographicSize = nextZoom;
+            }
+            else
+            {
+                targetDistance = nextZoom;
+                targetOrthographicSize = Mathf.Clamp(
+                    PerspectiveHalfHeight(nextZoom),
+                    minimumOrthographicSize,
+                    maximumOrthographicSize);
+            }
+
             State.SetFocus(coordinateConverter.ToTableCoordinate(targetPivot));
-            State.SetOrthographicSize(nextSize);
+            State.SetOrthographicSize(targetOrthographicSize);
         }
 
         public void ConfigureFramingTargets(
-            Bounds localBounds,
-            Bounds sharedBoardBounds,
+            Bounds? localBounds,
+            Bounds? sharedBoardBounds,
             float seatFacingYawDegrees,
             Bounds? mappingAreaBounds = null,
-            GameObject mappingAreaRoot = null)
+            GameObject mappingAreaRoot = null,
+            Vector3? seatAnchor = null,
+            Bounds? surroundingPlayerBounds = null)
         {
             EnsureInitialized();
-            ValidateBounds(localBounds, nameof(localBounds));
-            ValidateBounds(sharedBoardBounds, nameof(sharedBoardBounds));
+            if (localBounds.HasValue)
+            {
+                ValidateBounds(localBounds.Value, nameof(localBounds));
+            }
+
+            if (sharedBoardBounds.HasValue)
+            {
+                ValidateBounds(sharedBoardBounds.Value, nameof(sharedBoardBounds));
+            }
+
             ValidateFinite(seatFacingYawDegrees, nameof(seatFacingYawDegrees));
             if (mappingAreaBounds.HasValue)
             {
                 ValidateBounds(mappingAreaBounds.Value, nameof(mappingAreaBounds));
             }
 
-            localPlayerBounds = localBounds;
-            boardBounds = sharedBoardBounds;
+            if (seatAnchor.HasValue && !IsFinite(seatAnchor.Value))
+            {
+                throw new ArgumentOutOfRangeException(nameof(seatAnchor));
+            }
+
+            if (surroundingPlayerBounds.HasValue)
+            {
+                ValidateBounds(surroundingPlayerBounds.Value, nameof(surroundingPlayerBounds));
+            }
+
+            localPlayerBounds = localBounds.GetValueOrDefault();
+            boardBounds = sharedBoardBounds.GetValueOrDefault();
+            relevantPlayerBounds = surroundingPlayerBounds.GetValueOrDefault();
             controllerMappingBounds = mappingAreaBounds.GetValueOrDefault();
-            hasLocalPlayerBounds = true;
-            hasBoardBounds = true;
+            localSeatAnchor = seatAnchor.GetValueOrDefault();
+            hasLocalPlayerBounds = localBounds.HasValue;
+            hasBoardBounds = sharedBoardBounds.HasValue;
+            hasRelevantPlayerBounds = surroundingPlayerBounds.HasValue;
             hasControllerMappingBounds = mappingAreaBounds.HasValue;
+            hasLocalSeatAnchor = seatAnchor.HasValue;
             localSeatYawDegrees = NormalizeYaw(seatFacingYawDegrees);
             controllerMappingAreaRoot = mappingAreaRoot;
         }
@@ -382,10 +437,14 @@ namespace ConsoleCards.Presentation.Camera
         {
             hasLocalPlayerBounds = false;
             hasBoardBounds = false;
+            hasRelevantPlayerBounds = false;
             hasControllerMappingBounds = false;
+            hasLocalSeatAnchor = false;
             localPlayerBounds = default;
             boardBounds = default;
+            relevantPlayerBounds = default;
             controllerMappingBounds = default;
+            localSeatAnchor = default;
             localSeatYawDegrees = 0f;
             if (controllerMappingAreaRoot != null)
             {
@@ -399,10 +458,23 @@ namespace ConsoleCards.Presentation.Camera
         {
             EnsureInitialized();
             TabletopCameraPresetTuning tuning = ResolvePreset(preset);
-            if (!TryResolvePresetBounds(tuning, out Bounds framingBounds))
+            if (!TryResolvePresetBounds(
+                    preset,
+                    tuning,
+                    out Bounds framingBounds,
+                    out string boundsSource,
+                    out string failureReason))
             {
+                LogPresetDiagnostic(
+                    $"[Camera] {preset} bounds found: false "
+                    + $"(local={hasLocalPlayerBounds}, seat={hasLocalSeatAnchor}, "
+                    + $"board={hasBoardBounds}, players={hasRelevantPlayerBounds}, "
+                    + $"mapping={hasControllerMappingBounds})");
+                LogPresetDiagnostic($"[Camera] {preset} preset failed: {failureReason}");
                 return false;
             }
+
+            LogPresetDiagnostic($"[Camera] {preset} bounds found: true ({boundsSource})");
 
             float pitch = ClampPitch(tuning.PitchDegrees);
             float yaw = NormalizeYaw(localSeatYawDegrees + tuning.YawOffsetDegrees);
@@ -411,33 +483,74 @@ namespace ConsoleCards.Presentation.Camera
                 framingBounds,
                 rotation,
                 tuning.FramingPadding);
+            bool useOrthographicProjection = preset == TabletopCameraPreset.TopDown
+                && topDownUsesOrthographic;
+            float fittedDistance = useOrthographicProjection
+                ? DistanceForOrthographicSize(size)
+                : CalculatePerspectiveDistance(
+                    framingBounds,
+                    rotation,
+                    tuning.FramingPadding);
             float distance = Mathf.Clamp(
-                DistanceForOrthographicSize(size) * Mathf.Max(0.01f, tuning.DistanceMultiplier),
+                fittedDistance * Mathf.Max(0.01f, tuning.DistanceMultiplier),
                 minimumDistance,
                 maximumDistance);
             Vector3 pivot = framingBounds.center;
             pivot.y = tabletopHeight;
+            Vector3 targetPosition = pivot + (rotation * (Vector3.back * distance));
 
-            SetPresetTarget(pivot, yaw, pitch, distance, size, immediate);
+            LogPresetDiagnostic($"[Camera] {preset} pivot: {pivot}");
+            LogPresetDiagnostic(
+                $"[Camera] {preset} distance: {distance:F3}; orthographic size: {size:F3}");
+            LogPresetDiagnostic($"[Camera] {preset} rotation: {rotation.eulerAngles}");
+            LogPresetDiagnostic(
+                $"[Camera] {preset} current position: {targetCamera.transform.position}; "
+                + $"target position: {targetPosition}");
+
+            SetPresetTarget(
+                pivot,
+                yaw,
+                pitch,
+                distance,
+                size,
+                useOrthographicProjection,
+                immediate);
             if (controllerMappingAreaRoot != null)
             {
-                controllerMappingAreaRoot.SetActive(tuning.ShowControllerMappingArea);
+                controllerMappingAreaRoot.SetActive(
+                    tuning.ShowControllerMappingArea && hasControllerMappingBounds);
             }
+
+            LogPresetDiagnostic(
+                $"[Camera] Starting {preset} transition: {transitionActive}; "
+                + $"immediate={immediate || presetTransitionDuration <= 0f}");
 
             return true;
         }
 
-        public bool ShowCloseView(bool immediate = false) =>
-            ShowPreset(TabletopCameraPreset.Close, immediate);
+        public bool ShowCloseView(bool immediate = false)
+        {
+            LogPresetApplication("[Camera] Applying Close preset");
+            return ShowPreset(TabletopCameraPreset.Close, immediate);
+        }
 
-        public bool ShowMidView(bool immediate = false) =>
-            ShowPreset(TabletopCameraPreset.Mid, immediate);
+        public bool ShowMidView(bool immediate = false)
+        {
+            LogPresetApplication("[Camera] Applying Mid preset");
+            return ShowPreset(TabletopCameraPreset.Mid, immediate);
+        }
 
-        public bool ShowBoardView(bool immediate = false) =>
-            ShowPreset(TabletopCameraPreset.Board, immediate);
+        public bool ShowBoardView(bool immediate = false)
+        {
+            LogPresetApplication("[Camera] Applying Board preset");
+            return ShowPreset(TabletopCameraPreset.Board, immediate);
+        }
 
-        public bool ShowTopDownView(bool immediate = false) =>
-            ShowPreset(TabletopCameraPreset.TopDown, immediate);
+        public bool ShowTopDownView(bool immediate = false)
+        {
+            LogPresetApplication("[Camera] Applying TopDown preset");
+            return ShowPreset(TabletopCameraPreset.TopDown, immediate);
+        }
 
         public bool ReturnToLocalPlayer(bool immediate = false) => ShowCloseView(immediate);
 
@@ -467,6 +580,7 @@ namespace ConsoleCards.Presentation.Camera
                 targetPitchDegrees,
                 DistanceForOrthographicSize(size),
                 size,
+                false,
                 false);
         }
 
@@ -486,8 +600,10 @@ namespace ConsoleCards.Presentation.Camera
             float pitch,
             float distance,
             float orthographicSize,
+            bool useOrthographicProjection,
             bool immediate)
         {
+            SwitchProjection(useOrthographicProjection, true);
             targetPivot = SanitizePivot(pivot);
             targetYawDegrees = NormalizeYaw(yaw);
             targetPitchDegrees = ClampPitch(pitch);
@@ -523,44 +639,149 @@ namespace ConsoleCards.Presentation.Camera
         }
 
         private bool TryResolvePresetBounds(
+            TabletopCameraPreset preset,
             TabletopCameraPresetTuning tuning,
-            out Bounds resolvedBounds)
+            out Bounds resolvedBounds,
+            out string source,
+            out string failureReason)
         {
-            bool hasBounds = false;
             resolvedBounds = default;
-            if (tuning.IncludeLocalPlayerArea && hasLocalPlayerBounds)
-            {
-                resolvedBounds = localPlayerBounds;
-                hasBounds = true;
-            }
+            source = string.Empty;
+            failureReason = string.Empty;
 
-            if (tuning.IncludeBoardArea && hasBoardBounds)
+            switch (preset)
             {
-                if (hasBounds)
-                {
-                    resolvedBounds.Encapsulate(boardBounds);
-                }
-                else
-                {
+                case TabletopCameraPreset.Close:
+                    if (hasLocalPlayerBounds)
+                    {
+                        resolvedBounds = localPlayerBounds;
+                        source = "local Hand/Console";
+                    }
+                    else if (hasLocalSeatAnchor)
+                    {
+                        resolvedBounds = CreateAnchorBounds(localSeatAnchor);
+                        source = "local Seat anchor fallback";
+                    }
+                    else
+                    {
+                        failureReason = "no local Hand, Console, or Seat anchor";
+                        return false;
+                    }
+
+                    EncapsulateMappingAreaIfRequested(tuning, ref resolvedBounds, ref source);
+                    return true;
+
+                case TabletopCameraPreset.Mid:
+                    bool hasMidBounds = false;
+                    if (hasLocalPlayerBounds)
+                    {
+                        resolvedBounds = localPlayerBounds;
+                        source = "local Hand/Console";
+                        hasMidBounds = true;
+                    }
+
+                    if (hasBoardBounds)
+                    {
+                        Encapsulate(ref resolvedBounds, ref hasMidBounds, boardBounds);
+                        source = AppendSource(source, "Board/play area");
+                    }
+                    else if (hasMidBounds)
+                    {
+                        source = AppendSource(source, "authored Mid fallback");
+                    }
+
+                    if (!hasLocalPlayerBounds && hasLocalSeatAnchor)
+                    {
+                        Encapsulate(
+                            ref resolvedBounds,
+                            ref hasMidBounds,
+                            CreateAnchorBounds(localSeatAnchor));
+                        source = AppendSource(source, "local Seat anchor fallback");
+                    }
+
+                    if (!hasMidBounds)
+                    {
+                        failureReason = "no local Hand/Console, local Seat anchor, or Board/play-area bounds";
+                        return false;
+                    }
+
+                    EncapsulateMappingAreaIfRequested(tuning, ref resolvedBounds, ref source);
+                    return true;
+
+                case TabletopCameraPreset.Board:
+                    if (!hasBoardBounds)
+                    {
+                        failureReason = "no active Board/play-area bounds";
+                        return false;
+                    }
+
                     resolvedBounds = boardBounds;
-                    hasBounds = true;
-                }
-            }
+                    source = "Board/play area";
+                    if (hasRelevantPlayerBounds)
+                    {
+                        resolvedBounds.Encapsulate(relevantPlayerBounds);
+                        source = AppendSource(source, "relevant Player areas");
+                    }
 
+                    return true;
+
+                case TabletopCameraPreset.TopDown:
+                    if (hasBoardBounds)
+                    {
+                        resolvedBounds = boardBounds;
+                        source = "Board/play area";
+                    }
+                    else
+                    {
+                        resolvedBounds = CreateAnchorBounds(targetPivot);
+                        source = "current Camera pivot fallback";
+                    }
+
+                    return true;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(preset));
+            }
+        }
+
+        private void EncapsulateMappingAreaIfRequested(
+            TabletopCameraPresetTuning tuning,
+            ref Bounds resolvedBounds,
+            ref string source)
+        {
             if (tuning.ShowControllerMappingArea && hasControllerMappingBounds)
             {
-                if (hasBounds)
-                {
-                    resolvedBounds.Encapsulate(controllerMappingBounds);
-                }
-                else
-                {
-                    resolvedBounds = controllerMappingBounds;
-                    hasBounds = true;
-                }
+                resolvedBounds.Encapsulate(controllerMappingBounds);
+                source = AppendSource(source, "Controller Mapping area");
+            }
+        }
+
+        private Bounds CreateAnchorBounds(Vector3 anchor)
+        {
+            Vector3 center = SanitizePivot(anchor);
+            return new Bounds(center, new Vector3(0f, 0.1f, 0f));
+        }
+
+        private static void Encapsulate(
+            ref Bounds aggregate,
+            ref bool hasAggregate,
+            Bounds addition)
+        {
+            if (hasAggregate)
+            {
+                aggregate.Encapsulate(addition);
+                return;
             }
 
-            return hasBounds;
+            aggregate = addition;
+            hasAggregate = true;
+        }
+
+        private static string AppendSource(string current, string addition)
+        {
+            return string.IsNullOrEmpty(current)
+                ? addition
+                : $"{current} + {addition}";
         }
 
         private float CalculateOrthographicSize(Bounds bounds, Quaternion rotation, float padding)
@@ -580,6 +801,34 @@ namespace ConsoleCards.Presentation.Camera
             float required = Mathf.Max(projectedHalfHeight, projectedHalfWidth / aspect)
                 + Mathf.Max(0f, padding);
             return Mathf.Clamp(required, minimumOrthographicSize, maximumOrthographicSize);
+        }
+
+        private float CalculatePerspectiveDistance(
+            Bounds bounds,
+            Quaternion rotation,
+            float padding)
+        {
+            Vector3 right = rotation * Vector3.right;
+            Vector3 up = rotation * Vector3.up;
+            Vector3 forward = rotation * Vector3.forward;
+            Vector3 extents = bounds.extents;
+            float projectedHalfWidth = ProjectExtent(extents, right) + Mathf.Max(0f, padding);
+            float projectedHalfHeight = ProjectExtent(extents, up) + Mathf.Max(0f, padding);
+            float projectedHalfDepth = ProjectExtent(extents, forward);
+            float verticalTangent = Mathf.Tan(perspectiveFieldOfView * 0.5f * Mathf.Deg2Rad);
+            float aspect = targetCamera.aspect > 0f ? targetCamera.aspect : 1f;
+            float horizontalTangent = verticalTangent * aspect;
+            float framingDistance = Mathf.Max(
+                projectedHalfHeight / verticalTangent,
+                projectedHalfWidth / horizontalTangent);
+            return projectedHalfDepth + framingDistance;
+        }
+
+        private static float ProjectExtent(Vector3 extents, Vector3 axis)
+        {
+            return Mathf.Abs(axis.x) * extents.x
+                + Mathf.Abs(axis.y) * extents.y
+                + Mathf.Abs(axis.z) * extents.z;
         }
 
         private bool TryResolveZoomWorldPoint(Vector2 screenPosition, out Vector3 worldPoint)
@@ -634,10 +883,55 @@ namespace ConsoleCards.Presentation.Camera
             targetCamera.transform.localPosition = Vector3.back
                 * Mathf.Clamp(currentDistance, minimumDistance, maximumDistance);
             targetCamera.transform.localRotation = Quaternion.identity;
+            targetCamera.orthographic = usesOrthographicProjection;
+            targetCamera.fieldOfView = perspectiveFieldOfView;
             targetCamera.orthographicSize = Mathf.Clamp(
                 currentOrthographicSize,
                 minimumOrthographicSize,
                 maximumOrthographicSize);
+        }
+
+        private void SwitchProjection(bool useOrthographicProjection, bool preserveVisibleScale)
+        {
+            if (usesOrthographicProjection == useOrthographicProjection)
+            {
+                return;
+            }
+
+            if (preserveVisibleScale)
+            {
+                if (useOrthographicProjection)
+                {
+                    currentOrthographicSize = Mathf.Clamp(
+                        PerspectiveHalfHeight(currentDistance),
+                        minimumOrthographicSize,
+                        maximumOrthographicSize);
+                    targetOrthographicSize = currentOrthographicSize;
+                }
+                else
+                {
+                    currentDistance = Mathf.Clamp(
+                        PerspectiveDistanceForHalfHeight(currentOrthographicSize),
+                        minimumDistance,
+                        maximumDistance);
+                    targetDistance = currentDistance;
+                }
+            }
+
+            usesOrthographicProjection = useOrthographicProjection;
+            ApplyCurrentPose();
+        }
+
+        private float PerspectiveHalfHeight(float distance)
+        {
+            return Mathf.Max(
+                0.01f,
+                distance * Mathf.Tan(perspectiveFieldOfView * 0.5f * Mathf.Deg2Rad));
+        }
+
+        private float PerspectiveDistanceForHalfHeight(float halfHeight)
+        {
+            return halfHeight / Mathf.Tan(perspectiveFieldOfView * 0.5f * Mathf.Deg2Rad);
         }
 
         private void InterruptTransitionForNavigation()
@@ -750,12 +1044,6 @@ namespace ConsoleCards.Presentation.Camera
                 return false;
             }
 
-            if (!targetCamera.orthographic)
-            {
-                LogConfigurationError("TabletopCameraController requires an orthographic target Camera.");
-                return false;
-            }
-
             if (!IsFinite(worldUnitsPerTableUnit) || worldUnitsPerTableUnit <= 0f)
             {
                 LogConfigurationError("TabletopCameraController requires finite worldUnitsPerTableUnit greater than zero.");
@@ -807,7 +1095,10 @@ namespace ConsoleCards.Presentation.Camera
                 || motionSmoothing < 0f
                 || !IsFinite(presetTransitionDuration)
                 || presetTransitionDuration < 0f
-                || !IsFinite(tabletopHeight))
+                || !IsFinite(tabletopHeight)
+                || !IsFinite(perspectiveFieldOfView)
+                || perspectiveFieldOfView <= 1f
+                || perspectiveFieldOfView >= 179f)
             {
                 LogConfigurationError("TabletopCameraController navigation tuning must be finite and non-negative.");
                 return false;
@@ -857,6 +1148,20 @@ namespace ConsoleCards.Presentation.Camera
         private void LogConfigurationError(string message)
         {
             Debug.LogError(message, this);
+        }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void LogPresetApplication(string message)
+        {
+            Debug.Log(message, this);
+        }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void LogPresetDiagnostic(string message)
+        {
+            Debug.Log(message, this);
         }
 
         private static void ValidateBounds(Bounds bounds, string parameterName)

@@ -6871,11 +6871,6 @@ namespace ConsoleCards.Presentation.Prototype
             RequireReference(objectInputAdapter, nameof(objectInputAdapter));
             RequireReference(inputFrameCoordinator, nameof(inputFrameCoordinator));
 
-            if (!targetCamera.orthographic)
-            {
-                throw new InvalidOperationException("TabletopPrototypeComposition requires an orthographic Camera.");
-            }
-
             ValidateFiniteGreaterThanZero(maximumHitDistance, nameof(maximumHitDistance));
             ValidateFiniteGreaterThanOrEqualToZero(dragThresholdPixels, nameof(dragThresholdPixels));
             ValidateFiniteGreaterThanZero(worldUnitsPerTableUnit, nameof(worldUnitsPerTableUnit));
@@ -7465,29 +7460,47 @@ namespace ConsoleCards.Presentation.Prototype
         {
             if (cameraInputAdapter == null
                 || cameraInputAdapter.CameraController == null
-                || coordinateConverter == null
-                || localSeatLayout == null
-                || matchState == null
-                || centralPlayAreaId.IsEmpty)
+                || coordinateConverter == null)
             {
                 return;
             }
 
-            Bounds localBounds = CreatePresentationBounds(sceneHandVisual.transform, 0.75f);
-            localBounds.Encapsulate(CreatePresentationBounds(sceneConsoleView.transform, 0.75f));
+            Bounds? localBounds = null;
+            if (sceneHandVisual != null && sceneHandVisual.gameObject.activeInHierarchy)
+            {
+                EncapsulateBounds(
+                    ref localBounds,
+                    CreatePresentationBounds(sceneHandVisual.transform, 0.75f));
+            }
 
-            PlayAreaState playArea = matchState.GetPlayArea(centralPlayAreaId);
-            Bounds sharedBounds = CreateWorldBounds(playArea.Bounds);
+            if (sceneConsoleView != null && sceneConsoleView.gameObject.activeInHierarchy)
+            {
+                EncapsulateBounds(
+                    ref localBounds,
+                    CreatePresentationBounds(sceneConsoleView.transform, 0.75f));
+            }
+
+            Bounds? sharedBounds = null;
+            if (matchState != null && !centralPlayAreaId.IsEmpty)
+            {
+                PlayAreaState playArea = matchState.GetPlayArea(centralPlayAreaId);
+                sharedBounds = CreateWorldBounds(playArea.Bounds);
+            }
+
+            Bounds? surroundingPlayerBounds = null;
             if (playerLayout != null)
             {
                 for (int i = 0; i < playerLayout.Seats.Count; i++)
                 {
                     PlayerSeatLayoutEntry seat = playerLayout.Seats[i];
-                    sharedBounds.Encapsulate(
+                    EncapsulateBounds(
+                        ref surroundingPlayerBounds,
                         coordinateConverter.ToWorldPosition(seat.PlayerZonePose.Position));
-                    sharedBounds.Encapsulate(
+                    EncapsulateBounds(
+                        ref surroundingPlayerBounds,
                         coordinateConverter.ToWorldPosition(seat.HandAnchorPose.Position));
-                    sharedBounds.Encapsulate(
+                    EncapsulateBounds(
+                        ref surroundingPlayerBounds,
                         coordinateConverter.ToWorldPosition(seat.ConsoleAnchorPose.Position));
                 }
             }
@@ -7497,7 +7510,8 @@ namespace ConsoleCards.Presentation.Prototype
                 ConsoleView playerConsole = playerConsoleViews[i];
                 if (playerConsole != null && playerConsole.gameObject.activeInHierarchy)
                 {
-                    sharedBounds.Encapsulate(
+                    EncapsulateBounds(
+                        ref surroundingPlayerBounds,
                         CreatePresentationBounds(playerConsole.transform, 0.5f));
                 }
             }
@@ -7508,20 +7522,57 @@ namespace ConsoleCards.Presentation.Prototype
                 mappingBounds = CreatePresentationBounds(sceneControllerMappingArea, 0.5f);
             }
 
-            Quaternion seatRotation = coordinateConverter.ToWorldRotation(
-                new TabletopPose(
-                    TableCoordinate.Zero,
-                    localSeatLayout.FacingRotationDegrees,
-                    0,
-                    0));
+            float seatYawDegrees = 0f;
+            Vector3? localSeatAnchor = null;
+            if (localSeatLayout != null)
+            {
+                Quaternion seatRotation = coordinateConverter.ToWorldRotation(
+                    new TabletopPose(
+                        TableCoordinate.Zero,
+                        localSeatLayout.FacingRotationDegrees,
+                        0,
+                        0));
+                seatYawDegrees = seatRotation.eulerAngles.y;
+                localSeatAnchor = coordinateConverter.ToWorldPosition(
+                    localSeatLayout.PlayerZonePose.Position);
+            }
+
             cameraInputAdapter.CameraController.ConfigureFramingTargets(
                 localBounds,
                 sharedBounds,
-                seatRotation.eulerAngles.y,
+                seatYawDegrees,
                 mappingBounds,
                 sceneControllerMappingArea != null
                     ? sceneControllerMappingArea.gameObject
-                    : null);
+                    : null,
+                localSeatAnchor,
+                surroundingPlayerBounds);
+        }
+
+        private static void EncapsulateBounds(ref Bounds? aggregate, Bounds addition)
+        {
+            if (aggregate.HasValue)
+            {
+                Bounds expanded = aggregate.Value;
+                expanded.Encapsulate(addition);
+                aggregate = expanded;
+                return;
+            }
+
+            aggregate = addition;
+        }
+
+        private static void EncapsulateBounds(ref Bounds? aggregate, Vector3 point)
+        {
+            if (aggregate.HasValue)
+            {
+                Bounds expanded = aggregate.Value;
+                expanded.Encapsulate(point);
+                aggregate = expanded;
+                return;
+            }
+
+            aggregate = new Bounds(point, Vector3.zero);
         }
 
         private Bounds CreateWorldBounds(TabletopBounds bounds)

@@ -2961,8 +2961,8 @@ Camera:
     height: 1
   near clip plane: 0.1
   far clip plane: 100
-  field of view: 60
-  orthographic: 1
+  field of view: 50
+  orthographic: 0
   orthographic size: 5
   m_Depth: -1
   m_CullingMask:
@@ -3222,6 +3222,8 @@ MonoBehaviour:
   zoomWorldMask:
     serializedVersion: 2
     m_Bits: 4294967295
+  perspectiveFieldOfView: 50
+  topDownUsesOrthographic: 1
   minimumOrthographicSize: 2
   maximumOrthographicSize: 20
   initialOrthographicSize: 5

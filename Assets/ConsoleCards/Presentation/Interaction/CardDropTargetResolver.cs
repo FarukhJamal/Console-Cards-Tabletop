@@ -34,11 +34,6 @@ namespace ConsoleCards.Presentation.Interaction
                 throw new ArgumentNullException(nameof(targetCamera));
             }
 
-            if (!targetCamera.orthographic)
-            {
-                throw new ArgumentException("CardDropTargetResolver requires an orthographic Camera.", nameof(targetCamera));
-            }
-
             if (pointerProjector == null)
             {
                 throw new ArgumentNullException(nameof(pointerProjector));

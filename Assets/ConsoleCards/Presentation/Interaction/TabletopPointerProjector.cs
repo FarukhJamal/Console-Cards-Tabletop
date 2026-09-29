@@ -24,11 +24,6 @@ namespace ConsoleCards.Presentation.Interaction
                 throw new ArgumentNullException(nameof(targetCamera));
             }
 
-            if (!targetCamera.orthographic)
-            {
-                throw new ArgumentException("TabletopPointerProjector requires an orthographic Camera.", nameof(targetCamera));
-            }
-
             if (coordinateConverter == null)
             {
                 throw new ArgumentNullException(nameof(coordinateConverter));

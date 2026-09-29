@@ -26,11 +26,6 @@ namespace ConsoleCards.Presentation.Interaction
                 throw new ArgumentNullException(nameof(targetCamera));
             }
 
-            if (!targetCamera.orthographic)
-            {
-                throw new ArgumentException("TabletopObjectHitResolver requires an orthographic Camera.", nameof(targetCamera));
-            }
-
             if (!IsFinite(maximumDistance) || maximumDistance <= 0f)
             {
                 throw new ArgumentOutOfRangeException(nameof(maximumDistance));
