@@ -48,7 +48,7 @@ namespace ConsoleCards.Presentation.Camera
         [SerializeField] internal Transform cameraRig;
         [SerializeField] internal float worldUnitsPerTableUnit = 1f;
         [SerializeField] internal float cameraHeight = 10f;
-        [SerializeField] internal float initialDistance = 12f;
+        [SerializeField] internal float initialDistance = 16f;
         [SerializeField] internal float initialPitchDegrees = 78f;
         [SerializeField] internal float initialYawDegrees;
         [SerializeField] internal float tabletopHeight;
@@ -62,7 +62,7 @@ namespace ConsoleCards.Presentation.Camera
         [SerializeField] internal float initialOrthographicSize = 5f;
         [SerializeField] internal float minimumDistance = 3f;
         [SerializeField] internal float maximumDistance = 32f;
-        [SerializeField] internal float zoomSpeed = 1f;
+        [SerializeField] internal float zoomSpeed = 22.5f;
         [SerializeField, Range(0f, 1f)] internal float cursorZoomBias = 0.85f;
 
         [Header("Navigation")]
@@ -72,6 +72,7 @@ namespace ConsoleCards.Presentation.Camera
         [SerializeField] internal float maximumPitchDegrees = 89.5f;
         [SerializeField] internal float motionSmoothing = 0.09f;
         [SerializeField] internal float presetTransitionDuration = 0.32f;
+        [SerializeField] internal float initialGameFramingDistanceMultiplier = 0.85f;
 
         [Header("Authored Views")]
         [SerializeField] internal TabletopCameraPresetTuning closeView = new TabletopCameraPresetTuning
@@ -456,25 +457,31 @@ namespace ConsoleCards.Presentation.Camera
 
         public bool ShowPreset(TabletopCameraPreset preset, bool immediate = false)
         {
+            return ShowPreset(preset, immediate, 1f);
+        }
+
+        private bool ShowPreset(
+            TabletopCameraPreset preset,
+            bool immediate,
+            float framingDistanceMultiplier)
+        {
             EnsureInitialized();
+            ValidateFinite(framingDistanceMultiplier, nameof(framingDistanceMultiplier));
+            if (framingDistanceMultiplier <= 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(framingDistanceMultiplier));
+            }
+
             TabletopCameraPresetTuning tuning = ResolvePreset(preset);
             if (!TryResolvePresetBounds(
                     preset,
                     tuning,
                     out Bounds framingBounds,
-                    out string boundsSource,
-                    out string failureReason))
+                    out _,
+                    out _))
             {
-                LogPresetDiagnostic(
-                    $"[Camera] {preset} bounds found: false "
-                    + $"(local={hasLocalPlayerBounds}, seat={hasLocalSeatAnchor}, "
-                    + $"board={hasBoardBounds}, players={hasRelevantPlayerBounds}, "
-                    + $"mapping={hasControllerMappingBounds})");
-                LogPresetDiagnostic($"[Camera] {preset} preset failed: {failureReason}");
                 return false;
             }
-
-            LogPresetDiagnostic($"[Camera] {preset} bounds found: true ({boundsSource})");
 
             float pitch = ClampPitch(tuning.PitchDegrees);
             float yaw = NormalizeYaw(localSeatYawDegrees + tuning.YawOffsetDegrees);
@@ -492,20 +499,13 @@ namespace ConsoleCards.Presentation.Camera
                     rotation,
                     tuning.FramingPadding);
             float distance = Mathf.Clamp(
-                fittedDistance * Mathf.Max(0.01f, tuning.DistanceMultiplier),
+                fittedDistance
+                    * Mathf.Max(0.01f, tuning.DistanceMultiplier)
+                    * framingDistanceMultiplier,
                 minimumDistance,
                 maximumDistance);
             Vector3 pivot = framingBounds.center;
             pivot.y = tabletopHeight;
-            Vector3 targetPosition = pivot + (rotation * (Vector3.back * distance));
-
-            LogPresetDiagnostic($"[Camera] {preset} pivot: {pivot}");
-            LogPresetDiagnostic(
-                $"[Camera] {preset} distance: {distance:F3}; orthographic size: {size:F3}");
-            LogPresetDiagnostic($"[Camera] {preset} rotation: {rotation.eulerAngles}");
-            LogPresetDiagnostic(
-                $"[Camera] {preset} current position: {targetCamera.transform.position}; "
-                + $"target position: {targetPosition}");
 
             SetPresetTarget(
                 pivot,
@@ -521,35 +521,48 @@ namespace ConsoleCards.Presentation.Camera
                     tuning.ShowControllerMappingArea && hasControllerMappingBounds);
             }
 
-            LogPresetDiagnostic(
-                $"[Camera] Starting {preset} transition: {transitionActive}; "
-                + $"immediate={immediate || presetTransitionDuration <= 0f}");
-
             return true;
         }
 
         public bool ShowCloseView(bool immediate = false)
         {
-            LogPresetApplication("[Camera] Applying Close preset");
             return ShowPreset(TabletopCameraPreset.Close, immediate);
         }
 
         public bool ShowMidView(bool immediate = false)
         {
-            LogPresetApplication("[Camera] Applying Mid preset");
             return ShowPreset(TabletopCameraPreset.Mid, immediate);
         }
 
         public bool ShowBoardView(bool immediate = false)
         {
-            LogPresetApplication("[Camera] Applying Board preset");
             return ShowPreset(TabletopCameraPreset.Board, immediate);
         }
 
         public bool ShowTopDownView(bool immediate = false)
         {
-            LogPresetApplication("[Camera] Applying TopDown preset");
             return ShowPreset(TabletopCameraPreset.TopDown, immediate);
+        }
+
+        public bool ShowInitialGameView(bool immediate = false)
+        {
+            return ShowPreset(
+                TabletopCameraPreset.Board,
+                immediate,
+                initialGameFramingDistanceMultiplier);
+        }
+
+        public void ShowDefaultView(bool immediate = false)
+        {
+            EnsureInitialized();
+            SetPresetTarget(
+                coordinateConverter.ToWorldPosition(TableCoordinate.Zero),
+                initialYawDegrees,
+                initialPitchDegrees,
+                initialDistance,
+                initialOrthographicSize,
+                false,
+                immediate);
         }
 
         public bool ReturnToLocalPlayer(bool immediate = false) => ShowCloseView(immediate);
@@ -1095,6 +1108,8 @@ namespace ConsoleCards.Presentation.Camera
                 || motionSmoothing < 0f
                 || !IsFinite(presetTransitionDuration)
                 || presetTransitionDuration < 0f
+                || !IsFinite(initialGameFramingDistanceMultiplier)
+                || initialGameFramingDistanceMultiplier <= 0f
                 || !IsFinite(tabletopHeight)
                 || !IsFinite(perspectiveFieldOfView)
                 || perspectiveFieldOfView <= 1f
@@ -1148,20 +1163,6 @@ namespace ConsoleCards.Presentation.Camera
         private void LogConfigurationError(string message)
         {
             Debug.LogError(message, this);
-        }
-
-        [System.Diagnostics.Conditional("UNITY_EDITOR")]
-        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
-        private void LogPresetApplication(string message)
-        {
-            Debug.Log(message, this);
-        }
-
-        [System.Diagnostics.Conditional("UNITY_EDITOR")]
-        [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
-        private void LogPresetDiagnostic(string message)
-        {
-            Debug.Log(message, this);
         }
 
         private static void ValidateBounds(Bounds bounds, string parameterName)

@@ -497,6 +497,7 @@ namespace ConsoleCards.Presentation.Prototype
                     : activeSession.CurrentMatch;
                 localPlayerId = activeSession.Request.RequestingPlayerId;
                 cameraInputAdapter.CameraController.ClearFramingTargets();
+                cameraInputAdapter.CameraController.ShowDefaultView();
                 BuildToolboxRuntime();
                 RebuildEmptyTableLooseObjectPresentation();
 
@@ -7641,7 +7642,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ProjectTrapFloorCameraBookmark()
         {
-            if (cameraInputAdapter.CameraController.ShowBoardView())
+            if (cameraInputAdapter.CameraController.ShowInitialGameView())
             {
                 return;
             }

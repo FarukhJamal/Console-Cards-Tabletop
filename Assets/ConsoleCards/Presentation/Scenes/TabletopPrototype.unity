@@ -3215,7 +3215,7 @@ MonoBehaviour:
   cameraRig: {fileID: 1862448551}
   worldUnitsPerTableUnit: 1
   cameraHeight: 14.3
-  initialDistance: 12
+  initialDistance: 16
   initialPitchDegrees: 78
   initialYawDegrees: 0
   tabletopHeight: 14.3
@@ -3229,7 +3229,7 @@ MonoBehaviour:
   initialOrthographicSize: 5
   minimumDistance: 3
   maximumDistance: 32
-  zoomSpeed: 1
+  zoomSpeed: 22.5
   cursorZoomBias: 0.85
   orbitDegreesPerPixel: 0.18
   panDistanceScale: 0.085
@@ -3237,6 +3237,7 @@ MonoBehaviour:
   maximumPitchDegrees: 89.5
   motionSmoothing: 0.09
   presetTransitionDuration: 0.32
+  initialGameFramingDistanceMultiplier: 0.85
   closeView:
     pitchDegrees: 78
     yawOffsetDegrees: 0
