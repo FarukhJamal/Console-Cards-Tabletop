@@ -211,6 +211,7 @@ namespace ConsoleCards.Presentation.Interaction
                 {
                     cardView.PhysicalObject.BeginContainedPickup(consoleSlotView.ExtractionLift);
                 }
+                cardView.PhysicalObject?.PreparePointerAnchor(initialScreenPosition);
                 feedback?.Begin(sourceContainerId);
                 return true;
             }

@@ -58,6 +58,9 @@ namespace ConsoleCards.Presentation.UI
             }
 
             ValidateReferences();
+            gameObject.SetActive(true);
+            returnButton.gameObject.SetActive(true);
+            returnButton.interactable = true;
             sessionTitleLabel.text = sessionTitle;
             undoButton.onClick.RemoveAllListeners();
             undoButton.onClick.AddListener(undo.Invoke);
@@ -67,6 +70,11 @@ namespace ConsoleCards.Presentation.UI
             resetButton.onClick.AddListener(resetSession.Invoke);
             returnButton.onClick.RemoveAllListeners();
             returnButton.onClick.AddListener(openGameTemplates.Invoke);
+
+            if (transform is RectTransform toolbarRect)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(toolbarRect);
+            }
         }
 
         public void SetUndoState(bool enabled, string label)

@@ -269,6 +269,7 @@ namespace ConsoleCards.Presentation.Interaction
                 stateMachine.BeginPress(resolvedView.ObjectId, screenPosition);
                 activeView = resolvedView;
                 previewSession.BeginPress(resolvedView);
+                resolvedView.PhysicalObject?.PreparePointerAnchor(screenPosition);
                 if (resolvedView is CardView)
                 {
                     cardDragFeedback?.Begin(ContainerId.Empty);
