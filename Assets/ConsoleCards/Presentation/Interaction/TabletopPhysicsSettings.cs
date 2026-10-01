@@ -32,15 +32,23 @@ namespace ConsoleCards.Presentation.Interaction
         }
 
         /// <summary>Assign to every PhysicalTabletopSurface collider (table, boards, mats).</summary>
-        public static PhysicsMaterial Table => tableMaterial ??= Create("TabletopSurface", 0.5f, 0.6f, 0.20f);
+        public static PhysicsMaterial Table => tableMaterial != null ? tableMaterial : (tableMaterial = Create("TabletopSurface", 0.5f, 0.6f, 0.20f));
 
         /// <summary>Bouncy, moderate friction: dice should hop and tumble.</summary>
-        public static PhysicsMaterial Die => dieMaterial ??= Create("TabletopDie", 0.4f, 0.5f, 0.38f);
+        public static PhysicsMaterial Die => dieMaterial != null ? dieMaterial : (dieMaterial = Create("TabletopDie", 0.4f, 0.5f, 0.38f));
 
         /// <summary>Cards, pawns, tokens: grippy, almost no bounce.</summary>
-        public static PhysicsMaterial Piece => pieceMaterial ??= Create("TabletopPiece", 0.6f, 0.7f, 0.05f);
+        public static PhysicsMaterial Piece => pieceMaterial != null ? pieceMaterial : (pieceMaterial = Create("TabletopPiece", 0.6f, 0.7f, 0.05f));
 
         public static PhysicsMaterial MaterialFor(bool isDie) => isDie ? Die : Piece;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetMaterials()
+        {
+            tableMaterial = null;
+            dieMaterial = null;
+            pieceMaterial = null;
+        }
 
         private static PhysicsMaterial Create(string name, float dynamicFriction, float staticFriction, float bounce)
         {

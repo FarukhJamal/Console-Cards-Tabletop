@@ -39,6 +39,10 @@ Root cause found in review: `PhysicalLooseObject` makes the held body **kinemati
 6. Preserve each file's existing line endings (files have mixed CRLF/LF). Make minimal diffs; never reformat or re-save whole files. Check `git diff --stat` before finishing.
 7. Do not edit generated files, `.meta` files, or scene/prefab YAML by hand unless the task says so. If a scene value must change, edit only the exact serialized lines and tell me which.
 8. If something conflicts with these rules or you are unsure, stop and ask. Do not guess.
+9. No test-runner dependency. I verify behavior myself in the Editor/Play mode. Do not add new automated tests,
+do not make the game depend on test code, and do not edit or delete existing tests unless they block compilation
+(then tell me first). At the end of every stage, give me a short numbered manual verification checklist
+(what to click, what I should see, what would indicate a problem).
 
 ## Files already prepared (drop-in, written against the real code)
 - `PhysicalLooseObject.cs` → replaces `Assets/ConsoleCards/Presentation/Interaction/PhysicalLooseObject.cs`

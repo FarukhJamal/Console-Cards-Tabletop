@@ -33,7 +33,7 @@ namespace ConsoleCards.Presentation.Interaction
             public const float MaxHeldSpeed = 60f;
             public const float VelocitySmoothing = 30f;          // 1/s. higher = snappier velocity response
             public const float TiltDegreesPerSpeed = 1.6f;       // lean per unit/second of planar speed
-            public const float MaxTiltDegrees = 20f;
+            public const float MaxTiltDegrees = 0f;
             public const float RotationGain = 14f;
             public const float MaxHeldAngularSpeed = 20f;
 

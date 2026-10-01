@@ -34,6 +34,8 @@ namespace ConsoleCards.Presentation.Interaction
         private void OnEnable()
         {
             ResolveLocalCollider();
+            if (UnityEngine.Application.isPlaying && surfaceCollider != null && surfaceCollider.sharedMaterial == null)
+                surfaceCollider.sharedMaterial = TabletopPhysicsSettings.Table;
             // Scene.isLoaded can still be false during load-time OnEnable; query eligibility is checked later.
             if (gameObject.scene.IsValid())
                 registered.Add(this);

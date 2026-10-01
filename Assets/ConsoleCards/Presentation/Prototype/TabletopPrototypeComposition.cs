@@ -7291,6 +7291,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void BuildToolboxRuntime()
         {
+            TabletopPhysicsSettings.Apply();
             SetGameBoardActive(activeSession.Selection.Kind == TabletopSessionKind.GameTemplate);
             physicalSurfaceQuery = new PhysicalTabletopSurfaces(targetCamera, coordinateConverter);
             physicalSurfaceQuery.ValidateSetup();
