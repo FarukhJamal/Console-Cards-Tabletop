@@ -380,25 +380,6 @@ namespace ConsoleCards.Presentation.Interaction
                 : Vector3.zero;
         }
 
-        // TEMP TTS DIAGNOSTICS BEGIN
-        internal int DiagnosticSampleCount(float time, out float newestAgeSeconds)
-        {
-            newestAgeSeconds = -1f;
-            if (linearSampleCount == 0) return 0;
-            int newest = (linearSampleWriteIndex - 1 + LinearSampleCapacity) % LinearSampleCapacity;
-            float newestTime = linearTimes[newest];
-            newestAgeSeconds = time - newestTime;
-            int count = 1;
-            for (int offset = 1; offset < linearSampleCount; offset++)
-            {
-                int candidate = (newest - offset + LinearSampleCapacity) % LinearSampleCapacity;
-                if (newestTime - linearTimes[candidate] > config.DragVelocitySampleWindowSeconds) break;
-                count++;
-            }
-
-            return count;
-        }
-        // TEMP TTS DIAGNOSTICS END
         private void StoreAngularSample(Quaternion rotation, float time)
         {
             lastDeliberateRotation = rotation;
