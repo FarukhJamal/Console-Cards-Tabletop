@@ -8,10 +8,64 @@ using UnityEngine;
 
 namespace ConsoleCards.Presentation.Interaction
 {
-    /// <summary>Shared Rigidbody adapter. The injected local authority owns lifecycle/settlement; no per-object Update.</summary>
+    /// <summary>
+    /// Shared Rigidbody adapter. The injected local authority owns lifecycle/settlement.
+    /// TTS-FEEL: a held object is now a DYNAMIC body (gravity off) that chases the cursor target with
+    /// velocity in FixedUpdate. It lags a little, leans into travel, collides with and shoves other pieces,
+    /// and release velocity comes from the real body motion. Update-time Follow() only computes the target.
+    /// </summary>
     public sealed class PhysicalLooseObject : MonoBehaviour
     {
         private const int SupportHitBufferCapacity = 32;
+
+        /// <summary>
+        /// TTS-FEEL tuning. Defaults are a starting point; migrate into PhysicalObjectInteractionProfile
+        /// when you want per-kind control. All speeds are in world units/second.
+        /// </summary>
+        private static class Tune
+        {
+            // Held body
+            public const float HeldMassMultiplier = 6f;          // heavier while held so it shoves lighter pieces
+            public const float HeldLinearDamping = 0f;
+            public const float HeldAngularDamping = 4f;
+            public const float HeldMaxDepenetrationVelocity = 4f; // avoids violent pop-outs when shoved into things
+            public const float FollowStiffness = 35f;            // 1/s. higher = tighter to cursor
+            public const float MaxHeldSpeed = 60f;
+            public const float VelocitySmoothing = 30f;          // 1/s. higher = snappier velocity response
+            public const float TiltDegreesPerSpeed = 1.6f;       // lean per unit/second of planar speed
+            public const float MaxTiltDegrees = 20f;
+            public const float RotationGain = 14f;
+            public const float MaxHeldAngularSpeed = 20f;
+
+            // Rigidbody quality
+            public const float MaxAngularVelocity = 50f;         // Unity default of 7 kills dice spin
+            public const int SolverIterations = 12;
+            public const int SolverVelocityIterations = 4;
+
+            // Release spin
+            public const float SpinMinSpeed = 0.8f;
+            public const float DiceRollFactor = 0.55f;           // fraction of true rolling omega = v / r
+            public const float DiceSpinRandomness = 0.35f;
+            public const float PieceYawSpinPerSpeed = 0.12f;
+            public const float PieceYawSpinMax = 1.5f;
+
+            // Settlement
+            public const float RestLinearSpeed = 0.05f;
+            public const float RestAngularSpeed = 0.10f;
+            public const float RestSeconds = 0.35f;
+            public const int MaxCockedNudges = 3;
+            public const float CockedNudgeUpSpeed = 2.0f;
+            public const float CockedNudgeSpin = 6f;
+
+            // Support detection
+            public const float SupportRayLift = 10f;
+            public const float SupportRayDepth = 100f;
+            public const float FootprintInset = 0.8f;
+            public const float FootprintMaxStep = 0.35f;        // corners may lift the object over steps up to this tall
+
+            // Roll()
+            public const float RollApexHeight = 1.2f;            // keeps roll arc constant when gravity changes
+        }
 
         private TabletopObjectView view;
         private Rigidbody body;
@@ -44,6 +98,15 @@ namespace ConsoleCards.Presentation.Interaction
         private PhysicalObjectState grabOrigin;
         private bool userActionActive;
         private bool compoundActionActive;
+
+        // TTS-FEEL state
+        private Quaternion heldBaseRotation;   // logical carry orientation (no lean); body chases lean * this
+        private Vector3 heldTargetPosition;    // computed in Follow (Update), chased in FixedUpdate
+        private bool hasHeldTarget;
+        private float lastAnchorHeight;        // world Y of the grabbed point last frame (breaks projection/support circularity)
+        private float restTimer;
+        private int cockedNudges;
+
         public bool IsHeld => held;
         public bool OwnsLooseTransform => view != null && view.IsBound && view.BoundState.ContainerId.IsEmpty;
         public Rigidbody Body => body;
@@ -71,22 +134,29 @@ namespace ConsoleCards.Presentation.Interaction
             compoundActionActive = false;
             hasPointerAnchor = false;
             hasSupportHeight = false;
+            hasHeldTarget = false;
             containedPickupLift = 0f;
             gentlePlacementIntent = 0f;
             orientationRecoveryResumeTime = 0f;
             deliberateRotationPending = false;
+            restTimer = 0f;
+            cockedNudges = 0;
             if (PhysicalCollider == null) throw new InvalidOperationException("Loose physics requires an enabled collider on the wrapper or its visual child.");
             physicalCollider = PhysicalCollider;
+            if (physicalCollider.sharedMaterial == null)
+                physicalCollider.sharedMaterial = TabletopPhysicsSettings.MaterialFor(view is DieView);
             body = GetComponent<Rigidbody>();
             if (body == null) body = gameObject.AddComponent<Rigidbody>();
             body.isKinematic = true;
             body.useGravity = false;
-            body.mass = profile.Mass;
-            body.linearDamping = profile.LinearDamping;
-            body.angularDamping = profile.AngularDamping;
+            RestoreProfilePhysics();
             body.interpolation = RigidbodyInterpolation.Interpolate;
-            body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
-            body.maxAngularVelocity = 35f;
+            body.collisionDetectionMode = view is DieView
+                ? CollisionDetectionMode.ContinuousDynamic
+                : CollisionDetectionMode.ContinuousSpeculative;
+            body.maxAngularVelocity = Tune.MaxAngularVelocity;
+            body.solverIterations = Tune.SolverIterations;
+            body.solverVelocityIterations = Tune.SolverVelocityIterations;
             actor = authority.Actor;
             Synchronize();
         }
@@ -115,21 +185,33 @@ namespace ConsoleCards.Presentation.Interaction
                 body.position = heldAnchorWorld - RotatedGrabAnchor(body.rotation);
             }
             if (stateHeld)
+            {
                 carryOrientationTarget = ResolveCarryOrientation();
+                heldBaseRotation = body.rotation;
+            }
             transform.SetPositionAndRotation(body.position, body.rotation);
             held = stateHeld;
-            body.isKinematic = held || view.BoundState.IsUserLocked;
-            body.useGravity = !body.isKinematic;
-            body.detectCollisions = !held;
+
+            // TTS-FEEL: held bodies stay DYNAMIC (gravity off). Only user-locked objects are kinematic.
+            bool locked = view.BoundState.IsUserLocked;
+            body.isKinematic = locked;
+            body.useGravity = !held && !locked;
+            body.detectCollisions = true;
+            if (held) ApplyHeldPhysics(); else RestoreProfilePhysics();
             if (!body.isKinematic)
             {
-                body.linearVelocity = Vector(state.Velocity);
-                body.angularVelocity = Vector(state.AngularVelocity);
-                if (state.Mode == PhysicalObjectMode.Sleeping || state.Mode == PhysicalObjectMode.SleepingUnresolved)
-                    body.Sleep();
-                else body.WakeUp();
+                if (!held)
+                {
+                    body.linearVelocity = Vector(state.Velocity);
+                    body.angularVelocity = Vector(state.AngularVelocity);
+                    if (state.Mode == PhysicalObjectMode.Sleeping || state.Mode == PhysicalObjectMode.SleepingUnresolved)
+                        body.Sleep();
+                    else body.WakeUp();
+                }
+                else body.WakeUp(); // FixedUpdate owns held velocities
             }
             dynamicFrames = 0;
+            restTimer = 0f;
         }
 
         public void DisableForContainer()
@@ -138,11 +220,13 @@ namespace ConsoleCards.Presentation.Interaction
             held = false;
             hasPointerAnchor = false;
             hasSupportHeight = false;
+            hasHeldTarget = false;
             containedPickupLift = 0f;
             gentlePlacementIntent = 0f;
             deliberateRotationPending = false;
             body.isKinematic = true;
             body.useGravity = false;
+            RestoreProfilePhysics();
             // Retain raycast selection colliders, but exclude contained pieces from dynamic contacts.
             authority.SetContainedCollisions(this, true);
             applied = null;
@@ -164,14 +248,34 @@ namespace ConsoleCards.Presentation.Interaction
                 return false;
             }
             held = true;
-            body.isKinematic = true;
+
+            // Contained cards are positioned by presentation (transform) while kinematic; make sure the
+            // physics pose matches the visible pose before the body becomes dynamic.
+            if (!OwnsLooseTransform)
+            {
+                body.position = transform.position;
+                body.rotation = transform.rotation;
+                Physics.SyncTransforms();
+            }
+
+            // TTS-FEEL: dynamic held body, gravity off, real collisions.
+            body.isKinematic = false;
             body.useGravity = false;
-            body.detectCollisions = false;
+            body.detectCollisions = true;
+            body.linearVelocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
+            ApplyHeldPhysics();
+            body.WakeUp();
+
             authority.SetContainedCollisions(this, false);
             authority.StopAnimation(transform);
             pickupPosition = body.position;
             pickupRotation = body.rotation;
             carryOrientationTarget = ResolveCarryOrientation();
+            heldBaseRotation = body.rotation;
+            heldTargetPosition = body.position;
+            hasHeldTarget = false;
+            lastAnchorHeight = hasPointerAnchor ? GrabAnchorWorld().y : body.position.y;
             pickupStartTime = Time.unscaledTime;
             pickupStartBottomHeight = PhysicalCollider != null
                 ? PhysicalCollider.bounds.min.y
@@ -182,6 +286,8 @@ namespace ConsoleCards.Presentation.Interaction
             gentlePlacementIntent = 0f;
             orientationRecoveryResumeTime = 0f;
             deliberateRotationPending = false;
+            restTimer = 0f;
+            cockedNudges = 0;
             releaseMotion.Reset();
             return true;
         }
@@ -196,20 +302,23 @@ namespace ConsoleCards.Presentation.Interaction
             InitializePointerAnchor(screenPosition);
         }
 
+        /// <summary>
+        /// Update-time: compute where the grabbed point should be. Does NOT move the body.
+        /// FixedUpdate chases heldTargetPosition / heldBaseRotation with velocities.
+        /// </summary>
         public void Follow(Vector2 screenPosition)
         {
             if (!held && !BeginHold()) return;
             if (!hasPointerAnchor) InitializePointerAnchor(screenPosition);
 
             float deltaTime = Time.unscaledDeltaTime;
-            Quaternion nextRotation = ResolveHeldRotation(deltaTime);
-            body.rotation = nextRotation;
-            transform.rotation = nextRotation;
+            UpdateHeldBaseRotation(deltaTime);
 
+            // TTS-FEEL: intersect the cursor ray with a HORIZONTAL plane at the grabbed point's height.
+            // (Camera-parallel projection drifts from the cursor whenever Y changes.)
             Vector2 anchoredScreenPosition = screenPosition + grabScreenOffset;
-            Vector3 targetAnchor = authority.Camera.ScreenToWorldPoint(
-                new Vector3(anchoredScreenPosition.x, anchoredScreenPosition.y, holdDepth));
-            Vector3 target = targetAnchor - RotatedGrabAnchor(nextRotation);
+            Vector3 targetAnchor = ProjectScreenToHeight(anchoredScreenPosition, lastAnchorHeight);
+            Vector3 target = targetAnchor - RotatedGrabAnchor(body.rotation);
 
             Vector3 sampledAngularVelocity = releaseMotion.GetAngularRelease(Time.unscaledTime);
             Vector3 sampledLinearVelocity = releaseMotion.GetLinearRelease(Time.unscaledTime);
@@ -217,10 +326,7 @@ namespace ConsoleCards.Presentation.Interaction
                 sampledLinearVelocity,
                 sampledAngularVelocity);
 
-            Vector3 targetScreenPoint = authority.Camera.WorldToScreenPoint(target);
-            bool hasSupport = TryResolveSupportHeight(
-                new Vector2(targetScreenPoint.x, targetScreenPoint.y),
-                out float supportHeight);
+            bool hasSupport = TryResolveSupportHeight(target, out float supportHeight);
             if (hasSupport)
             {
                 smoothedSupportHeight = SmoothSupportHeight(supportHeight, deltaTime);
@@ -256,12 +362,48 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             Vector3 next = ResolveDirectCarryPosition(target, deltaTime);
-            next = ResolveCollisionAwareCarryPosition(body.position, next);
-            body.position = next;
-            transform.SetPositionAndRotation(next, nextRotation);
+            lastAnchorHeight = next.y + RotatedGrabAnchor(body.rotation).y;
+            heldTargetPosition = next;
+            hasHeldTarget = true;
+        }
+
+        /// <summary>TTS-FEEL: velocity-driven chase. Collisions are real; the body can shove and be blocked.</summary>
+        private void FixedUpdate()
+        {
+            if (!held || body == null || body.isKinematic || !hasHeldTarget) return;
+            if (body.IsSleeping()) body.WakeUp();
+
+            float dt = Time.fixedDeltaTime;
+            float k = 1f - Mathf.Exp(-Tune.VelocitySmoothing * dt);
+
+            // Linear: spring-like chase toward the target.
+            Vector3 desired = Vector3.ClampMagnitude(
+                (heldTargetPosition - body.position) * Tune.FollowStiffness,
+                Tune.MaxHeldSpeed);
+            body.linearVelocity = Vector3.Lerp(body.linearVelocity, desired, k);
+
+            // Angular: lean into the direction of travel on top of the carry orientation.
+            Vector3 velocity = body.linearVelocity;
+            Vector3 planar = new Vector3(velocity.x, 0f, velocity.z);
+            float planarSpeed = planar.magnitude;
+            Quaternion lean = Quaternion.identity;
+            if (planarSpeed > 0.05f)
+            {
+                float tilt = Mathf.Min(planarSpeed * Tune.TiltDegreesPerSpeed, Tune.MaxTiltDegrees);
+                // Leading edge dips (top leans forward). Negate tilt to lean the other way.
+                lean = Quaternion.AngleAxis(tilt, Vector3.Cross(Vector3.up, planar / planarSpeed));
+            }
+
+            Quaternion targetRotation = lean * heldBaseRotation;
+            body.angularVelocity = Vector3.Lerp(
+                body.angularVelocity,
+                AngularVelocityTo(body.rotation, targetRotation, Tune.RotationGain, Tune.MaxHeldAngularSpeed),
+                k);
+
+            // Sample the REAL body (not the commanded target) so release velocity matches what the player saw.
             releaseMotion.SampleLinear(
-                next + RotatedGrabAnchor(nextRotation),
-                Time.unscaledTime);
+                body.position + RotatedGrabAnchor(body.rotation),
+                Time.fixedUnscaledTime);
         }
 
         internal bool BeginContainedPickup(float lift)
@@ -278,7 +420,12 @@ namespace ConsoleCards.Presentation.Interaction
             body.position = position;
             body.rotation = rotation;
             transform.SetPositionAndRotation(position, rotation);
+            body.linearVelocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
             carryOrientationTarget = rotation;
+            heldBaseRotation = rotation;
+            heldTargetPosition = position;
+            hasHeldTarget = true;
             hasSupportHeight = false;
             deliberateRotationPending = false;
             releaseMotion.Reset();
@@ -290,7 +437,10 @@ namespace ConsoleCards.Presentation.Interaction
             Vector3 velocity = releaseMotion.GetLinearRelease(Time.unscaledTime);
             Vector3 angularVelocity = releaseMotion.GetAngularRelease(Time.unscaledTime);
             profile.ApplyRelease(ref velocity, ref angularVelocity);
-            return State(transform.position, transform.rotation, velocity,
+            // TTS-FEEL: spin is synthesized AFTER profile clamps so a flick actually tumbles.
+            angularVelocity = SynthesizeReleaseSpin(velocity, angularVelocity);
+            // Use the physics pose (not the interpolated transform) so the committed pose matches the body.
+            return State(body.position, body.rotation, velocity,
                 angularVelocity, PhysicalObjectMode.Dynamic, actor);
         }
 
@@ -301,9 +451,11 @@ namespace ConsoleCards.Presentation.Interaction
             held = false;
             hasPointerAnchor = false;
             hasSupportHeight = false;
+            hasHeldTarget = false;
             containedPickupLift = 0f;
             gentlePlacementIntent = 0f;
             deliberateRotationPending = false;
+            RestoreProfilePhysics();
             body.isKinematic = false;
             body.useGravity = true;
             body.detectCollisions = true;
@@ -311,6 +463,8 @@ namespace ConsoleCards.Presentation.Interaction
             body.angularVelocity = Vector(applied.AngularVelocity);
             body.WakeUp();
             dynamicFrames = 0;
+            restTimer = 0f;
+            cockedNudges = 0;
             return true;
         }
 
@@ -338,12 +492,14 @@ namespace ConsoleCards.Presentation.Interaction
             held = false;
             hasPointerAnchor = false;
             hasSupportHeight = false;
+            hasHeldTarget = false;
             containedPickupLift = 0f;
             gentlePlacementIntent = 0f;
             deliberateRotationPending = false;
             userActionActive = false;
             compoundActionActive = false;
             applied = null;
+            RestoreProfilePhysics();
             Synchronize();
         }
 
@@ -353,15 +509,20 @@ namespace ConsoleCards.Presentation.Interaction
             actor = requestingActor ?? authority.Actor;
             userActionActive = !partOfCompoundAction;
             compoundActionActive = partOfCompoundAction;
+
+            // TTS-FEEL: launch speed derived from gravity so the roll arc stays the same when gravity changes.
+            float upSpeed = Mathf.Sqrt(2f * Mathf.Abs(Physics.gravity.y) * Tune.RollApexHeight);
+            float side = upSpeed * 0.3f;
             PhysicalObjectState launch = State(transform.position + Vector3.up * 0.8f, transform.rotation,
-                new Vector3(UnityEngine.Random.Range(-1.8f, 1.8f), 4f, UnityEngine.Random.Range(-1.8f, 1.8f)),
-                UnityEngine.Random.onUnitSphere * UnityEngine.Random.Range(12f, 25f), PhysicalObjectMode.Dynamic, actor);
+                new Vector3(UnityEngine.Random.Range(-side, side), upSpeed, UnityEngine.Random.Range(-side, side)),
+                UnityEngine.Random.onUnitSphere * UnityEngine.Random.Range(20f, 40f), PhysicalObjectMode.Dynamic, actor);
             if (!Commit(launch, null, AuthoritativeActionRecordMode.Intermediate))
             {
                 userActionActive = false;
                 compoundActionActive = false;
                 return false;
             }
+            cockedNudges = 0;
             applied = null;
             ApplyAccepted();
             return true;
@@ -373,15 +534,37 @@ namespace ConsoleCards.Presentation.Interaction
             Synchronize();
             if (!OwnsLooseTransform || held || body.isKinematic) return;
             dynamicFrames++;
-            if (body.IsSleeping() && dynamicFrames > 2)
+
+            // TTS-FEEL: don't wait on Unity's energy-based sleep alone (dice can creep for seconds).
+            bool slow = body.linearVelocity.sqrMagnitude < Tune.RestLinearSpeed * Tune.RestLinearSpeed
+                && body.angularVelocity.sqrMagnitude < Tune.RestAngularSpeed * Tune.RestAngularSpeed;
+            restTimer = slow ? restTimer + Time.unscaledDeltaTime : 0f;
+            bool restedLongEnough = dynamicFrames > 2 && restTimer >= Tune.RestSeconds;
+            bool settled = (body.IsSleeping() && dynamicFrames > 2) || restedLongEnough;
+
+            if (settled)
             {
                 if (applied != null && (applied.Mode == PhysicalObjectMode.Sleeping
                     || applied.Mode == PhysicalObjectMode.SleepingUnresolved)) return;
+
                 int? value = null;
                 if (view is DieView die)
                 {
                     if (!die.TryResolvePhysicalValue(out int face))
                     {
+                        // Cocked: nudge a few times before giving up, instead of leaving it unresolved.
+                        if (cockedNudges < Tune.MaxCockedNudges)
+                        {
+                            cockedNudges++;
+                            body.WakeUp();
+                            body.AddForce(Vector3.up * Tune.CockedNudgeUpSpeed, ForceMode.VelocityChange);
+                            body.AddTorque(UnityEngine.Random.onUnitSphere * Tune.CockedNudgeSpin, ForceMode.VelocityChange);
+                            dynamicFrames = 0;
+                            restTimer = 0f;
+                            return;
+                        }
+
+                        FreezeBody();
                         Commit(State(body.position, body.rotation, Vector3.zero, Vector3.zero,
                             PhysicalObjectMode.SleepingUnresolved, actor), null,
                             userActionActive
@@ -391,10 +574,12 @@ namespace ConsoleCards.Presentation.Interaction
                                     : AuthoritativeActionRecordMode.None);
                         userActionActive = false;
                         compoundActionActive = false;
-                        return; // Cocked: retain the prior result, but record the actual resting pose and unresolved status.
+                        return; // Still cocked after nudges: record the actual resting pose and unresolved status.
                     }
                     value = face;
                 }
+
+                FreezeBody();
                 Commit(State(body.position, body.rotation, Vector3.zero, Vector3.zero,
                     PhysicalObjectMode.Sleeping, actor), value,
                     userActionActive
@@ -413,6 +598,15 @@ namespace ConsoleCards.Presentation.Interaction
                         ? AuthoritativeActionRecordMode.Intermediate
                         : AuthoritativeActionRecordMode.None); // Includes continuing off-table falls.
             }
+        }
+
+        /// <summary>Make the physics body match a committed Sleeping state when our own rest detector fires first.</summary>
+        private void FreezeBody()
+        {
+            if (body.IsSleeping()) return;
+            body.linearVelocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
+            body.Sleep();
         }
 
         private void Synchronize()
@@ -447,6 +641,22 @@ namespace ConsoleCards.Presentation.Interaction
             return true;
         }
 
+        private void ApplyHeldPhysics()
+        {
+            body.mass = profile.Mass * Tune.HeldMassMultiplier;
+            body.linearDamping = Tune.HeldLinearDamping;
+            body.angularDamping = Tune.HeldAngularDamping;
+            body.maxDepenetrationVelocity = Tune.HeldMaxDepenetrationVelocity;
+        }
+
+        private void RestoreProfilePhysics()
+        {
+            body.mass = profile.Mass;
+            body.linearDamping = profile.LinearDamping;
+            body.angularDamping = profile.AngularDamping;
+            body.maxDepenetrationVelocity = Physics.defaultMaxDepenetrationVelocity;
+        }
+
         private void InitializePointerAnchor(Vector2 screenPosition)
         {
             Ray pointerRay = authority.Camera.ScreenPointToRay(screenPosition);
@@ -472,45 +682,95 @@ namespace ConsoleCards.Presentation.Interaction
 
             Vector3 projected = authority.Camera.WorldToScreenPoint(anchorWorld);
             holdDepth = Mathf.Max(authority.Camera.nearClipPlane + 0.01f, projected.z);
+            lastAnchorHeight = anchorWorld.y;
             hasPointerAnchor = true;
         }
 
-        private bool TryResolveSupportHeight(Vector2 screenPosition, out float height)
+        /// <summary>Cursor ray intersected with a horizontal plane at the given world height.</summary>
+        private Vector3 ProjectScreenToHeight(Vector2 screenPosition, float worldHeight)
         {
-            Physics.SyncTransforms();
-            Ray ray = authority.Camera.ScreenPointToRay(screenPosition);
+            UnityEngine.Camera camera = authority.Camera;
+            Ray ray = camera.ScreenPointToRay(screenPosition);
+            var plane = new Plane(Vector3.up, new Vector3(0f, worldHeight, 0f));
+            if (plane.Raycast(ray, out float enter) && enter > 0f && enter <= holdDepth * 4f)
+                return ray.GetPoint(enter);
+            // Near-horizon or parallel ray: fall back to the original camera-depth projection.
+            return camera.ScreenToWorldPoint(new Vector3(screenPosition.x, screenPosition.y, holdDepth));
+        }
+
+        /// <summary>
+        /// Support height under the target. Center uses a top-down ray; four inset footprint corners may raise the
+        /// result so edges don't clip into shallow steps (e.g. a card hanging over a token). Taller things are
+        /// left to real collisions, so held pieces shove tall objects instead of hopping onto them.
+        /// </summary>
+        private bool TryResolveSupportHeight(Vector3 target, out float height)
+        {
+            height = float.MinValue;
+            Collider collider = PhysicalCollider;
+            if (collider == null) return false;
+
+            Bounds bounds = collider.bounds;
+            Vector3 offset = bounds.center - body.position;
+            offset.y = 0f;
+            Vector3 center = target + offset;
+            float originY = Mathf.Max(body.position.y, lastAnchorHeight) + Tune.SupportRayLift;
+
+            if (!TryRaycastSupportDown(center.x, center.z, originY, out float centerHeight)) return false;
+
+            float best = centerHeight;
+            float halfX = bounds.extents.x * Tune.FootprintInset;
+            float halfZ = bounds.extents.z * Tune.FootprintInset;
+            for (int i = 0; i < 4; i++)
+            {
+                float sx = (i & 1) == 0 ? -1f : 1f;
+                float sz = (i & 2) == 0 ? -1f : 1f;
+                if (TryRaycastSupportDown(center.x + sx * halfX, center.z + sz * halfZ, originY, out float cornerHeight)
+                    && cornerHeight > best
+                    && cornerHeight <= centerHeight + Tune.FootprintMaxStep)
+                {
+                    best = cornerHeight;
+                }
+            }
+
+            height = best;
+            return true;
+        }
+
+        private bool TryRaycastSupportDown(float x, float z, float originY, out float height)
+        {
+            height = float.MinValue;
             int hitCount = Physics.RaycastNonAlloc(
-                ray,
+                new Vector3(x, originY, z),
+                Vector3.down,
                 supportHitBuffer,
-                authority.Camera.farClipPlane,
+                originY + Tune.SupportRayDepth,
                 ~0,
                 QueryTriggerInteraction.Ignore);
             bool found = false;
-            height = float.MinValue;
             float closestDistance = float.MaxValue;
             for (int i = 0; i < hitCount; i++)
             {
-                Collider candidate = supportHitBuffer[i].collider;
-                if (candidate == null
-                    || !candidate.enabled
-                    || candidate.transform == transform
-                    || candidate.transform.IsChildOf(transform)
-                    || Vector3.Dot(supportHitBuffer[i].normal, Vector3.up) <= 0.2f
-                    || !IsSupportCollider(candidate))
-                {
-                    continue;
-                }
-
-                float candidateDistance = supportHitBuffer[i].distance;
-                if (!found || candidateDistance < closestDistance)
+                if (!IsValidSupportHit(supportHitBuffer[i])) continue;
+                if (!found || supportHitBuffer[i].distance < closestDistance)
                 {
                     found = true;
-                    closestDistance = candidateDistance;
+                    closestDistance = supportHitBuffer[i].distance;
                     height = supportHitBuffer[i].point.y;
                 }
             }
 
             return found;
+        }
+
+        private bool IsValidSupportHit(RaycastHit hit)
+        {
+            Collider candidate = hit.collider;
+            return candidate != null
+                && candidate.enabled
+                && candidate.transform != transform
+                && !candidate.transform.IsChildOf(transform)
+                && Vector3.Dot(hit.normal, Vector3.up) > 0.2f
+                && IsSupportCollider(candidate);
         }
 
         private bool IsSupportCollider(Collider candidate)
@@ -526,21 +786,22 @@ namespace ConsoleCards.Presentation.Interaction
             return supportingView != null && !ReferenceEquals(supportingView, view);
         }
 
-        private Quaternion ResolveHeldRotation(float deltaTime)
+        /// <summary>Advances the logical carry orientation (no lean). Physics chases it in FixedUpdate.</summary>
+        private void UpdateHeldBaseRotation(float deltaTime)
         {
             if (!profile.NormalizeOrientationOnPickup
                 || profile.OrientationRecoverySpeed <= 0f
                 || Time.unscaledTime < orientationRecoveryResumeTime)
             {
-                return body.rotation;
+                return;
             }
 
             float speed = profile.OrientationRecoverySpeed * Mathf.Lerp(
                 1f,
                 profile.GentlePlacementOrientationStrength,
                 gentlePlacementIntent);
-            return Quaternion.RotateTowards(
-                body.rotation,
+            heldBaseRotation = Quaternion.RotateTowards(
+                heldBaseRotation,
                 carryOrientationTarget,
                 speed * Mathf.Max(0f, deltaTime));
         }
@@ -593,81 +854,49 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             return Vector3.Lerp(
-                body.position,
+                heldTargetPosition,
                 target,
                 1f - Mathf.Exp(-deltaTime / smoothing));
         }
 
-        private Vector3 ResolveCollisionAwareCarryPosition(Vector3 current, Vector3 proposed)
+        private static Vector3 AngularVelocityTo(Quaternion from, Quaternion to, float gain, float max)
         {
-            Vector3 translation = proposed - current;
-            Vector3 horizontal = new Vector3(translation.x, 0f, translation.z);
-            float distance = horizontal.magnitude;
-            Collider collider = PhysicalCollider;
-            if (distance <= 0.0001f || collider == null)
-            {
-                return proposed;
-            }
-
-            Physics.SyncTransforms();
-            Bounds bounds = collider.bounds;
-            float skin = profile.HeldCollisionSkin;
-            Vector3 extents = new Vector3(
-                Mathf.Max(0.001f, bounds.extents.x - skin),
-                Mathf.Max(0.001f, bounds.extents.y - skin),
-                Mathf.Max(0.001f, bounds.extents.z - skin));
-            Vector3 direction = horizontal / distance;
-            int hitCount = Physics.BoxCastNonAlloc(
-                bounds.center,
-                extents,
-                direction,
-                supportHitBuffer,
-                Quaternion.identity,
-                distance + skin,
-                ~0,
-                QueryTriggerInteraction.Ignore);
-            float nearestObstacle = float.MaxValue;
-            for (int i = 0; i < hitCount; i++)
-            {
-                Collider candidate = supportHitBuffer[i].collider;
-                if (!IsHeldObstacle(candidate))
-                {
-                    continue;
-                }
-
-                nearestObstacle = Mathf.Min(nearestObstacle, supportHitBuffer[i].distance);
-            }
-
-            if (nearestObstacle == float.MaxValue)
-            {
-                return proposed;
-            }
-
-            float safeDistance = Mathf.Clamp(nearestObstacle - skin, 0f, distance);
-            float clearFraction = distance > 0f ? safeDistance / distance : 0f;
-            float resistedDistance = safeDistance * Mathf.Lerp(
-                profile.CollisionCarryScale,
-                1f,
-                clearFraction);
-            Vector3 resisted = current + (direction * resistedDistance);
-            resisted.y = proposed.y;
-            return resisted;
+            Quaternion delta = to * Quaternion.Inverse(from);
+            delta.ToAngleAxis(out float angle, out Vector3 axis);
+            if (angle > 180f) angle -= 360f;
+            if (float.IsNaN(axis.x) || float.IsInfinity(axis.x)) return Vector3.zero;
+            return Vector3.ClampMagnitude(axis * (angle * Mathf.Deg2Rad * gain), max);
         }
 
-        private bool IsHeldObstacle(Collider candidate)
+        /// <summary>
+        /// Dice get a rolling spin (omega = v / r, scaled) plus randomness so a flick tumbles. Other pieces get a
+        /// small yaw so a slid card doesn't stay perfectly aligned. Added AFTER profile clamps on purpose.
+        /// </summary>
+        private Vector3 SynthesizeReleaseSpin(Vector3 linear, Vector3 angular)
         {
-            if (candidate == null
-                || !candidate.enabled
-                || candidate.isTrigger
-                || candidate.transform == transform
-                || candidate.transform.IsChildOf(transform)
-                || candidate.GetComponentInParent<PhysicalTabletopSurface>() != null)
+            Vector3 planar = new Vector3(linear.x, 0f, linear.z);
+            float speed = planar.magnitude;
+            if (speed < Tune.SpinMinSpeed) return angular;
+
+            if (view is DieView)
             {
-                return false;
+                Vector3 direction = planar / speed;
+                Bounds bounds = PhysicalCollider.bounds;
+                float radius = Mathf.Max(0.05f, (bounds.extents.x + bounds.extents.y + bounds.extents.z) / 3f);
+                float roll = speed / radius * Tune.DiceRollFactor;
+                Vector3 spin = Vector3.Cross(Vector3.up, direction) * roll
+                    + UnityEngine.Random.onUnitSphere * (roll * Tune.DiceSpinRandomness);
+                return Vector3.ClampMagnitude(angular + spin, body.maxAngularVelocity);
             }
 
-            TabletopObjectView otherView = candidate.GetComponentInParent<TabletopObjectView>();
-            return otherView != null && !ReferenceEquals(otherView, view);
+            if (gentlePlacementIntent < 0.5f && speed > 2f)
+            {
+                float yaw = Mathf.Min(speed * Tune.PieceYawSpinPerSpeed, Tune.PieceYawSpinMax)
+                    * UnityEngine.Random.Range(-1f, 1f);
+                return angular + Vector3.up * yaw;
+            }
+
+            return angular;
         }
 
         private float RootHeightAboveBottom()
