@@ -3377,20 +3377,20 @@ MonoBehaviour:
   gameBoardVisualRoot: {fileID: 234356922}
   gameBoardVisualMaterial: {fileID: 2100000, guid: 4fb7f4b8103a8954dbf13d614cca7b06, type: 2}
   physicalInteraction:
-    dragVelocitySampleWindowSeconds: 0.06
+    dragVelocitySampleWindowSeconds: 0.08
     releaseSmoothingSeconds: 0.04
     maximumReleaseAngularVelocity: 6
-    releaseSampleTimeoutSeconds: 0.16
+    releaseSampleTimeoutSeconds: 0.2
     card:
       heldFollowSmoothingSeconds: 0
       collisionCarryScale: 0.35
       heldClearance: 0.18
       mass: 0.03
-      releaseLinearVelocityRetention: 0.9
-      maximumReleaseLinearVelocity: 6
+      releaseLinearVelocityRetention: 1
+      maximumReleaseLinearVelocity: 22
       releaseAngularVelocityMultiplier: 0.85
       maximumReleaseAngularVelocity: 2.5
-      linearDamping: 1
+      linearDamping: 0.25
       angularDamping: 3.5
       gentlePlacementSpeed: 0.45
       gentlePlacementAngularSpeed: 1
@@ -3401,11 +3401,11 @@ MonoBehaviour:
       heldClearance: 0.35
       mass: 0.12
       releaseLinearVelocityRetention: 1
-      maximumReleaseLinearVelocity: 8
+      maximumReleaseLinearVelocity: 30
       releaseAngularVelocityMultiplier: 1
       maximumReleaseAngularVelocity: 6
-      linearDamping: 0.12
-      angularDamping: 0.12
+      linearDamping: 0.05
+      angularDamping: 0.08
       gentlePlacementSpeed: 0
       gentlePlacementAngularSpeed: 0
       stabilizeGentlePlacement: 0
@@ -3414,11 +3414,11 @@ MonoBehaviour:
       collisionCarryScale: 0.2
       heldClearance: 0.25
       mass: 0.1
-      releaseLinearVelocityRetention: 0.8
-      maximumReleaseLinearVelocity: 5
+      releaseLinearVelocityRetention: 0.95
+      maximumReleaseLinearVelocity: 14
       releaseAngularVelocityMultiplier: 0.8
       maximumReleaseAngularVelocity: 3
-      linearDamping: 2
+      linearDamping: 0.8
       angularDamping: 5
       gentlePlacementSpeed: 0.5
       gentlePlacementAngularSpeed: 1.25
@@ -3428,11 +3428,11 @@ MonoBehaviour:
       collisionCarryScale: 0.25
       heldClearance: 0.2
       mass: 0.05
-      releaseLinearVelocityRetention: 0.85
-      maximumReleaseLinearVelocity: 5.5
+      releaseLinearVelocityRetention: 1
+      maximumReleaseLinearVelocity: 16
       releaseAngularVelocityMultiplier: 0.85
       maximumReleaseAngularVelocity: 4
-      linearDamping: 1.8
+      linearDamping: 0.5
       angularDamping: 4
       gentlePlacementSpeed: 0.5
       gentlePlacementAngularSpeed: 1.25
@@ -3470,7 +3470,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 256
   maximumHitDistance: 100
-  dragThresholdPixels: 8
+  dragThresholdPixels: 3
   worldUnitsPerTableUnit: 1
   tabletopHeight: 14.3
   tabletopLayerHeight: 0.02

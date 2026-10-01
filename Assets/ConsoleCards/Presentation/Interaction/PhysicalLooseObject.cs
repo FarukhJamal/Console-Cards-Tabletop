@@ -439,6 +439,9 @@ namespace ConsoleCards.Presentation.Interaction
             profile.ApplyRelease(ref velocity, ref angularVelocity);
             // TTS-FEEL: spin is synthesized AFTER profile clamps so a flick actually tumbles.
             angularVelocity = SynthesizeReleaseSpin(velocity, angularVelocity);
+            // TEMP TTS DIAGNOSTICS BEGIN
+            DiagLogRelease(velocity);
+            // TEMP TTS DIAGNOSTICS END
             // Use the physics pose (not the interpolated transform) so the committed pose matches the body.
             return State(body.position, body.rotation, velocity,
                 angularVelocity, PhysicalObjectMode.Dynamic, actor);
@@ -556,6 +559,9 @@ namespace ConsoleCards.Presentation.Interaction
                         if (cockedNudges < Tune.MaxCockedNudges)
                         {
                             cockedNudges++;
+                            // TEMP TTS DIAGNOSTICS BEGIN
+                            DiagLogCockedNudge();
+                            // TEMP TTS DIAGNOSTICS END
                             body.WakeUp();
                             body.AddForce(Vector3.up * Tune.CockedNudgeUpSpeed, ForceMode.VelocityChange);
                             body.AddTorque(UnityEngine.Random.onUnitSphere * Tune.CockedNudgeSpin, ForceMode.VelocityChange);
@@ -564,6 +570,9 @@ namespace ConsoleCards.Presentation.Interaction
                             return;
                         }
 
+                        // TEMP TTS DIAGNOSTICS BEGIN
+                        DiagLogSettle(PhysicalObjectMode.SleepingUnresolved);
+                        // TEMP TTS DIAGNOSTICS END
                         FreezeBody();
                         Commit(State(body.position, body.rotation, Vector3.zero, Vector3.zero,
                             PhysicalObjectMode.SleepingUnresolved, actor), null,
@@ -579,6 +588,9 @@ namespace ConsoleCards.Presentation.Interaction
                     value = face;
                 }
 
+                // TEMP TTS DIAGNOSTICS BEGIN
+                DiagLogSettle(PhysicalObjectMode.Sleeping);
+                // TEMP TTS DIAGNOSTICS END
                 FreezeBody();
                 Commit(State(body.position, body.rotation, Vector3.zero, Vector3.zero,
                     PhysicalObjectMode.Sleeping, actor), value,
@@ -609,6 +621,53 @@ namespace ConsoleCards.Presentation.Interaction
             body.Sleep();
         }
 
+        // TEMP TTS DIAGNOSTICS BEGIN
+        // Editor/development-only logging for TTS-feel tuning. Delete this block and every other
+        // marked pair when tuning is done.
+        private float diagLastReleaseTime = float.NaN;
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void DiagLogRelease(Vector3 finalVelocity)
+        {
+            float now = Time.unscaledTime;
+            diagLastReleaseTime = now;
+            Vector3 raw = releaseMotion.GetLinearRelease(now);
+            int samples = releaseMotion.DiagnosticSampleCount(now, out float newestAge);
+            Vector3 bodyVelocity = body.linearVelocity;
+            string kind = view != null && view.IsBound ? view.BoundState.Kind.ToString() : "?";
+            Debug.Log(
+                $"[TTS-DIAG] release {kind} '{name}': raw={new Vector2(raw.x, raw.z).magnitude:F2} "
+                + $"final={new Vector2(finalVelocity.x, finalVelocity.z).magnitude:F2} "
+                + $"cap={profile.MaximumReleaseLinearVelocity:F2} retention={profile.ReleaseLinearVelocityRetention:F2} "
+                + $"body={bodyVelocity.magnitude:F2} (planar {new Vector2(bodyVelocity.x, bodyVelocity.z).magnitude:F2}) "
+                + $"samples={samples} newestAge={newestAge * 1000f:F0}ms "
+                + $"timedOut={newestAge >= authority.InteractionConfig.ReleaseSampleTimeoutSeconds}",
+                this);
+        }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void DiagLogCockedNudge()
+        {
+            Debug.Log(
+                $"[TTS-DIAG] cocked nudge '{name}' {cockedNudges}/{Tune.MaxCockedNudges}: "
+                + $"linear={body.linearVelocity.magnitude:F3} angular={body.angularVelocity.magnitude:F3} "
+                + $"sinceRelease={DiagSinceRelease()}",
+                this);
+        }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void DiagLogSettle(PhysicalObjectMode mode)
+        {
+            string trigger = body.IsSleeping() && dynamicFrames > 2 ? "UnitySleep" : "RestTimer";
+            Debug.Log(
+                $"[TTS-DIAG] settle '{name}' {mode}: trigger={trigger} sinceRelease={DiagSinceRelease()} "
+                + $"restTimer={restTimer:F2}s linear={body.linearVelocity.magnitude:F3} angular={body.angularVelocity.magnitude:F3}",
+                this);
+        }
+
+        private string DiagSinceRelease() =>
+            float.IsNaN(diagLastReleaseTime) ? "n/a" : $"{Time.unscaledTime - diagLastReleaseTime:F2}s";
+        // TEMP TTS DIAGNOSTICS END
         private void Synchronize()
         {
             if (held && !OwnsLooseTransform) return; // Contained drag is a preview until transfer acceptance.
