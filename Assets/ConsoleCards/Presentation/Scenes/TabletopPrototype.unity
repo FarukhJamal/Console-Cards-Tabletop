@@ -3386,7 +3386,7 @@ MonoBehaviour:
       collisionCarryScale: 0.35
       heldClearance: 0.18
       mass: 0.03
-      releaseLinearVelocityRetention: 1
+      releaseLinearVelocityRetention: 0.8
       maximumReleaseLinearVelocity: 22
       releaseAngularVelocityMultiplier: 0.85
       maximumReleaseAngularVelocity: 2.5
@@ -3400,7 +3400,7 @@ MonoBehaviour:
       collisionCarryScale: 0.3
       heldClearance: 0.35
       mass: 0.12
-      releaseLinearVelocityRetention: 1
+      releaseLinearVelocityRetention: 0.8
       maximumReleaseLinearVelocity: 30
       releaseAngularVelocityMultiplier: 1
       maximumReleaseAngularVelocity: 6
@@ -3414,7 +3414,7 @@ MonoBehaviour:
       collisionCarryScale: 0.2
       heldClearance: 0.25
       mass: 0.1
-      releaseLinearVelocityRetention: 0.95
+      releaseLinearVelocityRetention: 0.8
       maximumReleaseLinearVelocity: 14
       releaseAngularVelocityMultiplier: 0.8
       maximumReleaseAngularVelocity: 3
@@ -3428,7 +3428,7 @@ MonoBehaviour:
       collisionCarryScale: 0.25
       heldClearance: 0.2
       mass: 0.05
-      releaseLinearVelocityRetention: 1
+      releaseLinearVelocityRetention: 0.8
       maximumReleaseLinearVelocity: 16
       releaseAngularVelocityMultiplier: 0.85
       maximumReleaseAngularVelocity: 4
