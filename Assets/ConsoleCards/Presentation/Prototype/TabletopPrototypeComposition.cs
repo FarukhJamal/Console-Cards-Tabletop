@@ -35,6 +35,18 @@ using UnityCamera = UnityEngine.Camera;
 
 namespace ConsoleCards.Presentation.Prototype
 {
+    /// <summary>Prototype tabletop visuals hidden at bind time without deleting their code paths.</summary>
+    [Flags]
+    public enum PrototypeVisualHide
+    {
+        None = 0,
+        CardPlaceholderLabels = 1,
+        ContainerLabels = 2,
+        ContainerPlates = 4,
+        EmptySlotPlate = 8,
+        SelectionHighlight = 16
+    }
+
     public sealed class TabletopPrototypeComposition : MonoBehaviour, IContainedCardDragFeedback
     {
         private const float TrapFloorCoinVisualScale = 0.34f;
@@ -119,6 +131,9 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal float shuffleCompression = 0.06f;
         [SerializeField] internal float floorCardVisualScale = 0.62f;
         [SerializeField] internal bool showDeveloperControls;
+        [Tooltip("Prototype visuals hidden at bind time. After changing in Play mode, press Reset or restart the session.")]
+        [SerializeField] internal PrototypeVisualHide prototypeVisualHide =
+            PrototypeVisualHide.CardPlaceholderLabels | PrototypeVisualHide.SelectionHighlight;
 
         private readonly List<RuntimeCardInstance> runtimeCardInstances = new List<RuntimeCardInstance>();
         private readonly List<RuntimeObjectInstance> runtimePawnInstances = new List<RuntimeObjectInstance>();
@@ -1078,7 +1093,8 @@ namespace ConsoleCards.Presentation.Prototype
                 StackRuntimeView newStackView = CreateStackRuntimeView(
                     $"Stack {stackViewsByContainerId.Count + 1}",
                     matchState.GetContainer(newStackId),
-                    matchState.ContainerPlacements[newStackId]);
+                    matchState.ContainerPlacements[newStackId],
+                    true);
                 stackViewsByContainerId.Add(newStackId, newStackView);
                 primaryStackContainerId = newStackId;
                 sourceView.View.ApplyAcceptedLayout();
@@ -2808,6 +2824,7 @@ namespace ConsoleCards.Presentation.Prototype
                         preview.BackLabel.text,
                         TrapFloorCardBackLabelCharacterSize,
                         TrapFloorCardLabelFontSize);
+                    preview.SetBackLabelHidden(HidesPrototypeVisual(PrototypeVisualHide.CardPlaceholderLabels));
                     previewRoot = preview.gameObject;
                     break;
                 }
@@ -2816,6 +2833,7 @@ namespace ConsoleCards.Presentation.Prototype
                     PrototypeFixedContainerVisual preview = Instantiate(prototypeDeckPrefab);
                     preview.ValidateReferences();
                     ConfigureContainerLabel(preview.Label, "DECK");
+                    preview.Label.gameObject.SetActive(!HidesPrototypeVisual(PrototypeVisualHide.ContainerLabels));
                     previewRoot = preview.gameObject;
                     break;
                 }
@@ -2824,6 +2842,7 @@ namespace ConsoleCards.Presentation.Prototype
                     PrototypeFixedContainerVisual preview = Instantiate(prototypeStackPrefab);
                     preview.ValidateReferences();
                     ConfigureContainerLabel(preview.Label, "STACK");
+                    preview.Label.gameObject.SetActive(!HidesPrototypeVisual(PrototypeVisualHide.ContainerLabels));
                     previewRoot = preview.gameObject;
                     break;
                 }
@@ -2882,6 +2901,7 @@ namespace ConsoleCards.Presentation.Prototype
                     preview.BackLabel.text,
                     TrapFloorCardBackLabelCharacterSize,
                     TrapFloorCardLabelFontSize);
+                preview.SetBackLabelHidden(HidesPrototypeVisual(PrototypeVisualHide.CardPlaceholderLabels));
                 TabletopPose offsetPose = GenericCardBatchLayout.ResolvePose(origin, i, quantity, i);
                 preview.transform.localPosition = new Vector3(
                     (float)(offsetPose.Position.X * worldUnitsPerTableUnit),
@@ -2971,7 +2991,8 @@ namespace ConsoleCards.Presentation.Prototype
                     RuntimeDeckInstance instance = CreateRuntimeDeckInstance(
                         "Toolbox Deck",
                         "DECK",
-                        result.ContainerId);
+                        result.ContainerId,
+                        true);
                     runtimeDeckInstances.Add(instance);
                     controllerDeckViews.Add(instance.View);
                     instance.View.Bind(
@@ -2988,7 +3009,7 @@ namespace ConsoleCards.Presentation.Prototype
                 {
                     ContainerState container = matchState.GetContainer(result.ContainerId);
                     ContainerPlacementState placement = matchState.ContainerPlacements[result.ContainerId];
-                    StackRuntimeView stack = CreateStackRuntimeView("STACK", container, placement);
+                    StackRuntimeView stack = CreateStackRuntimeView("STACK", container, placement, true);
                     stackViewsByContainerId.Add(result.ContainerId, stack);
                     appearedTransform = stack.Root.transform;
                     layoutCollectionChanged = true;
@@ -7004,6 +7025,11 @@ namespace ConsoleCards.Presentation.Prototype
             sceneStackBVisual.Reactivate();
             sceneDiscardPileVisual.Reactivate();
             sceneHandVisual.Reactivate();
+            ApplyFixedContainerVisualHide(sceneDeckVisual, true);
+            ApplyFixedContainerVisualHide(sceneStackAVisual, true);
+            ApplyFixedContainerVisualHide(sceneStackBVisual, true);
+            ApplyFixedContainerVisualHide(sceneDiscardPileVisual, true);
+            ApplyFixedContainerVisualHide(sceneHandVisual, true);
             sceneConsoleView.gameObject.SetActive(true);
         }
 
@@ -8025,6 +8051,7 @@ namespace ConsoleCards.Presentation.Prototype
                 cardState,
                 labelsByCardId[cardState.BaseState.Id]);
             cardSelectionVisual.SetSelected(false);
+            ApplySelectionHighlightHide(cardSelectionVisual);
             cardView.Bind(cardState, coordinateConverter);
             cardViewBoundByComposition = true;
             cardVisualReferences.Add(looseCardVisualReferences);
@@ -8047,6 +8074,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             pawnSelectionVisual.SetSelected(false);
+            ApplySelectionHighlightHide(pawnSelectionVisual);
             pawnView.Bind(pawnState, coordinateConverter);
             pawnViewBoundByComposition = true;
             pawnViews.Add(pawnView);
@@ -8069,6 +8097,7 @@ namespace ConsoleCards.Presentation.Prototype
             if (tokenState != null)
             {
                 tokenSelectionVisual.SetSelected(false);
+                ApplySelectionHighlightHide(tokenSelectionVisual);
                 tokenView.Bind(tokenState, coordinateConverter);
                 tokenView.transform.localScale = Vector3.one * TrapFloorCoinVisualScale;
                 tokenViewBoundByComposition = true;
@@ -8124,14 +8153,16 @@ namespace ConsoleCards.Presentation.Prototype
                 RuntimeDeckInstance controllerDeck = CreateRuntimeDeckInstance(
                     $"Player {playerIndex + 1} Controller Deck",
                     $"P{playerIndex + 1} CTRL",
-                    player.ControllerDeckId);
+                    player.ControllerDeckId,
+                    false);
                 runtimeDeckInstances.Add(controllerDeck);
                 controllerDeckViews.Add(controllerDeck.View);
                 ContainerId actionAreaId = player.ActionAbilityAreaContainerId;
                 StackRuntimeView actionArea = CreateStackRuntimeView(
                     $"P{playerIndex + 1} ACTIONS",
                     matchState.GetContainer(actionAreaId),
-                    matchState.ContainerPlacements[actionAreaId]);
+                    matchState.ContainerPlacements[actionAreaId],
+                    false);
                 stackViewsByContainerId.Add(actionAreaId, actionArea);
 
                 if (player.LayoutSeatIndex == localPlayerLayoutSeatIndex)
@@ -8919,6 +8950,7 @@ namespace ConsoleCards.Presentation.Prototype
             selectionVisual = createdVisualReferences.SelectionVisual;
             runtimeCardInstance.SetReferences(createdView, selectionVisual, createdVisualReferences);
             selectionVisual.SetSelected(false);
+            ApplySelectionHighlightHide(selectionVisual);
             ConfigureCardVisuals(createdVisualReferences, card, label);
             createdView.Bind(card, coordinateConverter);
             if (trapFloorTemplate != null && trapFloorTemplate.IsFloorCard(card.BaseState.Id))
@@ -8946,6 +8978,7 @@ namespace ConsoleCards.Presentation.Prototype
             selectionVisual = createdView.GetComponent<TabletopSelectionVisual>();
             ValidateRuntimeSelectionVisual(createdView, selectionVisual);
             selectionVisual.SetSelected(false);
+            ApplySelectionHighlightHide(selectionVisual);
             createdView.Bind(pawn, coordinateConverter);
             runtimePawnInstances.Add(new RuntimeObjectInstance(root, createdView, selectionVisual));
             return createdView;
@@ -9047,6 +9080,7 @@ namespace ConsoleCards.Presentation.Prototype
             selectionVisual = createdView.GetComponent<TabletopSelectionVisual>();
             ValidateRuntimeSelectionVisual(createdView, selectionVisual);
             selectionVisual.SetSelected(false);
+            ApplySelectionHighlightHide(selectionVisual);
             createdView.Bind(token, coordinateConverter);
             createdView.transform.localScale = Vector3.one * visualScale;
             runtimeTokenInstances.Add(new RuntimeObjectInstance(root, createdView, selectionVisual));
@@ -9136,6 +9170,7 @@ namespace ConsoleCards.Presentation.Prototype
             selectionVisual = createdView.GetComponent<TabletopSelectionVisual>();
             ValidateRuntimeSelectionVisual(createdView, selectionVisual);
             selectionVisual.SetSelected(false);
+            ApplySelectionHighlightHide(selectionVisual);
             createdView.Bind(die, coordinateConverter);
             runtimeDieInstances.Add(new RuntimeObjectInstance(root, createdView, selectionVisual));
             return createdView;
@@ -9144,7 +9179,8 @@ namespace ConsoleCards.Presentation.Prototype
         private RuntimeDeckInstance CreateRuntimeDeckInstance(
             string name,
             string displayLabel,
-            ContainerId containerId)
+            ContainerId containerId,
+            bool labelIsDecoration)
         {
             PrototypeFixedContainerVisual visual = Instantiate(prototypeDeckPrefab);
             GameObject root = PrepareRuntimeRoot(visual.gameObject, name);
@@ -9155,6 +9191,7 @@ namespace ConsoleCards.Presentation.Prototype
             visual.DropTarget.enabled = false;
             visual.TargetCollider.enabled = false;
             visual.ClearFeedback();
+            ApplyFixedContainerVisualHide(visual, labelIsDecoration);
             return new RuntimeDeckInstance(root, visual, view, containerId);
         }
 
@@ -9271,6 +9308,7 @@ namespace ConsoleCards.Presentation.Prototype
                 : new Color(0.95f, 0.88f, 0.42f);
             string frontLabel = label;
             string backLabel = isFloorCard ? "MYSTERY" : visualReferences.BackLabel.text;
+            bool backLabelIsPlaceholder = true;
             Color backColor = new Color(0.10f, 0.19f, 0.42f);
             if (TryGetAuthoredCardDefinition(card.BaseState.DefinitionId, out CardDefinition authoredDefinition))
             {
@@ -9291,6 +9329,7 @@ namespace ConsoleCards.Presentation.Prototype
                     backColor = frontColor;
                     frontLabel = $"HOLE\n{floorCard.Coordinate}";
                     backLabel = frontLabel;
+                    backLabelIsPlaceholder = false;
                 }
                 else
                 {
@@ -9327,6 +9366,8 @@ namespace ConsoleCards.Presentation.Prototype
                 backLabel,
                 TrapFloorCardBackLabelCharacterSize,
                 TrapFloorCardLabelFontSize);
+            visualReferences.SetBackLabelHidden(
+                backLabelIsPlaceholder && HidesPrototypeVisual(PrototypeVisualHide.CardPlaceholderLabels));
         }
 
         private static Color TrapFloorContentColor(TrapFloorFloorContentCategory category)
@@ -9347,6 +9388,28 @@ namespace ConsoleCards.Presentation.Prototype
                     return new Color(0.42f, 0.66f, 0.90f);
                 default:
                     return new Color(0.95f, 0.88f, 0.42f);
+            }
+        }
+
+        private bool HidesPrototypeVisual(PrototypeVisualHide part)
+        {
+            return (prototypeVisualHide & part) != 0;
+        }
+
+        private void ApplyFixedContainerVisualHide(PrototypeFixedContainerVisual visual, bool labelIsDecoration)
+        {
+            visual.Label.gameObject.SetActive(
+                !labelIsDecoration || !HidesPrototypeVisual(PrototypeVisualHide.ContainerLabels));
+            visual.SetBasePlateHidden(HidesPrototypeVisual(PrototypeVisualHide.ContainerPlates));
+        }
+
+        private void ApplySelectionHighlightHide(TabletopSelectionVisual selectionVisual)
+        {
+            bool visible = !HidesPrototypeVisual(PrototypeVisualHide.SelectionHighlight);
+            Renderer[] renderers = selectionVisual.HighlightRoot.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                renderers[i].enabled = visible;
             }
         }
 
@@ -9722,7 +9785,8 @@ namespace ConsoleCards.Presentation.Prototype
         private StackRuntimeView CreateStackRuntimeView(
             string name,
             ContainerState container,
-            ContainerPlacementState placement)
+            ContainerPlacementState placement,
+            bool labelIsDecoration)
         {
             PrototypeFixedContainerVisual visual = Instantiate(prototypeStackPrefab);
             GameObject root = visual.gameObject;
@@ -9747,6 +9811,7 @@ namespace ConsoleCards.Presentation.Prototype
                 placement,
                 visual.DropTarget);
             ConfigureFixedContainer(visual, view);
+            ApplyFixedContainerVisualHide(visual, labelIsDecoration);
             return stackRuntimeView;
         }
 
@@ -9769,6 +9834,7 @@ namespace ConsoleCards.Presentation.Prototype
             slotVisual.DropTarget.enabled = true;
             slotVisual.TargetCollider.enabled = true;
             slotVisual.ClearFeedback();
+            slotVisual.SetEmptyStateHidden(HidesPrototypeVisual(PrototypeVisualHide.EmptySlotPlate));
             feedbackTargetsByContainerId[slotView.ContainerId] = new ContainerFeedbackTarget(slotVisual);
         }
 

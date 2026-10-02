@@ -50,6 +50,7 @@ do not make the game depend on test code, and do not edit or delete existing tes
 - `MissingReferenceException` on Play-mode stop in `PrototypeFixedContainerVisual.ClearFeedback` (`Renderer.sharedMaterial` on an already-destroyed `MeshRenderer`; reached via `TabletopPrototypeComposition.Shutdown` -> `ClearFeedback`).
 - The camera pivot height (`tabletopHeight` 14.3) is stale vs the active table top (11.6); at the default view the far and near table edges are not framed, so pieces recovered outside those sides are off screen until the player zooms out or pans. Needs a separate camera-framing stage.
 - Grabbing a piece hovering outside the table drops it about 2 units quickly when its centre crosses the edge (polish).
+- Card base colour, floor-category colour, card artwork, and the Floorfall / ability-destination / neutralized-trap tints are applied to renderers that are disabled in `PrototypeCard.prefab` (`FaceUpPlate` / `FaceDownPlate`). The visible card is the nested "Trading Card" model, so those cues are not visible to the player.
 
 ## Files already prepared (drop-in, written against the real code)
 - `PhysicalLooseObject.cs` → replaces `Assets/ConsoleCards/Presentation/Interaction/PhysicalLooseObject.cs`

@@ -17,6 +17,7 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] private Material validTargetMaterial;
         [SerializeField] private Material sourceTargetMaterial;
         [SerializeField] private Material invalidTargetMaterial;
+        private bool basePlateHidden;
 
         public IContainerView ContainerView => containerView as IContainerView;
 
@@ -97,6 +98,12 @@ namespace ConsoleCards.Presentation.Prototype
             SetFeedbackMaterial(invalidTargetMaterial);
         }
 
+        public void SetBasePlateHidden(bool hidden)
+        {
+            basePlateHidden = hidden;
+            SetFeedbackMaterial(feedbackRenderer.sharedMaterial);
+        }
+
         public void ClearFeedback()
         {
             SetFeedbackMaterial(baseMaterial);
@@ -105,6 +112,10 @@ namespace ConsoleCards.Presentation.Prototype
         private void SetFeedbackMaterial(Material material)
         {
             feedbackRenderer.sharedMaterial = material;
+            feedbackRenderer.enabled = !basePlateHidden
+                || ReferenceEquals(material, validTargetMaterial)
+                || ReferenceEquals(material, sourceTargetMaterial)
+                || ReferenceEquals(material, invalidTargetMaterial);
         }
 
         private void ValidateHierarchyReference(Transform referencedTransform, string referenceName)

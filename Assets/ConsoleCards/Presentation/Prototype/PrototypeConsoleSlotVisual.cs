@@ -74,6 +74,11 @@ namespace ConsoleCards.Presentation.Prototype
             SetFeedback(invalidTargetFeedbackRoot);
         }
 
+        public void SetEmptyStateHidden(bool hidden)
+        {
+            emptyStateRoot.SetActive(!hidden);
+        }
+
         public void ClearFeedback()
         {
             SetFeedback(null);

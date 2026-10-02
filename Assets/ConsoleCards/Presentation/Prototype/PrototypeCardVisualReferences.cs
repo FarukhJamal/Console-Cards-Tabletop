@@ -17,6 +17,7 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] private Renderer faceDownRenderer;
         [SerializeField] private TextMesh frontLabel;
         [SerializeField] private TextMesh backLabel;
+        private bool backLabelHidden;
 
         public CardView CardView => cardView;
 
@@ -54,6 +55,21 @@ namespace ConsoleCards.Presentation.Prototype
                 localOrderHeight);
         }
 
+        public void SetBackLabelHidden(bool hidden)
+        {
+            backLabelHidden = hidden;
+            if (backLabel == null)
+            {
+                return;
+            }
+
+            bool backVisible = !hidden && (frontLabel == null || frontLabel.gameObject.activeSelf);
+            if (backLabel.gameObject.activeSelf != backVisible)
+            {
+                backLabel.gameObject.SetActive(backVisible);
+            }
+        }
+
         public void SetCardContentVisible(bool visible)
         {
             if (frontLabel != null && frontLabel.gameObject.activeSelf != visible)
@@ -61,9 +77,10 @@ namespace ConsoleCards.Presentation.Prototype
                 frontLabel.gameObject.SetActive(visible);
             }
 
-            if (backLabel != null && backLabel.gameObject.activeSelf != visible)
+            bool backVisible = visible && !backLabelHidden;
+            if (backLabel != null && backLabel.gameObject.activeSelf != backVisible)
             {
-                backLabel.gameObject.SetActive(visible);
+                backLabel.gameObject.SetActive(backVisible);
             }
         }
 
