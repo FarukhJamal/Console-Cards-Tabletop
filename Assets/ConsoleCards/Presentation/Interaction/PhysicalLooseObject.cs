@@ -67,7 +67,11 @@ namespace ConsoleCards.Presentation.Interaction
             public const float RollApexHeight = 1.2f;            // keeps roll arc constant when gravity changes
 
             // Out-of-bounds recovery
-            public const float RecoverBelowSurfaceDistance = 2f; // recover once below the lowest tabletop surface top by this much
+            public const float RecoverBelowSurfaceDistance = 15f; // recover once below the lowest tabletop surface top by this much (~1 s fall at g -30)
+            public const float RecoverOutsideOffset = 0.5f;       // recovered footprint sits this far outside the table edge it fell past
+            public const float RecoverHoverClearance = 2.0f;      // recovered collider bottom sits this far above the table top
+            public const float RecoverSlotGap = 0.2f;             // gap between neighbouring recovery spots along an edge
+            public const int RecoverSlotTries = 8;                // spots tried along the edge before using the last one
         }
 
         private TabletopObjectView view;
@@ -662,6 +666,7 @@ namespace ConsoleCards.Presentation.Interaction
         /// </summary>
         private void RecoverOutOfBounds()
         {
+            Vector3 fallPosition = body.position; // where it actually fell, before the freeze moves it
             Vector3 position;
             Quaternion rotation;
             if (hasReleasePose) { position = releasePosition; rotation = releaseRotation; }
@@ -686,6 +691,7 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             FreezeAt(position, rotation);
+            position = PlaceOutsideTable(position, fallPosition);
             bool accepted = CommitFrozenPose(position, rotation,
                 userActionActive
                     ? AuthoritativeActionRecordMode.Transaction
@@ -722,6 +728,167 @@ namespace ConsoleCards.Presentation.Interaction
             body.rotation = rotation;
             transform.SetPositionAndRotation(position, rotation);
         }
+
+        private static readonly Collider[] recoveryOverlapBuffer = new Collider[16];
+
+        /// <summary>
+        /// Moves a frozen piece (translation only) to hover just outside the table, at the midpoint of the side it fell past:
+        /// RecoverOutsideOffset beyond the edge, collider bottom RecoverHoverClearance above the table top. Occupied spots
+        /// shift along the edge. Edges always come from the table (lowest-top active surface), never the game board.
+        /// Event-time only (the surface registry enumerates with an allocation).
+        /// </summary>
+        private Vector3 PlaceOutsideTable(Vector3 position, Vector3 fallPosition)
+        {
+            Collider pieceCollider = PhysicalCollider;
+            if (pieceCollider == null || !TryGetRecoveryTableBounds(out Bounds table)) return position;
+            Physics.SyncTransforms(); // auto-sync is off; bounds must reflect the frozen pose
+            Bounds piece = pieceCollider.bounds;
+
+            // Side: nearest edge to where it fell; if still inside the footprint (tunnelled), push the release XZ out instead.
+            Vector3 probe = fallPosition;
+            if (probe.x >= table.min.x && probe.x <= table.max.x && probe.z >= table.min.z && probe.z <= table.max.z)
+                probe = hasReleasePose ? releasePosition : position;
+            int side = NearestTableSide(table, probe); // 0 = +X, 1 = -X, 2 = +Z, 3 = -Z
+
+            bool edgeAlongX = side >= 2;
+            float outward = side == 0 ? table.max.x + Tune.RecoverOutsideOffset + piece.extents.x
+                : side == 1 ? table.min.x - Tune.RecoverOutsideOffset - piece.extents.x
+                : side == 2 ? table.max.z + Tune.RecoverOutsideOffset + piece.extents.z
+                : table.min.z - Tune.RecoverOutsideOffset - piece.extents.z;
+            float alongCenter = edgeAlongX ? table.center.x : table.center.z;
+            float halfAlong = edgeAlongX ? piece.extents.x : piece.extents.z;
+            float maxAlongOffset = Mathf.Max(0f, (edgeAlongX ? table.extents.x : table.extents.z) - halfAlong);
+            float step = (2f * halfAlong) + Tune.RecoverSlotGap;
+            float centerY = table.max.y + Tune.RecoverHoverClearance + piece.extents.y;
+
+            // Midpoint first, then alternate along the edge: 0, +1, -1, +2, -2, ... (spots past the edge ends are skipped).
+            Vector3 candidate = piece.center;
+            bool foundFree = false;
+            int tries = 0;
+            for (int i = 0; i < 2 * Tune.RecoverSlotTries && tries < Tune.RecoverSlotTries; i++)
+            {
+                int k = ((i + 1) / 2) * (i % 2 == 1 ? 1 : -1);
+                float along = alongCenter + (k * step);
+                if (Mathf.Abs(along - alongCenter) > maxAlongOffset) continue;
+                tries++;
+                candidate = edgeAlongX
+                    ? new Vector3(along, centerY, outward)
+                    : new Vector3(outward, centerY, along);
+                if (!IsRecoverySpotOccupied(candidate, piece.extents))
+                {
+                    foundFree = true;
+                    break;
+                }
+            }
+
+            // TEMP TTS DIAGNOSTICS BEGIN
+            if (!foundFree) WarnRecoverySpotsOccupied(tries);
+            // TEMP TTS DIAGNOSTICS END
+            Vector3 adjusted = position + (candidate - piece.center);
+            body.position = adjusted;
+            transform.position = adjusted;
+            Physics.SyncTransforms();
+
+            // TEMP TTS DIAGNOSTICS BEGIN
+            WarnIfRecoveredIntoSurface(table.max.y);
+            // TEMP TTS DIAGNOSTICS END
+            return adjusted;
+        }
+
+        /// <summary>The table for recovery: the active surface with the lowest top; ties go to the larger XZ area.</summary>
+        private bool TryGetRecoveryTableBounds(out Bounds table)
+        {
+            table = default;
+            bool found = false;
+            PhysicsScene physicsScene = gameObject.scene.GetPhysicsScene();
+            foreach (PhysicalTabletopSurface surface in PhysicalTabletopSurface.Registered)
+            {
+                if (surface == null
+                    || !surface.ParticipatesIn(physicsScene)
+                    || !surface.TryGetCollider(out Collider surfaceCollider, out _)) continue;
+                Bounds candidate = surfaceCollider.bounds;
+                bool tie = found && Mathf.Abs(candidate.max.y - table.max.y) <= 0.0001f;
+                if (!found
+                    || (!tie && candidate.max.y < table.max.y)
+                    || (tie && candidate.size.x * candidate.size.z > table.size.x * table.size.z))
+                {
+                    table = candidate;
+                    found = true;
+                }
+            }
+
+            return found;
+        }
+
+        /// <summary>Nearest table edge segment to the point; ties (corner regions) go to the edge the point is furthest beyond.</summary>
+        private static int NearestTableSide(Bounds table, Vector3 point)
+        {
+            float clampedX = Mathf.Clamp(point.x, table.min.x, table.max.x);
+            float clampedZ = Mathf.Clamp(point.z, table.min.z, table.max.z);
+            int best = 0;
+            float bestDistance = float.MaxValue;
+            float bestBeyond = float.MinValue;
+            for (int side = 0; side < 4; side++)
+            {
+                float edgeX = side == 0 ? table.max.x : side == 1 ? table.min.x : clampedX;
+                float edgeZ = side == 2 ? table.max.z : side == 3 ? table.min.z : clampedZ;
+                float dx = point.x - edgeX;
+                float dz = point.z - edgeZ;
+                float distance = (dx * dx) + (dz * dz);
+                float beyond = side == 0 ? point.x - table.max.x
+                    : side == 1 ? table.min.x - point.x
+                    : side == 2 ? point.z - table.max.z
+                    : table.min.z - point.z;
+                bool tie = Mathf.Abs(distance - bestDistance) <= 0.0001f;
+                if ((!tie && distance < bestDistance) || (tie && beyond > bestBeyond))
+                {
+                    best = side;
+                    bestDistance = distance;
+                    bestBeyond = beyond;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>Non-alloc AABB overlap at a candidate spot, ignoring this piece's own colliders and triggers.</summary>
+        private bool IsRecoverySpotOccupied(Vector3 center, Vector3 extents)
+        {
+            int count = Physics.OverlapBoxNonAlloc(
+                center,
+                extents,
+                recoveryOverlapBuffer,
+                Quaternion.identity,
+                ~0,
+                QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                Collider hit = recoveryOverlapBuffer[i];
+                if (hit == null || hit.transform == transform || hit.transform.IsChildOf(transform)) continue;
+                return true;
+            }
+
+            return false;
+        }
+
+        // TEMP TTS DIAGNOSTICS BEGIN
+        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void WarnRecoverySpotsOccupied(int tries)
+        {
+            Debug.LogWarning($"PhysicalLooseObject '{name}': all {tries} recovery spots along the edge are occupied; using the last one.", this);
+        }
+
+        /// <summary>Bounds proof: the piece's AABB bottom must sit above every surface AABB under it, so they cannot overlap.</summary>
+        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void WarnIfRecoveredIntoSurface(float highestTop)
+        {
+            Collider pieceCollider = PhysicalCollider;
+            if (pieceCollider == null) return;
+            float bottom = pieceCollider.bounds.min.y;
+            if (bottom < highestTop + Tune.RecoverHoverClearance - 0.001f)
+                Debug.LogWarning($"PhysicalLooseObject '{name}' recovered with collider bottom {bottom:F3}, below surface top {highestTop:F3} + clearance {Tune.RecoverHoverClearance:F2}.", this);
+        }
+        // TEMP TTS DIAGNOSTICS END
 
         /// <summary>Commits a zero-velocity sleeping state for a frozen pose; dice report a face or SleepingUnresolved.</summary>
         private bool CommitFrozenPose(Vector3 position, Quaternion rotation, AuthoritativeActionRecordMode recordMode)

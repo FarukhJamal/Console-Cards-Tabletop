@@ -43,6 +43,13 @@ Root cause found in review: `PhysicalLooseObject` makes the held body **kinemati
 do not make the game depend on test code, and do not edit or delete existing tests unless they block compilation
 (then tell me first). At the end of every stage, give me a short numbered manual verification checklist
 (what to click, what I should see, what would indicate a problem).
+10. Frozen pieces are solid like locked pieces and must never be stack/deck merge targets (enforce this in the stacking stage).
+
+## Known issues (do not fix unless asked)
+- `MissingReferenceException` on Play-mode stop in `PrototypeRuntimeUiController.ReleaseModalViews` (`GameObject.SetActive` on an already-destroyed object; reached via `TabletopPrototypeComposition.OnDestroy` -> `Shutdown` -> `CloseContextMenu`).
+- `MissingReferenceException` on Play-mode stop in `PrototypeFixedContainerVisual.ClearFeedback` (`Renderer.sharedMaterial` on an already-destroyed `MeshRenderer`; reached via `TabletopPrototypeComposition.Shutdown` -> `ClearFeedback`).
+- The camera pivot height (`tabletopHeight` 14.3) is stale vs the active table top (11.6); at the default view the far and near table edges are not framed, so pieces recovered outside those sides are off screen until the player zooms out or pans. Needs a separate camera-framing stage.
+- Grabbing a piece hovering outside the table drops it about 2 units quickly when its centre crosses the edge (polish).
 
 ## Files already prepared (drop-in, written against the real code)
 - `PhysicalLooseObject.cs` → replaces `Assets/ConsoleCards/Presentation/Interaction/PhysicalLooseObject.cs`
