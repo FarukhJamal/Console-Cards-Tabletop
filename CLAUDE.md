@@ -51,6 +51,9 @@ do not make the game depend on test code, and do not edit or delete existing tes
 - The camera pivot height (`tabletopHeight` 14.3) is stale vs the active table top (11.6); at the default view the far and near table edges are not framed, so pieces recovered outside those sides are off screen until the player zooms out or pans. Needs a separate camera-framing stage.
 - Grabbing a piece hovering outside the table drops it about 2 units quickly when its centre crosses the edge (polish).
 - Card base colour, floor-category colour, card artwork, and the Floorfall / ability-destination / neutralized-trap tints are applied to renderers that are disabled in `PrototypeCard.prefab` (`FaceUpPlate` / `FaceDownPlate`). The visible card is the nested "Trading Card" model, so those cues are not visible to the player.
+- The d6 and d8 dice prefabs (`Dice Collection/Prefabs/Dice_d6.prefab`, `Dice_d8.prefab`) use the "Plastic Glossy" materials, which have no albedo texture: the dice render plain white with only faintly embossed pips/numerals. The pack also ships "Plastic Rough Scratched" albedo materials with painted values. Until switched, d6/d8 rolls are hard to read when `PrototypeVisualHide.DieResultLabel` is set.
+- A cocked die (`SleepingUnresolved`) has no visible indicator when `PrototypeVisualHide.DieResultLabel` is set; only the lean is visible, and the Die context-menu subtitle still shows the previous `CurrentValue`.
+- Card faces and backs are the plain grey "Trading Card" model (`CARD/face.mat`, `back.mat`, no texture); the `PrototypeLabel` / `PrototypeBackLabel` TextMeshes are the only identity cue on the table, so cards are blank when `PrototypeVisualHide.CardFaceLabels` is set.
 
 ## Files already prepared (drop-in, written against the real code)
 - `PhysicalLooseObject.cs` → replaces `Assets/ConsoleCards/Presentation/Interaction/PhysicalLooseObject.cs`

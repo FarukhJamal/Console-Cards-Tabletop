@@ -44,7 +44,10 @@ namespace ConsoleCards.Presentation.Prototype
         ContainerLabels = 2,
         ContainerPlates = 4,
         EmptySlotPlate = 8,
-        SelectionHighlight = 16
+        SelectionHighlight = 16,
+        DieResultLabel = 32,
+        PawnOwnerLabel = 64,
+        CardFaceLabels = 128
     }
 
     public sealed class TabletopPrototypeComposition : MonoBehaviour, IContainedCardDragFeedback
@@ -133,7 +136,12 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal bool showDeveloperControls;
         [Tooltip("Prototype visuals hidden at bind time. After changing in Play mode, press Reset or restart the session.")]
         [SerializeField] internal PrototypeVisualHide prototypeVisualHide =
-            PrototypeVisualHide.CardPlaceholderLabels | PrototypeVisualHide.SelectionHighlight;
+            PrototypeVisualHide.CardPlaceholderLabels
+            | PrototypeVisualHide.ContainerLabels
+            | PrototypeVisualHide.SelectionHighlight
+            | PrototypeVisualHide.DieResultLabel
+            | PrototypeVisualHide.PawnOwnerLabel
+            | PrototypeVisualHide.CardFaceLabels;
 
         private readonly List<RuntimeCardInstance> runtimeCardInstances = new List<RuntimeCardInstance>();
         private readonly List<RuntimeObjectInstance> runtimePawnInstances = new List<RuntimeObjectInstance>();
@@ -2825,6 +2833,8 @@ namespace ConsoleCards.Presentation.Prototype
                         TrapFloorCardBackLabelCharacterSize,
                         TrapFloorCardLabelFontSize);
                     preview.SetBackLabelHidden(HidesPrototypeVisual(PrototypeVisualHide.CardPlaceholderLabels));
+                    ApplyLabelRendererHide(preview.FrontLabel, PrototypeVisualHide.CardFaceLabels);
+                    ApplyLabelRendererHide(preview.BackLabel, PrototypeVisualHide.CardFaceLabels);
                     previewRoot = preview.gameObject;
                     break;
                 }
@@ -2862,6 +2872,7 @@ namespace ConsoleCards.Presentation.Prototype
                     DieView preview = Instantiate(prototypeDiePrefab);
                     preview.ConfigurePhysicalShape(dieSideCount);
                     ConfigurePrototypeLabel(preview.ResultLabel, $"d{dieSideCount}\n1", 0.18f, 64);
+                    ApplyLabelRendererHide(preview.ResultLabel, PrototypeVisualHide.DieResultLabel);
                     previewRoot = preview.gameObject;
                     break;
                 }
@@ -2902,6 +2913,8 @@ namespace ConsoleCards.Presentation.Prototype
                     TrapFloorCardBackLabelCharacterSize,
                     TrapFloorCardLabelFontSize);
                 preview.SetBackLabelHidden(HidesPrototypeVisual(PrototypeVisualHide.CardPlaceholderLabels));
+                ApplyLabelRendererHide(preview.FrontLabel, PrototypeVisualHide.CardFaceLabels);
+                ApplyLabelRendererHide(preview.BackLabel, PrototypeVisualHide.CardFaceLabels);
                 TabletopPose offsetPose = GenericCardBatchLayout.ResolvePose(origin, i, quantity, i);
                 preview.transform.localPosition = new Vector3(
                     (float)(offsetPose.Position.X * worldUnitsPerTableUnit),
@@ -9033,6 +9046,7 @@ namespace ConsoleCards.Presentation.Prototype
                 labelRoot.transform.localScale = Vector3.one * 0.45f;
                 TextMesh label = labelRoot.AddComponent<TextMesh>();
                 ConfigurePrototypeLabel(label, $"P{playerNumber}", 0.16f, 64);
+                ApplyLabelRendererHide(label, PrototypeVisualHide.PawnOwnerLabel);
                 officialPawnLabels.Add(labelRoot);
             }
         }
@@ -9167,6 +9181,7 @@ namespace ConsoleCards.Presentation.Prototype
             DieView createdView = Instantiate(prototypeDiePrefab);
             GameObject root = PrepareRuntimeRoot(createdView.gameObject, name);
             ConfigurePrototypeLabel(createdView.ResultLabel, createdView.ResultLabel.text, 0.18f, 64);
+            ApplyLabelRendererHide(createdView.ResultLabel, PrototypeVisualHide.DieResultLabel);
             selectionVisual = createdView.GetComponent<TabletopSelectionVisual>();
             ValidateRuntimeSelectionVisual(createdView, selectionVisual);
             selectionVisual.SetSelected(false);
@@ -9368,6 +9383,11 @@ namespace ConsoleCards.Presentation.Prototype
                 TrapFloorCardLabelFontSize);
             visualReferences.SetBackLabelHidden(
                 backLabelIsPlaceholder && HidesPrototypeVisual(PrototypeVisualHide.CardPlaceholderLabels));
+            PrototypeVisualHide faceLabelPart = backLabelIsPlaceholder
+                ? PrototypeVisualHide.CardFaceLabels
+                : PrototypeVisualHide.None; // collapsed floor card: HOLE (x,y) stays visible on both sides
+            ApplyLabelRendererHide(visualReferences.FrontLabel, faceLabelPart);
+            ApplyLabelRendererHide(visualReferences.BackLabel, faceLabelPart);
         }
 
         private static Color TrapFloorContentColor(TrapFloorFloorContentCategory category)
@@ -9410,6 +9430,15 @@ namespace ConsoleCards.Presentation.Prototype
             for (int i = 0; i < renderers.Length; i++)
             {
                 renderers[i].enabled = visible;
+            }
+        }
+
+        private void ApplyLabelRendererHide(TextMesh label, PrototypeVisualHide part)
+        {
+            Renderer labelRenderer = label != null ? label.GetComponent<Renderer>() : null;
+            if (labelRenderer != null)
+            {
+                labelRenderer.enabled = !HidesPrototypeVisual(part);
             }
         }
 
