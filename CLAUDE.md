@@ -32,7 +32,7 @@ Root cause found in review: `PhysicalLooseObject` makes the held body **kinemati
 
 ## Hard rules
 1. Keep authority/Undo contracts: all physical state changes go through `Commit(...)` with the right `AuthoritativeActionRecordMode`. No direct `MatchState` mutation from presentation.
-2. A held physical object is **dynamic** (`isKinematic=false`, `useGravity=false`, `detectCollisions=true`). Kinematic only if user-locked. Never reintroduce teleporting (`body.position`/`transform` writes every frame) to "fix" a symptom.
+2. A held physical object is **dynamic** (`isKinematic=false`, `useGravity=false`, `detectCollisions=true`). Kinematic only when user-locked or frozen after out-of-bounds recovery. Never reintroduce teleporting (`body.position`/`transform` writes every frame) to "fix" a symptom.
 3. `Follow()` runs in `Update` and only computes the target; movement happens by velocity in `FixedUpdate`. Release velocity must come from samples of the real body.
 4. Do not weaken collisions or remove the Undo/lock/container logic.
 5. Per-frame code must not allocate (use the existing NonAlloc buffers).

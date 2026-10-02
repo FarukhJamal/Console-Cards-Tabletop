@@ -65,6 +65,9 @@ namespace ConsoleCards.Presentation.Interaction
 
             // Roll()
             public const float RollApexHeight = 1.2f;            // keeps roll arc constant when gravity changes
+
+            // Out-of-bounds recovery
+            public const float RecoverBelowSurfaceDistance = 2f; // recover once below the lowest tabletop surface top by this much
         }
 
         private TabletopObjectView view;
@@ -107,6 +110,20 @@ namespace ConsoleCards.Presentation.Interaction
         private float restTimer;
         private int cockedNudges;
 
+        // Out-of-bounds recovery (runtime only; never committed)
+        private bool frozenAfterRecovery;      // kinematic hover after recovery until grabbed/rolled
+        private float recoveryHeight = float.NaN;
+        private bool hasReleasePose;
+        private Vector3 releasePosition;
+        private Quaternion releaseRotation;
+        private bool hasSettledPose;
+        private Vector3 settledPosition;
+        private Quaternion settledRotation;
+        private bool hasHeldPose;
+        private Vector3 heldPosition;
+        private Quaternion heldRotation;
+        private bool missingRecoveryPoseReported;
+
         public bool IsHeld => held;
         public bool OwnsLooseTransform => view != null && view.IsBound && view.BoundState.ContainerId.IsEmpty;
         public Rigidbody Body => body;
@@ -141,6 +158,11 @@ namespace ConsoleCards.Presentation.Interaction
             deliberateRotationPending = false;
             restTimer = 0f;
             cockedNudges = 0;
+            frozenAfterRecovery = false;
+            hasReleasePose = false;
+            hasSettledPose = false;
+            hasHeldPose = false;
+            missingRecoveryPoseReported = false;
             if (PhysicalCollider == null) throw new InvalidOperationException("Loose physics requires an enabled collider on the wrapper or its visual child.");
             physicalCollider = PhysicalCollider;
             if (physicalCollider.sharedMaterial == null)
@@ -158,7 +180,9 @@ namespace ConsoleCards.Presentation.Interaction
             body.solverIterations = Tune.SolverIterations;
             body.solverVelocityIterations = Tune.SolverVelocityIterations;
             actor = authority.Actor;
+            RefreshRecoveryHeight();
             Synchronize();
+            if (OwnsLooseTransform && applied != null) RecordSettledPose(body.position, body.rotation);
         }
 
         public void ApplyAccepted()
@@ -173,6 +197,8 @@ namespace ConsoleCards.Presentation.Interaction
             Vector3 heldAnchorWorld = preserveHeldAnchor ? GrabAnchorWorld() : Vector3.zero;
             applied = state;
             actor = state.ControllingPlayerId;
+            if (state.Mode != PhysicalObjectMode.Sleeping && state.Mode != PhysicalObjectMode.SleepingUnresolved)
+                frozenAfterRecovery = false;
             body.position = Vector(state.Position);
             body.rotation = Rotation(state.Rotation);
             if (sampleDeliberateRotation)
@@ -194,8 +220,8 @@ namespace ConsoleCards.Presentation.Interaction
 
             // TTS-FEEL: held bodies stay DYNAMIC (gravity off). Only user-locked objects are kinematic.
             bool locked = view.BoundState.IsUserLocked;
-            body.isKinematic = locked;
-            body.useGravity = !held && !locked;
+            body.isKinematic = locked || frozenAfterRecovery;
+            body.useGravity = !held && !locked && !frozenAfterRecovery;
             body.detectCollisions = true;
             if (held) ApplyHeldPhysics(); else RestoreProfilePhysics();
             if (!body.isKinematic)
@@ -212,6 +238,7 @@ namespace ConsoleCards.Presentation.Interaction
             }
             dynamicFrames = 0;
             restTimer = 0f;
+            RecordAcceptedPose(state);
         }
 
         public void DisableForContainer()
@@ -224,6 +251,7 @@ namespace ConsoleCards.Presentation.Interaction
             containedPickupLift = 0f;
             gentlePlacementIntent = 0f;
             deliberateRotationPending = false;
+            frozenAfterRecovery = false;
             body.isKinematic = true;
             body.useGravity = false;
             RestoreProfilePhysics();
@@ -248,6 +276,7 @@ namespace ConsoleCards.Presentation.Interaction
                 return false;
             }
             held = true;
+            frozenAfterRecovery = false;
 
             // Contained cards are positioned by presentation (transform) while kinematic; make sure the
             // physics pose matches the visible pose before the body becomes dynamic.
@@ -439,6 +468,11 @@ namespace ConsoleCards.Presentation.Interaction
             profile.ApplyRelease(ref velocity, ref angularVelocity);
             // TTS-FEEL: spin is synthesized AFTER profile clamps so a flick actually tumbles.
             angularVelocity = SynthesizeReleaseSpin(velocity, angularVelocity);
+            hasReleasePose = true;
+            releasePosition = body.position;
+            releaseRotation = body.rotation;
+            missingRecoveryPoseReported = false;
+            if (float.IsNaN(recoveryHeight)) RefreshRecoveryHeight();
             // Use the physics pose (not the interpolated transform) so the committed pose matches the body.
             return State(body.position, body.rotation, velocity,
                 angularVelocity, PhysicalObjectMode.Dynamic, actor);
@@ -475,6 +509,15 @@ namespace ConsoleCards.Presentation.Interaction
                 orientationRecoveryResumeTime = Time.unscaledTime + profile.OrientationRecoveryInputPauseSeconds;
                 deliberateRotationPending = true;
             }
+            if (!held && frozenAfterRecovery)
+            {
+                // Frozen pieces stay frozen while rotated in place: commit a zero-velocity sleeping state.
+                if (OwnsLooseTransform) CommitFrozenPose(body.position, body.rotation,
+                    userActionActive || compoundActionActive
+                        ? AuthoritativeActionRecordMode.Intermediate
+                        : AuthoritativeActionRecordMode.None);
+                return;
+            }
             if (OwnsLooseTransform) Commit(
                 Capture(held ? PhysicalObjectMode.Held : PhysicalObjectMode.Dynamic),
                 null,
@@ -498,6 +541,7 @@ namespace ConsoleCards.Presentation.Interaction
             deliberateRotationPending = false;
             userActionActive = false;
             compoundActionActive = false;
+            frozenAfterRecovery = false;
             applied = null;
             RestoreProfilePhysics();
             Synchronize();
@@ -523,6 +567,8 @@ namespace ConsoleCards.Presentation.Interaction
                 return false;
             }
             cockedNudges = 0;
+            frozenAfterRecovery = false;
+            if (float.IsNaN(recoveryHeight)) RefreshRecoveryHeight();
             applied = null;
             ApplyAccepted();
             return true;
@@ -533,6 +579,7 @@ namespace ConsoleCards.Presentation.Interaction
             if (view == null || !view.IsBound || !gameObject.activeInHierarchy) return;
             Synchronize();
             if (!OwnsLooseTransform || held || body.isKinematic) return;
+            if (body.position.y < recoveryHeight) { RecoverOutOfBounds(); return; } // NaN height never recovers
             dynamicFrames++;
 
             // TTS-FEEL: don't wait on Unity's energy-based sleep alone (dice can creep for seconds).
@@ -609,6 +656,136 @@ namespace ConsoleCards.Presentation.Interaction
             body.Sleep();
         }
 
+        /// <summary>
+        /// Out-of-bounds recovery: return to the last release pose (then last settled, then last held pose),
+        /// freeze kinematic there with zero velocity, and commit it as a sleeping state through the authority.
+        /// </summary>
+        private void RecoverOutOfBounds()
+        {
+            Vector3 position;
+            Quaternion rotation;
+            if (hasReleasePose) { position = releasePosition; rotation = releaseRotation; }
+            else if (hasSettledPose) { position = settledPosition; rotation = settledRotation; }
+            else if (hasHeldPose) { position = heldPosition; rotation = heldRotation; }
+            else
+            {
+                if (!missingRecoveryPoseReported) ReportMissingRecoveryPose();
+                missingRecoveryPoseReported = true;
+                return;
+            }
+
+            if (view is DieView die && hasSettledPose)
+            {
+                // Keep the release position; prefer a rotation that reads a face.
+                body.rotation = rotation;
+                if (!die.TryResolvePhysicalValue(out _))
+                {
+                    body.rotation = settledRotation;
+                    if (die.TryResolvePhysicalValue(out _)) rotation = settledRotation;
+                }
+            }
+
+            FreezeAt(position, rotation);
+            bool accepted = CommitFrozenPose(position, rotation,
+                userActionActive
+                    ? AuthoritativeActionRecordMode.Transaction
+                    : compoundActionActive
+                        ? AuthoritativeActionRecordMode.Intermediate
+                        : AuthoritativeActionRecordMode.None);
+            userActionActive = false;
+            compoundActionActive = false;
+            dynamicFrames = 0;
+            restTimer = 0f;
+            cockedNudges = 0;
+            if (!accepted)
+            {
+                // Not accepted: drop the local freeze and let the accepted state re-apply on the next Synchronize.
+                frozenAfterRecovery = false;
+                applied = null;
+            }
+        }
+
+        private void FreezeAt(Vector3 position, Quaternion rotation)
+        {
+            // Zero velocities while still dynamic (setting velocity on a kinematic body is not supported).
+            if (!body.isKinematic)
+            {
+                body.linearVelocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+            }
+
+            frozenAfterRecovery = true;
+            body.isKinematic = true;
+            body.useGravity = false;
+            body.detectCollisions = true;
+            body.position = position;
+            body.rotation = rotation;
+            transform.SetPositionAndRotation(position, rotation);
+        }
+
+        /// <summary>Commits a zero-velocity sleeping state for a frozen pose; dice report a face or SleepingUnresolved.</summary>
+        private bool CommitFrozenPose(Vector3 position, Quaternion rotation, AuthoritativeActionRecordMode recordMode)
+        {
+            int? value = null;
+            PhysicalObjectMode mode = PhysicalObjectMode.Sleeping;
+            if (view is DieView die)
+            {
+                if (die.TryResolvePhysicalValue(out int face)) value = face;
+                else mode = PhysicalObjectMode.SleepingUnresolved;
+            }
+
+            return Commit(State(position, rotation, Vector3.zero, Vector3.zero, mode, actor), value, recordMode);
+        }
+
+        private void RecordAcceptedPose(PhysicalObjectState state)
+        {
+            // Only resting and held poses are recovery targets; Dynamic checkpoints can be mid-fall.
+            if (state == null) return;
+            if (state.Mode == PhysicalObjectMode.Sleeping || state.Mode == PhysicalObjectMode.SleepingUnresolved)
+                RecordSettledPose(Vector(state.Position), Rotation(state.Rotation));
+            else if (state.Mode == PhysicalObjectMode.Held)
+            {
+                hasHeldPose = true;
+                heldPosition = Vector(state.Position);
+                heldRotation = Rotation(state.Rotation);
+                missingRecoveryPoseReported = false;
+            }
+        }
+
+        private void RecordSettledPose(Vector3 position, Quaternion rotation)
+        {
+            hasSettledPose = true;
+            settledPosition = position;
+            settledRotation = rotation;
+            missingRecoveryPoseReported = false;
+        }
+
+        /// <summary>Event-time only (the surface registry enumerates with an allocation): never call per frame.</summary>
+        private void RefreshRecoveryHeight()
+        {
+            float lowestTop = float.PositiveInfinity;
+            PhysicsScene physicsScene = gameObject.scene.GetPhysicsScene();
+            foreach (PhysicalTabletopSurface surface in PhysicalTabletopSurface.Registered)
+            {
+                if (surface != null
+                    && surface.ParticipatesIn(physicsScene)
+                    && surface.TryGetCollider(out Collider surfaceCollider, out _))
+                {
+                    lowestTop = Mathf.Min(lowestTop, surfaceCollider.bounds.max.y);
+                }
+            }
+
+            recoveryHeight = float.IsPositiveInfinity(lowestTop)
+                ? float.NaN
+                : lowestTop - Tune.RecoverBelowSurfaceDistance;
+        }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void ReportMissingRecoveryPose()
+        {
+            Debug.LogWarning($"PhysicalLooseObject '{name}' fell out of bounds but has no recorded release, settled or held pose; not recovering.", this);
+        }
+
         private void Synchronize()
         {
             if (held && !OwnsLooseTransform) return; // Contained drag is a preview until transfer acceptance.
@@ -637,6 +814,7 @@ namespace ConsoleCards.Presentation.Interaction
         {
             if (!authority.Commit(view, state, value, recordMode)) return false;
             applied = view.BoundState.PhysicalState;
+            RecordAcceptedPose(applied);
             view.RefreshAcceptedAppearance();
             return true;
         }
