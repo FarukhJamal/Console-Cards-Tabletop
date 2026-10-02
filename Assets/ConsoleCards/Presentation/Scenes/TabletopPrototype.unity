@@ -3384,7 +3384,7 @@ MonoBehaviour:
     card:
       heldFollowSmoothingSeconds: 0
       collisionCarryScale: 0.35
-      heldClearance: 0.18
+      heldClearance: 0.35
       mass: 0.03
       releaseLinearVelocityRetention: 0.8
       maximumReleaseLinearVelocity: 22
@@ -3395,10 +3395,11 @@ MonoBehaviour:
       gentlePlacementSpeed: 0.45
       gentlePlacementAngularSpeed: 1
       stabilizeGentlePlacement: 1
+      gentlePlacementClearance: 0.2
     die:
       heldFollowSmoothingSeconds: 0
       collisionCarryScale: 0.3
-      heldClearance: 0.35
+      heldClearance: 0.55
       mass: 0.12
       releaseLinearVelocityRetention: 0.8
       maximumReleaseLinearVelocity: 30
@@ -3412,7 +3413,7 @@ MonoBehaviour:
     pawn:
       heldFollowSmoothingSeconds: 0
       collisionCarryScale: 0.2
-      heldClearance: 0.25
+      heldClearance: 0.45
       mass: 0.1
       releaseLinearVelocityRetention: 0.8
       maximumReleaseLinearVelocity: 14
@@ -3423,10 +3424,11 @@ MonoBehaviour:
       gentlePlacementSpeed: 0.5
       gentlePlacementAngularSpeed: 1.25
       stabilizeGentlePlacement: 1
+      gentlePlacementClearance: 0.25
     token:
       heldFollowSmoothingSeconds: 0
       collisionCarryScale: 0.25
-      heldClearance: 0.2
+      heldClearance: 0.35
       mass: 0.05
       releaseLinearVelocityRetention: 0.8
       maximumReleaseLinearVelocity: 16
@@ -3437,6 +3439,7 @@ MonoBehaviour:
       gentlePlacementSpeed: 0.5
       gentlePlacementAngularSpeed: 1.25
       stabilizeGentlePlacement: 1
+      gentlePlacementClearance: 0.2
   prototypeDeckPrefab: {fileID: 114102, guid: e81b395902c476d7f8192a3b4c5d6e78, type: 3}
   prototypeConsolePrefab: {fileID: 114100, guid: e2283b6fd55d32c2417eb33679d3bb2b, type: 3}
   cardView: {fileID: 2100000102}
