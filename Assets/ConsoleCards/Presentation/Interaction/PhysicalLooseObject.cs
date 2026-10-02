@@ -323,9 +323,6 @@ namespace ConsoleCards.Presentation.Interaction
             restTimer = 0f;
             cockedNudges = 0;
             releaseMotion.Reset();
-            // TEMP TTS DIAGNOSTICS BEGIN
-            DiagResetHold();
-            // TEMP TTS DIAGNOSTICS END
             return true;
         }
 
@@ -442,55 +439,7 @@ namespace ConsoleCards.Presentation.Interaction
             releaseMotion.SampleLinear(
                 body.position + RotatedGrabAnchor(body.rotation),
                 Time.fixedUnscaledTime);
-            // TEMP TTS DIAGNOSTICS BEGIN
-            DiagSampleHold();
-            // TEMP TTS DIAGNOSTICS END
         }
-        // TEMP TTS DIAGNOSTICS BEGIN
-
-        // Held-wobble diagnostics (editor/development only). Delete this block and every other marked pair when done.
-        private const int DiagMaxHoldLines = 40;
-        private const float DiagHoldLogInterval = 0.1f;
-        private const float DiagHoldSlowSpeed = 0.5f;
-        private int diagHoldLines;
-        private float diagNextLogTime;
-        private float diagMinY = float.PositiveInfinity;
-        private float diagMaxY = float.NegativeInfinity;
-
-        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
-        private void DiagResetHold()
-        {
-            diagHoldLines = 0;
-            diagNextLogTime = 0f;
-            diagMinY = float.PositiveInfinity;
-            diagMaxY = float.NegativeInfinity;
-        }
-
-        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
-        private void DiagSampleHold()
-        {
-            // Y range is tracked every physics step at any speed, so overshoot during the fast lift is captured.
-            float y = body.position.y;
-            diagMinY = Mathf.Min(diagMinY, y);
-            diagMaxY = Mathf.Max(diagMaxY, y);
-            if (diagHoldLines >= DiagMaxHoldLines || Time.unscaledTime < diagNextLogTime) return;
-            Vector3 linear = body.linearVelocity;
-            if (linear.magnitude >= DiagHoldSlowSpeed) return;
-            diagNextLogTime = Time.unscaledTime + DiagHoldLogInterval;
-            diagHoldLines++;
-            Vector3 xzError = heldTargetPosition - body.position;
-            xzError.y = 0f;
-            Debug.Log(
-                $"[TTS-DIAG] hold '{name}' #{diagHoldLines}: y={y:F4} targetY={heldTargetPosition.y:F4} "
-                + $"xzErr={xzError.magnitude:F4} intent={gentlePlacementIntent:F2} clearance={currentClearance:F3} "
-                + $"support={smoothedSupportHeight:F3} rootH={RootHeightAboveBottom():F4} "
-                + $"v={linear.magnitude:F3} w={body.angularVelocity.magnitude:F3} "
-                + $"yRange={diagMinY:F4}..{diagMaxY:F4} fixedDt={Time.fixedDeltaTime:F3}",
-                this);
-            diagMinY = float.PositiveInfinity;
-            diagMaxY = float.NegativeInfinity;
-        }
-        // TEMP TTS DIAGNOSTICS END
 
         internal bool BeginContainedPickup(float lift)
         {
@@ -816,7 +765,6 @@ namespace ConsoleCards.Presentation.Interaction
 
             // Midpoint first, then alternate along the edge: 0, +1, -1, +2, -2, ... (spots past the edge ends are skipped).
             Vector3 candidate = piece.center;
-            bool foundFree = false;
             int tries = 0;
             for (int i = 0; i < 2 * Tune.RecoverSlotTries && tries < Tune.RecoverSlotTries; i++)
             {
@@ -827,24 +775,14 @@ namespace ConsoleCards.Presentation.Interaction
                 candidate = edgeAlongX
                     ? new Vector3(along, centerY, outward)
                     : new Vector3(outward, centerY, along);
-                if (!IsRecoverySpotOccupied(candidate, piece.extents))
-                {
-                    foundFree = true;
-                    break;
-                }
+                if (!IsRecoverySpotOccupied(candidate, piece.extents)) break;
             }
 
-            // TEMP TTS DIAGNOSTICS BEGIN
-            if (!foundFree) WarnRecoverySpotsOccupied(tries);
-            // TEMP TTS DIAGNOSTICS END
             Vector3 adjusted = position + (candidate - piece.center);
             body.position = adjusted;
             transform.position = adjusted;
             Physics.SyncTransforms();
 
-            // TEMP TTS DIAGNOSTICS BEGIN
-            WarnIfRecoveredIntoSurface(table.max.y);
-            // TEMP TTS DIAGNOSTICS END
             return adjusted;
         }
 
@@ -924,24 +862,6 @@ namespace ConsoleCards.Presentation.Interaction
             return false;
         }
 
-        // TEMP TTS DIAGNOSTICS BEGIN
-        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
-        private void WarnRecoverySpotsOccupied(int tries)
-        {
-            Debug.LogWarning($"PhysicalLooseObject '{name}': all {tries} recovery spots along the edge are occupied; using the last one.", this);
-        }
-
-        /// <summary>Bounds proof: the piece's AABB bottom must sit above every surface AABB under it, so they cannot overlap.</summary>
-        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
-        private void WarnIfRecoveredIntoSurface(float highestTop)
-        {
-            Collider pieceCollider = PhysicalCollider;
-            if (pieceCollider == null) return;
-            float bottom = pieceCollider.bounds.min.y;
-            if (bottom < highestTop + Tune.RecoverHoverClearance - 0.001f)
-                Debug.LogWarning($"PhysicalLooseObject '{name}' recovered with collider bottom {bottom:F3}, below surface top {highestTop:F3} + clearance {Tune.RecoverHoverClearance:F2}.", this);
-        }
-        // TEMP TTS DIAGNOSTICS END
 
         /// <summary>Commits a zero-velocity sleeping state for a frozen pose; dice report a face or SleepingUnresolved.</summary>
         private bool CommitFrozenPose(Vector3 position, Quaternion rotation, AuthoritativeActionRecordMode recordMode)
