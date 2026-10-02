@@ -32,6 +32,7 @@ namespace ConsoleCards.Presentation.Interaction
             public const float FollowStiffness = 35f;            // 1/s. higher = tighter to cursor
             public const float MaxHeldSpeed = 60f;
             public const float VelocitySmoothing = 30f;          // 1/s. higher = snappier velocity response
+            public const float LinearVelocitySmoothing = 140f;   // 1/s. linear chase only: ~critical damping with FollowStiffness 35
             public const float TiltDegreesPerSpeed = 1.6f;       // lean per unit/second of planar speed
             public const float MaxTiltDegrees = 0f;
             public const float RotationGain = 14f;
@@ -322,6 +323,9 @@ namespace ConsoleCards.Presentation.Interaction
             restTimer = 0f;
             cockedNudges = 0;
             releaseMotion.Reset();
+            // TEMP TTS DIAGNOSTICS BEGIN
+            DiagResetHold();
+            // TEMP TTS DIAGNOSTICS END
             return true;
         }
 
@@ -408,12 +412,13 @@ namespace ConsoleCards.Presentation.Interaction
 
             float dt = Time.fixedDeltaTime;
             float k = 1f - Mathf.Exp(-Tune.VelocitySmoothing * dt);
+            float linearK = 1f - Mathf.Exp(-Tune.LinearVelocitySmoothing * dt);
 
             // Linear: spring-like chase toward the target.
             Vector3 desired = Vector3.ClampMagnitude(
                 (heldTargetPosition - body.position) * Tune.FollowStiffness,
                 Tune.MaxHeldSpeed);
-            body.linearVelocity = Vector3.Lerp(body.linearVelocity, desired, k);
+            body.linearVelocity = Vector3.Lerp(body.linearVelocity, desired, linearK);
 
             // Angular: lean into the direction of travel on top of the carry orientation.
             Vector3 velocity = body.linearVelocity;
@@ -437,7 +442,55 @@ namespace ConsoleCards.Presentation.Interaction
             releaseMotion.SampleLinear(
                 body.position + RotatedGrabAnchor(body.rotation),
                 Time.fixedUnscaledTime);
+            // TEMP TTS DIAGNOSTICS BEGIN
+            DiagSampleHold();
+            // TEMP TTS DIAGNOSTICS END
         }
+        // TEMP TTS DIAGNOSTICS BEGIN
+
+        // Held-wobble diagnostics (editor/development only). Delete this block and every other marked pair when done.
+        private const int DiagMaxHoldLines = 40;
+        private const float DiagHoldLogInterval = 0.1f;
+        private const float DiagHoldSlowSpeed = 0.5f;
+        private int diagHoldLines;
+        private float diagNextLogTime;
+        private float diagMinY = float.PositiveInfinity;
+        private float diagMaxY = float.NegativeInfinity;
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void DiagResetHold()
+        {
+            diagHoldLines = 0;
+            diagNextLogTime = 0f;
+            diagMinY = float.PositiveInfinity;
+            diagMaxY = float.NegativeInfinity;
+        }
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void DiagSampleHold()
+        {
+            // Y range is tracked every physics step at any speed, so overshoot during the fast lift is captured.
+            float y = body.position.y;
+            diagMinY = Mathf.Min(diagMinY, y);
+            diagMaxY = Mathf.Max(diagMaxY, y);
+            if (diagHoldLines >= DiagMaxHoldLines || Time.unscaledTime < diagNextLogTime) return;
+            Vector3 linear = body.linearVelocity;
+            if (linear.magnitude >= DiagHoldSlowSpeed) return;
+            diagNextLogTime = Time.unscaledTime + DiagHoldLogInterval;
+            diagHoldLines++;
+            Vector3 xzError = heldTargetPosition - body.position;
+            xzError.y = 0f;
+            Debug.Log(
+                $"[TTS-DIAG] hold '{name}' #{diagHoldLines}: y={y:F4} targetY={heldTargetPosition.y:F4} "
+                + $"xzErr={xzError.magnitude:F4} intent={gentlePlacementIntent:F2} clearance={currentClearance:F3} "
+                + $"support={smoothedSupportHeight:F3} rootH={RootHeightAboveBottom():F4} "
+                + $"v={linear.magnitude:F3} w={body.angularVelocity.magnitude:F3} "
+                + $"yRange={diagMinY:F4}..{diagMaxY:F4} fixedDt={Time.fixedDeltaTime:F3}",
+                this);
+            diagMinY = float.PositiveInfinity;
+            diagMaxY = float.NegativeInfinity;
+        }
+        // TEMP TTS DIAGNOSTICS END
 
         internal bool BeginContainedPickup(float lift)
         {
