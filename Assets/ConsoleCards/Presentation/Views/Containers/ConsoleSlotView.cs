@@ -132,16 +132,18 @@ namespace ConsoleCards.Presentation.Views.Containers
         {
             List<CardLayoutPlan> plan = new List<CardLayoutPlan>(orderedCards.Count);
             float physicalStep = PhysicalStackSeparation();
+            TableCoordinate anchorCoordinate = coordinateConverter.ToTableCoordinate(anchor.position);
+            float anchorWorldUpOffset = anchor.position.y - coordinateConverter.ToWorldPosition(anchorCoordinate).y;
             for (int i = 0; i < orderedCards.Count; i++)
             {
                 TabletopPose currentPose = orderedCards[i].BoundState.Pose;
                 plan.Add(new CardLayoutPlan(
                     orderedCards[i],
                     ContainerViewBinding.CreatePose(
-                        coordinateConverter.ToTableCoordinate(anchor.position),
+                        anchorCoordinate,
                         currentPose.RotationDegrees,
                         currentPose),
-                    i * physicalStep));
+                    anchorWorldUpOffset + (i * physicalStep)));
             }
 
             return plan;

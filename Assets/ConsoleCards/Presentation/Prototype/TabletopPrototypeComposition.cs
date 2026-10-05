@@ -501,6 +501,27 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
+        // Empty Table keeps its simple X/Z mapping but rests on the real Table top when one is active.
+        // Falls back to the serialized tabletopHeight only when no Template Layout Origin surface is active.
+        private float ResolveEmptyTableSurfaceHeight()
+        {
+            PhysicsScene physicsScene = targetCamera.gameObject.scene.GetPhysicsScene();
+            foreach (PhysicalTabletopSurface surface in PhysicalTabletopSurface.Registered)
+            {
+                if (surface != null && surface.ParticipatesIn(physicsScene) && surface.IsTemplateLayoutOrigin)
+                {
+                    return PhysicalTabletopSurfaces.CreateTemplateLayoutConverter(
+                            targetCamera,
+                            worldUnitsPerTableUnit,
+                            tabletopLayerHeight,
+                            tabletopLocalOrderHeight)
+                        .ToWorldPosition(new TableCoordinate(0d, 0d)).y;
+                }
+            }
+
+            return tabletopHeight;
+        }
+
         private void InitializeEmptyTableSession(bool restoreInitialBaseline)
         {
             try
@@ -512,7 +533,7 @@ namespace ConsoleCards.Presentation.Prototype
                 interactionOwnerId = InteractionOwnerId.New();
                 coordinateConverter = new TabletopCoordinateConverter(
                     worldUnitsPerTableUnit,
-                    tabletopHeight,
+                    ResolveEmptyTableSurfaceHeight(),
                     tabletopLayerHeight,
                     tabletopLocalOrderHeight);
                 matchState = restoreInitialBaseline
@@ -8024,11 +8045,16 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             ConsoleSlotView[] slotViews = prototypeConsolePrefab.GetComponentsInChildren<ConsoleSlotView>(true);
-            int expectedSlotCount = ActiveTrapFloorConsoleSlotCount();
-            if (slotViews.Length != expectedSlotCount)
+            int requiredSlotCount = ToolboxComponentDefinitions.ConsoleSlotCount;
+            foreach (SeatState seat in matchState.Seats.Values)
+            {
+                requiredSlotCount = Math.Max(requiredSlotCount, seat.Console.SlotCount);
+            }
+
+            if (slotViews.Length < requiredSlotCount)
             {
                 throw new InvalidOperationException(
-                    $"The prototype Console prefab requires exactly {expectedSlotCount} authored Console Slots.");
+                    $"The prototype Console prefab requires at least {requiredSlotCount} authored Console Slots.");
             }
 
             for (int i = 0; i < slotViews.Length; i++)
@@ -8338,7 +8364,10 @@ namespace ConsoleCards.Presentation.Prototype
         {
             selectionState = new TabletopSelectionState();
             hitResolver = new TabletopObjectHitResolver(targetCamera, interactionLayerMask, maximumHitDistance);
-            pointerProjector = new TabletopPointerProjector(targetCamera, coordinateConverter, tabletopHeight);
+            pointerProjector = new TabletopPointerProjector(
+                targetCamera,
+                coordinateConverter,
+                coordinateConverter.ToWorldPosition(new TableCoordinate(0d, 0d)).y);
             lockService = new LocalInteractionLockService();
             interactionStateMachine = new TabletopInteractionStateMachine(dragThresholdPixels);
             previewSession = new TabletopDragPreviewSession(
@@ -9228,23 +9257,15 @@ namespace ConsoleCards.Presentation.Prototype
                 seat.ConsolePose,
                 seat.ConsoleSurfaceHeight);
             ConsoleSlotView[] slotViews = view.GetComponentsInChildren<ConsoleSlotView>(true);
-            int expectedSlotCount = ActiveTrapFloorConsoleSlotCount();
-            if (slotViews.Length != expectedSlotCount)
-            {
-                throw new InvalidOperationException(
-                    $"Runtime Trap Floor Consoles require exactly {expectedSlotCount} authored Slots.");
-            }
-
             Array.Sort(slotViews, (left, right) => left.transform.GetSiblingIndex().CompareTo(right.transform.GetSiblingIndex()));
-            PrototypeConsoleSlotVisual[] slotVisuals = new PrototypeConsoleSlotVisual[slotViews.Length];
-            for (int i = 0; i < slotViews.Length; i++)
-            {
-                slotVisuals[i] = slotViews[i].GetComponent<PrototypeConsoleSlotVisual>();
-                RequireReference(slotVisuals[i], $"Runtime Console Slot visual {i}");
-                slotVisuals[i].ValidateReferences();
-            }
+            SelectConsoleSlots(
+                slotViews,
+                seat.Console.SlotCount,
+                "Runtime Console Slot visual",
+                out ConsoleSlotView[] activeSlotViews,
+                out PrototypeConsoleSlotVisual[] slotVisuals);
 
-            return new RuntimeConsoleInstance(root, view, layoutSeatIndex, slotViews, slotVisuals);
+            return new RuntimeConsoleInstance(root, view, layoutSeatIndex, activeSlotViews, slotVisuals);
         }
 
         private RuntimeConsoleInstance CreateRuntimeConsoleInstance(
@@ -9255,27 +9276,15 @@ namespace ConsoleCards.Presentation.Prototype
             GameObject root = PrepareRuntimeRoot(view.gameObject, name);
             ApplyConsolePose(root.transform, placedConsole.Pose, placedConsole.SurfaceHeight);
             ConsoleSlotView[] slotViews = view.GetComponentsInChildren<ConsoleSlotView>(true);
-            if (slotViews.Length < placedConsole.Console.SlotCount)
-            {
-                throw new InvalidOperationException(
-                    "Runtime freeform Console prefab does not contain enough authored Slots for authoritative Console state.");
-            }
-
             Array.Sort(
                 slotViews,
                 (left, right) => left.transform.GetSiblingIndex().CompareTo(right.transform.GetSiblingIndex()));
-            int visibleSlotCount = placedConsole.Console.SlotCount;
-            ConsoleSlotView[] visibleSlotViews = new ConsoleSlotView[visibleSlotCount];
-            PrototypeConsoleSlotVisual[] slotVisuals = new PrototypeConsoleSlotVisual[visibleSlotCount];
-            for (int i = 0; i < visibleSlotCount; i++)
-            {
-                slotVisuals[i] = slotViews[i].GetComponent<PrototypeConsoleSlotVisual>();
-                RequireReference(slotVisuals[i], $"Runtime freeform Console Slot visual {i}");
-                slotVisuals[i].ValidateReferences();
-                visibleSlotViews[i] = slotViews[i];
-            }
-
-            for (int i = visibleSlotCount; i < slotViews.Length; i++) slotViews[i].gameObject.SetActive(false);
+            SelectConsoleSlots(
+                slotViews,
+                placedConsole.Console.SlotCount,
+                "Runtime freeform Console Slot visual",
+                out ConsoleSlotView[] visibleSlotViews,
+                out PrototypeConsoleSlotVisual[] slotVisuals);
 
             return new RuntimeConsoleInstance(
                 root,
@@ -9284,6 +9293,34 @@ namespace ConsoleCards.Presentation.Prototype
                 visibleSlotViews,
                 slotVisuals,
                 placedConsole.Id);
+        }
+
+        // Binds the first requiredCount authored Slots (already in authored order) and hides the rest.
+        // Presentation-only: Slot GameObjects carry no authoritative state.
+        private static void SelectConsoleSlots(
+            ConsoleSlotView[] orderedSlotViews,
+            int requiredCount,
+            string visualLabel,
+            out ConsoleSlotView[] activeSlotViews,
+            out PrototypeConsoleSlotVisual[] activeSlotVisuals)
+        {
+            if (orderedSlotViews.Length < requiredCount)
+            {
+                throw new InvalidOperationException(
+                    $"The Console prefab has {orderedSlotViews.Length} authored Slots; its Console state needs {requiredCount}.");
+            }
+
+            activeSlotViews = new ConsoleSlotView[requiredCount];
+            activeSlotVisuals = new PrototypeConsoleSlotVisual[requiredCount];
+            for (int i = 0; i < requiredCount; i++)
+            {
+                activeSlotVisuals[i] = orderedSlotViews[i].GetComponent<PrototypeConsoleSlotVisual>();
+                RequireReference(activeSlotVisuals[i], $"{visualLabel} {i}");
+                activeSlotVisuals[i].ValidateReferences();
+                activeSlotViews[i] = orderedSlotViews[i];
+            }
+
+            for (int i = requiredCount; i < orderedSlotViews.Length; i++) orderedSlotViews[i].gameObject.SetActive(false);
         }
 
         private GameObject PrepareRuntimeRoot(GameObject root, string name)
@@ -11039,7 +11076,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             RequireReference(sceneConsoleView, nameof(sceneConsoleView));
             resolvedSceneConsoleSlotViews = ResolveSceneConsoleSlotViews();
-            int expectedSlotCount = ActiveTrapFloorConsoleSlotCount();
+            int expectedSlotCount = resolvedSceneConsoleSlotViews.Length;
             resolvedSceneConsoleSlotVisuals = new PrototypeConsoleSlotVisual[expectedSlotCount];
 
             HashSet<ConsoleSlotView> seenViews = new HashSet<ConsoleSlotView>();
@@ -11098,7 +11135,11 @@ namespace ConsoleCards.Presentation.Prototype
 
         private ConsoleSlotView[] ResolveSceneConsoleSlotViews()
         {
-            int expectedSlotCount = ActiveTrapFloorConsoleSlotCount();
+            int expectedSlotCount = matchState.GetSeat(localSeatId).Console.SlotCount;
+            // The scene Console persists across sessions: re-activate every Slot before applying this count.
+            ConsoleSlotView[] authoredViews = sceneConsoleView.GetComponentsInChildren<ConsoleSlotView>(true);
+            for (int i = 0; i < authoredViews.Length; i++) authoredViews[i].gameObject.SetActive(true);
+
             ConsoleSlotView[] resolvedViews;
             if (sceneConsoleSlotViews != null
                 && sceneConsoleSlotViews.Length == expectedSlotCount
@@ -11108,13 +11149,17 @@ namespace ConsoleCards.Presentation.Prototype
             }
             else
             {
-                resolvedViews = sceneConsoleView.GetComponentsInChildren<ConsoleSlotView>(true);
+                Array.Sort(
+                    authoredViews,
+                    (left, right) => CompareConsoleHierarchyOrder(left.transform, right.transform));
+                resolvedViews = new ConsoleSlotView[Math.Min(expectedSlotCount, authoredViews.Length)];
+                Array.Copy(authoredViews, resolvedViews, resolvedViews.Length);
             }
 
             if (resolvedViews.Length != expectedSlotCount)
             {
                 throw new InvalidOperationException(
-                    $"Expected exactly {expectedSlotCount} ConsoleSlotView components under sceneConsoleView.");
+                    $"Expected at least {expectedSlotCount} ConsoleSlotView components under sceneConsoleView.");
             }
 
             for (int i = 0; i < resolvedViews.Length; i++)
@@ -11133,14 +11178,12 @@ namespace ConsoleCards.Presentation.Prototype
             Array.Sort(
                 resolvedViews,
                 (left, right) => CompareConsoleHierarchyOrder(left.transform, right.transform));
-            return resolvedViews;
-        }
+            for (int i = 0; i < authoredViews.Length; i++)
+            {
+                if (Array.IndexOf(resolvedViews, authoredViews[i]) < 0) authoredViews[i].gameObject.SetActive(false);
+            }
 
-        private int ActiveTrapFloorConsoleSlotCount()
-        {
-            if (trapFloorTemplate == null || trapFloorTemplate.Players.Count == 0)
-                throw new InvalidOperationException("Trap Floor Console validation requires an active authored Template.");
-            return 1 + trapFloorTemplate.Players[0].SideSlotContainerIds.Count;
+            return resolvedViews;
         }
 
         private PrototypeConsoleSlotVisual ResolveSceneConsoleSlotVisual(ConsoleSlotView slotView)
