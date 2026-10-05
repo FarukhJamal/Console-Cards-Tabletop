@@ -16,10 +16,11 @@ namespace ConsoleCards.Presentation.Views.Containers
         [SerializeField] private float layoutWidth = 5.8f;
         [SerializeField] private float cardLayoutWidth = 1.0f;
         [SerializeField] private float verticalOffset = 0.005f;
-        [SerializeField] private float hoverLiftDistance = 0.14f;
-        [SerializeField] private float selectedLiftDistance = 0.42f;
-        [SerializeField] private float hoverWorldHeight = 0.025f;
-        [SerializeField] private float selectedWorldHeight = 0.065f;
+        // Hover/selected cards rise and move away from the owner along the hand's forward.
+        [SerializeField] private float hoverRaise = 0.08f;
+        [SerializeField] private float hoverAwayOffset = 0.16f;
+        [SerializeField] private float selectedRaise = 0.16f;
+        [SerializeField] private float selectedAwayOffset = 0.32f;
         [SerializeField] private float hoverScale = 1.025f;
         [SerializeField] private float selectedScale = 1.06f;
         [SerializeField] private float interactionResponse = 18f;
@@ -87,10 +88,10 @@ namespace ConsoleCards.Presentation.Views.Containers
             ContainerViewBinding.ValidateConverter(coordinateConverter);
             ContainerViewBinding.ValidateFiniteNonNegative(horizontalSpacing, nameof(horizontalSpacing));
             ContainerViewBinding.ValidateFiniteNonNegative(verticalOffset, nameof(verticalOffset));
-            ContainerViewBinding.ValidateFiniteNonNegative(hoverLiftDistance, nameof(hoverLiftDistance));
-            ContainerViewBinding.ValidateFiniteNonNegative(selectedLiftDistance, nameof(selectedLiftDistance));
-            ContainerViewBinding.ValidateFiniteNonNegative(hoverWorldHeight, nameof(hoverWorldHeight));
-            ContainerViewBinding.ValidateFiniteNonNegative(selectedWorldHeight, nameof(selectedWorldHeight));
+            ContainerViewBinding.ValidateFiniteNonNegative(hoverRaise, nameof(hoverRaise));
+            ContainerViewBinding.ValidateFiniteNonNegative(hoverAwayOffset, nameof(hoverAwayOffset));
+            ContainerViewBinding.ValidateFiniteNonNegative(selectedRaise, nameof(selectedRaise));
+            ContainerViewBinding.ValidateFiniteNonNegative(selectedAwayOffset, nameof(selectedAwayOffset));
             ContainerViewBinding.ValidateFiniteNonNegative(interactionResponse, nameof(interactionResponse));
             ContainerViewBinding.ValidateFiniteNonNegative(layoutWidth, nameof(layoutWidth));
             ContainerViewBinding.ValidateFiniteNonNegative(cardLayoutWidth, nameof(cardLayoutWidth));
@@ -341,6 +342,9 @@ namespace ConsoleCards.Presentation.Views.Containers
 
                 if (presentationTransitions != null && presentationTransitions.IsAnimating(card.transform))
                 {
+                    // The settle tween owns position and eases yaw; pitch and roll are held flat so a hand
+                    // card never tilts. The tween ends on the flat resting rotation.
+                    card.transform.rotation = FlattenToRest(card.transform.rotation, pose.WorldRotation);
                     continue;
                 }
 
@@ -348,12 +352,12 @@ namespace ConsoleCards.Presentation.Views.Containers
                 bool hovered = !selected && cardId == hoveredCardId;
                 if (!selected && !hovered && !animatingCardIds.Contains(cardId)) continue;
 
-                float lift = selected ? selectedLiftDistance : hovered ? hoverLiftDistance : 0f;
-                float height = selected ? selectedWorldHeight : hovered ? hoverWorldHeight : 0f;
+                float away = selected ? selectedAwayOffset : hovered ? hoverAwayOffset : 0f;
+                float raise = selected ? selectedRaise : hovered ? hoverRaise : 0f;
                 float scale = selected ? selectedScale : hovered ? hoverScale : 1f;
                 Vector3 targetPosition = pose.WorldPosition
-                    - (layoutAnchor.forward * lift)
-                    + (Vector3.up * height);
+                    + (layoutAnchor.forward * away)
+                    + (Vector3.up * raise);
                 card.transform.position = Vector3.Lerp(card.transform.position, targetPosition, blend);
                 card.transform.rotation = Quaternion.Lerp(card.transform.rotation, pose.WorldRotation, blend);
                 card.transform.localScale = Vector3.Lerp(
@@ -546,6 +550,15 @@ namespace ConsoleCards.Presentation.Views.Containers
                 pickOrder.Add(card);
                 pickHalfDepths.Add(ComponentRestHeight.HalfDepth(card.transform, cardLayoutWidth * 0.7f));
             }
+        }
+
+        private static Quaternion FlattenToRest(Quaternion current, Quaternion rest)
+        {
+            Vector3 restUp = rest * Vector3.up;
+            Vector3 forward = Vector3.ProjectOnPlane(current * Vector3.forward, restUp);
+            return forward.sqrMagnitude > 0.000001f
+                ? Quaternion.LookRotation(forward, restUp)
+                : rest;
         }
 
         private static float NormalizeAngle(float angle)

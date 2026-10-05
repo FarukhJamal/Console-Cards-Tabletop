@@ -109,6 +109,8 @@ namespace ConsoleCards.Presentation.Interaction
 
         // TTS-FEEL state
         private Quaternion heldBaseRotation;   // logical carry orientation (no lean); body chases lean * this
+        private bool containedSmoothingSuspended;          // interpolation is off while presentation owns a contained pose
+        private RigidbodyInterpolation containedSmoothingRestore;
         private Vector3 heldTargetPosition;    // computed in Follow (Update), chased in FixedUpdate
         private bool hasHeldTarget;
         private float lastAnchorHeight;        // world Y of the grabbed point last frame (breaks projection/support circularity)
@@ -177,6 +179,7 @@ namespace ConsoleCards.Presentation.Interaction
             body.isKinematic = true;
             body.useGravity = false;
             RestoreProfilePhysics();
+            containedSmoothingSuspended = false;
             body.interpolation = RigidbodyInterpolation.Interpolate;
             body.collisionDetectionMode = view is DieView
                 ? CollisionDetectionMode.ContinuousDynamic
@@ -194,6 +197,7 @@ namespace ConsoleCards.Presentation.Interaction
         {
             if (body == null || !view.IsBound) return;
             if (!OwnsLooseTransform) { DisableForContainer(); return; }
+            RestoreContainedSmoothing();
             PhysicalObjectState state = view.BoundState.PhysicalState;
             if (state == null || ReferenceEquals(state, applied)) return;
             bool stateHeld = state.Mode == PhysicalObjectMode.Held;
@@ -262,7 +266,24 @@ namespace ConsoleCards.Presentation.Interaction
             RestoreProfilePhysics();
             // Retain raycast selection colliders, but exclude contained pieces from dynamic contacts.
             authority.SetContainedCollisions(this, true);
+            SuspendContainedSmoothing();
             applied = null;
+        }
+
+        private void SuspendContainedSmoothing()
+        {
+            // DisableForContainer runs every frame for contained pieces; cache the real value only once.
+            if (containedSmoothingSuspended || body == null) return;
+            containedSmoothingRestore = body.interpolation;
+            body.interpolation = RigidbodyInterpolation.None;
+            containedSmoothingSuspended = true;
+        }
+
+        private void RestoreContainedSmoothing()
+        {
+            if (!containedSmoothingSuspended || body == null) return;
+            body.interpolation = containedSmoothingRestore;
+            containedSmoothingSuspended = false;
         }
 
         public bool BeginHold()
@@ -292,6 +313,8 @@ namespace ConsoleCards.Presentation.Interaction
                 Physics.SyncTransforms();
             }
 
+            // A contained card regains its smoothing before its first physics step as a held body.
+            RestoreContainedSmoothing();
             // TTS-FEEL: dynamic held body, gravity off, real collisions.
             body.isKinematic = false;
             body.useGravity = false;
@@ -488,6 +511,7 @@ namespace ConsoleCards.Presentation.Interaction
         {
             if (!OwnsLooseTransform) return false;
             if (!Commit(ReleaseState(), null, AuthoritativeActionRecordMode.Intermediate)) { Cancel(); return false; }
+            RestoreContainedSmoothing();
             held = false;
             hasPointerAnchor = false;
             hasSupportHeight = false;
@@ -550,12 +574,14 @@ namespace ConsoleCards.Presentation.Interaction
             frozenAfterRecovery = false;
             applied = null;
             RestoreProfilePhysics();
+            RestoreContainedSmoothing();
             Synchronize();
         }
 
         public bool Roll(PlayerId? requestingActor = null, bool partOfCompoundAction = false)
         {
             if (!(view is DieView) || !OwnsLooseTransform || view.BoundState.IsUserLocked || held) return false;
+            RestoreContainedSmoothing();
             actor = requestingActor ?? authority.Actor;
             userActionActive = !partOfCompoundAction;
             compoundActionActive = partOfCompoundAction;
@@ -722,6 +748,7 @@ namespace ConsoleCards.Presentation.Interaction
                 body.angularVelocity = Vector3.zero;
             }
 
+            RestoreContainedSmoothing();
             frozenAfterRecovery = true;
             body.isKinematic = true;
             body.useGravity = false;
@@ -931,6 +958,7 @@ namespace ConsoleCards.Presentation.Interaction
             if (held && !OwnsLooseTransform) return; // Contained drag is a preview until transfer acceptance.
             if (!OwnsLooseTransform) { DisableForContainer(); return; }
             authority.SetContainedCollisions(this, false);
+            RestoreContainedSmoothing();
             if (view.BoundState.PhysicalState == null)
             {
                 PhysicalObjectState initial;

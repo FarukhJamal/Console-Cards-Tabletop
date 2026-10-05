@@ -34,8 +34,9 @@ namespace ConsoleCards.Presentation.Interaction
         public bool HasActiveInteraction => activeRoute != TabletopInteractionRoute.None;
 
         /// <summary>
-        /// Optional local hand. A card accepted into it (transfer or reorder) is deselected so it
-        /// settles into the row instead of taking the selected lift; hover lift is unaffected.
+        /// Optional local hand. A card that ends a real drag in it (accepted, put back, cancelled or
+        /// dropped on no target) is deselected so it settles into the row instead of taking the selected
+        /// lift; a plain click still selects, and hover lift is unaffected.
         /// </summary>
         public HandView HandView { get; set; }
 
@@ -131,14 +132,21 @@ namespace ConsoleCards.Presentation.Interaction
 
         private void ClearSelectionAfterHandDrop(TabletopInteractionReleaseResult result)
         {
-            bool acceptedDrop =
+            bool endedHandDrag =
                 (result.MoveResult.HasValue
                     && result.MoveResult.Value.Status == MoveInteractionReleaseStatus.CardTransferAccepted)
                 || (result.ContainedCardResult.HasValue
-                    && (result.ContainedCardResult.Value.Status == ContainedCardDragReleaseStatus.TransferAccepted
-                        || result.ContainedCardResult.Value.Status == ContainedCardDragReleaseStatus.HandReordered));
+                    && result.ContainedCardResult.Value.Status != ContainedCardDragReleaseStatus.ClickReleased);
+            if (endedHandDrag)
+            {
+                ClearSelectionIfInHand();
+            }
+        }
+
+        private void ClearSelectionIfInHand()
+        {
             HandView hand = HandView;
-            if (!acceptedDrop || hand == null || !hand.IsBound)
+            if (hand == null || !hand.IsBound)
             {
                 return;
             }
@@ -170,6 +178,7 @@ namespace ConsoleCards.Presentation.Interaction
                     try
                     {
                         containedCardDragCoordinator.Cancel();
+                        ClearSelectionIfInHand();
                     }
                     finally
                     {
