@@ -15,6 +15,7 @@ namespace ConsoleCards.Presentation.Views.Containers
 
         private readonly List<CardView> suppliedCardViews = new List<CardView>();
         private readonly List<CardView> layoutAppliedCards = new List<CardView>();
+        private readonly List<Renderer> plateRenderers = new List<Renderer>();
         private ContainerState containerState;
         private ContainerPlacementState placementState;
         private Transform layoutAnchor;
@@ -88,6 +89,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             Dictionary<TabletopObjectId, CardView> lookup = ContainerViewBinding.BuildLookup(cardViews);
             List<CardView> resolvedCards = ContainerViewBinding.ResolveOrderedCards(container, lookup);
             restLift = ComponentRestHeight.RestLift(transform);
+            CachePlateRenderers();
             SetPlacementTransform(placement, coordinateConverter);
             List<CardLayoutPlan> plan = BuildLayoutPlan(
                 placement,
@@ -141,6 +143,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             containerState = null;
             placementState = null;
             layoutAnchor = null;
+            plateRenderers.Clear();
             converter = null;
             suppliedCardViews.Clear();
             VisibleCardCount = 0;
@@ -157,6 +160,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             Vector3 placementWorldPosition = coordinateConverter.ToWorldPosition(placement.Pose);
             TableCoordinate anchorCoordinate = coordinateConverter.ToTableCoordinate(authoredLayoutAnchor.position);
             float anchorWorldUpOffset = authoredLayoutAnchor.position.y - placementWorldPosition.y;
+            float plateTop = PlateTop();
             float physicalStep = Mathf.Max(
                 verticalOffset,
                 ContainerViewBinding.MinimumPhysicalCardSeparation);
@@ -172,10 +176,62 @@ namespace ConsoleCards.Presentation.Views.Containers
                 plan.Add(new CardLayoutPlan(
                     orderedCards[i],
                     pose,
-                    anchorWorldUpOffset + (i * physicalStep)));
+                    ResolveCardHeight(coordinateConverter, pose, orderedCards[i], plateTop, anchorWorldUpOffset, i, physicalStep)));
             }
 
             return plan;
+        }
+
+        // Rest the card's own collider bottom on the plate top, then stack by the physical step (the hand
+        // rule). Without a plate the authored layout anchor height is used, as before.
+        private static float ResolveCardHeight(
+            TabletopCoordinateConverter coordinateConverter,
+            TabletopPose pose,
+            CardView card,
+            float plateTop,
+            float anchorWorldUpOffset,
+            int index,
+            float physicalStep)
+        {
+            if (float.IsNegativeInfinity(plateTop))
+            {
+                return anchorWorldUpOffset + (index * physicalStep);
+            }
+
+            float restingPivotY = plateTop
+                + ComponentRestHeight.PivotToBottom(card.transform)
+                + ComponentRestHeight.RestClearance
+                + (index * physicalStep);
+            return restingPivotY - coordinateConverter.ToWorldPosition(pose).y;
+        }
+
+        // The stack's own plate meshes: every renderer below the root except labels and cards. Cached at
+        // Bind so layout does not allocate.
+        private void CachePlateRenderers()
+        {
+            GetComponentsInChildren(true, plateRenderers);
+            for (int i = plateRenderers.Count - 1; i >= 0; i--)
+            {
+                Renderer candidate = plateRenderers[i];
+                if (candidate.TryGetComponent(out TextMesh _) || candidate.GetComponentInParent<CardView>(true) != null)
+                {
+                    plateRenderers.RemoveAt(i);
+                }
+            }
+        }
+
+        private float PlateTop()
+        {
+            float top = float.NegativeInfinity;
+            for (int i = 0; i < plateRenderers.Count; i++)
+            {
+                if (plateRenderers[i] != null)
+                {
+                    top = Mathf.Max(top, ComponentRestHeight.TopOf(plateRenderers[i]));
+                }
+            }
+
+            return top;
         }
 
         private void ApplyPlan(IReadOnlyList<CardLayoutPlan> plan)
