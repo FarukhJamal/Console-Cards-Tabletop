@@ -465,7 +465,7 @@ namespace ConsoleCards.Presentation.Prototype
                 BuildContainerViews();
                 BindContainerViews();
                 ConfigureTabletopCameraFraming();
-                ProjectTrapFloorCameraBookmark();
+                if (!rebuildingFromUndo) ProjectTrapFloorCameraBookmark();
                 RefreshCardContentVisibility();
                 ConfigureDropTargets();
                 BuildInteractionGraph();
@@ -541,7 +541,7 @@ namespace ConsoleCards.Presentation.Prototype
                     : activeSession.CurrentMatch;
                 localPlayerId = activeSession.Request.RequestingPlayerId;
                 cameraInputAdapter.CameraController.ClearFramingTargets();
-                cameraInputAdapter.CameraController.ShowDefaultView();
+                if (!rebuildingFromUndo) cameraInputAdapter.CameraController.ShowDefaultView();
                 BuildToolboxRuntime();
                 RebuildEmptyTableLooseObjectPresentation();
 
