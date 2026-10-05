@@ -520,6 +520,15 @@ namespace ConsoleCards.Presentation.Interaction
             }
         }
 
+        /// <summary>
+        /// Optional local comfort check: true when a container is the player's own hand at its hand cap.
+        /// Such a hand is treated as full (red feedback, the card returns, nothing is committed).
+        /// </summary>
+        public Func<ContainerId, bool> IsContainerAtComfortCap { get; set; }
+
+        /// <summary>Optional notice raised when a drop is refused by the comfort cap.</summary>
+        public Action ComfortCapRejected { get; set; }
+
         private bool TryTransferTabletopCardToContainer(
             TabletopObjectView view,
             Vector2 screenPosition,
@@ -543,6 +552,21 @@ namespace ConsoleCards.Presentation.Interaction
                 || target.Kind != CardDropTargetKind.Container)
             {
                 return false;
+            }
+
+            if (IsContainerAtComfortCap != null && IsContainerAtComfortCap(target.ContainerId))
+            {
+                TabletopTransformSnapshot rejectedStart = previewSession.IsActive
+                    ? previewSession.EndPreviewWithoutReconcileAndCapture()
+                    : default;
+                cardView.PhysicalObject?.Cancel();
+                cardView.ClearContainerLayoutAndReconcile();
+                previewSession.AnimateReturnFrom(cardView, rejectedStart);
+                cardDragFeedback?.ShowRejected(ContainerId.Empty, target);
+                ComfortCapRejected?.Invoke();
+                releaseResult = MoveInteractionReleaseResult.FromCardTransferResult(
+                    CardTransferInteractionResult.CardNotTransferable());
+                return true;
             }
 
             TabletopTransformSnapshot transferStart = previewSession.IsActive
@@ -821,7 +845,8 @@ namespace ConsoleCards.Presentation.Interaction
             return target.Kind == CardDropTargetKind.Container
                 && !target.ContainerId.IsEmpty
                 && MatchState.Containers.TryGetValue(target.ContainerId, out ContainerState container)
-                && !container.IsFull;
+                && !container.IsFull
+                && (IsContainerAtComfortCap == null || !IsContainerAtComfortCap(target.ContainerId));
         }
 
         private TabletopPose ApplyStackMagnetism(TabletopPose previewPose, Vector2 screenPosition)

@@ -280,6 +280,15 @@ namespace ConsoleCards.Presentation.Interaction
             UpdateFeedback(screenPosition);
         }
 
+        /// <summary>
+        /// Optional local comfort check: true when a container is the player's own hand at its hand cap.
+        /// Such a hand is treated as full (red feedback, the card returns, nothing is committed).
+        /// </summary>
+        public Func<ContainerId, bool> IsContainerAtComfortCap { get; set; }
+
+        /// <summary>Optional notice raised when a drop is refused by the comfort cap.</summary>
+        public Action ComfortCapRejected { get; set; }
+
         public ContainedCardDragReleaseResult Release(Vector2 screenPosition)
         {
             ValidateScreenPosition(screenPosition, nameof(screenPosition));
@@ -354,6 +363,21 @@ namespace ConsoleCards.Presentation.Interaction
                     stateMachine.BeginCancellation();
                     stateMachine.CompleteCancellation();
                     return ContainedCardDragReleaseResult.SameSource();
+                }
+
+                if (target.Kind == CardDropTargetKind.Container
+                    && IsContainerAtComfortCap != null
+                    && IsContainerAtComfortCap(target.ContainerId))
+                {
+                    TabletopTransformSnapshot rejectedStart = EndPresentationWithoutReconcile(view);
+                    RestoreSourceLayout();
+                    previewSession.AnimateReturnFrom(view, rejectedStart);
+                    feedback?.ShowRejected(sourceContainerId, target);
+                    ComfortCapRejected?.Invoke();
+                    stateMachine.BeginCancellation();
+                    stateMachine.CompleteCancellation();
+                    keepRejectedFeedback = true;
+                    return ContainedCardDragReleaseResult.Cancelled();
                 }
 
                 TabletopTransformSnapshot transferStart = EndPresentationWithoutReconcile(view);
@@ -753,7 +777,8 @@ namespace ConsoleCards.Presentation.Interaction
                 return false;
             }
 
-            return !container.IsFull;
+            return !container.IsFull
+                && (IsContainerAtComfortCap == null || !IsContainerAtComfortCap(target.ContainerId));
         }
 
         private void ReleaseLifecycleOwnedLock()

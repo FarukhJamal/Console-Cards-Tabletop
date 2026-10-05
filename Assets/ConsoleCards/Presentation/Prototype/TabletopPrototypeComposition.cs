@@ -25,6 +25,7 @@ using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Coordinates;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
+using ConsoleCards.Presentation.Settings;
 using ConsoleCards.Presentation.UI;
 using ConsoleCards.Presentation.Views;
 using ConsoleCards.Presentation.Views.Containers;
@@ -271,6 +272,8 @@ namespace ConsoleCards.Presentation.Prototype
         private SeatId localSeatId;
         private ContainerId deckContainerId;
         private ContainerId handContainerId;
+        // Local comfort setting for this player's own hand; never game state, Undo or authority.
+        private readonly PlayerHandComfortSettings handComfortSettings = new PlayerHandComfortSettings();
         private ContainerId discardContainerId;
         private ContainerId stackAContainerId;
         private ContainerId stackBContainerId;
@@ -924,6 +927,13 @@ namespace ConsoleCards.Presentation.Prototype
         {
             EnsureInitialized();
             TrapFloorPlayerSetupDefinition player = GetAssistedTrapFloorPlayerSetup();
+            if (matchState.Containers.TryGetValue(player.HandContainerId, out ContainerState capHand))
+            {
+                // Draw To Hand Limit fills the hand up to the player's hand cap; the game's own limit is
+                // shown as advisory text in the DRAW popup.
+                return DrawControllerCardsUpToComfortCap(player, capHand);
+            }
+
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(player.ControllerDeckId, player.HandContainerId);
             ControllerInputHandDrawResult result = trapFloorTurnService.DrawForCurrentPlayer(
@@ -1009,6 +1019,16 @@ namespace ConsoleCards.Presentation.Prototype
         private DrawCardsResult DrawCards(ContainerId sourceDeckContainerId, int count)
         {
             EnsureInitialized();
+            int requestedCount = count;
+            count = ClampToHandComfortCap(handContainerId, count);
+            if (count <= 0)
+            {
+                ShowMessage(handComfortSettings.ReachedMessage + ".");
+                return DrawCardsResult.Failure(
+                    CommandResultStatus.Rejected,
+                    DrawCardsError.DestinationCapacityExceeded);
+            }
+
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(sourceDeckContainerId, handContainerId);
             DrawCardsResult result = new DrawCardsUseCase().Execute(
@@ -1023,7 +1043,9 @@ namespace ConsoleCards.Presentation.Prototype
                     transitionStarts,
                     handReflowDuration,
                     0.035f);
-                ShowMessage($"Drew {count} card{(count == 1 ? string.Empty : "s")} to Hand.");
+                ShowMessage(count < requestedCount
+                    ? $"{handComfortSettings.ReachedMessage}: drew {count} of {requestedCount}."
+                    : $"Drew {count} card{(count == 1 ? string.Empty : "s")} to Hand.");
             }
             else
             {
@@ -2253,6 +2275,19 @@ namespace ConsoleCards.Presentation.Prototype
 
                 GUILayout.EndHorizontal();
             }
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(handComfortSettings.CapLabel);
+            if (GUILayout.Button("-"))
+            {
+                handComfortSettings.MaxHandCards -= 1;
+            }
+
+            if (GUILayout.Button("+"))
+            {
+                handComfortSettings.MaxHandCards += 1;
+            }
+
+            GUILayout.EndHorizontal();
             GUILayout.Space(4f);
             GUILayout.Label("Hand order");
             GUILayout.BeginHorizontal();
@@ -4677,8 +4712,8 @@ namespace ConsoleCards.Presentation.Prototype
                     availableCount > 0,
                     () => DrawControllerCardsFromContext(targetDeckId, 5)),
                 new PrototypePopupActionOption(
-                    "Draw To Hand Limit",
-                    configuration != null && configuration.DrawToMaximumAtTurnStart,
+                    $"Draw To Hand Limit ({handComfortSettings.MaxHandCards})",
+                    availableCount > 0,
                     () => DrawUpToConfiguredHandLimitFromContext(targetDeckId)),
                 new PrototypePopupActionOption(
                     "Custom",
@@ -4691,17 +4726,34 @@ namespace ConsoleCards.Presentation.Prototype
                             Math.Max(1, AvailableControllerDeckCount(targetDeckId)));
                         SetContextMenuMode(PrototypeContextMenuMode.CustomDrawCards);
                     }),
+                new PrototypePopupActionOption(
+                    handComfortSettings.CapLabel + "  -",
+                    handComfortSettings.MaxHandCards > PlayerHandComfortSettings.MinimumMaxHandCards,
+                    () => ChangeHandComfortCapFromDrawPopup(-1)),
+                new PrototypePopupActionOption(
+                    handComfortSettings.CapLabel + "  +",
+                    true,
+                    () => ChangeHandComfortCapFromDrawPopup(1)),
             };
 
             runtimeUi.ShowContextMenu(
                 contextMenuAnchorScreenPosition,
                 "DRAW",
-                availableCount == 1
+                (availableCount == 1
                     ? "1 Card remaining in Controller Deck."
-                    : $"{availableCount} Cards remaining in Controller Deck.",
+                    : $"{availableCount} Cards remaining in Controller Deck.")
+                    + (configuration != null
+                        ? $"\nGame hand limit: {configuration.MaximumHandSize} (advisory)."
+                        : string.Empty),
                 actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);
+        }
+
+        private void ChangeHandComfortCapFromDrawPopup(int delta)
+        {
+            handComfortSettings.MaxHandCards += delta;
+            SetContextMenuMode(PrototypeContextMenuMode.DrawCards);
         }
 
         private void ShowCustomControllerDrawPopup()
@@ -6085,6 +6137,15 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             int drawCount = Math.Min(requestedCount, AvailableControllerDeckCount(targetDeckId));
+            int deckLimitedCount = drawCount;
+            drawCount = ClampToHandComfortCap(player.HandContainerId, drawCount);
+            if (drawCount <= 0 && deckLimitedCount > 0)
+            {
+                ShowMessage(handComfortSettings.ReachedMessage + ".");
+                CloseContextMenu();
+                return;
+            }
+
             if (drawCount <= 0)
             {
                 ShowMessage("Controller Deck is empty.");
@@ -6109,7 +6170,9 @@ namespace ConsoleCards.Presentation.Prototype
                 result.Succeeded ? 0.035f : 0f);
             if (result.Succeeded)
             {
-                ShowMessage($"Drew {drawCount} Controller Card{(drawCount == 1 ? string.Empty : "s")}.");
+                ShowMessage(drawCount < deckLimitedCount
+                    ? $"{handComfortSettings.ReachedMessage}: drew {drawCount} of {deckLimitedCount}."
+                    : $"Drew {drawCount} Controller Card{(drawCount == 1 ? string.Empty : "s")}.");
                 CloseContextMenu();
             }
             else
@@ -6132,6 +6195,71 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 CloseContextMenu();
             }
+        }
+
+        private ControllerInputHandDrawResult DrawControllerCardsUpToComfortCap(
+            TrapFloorPlayerSetupDefinition player,
+            ContainerState hand)
+        {
+            int drawCount = Math.Min(
+                handComfortSettings.RemainingFor(hand),
+                AvailableControllerDeckCount(player.ControllerDeckId));
+            if (drawCount <= 0)
+            {
+                ShowMessage(handComfortSettings.RemainingFor(hand) <= 0
+                    ? handComfortSettings.ReachedMessage + "."
+                    : "Controller Deck is empty.");
+                return ControllerInputHandDrawResult.NoChange(matchState.Revision);
+            }
+
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
+                CaptureContainerCardTransforms(player.ControllerDeckId, player.HandContainerId);
+            DrawCardsResult result = new DrawCardsUseCase().Execute(
+                matchState,
+                new DrawCardsCommand(
+                    CreateCommandContext(trapFloorTurnState.ActivePlayerId),
+                    player.ControllerDeckId,
+                    player.HandContainerId,
+                    drawCount));
+            ApplyLayout(player.ControllerDeckId);
+            ApplyLayout(player.HandContainerId);
+            presentationTransitions.AnimateCardsFromCurrentResults(
+                transitionStarts,
+                result.Succeeded ? handReflowDuration : returnDuration,
+                result.Succeeded ? 0.035f : 0f);
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Controller draw rejected: {result.Error}.");
+                return ControllerInputHandDrawResult.NoChange(matchState.Revision);
+            }
+
+            ShowMessage($"Drew {drawCount} Controller Card{(drawCount == 1 ? string.Empty : "s")} (hand cap {handComfortSettings.MaxHandCards}).");
+            return ControllerInputHandDrawResult.Accepted(result.Revision, drawCount);
+        }
+
+        // Local comfort cap: limits only this player's own draws and drops into their own hand.
+        private int ClampToHandComfortCap(ContainerId handId, int requestedCount)
+        {
+            if (!matchState.Containers.TryGetValue(handId, out ContainerState hand))
+            {
+                return requestedCount;
+            }
+
+            return Math.Min(requestedCount, handComfortSettings.RemainingFor(hand));
+        }
+
+        private bool IsOwnHandAtComfortCap(ContainerId containerId)
+        {
+            return handView != null
+                && handView.IsBound
+                && containerId == handView.ContainerId
+                && matchState.Containers.TryGetValue(containerId, out ContainerState hand)
+                && handComfortSettings.RemainingFor(hand) <= 0;
+        }
+
+        private void ShowHandCapReached()
+        {
+            ShowMessage(handComfortSettings.ReachedMessage + ".");
         }
 
         private void OpenActionAbilityPurchase()
@@ -8491,6 +8619,10 @@ namespace ConsoleCards.Presentation.Prototype
                 selectionState);
             interactionRouter.HandView = handView;
             hitResolver.HandPicker = handView;
+            moveCoordinator.IsContainerAtComfortCap = IsOwnHandAtComfortCap;
+            moveCoordinator.ComfortCapRejected = ShowHandCapReached;
+            containedCardDragCoordinator.IsContainerAtComfortCap = IsOwnHandAtComfortCap;
+            containedCardDragCoordinator.ComfortCapRejected = ShowHandCapReached;
             inputRoutingPolicy.ConfigureInteractionRouter(interactionRouter);
             cameraInputAdapter.ConfigureScrollRoutingPolicy(inputRoutingPolicy);
             cameraRoutingConfiguredByComposition = true;
