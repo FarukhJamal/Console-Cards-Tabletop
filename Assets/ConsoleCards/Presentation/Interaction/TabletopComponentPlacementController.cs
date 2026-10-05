@@ -2,6 +2,7 @@ using System;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Application.UseCases;
 using ConsoleCards.Presentation.Coordinates;
+using ConsoleCards.Presentation.Views;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Interaction
@@ -12,14 +13,14 @@ namespace ConsoleCards.Presentation.Interaction
     /// </summary>
     internal sealed class TabletopComponentPlacementController
     {
-        private const float PreviewHeight = 0.035f;
-
         private readonly TabletopPointerProjector pointerProjector;
         private readonly TabletopCoordinateConverter coordinateConverter;
         private readonly Func<TabletopComponentKind, int, TabletopPose, bool> commitComponentPlacement;
         private readonly Action<float> rotationChanged;
 
         private GameObject previewRoot;
+        private float restLift;
+        private float batchCardRestLift;
         private TabletopComponentKind componentKind;
         private int dieSideCount;
         private float rotationDegrees;
@@ -149,6 +150,11 @@ namespace ConsoleCards.Presentation.Interaction
             activeCommitPlacement = requestedCommitPlacement;
             activePlacementEnded = requestedPlacementEnded;
             hasValidPreviewPose = false;
+            // Measured once per placement so the ghost rests exactly where the placed piece will (P1a).
+            restLift = ComponentRestHeight.RestLift(previewRoot.transform);
+            batchCardRestLift = previewRoot.transform.childCount > 0
+                ? ComponentRestHeight.RestLift(previewRoot.transform.GetChild(0))
+                : restLift;
             previewRoot.SetActive(false);
         }
 
@@ -223,14 +229,15 @@ namespace ConsoleCards.Presentation.Interaction
                     if (!PhysicalSurfaces.TryAtLayout(candidate, out _))
                     { hasValidPreviewPose = false; previewRoot.SetActive(false); return; }
                 }
-                previewRoot.transform.SetPositionAndRotation(hit.point + Vector3.up *
-                    (componentKind == TabletopComponentKind.Die ? 0.6f : PhysicalTabletopSurfaces.PlacementClearance),
+                // The ghost shows the resting pose; the spawned piece still drops from its placement
+                // clearance and settles here.
+                previewRoot.transform.SetPositionAndRotation(hit.point + (Vector3.up * restLift),
                     coordinateConverter.ToWorldRotation(previewPose));
                 if (PhysicalQuantity > 1 && previewRoot.transform.childCount == PhysicalQuantity)
                     for (int i = 0; i < PhysicalQuantity; i++)
                         if (PhysicalSurfaces.TryAtLayout(GenericCardBatchLayout.ResolvePose(
                             previewPose, i, PhysicalQuantity, localOrder), out RaycastHit cardHit))
-                            previewRoot.transform.GetChild(i).position = cardHit.point + Vector3.up * PhysicalTabletopSurfaces.PlacementClearance;
+                            previewRoot.transform.GetChild(i).position = cardHit.point + (Vector3.up * batchCardRestLift);
                 return;
             }
             if (pointerBlockedByUi
@@ -265,7 +272,7 @@ namespace ConsoleCards.Presentation.Interaction
             }
             Quaternion worldRotation = coordinateConverter.ToWorldRotation(previewPose);
             previewRoot.transform.SetPositionAndRotation(
-                worldPosition + (Vector3.up * PreviewHeight),
+                worldPosition + (Vector3.up * restLift),
                 worldRotation);
             if (!previewRoot.activeSelf)
             {
@@ -291,6 +298,8 @@ namespace ConsoleCards.Presentation.Interaction
             rotationDegrees = 0f;
             layer = 0;
             localOrder = 0;
+            restLift = 0f;
+            batchCardRestLift = 0f;
             previewPose = TabletopPose.Default;
             hasValidPreviewPose = false;
             activeCommitPlacement = null;

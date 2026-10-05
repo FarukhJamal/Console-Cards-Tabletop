@@ -7636,7 +7636,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ProjectPrototypePlayerLayout(PlayerSeatLayoutEntry seatLayout)
         {
-            ApplyAuthoredPose(
+            ApplyRestingAuthoredPose(
                 sceneHandVisual.transform,
                 TrapFloorTemplateFactory.GetHandPose(seatLayout));
             SeatState seat = matchState.GetSeat(localSeatId);
@@ -7858,6 +7858,15 @@ namespace ConsoleCards.Presentation.Prototype
                 coordinateConverter.ToWorldRotation(pose));
         }
 
+        // Like ApplyAuthoredPose, but rests the root's lowest body point on the surface (P1a).
+        // Presentation only: the authoritative pose is unchanged.
+        private void ApplyRestingAuthoredPose(Transform target, TabletopPose pose)
+        {
+            target.SetPositionAndRotation(
+                coordinateConverter.ToWorldPosition(pose) + (Vector3.up * ComponentRestHeight.RestLift(target)),
+                coordinateConverter.ToWorldRotation(pose));
+        }
+
         private void ApplyConsolePose(
             Transform target,
             TabletopPose pose,
@@ -7869,6 +7878,9 @@ namespace ConsoleCards.Presentation.Prototype
                 worldPosition.y = surfaceHeight.Value;
             }
 
+            // Rest the Console's lowest body point on the surface (P1a); the authoritative pose and
+            // surface height are unchanged.
+            worldPosition.y += ComponentRestHeight.RestLift(target);
             target.SetPositionAndRotation(
                 worldPosition,
                 coordinateConverter.ToWorldRotation(pose));

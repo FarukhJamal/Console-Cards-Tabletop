@@ -19,6 +19,7 @@ namespace ConsoleCards.Presentation.Views.Containers
         private ContainerPlacementState placementState;
         private TabletopCoordinateConverter converter;
         private bool isBound;
+        private float restLift;
 
         public bool IsBound => isBound;
 
@@ -63,6 +64,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             ContainerViewBinding.ValidateFiniteNonNegative(diagonalTableOffsetPerCard, nameof(diagonalTableOffsetPerCard));
             Dictionary<TabletopObjectId, CardView> lookup = ContainerViewBinding.BuildLookup(cardViews);
             List<CardView> resolvedCards = ContainerViewBinding.ResolveOrderedCards(container, lookup);
+            restLift = ComponentRestHeight.RestLift(transform);
             List<CardLayoutPlan> plan = BuildLayoutPlan(placement, resolvedCards);
 
             ContainerViewBinding.ClearAppliedCards(layoutAppliedCards);
@@ -130,7 +132,7 @@ namespace ConsoleCards.Presentation.Views.Containers
                 plan.Add(new CardLayoutPlan(
                     orderedCards[i],
                     pose,
-                    ContainerViewBinding.DefaultCardSurfaceClearance + (i * physicalStep)));
+                    restLift + ContainerViewBinding.DefaultCardSurfaceClearance + (i * physicalStep)));
             }
 
             return plan;
@@ -139,7 +141,7 @@ namespace ConsoleCards.Presentation.Views.Containers
         private void ApplyPlan(IReadOnlyList<CardLayoutPlan> plan)
         {
             transform.SetPositionAndRotation(
-                converter.ToWorldPosition(placementState.Pose),
+                converter.ToWorldPosition(placementState.Pose) + (Vector3.up * restLift),
                 converter.ToWorldRotation(placementState.Pose));
             ContainerViewBinding.ApplyPlan(plan, layoutAppliedCards, containerState.Id);
             VisibleCardCount = plan.Count;

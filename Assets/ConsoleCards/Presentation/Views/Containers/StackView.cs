@@ -20,6 +20,7 @@ namespace ConsoleCards.Presentation.Views.Containers
         private Transform layoutAnchor;
         private TabletopCoordinateConverter converter;
         private bool isBound;
+        private float restLift;
 
         public bool IsBound => isBound;
 
@@ -86,6 +87,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             ContainerViewBinding.ValidateFiniteNonNegative(tableOffsetPerCard, nameof(tableOffsetPerCard));
             Dictionary<TabletopObjectId, CardView> lookup = ContainerViewBinding.BuildLookup(cardViews);
             List<CardView> resolvedCards = ContainerViewBinding.ResolveOrderedCards(container, lookup);
+            restLift = ComponentRestHeight.RestLift(transform);
             SetPlacementTransform(placement, coordinateConverter);
             List<CardLayoutPlan> plan = BuildLayoutPlan(
                 placement,
@@ -187,7 +189,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             TabletopCoordinateConverter coordinateConverter)
         {
             transform.SetPositionAndRotation(
-                ContainerViewBinding.PlacementWorldPosition(placement, coordinateConverter),
+                ContainerViewBinding.PlacementWorldPosition(placement, coordinateConverter) + (Vector3.up * restLift),
                 coordinateConverter.ToWorldRotation(placement.Pose));
         }
 
