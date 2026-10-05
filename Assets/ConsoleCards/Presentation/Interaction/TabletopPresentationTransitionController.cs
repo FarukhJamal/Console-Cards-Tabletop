@@ -181,6 +181,12 @@ namespace ConsoleCards.Presentation.Interaction
             TickPulses(unscaledDeltaTime);
         }
 
+        /// <summary>True while a timed or follow motion owns the target's transform.</summary>
+        public bool IsAnimating(Transform target)
+        {
+            return target != null && motions.ContainsKey(target);
+        }
+
         public void Complete(Transform target)
         {
             if (target == null)

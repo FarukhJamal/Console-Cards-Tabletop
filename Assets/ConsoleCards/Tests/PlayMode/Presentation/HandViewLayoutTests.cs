@@ -76,7 +76,6 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         {
             HandFixture fixture = CreateHandFixture(1);
             fixture.View.HorizontalSpacing = 0.75f;
-            fixture.View.FanAngleDegrees = 10f;
 
             fixture.View.Bind(fixture.Container, fixture.Anchor, fixture.Converter, fixture.CardViews);
 
@@ -89,16 +88,13 @@ namespace ConsoleCards.Tests.PlayMode.Presentation
         {
             HandFixture fixture = CreateHandFixture(3);
             fixture.View.HorizontalSpacing = 1f;
-            fixture.View.FanAngleDegrees = 10f;
 
             fixture.View.Bind(fixture.Container, fixture.Anchor, fixture.Converter, fixture.CardViews);
 
             Assert.That(fixture.CardViews[0].transform.position.x, Is.EqualTo(-1f).Within(Tolerance));
             Assert.That(fixture.CardViews[1].transform.position.x, Is.EqualTo(0f).Within(Tolerance));
             Assert.That(fixture.CardViews[2].transform.position.x, Is.EqualTo(1f).Within(Tolerance));
-            Assert.That(Quaternion.Angle(Quaternion.Euler(0f, -10f, 0f), fixture.CardViews[0].transform.rotation), Is.EqualTo(0f).Within(Tolerance));
             Assert.That(Quaternion.Angle(Quaternion.Euler(0f, 0f, 0f), fixture.CardViews[1].transform.rotation), Is.EqualTo(0f).Within(Tolerance));
-            Assert.That(Quaternion.Angle(Quaternion.Euler(0f, 10f, 0f), fixture.CardViews[2].transform.rotation), Is.EqualTo(0f).Within(Tolerance));
         }
 
         [Test]

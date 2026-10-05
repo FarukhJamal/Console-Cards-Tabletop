@@ -2,6 +2,7 @@ using System;
 using System.Runtime.ExceptionServices;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Presentation.Views;
+using ConsoleCards.Presentation.Views.Containers;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Interaction
@@ -31,6 +32,12 @@ namespace ConsoleCards.Presentation.Interaction
         public TabletopInteractionRoute ActiveRoute => activeRoute;
 
         public bool HasActiveInteraction => activeRoute != TabletopInteractionRoute.None;
+
+        /// <summary>
+        /// Optional local hand. A card accepted into it (transfer or reorder) is deselected so it
+        /// settles into the row instead of taking the selected lift; hover lift is unaffected.
+        /// </summary>
+        public HandView HandView { get; set; }
 
         public bool TryBegin(Vector2 screenPosition)
         {
@@ -93,8 +100,10 @@ namespace ConsoleCards.Presentation.Interaction
                 case TabletopInteractionRoute.TabletopMove:
                     try
                     {
-                        return TabletopInteractionReleaseResult.FromMove(
+                        TabletopInteractionReleaseResult moveResult = TabletopInteractionReleaseResult.FromMove(
                             moveCoordinator.ReleasePointer(screenPosition));
+                        ClearSelectionAfterHandDrop(moveResult);
+                        return moveResult;
                     }
                     finally
                     {
@@ -103,8 +112,10 @@ namespace ConsoleCards.Presentation.Interaction
                 case TabletopInteractionRoute.ContainedCardDrag:
                     try
                     {
-                        return TabletopInteractionReleaseResult.FromContainedCard(
+                        TabletopInteractionReleaseResult containedResult = TabletopInteractionReleaseResult.FromContainedCard(
                             containedCardDragCoordinator.Release(screenPosition));
+                        ClearSelectionAfterHandDrop(containedResult);
+                        return containedResult;
                     }
                     finally
                     {
@@ -115,6 +126,28 @@ namespace ConsoleCards.Presentation.Interaction
                 default:
                     activeRoute = TabletopInteractionRoute.None;
                     throw new InvalidOperationException("Unsupported tabletop interaction route.");
+            }
+        }
+
+        private void ClearSelectionAfterHandDrop(TabletopInteractionReleaseResult result)
+        {
+            bool acceptedDrop =
+                (result.MoveResult.HasValue
+                    && result.MoveResult.Value.Status == MoveInteractionReleaseStatus.CardTransferAccepted)
+                || (result.ContainedCardResult.HasValue
+                    && (result.ContainedCardResult.Value.Status == ContainedCardDragReleaseStatus.TransferAccepted
+                        || result.ContainedCardResult.Value.Status == ContainedCardDragReleaseStatus.HandReordered));
+            HandView hand = HandView;
+            if (!acceptedDrop || hand == null || !hand.IsBound)
+            {
+                return;
+            }
+
+            if (selectionState.SelectedView is CardView card
+                && card.BoundState != null
+                && card.BoundState.ContainerId == hand.ContainerId)
+            {
+                selectionState.ClearSelection();
             }
         }
 

@@ -8179,6 +8179,7 @@ namespace ConsoleCards.Presentation.Prototype
             deckView = null;
             sceneDeckVisual.gameObject.SetActive(false);
             handView = sceneHandVisual.GetView<HandView>();
+            handView.ConfigurePresentation(presentationTransitions, sceneHandVisual.FeedbackRenderer);
             DeactivateUnusedSceneStack(sceneStackAVisual);
             DeactivateUnusedSceneStack(sceneStackBVisual);
             discardPileView = null;
@@ -8488,6 +8489,8 @@ namespace ConsoleCards.Presentation.Prototype
                 moveCoordinator,
                 containedCardDragCoordinator,
                 selectionState);
+            interactionRouter.HandView = handView;
+            hitResolver.HandPicker = handView;
             inputRoutingPolicy.ConfigureInteractionRouter(interactionRouter);
             cameraInputAdapter.ConfigureScrollRoutingPolicy(inputRoutingPolicy);
             cameraRoutingConfiguredByComposition = true;

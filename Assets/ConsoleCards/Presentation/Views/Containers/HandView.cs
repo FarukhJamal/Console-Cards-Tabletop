@@ -4,6 +4,7 @@ using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Presentation.Coordinates;
+using ConsoleCards.Presentation.Interaction;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Views.Containers
@@ -12,7 +13,8 @@ namespace ConsoleCards.Presentation.Views.Containers
     {
         [SerializeField] private Transform layoutAnchor;
         [SerializeField] private float horizontalSpacing = 0.75f;
-        [SerializeField] private float fanAngleDegrees = 12f;
+        [SerializeField] private float layoutWidth = 5.8f;
+        [SerializeField] private float cardLayoutWidth = 1.0f;
         [SerializeField] private float verticalOffset = 0.005f;
         [SerializeField] private float hoverLiftDistance = 0.14f;
         [SerializeField] private float selectedLiftDistance = 0.42f;
@@ -30,6 +32,11 @@ namespace ConsoleCards.Presentation.Views.Containers
             new HashSet<TabletopObjectId>();
         private readonly List<TabletopObjectId> interactionCleanup =
             new List<TabletopObjectId>();
+        private readonly List<CardView> pickOrder = new List<CardView>();
+        private readonly List<float> pickHalfDepths = new List<float>();
+        private TabletopPresentationTransitionController presentationTransitions;
+        private Renderer restSurfaceRenderer;
+        private float layoutPitch;
         private ContainerState containerState;
         private TabletopCoordinateConverter converter;
         private TabletopObjectId hoveredCardId;
@@ -59,20 +66,6 @@ namespace ConsoleCards.Presentation.Views.Containers
             }
         }
 
-        public float FanAngleDegrees
-        {
-            get => fanAngleDegrees;
-            set
-            {
-                if (float.IsNaN(value) || float.IsInfinity(value))
-                {
-                    throw new ArgumentOutOfRangeException(nameof(value));
-                }
-
-                fanAngleDegrees = value;
-            }
-        }
-
         public float VerticalOffset
         {
             get => verticalOffset;
@@ -99,9 +92,11 @@ namespace ConsoleCards.Presentation.Views.Containers
             ContainerViewBinding.ValidateFiniteNonNegative(hoverWorldHeight, nameof(hoverWorldHeight));
             ContainerViewBinding.ValidateFiniteNonNegative(selectedWorldHeight, nameof(selectedWorldHeight));
             ContainerViewBinding.ValidateFiniteNonNegative(interactionResponse, nameof(interactionResponse));
-            if (float.IsNaN(fanAngleDegrees) || float.IsInfinity(fanAngleDegrees))
+            ContainerViewBinding.ValidateFiniteNonNegative(layoutWidth, nameof(layoutWidth));
+            ContainerViewBinding.ValidateFiniteNonNegative(cardLayoutWidth, nameof(cardLayoutWidth));
+            if (cardLayoutWidth <= 0f || layoutWidth < cardLayoutWidth)
             {
-                throw new ArgumentOutOfRangeException(nameof(fanAngleDegrees));
+                throw new ArgumentOutOfRangeException(nameof(layoutWidth));
             }
             if (hoverScale < 1f || float.IsNaN(hoverScale) || float.IsInfinity(hoverScale))
             {
@@ -148,6 +143,19 @@ namespace ConsoleCards.Presentation.Views.Containers
             suppliedCardViews.Clear();
             suppliedCardViews.AddRange(cardViews);
             ApplyAcceptedLayout();
+        }
+
+        /// <summary>
+        /// Optional presentation collaborators: the transition controller, so interaction lifts never
+        /// fight a settle animation, and the plate the cards rest on. Without a plate the cards keep
+        /// the default surface clearance.
+        /// </summary>
+        internal void ConfigurePresentation(
+            TabletopPresentationTransitionController transitions,
+            Renderer restSurface)
+        {
+            presentationTransitions = transitions;
+            restSurfaceRenderer = restSurface;
         }
 
         /// <summary>
@@ -206,7 +214,8 @@ namespace ConsoleCards.Presentation.Views.Containers
                 return false;
             }
 
-            if (containerState.Count <= 1 || horizontalSpacing <= 0f)
+            float pitch = CalculatePitch(containerState.Count);
+            if (containerState.Count <= 1 || pitch <= 0f)
             {
                 targetIndex = currentIndex;
                 return true;
@@ -216,10 +225,51 @@ namespace ConsoleCards.Presentation.Views.Containers
             float localPointerX = layoutAnchor.InverseTransformPoint(pointerWorldPosition).x;
             float center = (containerState.Count - 1) * 0.5f;
             targetIndex = Mathf.Clamp(
-                Mathf.RoundToInt((localPointerX / horizontalSpacing) + center),
+                Mathf.RoundToInt((localPointerX / pitch) + center),
                 0,
                 containerState.Count - 1);
             return true;
+        }
+
+        /// <summary>
+        /// Picks the topmost card whose resting (unlifted) strip in the row contains the point where the
+        /// ray meets the hand plane. Hover and selection lifts are ignored, so overlapping cards are
+        /// picked by what lies under the pointer in the row.
+        /// </summary>
+        internal bool TryPickCard(Ray ray, out CardView pickedCard)
+        {
+            pickedCard = null;
+            if (!isBound || pickOrder.Count == 0)
+            {
+                return false;
+            }
+
+            Plane plane = new Plane(layoutAnchor.up, layoutAnchor.position);
+            if (!plane.Raycast(ray, out float distance))
+            {
+                return false;
+            }
+
+            Vector3 localPoint = layoutAnchor.InverseTransformPoint(ray.GetPoint(distance));
+            float halfWidth = cardLayoutWidth * 0.5f;
+            float center = (pickOrder.Count - 1) * 0.5f;
+            for (int i = pickOrder.Count - 1; i >= 0; i--)
+            {
+                CardView card = pickOrder[i];
+                if (card == null || !card.IsBound)
+                {
+                    continue;
+                }
+
+                if (Mathf.Abs(localPoint.x - ((i - center) * layoutPitch)) <= halfWidth
+                    && Mathf.Abs(localPoint.z) <= pickHalfDepths[i])
+                {
+                    pickedCard = card;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         internal void ApplyReorderPreview(CardView movingCard, int targetIndex)
@@ -259,6 +309,8 @@ namespace ConsoleCards.Presentation.Views.Containers
             converter = null;
             suppliedCardViews.Clear();
             VisibleCardCount = 0;
+            pickOrder.Clear();
+            pickHalfDepths.Clear();
             isBound = false;
         }
 
@@ -284,6 +336,11 @@ namespace ConsoleCards.Presentation.Views.Containers
                 if (cardId == draggedCardId || card.IsPreviewing)
                 {
                     animatingCardIds.Remove(cardId);
+                    continue;
+                }
+
+                if (presentationTransitions != null && presentationTransitions.IsAnimating(card.transform))
+                {
                     continue;
                 }
 
@@ -329,15 +386,20 @@ namespace ConsoleCards.Presentation.Views.Containers
         {
             List<CardLayoutPlan> plan = new List<CardLayoutPlan>(orderedCards.Count);
             float center = (orderedCards.Count - 1) * 0.5f;
+            float pitch = CalculatePitch(orderedCards.Count);
+            float rotation = NormalizeAngle(anchor.eulerAngles.y);
+            float restSurfaceTop = restSurfaceRenderer != null
+                ? ComponentRestHeight.TopOf(restSurfaceRenderer)
+                : float.NaN;
             for (int i = 0; i < orderedCards.Count; i++)
             {
                 float centeredIndex = i - center;
-                Vector3 worldPosition = anchor.position + (anchor.right * centeredIndex * horizontalSpacing);
-                float rotation = NormalizeAngle(anchor.eulerAngles.y + CalculateFanRotation(centeredIndex, orderedCards.Count));
+                Vector3 worldPosition = anchor.position + (anchor.right * centeredIndex * pitch);
+                TabletopPose pose = ContainerViewBinding.PoseFromWorld(coordinateConverter, worldPosition, rotation);
                 plan.Add(new CardLayoutPlan(
                     orderedCards[i],
-                    ContainerViewBinding.PoseFromWorld(coordinateConverter, worldPosition, rotation),
-                    ContainerViewBinding.DefaultCardSurfaceClearance + (i * verticalOffset)));
+                    pose,
+                    ResolveCardHeight(coordinateConverter, pose, orderedCards[i], restSurfaceTop, i)));
             }
 
             return plan;
@@ -348,6 +410,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             transform.SetPositionAndRotation(layoutAnchor.position, layoutAnchor.rotation);
             ContainerViewBinding.ApplyPlan(plan, layoutAppliedCards, containerState.Id);
             UpdateInteractionPoses(plan, null);
+            RecordPickOrder(plan);
             VisibleCardCount = plan.Count;
         }
 
@@ -365,6 +428,7 @@ namespace ConsoleCards.Presentation.Views.Containers
                 }
             }
             UpdateInteractionPoses(plan, movingCard);
+            RecordPickOrder(plan);
         }
 
         private void UpdateInteractionPoses(
@@ -439,14 +503,49 @@ namespace ConsoleCards.Presentation.Views.Containers
             return false;
         }
 
-        private float CalculateFanRotation(float centeredIndex, int count)
+        private float CalculatePitch(int count)
         {
             if (count <= 1)
             {
                 return 0f;
             }
 
-            return centeredIndex * fanAngleDegrees;
+            // Normal spacing until the row would exceed the hand width, then compress evenly.
+            float fittedPitch = (layoutWidth - cardLayoutWidth) / (count - 1);
+            return Mathf.Max(0f, Mathf.Min(horizontalSpacing, fittedPitch));
+        }
+
+        private float ResolveCardHeight(
+            TabletopCoordinateConverter coordinateConverter,
+            TabletopPose pose,
+            CardView card,
+            float restSurfaceTop,
+            int index)
+        {
+            if (float.IsNaN(restSurfaceTop))
+            {
+                return ContainerViewBinding.DefaultCardSurfaceClearance + (index * verticalOffset);
+            }
+
+            // Rest the card's own collider bottom on the plate top, then stack by verticalOffset.
+            float restingPivotY = restSurfaceTop
+                + ComponentRestHeight.PivotToBottom(card.transform)
+                + ComponentRestHeight.RestClearance
+                + (index * verticalOffset);
+            return restingPivotY - coordinateConverter.ToWorldPosition(pose).y;
+        }
+
+        private void RecordPickOrder(IReadOnlyList<CardLayoutPlan> plan)
+        {
+            layoutPitch = CalculatePitch(plan.Count);
+            pickOrder.Clear();
+            pickHalfDepths.Clear();
+            for (int i = 0; i < plan.Count; i++)
+            {
+                CardView card = plan[i].CardView;
+                pickOrder.Add(card);
+                pickHalfDepths.Add(ComponentRestHeight.HalfDepth(card.transform, cardLayoutWidth * 0.7f));
+            }
         }
 
         private static float NormalizeAngle(float angle)

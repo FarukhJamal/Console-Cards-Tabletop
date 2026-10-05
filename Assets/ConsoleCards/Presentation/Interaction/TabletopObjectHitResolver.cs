@@ -1,5 +1,6 @@
 using System;
 using ConsoleCards.Presentation.Views;
+using ConsoleCards.Presentation.Views.Containers;
 using UnityEngine;
 using UnityCamera = UnityEngine.Camera;
 
@@ -43,6 +44,12 @@ namespace ConsoleCards.Presentation.Interaction
 
         public float MaximumDistance { get; }
 
+        /// <summary>
+        /// Optional local hand. When the nearest hit is one of its cards, the hand picks the card by
+        /// its resting strip in the row; the raycast result stays the fallback.
+        /// </summary>
+        public HandView HandPicker { get; set; }
+
         public bool TryResolve(Vector2 screenPosition, out TabletopObjectView view)
         {
             ValidateFinite(screenPosition);
@@ -81,12 +88,28 @@ namespace ConsoleCards.Presentation.Interaction
                     continue;
                 }
 
-                view = resolvedView;
+                view = ResolveHandCard(ray, resolvedView);
                 return true;
             }
 
             view = null;
             return false;
+        }
+
+        private TabletopObjectView ResolveHandCard(Ray ray, TabletopObjectView resolvedView)
+        {
+            HandView hand = HandPicker;
+            CardView card = resolvedView as CardView;
+            if (hand == null
+                || !hand.IsBound
+                || card == null
+                || card.BoundState == null
+                || card.BoundState.ContainerId != hand.ContainerId)
+            {
+                return resolvedView;
+            }
+
+            return hand.TryPickCard(ray, out CardView pickedCard) ? pickedCard : resolvedView;
         }
 
         private void SortHitsNearestFirst(int hitCount)
