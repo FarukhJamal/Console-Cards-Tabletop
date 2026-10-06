@@ -32,6 +32,12 @@ namespace ConsoleCards.Games.TrapFloor
         // Controller Deck (clearance 0.175) at all four corners; table margin 0.444.
         private const double StartingAbilityStagingSideOffset = -7.6d;
         private const double StartingAbilityStagingSpacing = 1.15d;
+        // Temporary until (a2b) repositions it with the staging layout: default Hand zone, console-local
+        // (+6.40, 0.00), 2.0 x 1.4. Clearance 0.300 (Easy) / 0.325 (Hard, Impossible); table margin 1.144.
+        private const double HandZoneLocalX = 6.40d;
+        private const double HandZoneLocalZ = 0.00d;
+        private const float HandZoneWidth = 2.0f;
+        private const float HandZoneDepth = 1.4f;
         private const double FloorfallDiceX = 3.45d;
         private const double FloorfallDiceY = 3.45d;
         private const double FloorfallDiceSpacing = 0.9d;
@@ -578,7 +584,16 @@ namespace ConsoleCards.Games.TrapFloor
                 GetConsolePose(layoutSeat)));
             // The authored maximum is an assisted draw target, not a physical capacity. Zero keeps
             // the Hand technically unbounded for freeform draws beyond that recommendation.
-            containers.Add(CreateContainer(handId, ContainerKind.Hand, seatId, ObjectVisibility.OwnerOnly, 0));
+            containers.Add(new GameTemplateContainerDefinition(
+                handId,
+                ContainerKind.Hand,
+                seatId,
+                ObjectVisibility.OwnerOnly,
+                0,
+                true,
+                OffsetFromConsole(GetConsolePose(layoutSeat), HandZoneLocalX, HandZoneLocalZ),
+                HandZoneWidth,
+                HandZoneDepth));
             containers.Add(CreateContainer(
                 mainSlotId,
                 ContainerKind.ConsoleSlot,
@@ -804,6 +819,19 @@ namespace ConsoleCards.Games.TrapFloor
                 pose.RotationDegrees,
                 pose.Layer,
                 pose.LocalOrder);
+        }
+
+        // Console-local (x right, z toward the board) to table coordinates, keeping the Console's rotation.
+        private static TabletopPose OffsetFromConsole(TabletopPose consolePose, double localX, double localZ)
+        {
+            double radians = consolePose.RotationDegrees * (Math.PI / 180d);
+            return new TabletopPose(
+                new TableCoordinate(
+                    consolePose.Position.X + (Math.Cos(radians) * localX) + (Math.Sin(radians) * localZ),
+                    consolePose.Position.Y - (Math.Sin(radians) * localX) + (Math.Cos(radians) * localZ)),
+                consolePose.RotationDegrees,
+                consolePose.Layer,
+                consolePose.LocalOrder);
         }
 
         private static TabletopPose OffsetBesideConsole(TabletopPose consolePose, double distance)

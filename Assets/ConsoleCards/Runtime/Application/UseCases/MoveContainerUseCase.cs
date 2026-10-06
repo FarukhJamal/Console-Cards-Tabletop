@@ -11,7 +11,8 @@ using ConsoleCards.Core.Identifiers;
 namespace ConsoleCards.Application.UseCases
 {
     /// <summary>
-    /// Moves the authoritative placement anchor of a Deck, Stack, or Console.
+    /// Moves the authoritative placement anchor of a Deck, Stack, Hand zone, or Console. A seat-owned Deck,
+    /// Stack, or Hand zone can only be moved by that seat's occupant; unowned (Toolbox) ones by anyone.
     /// A Console is addressed through one of its stable Slot Container IDs.
     /// Contained Card/Slot membership and order are not mutated.
     /// </summary>
@@ -65,7 +66,8 @@ namespace ConsoleCards.Application.UseCases
             bool isFixedCollection = container.Kind == ContainerKind.Deck
                 || container.Kind == ContainerKind.Stack;
             bool isConsoleSlot = container.Kind == ContainerKind.ConsoleSlot;
-            if (!isFixedCollection && !isConsoleSlot)
+            bool isHandZone = container.Kind == ContainerKind.Hand;
+            if (!isFixedCollection && !isConsoleSlot && !isHandZone)
             {
                 return MoveContainerResult.Failure(
                     CommandResultStatus.Rejected,
@@ -75,12 +77,30 @@ namespace ConsoleCards.Application.UseCases
             ContainerPlacementState placement = null;
             SeatState owningSeat = null;
             PlacedConsoleState placedConsole = null;
-            if (isFixedCollection
+            if ((isFixedCollection || isHandZone)
                 && !matchState.TryGetContainerPlacement(command.ContainerId, out placement))
             {
                 return MoveContainerResult.Failure(
                     CommandResultStatus.Rejected,
                     MoveContainerError.PlacementNotFound);
+            }
+
+            if (isHandZone && !placement.HasExtent)
+            {
+                return MoveContainerResult.Failure(
+                    CommandResultStatus.Rejected,
+                    MoveContainerError.PlacementNotFound);
+            }
+
+            // Move my own zone, deck or stack only (seat-owned); Console moves keep their existing rules.
+            if ((isFixedCollection || isHandZone)
+                && !container.OwnerSeatId.IsEmpty
+                && (!matchState.Seats.TryGetValue(container.OwnerSeatId, out SeatState ownerSeat)
+                    || ownerSeat.OccupantPlayerId != command.Context.RequestedByPlayerId))
+            {
+                return MoveContainerResult.Failure(
+                    CommandResultStatus.Rejected,
+                    MoveContainerError.NotContainerOwner);
             }
 
             if (isConsoleSlot

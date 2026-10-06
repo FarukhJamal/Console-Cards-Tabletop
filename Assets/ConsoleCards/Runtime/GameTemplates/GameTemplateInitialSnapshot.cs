@@ -113,7 +113,12 @@ namespace ConsoleCards.GameTemplates
                 new List<ContainerPlacementSnapshot>(matchState.ContainerPlacements.Count);
             foreach (ContainerPlacementState placement in matchState.ContainerPlacements.Values)
             {
-                placementSnapshots.Add(new ContainerPlacementSnapshot(placement.ContainerId, placement.Pose, placement.SurfaceHeight));
+                placementSnapshots.Add(new ContainerPlacementSnapshot(
+                    placement.ContainerId,
+                    placement.Pose,
+                    placement.SurfaceHeight,
+                    placement.HasExtent ? placement.ExtentWidth : (float?)null,
+                    placement.HasExtent ? placement.ExtentDepth : (float?)null));
             }
 
             List<SeatSnapshot> seatSnapshots = new List<SeatSnapshot>(matchState.Seats.Count);
@@ -228,7 +233,12 @@ namespace ConsoleCards.GameTemplates
             for (int i = 0; i < containerPlacements.Count; i++)
             {
                 ContainerPlacementSnapshot placement = containerPlacements[i];
-                restoredPlacements.Add(new ContainerPlacementState(placement.ContainerId, placement.Pose, placement.SurfaceHeight));
+                restoredPlacements.Add(new ContainerPlacementState(
+                    placement.ContainerId,
+                    placement.Pose,
+                    placement.SurfaceHeight,
+                    placement.ExtentWidth,
+                    placement.ExtentDepth));
             }
 
             List<SeatState> restoredSeats = new List<SeatState>(seats.Count);
@@ -392,16 +402,25 @@ namespace ConsoleCards.GameTemplates
 
         private sealed class ContainerPlacementSnapshot
         {
-            public ContainerPlacementSnapshot(ContainerId containerId, TabletopPose pose, float? surfaceHeight)
+            public ContainerPlacementSnapshot(
+                ContainerId containerId,
+                TabletopPose pose,
+                float? surfaceHeight,
+                float? extentWidth,
+                float? extentDepth)
             {
                 ContainerId = containerId;
                 Pose = pose;
                 SurfaceHeight = surfaceHeight;
+                ExtentWidth = extentWidth;
+                ExtentDepth = extentDepth;
             }
 
             public ContainerId ContainerId { get; }
             public TabletopPose Pose { get; }
             public float? SurfaceHeight { get; }
+            public float? ExtentWidth { get; }
+            public float? ExtentDepth { get; }
         }
 
         private sealed class PlacedConsoleSnapshot

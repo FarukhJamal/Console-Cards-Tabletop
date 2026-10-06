@@ -14,6 +14,7 @@ namespace ConsoleCards.Application.Results
         PlacementNotFound,
         RevisionOverflow,
         PhysicalSurfaceRequired,
+        NotContainerOwner,
     }
 
     public readonly struct MoveContainerResult : IEquatable<MoveContainerResult>

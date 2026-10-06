@@ -1143,9 +1143,11 @@ namespace ConsoleCards.Core.Domain.Match
                     throw new ArgumentException("Container placement references a missing Container.", nameof(containerPlacements));
                 }
 
-                if (!CanHavePlacement(container.Kind))
+                // A Hand may carry a zone placement (pose plus extent); other kinds need CanHavePlacement.
+                bool isHandZone = container.Kind == ContainerKind.Hand && placement.HasExtent;
+                if (!isHandZone && !CanHavePlacement(container.Kind))
                 {
-                    throw new ArgumentException("Container placement is only valid for Deck, Stack, and DiscardPile Containers.", nameof(containerPlacements));
+                    throw new ArgumentException("Container placement is only valid for Deck, Stack, and DiscardPile Containers, or as a Hand zone with an extent.", nameof(containerPlacements));
                 }
             }
         }

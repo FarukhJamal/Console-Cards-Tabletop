@@ -267,12 +267,25 @@ namespace ConsoleCards.GameTemplates
                 }
 
                 bool requiresPlacement = IsPlacedContainer(container.Kind);
-                if (requiresPlacement != container.HasTabletopPose)
+                bool isHand = container.Kind == ContainerKind.Hand;
+                // A Hand may declare a zone (pose plus extent); other non-placed kinds use their layout anchors.
+                bool placementInvalid = isHand
+                    ? container.HasTabletopPose != container.HasExtent
+                    : requiresPlacement != container.HasTabletopPose;
+                if (placementInvalid)
                 {
                     Add(
                         issues,
                         "ContainerPlacementInvalid",
-                        "Deck, Stack, and Discard Pile Containers require a pose; other Container kinds use their authored layout anchors.");
+                        "Deck, Stack, and Discard Pile Containers require a pose; a Hand zone needs both a pose and an extent; other Container kinds use their authored layout anchors.");
+                }
+
+                if (container.HasExtent
+                    && (!isHand
+                        || !IsFiniteAboveZero(container.ExtentWidth)
+                        || !IsFiniteAboveZero(container.ExtentDepth)))
+                {
+                    Add(issues, "ContainerExtentInvalid", "Only a Hand zone has an extent, and it must be finite and above zero.");
                 }
 
                 if (container.HasTabletopPose && !IsFinite(container.TabletopPose))
@@ -578,6 +591,11 @@ namespace ConsoleCards.GameTemplates
             return kind == ContainerKind.Deck
                 || kind == ContainerKind.Stack
                 || kind == ContainerKind.DiscardPile;
+        }
+
+        private static bool IsFiniteAboveZero(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value) && value > 0f;
         }
 
         private static bool IsFinite(TabletopPose pose)

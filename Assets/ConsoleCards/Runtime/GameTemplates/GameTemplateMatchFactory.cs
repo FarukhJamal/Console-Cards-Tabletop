@@ -128,7 +128,12 @@ namespace ConsoleCards.GameTemplates
                 containers.Add(container.Id, container);
                 if (definition.HasTabletopPose)
                 {
-                    placements.Add(new ContainerPlacementState(container.Id, definition.TabletopPose));
+                    placements.Add(new ContainerPlacementState(
+                        container.Id,
+                        definition.TabletopPose,
+                        null,
+                        definition.HasExtent ? definition.ExtentWidth : (float?)null,
+                        definition.HasExtent ? definition.ExtentDepth : (float?)null));
                 }
             }
 

@@ -123,7 +123,9 @@ namespace ConsoleCards.GameTemplates
             ObjectVisibility visibility,
             int capacity,
             bool hasTabletopPose,
-            TabletopPose tabletopPose)
+            TabletopPose tabletopPose,
+            float? extentWidth = null,
+            float? extentDepth = null)
         {
             Id = id;
             Kind = kind;
@@ -132,6 +134,9 @@ namespace ConsoleCards.GameTemplates
             Capacity = capacity;
             HasTabletopPose = hasTabletopPose;
             TabletopPose = tabletopPose;
+            HasExtent = extentWidth.HasValue && extentDepth.HasValue;
+            ExtentWidth = extentWidth ?? 0f;
+            ExtentDepth = extentDepth ?? 0f;
         }
 
         public ContainerId Id { get; }
@@ -147,6 +152,13 @@ namespace ConsoleCards.GameTemplates
         public bool HasTabletopPose { get; }
 
         public TabletopPose TabletopPose { get; }
+
+        /// <summary>True for a Hand zone: the pose and extent of the zone where cards can be dropped into the Hand.</summary>
+        public bool HasExtent { get; }
+
+        public float ExtentWidth { get; }
+
+        public float ExtentDepth { get; }
     }
 
     public sealed class GameTemplateObjectInstanceDefinition
