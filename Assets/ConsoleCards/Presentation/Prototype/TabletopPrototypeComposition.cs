@@ -2603,6 +2603,12 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
+            if (MoveContainerUseCase.IsMoveBlockedByOwner(matchState, container, localPlayerId))
+            {
+                ShowMessage($"Container move rejected: {MoveContainerError.NotContainerOwner}.");
+                return;
+            }
+
             TabletopComponentKind previewKind = container.Kind == ContainerKind.Deck
                 ? TabletopComponentKind.Deck
                 : TabletopComponentKind.Stack;

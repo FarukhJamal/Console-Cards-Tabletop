@@ -93,10 +93,7 @@ namespace ConsoleCards.Application.UseCases
             }
 
             // Move my own zone, deck or stack only (seat-owned); Console moves keep their existing rules.
-            if ((isFixedCollection || isHandZone)
-                && !container.OwnerSeatId.IsEmpty
-                && (!matchState.Seats.TryGetValue(container.OwnerSeatId, out SeatState ownerSeat)
-                    || ownerSeat.OccupantPlayerId != command.Context.RequestedByPlayerId))
+            if (IsMoveBlockedByOwner(matchState, container, command.Context.RequestedByPlayerId))
             {
                 return MoveContainerResult.Failure(
                     CommandResultStatus.Rejected,
@@ -146,6 +143,26 @@ namespace ConsoleCards.Application.UseCases
             long revision = matchState.AdvanceRevision(
                 command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.MoveContainer);
             return MoveContainerResult.Accepted(revision);
+        }
+
+        /// <summary>
+        /// True when a seat-owned Deck, Stack, or Hand zone belongs to a seat not occupied by the requester.
+        /// Read-only; callers may use it to reject a move before any placement preview starts.
+        /// </summary>
+        public static bool IsMoveBlockedByOwner(MatchState matchState, ContainerState container, PlayerId requestedBy)
+        {
+            if (matchState == null || container == null)
+            {
+                return false;
+            }
+
+            bool ownerRestricted = container.Kind == ContainerKind.Deck
+                || container.Kind == ContainerKind.Stack
+                || container.Kind == ContainerKind.Hand;
+            return ownerRestricted
+                && !container.OwnerSeatId.IsEmpty
+                && (!matchState.Seats.TryGetValue(container.OwnerSeatId, out SeatState ownerSeat)
+                    || ownerSeat.OccupantPlayerId != requestedBy);
         }
 
         private static bool TryResolveConsole(
