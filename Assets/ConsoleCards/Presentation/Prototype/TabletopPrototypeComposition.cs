@@ -3390,7 +3390,8 @@ namespace ConsoleCards.Presentation.Prototype
                 TrapFloorTemplateDefinition template = TrapFloorTemplateFactory.CreateStandardFourPlayer(
                     authoritativeRandomValueSource,
                     gameDefinition,
-                    gameDefinition.Modes[i].StableId);
+                    gameDefinition.Modes[i].StableId,
+                    GetConsoleLayout());
                 availableTrapFloorTemplates.Add(template.Template.Id, template);
                 registrations.Add(new GameTemplateRegistration(template.Template, template.ContentCatalog));
             }
@@ -7145,6 +7146,21 @@ namespace ConsoleCards.Presentation.Prototype
                     throw new InvalidOperationException(
                         $"Console Slot anchor {i} ({anchors[i].name}) is at ({local.x}, {local.z}); "
                         + $"layout slot '{slot.Key}' is at ({slot.X}, {slot.Z}).");
+                }
+
+                // The Slot collider is the slot footprint (console-local x/z).
+                BoxCollider footprint = slotViews[i].GetComponent<BoxCollider>();
+                RequireReference(footprint, $"BoxCollider on Console Slot {i}");
+                Vector3 scale = footprint.transform.lossyScale;
+                Vector3 rootScale = root.lossyScale;
+                float width = footprint.size.x * scale.x / rootScale.x;
+                float depth = footprint.size.z * scale.z / rootScale.z;
+                if (Mathf.Abs(width - slot.FootprintWidth) > ConsoleLayoutAnchorTolerance
+                    || Mathf.Abs(depth - slot.FootprintDepth) > ConsoleLayoutAnchorTolerance)
+                {
+                    throw new InvalidOperationException(
+                        $"Console Slot {i} ({slotViews[i].name}) collider is {width} x {depth}; "
+                        + $"layout slot '{slot.Key}' footprint is {slot.FootprintWidth} x {slot.FootprintDepth}.");
                 }
             }
         }

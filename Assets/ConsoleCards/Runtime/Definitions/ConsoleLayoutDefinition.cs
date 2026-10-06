@@ -18,6 +18,7 @@ namespace ConsoleCards.Definitions
         [SerializeField, Min(0.001f)] private float footprintDepth = 1.4f;
         [SerializeField, Min(0)] private int defaultCapacity;
         [SerializeField] private bool marker;
+        [SerializeField] private ConsoleSlotOrientation defaultOrientation;
 
         internal ConsoleLayoutSlotData ToData()
         {
@@ -31,7 +32,8 @@ namespace ConsoleCards.Definitions
                 footprintWidth,
                 footprintDepth,
                 defaultCapacity,
-                marker);
+                marker,
+                defaultOrientation);
         }
     }
 

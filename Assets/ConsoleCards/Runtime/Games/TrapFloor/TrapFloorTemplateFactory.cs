@@ -35,6 +35,7 @@ namespace ConsoleCards.Games.TrapFloor
         private const double FloorfallDiceY = 3.45d;
         private const double FloorfallDiceSpacing = 0.9d;
         private const float PrototypeCameraOrthographicSize = 7.35f;
+        private const string MainConsoleSlotKey = "Main";
 
         public static TrapFloorTemplateDefinition CreateStandardFourPlayer()
         {
@@ -65,6 +66,19 @@ namespace ConsoleCards.Games.TrapFloor
             GameDefinitionData gameDefinition,
             string selectedModeStableId)
         {
+            return CreateStandardFourPlayer(randomValueSource, gameDefinition, selectedModeStableId, null);
+        }
+
+        /// <summary>
+        /// As above, with the Console layout: each avatar enters the Main slot in Main's layout default
+        /// orientation relative to its Console. Without a layout the avatar keeps yaw 0 (previous behaviour).
+        /// </summary>
+        public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
+            IRandomValueSource randomValueSource,
+            GameDefinitionData gameDefinition,
+            string selectedModeStableId,
+            ConsoleLayoutData consoleLayout)
+        {
             if (randomValueSource == null) throw new ArgumentNullException(nameof(randomValueSource));
             if (gameDefinition == null) throw new ArgumentNullException(nameof(gameDefinition));
 
@@ -80,6 +94,7 @@ namespace ConsoleCards.Games.TrapFloor
             if (mainSlot.PhysicalSlotCount != 1)
                 throw new ArgumentException("Trap Floor Console requires exactly one authored Main Slot.", nameof(gameDefinition));
             PlayerLayoutDefinition playerLayout = PlayerLayoutPresets.StandardFourPlayer;
+            float? mainSlotYawOffset = ResolveMainSlotYawOffset(consoleLayout);
             GameTemplateId templateId = new GameTemplateId(
                 string.Equals(activeMode.StableId, gameDefinition.DefaultModeStableId, StringComparison.OrdinalIgnoreCase)
                     ? gameDefinitionId
@@ -133,7 +148,8 @@ namespace ConsoleCards.Games.TrapFloor
                     memberships,
                     objects,
                     labels,
-                    players);
+                    players,
+                    mainSlotYawOffset);
             }
 
             TabletopObjectId floorfallXAxisDieId = new TabletopObjectId(CreateGuid(60, 1));
@@ -416,6 +432,17 @@ namespace ConsoleCards.Games.TrapFloor
             return expanded;
         }
 
+        // Main's layout default orientation as a yaw offset from the Console (Landscape = +90, as for
+        // landscape abilities). Null without a layout, which keeps the avatar at yaw 0.
+        private static float? ResolveMainSlotYawOffset(ConsoleLayoutData consoleLayout)
+        {
+            if (consoleLayout == null) return null;
+            if (!consoleLayout.TryGetSlot(MainConsoleSlotKey, out ConsoleLayoutSlotData mainSlot)
+                || mainSlot.Kind != ConsoleLayoutSlotKind.Card)
+                throw new ArgumentException("The Console layout has no Card slot keyed 'Main'.", nameof(consoleLayout));
+            return mainSlot.DefaultOrientation == ConsoleSlotOrientation.Landscape ? 90f : 0f;
+        }
+
         private static ConsoleSlotDefinitionData ResolveConsoleSlot(
             ConsoleConfigurationData configuration,
             string role,
@@ -526,7 +553,8 @@ namespace ConsoleCards.Games.TrapFloor
             ICollection<GameTemplateContainerMembership> memberships,
             ICollection<GameTemplateObjectInstanceDefinition> objects,
             IDictionary<TabletopObjectId, string> labels,
-            ICollection<TrapFloorPlayerSetupDefinition> players)
+            ICollection<TrapFloorPlayerSetupDefinition> players,
+            float? mainSlotYawOffset)
         {
             int playerNumber = seatIndex + 1;
             int idBase = seatIndex * 20;
@@ -586,7 +614,10 @@ namespace ConsoleCards.Games.TrapFloor
             TabletopObjectId avatarId = new TabletopObjectId(CreateGuid(42, playerNumber));
             TabletopObjectId pawnId = new TabletopObjectId(CreateGuid(45, playerNumber));
             TabletopPose consolePose = GetConsolePose(layoutSeat);
-            objects.Add(CreatePlayerCard(avatarId, avatarDefinitionId, seatId, TabletopPose.Default));
+            TabletopPose avatarPose = mainSlotYawOffset.HasValue
+                ? new TabletopPose(TableCoordinate.Zero, consolePose.RotationDegrees + mainSlotYawOffset.Value, 0, 0)
+                : TabletopPose.Default;
+            objects.Add(CreatePlayerCard(avatarId, avatarDefinitionId, seatId, avatarPose));
             labels.Add(avatarId, $"P{playerNumber}\nAVATAR");
             objects.Add(new GameTemplateObjectInstanceDefinition(
                 pawnId,

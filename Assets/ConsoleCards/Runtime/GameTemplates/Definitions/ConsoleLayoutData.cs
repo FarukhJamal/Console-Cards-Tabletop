@@ -12,6 +12,18 @@ namespace ConsoleCards.GameTemplates.Definitions
     }
 
     /// <summary>
+    /// Default card orientation of a Card slot, relative to the Console. A default only: a card placed in a slot
+    /// keeps its own orientation; the default applies when a card is placed without one (for example a
+    /// template's starting content). Cube entries use None.
+    /// </summary>
+    public enum ConsoleSlotOrientation
+    {
+        None = 0,
+        Portrait = 1,
+        Landscape = 2
+    }
+
+    /// <summary>
     /// One authored Console layout slot: a stable ordinal and key, its console-local centre on the mat
     /// (origin at the mat centre, +x right, +z toward the top of the mat texture), its footprint and its
     /// default capacity (0 = unbounded). Ordinals are append-only and are never reused or renumbered.
@@ -31,7 +43,8 @@ namespace ConsoleCards.GameTemplates.Definitions
             float footprintWidth,
             float footprintDepth,
             int defaultCapacity,
-            bool marker)
+            bool marker,
+            ConsoleSlotOrientation defaultOrientation)
         {
             if (ordinal < 1 || ordinal > MaximumOrdinal) throw new ArgumentOutOfRangeException(nameof(ordinal));
             if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("Console layout slot key is required.", nameof(key));
@@ -41,6 +54,9 @@ namespace ConsoleCards.GameTemplates.Definitions
             if (!IsFinite(footprintWidth) || footprintWidth <= 0f) throw new ArgumentOutOfRangeException(nameof(footprintWidth));
             if (!IsFinite(footprintDepth) || footprintDepth <= 0f) throw new ArgumentOutOfRangeException(nameof(footprintDepth));
             if (defaultCapacity < 0) throw new ArgumentOutOfRangeException(nameof(defaultCapacity));
+            if (!Enum.IsDefined(typeof(ConsoleSlotOrientation), defaultOrientation)) throw new ArgumentOutOfRangeException(nameof(defaultOrientation));
+            if ((kind == ConsoleLayoutSlotKind.Card) == (defaultOrientation == ConsoleSlotOrientation.None))
+                throw new ArgumentException("Card slots need a Portrait or Landscape default orientation; Cube slots use None.", nameof(defaultOrientation));
 
             Ordinal = ordinal;
             Key = key;
@@ -52,6 +68,7 @@ namespace ConsoleCards.GameTemplates.Definitions
             FootprintDepth = footprintDepth;
             DefaultCapacity = defaultCapacity;
             Marker = marker;
+            DefaultOrientation = defaultOrientation;
         }
 
         public int Ordinal { get; }
@@ -64,6 +81,7 @@ namespace ConsoleCards.GameTemplates.Definitions
         public float FootprintDepth { get; }
         public int DefaultCapacity { get; }
         public bool Marker { get; }
+        public ConsoleSlotOrientation DefaultOrientation { get; }
 
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
@@ -137,5 +155,21 @@ namespace ConsoleCards.GameTemplates.Definitions
 
         /// <summary>Default capacity of each Card slot, in runtime slot index order (0 = unbounded).</summary>
         public IReadOnlyList<int> CardSlotCapacities => cardSlotCapacities;
+
+        /// <summary>Finds a slot by its stable key (case-insensitive), for starting content and rule hooks.</summary>
+        public bool TryGetSlot(string key, out ConsoleLayoutSlotData slot)
+        {
+            for (int i = 0; i < slots.Count; i++)
+            {
+                if (string.Equals(slots[i].Key, key, StringComparison.OrdinalIgnoreCase))
+                {
+                    slot = slots[i];
+                    return true;
+                }
+            }
+
+            slot = null;
+            return false;
+        }
     }
 }
