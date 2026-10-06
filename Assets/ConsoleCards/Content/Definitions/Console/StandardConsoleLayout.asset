@@ -1,0 +1,739 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 77e3d5a7aac44698b37b49a9d6f62d47, type: 3}
+  m_Name: StandardConsoleLayout
+  m_EditorClassIdentifier: 
+  stableId: standard-console-layout
+  matWidth: 6
+  matDepth: 3.077
+  cubePieceSize: 0.126
+  slots:
+  - ordinal: 1
+    key: Main
+    kind: 0
+    group: Main
+    x: -0.8141
+    z: 0.0093
+    footprintWidth: 1.4
+    footprintDepth: 1.4
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 2
+    key: TopL
+    kind: 0
+    group: TopPlates
+    x: -1.7624
+    z: 1.7811
+    footprintWidth: 1.4
+    footprintDepth: 1.4
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 3
+    key: TopC
+    kind: 0
+    group: TopPlates
+    x: 0.0024
+    z: 1.7811
+    footprintWidth: 1.4
+    footprintDepth: 1.4
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 4
+    key: TopR
+    kind: 0
+    group: TopPlates
+    x: 1.76
+    z: 1.7811
+    footprintWidth: 1.4
+    footprintDepth: 1.4
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 5
+    key: RailL
+    kind: 0
+    group: Rails
+    x: -2.9753
+    z: 0
+    footprintWidth: 1.4
+    footprintDepth: 1.4
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 6
+    key: RailR
+    kind: 0
+    group: Rails
+    x: 2.9753
+    z: 0
+    footprintWidth: 1.4
+    footprintDepth: 1.4
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 7
+    key: BotL
+    kind: 0
+    group: BottomPlates
+    x: -1.7624
+    z: -1.7811
+    footprintWidth: 1.4
+    footprintDepth: 1.4
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 8
+    key: BotC
+    kind: 0
+    group: BottomPlates
+    x: 0.0024
+    z: -1.7811
+    footprintWidth: 1.4
+    footprintDepth: 1.4
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 9
+    key: BotR
+    kind: 0
+    group: BottomPlates
+    x: 1.76
+    z: -1.7811
+    footprintWidth: 1.4
+    footprintDepth: 1.4
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 10
+    key: T01
+    kind: 1
+    group: TopTrack
+    x: -2.1682
+    z: 0.9789
+    footprintWidth: 0.205
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 11
+    key: T02
+    kind: 1
+    group: TopTrack
+    x: -1.9424
+    z: 0.9789
+    footprintWidth: 0.205
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 12
+    key: T03
+    kind: 1
+    group: TopTrack
+    x: -1.7082
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 13
+    key: T04
+    kind: 1
+    group: TopTrack
+    x: -1.4824
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 14
+    key: T05
+    kind: 1
+    group: TopTrack
+    x: -1.2541
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 1
+  - ordinal: 15
+    key: T06
+    kind: 1
+    group: TopTrack
+    x: -1.0282
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 16
+    key: T07
+    kind: 1
+    group: TopTrack
+    x: -0.7953
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 17
+    key: T08
+    kind: 1
+    group: TopTrack
+    x: -0.5694
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 18
+    key: T09
+    kind: 1
+    group: TopTrack
+    x: -0.3412
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 19
+    key: T10
+    kind: 1
+    group: TopTrack
+    x: -0.1153
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 1
+  - ordinal: 20
+    key: T11
+    kind: 1
+    group: TopTrack
+    x: 0.1176
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 21
+    key: T12
+    kind: 1
+    group: TopTrack
+    x: 0.3435
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 22
+    key: T13
+    kind: 1
+    group: TopTrack
+    x: 0.5718
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 23
+    key: T14
+    kind: 1
+    group: TopTrack
+    x: 0.8047
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 24
+    key: T15
+    kind: 1
+    group: TopTrack
+    x: 1.0306
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 1
+  - ordinal: 25
+    key: T16
+    kind: 1
+    group: TopTrack
+    x: 1.2588
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 26
+    key: T17
+    kind: 1
+    group: TopTrack
+    x: 1.4847
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 27
+    key: T18
+    kind: 1
+    group: TopTrack
+    x: 1.7106
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 28
+    key: T19
+    kind: 1
+    group: TopTrack
+    x: 1.9459
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 29
+    key: T20
+    kind: 1
+    group: TopTrack
+    x: 2.1718
+    z: 0.9789
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 1
+  - ordinal: 30
+    key: R1
+    kind: 1
+    group: RightTrack
+    x: 2.1718
+    z: 0.6746
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 31
+    key: R2
+    kind: 1
+    group: RightTrack
+    x: 2.1718
+    z: 0.4494
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 32
+    key: R3
+    kind: 1
+    group: RightTrack
+    x: 2.1718
+    z: 0.2195
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 33
+    key: R4
+    kind: 1
+    group: RightTrack
+    x: 2.1718
+    z: -0.0035
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 1
+  - ordinal: 34
+    key: R5
+    kind: 1
+    group: RightTrack
+    x: 2.1718
+    z: -0.2288
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 35
+    key: R6
+    kind: 1
+    group: RightTrack
+    x: 2.1718
+    z: -0.4517
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 36
+    key: R7
+    kind: 1
+    group: RightTrack
+    x: 2.1718
+    z: -0.6746
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 37
+    key: B01
+    kind: 1
+    group: BottomTrack
+    x: -2.1682
+    z: -0.9673
+    footprintWidth: 0.205
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 38
+    key: B02
+    kind: 1
+    group: BottomTrack
+    x: -1.9424
+    z: -0.9673
+    footprintWidth: 0.205
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 39
+    key: B03
+    kind: 1
+    group: BottomTrack
+    x: -1.7082
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 40
+    key: B04
+    kind: 1
+    group: BottomTrack
+    x: -1.4824
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 41
+    key: B05
+    kind: 1
+    group: BottomTrack
+    x: -1.2541
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 1
+  - ordinal: 42
+    key: B06
+    kind: 1
+    group: BottomTrack
+    x: -1.0282
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 43
+    key: B07
+    kind: 1
+    group: BottomTrack
+    x: -0.7953
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 44
+    key: B08
+    kind: 1
+    group: BottomTrack
+    x: -0.5694
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 45
+    key: B09
+    kind: 1
+    group: BottomTrack
+    x: -0.3412
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 46
+    key: B10
+    kind: 1
+    group: BottomTrack
+    x: -0.1153
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 1
+  - ordinal: 47
+    key: B11
+    kind: 1
+    group: BottomTrack
+    x: 0.1176
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 48
+    key: B12
+    kind: 1
+    group: BottomTrack
+    x: 0.3435
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 49
+    key: B13
+    kind: 1
+    group: BottomTrack
+    x: 0.5718
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 50
+    key: B14
+    kind: 1
+    group: BottomTrack
+    x: 0.8047
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 51
+    key: B15
+    kind: 1
+    group: BottomTrack
+    x: 1.0306
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 1
+  - ordinal: 52
+    key: B16
+    kind: 1
+    group: BottomTrack
+    x: 1.2588
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 53
+    key: B17
+    kind: 1
+    group: BottomTrack
+    x: 1.4847
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 54
+    key: B18
+    kind: 1
+    group: BottomTrack
+    x: 1.7106
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 55
+    key: B19
+    kind: 1
+    group: BottomTrack
+    x: 1.9459
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 56
+    key: B20
+    kind: 1
+    group: BottomTrack
+    x: 2.1718
+    z: -0.9673
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 1
+  - ordinal: 57
+    key: L1
+    kind: 1
+    group: LeftTrack
+    x: -2.1671
+    z: 0.6746
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 58
+    key: L2
+    kind: 1
+    group: LeftTrack
+    x: -2.1671
+    z: 0.4494
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 59
+    key: L3
+    kind: 1
+    group: LeftTrack
+    x: -2.1671
+    z: 0.2195
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 60
+    key: L4
+    kind: 1
+    group: LeftTrack
+    x: -2.1671
+    z: -0.0035
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 1
+  - ordinal: 61
+    key: L5
+    kind: 1
+    group: LeftTrack
+    x: -2.1671
+    z: -0.2288
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 62
+    key: L6
+    kind: 1
+    group: LeftTrack
+    x: -2.1671
+    z: -0.4517
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 63
+    key: L7
+    kind: 1
+    group: LeftTrack
+    x: -2.1671
+    z: -0.6746
+    footprintWidth: 0.207
+    footprintDepth: 0.204
+    defaultCapacity: 1
+    marker: 0
+  - ordinal: 64
+    key: G11
+    kind: 1
+    group: Grid
+    x: 0.6788
+    z: 0.5086
+    footprintWidth: 0.412
+    footprintDepth: 0.406
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 65
+    key: G12
+    kind: 1
+    group: Grid
+    x: 1.2224
+    z: 0.5086
+    footprintWidth: 0.412
+    footprintDepth: 0.406
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 66
+    key: G13
+    kind: 1
+    group: Grid
+    x: 1.7635
+    z: 0.5086
+    footprintWidth: 0.412
+    footprintDepth: 0.406
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 67
+    key: G21
+    kind: 1
+    group: Grid
+    x: 0.6788
+    z: 0.007
+    footprintWidth: 0.412
+    footprintDepth: 0.406
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 68
+    key: G22
+    kind: 1
+    group: Grid
+    x: 1.2224
+    z: 0.007
+    footprintWidth: 0.412
+    footprintDepth: 0.406
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 69
+    key: G23
+    kind: 1
+    group: Grid
+    x: 1.7635
+    z: 0.007
+    footprintWidth: 0.412
+    footprintDepth: 0.406
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 70
+    key: G31
+    kind: 1
+    group: Grid
+    x: 0.6788
+    z: -0.4947
+    footprintWidth: 0.412
+    footprintDepth: 0.406
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 71
+    key: G32
+    kind: 1
+    group: Grid
+    x: 1.2224
+    z: -0.4947
+    footprintWidth: 0.412
+    footprintDepth: 0.406
+    defaultCapacity: 0
+    marker: 0
+  - ordinal: 72
+    key: G33
+    kind: 1
+    group: Grid
+    x: 1.7635
+    z: -0.4947
+    footprintWidth: 0.412
+    footprintDepth: 0.406
+    defaultCapacity: 0
+    marker: 0

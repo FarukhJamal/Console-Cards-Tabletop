@@ -39,6 +39,7 @@ namespace ConsoleCards.Application.UseCases
         IdentityAllocationFailed,
         LooseCardOrderOverflow,
         PhysicalSurfaceRequired,
+        ConsoleLayoutRequired,
     }
 
     public sealed class CreateTabletopComponentRequest
@@ -181,7 +182,6 @@ namespace ConsoleCards.Application.UseCases
             new ObjectDefinitionId(new Guid("a0010000-0000-4000-8000-000000000003"));
         public static readonly ObjectDefinitionId Die =
             new ObjectDefinitionId(new Guid("a0010000-0000-4000-8000-000000000004"));
-        public const int ConsoleSlotCount = 6;
 
         public static bool IsSupportedDieSideCount(int sideCount)
         {
@@ -203,14 +203,18 @@ namespace ConsoleCards.Application.UseCases
         private readonly ITabletopComponentIdentitySource identitySource;
         private readonly IPhysicalPlacementResolver physicalPlacement;
         private readonly Func<TabletopPose, float?> resolveContainerSurfaceHeight;
+        private readonly int[] consoleSlotCapacities;
 
         public CreateTabletopComponentUseCase(ITabletopComponentIdentitySource identitySource,
             IPhysicalPlacementResolver physicalPlacement = null,
-            Func<TabletopPose, float?> resolveContainerSurfaceHeight = null)
+            Func<TabletopPose, float?> resolveContainerSurfaceHeight = null,
+            IReadOnlyList<int> consoleSlotCapacities = null)
         {
             this.identitySource = identitySource ?? throw new ArgumentNullException(nameof(identitySource));
             this.physicalPlacement = physicalPlacement;
             this.resolveContainerSurfaceHeight = resolveContainerSurfaceHeight;
+            // One slot per Console layout Card slot; without a layout, Console creation is rejected.
+            this.consoleSlotCapacities = CopyConsoleSlotCapacities(consoleSlotCapacities);
         }
 
         public CreateTabletopComponentResult Execute(
@@ -263,6 +267,13 @@ namespace ConsoleCards.Application.UseCases
 
             if (request.ComponentKind == TabletopComponentKind.Console)
             {
+                if (consoleSlotCapacities.Length == 0)
+                {
+                    return CreateTabletopComponentResult.Failure(
+                        CommandResultStatus.Rejected,
+                        CreateTabletopComponentError.ConsoleLayoutRequired);
+                }
+
                 float? surfaceHeight = resolveContainerSurfaceHeight?.Invoke(request.InitialPose);
                 if (resolveContainerSurfaceHeight != null && !surfaceHeight.HasValue)
                 {
@@ -274,7 +285,7 @@ namespace ConsoleCards.Application.UseCases
                 if (!TryAllocateConsoleId(matchState, out ConsoleId consoleId)
                     || !TryAllocateContainerIds(
                         matchState,
-                        ToolboxComponentDefinitions.ConsoleSlotCount,
+                        consoleSlotCapacities.Length,
                         out List<ContainerId> slotContainerIds))
                 {
                     return CreateTabletopComponentResult.Failure(
@@ -290,7 +301,7 @@ namespace ConsoleCards.Application.UseCases
                         ContainerKind.ConsoleSlot,
                         SeatId.Empty,
                         ObjectVisibility.Public,
-                        1));
+                        consoleSlotCapacities[i]));
                 }
 
                 ConsoleState console = ConsoleState.CreateUnowned(slotContainerIds);
@@ -507,6 +518,27 @@ namespace ConsoleCards.Application.UseCases
             }
 
             return true;
+        }
+
+        private static int[] CopyConsoleSlotCapacities(IReadOnlyList<int> capacities)
+        {
+            if (capacities == null)
+            {
+                return Array.Empty<int>();
+            }
+
+            int[] copy = new int[capacities.Count];
+            for (int i = 0; i < copy.Length; i++)
+            {
+                if (capacities[i] < 0)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(capacities));
+                }
+
+                copy[i] = capacities[i];
+            }
+
+            return copy;
         }
 
         private bool TryAllocateConsoleId(MatchState matchState, out ConsoleId consoleId)

@@ -25,9 +25,11 @@ namespace ConsoleCards.Games.TrapFloor
 
         private const double PlayerConsoleRadius = 6.1d;
         private const double PlayerHandRadius = 4.15d;
-        private const double ControllerDeckOffset = 3.2d;
+        // Stopgap until (a2): clears the W = 6.0 Console mat and its right rail slot (mirror of the ability area).
+        private const double ControllerDeckOffset = 4.45d;
         private const double PurchasedAbilityAreaOffset = -4.45d;
-        private const double StartingAbilityStagingSideOffset = -3.2d;
+        // Stopgap until (a2): stages starting abilities beyond the ability area, clear of the left rail slot.
+        private const double StartingAbilityStagingSideOffset = -5.7d;
         private const double StartingAbilityStagingSpacing = 1.15d;
         private const double FloorfallDiceX = 3.45d;
         private const double FloorfallDiceY = 3.45d;

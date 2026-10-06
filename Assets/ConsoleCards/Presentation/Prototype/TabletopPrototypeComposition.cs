@@ -53,6 +53,8 @@ namespace ConsoleCards.Presentation.Prototype
 
     public sealed class TabletopPrototypeComposition : MonoBehaviour, IContainedCardDragFeedback
     {
+        // Console Slot anchors must sit at their layout positions (console-local x/z) within this tolerance.
+        private const float ConsoleLayoutAnchorTolerance = 0.0005f;
         private const float TrapFloorCoinVisualScale = 0.34f;
         private const float TrapFloorCoinAreaLabelCharacterSize = 0.12f;
         private const int TrapFloorCoinAreaLabelFontSize = 56;
@@ -308,6 +310,7 @@ namespace ConsoleCards.Presentation.Prototype
         private HandView handView;
         private DiscardPileView discardPileView;
         private ConsoleView consoleView;
+        private ConsoleLayoutData consoleLayout;
         private readonly List<ConsoleSlotView> consoleSlotViews = new List<ConsoleSlotView>();
         private ConsoleSlotView[] resolvedSceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
         private PrototypeConsoleSlotVisual[] resolvedSceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
@@ -7105,6 +7108,85 @@ namespace ConsoleCards.Presentation.Prototype
             prototypeDeckPrefab.GetView<DeckView>();
             prototypeStackPrefab.ValidateReferences();
             ValidateStackLayoutAnchor(prototypeStackPrefab);
+            ValidateConsolePrefabLayout();
+        }
+
+        // One Console definition for every Console (doc 19): the prefab authors exactly one Slot per layout
+        // Card slot, and each Slot anchor sits at its layout position. Games never add, remove or hide Slots.
+        private void ValidateConsolePrefabLayout()
+        {
+            RequireReference(prototypeConsolePrefab, nameof(prototypeConsolePrefab));
+            if (prototypeConsolePrefab.gameObject.scene.IsValid())
+            {
+                throw new InvalidOperationException(
+                    "TabletopPrototypeComposition requires prototypeConsolePrefab to reference a prefab asset.");
+            }
+
+            ConsoleLayoutData layout = GetConsoleLayout();
+            int cardSlotCount = layout.CardSlots.Count;
+            ConsoleSlotView[] slotViews = prototypeConsolePrefab.GetComponentsInChildren<ConsoleSlotView>(true);
+            IReadOnlyList<Transform> anchors = prototypeConsolePrefab.SlotAnchors;
+            if (slotViews.Length != cardSlotCount || anchors.Count != cardSlotCount)
+            {
+                throw new InvalidOperationException(
+                    $"The Console prefab authors {slotViews.Length} Slots and {anchors.Count} Slot anchors; "
+                    + $"its layout '{layout.StableId}' has {cardSlotCount} Card slots.");
+            }
+
+            Transform root = prototypeConsolePrefab.transform;
+            for (int i = 0; i < cardSlotCount; i++)
+            {
+                ConsoleLayoutSlotData slot = layout.CardSlots[i];
+                RequireReference(anchors[i], $"Console Slot anchor {i}");
+                Vector3 local = root.InverseTransformPoint(anchors[i].position);
+                if (Mathf.Abs(local.x - slot.X) > ConsoleLayoutAnchorTolerance
+                    || Mathf.Abs(local.z - slot.Z) > ConsoleLayoutAnchorTolerance)
+                {
+                    throw new InvalidOperationException(
+                        $"Console Slot anchor {i} ({anchors[i].name}) is at ({local.x}, {local.z}); "
+                        + $"layout slot '{slot.Key}' is at ({slot.X}, {slot.Z}).");
+                }
+            }
+        }
+
+        // Resolved once from the Console prefab's ConsoleLayoutBinding; the layout asset does not change in play.
+        private ConsoleLayoutData GetConsoleLayout()
+        {
+            if (consoleLayout != null)
+            {
+                return consoleLayout;
+            }
+
+            RequireReference(prototypeConsolePrefab, nameof(prototypeConsolePrefab));
+            ConsoleLayoutBinding binding = prototypeConsolePrefab.GetComponent<ConsoleLayoutBinding>();
+            RequireReference(binding, $"{nameof(ConsoleLayoutBinding)} on {nameof(prototypeConsolePrefab)}");
+            consoleLayout = binding.ResolveLayoutData();
+            return consoleLayout;
+        }
+
+        // Games never add, remove or restrict Console slots: every seat Console must match the layout.
+        private void ValidateSeatConsolesMatchLayout()
+        {
+            ConsoleLayoutData layout = GetConsoleLayout();
+            foreach (SeatState seat in matchState.Seats.Values)
+            {
+                if (seat.Console.SlotCount != layout.CardSlots.Count)
+                {
+                    throw new InvalidOperationException(
+                        $"A seat Console has {seat.Console.SlotCount} Slots; the Console layout has {layout.CardSlots.Count} Card slots.");
+                }
+
+                for (int i = 0; i < seat.Console.SlotCount; i++)
+                {
+                    ContainerState slot = matchState.GetContainer(seat.Console.SlotContainerIds[i]);
+                    if (slot.Capacity != layout.CardSlotCapacities[i])
+                    {
+                        throw new InvalidOperationException(
+                            $"Seat Console Slot {i} has capacity {slot.Capacity}; layout slot '{layout.CardSlots[i].Key}' "
+                            + $"has {layout.CardSlotCapacities[i]}.");
+                    }
+                }
+            }
         }
 
         private void ValidateInputPreInitializationState()
@@ -7492,7 +7574,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
             componentIdentitySource = new GuidTabletopComponentIdentitySource();
             componentCreationUseCase = new CreateTabletopComponentUseCase(componentIdentitySource, physicalSurfaceQuery,
-                physicalSurfaceQuery.ResolveContainerSurfaceHeight);
+                physicalSurfaceQuery.ResolveContainerSurfaceHeight, GetConsoleLayout().CardSlotCapacities);
             cardBatchCreationUseCase = new CreateGenericCardBatchUseCase(componentIdentitySource, physicalSurfaceQuery);
             populateDeckUseCase = new PopulateDeckUseCase(componentIdentitySource);
             componentDeletionUseCase = new DeleteTabletopComponentUseCase();
@@ -8185,17 +8267,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             ConsoleSlotView[] slotViews = prototypeConsolePrefab.GetComponentsInChildren<ConsoleSlotView>(true);
-            int requiredSlotCount = ToolboxComponentDefinitions.ConsoleSlotCount;
-            foreach (SeatState seat in matchState.Seats.Values)
-            {
-                requiredSlotCount = Math.Max(requiredSlotCount, seat.Console.SlotCount);
-            }
-
-            if (slotViews.Length < requiredSlotCount)
-            {
-                throw new InvalidOperationException(
-                    $"The prototype Console prefab requires at least {requiredSlotCount} authored Console Slots.");
-            }
+            ValidateSeatConsolesMatchLayout();
 
             for (int i = 0; i < slotViews.Length; i++)
             {
@@ -9442,8 +9514,8 @@ namespace ConsoleCards.Presentation.Prototype
                 placedConsole.Id);
         }
 
-        // Binds the first requiredCount authored Slots (already in authored order) and hides the rest.
-        // Presentation-only: Slot GameObjects carry no authoritative state.
+        // Binds every authored Slot in authored order. Every Console Slot is always usable, so a count
+        // mismatch is a data error, never a reason to hide Slots. Presentation-only.
         private static void SelectConsoleSlots(
             ConsoleSlotView[] orderedSlotViews,
             int requiredCount,
@@ -9451,7 +9523,7 @@ namespace ConsoleCards.Presentation.Prototype
             out ConsoleSlotView[] activeSlotViews,
             out PrototypeConsoleSlotVisual[] activeSlotVisuals)
         {
-            if (orderedSlotViews.Length < requiredCount)
+            if (orderedSlotViews.Length != requiredCount)
             {
                 throw new InvalidOperationException(
                     $"The Console prefab has {orderedSlotViews.Length} authored Slots; its Console state needs {requiredCount}.");
@@ -9466,8 +9538,6 @@ namespace ConsoleCards.Presentation.Prototype
                 activeSlotVisuals[i].ValidateReferences();
                 activeSlotViews[i] = orderedSlotViews[i];
             }
-
-            for (int i = requiredCount; i < orderedSlotViews.Length; i++) orderedSlotViews[i].gameObject.SetActive(false);
         }
 
         private GameObject PrepareRuntimeRoot(GameObject root, string name)
@@ -11296,6 +11366,12 @@ namespace ConsoleCards.Presentation.Prototype
             }
             else
             {
+                if (authoredViews.Length != expectedSlotCount)
+                {
+                    throw new InvalidOperationException(
+                        $"sceneConsoleView authors {authoredViews.Length} ConsoleSlotViews; its Console state needs {expectedSlotCount}.");
+                }
+
                 Array.Sort(
                     authoredViews,
                     (left, right) => CompareConsoleHierarchyOrder(left.transform, right.transform));
