@@ -311,6 +311,8 @@ namespace ConsoleCards.Presentation.Prototype
         // Camera hand tray: created once, reused across session rebuilds (keeps its collapsed state).
         private HandTrayRig handTrayRig;
         private Action toggleHandTrayAction;
+        // Other seats' hands as face-down piles on their hand zones; rebuilt with each session.
+        private readonly List<HiddenHandView> hiddenHandViews = new List<HiddenHandView>();
         private DiscardPileView discardPileView;
         private ConsoleView consoleView;
         private ConsoleLayoutData consoleLayout;
@@ -5773,7 +5775,11 @@ namespace ConsoleCards.Presentation.Prototype
             TabletopObjectId targetCardId = contextMenuCardId;
             ContainerState container = matchState.GetContainer(contextMenuContainerId);
             List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
-            AddInspectAction(actions, targetCardId);
+            if (!IsHiddenHandContainer(container))
+            {
+                AddInspectAction(actions, targetCardId);
+            }
+
             if (container.Kind == ContainerKind.ConsoleSlot
                 && TryResolveConsolePlacement(container.Id, out _, out _, out _))
             {
@@ -7811,9 +7817,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ProjectPrototypePlayerLayout(PlayerSeatLayoutEntry seatLayout)
         {
-            ApplyRestingAuthoredPose(
-                sceneHandVisual.transform,
-                TrapFloorTemplateFactory.GetHandPose(seatLayout));
+            // The hand is a camera tray; no table pose to project.
             SeatState seat = matchState.GetSeat(localSeatId);
             ApplyConsolePose(
                 sceneConsoleView.transform,
@@ -8025,15 +8029,6 @@ namespace ConsoleCards.Presentation.Prototype
         {
             target.SetPositionAndRotation(
                 coordinateConverter.ToWorldPosition(pose),
-                coordinateConverter.ToWorldRotation(pose));
-        }
-
-        // Like ApplyAuthoredPose, but rests the root's lowest body point on the surface (P1a).
-        // Presentation only: the authoritative pose is unchanged.
-        private void ApplyRestingAuthoredPose(Transform target, TabletopPose pose)
-        {
-            target.SetPositionAndRotation(
-                coordinateConverter.ToWorldPosition(pose) + (Vector3.up * ComponentRestHeight.RestLift(target)),
                 coordinateConverter.ToWorldRotation(pose));
         }
 
@@ -8515,6 +8510,16 @@ namespace ConsoleCards.Presentation.Prototype
                     false);
                 stackViewsByContainerId.Add(actionAreaId, actionArea);
 
+                if (player.LayoutSeatIndex != localPlayerLayoutSeatIndex
+                    && matchState.TryGetContainerPlacement(player.HandContainerId, out ContainerPlacementState hiddenHandZone)
+                    && hiddenHandZone.HasExtent)
+                {
+                    hiddenHandViews.Add(CreateHiddenHandView(
+                        $"Player {playerIndex + 1} Hidden Hand",
+                        matchState.GetContainer(player.HandContainerId),
+                        hiddenHandZone));
+                }
+
                 if (player.LayoutSeatIndex == localPlayerLayoutSeatIndex)
                 {
                     continue;
@@ -8683,6 +8688,57 @@ namespace ConsoleCards.Presentation.Prototype
             sceneHandVisual.Label.gameObject.SetActive(false);
             handTrayRig.ConfigureDropTarget(handView);
             feedbackTargetsByContainerId[handView.ContainerId] = new ContainerFeedbackTarget(handTrayRig);
+        }
+
+        private HiddenHandView CreateHiddenHandView(
+            string name,
+            ContainerState hand,
+            ContainerPlacementState zone)
+        {
+            GameObject root = PrepareRuntimeRoot(new GameObject(name), name);
+            HiddenHandView view = root.AddComponent<HiddenHandView>();
+            GameObject labelRoot = new GameObject("Hidden Hand Count Label");
+            labelRoot.layer = root.layer;
+            labelRoot.transform.SetParent(root.transform, false);
+            labelRoot.transform.localScale = Vector3.one * 0.34f;
+            TextMesh label = labelRoot.AddComponent<TextMesh>();
+            ConfigurePrototypeLabel(
+                label,
+                string.Empty,
+                TrapFloorCoinAreaLabelCharacterSize,
+                TrapFloorCoinAreaLabelFontSize);
+            view.Bind(hand, zone, coordinateConverter, cardViews, label);
+            return view;
+        }
+
+        private void ReleaseHiddenHandViews()
+        {
+            for (int i = 0; i < hiddenHandViews.Count; i++)
+            {
+                HiddenHandView hidden = hiddenHandViews[i];
+                if (hidden == null)
+                {
+                    continue;
+                }
+
+                if (hidden.IsBound)
+                {
+                    hidden.Unbind();
+                }
+
+                Destroy(hidden.gameObject);
+            }
+
+            hiddenHandViews.Clear();
+        }
+
+        // Another seat's hand while this session has a local hand: shown face-down, contents not inspectable.
+        private bool IsHiddenHandContainer(ContainerState container)
+        {
+            return container != null
+                && container.Kind == ContainerKind.Hand
+                && !handContainerId.IsEmpty
+                && container.Id != handContainerId;
         }
 
         private void BuildInteractionGraph()
@@ -9156,6 +9212,14 @@ namespace ConsoleCards.Presentation.Prototype
             }
             else
             {
+                for (int i = 0; i < hiddenHandViews.Count; i++)
+                {
+                    if (hiddenHandViews[i] != null && hiddenHandViews[i].ContainerId == containerId)
+                    {
+                        hiddenHandViews[i].ApplyAcceptedLayout();
+                    }
+                }
+
                 for (int i = 0; i < controllerDeckViews.Count; i++)
                 {
                     if (controllerDeckViews[i].ContainerId == containerId)
@@ -9241,6 +9305,13 @@ namespace ConsoleCards.Presentation.Prototype
         private bool ShouldShowCardContent(CardInstanceState card)
         {
             ContainerId containerId = card.BaseState.ContainerId;
+            if (!containerId.IsEmpty
+                && matchState.Containers.TryGetValue(containerId, out ContainerState hiddenHand)
+                && IsHiddenHandContainer(hiddenHand))
+            {
+                return false;
+            }
+
             if (containerId.IsEmpty
                 || !matchState.Containers.TryGetValue(containerId, out ContainerState container)
                 || !ShowsOnlyTopCardContent(container.Kind))
@@ -10826,6 +10897,8 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 handTrayRig.Deactivate();
             }
+
+            ReleaseHiddenHandViews();
 
             handView = null;
             ReleaseSceneOwnedFixedContainer(sceneDiscardPileVisual, discardPileView, discardContainerId);

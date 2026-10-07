@@ -24,7 +24,6 @@ namespace ConsoleCards.Games.TrapFloor
         public const string ControllerInputContentSetId = "trap-floor-controller-inputs";
 
         private const double PlayerConsoleRadius = 6.1d;
-        private const double PlayerHandRadius = 4.15d;
         // Stopgap until (a2): clears the W = 6.0 Console mat and its right rail slot (mirror of the ability area).
         private const double ControllerDeckOffset = 4.45d;
         private const double PurchasedAbilityAreaOffset = -4.45d;
@@ -800,12 +799,6 @@ namespace ConsoleCards.Games.TrapFloor
         {
             if (layoutSeat == null) throw new ArgumentNullException(nameof(layoutSeat));
             return ProjectToRadius(layoutSeat.ConsoleAnchorPose, PlayerConsoleRadius);
-        }
-
-        public static TabletopPose GetHandPose(PlayerSeatLayoutEntry layoutSeat)
-        {
-            if (layoutSeat == null) throw new ArgumentNullException(nameof(layoutSeat));
-            return ProjectToRadius(layoutSeat.HandAnchorPose, PlayerHandRadius);
         }
 
         private static TabletopPose ProjectToRadius(TabletopPose pose, double radius)
