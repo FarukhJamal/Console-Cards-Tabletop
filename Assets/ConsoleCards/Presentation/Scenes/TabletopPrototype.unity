@@ -3384,7 +3384,14 @@ MonoBehaviour:
     card:
       heldFollowSmoothingSeconds: 0
       collisionCarryScale: 0.35
+      heldCollisionSkin: 0.003
+      pickupLiftDuration: 0.1
       heldClearance: 0.35
+      supportHeightResponseSeconds: 0.06
+      normalizeOrientationOnPickup: 1
+      carryLocalEulerAngles: {x: 0, y: 0, z: 0}
+      orientationRecoverySpeed: 720
+      orientationRecoveryInputPauseSeconds: 0.2
       mass: 0.03
       releaseLinearVelocityRetention: 0.8
       maximumReleaseLinearVelocity: 22
@@ -3396,10 +3403,20 @@ MonoBehaviour:
       gentlePlacementAngularSpeed: 1
       stabilizeGentlePlacement: 1
       gentlePlacementClearance: 0.2
+      gentlePlacementDescentResponseSeconds: 0.06
+      gentlePlacementOrientationStrength: 1.5
+      gentlePlacementAngularVelocityScale: 0
     die:
       heldFollowSmoothingSeconds: 0
       collisionCarryScale: 0.3
+      heldCollisionSkin: 0.004
+      pickupLiftDuration: 0.1
       heldClearance: 0.55
+      supportHeightResponseSeconds: 0.08
+      normalizeOrientationOnPickup: 1
+      carryLocalEulerAngles: {x: 0, y: 0, z: 0}
+      orientationRecoverySpeed: 240
+      orientationRecoveryInputPauseSeconds: 0.2
       mass: 0.12
       releaseLinearVelocityRetention: 0.8
       maximumReleaseLinearVelocity: 30
@@ -3410,10 +3427,21 @@ MonoBehaviour:
       gentlePlacementSpeed: 0
       gentlePlacementAngularSpeed: 0
       stabilizeGentlePlacement: 0
+      gentlePlacementClearance: 0.07
+      gentlePlacementDescentResponseSeconds: 0.12
+      gentlePlacementOrientationStrength: 0.35
+      gentlePlacementAngularVelocityScale: 0.8
     pawn:
       heldFollowSmoothingSeconds: 0
       collisionCarryScale: 0.2
+      heldCollisionSkin: 0.005
+      pickupLiftDuration: 0.12
       heldClearance: 0.45
+      supportHeightResponseSeconds: 0.07
+      normalizeOrientationOnPickup: 1
+      carryLocalEulerAngles: {x: 0, y: 0, z: 0}
+      orientationRecoverySpeed: 540
+      orientationRecoveryInputPauseSeconds: 0.2
       mass: 0.1
       releaseLinearVelocityRetention: 0.8
       maximumReleaseLinearVelocity: 14
@@ -3425,10 +3453,20 @@ MonoBehaviour:
       gentlePlacementAngularSpeed: 1.25
       stabilizeGentlePlacement: 1
       gentlePlacementClearance: 0.25
+      gentlePlacementDescentResponseSeconds: 0.08
+      gentlePlacementOrientationStrength: 1.25
+      gentlePlacementAngularVelocityScale: 0.05
     token:
       heldFollowSmoothingSeconds: 0
       collisionCarryScale: 0.25
+      heldCollisionSkin: 0.004
+      pickupLiftDuration: 0.1
       heldClearance: 0.35
+      supportHeightResponseSeconds: 0.06
+      normalizeOrientationOnPickup: 1
+      carryLocalEulerAngles: {x: 0, y: 0, z: 0}
+      orientationRecoverySpeed: 600
+      orientationRecoveryInputPauseSeconds: 0.2
       mass: 0.05
       releaseLinearVelocityRetention: 0.8
       maximumReleaseLinearVelocity: 16
@@ -3440,6 +3478,9 @@ MonoBehaviour:
       gentlePlacementAngularSpeed: 1.25
       stabilizeGentlePlacement: 1
       gentlePlacementClearance: 0.2
+      gentlePlacementDescentResponseSeconds: 0.06
+      gentlePlacementOrientationStrength: 1.4
+      gentlePlacementAngularVelocityScale: 0.03
   prototypeDeckPrefab: {fileID: 114102, guid: e81b395902c476d7f8192a3b4c5d6e78, type: 3}
   prototypeConsolePrefab: {fileID: 114100, guid: fa0ce3f8f1894f7591391129804cdd82, type: 3}
   cardView: {fileID: 2100000102}
@@ -3484,6 +3525,7 @@ MonoBehaviour:
   shuffleCompression: 0.06
   floorCardVisualScale: 0.62
   showDeveloperControls: 0
+  prototypeVisualHide: 243
 --- !u!1 &2100000020
 GameObject:
   m_ObjectHideFlags: 0
@@ -4453,6 +4495,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 3100000101}
     m_Modifications:
+    - target: {fileID: 114100, guid: 1b4e6c8c35f7a90a2b4c5d6e7f8091ab, type: 3}
+      propertyPath: trayHandoffDuration
+      value: 5
+      objectReference: {fileID: 0}
     - target: {fileID: 400100, guid: 1b4e6c8c35f7a90a2b4c5d6e7f8091ab, type: 3}
       propertyPath: m_Name
       value: Hand

@@ -39,7 +39,7 @@ namespace ConsoleCards.Presentation.Views.Containers
         [SerializeField] private float trayCardStep = 0.004f;
         [SerializeField] private float trayResponse = 14f;
         [SerializeField] private float trayDragResponse = 30f;
-        [SerializeField] private float trayHandoffDuration = 0.16f;
+        [SerializeField] private float trayHandoffDuration = 0.28f;
 
         private readonly List<CardView> suppliedCardViews = new List<CardView>();
         private readonly List<CardView> layoutAppliedCards = new List<CardView>();
@@ -935,7 +935,9 @@ namespace ConsoleCards.Presentation.Views.Containers
         {
             trayHandoffElapsed += deltaTime;
             float t = trayHandoffDuration > 0f ? Mathf.Clamp01(trayHandoffElapsed / trayHandoffDuration) : 1f;
-            float eased = t * t * (3f - (2f * t));
+            // Ease-out: quick departure, gentle landing, so the switch to a held card happens at rest.
+            float remaining = 1f - t;
+            float eased = 1f - (remaining * remaining * remaining);
             Transform anchor = trayRig.Anchor;
             float targetScale = 1f / Mathf.Max(0.0001f, trayRig.Scale);
             float startScale = Mathf.Max(0.0001f, trayHandoffStart.Scale);
