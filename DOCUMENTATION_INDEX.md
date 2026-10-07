@@ -43,6 +43,9 @@ All code and type examples are illustrative unless explicitly labelled `Approved
 | `Docs/REQUIREMENTS_TRACEABILITY.md` | Requirement-to-milestone/test mapping |
 | `Docs/17_Layout_Design_Requirements_Matrix.md` | Canonical layout/design requirements, status, milestone, source, and open-decision matrix |
 | `Docs/18_Trap_Floor_Game_Requirements.md` | Canonical approved Trap Floor direction and supersession of obsolete Trap Door material |
+| `Docs/19_Console_Layout_Slots_And_Mat_Surface.md` | Console layout (72 slots), mat surface, stage plan and current stage order, Stage (a)/(a2) records |
+| `Docs/20_Generic_Game_Setup_Flow_Gap_Analysis.md` | Generic game setup flow gap analysis, GS stages, advisory turns |
+| `Docs/21_Platform_Principles.md` | Binding owner rules every stage plan must follow |
 | `Docs/AUDIT_RESOLUTION_v1.1.md` | v1.0 audit correction record |
 | `CHANGELOG.md` | Pack history |
 | `README.md` | Repository entry point |

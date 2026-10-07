@@ -1,8 +1,8 @@
 # Console Cards - Console Layout Slots, Cube Cells, and Mat Surface
 
 **Document ID:** 19_Console_Layout_Slots_And_Mat_Surface
-**Version:** 0.1
-**Status:** Design proposal. Decisions in section 2 recorded by the user on 2026-10-03; implementation not yet approved (each stage needs its own approved plan).
+**Version:** 0.2
+**Status:** Stages (a) and (a2) implemented (2026-10-06/07; records in §4.4 and §11). Stages (a2b) onward each need their own approved plan; the current order is §9.1. Binding platform rules: `21_Platform_Principles.md`.
 **Source:** Stage 3c-1 read-only report (cube cells and the mat as a surface) and the user's decisions on it.
 **Purpose:** Define the console as one generic component whose mat exposes every card slot and every cube position as data, so any Game can choose what to use.
 
@@ -22,7 +22,7 @@
 4. **Toolbox console** exposes all 9 card slots and all 63 cube cells. One component definition, no reduced variant.
 5. **Cube piece:** size 0.126 world (about 8 mm, ADR-026), kept as data.
 6. **IDs:** stable slot keys plus a new ID range with no 15-side-slot cap (section 6).
-7. **Stage order:** (a) definition + variant, (c) mat support surface, (b) card slot targeting and settle, (d) cube cells. The `ContainedCardDragCoordinator.Release` exclusion bug is fixed in (b). The token drop path is dead code, so (d) uses the live move path.
+7. **Stage order:** (a) definition + variant, (c) mat support surface, (b) card slot targeting and settle, (d) cube cells. The `ContainedCardDragCoordinator.Release` exclusion bug is fixed in (b). The token drop path is dead code, so (d) uses the live move path. *(Order superseded 2026-10-07 by §9.1.)*
 8. **Measurement rules:** measured cell centres (no fixed pitch), cyan cells stored as a `marker` flag, half-pixel correction applied to the card anchors.
 
 ### 2.1 Addendum principles (2026-10-05)
@@ -44,82 +44,82 @@ World frame: W = 6.0, origin at the mat centre, +x right, +z toward the top of t
 
 ## 4. Slot table (layout asset content)
 
-Card footprints are the 1.4 × 1.4 worst case (either orientation, off-axis yaw accepted). Cube footprints are the measured cell rects. Capacity is the component's value; templates do not change it. Ordinal is the stable `idOrdinal` (section 6) and must never be reused or renumbered.
+Card footprints are the 1.4 × 1.4 worst case (either orientation, off-axis yaw accepted), except Main, which uses its measured screen rect. Cube footprints are the measured cell rects. Orientation is the slot's default card orientation for placement; any card can still be placed in either orientation. Capacity is the component's current default (0 = unbounded); it is a component property that templates do not change, and it should become a component-declared configurable parameter (§5). Ordinal is the stable `idOrdinal` (section 6). Card ordinals 5–9 were renumbered once in Stage (a), before any session used them; from now on ordinals are append-only and must never be reused or renumbered.
 
-| Ordinal | Key | Kind | Group | x | z | Footprint w × d | Default capacity | Marker | Source |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | `Main` | Card | Main | -0.8141 | +0.0093 | 1.400 × 1.400 | 1 |  | px 498–1359 × 371–945 |
-| 2 | `TopL` | Card | TopPlates | -1.7624 | +1.7811 | 1.400 × 1.400 | 1 |  | plate px 176–875 × 0–69; z pushed out |
-| 3 | `TopC` | Card | TopPlates | +0.0024 | +1.7811 | 1.400 × 1.400 | 1 |  | plate px 926–1625 × 0–69; z pushed out |
-| 4 | `TopR` | Card | TopPlates | +1.7600 | +1.7811 | 1.400 × 1.400 | 1 |  | plate px 1673–2372 × 0–69; z pushed out |
-| 5 | `RailR` | Card | Rails | +2.9753 | +0.0000 | 1.400 × 1.400 | 1 |  | rail px 2480–2549; x pushed out |
-| 6 | `BotR` | Card | BottomPlates | +1.7600 | -1.7811 | 1.400 × 1.400 | 1 |  | plate px 1673–2372 × 1255–1324; z pushed out |
-| 7 | `BotC` | Card | BottomPlates | +0.0024 | -1.7811 | 1.400 × 1.400 | 1 |  | plate px 926–1625 × 1255–1324; z pushed out |
-| 8 | `BotL` | Card | BottomPlates | -1.7624 | -1.7811 | 1.400 × 1.400 | 1 |  | plate px 176–875 × 1255–1324; z pushed out |
-| 9 | `RailL` | Card | Rails | -2.9753 | +0.0000 | 1.400 × 1.400 | 1 |  | rail px 0–69; x pushed out |
-| 10 | `T01` | Cube | TopTrack | -2.1682 | +0.9789 | 0.205 × 0.204 | 1 |  | px 310–396 × 197–284 |
-| 11 | `T02` | Cube | TopTrack | -1.9424 | +0.9789 | 0.205 × 0.204 | 1 |  | px 406–492 × 197–284 |
-| 12 | `T03` | Cube | TopTrack | -1.7082 | +0.9789 | 0.207 × 0.204 | 1 |  | px 505–592 × 197–284 |
-| 13 | `T04` | Cube | TopTrack | -1.4824 | +0.9789 | 0.207 × 0.204 | 1 |  | px 601–688 × 197–284 |
-| 14 | `T05` | Cube | TopTrack | -1.2541 | +0.9789 | 0.207 × 0.204 | 1 | yes | px 698–785 × 197–284 |
-| 15 | `T06` | Cube | TopTrack | -1.0282 | +0.9789 | 0.207 × 0.204 | 1 |  | px 794–881 × 197–284 |
-| 16 | `T07` | Cube | TopTrack | -0.7953 | +0.9789 | 0.207 × 0.204 | 1 |  | px 893–980 × 197–284 |
-| 17 | `T08` | Cube | TopTrack | -0.5694 | +0.9789 | 0.207 × 0.204 | 1 |  | px 989–1076 × 197–284 |
-| 18 | `T09` | Cube | TopTrack | -0.3412 | +0.9789 | 0.207 × 0.204 | 1 |  | px 1086–1173 × 197–284 |
-| 19 | `T10` | Cube | TopTrack | -0.1153 | +0.9789 | 0.207 × 0.204 | 1 | yes | px 1182–1269 × 197–284 |
-| 20 | `T11` | Cube | TopTrack | +0.1176 | +0.9789 | 0.207 × 0.204 | 1 |  | px 1281–1368 × 197–284 |
-| 21 | `T12` | Cube | TopTrack | +0.3435 | +0.9789 | 0.207 × 0.204 | 1 |  | px 1377–1464 × 197–284 |
-| 22 | `T13` | Cube | TopTrack | +0.5718 | +0.9789 | 0.207 × 0.204 | 1 |  | px 1474–1561 × 197–284 |
-| 23 | `T14` | Cube | TopTrack | +0.8047 | +0.9789 | 0.207 × 0.204 | 1 |  | px 1573–1660 × 197–284 |
-| 24 | `T15` | Cube | TopTrack | +1.0306 | +0.9789 | 0.207 × 0.204 | 1 | yes | px 1669–1756 × 197–284 |
-| 25 | `T16` | Cube | TopTrack | +1.2588 | +0.9789 | 0.207 × 0.204 | 1 |  | px 1766–1853 × 197–284 |
-| 26 | `T17` | Cube | TopTrack | +1.4847 | +0.9789 | 0.207 × 0.204 | 1 |  | px 1862–1949 × 197–284 |
-| 27 | `T18` | Cube | TopTrack | +1.7106 | +0.9789 | 0.207 × 0.204 | 1 |  | px 1958–2045 × 197–284 |
-| 28 | `T19` | Cube | TopTrack | +1.9459 | +0.9789 | 0.207 × 0.204 | 1 |  | px 2058–2145 × 197–284 |
-| 29 | `T20` | Cube | TopTrack | +2.1718 | +0.9789 | 0.207 × 0.204 | 1 | yes | px 2154–2241 × 197–284 |
-| 30 | `R1` | Cube | RightTrack | +2.1718 | +0.6746 | 0.207 × 0.204 | 1 |  | px 2154–2241 × 328–415 |
-| 31 | `R2` | Cube | RightTrack | +2.1718 | +0.4494 | 0.207 × 0.204 | 1 |  | px 2154–2241 × 425–512 |
-| 32 | `R3` | Cube | RightTrack | +2.1718 | +0.2195 | 0.207 × 0.204 | 1 |  | px 2154–2241 × 524–611 |
-| 33 | `R4` | Cube | RightTrack | +2.1718 | -0.0035 | 0.207 × 0.204 | 1 | yes | px 2154–2241 × 620–707 |
-| 34 | `R5` | Cube | RightTrack | +2.1718 | -0.2288 | 0.207 × 0.204 | 1 |  | px 2154–2241 × 717–804 |
-| 35 | `R6` | Cube | RightTrack | +2.1718 | -0.4517 | 0.207 × 0.204 | 1 |  | px 2154–2241 × 813–900 |
-| 36 | `R7` | Cube | RightTrack | +2.1718 | -0.6746 | 0.207 × 0.204 | 1 |  | px 2154–2241 × 909–996 |
-| 37 | `B01` | Cube | BottomTrack | -2.1682 | -0.9673 | 0.205 × 0.204 | 1 |  | px 310–396 × 1035–1122 |
-| 38 | `B02` | Cube | BottomTrack | -1.9424 | -0.9673 | 0.205 × 0.204 | 1 |  | px 406–492 × 1035–1122 |
-| 39 | `B03` | Cube | BottomTrack | -1.7082 | -0.9673 | 0.207 × 0.204 | 1 |  | px 505–592 × 1035–1122 |
-| 40 | `B04` | Cube | BottomTrack | -1.4824 | -0.9673 | 0.207 × 0.204 | 1 |  | px 601–688 × 1035–1122 |
-| 41 | `B05` | Cube | BottomTrack | -1.2541 | -0.9673 | 0.207 × 0.204 | 1 | yes | px 698–785 × 1035–1122 |
-| 42 | `B06` | Cube | BottomTrack | -1.0282 | -0.9673 | 0.207 × 0.204 | 1 |  | px 794–881 × 1035–1122 |
-| 43 | `B07` | Cube | BottomTrack | -0.7953 | -0.9673 | 0.207 × 0.204 | 1 |  | px 893–980 × 1035–1122 |
-| 44 | `B08` | Cube | BottomTrack | -0.5694 | -0.9673 | 0.207 × 0.204 | 1 |  | px 989–1076 × 1035–1122 |
-| 45 | `B09` | Cube | BottomTrack | -0.3412 | -0.9673 | 0.207 × 0.204 | 1 |  | px 1086–1173 × 1035–1122 |
-| 46 | `B10` | Cube | BottomTrack | -0.1153 | -0.9673 | 0.207 × 0.204 | 1 | yes | px 1182–1269 × 1035–1122 |
-| 47 | `B11` | Cube | BottomTrack | +0.1176 | -0.9673 | 0.207 × 0.204 | 1 |  | px 1281–1368 × 1035–1122 |
-| 48 | `B12` | Cube | BottomTrack | +0.3435 | -0.9673 | 0.207 × 0.204 | 1 |  | px 1377–1464 × 1035–1122 |
-| 49 | `B13` | Cube | BottomTrack | +0.5718 | -0.9673 | 0.207 × 0.204 | 1 |  | px 1474–1561 × 1035–1122 |
-| 50 | `B14` | Cube | BottomTrack | +0.8047 | -0.9673 | 0.207 × 0.204 | 1 |  | px 1573–1660 × 1035–1122 |
-| 51 | `B15` | Cube | BottomTrack | +1.0306 | -0.9673 | 0.207 × 0.204 | 1 | yes | px 1669–1756 × 1035–1122 |
-| 52 | `B16` | Cube | BottomTrack | +1.2588 | -0.9673 | 0.207 × 0.204 | 1 |  | px 1766–1853 × 1035–1122 |
-| 53 | `B17` | Cube | BottomTrack | +1.4847 | -0.9673 | 0.207 × 0.204 | 1 |  | px 1862–1949 × 1035–1122 |
-| 54 | `B18` | Cube | BottomTrack | +1.7106 | -0.9673 | 0.207 × 0.204 | 1 |  | px 1958–2045 × 1035–1122 |
-| 55 | `B19` | Cube | BottomTrack | +1.9459 | -0.9673 | 0.207 × 0.204 | 1 |  | px 2058–2145 × 1035–1122 |
-| 56 | `B20` | Cube | BottomTrack | +2.1718 | -0.9673 | 0.207 × 0.204 | 1 | yes | px 2154–2241 × 1035–1122 |
-| 57 | `L1` | Cube | LeftTrack | -2.1671 | +0.6746 | 0.207 × 0.204 | 1 |  | px 310–397 × 328–415 |
-| 58 | `L2` | Cube | LeftTrack | -2.1671 | +0.4494 | 0.207 × 0.204 | 1 |  | px 310–397 × 425–512 |
-| 59 | `L3` | Cube | LeftTrack | -2.1671 | +0.2195 | 0.207 × 0.204 | 1 |  | px 310–397 × 524–611 |
-| 60 | `L4` | Cube | LeftTrack | -2.1671 | -0.0035 | 0.207 × 0.204 | 1 | yes | px 310–397 × 620–707 |
-| 61 | `L5` | Cube | LeftTrack | -2.1671 | -0.2288 | 0.207 × 0.204 | 1 |  | px 310–397 × 717–804 |
-| 62 | `L6` | Cube | LeftTrack | -2.1671 | -0.4517 | 0.207 × 0.204 | 1 |  | px 310–397 × 813–900 |
-| 63 | `L7` | Cube | LeftTrack | -2.1671 | -0.6746 | 0.207 × 0.204 | 1 |  | px 310–397 × 909–996 |
-| 64 | `G11` | Cube | Grid | +0.6788 | +0.5086 | 0.412 × 0.406 | 0 |  | px 1476–1650 × 356–530 |
-| 65 | `G12` | Cube | Grid | +1.2224 | +0.5086 | 0.412 × 0.406 | 0 |  | px 1707–1881 × 356–530 |
-| 66 | `G13` | Cube | Grid | +1.7635 | +0.5086 | 0.412 × 0.406 | 0 |  | px 1937–2111 × 356–530 |
-| 67 | `G21` | Cube | Grid | +0.6788 | +0.0070 | 0.412 × 0.406 | 0 |  | px 1476–1650 × 572–746 |
-| 68 | `G22` | Cube | Grid | +1.2224 | +0.0070 | 0.412 × 0.406 | 0 |  | px 1707–1881 × 572–746 |
-| 69 | `G23` | Cube | Grid | +1.7635 | +0.0070 | 0.412 × 0.406 | 0 |  | px 1937–2111 × 572–746 |
-| 70 | `G31` | Cube | Grid | +0.6788 | -0.4947 | 0.412 × 0.406 | 0 |  | px 1476–1650 × 788–962 |
-| 71 | `G32` | Cube | Grid | +1.2224 | -0.4947 | 0.412 × 0.406 | 0 |  | px 1707–1881 × 788–962 |
-| 72 | `G33` | Cube | Grid | +1.7635 | -0.4947 | 0.412 × 0.406 | 0 |  | px 1937–2111 × 788–962 |
+| Ordinal | Key | Kind | Group | x | z | Footprint w × d | Orientation | Default capacity | Marker | Source |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `Main` | Card | Main | -0.8141 | +0.0070 | 2.0941 × 1.4097 | Landscape | 1 |  | screen px 484–1373 × 356–962 |
+| 2 | `TopL` | Card | TopPlates | -1.7624 | +1.7811 | 1.400 × 1.400 | Portrait | 0 |  | plate px 176–875 × 0–69; z pushed out |
+| 3 | `TopC` | Card | TopPlates | +0.0024 | +1.7811 | 1.400 × 1.400 | Portrait | 0 |  | plate px 926–1625 × 0–69; z pushed out |
+| 4 | `TopR` | Card | TopPlates | +1.7600 | +1.7811 | 1.400 × 1.400 | Portrait | 0 |  | plate px 1673–2372 × 0–69; z pushed out |
+| 5 | `RailL` | Card | Rails | -2.9753 | +0.0000 | 1.400 × 1.400 | Portrait | 0 |  | rail px 0–69; x pushed out |
+| 6 | `RailR` | Card | Rails | +2.9753 | +0.0000 | 1.400 × 1.400 | Portrait | 0 |  | rail px 2480–2549; x pushed out |
+| 7 | `BotL` | Card | BottomPlates | -1.7624 | -1.7811 | 1.400 × 1.400 | Portrait | 0 |  | plate px 176–875 × 1255–1324; z pushed out |
+| 8 | `BotC` | Card | BottomPlates | +0.0024 | -1.7811 | 1.400 × 1.400 | Portrait | 0 |  | plate px 926–1625 × 1255–1324; z pushed out |
+| 9 | `BotR` | Card | BottomPlates | +1.7600 | -1.7811 | 1.400 × 1.400 | Portrait | 0 |  | plate px 1673–2372 × 1255–1324; z pushed out |
+| 10 | `T01` | Cube | TopTrack | -2.1682 | +0.9789 | 0.205 × 0.204 | — | 1 |  | px 310–396 × 197–284 |
+| 11 | `T02` | Cube | TopTrack | -1.9424 | +0.9789 | 0.205 × 0.204 | — | 1 |  | px 406–492 × 197–284 |
+| 12 | `T03` | Cube | TopTrack | -1.7082 | +0.9789 | 0.207 × 0.204 | — | 1 |  | px 505–592 × 197–284 |
+| 13 | `T04` | Cube | TopTrack | -1.4824 | +0.9789 | 0.207 × 0.204 | — | 1 |  | px 601–688 × 197–284 |
+| 14 | `T05` | Cube | TopTrack | -1.2541 | +0.9789 | 0.207 × 0.204 | — | 1 | yes | px 698–785 × 197–284 |
+| 15 | `T06` | Cube | TopTrack | -1.0282 | +0.9789 | 0.207 × 0.204 | — | 1 |  | px 794–881 × 197–284 |
+| 16 | `T07` | Cube | TopTrack | -0.7953 | +0.9789 | 0.207 × 0.204 | — | 1 |  | px 893–980 × 197–284 |
+| 17 | `T08` | Cube | TopTrack | -0.5694 | +0.9789 | 0.207 × 0.204 | — | 1 |  | px 989–1076 × 197–284 |
+| 18 | `T09` | Cube | TopTrack | -0.3412 | +0.9789 | 0.207 × 0.204 | — | 1 |  | px 1086–1173 × 197–284 |
+| 19 | `T10` | Cube | TopTrack | -0.1153 | +0.9789 | 0.207 × 0.204 | — | 1 | yes | px 1182–1269 × 197–284 |
+| 20 | `T11` | Cube | TopTrack | +0.1176 | +0.9789 | 0.207 × 0.204 | — | 1 |  | px 1281–1368 × 197–284 |
+| 21 | `T12` | Cube | TopTrack | +0.3435 | +0.9789 | 0.207 × 0.204 | — | 1 |  | px 1377–1464 × 197–284 |
+| 22 | `T13` | Cube | TopTrack | +0.5718 | +0.9789 | 0.207 × 0.204 | — | 1 |  | px 1474–1561 × 197–284 |
+| 23 | `T14` | Cube | TopTrack | +0.8047 | +0.9789 | 0.207 × 0.204 | — | 1 |  | px 1573–1660 × 197–284 |
+| 24 | `T15` | Cube | TopTrack | +1.0306 | +0.9789 | 0.207 × 0.204 | — | 1 | yes | px 1669–1756 × 197–284 |
+| 25 | `T16` | Cube | TopTrack | +1.2588 | +0.9789 | 0.207 × 0.204 | — | 1 |  | px 1766–1853 × 197–284 |
+| 26 | `T17` | Cube | TopTrack | +1.4847 | +0.9789 | 0.207 × 0.204 | — | 1 |  | px 1862–1949 × 197–284 |
+| 27 | `T18` | Cube | TopTrack | +1.7106 | +0.9789 | 0.207 × 0.204 | — | 1 |  | px 1958–2045 × 197–284 |
+| 28 | `T19` | Cube | TopTrack | +1.9459 | +0.9789 | 0.207 × 0.204 | — | 1 |  | px 2058–2145 × 197–284 |
+| 29 | `T20` | Cube | TopTrack | +2.1718 | +0.9789 | 0.207 × 0.204 | — | 1 | yes | px 2154–2241 × 197–284 |
+| 30 | `R1` | Cube | RightTrack | +2.1718 | +0.6746 | 0.207 × 0.204 | — | 1 |  | px 2154–2241 × 328–415 |
+| 31 | `R2` | Cube | RightTrack | +2.1718 | +0.4494 | 0.207 × 0.204 | — | 1 |  | px 2154–2241 × 425–512 |
+| 32 | `R3` | Cube | RightTrack | +2.1718 | +0.2195 | 0.207 × 0.204 | — | 1 |  | px 2154–2241 × 524–611 |
+| 33 | `R4` | Cube | RightTrack | +2.1718 | -0.0035 | 0.207 × 0.204 | — | 1 | yes | px 2154–2241 × 620–707 |
+| 34 | `R5` | Cube | RightTrack | +2.1718 | -0.2288 | 0.207 × 0.204 | — | 1 |  | px 2154–2241 × 717–804 |
+| 35 | `R6` | Cube | RightTrack | +2.1718 | -0.4517 | 0.207 × 0.204 | — | 1 |  | px 2154–2241 × 813–900 |
+| 36 | `R7` | Cube | RightTrack | +2.1718 | -0.6746 | 0.207 × 0.204 | — | 1 |  | px 2154–2241 × 909–996 |
+| 37 | `B01` | Cube | BottomTrack | -2.1682 | -0.9673 | 0.205 × 0.204 | — | 1 |  | px 310–396 × 1035–1122 |
+| 38 | `B02` | Cube | BottomTrack | -1.9424 | -0.9673 | 0.205 × 0.204 | — | 1 |  | px 406–492 × 1035–1122 |
+| 39 | `B03` | Cube | BottomTrack | -1.7082 | -0.9673 | 0.207 × 0.204 | — | 1 |  | px 505–592 × 1035–1122 |
+| 40 | `B04` | Cube | BottomTrack | -1.4824 | -0.9673 | 0.207 × 0.204 | — | 1 |  | px 601–688 × 1035–1122 |
+| 41 | `B05` | Cube | BottomTrack | -1.2541 | -0.9673 | 0.207 × 0.204 | — | 1 | yes | px 698–785 × 1035–1122 |
+| 42 | `B06` | Cube | BottomTrack | -1.0282 | -0.9673 | 0.207 × 0.204 | — | 1 |  | px 794–881 × 1035–1122 |
+| 43 | `B07` | Cube | BottomTrack | -0.7953 | -0.9673 | 0.207 × 0.204 | — | 1 |  | px 893–980 × 1035–1122 |
+| 44 | `B08` | Cube | BottomTrack | -0.5694 | -0.9673 | 0.207 × 0.204 | — | 1 |  | px 989–1076 × 1035–1122 |
+| 45 | `B09` | Cube | BottomTrack | -0.3412 | -0.9673 | 0.207 × 0.204 | — | 1 |  | px 1086–1173 × 1035–1122 |
+| 46 | `B10` | Cube | BottomTrack | -0.1153 | -0.9673 | 0.207 × 0.204 | — | 1 | yes | px 1182–1269 × 1035–1122 |
+| 47 | `B11` | Cube | BottomTrack | +0.1176 | -0.9673 | 0.207 × 0.204 | — | 1 |  | px 1281–1368 × 1035–1122 |
+| 48 | `B12` | Cube | BottomTrack | +0.3435 | -0.9673 | 0.207 × 0.204 | — | 1 |  | px 1377–1464 × 1035–1122 |
+| 49 | `B13` | Cube | BottomTrack | +0.5718 | -0.9673 | 0.207 × 0.204 | — | 1 |  | px 1474–1561 × 1035–1122 |
+| 50 | `B14` | Cube | BottomTrack | +0.8047 | -0.9673 | 0.207 × 0.204 | — | 1 |  | px 1573–1660 × 1035–1122 |
+| 51 | `B15` | Cube | BottomTrack | +1.0306 | -0.9673 | 0.207 × 0.204 | — | 1 | yes | px 1669–1756 × 1035–1122 |
+| 52 | `B16` | Cube | BottomTrack | +1.2588 | -0.9673 | 0.207 × 0.204 | — | 1 |  | px 1766–1853 × 1035–1122 |
+| 53 | `B17` | Cube | BottomTrack | +1.4847 | -0.9673 | 0.207 × 0.204 | — | 1 |  | px 1862–1949 × 1035–1122 |
+| 54 | `B18` | Cube | BottomTrack | +1.7106 | -0.9673 | 0.207 × 0.204 | — | 1 |  | px 1958–2045 × 1035–1122 |
+| 55 | `B19` | Cube | BottomTrack | +1.9459 | -0.9673 | 0.207 × 0.204 | — | 1 |  | px 2058–2145 × 1035–1122 |
+| 56 | `B20` | Cube | BottomTrack | +2.1718 | -0.9673 | 0.207 × 0.204 | — | 1 | yes | px 2154–2241 × 1035–1122 |
+| 57 | `L1` | Cube | LeftTrack | -2.1671 | +0.6746 | 0.207 × 0.204 | — | 1 |  | px 310–397 × 328–415 |
+| 58 | `L2` | Cube | LeftTrack | -2.1671 | +0.4494 | 0.207 × 0.204 | — | 1 |  | px 310–397 × 425–512 |
+| 59 | `L3` | Cube | LeftTrack | -2.1671 | +0.2195 | 0.207 × 0.204 | — | 1 |  | px 310–397 × 524–611 |
+| 60 | `L4` | Cube | LeftTrack | -2.1671 | -0.0035 | 0.207 × 0.204 | — | 1 | yes | px 310–397 × 620–707 |
+| 61 | `L5` | Cube | LeftTrack | -2.1671 | -0.2288 | 0.207 × 0.204 | — | 1 |  | px 310–397 × 717–804 |
+| 62 | `L6` | Cube | LeftTrack | -2.1671 | -0.4517 | 0.207 × 0.204 | — | 1 |  | px 310–397 × 813–900 |
+| 63 | `L7` | Cube | LeftTrack | -2.1671 | -0.6746 | 0.207 × 0.204 | — | 1 |  | px 310–397 × 909–996 |
+| 64 | `G11` | Cube | Grid | +0.6788 | +0.5086 | 0.412 × 0.406 | — | 0 |  | px 1476–1650 × 356–530 |
+| 65 | `G12` | Cube | Grid | +1.2224 | +0.5086 | 0.412 × 0.406 | — | 0 |  | px 1707–1881 × 356–530 |
+| 66 | `G13` | Cube | Grid | +1.7635 | +0.5086 | 0.412 × 0.406 | — | 0 |  | px 1937–2111 × 356–530 |
+| 67 | `G21` | Cube | Grid | +0.6788 | +0.0070 | 0.412 × 0.406 | — | 0 |  | px 1476–1650 × 572–746 |
+| 68 | `G22` | Cube | Grid | +1.2224 | +0.0070 | 0.412 × 0.406 | — | 0 |  | px 1707–1881 × 572–746 |
+| 69 | `G23` | Cube | Grid | +1.7635 | +0.0070 | 0.412 × 0.406 | — | 0 |  | px 1937–2111 × 572–746 |
+| 70 | `G31` | Cube | Grid | +0.6788 | -0.4947 | 0.412 × 0.406 | — | 0 |  | px 1476–1650 × 788–962 |
+| 71 | `G32` | Cube | Grid | +1.2224 | -0.4947 | 0.412 × 0.406 | — | 0 |  | px 1707–1881 × 788–962 |
+| 72 | `G33` | Cube | Grid | +1.7635 | -0.4947 | 0.412 × 0.406 | — | 0 |  | px 1937–2111 × 788–962 |
 
 ### 4.1 Option 2 geometry
 
@@ -153,21 +153,32 @@ Inputs:
 
 - **Seats do not overlap.** The nearest pair (neighbouring seats) is 1.159 apart.
 - **Seat 0 near edge:** a 1.4 card in a bottom plate hangs 0.037 past the table edge. A landscape card (0.5 half-depth) stays inside.
-- **Trap Floor seat containers collide with the larger console.** These are code constants in `TrapFloorTemplateFactory`, not console data, and are outside Stage (a) unless approved:
-  - The Hand pose (radius 4.15) lies inside the mat by 0.289 and under the inner plate cards, assuming a 1.4 card at the hand pose; HandView fan width was not measured.
-  - The Controller Deck (console-local x +3.2) sits on the right rail slot and 0.2 past the mat edge.
-  - The Purchased Ability stack (x −4.45) clears the left rail by 0.075 in the worst case.
+- **Trap Floor seat containers versus the larger console (status 2026-10-07).** These are code constants in `TrapFloorTemplateFactory`, not console data:
+  - Hand: the radius-4.15 hand pose is removed (a2); the hand is a camera tray, and its zone default is console-local (+6.40, 0.00), 2.0 × 1.4.
+  - Controller Deck at console-local x +4.45, Purchased Ability stack at −4.45, and starting-ability staging at −7.6 are stopgaps (clearance ≥ 0.175, table margin ≥ 0.444) until (a2b) replaces them with `ConsoleAdjacentPlacement`.
+
+### 4.4 Stage (a) record (2026-10-06)
+
+- **Layout asset:** `Content/Definitions/Console/StandardConsoleLayout.asset`, 72 entries as in §4; each slot carries kind, footprint, default capacity, marker and default orientation.
+- **Mat console:** `Content/Prefabs/Real/ConsoleMat.prefab` (not a Prototype* prefab). The mat is a nested `ConsoleCard` prefab instance with local scale (279.94424, 102.52346, 5.9562984); the slot feedback plates match the slot footprints (Main 2.0941 × 1.4097).
+- **Mat rotation fix:** the mat instance is at local rotation (90, 0, 0) (quaternion x = w = 0.7071068) and local position (−0.000595, 0, −0.000156). It was previously authored at (90, 0, 180), which maps console (x, z) to (−x, −z) and showed the art rotated 180°. Layout data and anchors are unchanged.
+- **Main slot:** footprint measured from the on-mat screen (2.0941 × 1.4097, landscape). Trap Floor turns the avatar to Main's layout default (+90° for Landscape).
+- **Consoles:** every console (Trap Floor and Toolbox) exposes all 9 card slots, with capacities from the layout asset; no slot selection or hiding. Trap Floor keeps its category-41 IDs; its Side n slot maps to ordinal n + 1. Cube entries are layout data only; they become containers in (d).
+- **Scene:** repointed to `ConsoleMat.prefab` (no reference to the old prefab GUID remains); `PrototypeConsole.prefab` restored from git.
 
 ## 5. Slot-kind model
 
-- **Core:** each slot is a `ContainerState(ContainerKind.ConsoleSlot)` with `Capacity` (existing) and a new optional `AcceptedObjectKinds` (flags over `TabletopObjectKind`). Missing means accept all. `TransferCardUseCase` and `TransferTokenUseCase` reject a destination that does not accept the object's kind, as a structural check alongside `IsFull`.
+- **Core (Stage d):** each slot is a `ContainerState(ContainerKind.ConsoleSlot)` with `Capacity` (existing) and a new optional `AcceptedObjectKinds` (flags over `TabletopObjectKind`). Missing means accept all. `TransferCardUseCase` and `TransferTokenUseCase` reject a destination that does not accept the object's kind, as a structural check alongside `IsFull`.
 - **Slot kinds (authored):** `Card → {Card}`, `Cube → {Token}`, later `Dice → {Die}`. The kind lives in the layout data; Core stores only the accepted kinds.
-- **Console state:** each slot records its layout key. If no key is stored (existing consoles), slots map positionally to the layout's card slots in ordinal order.
+- **Console state (Stage d):** each slot records its layout key. If no key is stored (existing consoles), slots map positionally to the layout's card slots in ordinal order.
 - **Templates** never add, remove or restrict slots: every console (Trap Floor, Toolbox, any game) always exposes all 72 slots. A template may only name slots by key to give them starting content or to refer to them in rule hooks.
 - **Cube piece:** `TabletopObjectKind.Token` with a new definition ID and its own prefab (size 0.126 as data). It uses the Token physics profile initially. The existing token (0.72) and Trap Floor coin (about 0.245) do not fit a 0.207 cell.
 - **Big squares (capacity 0):** contents are laid out in layers inside the 0.412 × 0.406 footprint.
+- **Capacity:** the layout asset's default capacity (today Main 1, other card slots 0, track cells 1, grid squares 0) is the current default only. Capacity should become a component-declared configurable parameter; games never override it outside that declaration (doc 21).
 
 ## 6. ID scheme
+
+*Applies from Stage (d). Until then Trap Floor keeps its category-41 IDs, Toolbox card slots use GUIDs, and no category-43 IDs are allocated (§4.4).*
 
 - **Toolbox consoles:** all 72 slot IDs come from the existing identity source (random v4 GUIDs) through `TryAllocateContainerIds`, which already checks for existing IDs. No range is needed.
 - **Trap Floor, existing slots:** keep their current category-41 IDs (`idBase = seatIndex × 20`; Hand +1, Main +2, Side +3…, Ability area +18, Controller Deck +19). Existing sessions, undo history and initial snapshots map 1:1.
@@ -217,17 +228,41 @@ Inputs:
 
 | Stage | Contents |
 |---|---|
-| (a) Definition + variant | Layout asset (72 entries), new mat console variant (not Prototype*), every console exposes all 72 slots (no slot selection; the 3b-1 `SelectConsoleSlots` hiding of authored views beyond the slot count is removed), slot kind/capacity/accepted-kinds as component data, Core accepted-kinds field with accept-all default, category-43 IDs, Trap Floor and Toolbox consoles both with 72 slots. Card slots behave as today; cube cells exist but are not targeted. Scene YAML shown before saving. |
+| (a) Definition + variant — **done 2026-10-06** | Layout asset (72 entries), `ConsoleMat.prefab` variant, every console exposes all 9 card slots with layout capacities, Main landscape footprint, mat rotation fix, scene repoint (§4.4). Accepted kinds, slot keys, category-43 IDs and cube containers moved to (d). |
 | (c) Mat support surface | Collider + `PhysicalTabletopSurface` on the variant, own-surface exclusion for console moves and placement. |
 | (b) Card slot targeting/settle | Shared resolver, free drag with highlight, nearest-anchor rule, `ContainedCardDragCoordinator.Release` exclusion fix. |
-| (d) Cube cells | Cube definition + prefab (0.126), cube cell view with layered layout for capacity 0, token preview and settle through the live move path (`TabletopMoveInteractionCoordinator`), `TransferTokenCommand` (Transaction) into the slot container. The dormant token-container code is not used. |
+| (d) Cube cells | Core accepted kinds (accept-all default), slot keys in console state, category-43 IDs, cube cell containers, cube definition + prefab (0.126), cube cell view with layered layout for capacity 0, token preview and settle through the live move path (`TabletopMoveInteractionCoordinator`), `TransferTokenCommand` (Transaction) into the slot container. The dormant token-container code is not used. |
+
+### 9.1 Stage order (2026-10-07)
+
+Done: (a) definition + variant (2026-10-06); (a2) hand tray (2026-10-07, §11).
+
+1. (a2b) Deck, stack and staging placement: `ConsoleAdjacentPlacement` helper and table bounds as data, plate-less controller deck and action stack, staging and hand-zone defaults; replaces the three stopgap constants.
+2. (a2c) Hand optional in Core, before the first template without a hand.
+3. (c) Mat support surface.
+4. (b) Card slot targeting and settle.
+5. Game setup pipeline: the second-template pipeline that removes Trap Floor-only wiring (doc 20 §12).
+6. Interaction queue: camera framing (stale camera pivot and framing; `tabletopHeight` 14.3 stays untouched), Flip, stacking and decks, Quick Inspect, Ping.
+7. (d) Cube cells.
+8. Architecture audit.
 
 ## 10. Open items
 
-- Trap Floor seat container constants (Hand radius 4.15, Controller Deck offset 3.2) versus the larger console (section 4.3).
+- Trap Floor seat container stopgaps (Controller Deck +4.45, Ability stack −4.45, staging −7.6) until (a2b) (§4.3). The hand radius is gone (a2).
 - Seat 0 worst-case overhang of 0.037 past the near table edge.
 - Mapping of the current Trap Floor Main/Side slots to layout keys, to be fixed in the Stage (a) plan from the current prefab's anchor order.
 - **Multiplayer (open, for the multiplayer stage):** `TransferCardUseCase` has no owner rule for Hand destinations, so any player can transfer a card into another player's hand. The H2 hand comfort cap is a local setting that only guards the owner's own draws and drops, so it does not close this. Do not fix before the multiplayer stage.
-- **Default card-slot capacity (decision needed):** with templates no longer setting capacity, the layout asset decides it. Trap Floor's Side slots stack today (capacity 0) while Main and the Toolbox console use 1. Options: all card slots 0 (unbounded, piles allowed anywhere, closest to a real table), or 1 with stacking only where the component allows it.
+- **Card-slot capacity (resolved for now, 2026-10-06):** Main 1; plates and rails 0 (unbounded, stackable). These are the current defaults only; capacity is to become a component-declared configurable parameter (§5).
 - **Sharing permissions (open, for the multiplayer stage):** a console, hand or deck is private to its owner by default. The owner can grant a teammate or friend access and revoke it. One rule covers console slot placement, hand transfers and deck access. The grants live in state (authoritative, undoable, synced), not in a local setting. Today nothing enforces this: see the 3c-0 report (2026-10-05) for current behaviour on another seat's console.
 - **Per-player save and load (open):** players can save and load sessions, built on top of the existing in-memory snapshots (`GameTemplateInitialSnapshot`, active-session undo history). These are explicitly not a persistence format today, so this needs a versioned save format and a load path that respects the sharing permissions above.
+- **Hand zone on the table (dropped from a2):** the hand container keeps a zone placement and Application can move it (owner only), but there is no zone view or Move Hand Zone UI. Add them back only if multiplayer needs a visible, movable zone (§11).
+
+## 11. Stage (a2) record: hand (2026-10-07)
+
+- **Tray:** the local hand is a camera-anchored tray at the bottom centre of the screen (`HandTrayRig`, `HandView` tray mode). It keeps a constant on-screen size and faces the owner at any pitch or yaw. Hover, select, reorder, and drag out to the table and back all ease smoothly. H or the HUD button collapses and expands it. Tray cards cast no shadows and their colliders are triggers while in the tray. The tray band is the hand's drop target, enabled only during a card drag.
+- **Zone data:** the hand container has a placement with pose and extent (`ContainerPlacementState`); the initial snapshot captures it, so Undo and reset restore it. Trap Floor default: console-local (+6.40, 0.00), 2.0 × 1.4, temporary until (a2b).
+- **Other seats:** each other seat's hand is a face-down pile with a card count at its zone pose (`HiddenHandView`). Faces are hidden and Inspect is not offered; the cards cannot be dragged out.
+- **Dropped:** the table zone view (trigger plus outline) and Move Hand Zone were built and then removed. The tray band replaces the zone as the drop target; the zone pose now only places other seats' piles. Application still supports moving a hand zone (owner only); a UI for it is tracked in §10.
+- **Owner-only moves:** `MoveContainerUseCase` rejects moving a seat-owned Deck, Stack or Hand zone by anyone except that seat's occupant (`NotContainerOwner`). Unowned Toolbox decks and stacks stay movable by anyone. `BeginContainerMove` runs the same check (`MoveContainerUseCase.IsMoveBlockedByOwner`) before any preview, hiding or placement starts.
+- **Removed:** `PlayerHandRadius` (4.15) and `GetHandPose`. The table hand plate is hidden at runtime and no longer part of camera framing.
+- **Optional hand:** Core still requires a hand per seat. Making it optional per game, with no fixed size, is Stage (a2c).

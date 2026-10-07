@@ -89,7 +89,7 @@ Also hard-coded:
 |---|---|---|
 | a. Variants as named parameter sets | **Partial** | Modes exist but with a fixed Trap Floor schema; `modeMetadata` / `objectiveConfiguration` are free text; `collapseSchedule` is only displayed. Needs: components and game modules **declare** parameters (key, type, range, default); a variant is a named set of overrides. |
 | b. Per-player-count setups | **Missing** | Single `RequiredPlayerCount`, exact-match validation, factory fixed at 4; no 2- or 3-player layouts (OD-014). |
-| c. Per-seat starting loadout (optional hand / controller deck) | **Missing in data, partial in code** | `GameTemplate` can express any per-seat containers, but no authored loadout type exists; the hand is mandatory (`HandIdEmpty`) and the controller deck is always created. Stage (a2) makes the hand optional. |
+| c. Per-seat starting loadout (optional hand / controller deck) | **Missing in data, partial in code** | `GameTemplate` can express any per-seat containers, but no authored loadout type exists; the hand is mandatory (`HandIdEmpty`) and the controller deck is always created. Stage (a2c) makes the hand optional. |
 | d. Actions with availability | **Missing** | Actions are C# lists in TPC. Ability and trap effects are chosen by `effectMetadata` strings; search costs are parsed from `assistanceConfiguration`. |
 | e. Status track and win/lose definition | **Missing (generic)** | `FinalRoundNumber = 10` constant; win (keys + SecretExit) coded in `TrapFloorObjectiveUseCase`; statuses (Blind/Slow/Sticky) are C# classes; no lose definition in data. |
 | f. Content packs | **Partial** | `GameContentSet` + `CardDefinition.quantity`; game-local only, looked up by fixed ID strings, not toggled per variant, no "draw a subset" rule. |
@@ -122,7 +122,7 @@ The layout model (`PlayerLayoutDefinition`, `PlayerSeatLayoutEntry`) accepts any
 | GS2 Rules and box contents | `GameDefinition` gains rule pages (ordered title/body list); a paginated rules panel that opens and closes; a components view generated from content sets and loadouts | Small-medium | Needed for G2 exit (the Rulebook), not to start |
 | GS3 Presentation decoupling | Template sessions no longer require Trap Floor wiring; container and object views are built from `GameTemplate.Containers` / `Objects`; Trap Floor services become an optional game module attached by module ID; presentation overrides (floor-card scale, coin scale, tints, labels) become declared component parameters | Medium-large | **Yes** (the hard blocker) |
 | GS4 Setup steps | Variant, player count and table setup as separate menu steps; the template is built at Start from (game, variant, player count, layout) instead of one template per mode | Medium | Partial (player counts depend on OD-019) |
-| GS5 Generic setup format and builder | Authored setup data: per-seat loadout (optional hand and controller deck), shared components, placement via layout anchors and `ConsoleAdjacentPlacement` (doc 19 / a2), per-player-count setups, content pack selection; a generic builder produces `GameTemplate`; Trap Floor's floor shuffle stays a module setup step | Large | **Yes**, unless SLS gets its own C# factory as a stopgap |
+| GS5 Generic setup format and builder | Authored setup data: per-seat loadout (optional hand and controller deck), shared components, placement via layout anchors and `ConsoleAdjacentPlacement` (doc 19 / a2b), per-player-count setups, content pack selection; a generic builder produces `GameTemplate`; Trap Floor's floor shuffle stays a module setup step | Large | **Yes**, unless SLS gets its own C# factory as a stopgap |
 | GS6 Table layouts and play areas as data | Layout asset type; seat groups (teams, sides); a Round generator; remove `ProjectToRadius`; several play areas with kind (grid, track/row, zone, arena) and rotation; camera framing over all play areas | Large | **Yes** (the side-scroller needs a row/track play area) |
 | GS7 Data-declared actions and generic HUD | The game module declares actions with availability; a generic HUD lists them and shows declared status tracks | Medium | No (G2 automation is optional) |
 | GS8 Parameters, variants and schema | Declared parameters with ranges; variants as named overrides; schema version on `GameDefinition`, migration hook, definition errors reported as issue codes | Medium | No |
@@ -180,7 +180,7 @@ The layout model (`PlayerLayoutDefinition`, `PlayerSeatLayoutEntry`) accepts any
 - **Interaction locks:** held by another interaction, `LocalLockConflict`, preview not transferable.
 - **Hidden content:** unrevealed floors and deck/stack interiors stay hidden.
 - **UI overlay:** open popups block tabletop input through the generic pointer-over-UI rule, and dismissing them cancels the flow.
-- **To add in Stage (a):** accepted kinds in Core. Today `TransferTokenUseCase` accepts a token into a ConsoleSlot (no kind check), and `ConsoleSlotView` then throws `KeyNotFoundException` on layout (§10 item 14).
+- **To add in Stage (d):** accepted kinds in Core. Today `TransferTokenUseCase` accepts a token into a ConsoleSlot (no kind check), and `ConsoleSlotView` then throws `KeyNotFoundException` on layout (§10 item 14).
 
 ### 9.2 Game rules that are enforced (affect a generic action) — Presentation only
 
@@ -219,11 +219,11 @@ The layout model (`PlayerLayoutDefinition`, `PlayerSeatLayoutEntry`) accepts any
 | 7 | Payment cards placed in Main, another console or a Toolbox console | Not counted as payment; Confirm rechecks Side slots | Fine |
 | 8 | Floor card moved anywhere | Impossible (floor cards are user-locked from setup) | Fine |
 | 9 | Pending Floormaster card dragged into a slot | `CompleteResolvedCard` fails with `OfficialContentStateInvalid` until it is dragged back out | Wrong state (recoverable) |
-| 10 | Toolbox console | Shows 6 of the prefab's 9 slot views (the rest are hidden by `SelectConsoleSlots`); no card can be orphaned, because state holds exactly 6 slot containers | Fine today; removed by Stage (a) (all 72 slots on every console) |
+| 10 | Toolbox console | Shows 6 of the prefab's 9 slot views (the rest are hidden by `SelectConsoleSlots`); no card can be orphaned, because state holds exactly 6 slot containers | Fine today; removed by Stage (a) (every console exposes all 9 card slots; cube cells become containers in (d)) |
 | 11 | Index assumptions | Only `ConsoleView.Bind` checks the view order against `SlotContainerIds`; nothing reads the Avatar from the Main slot | Fine |
 | 12 | Loose pieces resting on slot boxes | Treated as ordinary loose pieces; drops aimed there still resolve to the slot | Fine (physics changes in Stage (c)) |
 | 13 | Token into a ConsoleSlot through the UI | Not possible (tokens only target token-container drop targets) | Fine |
-| 14 | Token into a ConsoleSlot through the domain | Accepted, then `ConsoleSlotView` throws `KeyNotFoundException` and takes down the console layout | Throws (unreachable from UI); closed by Core accepted kinds in Stage (a) |
+| 14 | Token into a ConsoleSlot through the domain | Accepted, then `ConsoleSlotView` throws `KeyNotFoundException` and takes down the console layout | Throws (unreachable from UI); closed by Core accepted kinds in Stage (d) |
 | 15 | Console-interaction handler exceptions | Caught and logged, never rethrown | Fine |
 
 **Conclusion:** nothing breaks the platform when a card is put on an unused slot. The only defects are assist hooks that react too broadly (1-3, 9) and the token path (14).
@@ -243,5 +243,9 @@ The layout model (`PlayerLayoutDefinition`, `PlayerSeatLayoutEntry`) accepts any
   - Not a prerequisite for Super Leroy Sisters (a game with no turns works unchanged), but it should precede GS7 so data-declared actions are advisory from the start.
 - **GS3 (decoupling):** includes the two §9.2 menu fixes (generic Draw on every deck, Flip on floor cards).
 - **GS5 (setup format):** contains no slot selection and no capacity overrides. It has starting content by slot key and rule hooks by slot key.
-- **Stage (a) (doc 19):** every console exposes all 72 slots; Core accepted kinds closes §10 item 14.
+- **Stage (a) (doc 19, done):** every console exposes all 9 card slots. **Stage (d):** cube cells become containers; Core accepted kinds closes §10 item 14.
 - **Trap Floor assist scoping (§10 items 1-3, 9):** belongs with GS3 or GS-T; not before the console, hand and interaction work.
+
+## 12. Second-template pipeline as its own stage (2026-10-07)
+
+The game setup pipeline removes the Trap Floor-only wiring so a second template can load: GS1 catalog, GS3 decoupling, GS5 generic setup format and builder, and GS6 where a game needs it. It is its own stage, scheduled after (b) in the order of doc 19 §9.1. The GS contents above are unchanged; GS2, GS4, GS7–GS9 and GS-T stay unscheduled. Binding rules: doc 21.
