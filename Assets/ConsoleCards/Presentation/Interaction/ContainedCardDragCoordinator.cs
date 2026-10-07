@@ -12,6 +12,9 @@ namespace ConsoleCards.Presentation.Interaction
 {
     public sealed class ContainedCardDragCoordinator
     {
+        // Height above the table a tray card is placed at when it leaves the tray for the table.
+        private const float TrayExitLift = 0.05f;
+
         private readonly LocalInteractionLockService lockService;
         private readonly TabletopInteractionStateMachine stateMachine;
         private readonly TabletopDragPreviewSession previewSession;
@@ -30,6 +33,12 @@ namespace ConsoleCards.Presentation.Interaction
         private bool releasesLockOnCompletion;
         private bool handReorderPreviewActive;
         private int handReorderTargetIndex = -1;
+        // A physical card dragged from the camera tray follows the tray while the pointer is over it.
+        // Leaving the tray starts a short exit flight toward the table pose under the pointer; when it
+        // lands it becomes an ordinary held card. Coming back over the tray returns it to the tray.
+        private bool trayDragActive;
+        private bool trayExitInProgress;
+        private bool trayDragOnTable;
 
         public ContainedCardDragCoordinator(
             InteractionOwnerId interactionOwnerId,
@@ -212,6 +221,11 @@ namespace ConsoleCards.Presentation.Interaction
                     cardView.PhysicalObject.BeginContainedPickup(consoleSlotView.ExtractionLift);
                 }
                 cardView.PhysicalObject?.PreparePointerAnchor(initialScreenPosition);
+                trayDragActive = handView != null
+                    && handView.IsTrayMode
+                    && ReferenceEquals(currentSourceLayout, handView)
+                    && cardView.PhysicalObject != null;
+                trayDragOnTable = false;
                 feedback?.Begin(sourceContainerId);
                 return true;
             }
@@ -238,6 +252,60 @@ namespace ConsoleCards.Presentation.Interaction
             bool startedDragging = stateMachine.UpdatePointer(screenPosition);
             if (stateMachine.Phase != TabletopInteractionPhase.DraggingObject)
             {
+                return;
+            }
+
+            if (trayDragActive && !trayDragOnTable)
+            {
+                if (startedDragging)
+                {
+                    previewSession.Begin(view);
+                    startedDragging = false;
+                }
+
+                if (handView.IsScreenPointInTray(screenPosition))
+                {
+                    trayExitInProgress = false;
+                    handView.SetTrayDragPointer(view, screenPosition, true);
+                    UpdateHandReorderPreview(view, default(TableCoordinate), screenPosition);
+                    UpdateFeedback(screenPosition);
+                    return;
+                }
+
+                if (!TryResolveTrayTablePose(view, screenPosition, out Vector3 tablePosition, out Quaternion tableRotation))
+                {
+                    CancelActiveInteraction(ContainedCardDragReleaseStatus.ProjectionFailed);
+                    return;
+                }
+
+                if (!trayExitInProgress)
+                {
+                    trayExitInProgress = true;
+                    ClearHandReorderPreview(view);
+                }
+
+                handView.SetTrayHandoffTarget(view, tablePosition, tableRotation);
+                if (!handView.IsTrayHandoffComplete(view))
+                {
+                    UpdateFeedback(screenPosition);
+                    return;
+                }
+
+                if (!TryMoveTrayCardToTable(view, screenPosition))
+                {
+                    CancelActiveInteraction(ContainedCardDragReleaseStatus.Cancelled);
+                    return;
+                }
+            }
+            else if (trayDragActive && handView.IsScreenPointInTray(screenPosition))
+            {
+                // Back over the tray: stop holding it on the table and let it shrink back into the tray.
+                view.PhysicalObject.DisableForContainer();
+                trayDragOnTable = false;
+                trayExitInProgress = false;
+                handView.SetTrayDragPointer(view, screenPosition, false);
+                UpdateHandReorderPreview(view, default(TableCoordinate), screenPosition);
+                UpdateFeedback(screenPosition);
                 return;
             }
 
@@ -314,7 +382,16 @@ namespace ConsoleCards.Presentation.Interaction
                 }
             }
 
-            if (view.PhysicalObject != null)
+            if (trayDragActive
+                && !trayDragOnTable
+                && trayExitInProgress
+                && !TryMoveTrayCardToTable(view, screenPosition))
+            {
+                // Could not land on the table: treat the release as a return to the tray.
+                trayExitInProgress = false;
+            }
+
+            if (view.PhysicalObject != null && !(trayDragActive && !trayDragOnTable))
             {
                 view.PhysicalObject.Follow(screenPosition);
             }
@@ -323,6 +400,16 @@ namespace ConsoleCards.Presentation.Interaction
             try
             {
                 bool resolved = dropTargetResolver.TryResolve(screenPosition, out CardDropTarget target);
+                if (trayDragActive
+                    && !trayDragOnTable
+                    && (!resolved
+                        || target.Kind != CardDropTargetKind.Container
+                        || target.ContainerId != sourceContainerId))
+                {
+                    // Released without leaving the tray: it is a reorder or a return.
+                    target = CardDropTarget.ForContainer(sourceContainerId);
+                    resolved = true;
+                }
                 if (view.PhysicalObject != null && (!resolved || target.Kind != CardDropTargetKind.Container))
                 {
                     target = CardDropTarget.ForTabletop(new TabletopPose(
@@ -601,7 +688,7 @@ namespace ConsoleCards.Presentation.Interaction
                 || !dropTargetResolver.TryResolve(screenPosition, out CardDropTarget target)
                 || target.Kind != CardDropTargetKind.Container
                 || target.ContainerId != sourceContainerId
-                || !handView.TryGetReorderTargetIndex(view, pointerCoordinate, out int targetIndex))
+                || !TryGetHandReorderTargetIndex(view, pointerCoordinate, screenPosition, out int targetIndex))
             {
                 ClearHandReorderPreview(view);
                 return;
@@ -636,11 +723,13 @@ namespace ConsoleCards.Presentation.Interaction
             out ContainedCardDragReleaseResult releaseResult)
         {
             releaseResult = default;
+            TableCoordinate coordinate = default(TableCoordinate);
             if (handView == null
                 || reorderHandCard == null
                 || !ReferenceEquals(sourceLayoutView, handView)
-                || !pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate)
-                || !handView.TryGetReorderTargetIndex(view, coordinate, out int targetIndex))
+                || (!handView.IsTrayMode
+                    && !pointerProjector.TryProjectScreenPoint(screenPosition, out coordinate))
+                || !TryGetHandReorderTargetIndex(view, coordinate, screenPosition, out int targetIndex))
             {
                 return false;
             }
@@ -672,6 +761,84 @@ namespace ConsoleCards.Presentation.Interaction
 
             handReorderPreviewActive = false;
             handReorderTargetIndex = -1;
+            return true;
+        }
+
+        private bool TryGetHandReorderTargetIndex(
+            CardView view,
+            TableCoordinate pointerCoordinate,
+            Vector2 screenPosition,
+            out int targetIndex)
+        {
+            return handView.IsTrayMode
+                ? handView.TryGetTrayReorderTargetIndex(view, screenPosition, out targetIndex)
+                : handView.TryGetReorderTargetIndex(view, pointerCoordinate, out targetIndex);
+        }
+
+        /// <summary>
+        /// Table pose a tray card lands at: on the surface under the pointer, facing the owner, its
+        /// collider bottom slightly above the surface. Uses the authored collider so it is valid while
+        /// the card is still in its tray presentation.
+        /// </summary>
+        private bool TryResolveTrayTablePose(
+            CardView view,
+            Vector2 screenPosition,
+            out Vector3 position,
+            out Quaternion rotation)
+        {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            Vector3 point;
+            PhysicalTabletopSurfaces surfaces = dropTargetResolver.PhysicalSurfaces;
+            if (surfaces != null && surfaces.TryPointer(screenPosition, out RaycastHit surfaceHit))
+            {
+                point = surfaceHit.point;
+            }
+            else if (pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate))
+            {
+                point = pointerProjector.CoordinateConverter.ToWorldPosition(coordinate);
+            }
+            else
+            {
+                return false;
+            }
+
+            Vector3 up = pointerProjector.CoordinateConverter.WorldUp;
+            Vector3 facing = Vector3.ProjectOnPlane(handView.TrayRig.Anchor.forward, up);
+            rotation = facing.sqrMagnitude > 0.000001f
+                ? Quaternion.LookRotation(facing.normalized, up)
+                : view.transform.rotation;
+            BoxCollider box = view.GetComponent<BoxCollider>();
+            float pivotToBottom = box != null
+                ? -(box.center.y - (box.size.y * 0.5f)) * view.BaseLocalScale.y
+                : 0f;
+            position = point + (up * (pivotToBottom + TrayExitLift));
+            return true;
+        }
+
+        /// <summary>
+        /// The exit flight has landed: restore the table presentation (full size, shadows, solid
+        /// colliders) at the table pose and start an ordinary physical hold from there. The card stays a
+        /// Hand member until the release is committed.
+        /// </summary>
+        private bool TryMoveTrayCardToTable(CardView view, Vector2 screenPosition)
+        {
+            trayExitInProgress = false;
+            handView.EndTrayDrag();
+            if (!TryResolveTrayTablePose(view, screenPosition, out Vector3 position, out Quaternion rotation))
+            {
+                return false;
+            }
+
+            view.ApplyContainerWorldPose(position, rotation);
+            Physics.SyncTransforms();
+            if (!view.PhysicalObject.SnapHeldPreview(position, rotation))
+            {
+                return false;
+            }
+
+            view.PhysicalObject.PreparePointerAnchor(screenPosition);
+            trayDragOnTable = true;
             return true;
         }
 
@@ -808,6 +975,10 @@ namespace ConsoleCards.Presentation.Interaction
             releasesLockOnCompletion = false;
             handReorderPreviewActive = false;
             handReorderTargetIndex = -1;
+            trayDragActive = false;
+            trayDragOnTable = false;
+            trayExitInProgress = false;
+            handView?.EndTrayDrag();
         }
 
         private CardView GetActiveCardView()

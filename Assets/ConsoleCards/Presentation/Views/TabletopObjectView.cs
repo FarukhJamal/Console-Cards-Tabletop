@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Presentation.Coordinates;
 using ConsoleCards.Presentation.Interaction;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace ConsoleCards.Presentation.Views
 {
@@ -20,6 +22,15 @@ namespace ConsoleCards.Presentation.Views
         private TabletopPose previewPose;
         private bool isContainerLayoutApplied;
         private TabletopPose containerLayoutPose;
+        // Overlay presentation (e.g. the camera hand tray): scale, shadows and solid colliders are
+        // changed while it is active and restored by every other pose path.
+        private bool isOverlayPresentation;
+        private Vector3 overlayBaseScale;
+        private List<Renderer> overlayRenderers;
+        private List<ShadowCastingMode> overlayShadowModes;
+        private List<bool> overlayReceiveShadows;
+        private List<Collider> overlayColliders;
+        private List<Collider> overlayTriggerColliders;
 
         public bool IsBound => isBound;
         public PhysicalLooseObject PhysicalObject { get; internal set; }
@@ -36,6 +47,11 @@ namespace ConsoleCards.Presentation.Views
         public bool IsContainerLayoutApplied => isContainerLayoutApplied;
 
         public TabletopPose ContainerLayoutPose => isContainerLayoutApplied ? containerLayoutPose : TabletopPose.Default;
+
+        public bool IsOverlayPresentation => isOverlayPresentation;
+
+        /// <summary>The authored local scale, also while an overlay presentation scales the View.</summary>
+        public Vector3 BaseLocalScale => isOverlayPresentation ? overlayBaseScale : transform.localScale;
 
         protected void BindBase(
             TabletopObjectState state,
@@ -56,6 +72,7 @@ namespace ConsoleCards.Presentation.Views
         public void ApplyAcceptedState()
         {
             EnsureBound();
+            ClearOverlayPresentation();
 
             if (PhysicalObject != null && boundState.ContainerId.IsEmpty)
             {
@@ -77,6 +94,7 @@ namespace ConsoleCards.Presentation.Views
         public void ApplyPreviewPose(TabletopPose pose)
         {
             EnsureBound();
+            ClearOverlayPresentation();
 
             ValidateFinitePreviewPose(pose);
             Vector3 worldPosition = coordinateConverter.ToWorldPosition(pose);
@@ -107,6 +125,7 @@ namespace ConsoleCards.Presentation.Views
         public void ApplyContainerLayoutPose(TabletopPose pose, float additionalWorldHeight)
         {
             EnsureBound();
+            ClearOverlayPresentation();
             PhysicalObject?.DisableForContainer();
 
             if (boundState.ContainerId.IsEmpty)
@@ -130,6 +149,132 @@ namespace ConsoleCards.Presentation.Views
                 worldRotation);
         }
 
+        /// <summary>
+        /// Places a contained object at an explicit world pose (for layouts that are not on the table plane).
+        /// Keeps the contained-layout flags of ApplyContainerLayoutPose; physics interpolation stays off.
+        /// </summary>
+        public void ApplyContainerWorldPose(Vector3 worldPosition, Quaternion worldRotation)
+        {
+            EnsureBound();
+            ClearOverlayPresentation();
+            ApplyContainerWorldPoseCore(worldPosition, worldRotation);
+        }
+
+        /// <summary>
+        /// ApplyContainerWorldPose as an overlay: the View is scaled from its authored scale, casts and
+        /// receives no shadows, and its solid colliders become triggers so physics queries ignore it.
+        /// Any other pose path restores all three.
+        /// </summary>
+        internal void ApplyContainerOverlayPose(Vector3 worldPosition, Quaternion worldRotation, float scaleFactor)
+        {
+            EnsureBound();
+            if (!IsFinite(scaleFactor) || scaleFactor <= 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(scaleFactor));
+            }
+
+            BeginOverlayPresentation();
+            ApplyContainerWorldPoseCore(worldPosition, worldRotation);
+            transform.localScale = overlayBaseScale * scaleFactor;
+        }
+
+        /// <summary>Restores scale, shadows and colliders changed by ApplyContainerOverlayPose.</summary>
+        internal void ClearOverlayPresentation()
+        {
+            if (!isOverlayPresentation)
+            {
+                return;
+            }
+
+            isOverlayPresentation = false;
+            transform.localScale = overlayBaseScale;
+            for (int i = 0; i < overlayRenderers.Count; i++)
+            {
+                Renderer overlayRenderer = overlayRenderers[i];
+                if (overlayRenderer == null) continue;
+                overlayRenderer.shadowCastingMode = overlayShadowModes[i];
+                overlayRenderer.receiveShadows = overlayReceiveShadows[i];
+            }
+
+            for (int i = 0; i < overlayTriggerColliders.Count; i++)
+            {
+                if (overlayTriggerColliders[i] != null) overlayTriggerColliders[i].isTrigger = false;
+            }
+
+            overlayRenderers.Clear();
+            overlayShadowModes.Clear();
+            overlayReceiveShadows.Clear();
+            overlayTriggerColliders.Clear();
+        }
+
+        private void ApplyContainerWorldPoseCore(Vector3 worldPosition, Quaternion worldRotation)
+        {
+            PhysicalObject?.DisableForContainer();
+            if (boundState.ContainerId.IsEmpty)
+            {
+                throw new InvalidOperationException("Container layout can only be applied to contained objects.");
+            }
+
+            if (!IsFinite(worldPosition.x) || !IsFinite(worldPosition.y) || !IsFinite(worldPosition.z))
+            {
+                throw new ArgumentOutOfRangeException(nameof(worldPosition));
+            }
+
+            float yaw = worldRotation.eulerAngles.y;
+            containerLayoutPose = new TabletopPose(
+                coordinateConverter.ToTableCoordinate(worldPosition),
+                yaw > 180f ? yaw - 360f : yaw,
+                boundState.Pose.Layer,
+                boundState.Pose.LocalOrder);
+            isContainerLayoutApplied = true;
+            transform.SetPositionAndRotation(worldPosition, worldRotation);
+        }
+
+        private void BeginOverlayPresentation()
+        {
+            if (isOverlayPresentation)
+            {
+                return;
+            }
+
+            if (overlayRenderers == null)
+            {
+                overlayRenderers = new List<Renderer>();
+                overlayShadowModes = new List<ShadowCastingMode>();
+                overlayReceiveShadows = new List<bool>();
+                overlayColliders = new List<Collider>();
+                overlayTriggerColliders = new List<Collider>();
+            }
+
+            isOverlayPresentation = true;
+            overlayBaseScale = transform.localScale;
+            GetComponentsInChildren(true, overlayRenderers);
+            for (int i = 0; i < overlayRenderers.Count; i++)
+            {
+                Renderer overlayRenderer = overlayRenderers[i];
+                overlayShadowModes.Add(overlayRenderer.shadowCastingMode);
+                overlayReceiveShadows.Add(overlayRenderer.receiveShadows);
+                overlayRenderer.shadowCastingMode = ShadowCastingMode.Off;
+                overlayRenderer.receiveShadows = false;
+            }
+
+            GetComponentsInChildren(true, overlayColliders);
+            for (int i = 0; i < overlayColliders.Count; i++)
+            {
+                Collider overlayCollider = overlayColliders[i];
+                if (overlayCollider.isTrigger
+                    || (overlayCollider is MeshCollider meshCollider && !meshCollider.convex))
+                {
+                    continue;
+                }
+
+                overlayCollider.isTrigger = true;
+                overlayTriggerColliders.Add(overlayCollider);
+            }
+
+            overlayColliders.Clear();
+        }
+
         public void ClearContainerLayout()
         {
             containerLayoutPose = TabletopPose.Default;
@@ -149,6 +294,7 @@ namespace ConsoleCards.Presentation.Views
 
         public virtual void Unbind()
         {
+            ClearOverlayPresentation();
             PhysicalObject?.DisableForContainer();
             PhysicalObject = null;
             boundState = null;

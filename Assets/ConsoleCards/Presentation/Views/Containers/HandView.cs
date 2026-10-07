@@ -9,6 +9,8 @@ using UnityEngine;
 
 namespace ConsoleCards.Presentation.Views.Containers
 {
+    // Runs after the camera controller so the camera tray follows this frame's camera pose.
+    [DefaultExecutionOrder(100)]
     public sealed class HandView : MonoBehaviour, IContainerLayoutView
     {
         [SerializeField] private Transform layoutAnchor;
@@ -24,6 +26,20 @@ namespace ConsoleCards.Presentation.Views.Containers
         [SerializeField] private float hoverScale = 1.025f;
         [SerializeField] private float selectedScale = 1.06f;
         [SerializeField] private float interactionResponse = 18f;
+        // Camera tray (unscaled tray units). Hover/selected cards rise up the screen (forward), lift
+        // toward the camera (up) and grow; neighbours of the hovered card spread apart. Every tray card
+        // eases toward its target in tray space, so nothing in the tray ever jumps.
+        [SerializeField] private float trayHoverRise = 0.35f;
+        [SerializeField] private float traySelectedRise = 0.5f;
+        [SerializeField] private float trayHoverLift = 0.15f;
+        [SerializeField] private float traySelectedLift = 0.12f;
+        [SerializeField] private float trayHoverScale = 1.15f;
+        [SerializeField] private float traySelectedScale = 1.2f;
+        [SerializeField] private float trayHoverSpread = 0.35f;
+        [SerializeField] private float trayCardStep = 0.004f;
+        [SerializeField] private float trayResponse = 14f;
+        [SerializeField] private float trayDragResponse = 30f;
+        [SerializeField] private float trayHandoffDuration = 0.16f;
 
         private readonly List<CardView> suppliedCardViews = new List<CardView>();
         private readonly List<CardView> layoutAppliedCards = new List<CardView>();
@@ -46,6 +62,21 @@ namespace ConsoleCards.Presentation.Views.Containers
         private readonly HashSet<TabletopObjectId> assistedSelectedCardIds =
             new HashSet<TabletopObjectId>();
         private bool isBound;
+        private HandTrayRig trayRig;
+        private CardView trayDraggedCard;
+        private Vector2 trayDragScreenPosition;
+        private Vector2 trayDragOffset;
+        private CardView trayExcludedCard;
+        // Current pose of each tray card in tray space; Scale is relative to the tray scale.
+        private readonly Dictionary<TabletopObjectId, TrayMotion> trayMotions =
+            new Dictionary<TabletopObjectId, TrayMotion>();
+        // True while a bind or tray switch lays out: cards are placed at rest instead of easing in.
+        private bool trayPlanSnaps;
+        private bool trayHandoffActive;
+        private float trayHandoffElapsed;
+        private TrayMotion trayHandoffStart;
+        private Vector3 trayHandoffWorldPosition;
+        private Quaternion trayHandoffWorldRotation;
 
         public bool IsBound => isBound;
 
@@ -56,6 +87,10 @@ namespace ConsoleCards.Presentation.Views.Containers
         public Transform LayoutAnchor => layoutAnchor;
 
         public int VisibleCardCount { get; private set; }
+
+        internal bool IsTrayMode => trayRig != null;
+
+        internal HandTrayRig TrayRig => trayRig;
 
         public float HorizontalSpacing
         {
@@ -119,7 +154,15 @@ namespace ConsoleCards.Presentation.Views.Containers
             suppliedCardViews.Clear();
             suppliedCardViews.AddRange(cardViews);
             isBound = true;
-            ApplyPlan(plan);
+            trayPlanSnaps = true;
+            try
+            {
+                ApplyPlan(plan);
+            }
+            finally
+            {
+                trayPlanSnaps = false;
+            }
         }
 
         public void ApplyAcceptedLayout()
@@ -157,6 +200,148 @@ namespace ConsoleCards.Presentation.Views.Containers
         {
             presentationTransitions = transitions;
             restSurfaceRenderer = restSurface;
+        }
+
+        /// <summary>
+        /// Optional camera tray. While set, cards are laid out on the tray anchor in camera space instead
+        /// of on the table; null returns the hand to its table layout.
+        /// </summary>
+        internal void ConfigureTray(HandTrayRig rig)
+        {
+            if (ReferenceEquals(trayRig, rig))
+            {
+                return;
+            }
+
+            RestoreTrayPresentation();
+            trayRig = rig;
+            if (isBound)
+            {
+                trayPlanSnaps = true;
+                try
+                {
+                    ApplyAcceptedLayout();
+                }
+                finally
+                {
+                    trayPlanSnaps = false;
+                }
+            }
+        }
+
+        internal bool IsScreenPointInTray(Vector2 screenPosition)
+        {
+            return isBound && trayRig != null && trayRig.ContainsScreenPoint(screenPosition);
+        }
+
+        /// <summary>
+        /// A card dragged inside the tray follows the pointer on the tray plane. A card coming back from
+        /// the table shrinks into the tray from where it is, centred on the pointer.
+        /// </summary>
+        internal void SetTrayDragPointer(CardView card, Vector2 screenPosition, bool keepGrabOffset)
+        {
+            if (!isBound || trayRig == null || card == null)
+            {
+                return;
+            }
+
+            if (!ReferenceEquals(trayDraggedCard, card))
+            {
+                trayDragOffset = Vector2.zero;
+                if (!keepGrabOffset)
+                {
+                    // Re-entering from the table: start from where the card is now, centred on the pointer.
+                    trayMotions.Remove(card.ObjectId);
+                }
+
+                if (keepGrabOffset
+                    && trayMotions.TryGetValue(card.ObjectId, out TrayMotion motion)
+                    && TryGetTrayLocalPoint(screenPosition, out Vector3 pointerLocal))
+                {
+                    trayDragOffset = new Vector2(
+                        motion.Position.x - pointerLocal.x,
+                        motion.Position.z - pointerLocal.z);
+                }
+            }
+
+            trayHandoffActive = false;
+            trayDraggedCard = card;
+            trayDragScreenPosition = screenPosition;
+        }
+
+        /// <summary>
+        /// The pointer left the tray: the card flies and grows toward its table pose (which follows the
+        /// pointer) over trayHandoffDuration. The caller then hands it to physics already in place.
+        /// </summary>
+        internal void SetTrayHandoffTarget(CardView card, Vector3 worldPosition, Quaternion worldRotation)
+        {
+            if (!isBound || trayRig == null || card == null)
+            {
+                return;
+            }
+
+            if (!trayHandoffActive || !ReferenceEquals(trayDraggedCard, card))
+            {
+                trayDraggedCard = card;
+                trayHandoffActive = true;
+                trayHandoffElapsed = 0f;
+                trayHandoffStart = trayMotions.TryGetValue(card.ObjectId, out TrayMotion motion)
+                    ? motion
+                    : CaptureTrayMotion(card);
+            }
+
+            trayHandoffWorldPosition = worldPosition;
+            trayHandoffWorldRotation = worldRotation;
+        }
+
+        internal bool IsTrayHandoffComplete(CardView card)
+        {
+            return trayHandoffActive
+                && ReferenceEquals(trayDraggedCard, card)
+                && trayHandoffElapsed >= trayHandoffDuration;
+        }
+
+        internal void EndTrayDrag()
+        {
+            trayDraggedCard = null;
+            trayHandoffActive = false;
+        }
+
+        internal bool TryGetTrayReorderTargetIndex(
+            CardView movingCard,
+            Vector2 screenPosition,
+            out int targetIndex)
+        {
+            targetIndex = -1;
+            if (!isBound
+                || trayRig == null
+                || movingCard == null
+                || !movingCard.IsBound
+                || movingCard.CardState == null
+                || movingCard.CardState.BaseState.ContainerId != containerState.Id)
+            {
+                return false;
+            }
+
+            int currentIndex = containerState.IndexOf(movingCard.ObjectId);
+            if (currentIndex < 0 || !TryGetTrayLocalPoint(screenPosition, out Vector3 local))
+            {
+                return false;
+            }
+
+            float pitch = CalculatePitch(containerState.Count);
+            if (containerState.Count <= 1 || pitch <= 0f)
+            {
+                targetIndex = currentIndex;
+                return true;
+            }
+
+            float center = (containerState.Count - 1) * 0.5f;
+            targetIndex = Mathf.Clamp(
+                Mathf.RoundToInt((local.x / pitch) + center),
+                0,
+                containerState.Count - 1);
+            return true;
         }
 
         /// <summary>
@@ -245,13 +430,14 @@ namespace ConsoleCards.Presentation.Views.Containers
                 return false;
             }
 
-            Plane plane = new Plane(layoutAnchor.up, layoutAnchor.position);
+            Transform pickAnchor = trayRig != null ? trayRig.Anchor : layoutAnchor;
+            Plane plane = new Plane(pickAnchor.up, pickAnchor.position);
             if (!plane.Raycast(ray, out float distance))
             {
                 return false;
             }
 
-            Vector3 localPoint = layoutAnchor.InverseTransformPoint(ray.GetPoint(distance));
+            Vector3 localPoint = pickAnchor.InverseTransformPoint(ray.GetPoint(distance));
             float halfWidth = cardLayoutWidth * 0.5f;
             float center = (pickOrder.Count - 1) * 0.5f;
             for (int i = pickOrder.Count - 1; i >= 0; i--)
@@ -262,8 +448,12 @@ namespace ConsoleCards.Presentation.Views.Containers
                     continue;
                 }
 
+                // In the tray a lifted card also owns the strip it has risen into.
+                float lowerDepth = pickHalfDepths[i];
+                float upperDepth = lowerDepth + (trayRig != null ? TrayRise(card) : 0f);
                 if (Mathf.Abs(localPoint.x - ((i - center) * layoutPitch)) <= halfWidth
-                    && Mathf.Abs(localPoint.z) <= pickHalfDepths[i])
+                    && localPoint.z >= -lowerDepth
+                    && localPoint.z <= upperDepth)
                 {
                     pickedCard = card;
                     return true;
@@ -305,6 +495,8 @@ namespace ConsoleCards.Presentation.Views.Containers
         public void Unbind()
         {
             ResetInteractionPresentation();
+            RestoreTrayPresentation();
+            trayRig = null;
             ContainerViewBinding.ClearAppliedCards(layoutAppliedCards);
             containerState = null;
             converter = null;
@@ -317,6 +509,12 @@ namespace ConsoleCards.Presentation.Views.Containers
 
         private void LateUpdate()
         {
+            if (isBound && trayRig != null)
+            {
+                LateUpdateTray();
+                return;
+            }
+
             if (!isBound || interactionPoses.Count == 0) return;
             float blend = 1f - Mathf.Exp(-interactionResponse * Time.unscaledDeltaTime);
             interactionCleanup.Clear();
@@ -411,6 +609,13 @@ namespace ConsoleCards.Presentation.Views.Containers
 
         private void ApplyPlan(IReadOnlyList<CardLayoutPlan> plan)
         {
+            if (trayRig != null)
+            {
+                ApplyTrayPlan(plan, null);
+                VisibleCardCount = plan.Count;
+                return;
+            }
+
             transform.SetPositionAndRotation(layoutAnchor.position, layoutAnchor.rotation);
             ContainerViewBinding.ApplyPlan(plan, layoutAppliedCards, containerState.Id);
             UpdateInteractionPoses(plan, null);
@@ -422,6 +627,12 @@ namespace ConsoleCards.Presentation.Views.Containers
             IReadOnlyList<CardLayoutPlan> plan,
             CardView movingCard)
         {
+            if (trayRig != null)
+            {
+                ApplyTrayPlan(plan, movingCard);
+                return;
+            }
+
             transform.SetPositionAndRotation(layoutAnchor.position, layoutAnchor.rotation);
             for (int i = 0; i < plan.Count; i++)
             {
@@ -548,8 +759,303 @@ namespace ConsoleCards.Presentation.Views.Containers
             {
                 CardView card = plan[i].CardView;
                 pickOrder.Add(card);
-                pickHalfDepths.Add(ComponentRestHeight.HalfDepth(card.transform, cardLayoutWidth * 0.7f));
+                pickHalfDepths.Add(trayRig != null
+                    ? TrayHalfDepth(card)
+                    : ComponentRestHeight.HalfDepth(card.transform, cardLayoutWidth * 0.7f));
             }
+        }
+
+        private void ApplyTrayPlan(IReadOnlyList<CardLayoutPlan> plan, CardView excludedCard)
+        {
+            for (int i = 0; i < layoutAppliedCards.Count; i++)
+            {
+                CardView previousCard = layoutAppliedCards[i];
+                if (previousCard != null
+                    && previousCard.CardState != null
+                    && previousCard.CardState.BaseState.ContainerId != containerState.Id)
+                {
+                    previousCard.ClearOverlayPresentation();
+                    if (previousCard.IsContainerLayoutApplied)
+                    {
+                        previousCard.ClearContainerLayout();
+                    }
+
+                    trayMotions.Remove(previousCard.ObjectId);
+                }
+            }
+
+            layoutAppliedCards.Clear();
+            for (int i = 0; i < plan.Count; i++)
+            {
+                layoutAppliedCards.Add(plan[i].CardView);
+            }
+
+            trayExcludedCard = excludedCard;
+            RecordPickOrder(plan);
+            trayRig.UpdateFrame(TrayCardDepth(), layoutWidth, traySelectedRise);
+
+            // Cards keep their current pose here (new members start where they are); LateUpdateTray
+            // eases them to their slots, so reflows, draws and returns all glide.
+            for (int i = 0; i < pickOrder.Count; i++)
+            {
+                CardView card = pickOrder[i];
+                if (card == null
+                    || !card.IsBound
+                    || ReferenceEquals(card, excludedCard)
+                    || ReferenceEquals(card, trayDraggedCard))
+                {
+                    continue;
+                }
+
+                TabletopObjectId cardId = card.ObjectId;
+                TrayMotion motion = trayPlanSnaps
+                    ? RestTrayMotion(i)
+                    : trayMotions.TryGetValue(cardId, out TrayMotion current)
+                        ? current
+                        : CaptureTrayMotion(card);
+                trayMotions[cardId] = motion;
+                ApplyTrayMotion(card, motion);
+            }
+        }
+
+        private void LateUpdateTray()
+        {
+            trayRig.UpdateFrame(TrayCardDepth(), layoutWidth, traySelectedRise);
+            float deltaTime = Time.unscaledDeltaTime;
+            float settle = 1f - Mathf.Exp(-trayResponse * deltaTime);
+            float follow = 1f - Mathf.Exp(-trayDragResponse * deltaTime);
+            int focusIndex = -1;
+            if (!hoveredCardId.IsEmpty)
+            {
+                for (int i = 0; i < pickOrder.Count; i++)
+                {
+                    if (pickOrder[i] != null && pickOrder[i].IsBound && pickOrder[i].ObjectId == hoveredCardId)
+                    {
+                        focusIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            float center = (pickOrder.Count - 1) * 0.5f;
+            for (int i = 0; i < pickOrder.Count; i++)
+            {
+                CardView card = pickOrder[i];
+                if (card == null
+                    || !card.IsBound
+                    || card.CardState == null
+                    || card.CardState.BaseState.ContainerId != containerState.Id)
+                {
+                    continue;
+                }
+
+                TabletopObjectId cardId = card.ObjectId;
+                if (ReferenceEquals(card, trayDraggedCard))
+                {
+                    if (trayHandoffActive)
+                    {
+                        ApplyTrayHandoff(card, deltaTime);
+                    }
+                    else
+                    {
+                        ApplyTrayDragFollow(card, follow);
+                    }
+
+                    continue;
+                }
+
+                if ((card.PhysicalObject != null && card.PhysicalObject.IsHeld) || card.IsPreviewing)
+                {
+                    // Held on the table by a drag: forget the tray pose so it re-enters from wherever it is.
+                    trayMotions.Remove(cardId);
+                    continue;
+                }
+
+                if (ReferenceEquals(card, trayExcludedCard))
+                {
+                    continue;
+                }
+
+                if (presentationTransitions != null && presentationTransitions.IsAnimating(card.transform))
+                {
+                    // Take over draw/return/reorder tweens: continue from the tween's current pose.
+                    presentationTransitions.Stop(card.transform, false);
+                    trayMotions.Remove(cardId);
+                }
+
+                TrayMotion motion = trayMotions.TryGetValue(cardId, out TrayMotion current)
+                    ? current
+                    : CaptureTrayMotion(card);
+                bool selected = cardId == selectedCardId || assistedSelectedCardIds.Contains(cardId);
+                bool hovered = !selected && cardId == hoveredCardId;
+                float spread = 0f;
+                if (focusIndex >= 0 && i != focusIndex)
+                {
+                    int distance = Mathf.Abs(i - focusIndex);
+                    spread = Mathf.Sign(i - focusIndex)
+                        * trayHoverSpread
+                        * Mathf.Max(0f, 1f - ((distance - 1) * 0.35f));
+                }
+
+                Vector3 targetPosition = new Vector3(
+                    ((i - center) * layoutPitch) + spread,
+                    (i * trayCardStep) + (selected ? traySelectedLift : hovered ? trayHoverLift : 0f),
+                    selected ? traySelectedRise : hovered ? trayHoverRise : 0f);
+                float targetScale = selected ? traySelectedScale : hovered ? trayHoverScale : 1f;
+                motion.Position = Vector3.Lerp(motion.Position, targetPosition, settle);
+                motion.Rotation = Quaternion.Slerp(motion.Rotation, Quaternion.identity, settle);
+                motion.Scale = Mathf.Lerp(motion.Scale, targetScale, settle);
+                trayMotions[cardId] = motion;
+                ApplyTrayMotion(card, motion);
+            }
+        }
+
+        private void ApplyTrayDragFollow(CardView card, float follow)
+        {
+            TabletopObjectId cardId = card.ObjectId;
+            TrayMotion motion = trayMotions.TryGetValue(cardId, out TrayMotion current)
+                ? current
+                : CaptureTrayMotion(card);
+            if (TryGetTrayLocalPoint(trayDragScreenPosition, out Vector3 pointerLocal))
+            {
+                Vector3 targetPosition = new Vector3(
+                    pointerLocal.x + trayDragOffset.x,
+                    (pickOrder.Count * trayCardStep) + traySelectedLift,
+                    pointerLocal.z + trayDragOffset.y);
+                motion.Position = Vector3.Lerp(motion.Position, targetPosition, follow);
+            }
+
+            motion.Rotation = Quaternion.Slerp(motion.Rotation, Quaternion.identity, follow);
+            motion.Scale = Mathf.Lerp(motion.Scale, traySelectedScale, follow);
+            trayMotions[cardId] = motion;
+            ApplyTrayMotion(card, motion);
+        }
+
+        private void ApplyTrayHandoff(CardView card, float deltaTime)
+        {
+            trayHandoffElapsed += deltaTime;
+            float t = trayHandoffDuration > 0f ? Mathf.Clamp01(trayHandoffElapsed / trayHandoffDuration) : 1f;
+            float eased = t * t * (3f - (2f * t));
+            Transform anchor = trayRig.Anchor;
+            float targetScale = 1f / Mathf.Max(0.0001f, trayRig.Scale);
+            float startScale = Mathf.Max(0.0001f, trayHandoffStart.Scale);
+            TrayMotion motion;
+            motion.Position = Vector3.Lerp(
+                trayHandoffStart.Position,
+                anchor.InverseTransformPoint(trayHandoffWorldPosition),
+                eased);
+            motion.Rotation = Quaternion.Slerp(
+                trayHandoffStart.Rotation,
+                Quaternion.Inverse(anchor.rotation) * trayHandoffWorldRotation,
+                eased);
+            // Interpolated in log space so the growth reads evenly as the card moves away.
+            motion.Scale = Mathf.Exp(Mathf.Lerp(Mathf.Log(startScale), Mathf.Log(targetScale), eased));
+            trayMotions[card.ObjectId] = motion;
+            ApplyTrayMotion(card, motion);
+        }
+
+        private void ApplyTrayMotion(CardView card, TrayMotion motion)
+        {
+            Transform anchor = trayRig.Anchor;
+            card.ApplyContainerOverlayPose(
+                anchor.TransformPoint(motion.Position),
+                anchor.rotation * motion.Rotation,
+                trayRig.Scale * motion.Scale);
+        }
+
+        private TrayMotion RestTrayMotion(int index)
+        {
+            TrayMotion motion;
+            motion.Position = new Vector3(
+                (index - ((pickOrder.Count - 1) * 0.5f)) * layoutPitch,
+                index * trayCardStep,
+                0f);
+            motion.Rotation = Quaternion.identity;
+            motion.Scale = 1f;
+            return motion;
+        }
+
+        private TrayMotion CaptureTrayMotion(CardView card)
+        {
+            Transform anchor = trayRig.Anchor;
+            float baseScale = card.BaseLocalScale.x;
+            float relativeScale = baseScale > 0f && trayRig.Scale > 0f
+                ? (card.transform.localScale.x / baseScale) / trayRig.Scale
+                : 1f;
+            TrayMotion motion;
+            motion.Position = anchor.InverseTransformPoint(card.transform.position);
+            motion.Rotation = Quaternion.Inverse(anchor.rotation) * card.transform.rotation;
+            motion.Scale = relativeScale;
+            return motion;
+        }
+
+        private bool TryGetTrayLocalPoint(Vector2 screenPosition, out Vector3 local)
+        {
+            local = Vector3.zero;
+            if (trayRig == null || trayRig.TargetCamera == null)
+            {
+                return false;
+            }
+
+            Transform anchor = trayRig.Anchor;
+            Ray ray = trayRig.TargetCamera.ScreenPointToRay(screenPosition);
+            Plane plane = new Plane(anchor.up, anchor.position);
+            if (!plane.Raycast(ray, out float distance))
+            {
+                return false;
+            }
+
+            local = anchor.InverseTransformPoint(ray.GetPoint(distance));
+            return true;
+        }
+
+        // How far a card has currently risen up the screen; picking extends its strip by this much.
+        private float TrayRise(CardView card)
+        {
+            return card != null && trayMotions.TryGetValue(card.ObjectId, out TrayMotion motion)
+                ? Mathf.Max(0f, motion.Position.z)
+                : 0f;
+        }
+
+        // Half depth from the authored (unscaled) collider, so tray scaling does not change picking.
+        private float TrayHalfDepth(CardView card)
+        {
+            BoxCollider box = card.GetComponent<BoxCollider>();
+            return box != null
+                ? box.size.z * 0.5f * card.BaseLocalScale.z
+                : cardLayoutWidth * 0.7f;
+        }
+
+        private float TrayCardDepth()
+        {
+            float halfDepth = 0f;
+            for (int i = 0; i < pickHalfDepths.Count; i++)
+            {
+                halfDepth = Mathf.Max(halfDepth, pickHalfDepths[i]);
+            }
+
+            return halfDepth > 0f ? halfDepth * 2f : cardLayoutWidth * 1.4f;
+        }
+
+        private void RestoreTrayPresentation()
+        {
+            if (trayRig == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < layoutAppliedCards.Count; i++)
+            {
+                if (layoutAppliedCards[i] != null)
+                {
+                    layoutAppliedCards[i].ClearOverlayPresentation();
+                }
+            }
+
+            trayDraggedCard = null;
+            trayExcludedCard = null;
+            trayHandoffActive = false;
+            trayMotions.Clear();
         }
 
         private static Quaternion FlattenToRest(Quaternion current, Quaternion rest)
@@ -572,6 +1078,13 @@ namespace ConsoleCards.Presentation.Views.Containers
             {
                 throw new InvalidOperationException("HandView is not bound.");
             }
+        }
+
+        private struct TrayMotion
+        {
+            public Vector3 Position;
+            public Quaternion Rotation;
+            public float Scale;
         }
 
         private sealed class HandInteractionPose

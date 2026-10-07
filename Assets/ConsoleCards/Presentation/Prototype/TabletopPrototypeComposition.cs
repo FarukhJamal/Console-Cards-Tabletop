@@ -308,6 +308,9 @@ namespace ConsoleCards.Presentation.Prototype
 
         private DeckView deckView;
         private HandView handView;
+        // Camera hand tray: created once, reused across session rebuilds (keeps its collapsed state).
+        private HandTrayRig handTrayRig;
+        private Action toggleHandTrayAction;
         private DiscardPileView discardPileView;
         private ConsoleView consoleView;
         private ConsoleLayoutData consoleLayout;
@@ -2150,6 +2153,12 @@ namespace ConsoleCards.Presentation.Prototype
         private void OnDestroy()
         {
             Shutdown();
+            if (handTrayRig != null)
+            {
+                Destroy(handTrayRig.gameObject);
+                handTrayRig = null;
+            }
+
             if (runtimeUi != null)
             {
                 runtimeUi.ReleaseBindings();
@@ -2164,12 +2173,14 @@ namespace ConsoleCards.Presentation.Prototype
         {
             if (HandleRedoShortcut()) return;
             if (HandleUndoShortcut()) return;
+            HandleHandTrayShortcut();
             physicalAuthority?.Tick();
             CompletePhysicalFloorfallIfSettled();
             CompletePhysicalFloorCollapseIfSettled();
             CompletePhysicalBlindDirectionIfSettled();
             presentationTransitions?.Tick(Time.unscaledDeltaTime);
             RefreshHandInteractionPresentation();
+            RefreshHandTrayDropTarget();
             RefreshCardContentVisibility();
             if (feedbackHoldUntil > 0f && Time.unscaledTime >= feedbackHoldUntil)
             {
@@ -2181,6 +2192,66 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshToolboxPlacementUi();
             RefreshOpenTabletopPopup();
             RefreshCardInspectPopup();
+        }
+
+        // The tray band is a drop target only while a card drag is in progress.
+        private void RefreshHandTrayDropTarget()
+        {
+            if (handTrayRig == null || handView == null || !handView.IsTrayMode)
+            {
+                return;
+            }
+
+            bool cardDragActive = interactionStateMachine != null
+                && interactionStateMachine.Phase == TabletopInteractionPhase.DraggingObject
+                && ((containedCardDragCoordinator != null && containedCardDragCoordinator.ActiveCardView != null)
+                    || (moveCoordinator != null && moveCoordinator.ActiveView is CardView));
+            handTrayRig.SetDropTargetActive(cardDragActive);
+        }
+
+        private void HandleHandTrayShortcut()
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (!IsInitialized
+                || keyboard == null
+                || !keyboard.hKey.wasPressedThisFrame
+                || keyboard.leftCtrlKey.isPressed
+                || keyboard.rightCtrlKey.isPressed)
+            {
+                return;
+            }
+
+            ToggleHandTray();
+        }
+
+        private void ToggleHandTray()
+        {
+            if (handTrayRig == null || handView == null || !handView.IsTrayMode)
+            {
+                return;
+            }
+
+            handTrayRig.SetCollapsed(!handTrayRig.IsCollapsed);
+            ShowMessage(handTrayRig.IsCollapsed ? "Hand collapsed (H to show)." : "Hand shown.");
+        }
+
+        private List<PrototypePopupActionOption> AddHandTrayToggleAction(
+            List<PrototypePopupActionOption> actions)
+        {
+            if (handTrayRig != null && handView != null && handView.IsTrayMode)
+            {
+                if (toggleHandTrayAction == null)
+                {
+                    toggleHandTrayAction = ToggleHandTray;
+                }
+
+                actions.Add(new PrototypePopupActionOption(
+                    handTrayRig.IsCollapsed ? "Show Hand (H)" : "Hide Hand (H)",
+                    true,
+                    toggleHandTrayAction));
+            }
+
+            return actions;
         }
 
         private void RefreshHandInteractionPresentation()
@@ -3523,7 +3594,7 @@ namespace ConsoleCards.Presentation.Prototype
                 runtimeUi.ShowTrapFloorStatus(
                     turnStatus,
                     BuildFloorfallStatusModel(),
-                    BuildTrapFloorTurnActions());
+                    AddHandTrayToggleAction(BuildTrapFloorTurnActions()));
                 return;
             }
 
@@ -3562,7 +3633,7 @@ namespace ConsoleCards.Presentation.Prototype
                 TrapFloorActionHelpText());
 
             PrototypeFloorfallStatusModel floorfall = BuildFloorfallStatusModel();
-            runtimeUi.ShowTrapFloorStatus(status, floorfall, BuildTrapFloorAssistedActions());
+            runtimeUi.ShowTrapFloorStatus(status, floorfall, AddHandTrayToggleAction(BuildTrapFloorAssistedActions()));
         }
 
         private PrototypeFloorfallStatusModel BuildFloorfallStatusModel()
@@ -7760,12 +7831,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             Bounds? localBounds = null;
-            if (sceneHandVisual != null && sceneHandVisual.gameObject.activeInHierarchy)
-            {
-                EncapsulateBounds(
-                    ref localBounds,
-                    CreatePresentationBounds(sceneHandVisual.transform, 0.75f));
-            }
+            // The hand is a camera tray; it is not part of the framed table area.
 
             if (sceneConsoleView != null && sceneConsoleView.gameObject.activeInHierarchy)
             {
@@ -8414,6 +8480,16 @@ namespace ConsoleCards.Presentation.Prototype
             sceneDeckVisual.gameObject.SetActive(false);
             handView = sceneHandVisual.GetView<HandView>();
             handView.ConfigurePresentation(presentationTransitions, sceneHandVisual.FeedbackRenderer);
+            if (handTrayRig == null)
+            {
+                handTrayRig = HandTrayRig.Create(
+                    targetCamera,
+                    sceneHandVisual.TargetCollider.gameObject.layer,
+                    sceneHandVisual.FeedbackRenderer.sharedMaterial);
+            }
+
+            handTrayRig.Activate();
+            handView.ConfigureTray(handTrayRig);
             DeactivateUnusedSceneStack(sceneStackAVisual);
             DeactivateUnusedSceneStack(sceneStackBVisual);
             discardPileView = null;
@@ -8575,7 +8651,7 @@ namespace ConsoleCards.Presentation.Prototype
                 ConfigureFixedContainer(instance.Visual, instance.View);
             }
 
-            ConfigureFixedContainer(sceneHandVisual, handView);
+            ConfigureHandTrayDropTarget();
             foreach (StackRuntimeView stackRuntimeView in stackViewsByContainerId.Values)
             {
                 ConfigureStackDropTarget(stackRuntimeView);
@@ -8593,6 +8669,20 @@ namespace ConsoleCards.Presentation.Prototype
                 instance.DropTarget.enabled = true;
                 instance.TargetCollider.enabled = true;
             }
+        }
+
+        // The table hand plate stays bound for its HandView but is hidden and never a drop target;
+        // the camera tray band receives hand drops and shows the hand feedback instead.
+        private void ConfigureHandTrayDropTarget()
+        {
+            sceneHandVisual.DropTarget.ClearConfiguration();
+            sceneHandVisual.DropTarget.enabled = false;
+            sceneHandVisual.TargetCollider.enabled = false;
+            sceneHandVisual.SetBasePlateHidden(true);
+            sceneHandVisual.ClearFeedback();
+            sceneHandVisual.Label.gameObject.SetActive(false);
+            handTrayRig.ConfigureDropTarget(handView);
+            feedbackTargetsByContainerId[handView.ContainerId] = new ContainerFeedbackTarget(handTrayRig);
         }
 
         private void BuildInteractionGraph()
@@ -10732,6 +10822,11 @@ namespace ConsoleCards.Presentation.Prototype
             ReleaseSceneOwnedFixedContainer(sceneDeckVisual, deckView, deckContainerId);
             deckView = null;
             ReleaseSceneOwnedFixedContainer(sceneHandVisual, handView, handContainerId);
+            if (handTrayRig != null)
+            {
+                handTrayRig.Deactivate();
+            }
+
             handView = null;
             ReleaseSceneOwnedFixedContainer(sceneDiscardPileVisual, discardPileView, discardContainerId);
             discardPileView = null;
@@ -11947,6 +12042,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             private readonly PrototypeConsoleSlotVisual authoredSlotVisual;
             private readonly PrototypeFixedContainerVisual authoredFixedContainerVisual;
+            private readonly HandTrayRig handTrayRig;
 
             public ContainerFeedbackTarget(PrototypeConsoleSlotVisual slotVisual)
             {
@@ -11961,8 +12057,20 @@ namespace ConsoleCards.Presentation.Prototype
                 Clear();
             }
 
+            public ContainerFeedbackTarget(HandTrayRig trayRig)
+            {
+                handTrayRig = trayRig ?? throw new ArgumentNullException(nameof(trayRig));
+                Clear();
+            }
+
             public void SetValid()
             {
+                if (handTrayRig != null)
+                {
+                    handTrayRig.ShowFeedback(HandTrayFeedback.Valid);
+                    return;
+                }
+
                 if (authoredSlotVisual != null)
                 {
                     authoredSlotVisual.ShowValidTarget();
@@ -11974,6 +12082,12 @@ namespace ConsoleCards.Presentation.Prototype
 
             public void SetSource()
             {
+                if (handTrayRig != null)
+                {
+                    handTrayRig.ShowFeedback(HandTrayFeedback.Source);
+                    return;
+                }
+
                 if (authoredSlotVisual != null)
                 {
                     authoredSlotVisual.ShowSourceTarget();
@@ -11985,6 +12099,12 @@ namespace ConsoleCards.Presentation.Prototype
 
             public void SetInvalid()
             {
+                if (handTrayRig != null)
+                {
+                    handTrayRig.ShowFeedback(HandTrayFeedback.Invalid);
+                    return;
+                }
+
                 if (authoredSlotVisual != null)
                 {
                     authoredSlotVisual.ShowInvalidTarget();
@@ -11996,6 +12116,12 @@ namespace ConsoleCards.Presentation.Prototype
 
             public void Clear()
             {
+                if (handTrayRig != null)
+                {
+                    handTrayRig.ShowFeedback(HandTrayFeedback.None);
+                    return;
+                }
+
                 if (authoredSlotVisual != null)
                 {
                     authoredSlotVisual.ClearFeedback();
