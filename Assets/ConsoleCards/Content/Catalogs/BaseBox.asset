@@ -1,0 +1,111 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4d7c1e9a2b6f4e8c9a1d3b5f7e2c4a60, type: 3}
+  m_Name: BaseBox
+  m_EditorClassIdentifier: ConsoleCards.Presentation::ConsoleCards.Presentation.Catalog.ComponentCatalog
+  catalogId: 1e2f3a4b-5c6d-4e7f-8a9b-0c1d2e3f4a50
+  displayName: Base Box
+  category: 0
+  game: {fileID: 0}
+  entries:
+  - id: a0010000-0000-4000-8000-000000000001
+    displayName: Card
+    kind: 0
+    prefab: {fileID: 100100, guid: f3dcc30c78f848c587e75bb31bc47e3b, type: 3}
+    icon: {fileID: 0}
+    showInToolbox: 1
+    toolboxOrder: 0
+    definitions: []
+  - id: 3f6b1c2a-8d4e-4a7b-9c1e-5d2f7a9b0c11
+    displayName: Deck
+    kind: 1
+    prefab: {fileID: 100100, guid: 7a0f4b2d5e9c4b1fbd4a6e8cab5f7d93, type: 3}
+    icon: {fileID: 0}
+    showInToolbox: 1
+    toolboxOrder: 1
+    definitions:
+    - role: BayStyle
+      definition: {fileID: 11400000, guid: 6f9e3a1c4d8b4a0eac3f5d7b9a4e6c82, type: 2}
+  - id: 4a7c2d3b-9e5f-4b8c-8d2f-6e3a8b0c1d22
+    displayName: Stack
+    kind: 2
+    prefab: {fileID: 100100, guid: 8b1a5c3e6fad4c2ace5b7f9dbc6a8ea4, type: 3}
+    icon: {fileID: 0}
+    showInToolbox: 1
+    toolboxOrder: 2
+    definitions:
+    - role: BayStyle
+      definition: {fileID: 11400000, guid: 6f9e3a1c4d8b4a0eac3f5d7b9a4e6c82, type: 2}
+  - id: 5b8d3e4c-af60-4c9d-9e3a-7f4b9c1d2e33
+    displayName: Discard Pile
+    kind: 3
+    prefab: {fileID: 100100, guid: 9c2b6d4f7abe4d3bdf6c8aaecd7b9fb5, type: 3}
+    icon: {fileID: 0}
+    showInToolbox: 1
+    toolboxOrder: 3
+    definitions:
+    - role: BayStyle
+      definition: {fileID: 11400000, guid: 6f9e3a1c4d8b4a0eac3f5d7b9a4e6c82, type: 2}
+  - id: a0010000-0000-4000-8000-000000000002
+    displayName: Pawn
+    kind: 5
+    prefab: {fileID: 200100, guid: 5239af82a047422eb755f790bbe5daea, type: 3}
+    icon: {fileID: 0}
+    showInToolbox: 1
+    toolboxOrder: 4
+    definitions: []
+  - id: a0010000-0000-4000-8000-000000000003
+    displayName: Token
+    kind: 6
+    prefab: {fileID: 300100, guid: 2f85d772fd64424baa3eeb27b542f608, type: 3}
+    icon: {fileID: 0}
+    showInToolbox: 1
+    toolboxOrder: 5
+    definitions: []
+  - id: a0010000-0000-4000-8000-000000000004
+    displayName: Die
+    kind: 7
+    prefab: {fileID: 610100, guid: 7a41f6c247cc4a47a0fe1586125cc1a6, type: 3}
+    icon: {fileID: 0}
+    showInToolbox: 1
+    toolboxOrder: 6
+    definitions:
+    - role: Shape
+      definition: {fileID: 11400000, guid: b6025025f1a24d9a9ba9ac75eedf0004, type: 2}
+    - role: Shape
+      definition: {fileID: 11400000, guid: b6025025f1a24d9a9ba9ac75eedf0006, type: 2}
+    - role: Shape
+      definition: {fileID: 11400000, guid: b6025025f1a24d9a9ba9ac75eedf0008, type: 2}
+    - role: Shape
+      definition: {fileID: 11400000, guid: b6025025f1a24d9a9ba9ac75eedf0010, type: 2}
+    - role: Shape
+      definition: {fileID: 11400000, guid: b6025025f1a24d9a9ba9ac75eedf0012, type: 2}
+    - role: Shape
+      definition: {fileID: 11400000, guid: b6025025f1a24d9a9ba9ac75eedf0020, type: 2}
+  - id: 6c9e4f5d-b071-4dae-8f4b-80a5ad2e3f44
+    displayName: Console
+    kind: 8
+    prefab: {fileID: 200100, guid: fa0ce3f8f1894f7591391129804cdd82, type: 3}
+    icon: {fileID: 0}
+    showInToolbox: 1
+    toolboxOrder: 7
+    definitions:
+    - role: Layout
+      definition: {fileID: 11400000, guid: 2c40dd68301a49d598d208d326abea8f, type: 2}
+  - id: 7daf5a6e-c182-4ebf-905c-91b6be3f4a55
+    displayName: Hand
+    kind: 4
+    prefab: {fileID: 400100, guid: 1b4e6c8c35f7a90a2b4c5d6e7f8091ab, type: 3}
+    icon: {fileID: 0}
+    showInToolbox: 0
+    toolboxOrder: 8
+    definitions: []

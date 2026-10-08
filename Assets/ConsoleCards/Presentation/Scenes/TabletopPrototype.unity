@@ -3483,6 +3483,7 @@ MonoBehaviour:
       gentlePlacementAngularVelocityScale: 0.03
   prototypeDeckPrefab: {fileID: 114102, guid: e81b395902c476d7f8192a3b4c5d6e78, type: 3}
   prototypeConsolePrefab: {fileID: 114100, guid: fa0ce3f8f1894f7591391129804cdd82, type: 3}
+  componentLibrary: {fileID: 11400000, guid: d06fab8dbefc4b7fbdaa0ceecbbffd0b, type: 2}
   cardView: {fileID: 2100000102}
   pawnView: {fileID: 2100000202}
   tokenView: {fileID: 2100000302}

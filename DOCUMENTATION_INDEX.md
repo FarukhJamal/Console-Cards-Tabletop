@@ -46,6 +46,7 @@ All code and type examples are illustrative unless explicitly labelled `Approved
 | `Docs/19_Console_Layout_Slots_And_Mat_Surface.md` | Console layout (72 slots), mat surface, stage plan and current stage order, Stage (a)/(a2) records |
 | `Docs/20_Generic_Game_Setup_Flow_Gap_Analysis.md` | Generic game setup flow gap analysis, GS stages, advisory turns |
 | `Docs/21_Platform_Principles.md` | Binding owner rules every stage plan must follow |
+| `Docs/22_Component_Catalog_Architecture.md` | Product boxes, box catalogs (ID, 3D prefab, UI face, linked definitions), Toolbox from catalogs |
 | `Docs/AUDIT_RESOLUTION_v1.1.md` | v1.0 audit correction record |
 | `CHANGELOG.md` | Pack history |
 | `README.md` | Repository entry point |

@@ -162,7 +162,7 @@ namespace ConsoleCards.GameTemplates
 
         public float ExtentDepth { get; }
 
-        /// <summary>Declared pile presentation of a Deck or Stack; null uses the system default pile style.</summary>
+        /// <summary>Declared pile presentation of a Deck, Stack or Discard Pile; null uses the kind's default (DefaultFor).</summary>
         public GameTemplatePileStyle PileStyle { get; }
     }
 
@@ -179,7 +179,7 @@ namespace ConsoleCards.GameTemplates
     }
 
     /// <summary>
-    /// Configurable pile parameters a Deck or Stack component declares, set by a template: the bay mark and
+    /// Configurable pile parameters a Deck, Stack or Discard Pile declares, set by a template: the bay mark and
     /// the maximum pile height, which caps the per-card step so a large pile stays low. Every pile is
     /// plate-less (its cards rest on the table); there is no plate option. Presentation data only; not part
     /// of Match State.
@@ -190,6 +190,27 @@ namespace ConsoleCards.GameTemplates
 
         /// <summary>No mark, default maximum pile height.</summary>
         public static GameTemplatePileStyle Default { get; } = new GameTemplatePileStyle();
+
+        private static readonly GameTemplatePileStyle DrawDefault = new GameTemplatePileStyle(GameTemplateBayMark.Draw);
+        private static readonly GameTemplatePileStyle DiscardDefault =
+            new GameTemplatePileStyle(GameTemplateBayMark.Discard);
+
+        /// <summary>
+        /// The system default for a pile kind, used wherever a pile has no declared style (template or Toolbox
+        /// alike): a Deck is marked Draw, a Discard Pile Discard, a Stack has no mark.
+        /// </summary>
+        public static GameTemplatePileStyle DefaultFor(ContainerKind kind)
+        {
+            switch (kind)
+            {
+                case ContainerKind.Deck:
+                    return DrawDefault;
+                case ContainerKind.DiscardPile:
+                    return DiscardDefault;
+                default:
+                    return Default;
+            }
+        }
 
         public GameTemplatePileStyle(
             GameTemplateBayMark bayMark = GameTemplateBayMark.None,

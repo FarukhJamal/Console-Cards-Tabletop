@@ -22,6 +22,7 @@ using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
 using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Camera;
+using ConsoleCards.Presentation.Catalog;
 using ConsoleCards.Presentation.Coordinates;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
@@ -94,6 +95,10 @@ namespace ConsoleCards.Presentation.Prototype
         private TabletopObjectId physicalBlindDirectionDieId;
         [SerializeField] internal PrototypeFixedContainerVisual prototypeDeckPrefab;
         [SerializeField] internal ConsoleView prototypeConsolePrefab;
+        // Component library (doc 22): Base box, Controller box, Game boxes and environment, each a catalog of
+        // components (stable ID, prefab, linked definitions). C1 spawns Decks and Stacks from it; the other
+        // prefab fields move here in C3.
+        [SerializeField] internal ComponentLibrary componentLibrary;
         [SerializeField] internal CardView cardView;
         [SerializeField] internal PawnView pawnView;
         [SerializeField] internal TokenView tokenView;
@@ -313,9 +318,12 @@ namespace ConsoleCards.Presentation.Prototype
         private Action toggleHandTrayAction;
         // Other seats' hands as face-down piles on their hand zones; rebuilt with each session.
         private readonly List<HiddenHandView> hiddenHandViews = new List<HiddenHandView>();
-        // Pile bays (doc 21): each plate-less pile's bay and the seat whose Console its mouth faces.
+        // Pile bays (doc 21): each pile's bay and the seat whose Console its mouth faces.
         private readonly List<PileBayView> pileBays = new List<PileBayView>();
         private readonly List<SeatId> pileBayOwnerSeats = new List<SeatId>();
+        // Pile prefabs resolved from the box catalogs at initialisation (doc 22).
+        private PrototypeFixedContainerVisual catalogDeckPrefab;
+        private PrototypeFixedContainerVisual catalogStackPrefab;
         private DiscardPileView discardPileView;
         private ConsoleView consoleView;
         private ConsoleLayoutData consoleLayout;
@@ -2241,40 +2249,31 @@ namespace ConsoleCards.Presentation.Prototype
             return null;
         }
 
-        // Plate-less pile with its bay (doc 21): the plate never shows (labels kept) and the root drop box
-        // becomes a trigger so the pile no longer blocks loose pieces; drops and right-clicks still resolve
-        // through it. A fixed pile (declared by the template) always shows its bay; a free pile only while
-        // empty. The mouth faces the owner seat's Console once the Consoles are bound.
-        private void AttachPileBay(
+        // A pile in its bay (doc 21 principle 17), the same whether a template or the Toolbox placed it: no
+        // plate, labels kept, and the root drop box is a trigger so the pile never blocks loose pieces; drops
+        // and right-clicks still resolve through it. The mouth faces the owner seat's Console once the
+        // Consoles are bound.
+        private void ConfigurePileBay(
             PrototypeFixedContainerVisual visual,
-            IContainerView view,
             GameTemplatePileStyle pileStyle,
-            bool fixedSpot,
             SeatId ownerSeatId)
         {
             visual.TargetCollider.isTrigger = true;
-            PileBayView bay = CreatePileBay(visual.transform, pileStyle.BayMark, fixedSpot, view);
-            visual.AttachBay(bay);
-            pileBays.Add(bay);
+            ConfigureBayFootprint(visual, pileStyle.BayMark);
+            pileBays.Add(visual.Bay);
             pileBayOwnerSeats.Add(ownerSeatId);
         }
 
-        // The bay hugs the system card footprint (ConsoleAdjacentPlacementSettings.Standard, world units).
-        private PileBayView CreatePileBay(
-            Transform pileRoot,
-            GameTemplateBayMark mark,
-            bool fixedSpot,
-            IContainerView view)
+        // The bay's outer size is the pile footprint the placement uses (ConsoleAdjacentPlacementSettings).
+        private static void ConfigureBayFootprint(PrototypeFixedContainerVisual visual, GameTemplateBayMark mark)
         {
+            if (visual.Bay == null)
+            {
+                throw new InvalidOperationException($"{visual.name} requires a Bay: pile prefabs come from the catalog.");
+            }
+
             ConsoleAdjacentPlacementSettings footprint = ConsoleAdjacentPlacementSettings.Standard;
-            return PileBayView.Create(
-                pileRoot,
-                prototypeDeckPrefab.FeedbackRenderer.sharedMaterial,
-                (float)footprint.PieceWidth,
-                (float)footprint.PieceDepth,
-                mark,
-                fixedSpot,
-                view);
+            visual.Bay.Configure((float)footprint.BayWidth, (float)footprint.BayDepth, mark);
         }
 
         // Points each owned pile's bay mouth at its owner seat's Console (call after the Consoles are bound).
@@ -3068,23 +3067,21 @@ namespace ConsoleCards.Presentation.Prototype
                 }
                 case TabletopComponentKind.Deck:
                 {
-                    PrototypeFixedContainerVisual preview = Instantiate(prototypeDeckPrefab);
+                    PrototypeFixedContainerVisual preview = Instantiate(catalogDeckPrefab);
                     preview.ValidateReferences();
                     ConfigureContainerLabel(preview.Label, "DECK");
                     preview.Label.gameObject.SetActive(!HidesPrototypeVisual(PrototypeVisualHide.ContainerLabels));
-                    preview.FeedbackRenderer.enabled = false;
-                    CreatePileBay(preview.transform, GameTemplateBayMark.None, true, null);
+                    ConfigureBayFootprint(preview, GameTemplatePileStyle.DefaultFor(ContainerKind.Deck).BayMark);
                     previewRoot = preview.gameObject;
                     break;
                 }
                 case TabletopComponentKind.Stack:
                 {
-                    PrototypeFixedContainerVisual preview = Instantiate(prototypeStackPrefab);
+                    PrototypeFixedContainerVisual preview = Instantiate(catalogStackPrefab);
                     preview.ValidateReferences();
                     ConfigureContainerLabel(preview.Label, "STACK");
                     preview.Label.gameObject.SetActive(!HidesPrototypeVisual(PrototypeVisualHide.ContainerLabels));
-                    preview.FeedbackRenderer.enabled = false;
-                    CreatePileBay(preview.transform, GameTemplateBayMark.None, true, null);
+                    ConfigureBayFootprint(preview, GameTemplatePileStyle.DefaultFor(ContainerKind.Stack).BayMark);
                     previewRoot = preview.gameObject;
                     break;
                 }
@@ -3240,8 +3237,9 @@ namespace ConsoleCards.Presentation.Prototype
                         true);
                     runtimeDeckInstances.Add(instance);
                     controllerDeckViews.Add(instance.View);
-                    instance.View.ConfigureTableRest(true, GameTemplatePileStyle.Default.MaximumPileHeight);
-                    AttachPileBay(instance.Visual, instance.View, GameTemplatePileStyle.Default, false, SeatId.Empty);
+                    GameTemplatePileStyle toolboxDeckStyle = GameTemplatePileStyle.DefaultFor(ContainerKind.Deck);
+                    instance.View.ConfigureTableRest(true, toolboxDeckStyle.MaximumPileHeight);
+                    ConfigurePileBay(instance.Visual, toolboxDeckStyle, SeatId.Empty);
                     instance.View.Bind(
                         matchState.GetContainer(result.ContainerId),
                         matchState.ContainerPlacements[result.ContainerId],
@@ -3256,12 +3254,7 @@ namespace ConsoleCards.Presentation.Prototype
                 {
                     ContainerState container = matchState.GetContainer(result.ContainerId);
                     ContainerPlacementState placement = matchState.ContainerPlacements[result.ContainerId];
-                    StackRuntimeView stack = CreateStackRuntimeView(
-                        "STACK",
-                        container,
-                        placement,
-                        true,
-                        PileBayRole.Free);
+                    StackRuntimeView stack = CreateStackRuntimeView("STACK", container, placement, true);
                     stackViewsByContainerId.Add(result.ContainerId, stack);
                     appearedTransform = stack.Root.transform;
                     layoutCollectionChanged = true;
@@ -7262,6 +7255,40 @@ namespace ConsoleCards.Presentation.Prototype
             ValidateFiniteGreaterThanOrEqualToZero(feedbackDuration, nameof(feedbackDuration));
             ValidateFiniteGreaterThanOrEqualToZero(shuffleCompression, nameof(shuffleCompression));
             ValidateToolboxPrefabReferences();
+            ValidateComponentCatalogs();
+        }
+
+        // Component library (doc 22): validated once; IDs are unique across every catalog. Resolves the pile
+        // prefabs from the Base box first, in shelf order.
+        private void ValidateComponentCatalogs()
+        {
+            if (componentLibrary == null)
+            {
+                throw new InvalidOperationException(
+                    "TabletopPrototypeComposition requires its component library (doc 22).");
+            }
+
+            componentLibrary.Validate();
+            catalogDeckPrefab = ResolveCatalogPilePrefab(ComponentCatalogKind.Deck);
+            catalogStackPrefab = ResolveCatalogPilePrefab(ComponentCatalogKind.Stack);
+            catalogDeckPrefab.ValidateReferences();
+            catalogDeckPrefab.GetView<DeckView>();
+            catalogStackPrefab.ValidateReferences();
+            ValidateStackLayoutAnchor(catalogStackPrefab);
+        }
+
+        private PrototypeFixedContainerVisual ResolveCatalogPilePrefab(ComponentCatalogKind kind)
+        {
+            IReadOnlyList<ComponentCatalog> catalogs = componentLibrary.Catalogs;
+            for (int i = 0; i < catalogs.Count; i++)
+            {
+                if (catalogs[i].TryGetFirst(kind, out ComponentCatalogEntry entry))
+                {
+                    return entry.GetPrefabComponent<PrototypeFixedContainerVisual>();
+                }
+            }
+
+            throw new InvalidOperationException($"No catalog in the component library has a {kind} entry.");
         }
 
         private void ValidateToolboxPrefabReferences()
@@ -8602,10 +8629,10 @@ namespace ConsoleCards.Presentation.Prototype
                     player.ControllerDeckId,
                     false);
                 runtimeDeckInstances.Add(controllerDeck);
-                GameTemplatePileStyle deckPileStyle =
-                    ResolveTemplatePileStyle(player.ControllerDeckId) ?? GameTemplatePileStyle.Default;
+                GameTemplatePileStyle deckPileStyle = ResolveTemplatePileStyle(player.ControllerDeckId)
+                    ?? GameTemplatePileStyle.DefaultFor(ContainerKind.Deck);
                 controllerDeck.View.ConfigureTableRest(true, deckPileStyle.MaximumPileHeight);
-                AttachPileBay(controllerDeck.Visual, controllerDeck.View, deckPileStyle, true, player.SeatId);
+                ConfigurePileBay(controllerDeck.Visual, deckPileStyle, player.SeatId);
 
                 controllerDeckViews.Add(controllerDeck.View);
                 ContainerId actionAreaId = player.ActionAbilityAreaContainerId;
@@ -8614,7 +8641,6 @@ namespace ConsoleCards.Presentation.Prototype
                     matchState.GetContainer(actionAreaId),
                     matchState.ContainerPlacements[actionAreaId],
                     false,
-                    PileBayRole.Fixed,
                     ResolveTemplatePileStyle(actionAreaId));
                 stackViewsByContainerId.Add(actionAreaId, actionArea);
 
@@ -9738,7 +9764,7 @@ namespace ConsoleCards.Presentation.Prototype
             ContainerId containerId,
             bool labelIsDecoration)
         {
-            PrototypeFixedContainerVisual visual = Instantiate(prototypeDeckPrefab);
+            PrototypeFixedContainerVisual visual = Instantiate(catalogDeckPrefab);
             GameObject root = PrepareRuntimeRoot(visual.gameObject, name);
             visual.ValidateReferences();
             DeckView view = visual.GetView<DeckView>();
@@ -10358,24 +10384,16 @@ namespace ConsoleCards.Presentation.Prototype
             return $"\n\nInput Cost: {string.Join(", ", entries)}";
         }
 
-        // How a stack pile is presented: a legacy plate (split stacks, until they become free piles), a
-        // fixed pile in its bay (declared by the template), or a free pile (bay only while empty).
-        private enum PileBayRole
-        {
-            LegacyPlate,
-            Fixed,
-            Free,
-        }
-
+        // Every Stack (template, Toolbox or Split) is the catalog's Stack pile in its bay; pileStyle null uses
+        // the kind default (no mark).
         private StackRuntimeView CreateStackRuntimeView(
             string name,
             ContainerState container,
             ContainerPlacementState placement,
             bool labelIsDecoration,
-            PileBayRole bayRole = PileBayRole.LegacyPlate,
             GameTemplatePileStyle pileStyle = null)
         {
-            PrototypeFixedContainerVisual visual = Instantiate(prototypeStackPrefab);
+            PrototypeFixedContainerVisual visual = Instantiate(catalogStackPrefab);
             GameObject root = visual.gameObject;
             if (root.scene != gameObject.scene)
             {
@@ -10388,12 +10406,8 @@ namespace ConsoleCards.Presentation.Prototype
             visual.ValidateReferences();
             StackView view = visual.GetView<StackView>();
             ConfigureContainerLabel(visual.Label, name);
-            bool plateLess = bayRole != PileBayRole.LegacyPlate;
-            GameTemplatePileStyle style = pileStyle ?? GameTemplatePileStyle.Default;
-            if (plateLess)
-            {
-                view.ConfigureTableRest(true, style.MaximumPileHeight);
-            }
+            GameTemplatePileStyle style = pileStyle ?? GameTemplatePileStyle.DefaultFor(container.Kind);
+            view.ConfigureTableRest(true, style.MaximumPileHeight);
 
             view.Bind(container, placement, visual.LayoutAnchor, coordinateConverter, cardViews);
             StackRuntimeView stackRuntimeView = new StackRuntimeView(
@@ -10406,11 +10420,7 @@ namespace ConsoleCards.Presentation.Prototype
                 visual.DropTarget);
             ConfigureFixedContainer(visual, view);
             ApplyFixedContainerVisualHide(visual, labelIsDecoration);
-            if (plateLess)
-            {
-                AttachPileBay(visual, view, style, bayRole == PileBayRole.Fixed, container.OwnerSeatId);
-            }
-
+            ConfigurePileBay(visual, style, container.OwnerSeatId);
             return stackRuntimeView;
         }
 

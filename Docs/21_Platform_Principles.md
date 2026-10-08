@@ -1,9 +1,9 @@
 # Console Cards - Platform Principles
 
 **Document ID:** 21_Platform_Principles
-**Version:** 0.2
+**Version:** 0.3
 **Status:** Binding owner rules (recorded 2026-10-07). Every stage plan must comply; a plan that needs an exception must name the rule and get the owner's approval first.
-**Source:** Owner decisions 2026-10-03 to 2026-10-08 (doc 19 §2.1 and §12.1, doc 20 §8 and §12.1, stage reviews).
+**Source:** Owner decisions 2026-10-03 to 2026-10-08 (doc 19 §2.1, §12.1 and §12.2, doc 20 §8 and §12.1, doc 22, stage reviews).
 
 ## Product
 
@@ -45,4 +45,5 @@ Console Cards is a platform of generic components and console-card-specific comp
 ## Design language
 
 16. **One design language.** Components follow the platform's design language. Games choose from what it offers (for example the bay marks) and never restyle it or add their own visual vocabulary.
-17. **Every pile is plate-less.** Every Deck, Stack and pile is a pile of cards resting on its surface; there are no plates. A fixed pile spot (declared by the template) shows a bay; a free pile shows one only while empty; Console slots are their own bays. Drop feedback tints the bay or slot. Visual hints for new players can be turned off (doc 19 §12.1).
+17. **Every pile is plate-less.** Every Deck, Stack and pile is a pile of cards resting on its surface; there are no plates. A fixed pile spot (declared by the template) shows a bay; a free pile shows one only while empty; Console slots are their own bays. Drop feedback tints the bay or slot. Visual hints for new players can be turned off (doc 19 §12.1). A pile kind behaves the same whether a template or the Toolbox places it, and a bay never overlaps anything in a layout (doc 19 §12.2).
+18. **Components are registered in box catalogs.** Every component and its definitions are registered in a catalog for its product box (Base box, Controller box, a Game box) or the environment, with a stable ID, its 3D prefab, its UI face and its linked definitions; never wired one by one. One component library gathers the catalogs: Base box, Controller box, one Game box per game, environment (doc 22).

@@ -30,7 +30,7 @@ namespace ConsoleCards.Games.TrapFloor
         private const double ControllerDeckAlongZ = 0d;
         private const double HandZoneAlongZ = 0d;
         private const double ActionStackAlongZ = 0d;
-        private const double StartingAbilityStagingAlongZ = -0.9d;
+        private const double StartingAbilityStagingAlongZ = -1.1d;
         // Each seat's Controller Deck rests in a bay marked Draw (default maximum pile height).
         private static readonly GameTemplatePileStyle ControllerDeckPileStyle =
             new GameTemplatePileStyle(GameTemplateBayMark.Draw);
@@ -745,9 +745,10 @@ namespace ConsoleCards.Games.TrapFloor
         // The pieces beside every Console, in console-local space; the same for every seat.
         private static TrapFloorSeatPieces CreateSeatPieces(ConsoleAdjacentPlacement placement, int stagingCount)
         {
-            ConsoleLocalRect controllerDeck = placement.PlaceBeside(ConsoleSide.Right, ControllerDeckAlongZ);
+            // Piles sit in bays (bay footprint); the hand zone and staged cards use the card footprint.
+            ConsoleLocalRect controllerDeck = placement.PlaceBeside(ConsoleSide.Right, ControllerDeckAlongZ, null, true);
             ConsoleLocalRect handZone = placement.PlaceBeside(ConsoleSide.Right, HandZoneAlongZ, controllerDeck);
-            ConsoleLocalRect actionStack = placement.PlaceBeside(ConsoleSide.Left, ActionStackAlongZ);
+            ConsoleLocalRect actionStack = placement.PlaceBeside(ConsoleSide.Left, ActionStackAlongZ, null, true);
             IReadOnlyList<ConsoleLocalRect> staging = placement.PlaceRow(
                 ConsoleSide.Left,
                 StartingAbilityStagingAlongZ,

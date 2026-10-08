@@ -5,6 +5,11 @@ using UnityEngine;
 
 namespace ConsoleCards.Presentation.Prototype
 {
+    /// <summary>
+    /// Shared references of a fixed container prefab (Deck, Stack, Discard pile, Hand). A pile prefab with a
+    /// bay (the Real pile prefabs, doc 22) needs no plate: drop feedback tints the bay. Without a bay the plate
+    /// (feedback renderer and its materials) is required and shows the feedback, as before.
+    /// </summary>
     public sealed class PrototypeFixedContainerVisual : MonoBehaviour
     {
         [SerializeField] private MonoBehaviour containerView;
@@ -17,8 +22,10 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] private Material validTargetMaterial;
         [SerializeField] private Material sourceTargetMaterial;
         [SerializeField] private Material invalidTargetMaterial;
+        [SerializeField] private PileBayView bay;
         private bool basePlateHidden;
-        private PileBayView bay;
+        private PileBayFeedback feedbackState;
+        private Material feedbackMaterial;
 
         public IContainerView ContainerView => containerView as IContainerView;
 
@@ -32,7 +39,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         public Renderer FeedbackRenderer => feedbackRenderer;
 
-        /// <summary>The pile's bay; when set the plate never shows and drop feedback tints the bay.</summary>
+        /// <summary>The pile's bay; when set there is no plate and drop feedback tints the bay.</summary>
         public PileBayView Bay => bay;
 
         public TView GetView<TView>() where TView : MonoBehaviour, IContainerView
@@ -54,11 +61,14 @@ namespace ConsoleCards.Presentation.Prototype
             RequireReference(targetCollider, nameof(targetCollider));
             RequireReference(dropTarget, nameof(dropTarget));
             RequireReference(label, nameof(label));
-            RequireReference(feedbackRenderer, nameof(feedbackRenderer));
-            RequireReference(baseMaterial, nameof(baseMaterial));
-            RequireReference(validTargetMaterial, nameof(validTargetMaterial));
-            RequireReference(sourceTargetMaterial, nameof(sourceTargetMaterial));
-            RequireReference(invalidTargetMaterial, nameof(invalidTargetMaterial));
+            if (bay == null)
+            {
+                RequireReference(feedbackRenderer, nameof(feedbackRenderer));
+                RequireReference(baseMaterial, nameof(baseMaterial));
+                RequireReference(validTargetMaterial, nameof(validTargetMaterial));
+                RequireReference(sourceTargetMaterial, nameof(sourceTargetMaterial));
+                RequireReference(invalidTargetMaterial, nameof(invalidTargetMaterial));
+            }
 
             if (!(containerView is IContainerView))
             {
@@ -76,7 +86,14 @@ namespace ConsoleCards.Presentation.Prototype
             ValidateHierarchyReference(layoutAnchor, nameof(layoutAnchor));
             ValidateHierarchyReference(targetCollider.transform, nameof(targetCollider));
             ValidateHierarchyReference(label.transform, nameof(label));
-            ValidateHierarchyReference(feedbackRenderer.transform, nameof(feedbackRenderer));
+            if (bay != null)
+            {
+                ValidateHierarchyReference(bay.transform, nameof(bay));
+            }
+            else
+            {
+                ValidateHierarchyReference(feedbackRenderer.transform, nameof(feedbackRenderer));
+            }
         }
 
         public void Reactivate()
@@ -89,55 +106,47 @@ namespace ConsoleCards.Presentation.Prototype
 
         public void ShowValidTarget()
         {
-            SetFeedbackMaterial(validTargetMaterial);
+            SetFeedback(PileBayFeedback.Valid, validTargetMaterial);
         }
 
         public void ShowSourceTarget()
         {
-            SetFeedbackMaterial(sourceTargetMaterial);
+            SetFeedback(PileBayFeedback.Source, sourceTargetMaterial);
         }
 
         public void ShowInvalidTarget()
         {
-            SetFeedbackMaterial(invalidTargetMaterial);
+            SetFeedback(PileBayFeedback.Invalid, invalidTargetMaterial);
         }
 
         public void SetBasePlateHidden(bool hidden)
         {
             basePlateHidden = hidden;
-            SetFeedbackMaterial(feedbackRenderer.sharedMaterial);
-        }
-
-        /// <summary>Plate-less pile: the plate never shows; drop feedback (valid, source, invalid) tints the bay.</summary>
-        public void AttachBay(PileBayView pileBay)
-        {
-            bay = pileBay ?? throw new ArgumentNullException(nameof(pileBay));
-            SetFeedbackMaterial(feedbackRenderer.sharedMaterial);
+            SetFeedback(feedbackState, feedbackMaterial != null ? feedbackMaterial : baseMaterial);
         }
 
         public void ClearFeedback()
         {
-            SetFeedbackMaterial(baseMaterial);
+            SetFeedback(PileBayFeedback.None, baseMaterial);
         }
 
-        private void SetFeedbackMaterial(Material material)
+        private void SetFeedback(PileBayFeedback state, Material material)
         {
-            feedbackRenderer.sharedMaterial = material;
+            feedbackState = state;
+            feedbackMaterial = material;
             if (bay != null)
             {
-                feedbackRenderer.enabled = false;
-                bay.ShowFeedback(
-                    ReferenceEquals(material, validTargetMaterial) ? PileBayFeedback.Valid
-                    : ReferenceEquals(material, invalidTargetMaterial) ? PileBayFeedback.Invalid
-                    : ReferenceEquals(material, sourceTargetMaterial) ? PileBayFeedback.Source
-                    : PileBayFeedback.None);
+                if (feedbackRenderer != null)
+                {
+                    feedbackRenderer.enabled = false;
+                }
+
+                bay.ShowFeedback(state);
                 return;
             }
 
-            feedbackRenderer.enabled = !basePlateHidden
-                || ReferenceEquals(material, validTargetMaterial)
-                || ReferenceEquals(material, sourceTargetMaterial)
-                || ReferenceEquals(material, invalidTargetMaterial);
+            feedbackRenderer.sharedMaterial = material;
+            feedbackRenderer.enabled = !basePlateHidden || state != PileBayFeedback.None;
         }
 
         private void ValidateHierarchyReference(Transform referencedTransform, string referenceName)

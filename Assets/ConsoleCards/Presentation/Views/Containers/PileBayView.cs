@@ -1,4 +1,4 @@
-using ConsoleCards.Core.Domain.Containers;
+using System;
 using ConsoleCards.GameTemplates;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -14,46 +14,32 @@ namespace ConsoleCards.Presentation.Views.Containers
     }
 
     /// <summary>
-    /// A pile's bay: a thin frame drawn flat on the table around a plate-less pile, with a slot mouth on the
-    /// edge facing its owner's Console (the near edge when it has none) and an optional system mark. One
-    /// platform look for every game (doc 21). A fixed pile (declared by the template) always shows its bay; a
-    /// free pile shows it only while empty. Drop feedback tints the frame. Built from collider-less bars, so it
-    /// never blocks pieces. Presentation only: it never writes authoritative state.
+    /// A pile's bay (doc 19 §12.1, doc 21 principle 17): a thin frame drawn flat on the table at the pile's
+    /// footprint, with a slot mouth on the edge facing its owner's Console (the near edge when it has none) and
+    /// a mark from the system set. Lives in each pile prefab ("Bay" child) and reads the shared PileBayStyle,
+    /// so every bay in every game looks the same. Always shown; drop feedback tints and thickens the frame.
+    /// Built from collider-less bars, so it never blocks pieces. Presentation only.
     /// </summary>
     public sealed class PileBayView : MonoBehaviour
     {
-        // Margin around the card footprint, and the bar sizes, in world units.
-        public const float FootprintMargin = 0.08f;
-        private const float BarThickness = 0.035f;
-        private const float FeedbackThicknessScale = 1.7f;
-        private const float BarHeight = 0.004f;
-        private const float Lift = 0.004f;
-        private const float MouthHalfOpening = 0.18f;
-        private const float MouthInset = 0.07f;
-        private const float MouthSlant = 0.05f;
-        private const float MarkThickness = 0.04f;
         private const int FrameBarCount = 8;
         private const int MarkBarCount = 3;
 
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorId = Shader.PropertyToID("_Color");
-        private static readonly Color RestColor = new Color(0.55f, 0.66f, 0.63f, 1f);
-        private static readonly Color SourceColor = new Color(0.45f, 0.62f, 1f, 1f);
-        private static readonly Color ValidColor = new Color(0.45f, 0.95f, 0.6f, 1f);
-        private static readonly Color InvalidColor = new Color(0.75f, 0.22f, 0.18f, 1f);
+
+        [SerializeField] private PileBayStyle style;
 
         private readonly Renderer[] frameBars = new Renderer[FrameBarCount];
         private readonly Renderer[] markBars = new Renderer[MarkBarCount];
         private MaterialPropertyBlock propertyBlock;
-        private IContainerView pileView;
         private Transform mouthTarget;
         private GameTemplateBayMark mark;
-        private bool fixedSpot;
         private float halfWidth;
         private float halfDepth;
         private BayEdge mouthEdge;
         private PileBayFeedback feedback;
-        private bool visible;
+        private bool isBuilt;
 
         private enum BayEdge
         {
@@ -63,48 +49,60 @@ namespace ConsoleCards.Presentation.Views.Containers
             Right,
         }
 
+        public PileBayStyle Style => style;
+
         public PileBayFeedback Feedback => feedback;
 
-        public bool IsFixedSpot => fixedSpot;
+        public GameTemplateBayMark Mark => mark;
 
         /// <summary>
-        /// Creates a bay under the pile root. pileView may be null (a placement preview), which always shows.
-        /// footprintWidth and footprintDepth are the card footprint in world units (the margin is added here).
+        /// Sizes the bay to the pile footprint (outer size, world units) and sets its mark. Builds the bars on
+        /// the first call; later calls re-lay them out. Call once when the pile is created, not per frame.
         /// </summary>
-        public static PileBayView Create(
-            Transform pileRoot,
-            Material material,
-            float footprintWidth,
-            float footprintDepth,
-            GameTemplateBayMark bayMark,
-            bool isFixedSpot,
-            IContainerView view)
+        public void Configure(float footprintWidth, float footprintDepth, GameTemplateBayMark bayMark)
         {
-            GameObject root = new GameObject("Pile Bay");
-            root.transform.SetParent(pileRoot, false);
-            root.transform.localPosition = new Vector3(0f, Lift, 0f);
-            root.transform.localRotation = Quaternion.identity;
-            root.transform.localScale = Vector3.one;
-            PileBayView bay = root.AddComponent<PileBayView>();
-            bay.Build(material, footprintWidth, footprintDepth, bayMark, isFixedSpot, view);
-            return bay;
+            if (style == null)
+            {
+                throw new InvalidOperationException($"{name} requires a Pile Bay Style.");
+            }
+
+            style.Validate();
+            if (!Enum.IsDefined(typeof(GameTemplateBayMark), bayMark))
+            {
+                throw new ArgumentOutOfRangeException(nameof(bayMark));
+            }
+
+            if (!isBuilt)
+            {
+                CreateBars(frameBars);
+                CreateBars(markBars);
+                propertyBlock = new MaterialPropertyBlock();
+                feedback = PileBayFeedback.None;
+                mouthEdge = ResolveMouthEdge();
+                isBuilt = true;
+            }
+
+            transform.localPosition = new Vector3(0f, style.Lift, 0f);
+            transform.localRotation = Quaternion.identity;
+            transform.localScale = Vector3.one;
+            mark = bayMark;
+            halfWidth = Mathf.Max(0.01f, footprintWidth) * 0.5f;
+            halfDepth = Mathf.Max(0.01f, footprintDepth) * 0.5f;
+            LayoutFrame();
+            LayoutMark();
+            ApplyColor();
         }
 
         /// <summary>The Console the mouth should face; null faces the near edge (local -z).</summary>
         public void SetMouthTarget(Transform target)
         {
             mouthTarget = target;
-            BayEdge edge = ResolveMouthEdge();
-            if (edge != mouthEdge)
-            {
-                mouthEdge = edge;
-                LayoutFrame();
-            }
+            RefreshMouthEdge();
         }
 
         public void ShowFeedback(PileBayFeedback state)
         {
-            if (state == feedback || propertyBlock == null)
+            if (!isBuilt || state == feedback)
             {
                 return;
             }
@@ -112,77 +110,29 @@ namespace ConsoleCards.Presentation.Views.Containers
             feedback = state;
             ApplyColor();
             LayoutFrame();
-            RefreshVisibility();
-        }
-
-        private void Build(
-            Material material,
-            float footprintWidth,
-            float footprintDepth,
-            GameTemplateBayMark bayMark,
-            bool isFixedSpot,
-            IContainerView view)
-        {
-            mark = bayMark;
-            fixedSpot = isFixedSpot;
-            pileView = view;
-            halfWidth = (Mathf.Max(0.01f, footprintWidth) * 0.5f) + FootprintMargin;
-            halfDepth = (Mathf.Max(0.01f, footprintDepth) * 0.5f) + FootprintMargin;
-            CreateBars(material, frameBars);
-            CreateBars(material, markBars);
-            propertyBlock = new MaterialPropertyBlock();
-            feedback = PileBayFeedback.None;
-            mouthEdge = BayEdge.Near;
-            LayoutFrame();
-            LayoutMark();
-            ApplyColor();
-            visible = true;
-            RefreshVisibility();
         }
 
         private void LateUpdate()
         {
-            if (mouthTarget != null)
+            if (isBuilt && mouthTarget != null)
             {
-                BayEdge edge = ResolveMouthEdge();
-                if (edge != mouthEdge)
-                {
-                    mouthEdge = edge;
-                    LayoutFrame();
-                }
+                RefreshMouthEdge();
             }
-
-            RefreshVisibility();
         }
 
-        private void RefreshVisibility()
+        private void RefreshMouthEdge()
         {
-            bool show = fixedSpot
-                || feedback != PileBayFeedback.None
-                || pileView == null
-                || !pileView.IsBound
-                || IsEmpty(pileView.ContainerState);
-            if (show == visible)
+            if (!isBuilt)
             {
                 return;
             }
 
-            visible = show;
-            for (int i = 0; i < frameBars.Length; i++)
+            BayEdge edge = ResolveMouthEdge();
+            if (edge != mouthEdge)
             {
-                frameBars[i].enabled = show;
+                mouthEdge = edge;
+                LayoutFrame();
             }
-
-            bool showMark = show && mark != GameTemplateBayMark.None;
-            for (int i = 0; i < markBars.Length; i++)
-            {
-                markBars[i].enabled = showMark && markBars[i].transform.localScale.z > 0f;
-            }
-        }
-
-        private static bool IsEmpty(ContainerState container)
-        {
-            return container == null || container.Count == 0;
         }
 
         private BayEdge ResolveMouthEdge()
@@ -204,8 +154,9 @@ namespace ConsoleCards.Presentation.Views.Containers
         private void LayoutFrame()
         {
             float thickness = feedback == PileBayFeedback.None
-                ? BarThickness
-                : BarThickness * FeedbackThicknessScale;
+                ? style.BarThickness
+                : style.BarThickness * style.FeedbackThicknessScale;
+            float opening = style.MouthHalfOpening;
             int bar = 0;
             for (int edge = 0; edge < 4; edge++)
             {
@@ -218,10 +169,10 @@ namespace ConsoleCards.Presentation.Views.Containers
 
                 Vector2 tangent = (end - start).normalized;
                 Vector2 middle = (start + end) * 0.5f;
-                Vector2 openA = middle - (tangent * MouthHalfOpening);
-                Vector2 openB = middle + (tangent * MouthHalfOpening);
-                Vector2 insetA = middle - (tangent * (MouthHalfOpening - MouthSlant)) + (inward * MouthInset);
-                Vector2 insetB = middle + (tangent * (MouthHalfOpening - MouthSlant)) + (inward * MouthInset);
+                Vector2 openA = middle - (tangent * opening);
+                Vector2 openB = middle + (tangent * opening);
+                Vector2 insetA = middle - (tangent * (opening - style.MouthSlant)) + (inward * style.MouthInset);
+                Vector2 insetB = middle + (tangent * (opening - style.MouthSlant)) + (inward * style.MouthInset);
                 SetBar(frameBars[bar++], start, openA, thickness);
                 SetBar(frameBars[bar++], openB, end, thickness);
                 SetBar(frameBars[bar++], openA, insetA, thickness);
@@ -230,40 +181,47 @@ namespace ConsoleCards.Presentation.Views.Containers
             }
         }
 
-        // System marks, drawn from bars and pointing to local -z: Draw is a down arrow, Discard a cross over
-        // a line. None hides the mark bars.
+        // System marks in the middle of the bay, drawn from bars and pointing to local -z: Draw is a down
+        // arrow, Discard a cross over a line. None hides the mark bars. A pile covers its mark while it has cards.
         private void LayoutMark()
         {
+            float s = style.MarkScale;
+            float t = style.MarkThickness;
             switch (mark)
             {
                 case GameTemplateBayMark.Draw:
-                    SetBar(markBars[0], new Vector2(0f, 0.22f), new Vector2(0f, -0.2f), MarkThickness);
-                    SetBar(markBars[1], new Vector2(-0.15f, -0.05f), new Vector2(0f, -0.2f), MarkThickness);
-                    SetBar(markBars[2], new Vector2(0.15f, -0.05f), new Vector2(0f, -0.2f), MarkThickness);
+                    SetBar(markBars[0], new Vector2(0f, 0.22f) * s, new Vector2(0f, -0.2f) * s, t);
+                    SetBar(markBars[1], new Vector2(-0.15f, -0.05f) * s, new Vector2(0f, -0.2f) * s, t);
+                    SetBar(markBars[2], new Vector2(0.15f, -0.05f) * s, new Vector2(0f, -0.2f) * s, t);
+                    SetMarkVisible(true);
                     break;
                 case GameTemplateBayMark.Discard:
-                    SetBar(markBars[0], new Vector2(-0.16f, 0.2f), new Vector2(0.16f, -0.12f), MarkThickness);
-                    SetBar(markBars[1], new Vector2(0.16f, 0.2f), new Vector2(-0.16f, -0.12f), MarkThickness);
-                    SetBar(markBars[2], new Vector2(-0.2f, -0.26f), new Vector2(0.2f, -0.26f), MarkThickness);
+                    SetBar(markBars[0], new Vector2(-0.16f, 0.2f) * s, new Vector2(0.16f, -0.12f) * s, t);
+                    SetBar(markBars[1], new Vector2(0.16f, 0.2f) * s, new Vector2(-0.16f, -0.12f) * s, t);
+                    SetBar(markBars[2], new Vector2(-0.2f, -0.26f) * s, new Vector2(0.2f, -0.26f) * s, t);
+                    SetMarkVisible(true);
                     break;
                 default:
-                    for (int i = 0; i < markBars.Length; i++)
-                    {
-                        markBars[i].transform.localScale = Vector3.zero;
-                        markBars[i].enabled = false;
-                    }
-
+                    SetMarkVisible(false);
                     break;
+            }
+        }
+
+        private void SetMarkVisible(bool visible)
+        {
+            for (int i = 0; i < markBars.Length; i++)
+            {
+                markBars[i].enabled = visible;
             }
         }
 
         private void ApplyColor()
         {
             Color color = feedback == PileBayFeedback.Valid
-                ? ValidColor
+                ? style.ValidColor
                 : feedback == PileBayFeedback.Invalid
-                    ? InvalidColor
-                    : feedback == PileBayFeedback.Source ? SourceColor : RestColor;
+                    ? style.InvalidColor
+                    : feedback == PileBayFeedback.Source ? style.SourceColor : style.RestColor;
             propertyBlock.SetColor(BaseColorId, color);
             propertyBlock.SetColor(ColorId, color);
             for (int i = 0; i < frameBars.Length; i++)
@@ -304,26 +262,47 @@ namespace ConsoleCards.Presentation.Views.Containers
             }
         }
 
-        // Places a flat bar from a to b (local x/z), extended by its thickness so corners close.
-        private static void SetBar(Renderer bar, Vector2 a, Vector2 b, float thickness)
+        // Places a flat bar from a to b (local x/z), extended by its thickness so corners close. The bar is
+        // drawn inside the footprint edge, so the bay never reaches past the pile footprint.
+        private void SetBar(Renderer bar, Vector2 a, Vector2 b, float thickness)
         {
             Vector2 delta = b - a;
             float length = delta.magnitude;
             Transform barTransform = bar.transform;
             Vector2 middle = (a + b) * 0.5f;
-            barTransform.localPosition = new Vector3(middle.x, 0f, middle.y);
+            Vector2 inset = InsetTowardCentre(middle, thickness * 0.5f);
+            barTransform.localPosition = new Vector3(inset.x, 0f, inset.y);
             barTransform.localRotation = length > 0f
                 ? Quaternion.LookRotation(new Vector3(delta.x, 0f, delta.y), Vector3.up)
                 : Quaternion.identity;
-            barTransform.localScale = new Vector3(thickness, BarHeight, length + thickness);
+            barTransform.localScale = new Vector3(thickness, style.BarHeight, length);
         }
 
-        private void CreateBars(Material material, Renderer[] bars)
+        // Moves a point on an outer edge inward by the given amount, so a bar's outer face lies on the edge.
+        private Vector2 InsetTowardCentre(Vector2 point, float amount)
+        {
+            float x = point.x;
+            float y = point.y;
+            if (Mathf.Abs(Mathf.Abs(x) - halfWidth) < 0.0001f)
+            {
+                x -= Mathf.Sign(x) * amount;
+            }
+
+            if (Mathf.Abs(Mathf.Abs(y) - halfDepth) < 0.0001f)
+            {
+                y -= Mathf.Sign(y) * amount;
+            }
+
+            return new Vector2(x, y);
+        }
+
+        private void CreateBars(Renderer[] bars)
         {
             for (int i = 0; i < bars.Length; i++)
             {
                 GameObject bar = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 bar.name = $"Bay Bar {i}";
+                bar.layer = gameObject.layer;
                 Collider barCollider = bar.GetComponent<Collider>();
                 if (barCollider != null)
                 {
@@ -332,7 +311,7 @@ namespace ConsoleCards.Presentation.Views.Containers
 
                 bar.transform.SetParent(transform, false);
                 Renderer barRenderer = bar.GetComponent<Renderer>();
-                barRenderer.sharedMaterial = material;
+                barRenderer.sharedMaterial = style.Material;
                 barRenderer.shadowCastingMode = ShadowCastingMode.Off;
                 barRenderer.receiveShadows = false;
                 bars[i] = barRenderer;

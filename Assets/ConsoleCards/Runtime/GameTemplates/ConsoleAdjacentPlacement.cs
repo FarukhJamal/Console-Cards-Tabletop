@@ -44,19 +44,22 @@ namespace ConsoleCards.GameTemplates
 
     /// <summary>
     /// Parameters for placing pieces beside a Console. Gap and piece size are data here, not game constants.
-    /// Standard: 0.2 gap, a 1.0 x 1.4 portrait card pile, at least 0.15 clearance and 0.1 table margin.
+    /// Standard: 0.2 gap, a 1.0 x 1.4 portrait card, a 0.08 bay margin (a pile's bay is 1.16 x 1.56), at least
+    /// 0.15 clearance and 0.1 table margin. Pieces in a bay (Deck, Stack, Discard Pile) use the bay footprint,
+    /// so a bay never overlaps anything; loose cards and hand zones use the card footprint.
     /// </summary>
     public sealed class ConsoleAdjacentPlacementSettings
     {
         public static ConsoleAdjacentPlacementSettings Standard { get; } =
-            new ConsoleAdjacentPlacementSettings(0.2d, 1.0d, 1.4d, 0.15d, 0.1d);
+            new ConsoleAdjacentPlacementSettings(0.2d, 1.0d, 1.4d, 0.15d, 0.1d, 0.08d);
 
         public ConsoleAdjacentPlacementSettings(
             double gap,
             double pieceWidth,
             double pieceDepth,
             double minimumClearance,
-            double minimumTableMargin)
+            double minimumTableMargin,
+            double bayMargin = 0d)
         {
             if (!ConsoleLocalRect.IsFinite(gap) || gap < 0d)
                 throw new ArgumentOutOfRangeException(nameof(gap));
@@ -68,12 +71,15 @@ namespace ConsoleCards.GameTemplates
                 throw new ArgumentOutOfRangeException(nameof(minimumClearance));
             if (!ConsoleLocalRect.IsFinite(minimumTableMargin) || minimumTableMargin < 0d)
                 throw new ArgumentOutOfRangeException(nameof(minimumTableMargin));
+            if (!ConsoleLocalRect.IsFinite(bayMargin) || bayMargin < 0d)
+                throw new ArgumentOutOfRangeException(nameof(bayMargin));
 
             Gap = gap;
             PieceWidth = pieceWidth;
             PieceDepth = pieceDepth;
             MinimumClearance = minimumClearance;
             MinimumTableMargin = minimumTableMargin;
+            BayMargin = bayMargin;
         }
 
         public double Gap { get; }
@@ -81,6 +87,11 @@ namespace ConsoleCards.GameTemplates
         public double PieceDepth { get; }
         public double MinimumClearance { get; }
         public double MinimumTableMargin { get; }
+        /// <summary>Margin of a pile's bay around the card footprint, on every side.</summary>
+        public double BayMargin { get; }
+        /// <summary>Outer size of a pile's bay: the card footprint plus the bay margin on both sides.</summary>
+        public double BayWidth => PieceWidth + (2d * BayMargin);
+        public double BayDepth => PieceDepth + (2d * BayMargin);
     }
 
     /// <summary>One rectangle in table space taking part in the placement check.</summary>
@@ -190,16 +201,23 @@ namespace ConsoleCards.GameTemplates
         public IReadOnlyList<ConsoleLocalRect> ConsoleShape => consoleShape;
 
         /// <summary>
-        /// One piece of the settings size centred at alongZ, the gap beyond the Console's outer edge on that side,
-        /// or beyond an inner piece on the same side when the two share a z band.
+        /// One piece centred at alongZ, the gap beyond the Console's outer edge on that side, or beyond an inner
+        /// piece on the same side when the two share a z band. inBay: the piece is a pile in a bay and takes the
+        /// bay footprint; otherwise the card footprint.
         /// </summary>
-        public ConsoleLocalRect PlaceBeside(ConsoleSide side, double alongZ, ConsoleLocalRect? innerPiece = null)
+        public ConsoleLocalRect PlaceBeside(
+            ConsoleSide side,
+            double alongZ,
+            ConsoleLocalRect? innerPiece = null,
+            bool inBay = false)
         {
             if (!ConsoleLocalRect.IsFinite(alongZ)) throw new ArgumentOutOfRangeException(nameof(alongZ));
-            double halfDepth = Settings.PieceDepth * 0.5d;
+            double width = inBay ? Settings.BayWidth : Settings.PieceWidth;
+            double depth = inBay ? Settings.BayDepth : Settings.PieceDepth;
+            double halfDepth = depth * 0.5d;
             double edge = OuterEdge(side, alongZ - halfDepth, alongZ + halfDepth, innerPiece);
-            double distance = edge + Settings.Gap + (Settings.PieceWidth * 0.5d);
-            return new ConsoleLocalRect((int)side * distance, alongZ, Settings.PieceWidth, Settings.PieceDepth);
+            double distance = edge + Settings.Gap + (width * 0.5d);
+            return new ConsoleLocalRect((int)side * distance, alongZ, width, depth);
         }
 
         /// <summary>A row of pieces going outward along x, each the gap apart, the first placed as by PlaceBeside.</summary>

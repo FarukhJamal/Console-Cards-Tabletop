@@ -2,7 +2,7 @@
 
 **Document ID:** 19_Console_Layout_Slots_And_Mat_Surface
 **Version:** 0.2
-**Status:** Stages (a), (a2) and (a2b) implemented (2026-10-06/07/08; records in §4.4, §11 and §12); (a2b) 3a pile bays written 2026-10-08 (§12.1), 3b and 4 pending. Later stages each need their own approved plan; the current order is §9.1. Binding platform rules: `21_Platform_Principles.md`.
+**Status:** Stages (a), (a2) and (a2b) implemented (2026-10-06/07/08; records in §4.4, §11 and §12); (a2b) 3a pile bays written 2026-10-08 (§12.1); C1 component catalogs and pile prefabs written 2026-10-08 (§12.2, doc 22); 3b pending. Later stages each need their own approved plan; the current order is §9.1. Binding platform rules: `21_Platform_Principles.md`.
 **Source:** Stage 3c-1 read-only report (cube cells and the mat as a surface) and the user's decisions on it.
 **Purpose:** Define the console as one generic component whose mat exposes every card slot and every cube position as data, so any Game can choose what to use.
 
@@ -237,7 +237,7 @@ Inputs:
 
 Done: (a) definition + variant (2026-10-06); (a2) hand tray (2026-10-07, §11); (a2b) deck, stack and staging placement (2026-10-08, §12).
 
-1. ~~(a2b) Deck, stack and staging placement~~ — done (§12). Follow-up in progress (§12.1): 3a plate-less fixed piles with bays; 3b new-player hints (Hints switch, legal targets light during a drag); 4 split stacks become free piles.
+1. ~~(a2b) Deck, stack and staging placement~~ — done (§12). Follow-up (§12.1, §12.2): 3a plate-less piles with bays (done); catalog stages C1 (written), C2 (Toolbox UI prefab from the catalogs, Real UI prefab catalog, Discard Pile in Runtime and the Toolbox) and C3 (every other spawn from the catalogs, Controller and Trap Floor boxes filled, old prefab fields removed), doc 22; then 3b new-player hints (Hints switch, legal targets light during a drag). Stage 4 (split stacks) is absorbed by C1.
 2. (a2c) Hand optional (declared per template, in its rules), before the first template without a hand. Includes: removing Trap Floor's Action area; one routing rule for granted cards (starting cards, purchases): into the owner's hand when the template uses one, otherwise loose on the table at the next free staging spot (placement-checked); the purchase service accepts the seat's own Hand as destination.
 3. (c) Mat support surface.
 4. (b) Card slot targeting and settle.
@@ -249,7 +249,7 @@ Done: (a) definition + variant (2026-10-06); (a2) hand tray (2026-10-07, §11); 
 ## 10. Open items
 
 - ~~Trap Floor seat container stopgaps~~ — resolved by (a2b) (§12).
-- **Split stacks (until (a2b) Stage 4):** stacks created by Split keep the plate and the old rest rule. Stage 4 makes them free piles (§12.1); the rest of the stacking/decks work stays in the interaction queue (§9.1).
+- **Split stacks (resolved by C1, §12.2):** a split stack is the catalog's Stack pile in its bay, like every other Stack. The rest of the stacking/decks work stays in the interaction queue (§9.1).
 - Seat 0 worst-case overhang of 0.037 past the near table edge.
 - Mapping of the current Trap Floor Main/Side slots to layout keys, to be fixed in the Stage (a) plan from the current prefab's anchor order.
 - **Multiplayer (open, for the multiplayer stage):** `TransferCardUseCase` has no owner rule for Hand destinations, so any player can transfer a card into another player's hand. The H2 hand comfort cap is a local setting that only guards the owner's own draws and drops, so it does not close this. Do not fix before the multiplayer stage.
@@ -290,3 +290,10 @@ Done: (a) definition + variant (2026-10-06); (a2) hand tray (2026-10-07, §11); 
 - **Which piles (3a):** fixed piles declared by the template (Trap Floor Controller Decks; the Action area until (a2c) removes it) always show their bay. Toolbox decks and stacks are free piles: plate-less, bay only while empty. The Toolbox spawn and move ghosts show a bay outline instead of the plate. Console slot stacks are unchanged (the slot is the bay). Split stacks: Stage 4. The scene deck, stacks and discard pile are never shown in either session, so they are untouched.
 - **Feedback:** valid, source and invalid drop feedback tint the bay frame (thicker; invalid is a darker red), not a plate.
 - **Kept for the scene value:** `PrototypeVisualHide.ContainerPlates` still exists so the saved scene loads; a pile with a bay ignores it.
+
+### 12.2 C1: one pile behaviour, catalog pile prefabs, bays never overlap (2026-10-08)
+
+- **One behaviour per pile kind (owner):** a Deck, Stack or Discard Pile behaves the same whether a template or the Toolbox places it (and a Split stack is a Stack). Every pile always shows its bay; the fixed/free split of §12.1 is removed. The mark comes from the kind (`GameTemplatePileStyle.DefaultFor`: Deck → Draw, Discard Pile → Discard, Stack → none) unless a template declares a style. Validation now also allows a pile style on a Discard Pile.
+- **Pile prefabs:** `Content/Prefabs/Real/Deck.prefab`, `Stack.prefab` and `DiscardPile.prefab`, each with a `Model` placeholder (for the future model, e.g. the controller box whose lid is the card organizer) and a `Bay` child (`PileBayView`) reading the shared `PileBayStyle.asset` (material, colours, bar sizes). The composition spawns every runtime Deck and Stack, and the spawn and move ghosts, from the Base Box catalog (doc 22). The Prototype pile prefabs stay only for the hidden scene piles.
+- **Bays never overlap (owner):** placement uses the bay footprint for piles in a bay (`ConsoleAdjacentPlacementSettings.BayMargin` 0.08 → `BayWidth` × `BayDepth` 1.16 × 1.56; `PlaceBeside(..., inBay: true)`), and the card footprint for loose cards and hand zones. The bay is drawn inside that footprint. Trap Floor: deck (+4.455, 0), hand zone (+5.735, 0), Action area (−4.455, 0), Easy staging along-z moved from −0.9 to −1.1 so it clears the next seat's hand zone: (−5.735, −1.1) and (−6.935, −1.1). Build check: minimum clearance 0.200; table margin 0.644 (Easy), 1.664 (Hard, Impossible). Player drops stay free.
+- **Open:** the Toolbox quick-spawn grid (0.62 × 0.72 steps, used when a component is added without the ghost) is smaller than a card for every kind; it moves to catalog footprints in C2.
