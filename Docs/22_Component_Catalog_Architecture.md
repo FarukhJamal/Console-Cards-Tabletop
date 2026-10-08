@@ -2,7 +2,7 @@
 
 **Document ID:** 22_Component_Catalog_Architecture
 **Version:** 0.1
-**Status:** Stages C1 and C1b written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs). C2 and C3 pending; each needs its own approved plan. Binding rule: doc 21 principle 18.
+**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox). C2b and C3 pending; each needs its own approved plan. Binding rule: doc 21 principle 18.
 **Source:** Owner decisions 2026-10-08 and the product material (box set, controller box and game box images).
 **Purpose:** Define how every component and its definitions are registered, so the table, the Toolbox and the UI resolve the same component from one place.
 
@@ -64,10 +64,21 @@
 
 - **C1 (written):** catalog types and validation, `BaseBox`/`ControllerBox`/`TrapFloor` catalogs, `PileBayStyle`, the three pile prefabs, one behaviour per pile kind, bay footprint in placement; the composition spawns Decks and Stacks from the catalogs.
 - **C1b (written):** `ComponentLibrary` (Base, Controller, Game boxes, Environment); Game boxes name their game; Super Leroy Sisters box (empty); the scene references the library through one field (`componentLibrary`).
-- **C2:** the Toolbox becomes a UI prefab built from the library (tabs Base, Controller, Game Boxes with the current game, Environment; one button per entry); a new `RealUiPrefabCatalog` (UI prefab catalog) holds it plus the untouched Prototype UI prefabs; Discard Pile in Runtime (create, move, delete) and in the Toolbox; the quick-spawn grid uses catalog footprints.
+- **C2a (written):** the authored Toolbox (§7); several cards placed at once become one Deck; the Real UI prefab catalog; the scene's `RuntimeUiManager` uses it.
+- **C2b:** Discard Pile in Runtime (create, move, delete) and in the Toolbox (cards arrive face down, declared on the pile style). Also: the quick-spawn grid uses catalog footprints.
 - **C3:** every other spawn (card, pawn, token, die, console, hand) from the catalogs; game board and mapping board prefabs; Controller and Trap Floor boxes filled; the old prefab fields and their scene lines removed.
 
 ## 6. Open items
 
 - **Controller deck size:** Trap Floor's controller deck is 48 cards today (no Start or Select). Owner to decide whether Trap Floor uses Start and Select.
 - **UI faces:** icons and card art per entry are empty until the art is supplied.
+
+## 7. Toolbox (C2a, owner decisions 2026-10-08)
+
+- **No UI is built at runtime (owner).** `Content/Prefabs/Real/UI/ComponentToolbox.prefab` is an authored prefab (`ComponentToolboxView`); each tile is a `ToolboxEntryTile` that names one catalog entry. At runtime the Toolbox only binds clicks, checks that every Toolbox entry of the library has exactly one tile and every tile has an entry, and switches tabs, chips and the Placing card.
+- **Edit-time builder:** `Console Cards > Toolbox > Build Toolbox Prefab` makes the whole prefab (it also runs once by itself when the prefab is missing); `Sync Tiles from Library` regenerates only the tabs, game chips and tiles by cloning the templates inside the prefab (`Templates`: tab, chip, tile, empty state), so restyling a template and syncing restyles every copy. Both point the Real UI prefab catalog's Toolbox entry at the prefab and give icon-less entries their kind's icon.
+- **Look (approved mockup, canvas "Toolbox" page):** cream panel with a thick dark outline and offset shadow, orange header, pixel-font titles (Silkscreen) and Chakra Petch text (both OFL, `Content/UI/Fonts/`), tabs Base Box / Controller Box / Games (one chip per game box; the current game's chip is selected) / Environment when the library has one; two-column tiles with icon, name and the entry's description; an empty-box message for shelves with no tiles; controls in the footer. While placing, the panel folds into a Placing card (icon, "PLACING", subject and rotation) with the controls at the bottom centre.
+- **Cards:** the Card tile has a − / + counter (1–99). 1 places one loose card; 2 or more place one Deck holding that many face-down cards, in one command (`CreateTabletopComponentRequest.DeckCardCount`), so one Undo removes both. The ghost shows the deck in its bay with the cards stacked.
+- **Dice:** the Die tile's size chips come from the entry's linked Shape definitions; a chip places that size at once.
+- **Discard Pile** is hidden from the Toolbox until C2b (`showInToolbox` off).
+- **Real UI prefab catalog:** `Content/Prefabs/Real/UI/RealUiPrefabCatalog.asset` holds the new Toolbox plus the ten Prototype UI prefabs not yet remade; the scene's `RuntimeUiManager.prefabCatalog` points at it. The Prototype Toolbox prefab and view stay untouched and unused.

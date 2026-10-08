@@ -28,6 +28,8 @@ namespace ConsoleCards.Presentation.Interaction
         private int localOrder;
         private TabletopPose previewPose;
         private bool hasValidPreviewPose;
+        // The frame a placement began: a click that started it (a Toolbox tile) never also confirms it.
+        private int beginFrame = -1;
         private Func<TabletopPose, bool> activeCommitPlacement;
         private Action<bool> activePlacementEnded;
         internal PhysicalTabletopSurfaces PhysicalSurfaces { get; set; }
@@ -150,6 +152,7 @@ namespace ConsoleCards.Presentation.Interaction
             activeCommitPlacement = requestedCommitPlacement;
             activePlacementEnded = requestedPlacementEnded;
             hasValidPreviewPose = false;
+            beginFrame = Time.frameCount;
             // Measured once per placement so the ghost rests exactly where the placed piece will (P1a).
             restLift = ComponentRestHeight.RestLift(previewRoot.transform);
             batchCardRestLift = previewRoot.transform.childCount > 0
@@ -199,6 +202,7 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             if (confirmPressedThisFrame
+                && Time.frameCount != beginFrame
                 && !pointerBlockedByUi
                 && hasValidPreviewPose
                 && activeCommitPlacement != null
@@ -233,7 +237,10 @@ namespace ConsoleCards.Presentation.Interaction
                 // clearance and settles here.
                 previewRoot.transform.SetPositionAndRotation(hit.point + (Vector3.up * restLift),
                     coordinateConverter.ToWorldRotation(previewPose));
-                if (PhysicalQuantity > 1 && previewRoot.transform.childCount == PhysicalQuantity)
+                // Card ghosts sit under a wrapper root that measures no body of its own, so each card,
+                // a single one included, is lifted by its own rest height (otherwise it sinks into the table).
+                if ((PhysicalQuantity > 1 || componentKind == TabletopComponentKind.Card)
+                    && previewRoot.transform.childCount == PhysicalQuantity)
                     for (int i = 0; i < PhysicalQuantity; i++)
                         if (PhysicalSurfaces.TryAtLayout(GenericCardBatchLayout.ResolvePose(
                             previewPose, i, PhysicalQuantity, localOrder), out RaycastHit cardHit))

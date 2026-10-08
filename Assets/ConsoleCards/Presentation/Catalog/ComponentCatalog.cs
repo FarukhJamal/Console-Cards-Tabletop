@@ -61,6 +61,7 @@ namespace ConsoleCards.Presentation.Catalog
     {
         [SerializeField] private string id;
         [SerializeField] private string displayName;
+        [SerializeField] private string description;
         [SerializeField] private ComponentCatalogKind kind;
         [SerializeField] private GameObject prefab;
         [SerializeField] private Sprite icon;
@@ -71,6 +72,9 @@ namespace ConsoleCards.Presentation.Catalog
         public string Id => id;
 
         public string DisplayName => displayName;
+
+        /// <summary>One short line for the UI face (the Toolbox tile hint).</summary>
+        public string Description => description ?? string.Empty;
 
         public ComponentCatalogKind Kind => kind;
 

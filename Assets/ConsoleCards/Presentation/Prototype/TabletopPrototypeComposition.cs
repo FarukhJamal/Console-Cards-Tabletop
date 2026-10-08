@@ -28,6 +28,7 @@ using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
 using ConsoleCards.Presentation.Settings;
 using ConsoleCards.Presentation.UI;
+using ConsoleCards.Presentation.UI.Toolbox;
 using ConsoleCards.Presentation.Views;
 using ConsoleCards.Presentation.Views.Containers;
 using UnityEngine;
@@ -299,6 +300,8 @@ namespace ConsoleCards.Presentation.Prototype
         private int toolboxSpawnSequence;
         private bool toolboxPlacementHintActive;
         private string toolboxPlacementSubject;
+        // Icon of the catalog entry being placed from the Toolbox (shown on the Placing card); null otherwise.
+        private Sprite toolboxPlacementIcon;
         private TabletopObjectId contextMenuDieId;
         private TabletopObjectId contextMenuPawnId;
         private TabletopObjectId contextMenuTokenId;
@@ -2528,6 +2531,129 @@ namespace ConsoleCards.Presentation.Prototype
                     : componentKind.ToString());
         }
 
+        // A Toolbox tile was picked (doc 22, C2a). Cards: 1 places a loose card, 2 or more place one Deck of that
+        // many face-down cards. Dice: the value is the chosen size. Everything else places its component.
+        private void PlaceCatalogEntry(ComponentCatalogEntry entry, int value)
+        {
+            EnsureInitialized();
+            CloseContextMenu();
+            toolboxPlacementIcon = entry.Icon;
+            switch (entry.Kind)
+            {
+                case ComponentCatalogKind.Card:
+                    if (value <= 1)
+                    {
+                        BeginCardBatchPlacement(1);
+                    }
+                    else
+                    {
+                        BeginDeckOfCardsPlacement(Mathf.Min(value, CreateTabletopComponentUseCase.MaximumDeckCardCount));
+                    }
+
+                    break;
+                case ComponentCatalogKind.Deck:
+                    BeginToolboxPlacement(TabletopComponentKind.Deck);
+                    break;
+                case ComponentCatalogKind.Stack:
+                    BeginToolboxPlacement(TabletopComponentKind.Stack);
+                    break;
+                case ComponentCatalogKind.Pawn:
+                    BeginToolboxPlacement(TabletopComponentKind.Pawn);
+                    break;
+                case ComponentCatalogKind.Token:
+                    BeginToolboxPlacement(TabletopComponentKind.Token);
+                    break;
+                case ComponentCatalogKind.Console:
+                    BeginToolboxPlacement(TabletopComponentKind.Console);
+                    break;
+                case ComponentCatalogKind.Die:
+                    BeginToolboxPlacement(TabletopComponentKind.Die, value);
+                    break;
+                default:
+                    toolboxPlacementIcon = null;
+                    ShowMessage($"{entry.DisplayName} cannot be placed from the Toolbox yet.");
+                    break;
+            }
+        }
+
+        private void BeginDeckOfCardsPlacement(int quantity)
+        {
+            GameObject previewRoot = CreateDeckOfCardsPlacementPreview(quantity);
+            float rotation = localSeatLayout != null
+                ? localSeatLayout.PlayerZonePose.RotationDegrees
+                : 0f;
+            componentPlacementController.BeginCustomComponentPlacement(
+                TabletopComponentKind.Deck,
+                previewRoot,
+                rotation,
+                0,
+                toolboxSpawnSequence * ToolboxPhysicalOrderStride,
+                pose => CommitDeckOfCardsPlacement(quantity, pose));
+            ShowPlacementHint($"Deck of {quantity} cards");
+        }
+
+        // One command: the Deck and its face-down cards, so one Undo removes both.
+        private bool CommitDeckOfCardsPlacement(int quantity, TabletopPose requestedPose)
+        {
+            CreateTabletopComponentResult result = componentCreationUseCase.Execute(
+                matchState,
+                activeSession.Request.ActivePlayerIds,
+                new CreateTabletopComponentRequest(
+                    CreateCommandContext(),
+                    TabletopComponentKind.Deck,
+                    requestedPose,
+                    0,
+                    CardFace.FaceUp,
+                    AuthoritativeActionKind.CreateComponent,
+                    quantity));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Add Deck rejected: {result.Error}.");
+                return false;
+            }
+
+            toolboxSpawnSequence++;
+            // The new cards need their Views before the Deck View binds (it resolves every member card).
+            for (int i = 0; i < result.CardIds.Count; i++)
+            {
+                CardView view = CreateCardView(
+                    matchState.Cards[result.CardIds[i]],
+                    "CARD",
+                    out TabletopSelectionVisual selectionVisual);
+                cardViews.Add(view);
+                cardSelectionVisuals.Add(selectionVisual);
+            }
+
+            RefreshContainerCardViewSources();
+            ProjectCreatedToolboxComponent(result);
+            RefreshContainerCardViewSources();
+            RefreshSelectionPresenterAfterRuntimeProjection();
+            RefreshCardContentVisibility();
+            Physics.SyncTransforms();
+            ShowMessage($"Added a deck of {quantity} cards.");
+            return true;
+        }
+
+        // The Deck ghost (its bay with the Draw mark) with up to 12 card ghosts stacked inside it.
+        private GameObject CreateDeckOfCardsPlacementPreview(int quantity)
+        {
+            GameObject previewRoot = CreateToolboxPlacementPreview(TabletopComponentKind.Deck, 0);
+            int shown = Mathf.Min(quantity, 12);
+            for (int i = 0; i < shown; i++)
+            {
+                PrototypeCardVisualReferences preview = Instantiate(prototypeCardPrefab, previewRoot.transform, false);
+                preview.ValidateReferences();
+                preview.FrontLabel.gameObject.SetActive(false);
+                preview.BackLabel.gameObject.SetActive(false);
+                preview.transform.localPosition = new Vector3(0f, 0.03f + (i * 0.02f), 0f);
+                preview.transform.localRotation = Quaternion.identity;
+            }
+
+            DisablePlacementPreviewInteraction(previewRoot);
+            TintPlacementPreview(previewRoot);
+            return previewRoot;
+        }
+
         private void OpenCardQuantityPopup()
         {
             EnsureInitialized();
@@ -3627,14 +3753,10 @@ namespace ConsoleCards.Presentation.Prototype
                 ResetPrototype,
                 ToggleGameTemplatesPanel,
                 CurrentStatusText(),
-                new PrototypeComponentToolboxBindings(
-                    OpenCardQuantityPopup,
-                    () => BeginToolboxPlacement(TabletopComponentKind.Deck),
-                    () => BeginToolboxPlacement(TabletopComponentKind.Stack),
-                    () => BeginToolboxPlacement(TabletopComponentKind.Pawn),
-                    () => BeginToolboxPlacement(TabletopComponentKind.Token),
-                    () => BeginToolboxPlacement(TabletopComponentKind.Console),
-                    sideCount => BeginToolboxPlacement(TabletopComponentKind.Die, sideCount)));
+                new ComponentToolboxBindings(
+                    componentLibrary,
+                    activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom ? null : trapFloorGameDefinition,
+                    PlaceCatalogEntry));
             RefreshUndoUi();
             RefreshTrapFloorStatusUi();
         }
@@ -4148,6 +4270,7 @@ namespace ConsoleCards.Presentation.Prototype
 
             toolboxPlacementHintActive = false;
             toolboxPlacementSubject = null;
+            toolboxPlacementIcon = null;
             runtimeUi?.ClearPlacementHint();
         }
 
@@ -4157,7 +4280,8 @@ namespace ConsoleCards.Presentation.Prototype
             toolboxPlacementSubject = subject;
             runtimeUi?.ShowPlacementHint(
                 subject,
-                componentPlacementController?.RotationDegrees ?? 0f);
+                componentPlacementController?.RotationDegrees ?? 0f,
+                toolboxPlacementIcon);
         }
 
         private void HandlePlacementRotationChanged(float rotationDegrees)
@@ -4167,7 +4291,7 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            runtimeUi?.ShowPlacementHint(toolboxPlacementSubject, rotationDegrees);
+            runtimeUi?.ShowPlacementHint(toolboxPlacementSubject, rotationDegrees, toolboxPlacementIcon);
         }
 
         private void RequestTableReplacement(TabletopSessionSelection selection)

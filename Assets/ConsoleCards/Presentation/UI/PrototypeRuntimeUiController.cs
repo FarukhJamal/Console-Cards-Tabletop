@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ConsoleCards.Presentation.UI.Toolbox;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.UI
@@ -20,7 +21,7 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private PrototypeStatusMessageView statusMessageView;
 
         private IRuntimeUiService uiService;
-        private PrototypeComponentToolboxView componentToolboxView;
+        private ComponentToolboxView componentToolboxView;
         private PrototypeTabletopPopupView tabletopPopupView;
         private PrototypeQuantityPopupView quantityPopupView;
         private PrototypeCardInspectView cardInspectPopupView;
@@ -93,7 +94,7 @@ namespace ConsoleCards.Presentation.UI
             Action resetSession,
             Action openGameTemplates,
             string statusMessage,
-            PrototypeComponentToolboxBindings componentToolboxBindings)
+            ComponentToolboxBindings componentToolboxBindings)
         {
             ValidateReferences();
             EnsureComponentToolboxView();
@@ -128,10 +129,10 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
-        public void ShowPlacementHint(string placementSubject, float rotationDegrees)
+        public void ShowPlacementHint(string placementSubject, float rotationDegrees, Sprite icon = null)
         {
             EnsureComponentToolboxView();
-            componentToolboxView.ShowPlacementHint(placementSubject, rotationDegrees);
+            componentToolboxView.ShowPlacementHint(placementSubject, rotationDegrees, icon);
         }
 
         public void ClearPlacementHint() => componentToolboxView?.ClearPlacementHint();
@@ -391,7 +392,7 @@ namespace ConsoleCards.Presentation.UI
         private void EnsureComponentToolboxView()
         {
             EnsureService();
-            componentToolboxView = uiService.AcquireCached<PrototypeComponentToolboxView>(
+            componentToolboxView = uiService.AcquireCached<ComponentToolboxView>(
                 PrototypeUiPrefabIds.ComponentToolbox);
             componentToolboxView.ValidateReferences();
         }

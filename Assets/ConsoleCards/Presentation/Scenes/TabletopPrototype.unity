@@ -630,7 +630,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: ConsoleCards.Presentation::ConsoleCards.Presentation.UI.RuntimeUiManager
   root: {fileID: 114000}
-  prefabCatalog: {fileID: 11400000, guid: 5c180df2f2ac4b4787d668a79ce220dd, type: 2}
+  prefabCatalog: {fileID: 11400000, guid: 8e1d4c7b2a9f4e60b3c5d7e9f1a2b4c6, type: 2}
   screenLayerMount: {fileID: 224100}
   hudLayerMount: {fileID: 224200}
   popupLayerMount: {fileID: 224300}

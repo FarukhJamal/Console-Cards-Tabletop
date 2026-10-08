@@ -237,7 +237,7 @@ Inputs:
 
 Done: (a) definition + variant (2026-10-06); (a2) hand tray (2026-10-07, §11); (a2b) deck, stack and staging placement (2026-10-08, §12).
 
-1. ~~(a2b) Deck, stack and staging placement~~ — done (§12). Follow-up (§12.1, §12.2): 3a plate-less piles with bays (done); catalog stages C1 (written), C2 (Toolbox UI prefab from the catalogs, Real UI prefab catalog, Discard Pile in Runtime and the Toolbox) and C3 (every other spawn from the catalogs, Controller and Trap Floor boxes filled, old prefab fields removed), doc 22; then 3b new-player hints (Hints switch, legal targets light during a drag). Stage 4 (split stacks) is absorbed by C1.
+1. ~~(a2b) Deck, stack and staging placement~~ — done (§12). Follow-up (§12.1, §12.2): 3a plate-less piles with bays (done); catalog stages C1 and C1b (done), C2a (written: authored Toolbox prefab from the library, Real UI prefab catalog, several cards become one Deck), C2b (Discard Pile in Runtime and the Toolbox, face-down arrival) and C3 (every other spawn from the catalogs, Controller and Trap Floor boxes filled, old prefab fields removed), doc 22; then 3b new-player hints (Hints switch, legal targets light during a drag). Stage 4 (split stacks) is absorbed by C1.
 2. (a2c) Hand optional (declared per template, in its rules), before the first template without a hand. Includes: removing Trap Floor's Action area; one routing rule for granted cards (starting cards, purchases): into the owner's hand when the template uses one, otherwise loose on the table at the next free staging spot (placement-checked); the purchase service accepts the seat's own Hand as destination.
 3. (c) Mat support surface.
 4. (b) Card slot targeting and settle.

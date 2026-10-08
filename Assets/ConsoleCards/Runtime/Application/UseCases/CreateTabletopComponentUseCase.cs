@@ -40,6 +40,7 @@ namespace ConsoleCards.Application.UseCases
         LooseCardOrderOverflow,
         PhysicalSurfaceRequired,
         ConsoleLayoutRequired,
+        DeckCardCountInvalid,
     }
 
     public sealed class CreateTabletopComponentRequest
@@ -50,7 +51,8 @@ namespace ConsoleCards.Application.UseCases
             TabletopPose initialPose,
             int dieSideCount = 0,
             CardFace initialCardFace = CardFace.FaceUp,
-            AuthoritativeActionKind actionKind = AuthoritativeActionKind.CreateComponent)
+            AuthoritativeActionKind actionKind = AuthoritativeActionKind.CreateComponent,
+            int deckCardCount = 0)
         {
             if (!IsFinite(initialPose.Position.X)
                 || !IsFinite(initialPose.Position.Y)
@@ -65,6 +67,7 @@ namespace ConsoleCards.Application.UseCases
             DieSideCount = dieSideCount;
             InitialCardFace = initialCardFace;
             ActionKind = actionKind;
+            DeckCardCount = deckCardCount;
         }
 
         public CommandContext Context { get; }
@@ -73,6 +76,8 @@ namespace ConsoleCards.Application.UseCases
         public int DieSideCount { get; }
         public CardFace InitialCardFace { get; }
         public AuthoritativeActionKind ActionKind { get; }
+        /// <summary>Deck only: generic face-down Cards created inside the new Deck in the same command (0 = empty).</summary>
+        public int DeckCardCount { get; }
 
         private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
@@ -86,7 +91,8 @@ namespace ConsoleCards.Application.UseCases
             TabletopComponentKind componentKind,
             TabletopObjectId objectId,
             ContainerId containerId,
-            ConsoleId consoleId)
+            ConsoleId consoleId,
+            IReadOnlyList<TabletopObjectId> cardIds = null)
         {
             CommandResult = commandResult;
             Error = error;
@@ -94,7 +100,10 @@ namespace ConsoleCards.Application.UseCases
             ObjectId = objectId;
             ContainerId = containerId;
             ConsoleId = consoleId;
+            this.cardIds = cardIds;
         }
+
+        private readonly IReadOnlyList<TabletopObjectId> cardIds;
 
         public CommandResult CommandResult { get; }
         public CreateTabletopComponentError Error { get; }
@@ -102,6 +111,8 @@ namespace ConsoleCards.Application.UseCases
         public TabletopObjectId ObjectId { get; }
         public ContainerId ContainerId { get; }
         public ConsoleId ConsoleId { get; }
+        /// <summary>Cards created inside a new Deck (DeckCardCount); empty otherwise.</summary>
+        public IReadOnlyList<TabletopObjectId> CardIds => cardIds ?? Array.Empty<TabletopObjectId>();
         public bool Succeeded => CommandResult.Succeeded;
         public long Revision => CommandResult.Revision;
 
@@ -122,7 +133,8 @@ namespace ConsoleCards.Application.UseCases
         internal static CreateTabletopComponentResult ContainerAccepted(
             long revision,
             TabletopComponentKind kind,
-            ContainerId containerId)
+            ContainerId containerId,
+            IReadOnlyList<TabletopObjectId> cardIds = null)
         {
             return new CreateTabletopComponentResult(
                 CommandResult.Accepted(revision),
@@ -130,7 +142,8 @@ namespace ConsoleCards.Application.UseCases
                 kind,
                 TabletopObjectId.Empty,
                 containerId,
-                ConsoleId.Empty);
+                ConsoleId.Empty,
+                cardIds);
         }
 
         internal static CreateTabletopComponentResult ConsoleAccepted(
@@ -199,6 +212,8 @@ namespace ConsoleCards.Application.UseCases
     /// </summary>
     public sealed class CreateTabletopComponentUseCase
     {
+        /// <summary>Most generic Cards a new Deck can be created with (same limit as Populate Deck).</summary>
+        public const int MaximumDeckCardCount = PopulateDeckUseCase.MaximumQuantity;
         private const int IdentityAllocationAttempts = 32;
         private readonly ITabletopComponentIdentitySource identitySource;
         private readonly IPhysicalPlacementResolver physicalPlacement;
@@ -246,6 +261,15 @@ namespace ConsoleCards.Application.UseCases
                         CreateTabletopComponentError.IdentityAllocationFailed);
                 }
 
+                List<TabletopObjectId> deckCardIds = null;
+                if (request.DeckCardCount > 0
+                    && !TryAllocateObjectIds(matchState, request.DeckCardCount, out deckCardIds))
+                {
+                    return CreateTabletopComponentResult.Failure(
+                        CommandResultStatus.Conflict,
+                        CreateTabletopComponentError.IdentityAllocationFailed);
+                }
+
                 ContainerKind containerKind = request.ComponentKind == TabletopComponentKind.Deck
                     ? ContainerKind.Deck
                     : ContainerKind.Stack;
@@ -257,12 +281,35 @@ namespace ConsoleCards.Application.UseCases
                         ObjectVisibility.Public,
                         0),
                     new ContainerPlacementState(containerId, request.InitialPose, surfaceHeight));
+                if (deckCardIds != null)
+                {
+                    // One command: the Deck and its face-down generic Cards (doc 22, C2a).
+                    List<CardInstanceState> cards = new List<CardInstanceState>(deckCardIds.Count);
+                    for (int i = 0; i < deckCardIds.Count; i++)
+                    {
+                        cards.Add(new CardInstanceState(
+                            new TabletopObjectState(
+                                deckCardIds[i],
+                                ToolboxComponentDefinitions.Card,
+                                TabletopObjectKind.Card,
+                                request.InitialPose,
+                                containerId,
+                                request.Context.RequestedByPlayerId,
+                                ObjectVisibility.Public,
+                                false),
+                            CardFace.FaceDown));
+                    }
+
+                    matchState.AddCardsToEmptyContainer(containerId, cards);
+                }
+
                 long revision = matchState.AdvanceRevision(
                     request.Context.Id, request.Context.RequestedByPlayerId, request.ActionKind);
                 return CreateTabletopComponentResult.ContainerAccepted(
                     revision,
                     request.ComponentKind,
-                    containerId);
+                    containerId,
+                    deckCardIds);
             }
 
             if (request.ComponentKind == TabletopComponentKind.Console)
@@ -445,6 +492,15 @@ namespace ConsoleCards.Application.UseCases
                     CreateTabletopComponentError.CardFaceInvalid);
             }
 
+            if (request.DeckCardCount < 0
+                || request.DeckCardCount > MaximumDeckCardCount
+                || (request.DeckCardCount > 0 && request.ComponentKind != TabletopComponentKind.Deck))
+            {
+                return CreateTabletopComponentResult.Failure(
+                    CommandResultStatus.Invalid,
+                    CreateTabletopComponentError.DeckCardCountInvalid);
+            }
+
             if (matchState.Revision == long.MaxValue)
             {
                 return CreateTabletopComponentResult.Failure(
@@ -469,6 +525,39 @@ namespace ConsoleCards.Application.UseCases
 
             objectId = TabletopObjectId.Empty;
             return false;
+        }
+
+        private bool TryAllocateObjectIds(
+            MatchState matchState,
+            int count,
+            out List<TabletopObjectId> objectIds)
+        {
+            objectIds = new List<TabletopObjectId>(count);
+            HashSet<TabletopObjectId> allocated = new HashSet<TabletopObjectId>();
+            for (int i = 0; i < count; i++)
+            {
+                bool found = false;
+                for (int attempt = 0; attempt < IdentityAllocationAttempts; attempt++)
+                {
+                    TabletopObjectId candidate = identitySource.NextObjectId();
+                    if (!candidate.IsEmpty
+                        && !matchState.ContainsObject(candidate)
+                        && allocated.Add(candidate))
+                    {
+                        objectIds.Add(candidate);
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                {
+                    objectIds.Clear();
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private bool TryAllocateContainerId(MatchState matchState, out ContainerId containerId)
