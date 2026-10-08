@@ -2,7 +2,7 @@
 
 **Document ID:** 22_Component_Catalog_Architecture
 **Version:** 0.3
-**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8); C3a written 2026-10-09 (every spawn from the catalogs, §9). C3b and C3c pending; each needs its own approved plan. Binding rule: doc 21 principle 18.
+**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8); C3a written 2026-10-09 (every spawn from the catalogs, §9); C3b-1 written 2026-10-09 (local Console, Hand, Avatar card and pawn from the catalogs, §10). C3b-2 and C3c pending; each needs its own approved plan. Binding rule: doc 21 principle 18.
 **Source:** Owner decisions 2026-10-08 and the product material (box set, controller box and game box images).
 **Purpose:** Define how every component and its definitions are registered, so the table, the Toolbox and the UI resolve the same component from one place.
 
@@ -67,7 +67,8 @@
 - **C2a (written):** the authored Toolbox (§7); several cards placed at once become one Deck; the Real UI prefab catalog; the scene's `RuntimeUiManager` uses it.
 - **C2b (written):** Discard Pile in Runtime (create, move, delete) and in the Toolbox (cards arrive face down, declared on the pile style); Undo and Redo rebuild every Toolbox-placed piece; the quick-spawn grid uses catalog footprints (§8).
 - **C3a (written):** Card, Pawn, Token, Die and Console spawns from the catalogs; the seven old prefab fields and their scene lines removed (§9).
-- **C3b:** the scene-owned pieces become catalog spawns: the local Console and Hand, the starting loose card, pawn and token; the first-prototype scene deck, stacks and discard pile removed.
+- **C3b-1 (written):** the local Console and Hand, the local Avatar card and pawn become catalog spawns (§10).
+- **C3b-2:** the unused scene pieces (scene Console, Hand, loose card, pawn and token, the first-prototype deck, stacks A and B and discard pile), their fields and dead code removed; the tests for the removed pieces removed and the rest updated (owner choice A).
 - **C3c:** game board and mapping board prefabs; Controller and Trap Floor boxes filled, and their tiles place real game pieces (§6).
 
 ## 6. Open items
@@ -75,6 +76,7 @@
 - **Controller deck size (decided 2026-10-09):** the controller deck stays 48 cards (6 each of Up, Down, Left, Right, A, B, X, Y); Start and Select are left out. Whether a game uses them is part of the rules stage.
 - **Box tiles (decided 2026-10-09):** Controller and Game box tiles place real game pieces (for example a full labelled controller deck, or a game's real Item cards), not generic ones.
 - **Controller mapping board (decided 2026-10-09):** one spot per input where a player lays a card; the mapping rules come later.
+- **Avatar (Hero) cards (owner, 2026-10-09):** bigger than other cards, sized to fit the Console's Main slot. Done in C3c with the Trap Floor box's Avatar entry (its own card prefab sized from the Main slot footprint); until then an Avatar is a standard card.
 - **UI faces:** icons and card art per entry are empty until the art is supplied.
 
 ## 7. Toolbox (C2a, owner decisions 2026-10-08)
@@ -102,3 +104,10 @@
 - The composition resolves its Card, Pawn, Token, Die and Console prefabs from the library: the first entry of each kind in shelf order (the same rule as the piles). They are the same prefabs as before (`PrototypeCard`, `PrototypePawn`, `PrototypeToken`, `PrototypeDie`, `Real/ConsoleMat`).
 - The Console layout comes from the catalog Console prefab's `ConsoleLayoutBinding`; catalog validation already requires its `Layout` link to match.
 - Removed: `prototypeCardPrefab`, `prototypePawnPrefab`, `prototypeTokenPrefab`, `prototypeDiePrefab`, `prototypeDeckPrefab`, `prototypeStackPrefab`, `prototypeConsolePrefab` and their seven scene lines. Their prefab checks run in the catalog validation.
+
+## 10. Local seat pieces from the catalogs (C3b-1, 2026-10-09)
+
+- **Console:** every seat's Console, the local one included, is built from the catalog Console entry and posed from its seat; the scene Console is no longer used.
+- **Hand:** the local Hand is built from the catalog Hand entry (`PrototypeHand`) at the scene Hand's old pose and drives the camera tray as before. It uses the prefab's Tray Handoff Duration (0.28 s); the scene Hand's 5 s override is dropped (owner choice).
+- **Avatar card and pawn:** created like every other card and pawn; the scene loose card, pawn and token are no longer used.
+- The unused scene pieces stay hidden until C3b-2 removes them.
