@@ -24,19 +24,13 @@ namespace ConsoleCards.Games.TrapFloor
         public const string ControllerInputContentSetId = "trap-floor-controller-inputs";
 
         private const double PlayerConsoleRadius = 6.1d;
-        // Stopgap until (a2): clears the W = 6.0 Console mat and its right rail slot (mirror of the ability area).
-        private const double ControllerDeckOffset = 4.45d;
-        private const double PurchasedAbilityAreaOffset = -4.45d;
-        // Temporary until (a2b) ConsoleAdjacentPlacement: stages starting abilities past the neighbouring seat's
-        // Controller Deck (clearance 0.175) at all four corners; table margin 0.444.
-        private const double StartingAbilityStagingSideOffset = -7.6d;
-        private const double StartingAbilityStagingSpacing = 1.15d;
-        // Temporary until (a2b) repositions it with the staging layout: default Hand zone, console-local
-        // (+6.40, 0.00), 2.0 x 1.4. Clearance 0.300 (Easy) / 0.325 (Hard, Impossible); table margin 1.144.
-        private const double HandZoneLocalX = 6.40d;
-        private const double HandZoneLocalZ = 0.00d;
-        private const float HandZoneWidth = 2.0f;
-        private const float HandZoneDepth = 1.4f;
+        // Trap Floor's placement choices beside each Console (console-local along-z). Positions come from
+        // ConsoleAdjacentPlacement with its Standard settings (gap, pile size, clearance and margin rules).
+        // Right side: Controller Deck, then the Hand zone; left side: Action stack, then the staging row (Easy).
+        private const double ControllerDeckAlongZ = 0d;
+        private const double HandZoneAlongZ = 0d;
+        private const double ActionStackAlongZ = 0d;
+        private const double StartingAbilityStagingAlongZ = -0.9d;
         private const double FloorfallDiceX = 3.45d;
         private const double FloorfallDiceY = 3.45d;
         private const double FloorfallDiceSpacing = 0.9d;
@@ -101,6 +95,10 @@ namespace ConsoleCards.Games.TrapFloor
                 throw new ArgumentException("Trap Floor Console requires exactly one authored Main Slot.", nameof(gameDefinition));
             PlayerLayoutDefinition playerLayout = PlayerLayoutPresets.StandardFourPlayer;
             float? mainSlotYawOffset = ResolveMainSlotYawOffset(consoleLayout);
+            ConsoleAdjacentPlacement adjacentPlacement = new ConsoleAdjacentPlacement(
+                consoleLayout,
+                ConsoleAdjacentPlacementSettings.Standard);
+            TrapFloorSeatPieces seatPieces = CreateSeatPieces(adjacentPlacement, activeMode.StartingAbilityCount);
             GameTemplateId templateId = new GameTemplateId(
                 string.Equals(activeMode.StableId, gameDefinition.DefaultModeStableId, StringComparison.OrdinalIgnoreCase)
                     ? gameDefinitionId
@@ -155,7 +153,8 @@ namespace ConsoleCards.Games.TrapFloor
                     objects,
                     labels,
                     players,
-                    mainSlotYawOffset);
+                    mainSlotYawOffset,
+                    seatPieces);
             }
 
             TabletopObjectId floorfallXAxisDieId = new TabletopObjectId(CreateGuid(60, 1));
@@ -172,6 +171,10 @@ namespace ConsoleCards.Games.TrapFloor
                 FloorfallDiceY));
 
             TabletopBounds boardBounds = CreateBoardBounds(grid);
+            if (!adjacentPlacement.UsesFallbackShape)
+            {
+                CheckSeatPlacement(adjacentPlacement, seatPieces, playerLayout, boardBounds);
+            }
             GameTemplate template = new GameTemplate(
                 templateId,
                 GameTemplate.CurrentSchemaVersion,
@@ -560,7 +563,8 @@ namespace ConsoleCards.Games.TrapFloor
             ICollection<GameTemplateObjectInstanceDefinition> objects,
             IDictionary<TabletopObjectId, string> labels,
             ICollection<TrapFloorPlayerSetupDefinition> players,
-            float? mainSlotYawOffset)
+            float? mainSlotYawOffset,
+            TrapFloorSeatPieces seatPieces)
         {
             int playerNumber = seatIndex + 1;
             int idBase = seatIndex * 20;
@@ -590,9 +594,9 @@ namespace ConsoleCards.Games.TrapFloor
                 ObjectVisibility.OwnerOnly,
                 0,
                 true,
-                OffsetFromConsole(GetConsolePose(layoutSeat), HandZoneLocalX, HandZoneLocalZ),
-                HandZoneWidth,
-                HandZoneDepth));
+                ConsoleAdjacentPlacement.ToTablePose(GetConsolePose(layoutSeat), seatPieces.HandZone),
+                (float)seatPieces.HandZone.Width,
+                (float)seatPieces.HandZone.Depth));
             containers.Add(CreateContainer(
                 mainSlotId,
                 ContainerKind.ConsoleSlot,
@@ -616,7 +620,7 @@ namespace ConsoleCards.Games.TrapFloor
                 ObjectVisibility.Public,
                 0,
                 true,
-                OffsetBesideConsole(GetConsolePose(layoutSeat), PurchasedAbilityAreaOffset)));
+                ConsoleAdjacentPlacement.ToTablePose(GetConsolePose(layoutSeat), seatPieces.ActionStack)));
             containers.Add(new GameTemplateContainerDefinition(
                 controllerDeckId,
                 ContainerKind.Deck,
@@ -624,7 +628,7 @@ namespace ConsoleCards.Games.TrapFloor
                 ObjectVisibility.Public,
                 0,
                 true,
-                OffsetBesideConsole(GetConsolePose(layoutSeat), ControllerDeckOffset)));
+                ConsoleAdjacentPlacement.ToTablePose(GetConsolePose(layoutSeat), seatPieces.ControllerDeck)));
 
             TabletopObjectId avatarId = new TabletopObjectId(CreateGuid(42, playerNumber));
             TabletopObjectId pawnId = new TabletopObjectId(CreateGuid(45, playerNumber));
@@ -658,8 +662,8 @@ namespace ConsoleCards.Games.TrapFloor
                     ParseStableGuid(ability.StableId, $"Ability '{ability.DisplayName}'"));
                 TabletopPose stagingPose = CreateStartingAbilityStagingPose(
                     consolePose,
+                    seatPieces.Staging[i],
                     i,
-                    startingAbilityCount,
                     ability.Orientation);
                 objects.Add(CreatePlayerCard(abilityId, abilityDefinitionId, seatId, stagingPose));
                 labels.Add(abilityId, ability.DisplayName);
@@ -721,25 +725,108 @@ namespace ConsoleCards.Games.TrapFloor
 
         private static TabletopPose CreateStartingAbilityStagingPose(
             TabletopPose consolePose,
+            ConsoleLocalRect stagingRect,
             int abilityIndex,
-            int abilityCount,
             CardOrientation orientation)
         {
-            double radians = consolePose.RotationDegrees * (Math.PI / 180d);
-            double centeredIndex = abilityIndex - ((abilityCount - 1d) * 0.5d);
-            double rowOffset = centeredIndex * StartingAbilityStagingSpacing;
+            TabletopPose centre = ConsoleAdjacentPlacement.ToTablePose(consolePose, stagingRect);
             float orientationOffset = orientation == CardOrientation.Landscape ? 90f : 0f;
             return new TabletopPose(
-                new TableCoordinate(
-                    consolePose.Position.X
-                        + (Math.Cos(radians) * StartingAbilityStagingSideOffset)
-                        + (Math.Sin(radians) * rowOffset),
-                    consolePose.Position.Y
-                        - (Math.Sin(radians) * StartingAbilityStagingSideOffset)
-                        + (Math.Cos(radians) * rowOffset)),
+                centre.Position,
                 consolePose.RotationDegrees + orientationOffset,
                 consolePose.Layer,
                 abilityIndex);
+        }
+
+        // The pieces beside every Console, in console-local space; the same for every seat.
+        private static TrapFloorSeatPieces CreateSeatPieces(ConsoleAdjacentPlacement placement, int stagingCount)
+        {
+            ConsoleLocalRect controllerDeck = placement.PlaceBeside(ConsoleSide.Right, ControllerDeckAlongZ);
+            ConsoleLocalRect handZone = placement.PlaceBeside(ConsoleSide.Right, HandZoneAlongZ, controllerDeck);
+            ConsoleLocalRect actionStack = placement.PlaceBeside(ConsoleSide.Left, ActionStackAlongZ);
+            IReadOnlyList<ConsoleLocalRect> staging = placement.PlaceRow(
+                ConsoleSide.Left,
+                StartingAbilityStagingAlongZ,
+                stagingCount,
+                actionStack);
+            return new TrapFloorSeatPieces(controllerDeck, handZone, actionStack, staging);
+        }
+
+        // Build-time check: every seat's Console shape and pieces, the board and the table surface.
+        private static void CheckSeatPlacement(
+            ConsoleAdjacentPlacement placement,
+            TrapFloorSeatPieces pieces,
+            PlayerLayoutDefinition playerLayout,
+            TabletopBounds boardBounds)
+        {
+            List<ConsoleAdjacentPlacementItem> items = new List<ConsoleAdjacentPlacementItem>
+            {
+                new ConsoleAdjacentPlacementItem("board", -1, boardBounds, false),
+            };
+            for (int seatIndex = 0; seatIndex < PrototypePlayerCount; seatIndex++)
+            {
+                playerLayout.TryGetSeat(seatIndex, out PlayerSeatLayoutEntry layoutSeat);
+                TabletopPose consolePose = GetConsolePose(layoutSeat);
+                for (int i = 0; i < placement.ConsoleShape.Count; i++)
+                {
+                    items.Add(new ConsoleAdjacentPlacementItem(
+                        "console",
+                        seatIndex,
+                        ConsoleAdjacentPlacement.ToTableBounds(consolePose, placement.ConsoleShape[i]),
+                        false));
+                }
+
+                AddPiece(items, "controller deck", seatIndex, consolePose, pieces.ControllerDeck);
+                AddPiece(items, "hand zone", seatIndex, consolePose, pieces.HandZone);
+                AddPiece(items, "action stack", seatIndex, consolePose, pieces.ActionStack);
+                for (int i = 0; i < pieces.Staging.Count; i++)
+                {
+                    AddPiece(items, $"staging {i + 1}", seatIndex, consolePose, pieces.Staging[i]);
+                }
+            }
+
+            ConsoleAdjacentPlacementReport report = ConsoleAdjacentPlacement.Check(
+                items,
+                playerLayout.TableBounds,
+                placement.Settings);
+            if (!report.Passes)
+            {
+                throw new InvalidOperationException($"Trap Floor seat placement check failed: {report.Describe()}.");
+            }
+        }
+
+        private static void AddPiece(
+            List<ConsoleAdjacentPlacementItem> items,
+            string label,
+            int seatIndex,
+            TabletopPose consolePose,
+            ConsoleLocalRect rect)
+        {
+            items.Add(new ConsoleAdjacentPlacementItem(
+                label,
+                seatIndex,
+                ConsoleAdjacentPlacement.ToTableBounds(consolePose, rect),
+                true));
+        }
+
+        private sealed class TrapFloorSeatPieces
+        {
+            public TrapFloorSeatPieces(
+                ConsoleLocalRect controllerDeck,
+                ConsoleLocalRect handZone,
+                ConsoleLocalRect actionStack,
+                IReadOnlyList<ConsoleLocalRect> staging)
+            {
+                ControllerDeck = controllerDeck;
+                HandZone = handZone;
+                ActionStack = actionStack;
+                Staging = staging;
+            }
+
+            public ConsoleLocalRect ControllerDeck { get; }
+            public ConsoleLocalRect HandZone { get; }
+            public ConsoleLocalRect ActionStack { get; }
+            public IReadOnlyList<ConsoleLocalRect> Staging { get; }
         }
 
         private static GameTemplateObjectInstanceDefinition CreateFloorfallDie(
@@ -812,31 +899,6 @@ namespace ConsoleCards.Games.TrapFloor
                 pose.RotationDegrees,
                 pose.Layer,
                 pose.LocalOrder);
-        }
-
-        // Console-local (x right, z toward the board) to table coordinates, keeping the Console's rotation.
-        private static TabletopPose OffsetFromConsole(TabletopPose consolePose, double localX, double localZ)
-        {
-            double radians = consolePose.RotationDegrees * (Math.PI / 180d);
-            return new TabletopPose(
-                new TableCoordinate(
-                    consolePose.Position.X + (Math.Cos(radians) * localX) + (Math.Sin(radians) * localZ),
-                    consolePose.Position.Y - (Math.Sin(radians) * localX) + (Math.Cos(radians) * localZ)),
-                consolePose.RotationDegrees,
-                consolePose.Layer,
-                consolePose.LocalOrder);
-        }
-
-        private static TabletopPose OffsetBesideConsole(TabletopPose consolePose, double distance)
-        {
-            double radians = consolePose.RotationDegrees * (Math.PI / 180d);
-            return new TabletopPose(
-                new TableCoordinate(
-                    consolePose.Position.X + (Math.Cos(radians) * distance),
-                    consolePose.Position.Y - (Math.Sin(radians) * distance)),
-                consolePose.RotationDegrees,
-                consolePose.Layer,
-                consolePose.LocalOrder);
         }
 
         private static GameTemplateContainerDefinition CreateContainer(

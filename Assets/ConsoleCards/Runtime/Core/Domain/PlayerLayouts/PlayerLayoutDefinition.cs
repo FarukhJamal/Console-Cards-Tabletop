@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Identifiers;
 
 namespace ConsoleCards.Core.Domain.PlayerLayouts
@@ -15,7 +16,8 @@ namespace ConsoleCards.Core.Domain.PlayerLayouts
         public PlayerLayoutDefinition(
             PlayerLayoutId id,
             string name,
-            IEnumerable<PlayerSeatLayoutEntry> seats)
+            IEnumerable<PlayerSeatLayoutEntry> seats,
+            TabletopBounds? tableBounds = null)
         {
             if (id.IsEmpty)
             {
@@ -70,6 +72,7 @@ namespace ConsoleCards.Core.Domain.PlayerLayouts
             Id = id;
             Name = name;
             this.seats = new ReadOnlyCollection<PlayerSeatLayoutEntry>(copiedSeats);
+            TableBounds = tableBounds;
         }
 
         public PlayerLayoutId Id { get; }
@@ -79,6 +82,12 @@ namespace ConsoleCards.Core.Domain.PlayerLayouts
         public int OccupiedSeatCount => seats.Count;
 
         public IReadOnlyList<PlayerSeatLayoutEntry> Seats => seats;
+
+        /// <summary>
+        /// Usable table surface in table coordinates, when known. Seat placement checks keep pieces inside it;
+        /// without it the table-margin check is skipped.
+        /// </summary>
+        public TabletopBounds? TableBounds { get; }
 
         public bool TryGetSeat(int seatIndex, out PlayerSeatLayoutEntry seat)
         {

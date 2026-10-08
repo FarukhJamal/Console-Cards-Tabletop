@@ -23,7 +23,11 @@ namespace ConsoleCards.Core.Domain.PlayerLayouts
                     CreateSeat(1, -6d, 0d, -3.2d, 0d, -5.8d, 0d, 90f),
                     CreateSeat(2, 0d, 4d, 0d, 1.86d, 0d, 3.86d, 180f),
                     CreateSeat(3, 6d, 0d, 3.2d, 0d, 5.8d, 0d, 270f),
-                });
+                },
+                // TCGTable2 usable surface (measured 2026-10-05); 1 table unit = 1 world unit.
+                new TabletopBounds(
+                    new TableCoordinate(-12.578d, -8.544d),
+                    new TableCoordinate(12.178d, 8.644d)));
         }
 
         private static PlayerLayoutDefinition CreateCompactFourPlayer()
