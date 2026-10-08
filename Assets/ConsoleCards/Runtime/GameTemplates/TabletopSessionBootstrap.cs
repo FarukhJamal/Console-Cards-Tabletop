@@ -318,6 +318,15 @@ namespace ConsoleCards.GameTemplates
             {
                 if (request.Selection.Kind == TabletopSessionKind.EmptyCustom)
                 {
+                    // An Empty Table starts with one unowned Hand for the local player (doc 22, H-E); cards that
+                    // arrive in it are shown face up. Part of the baseline, so Reset and Undo keep it.
+                    ContainerState emptyTableHand = new ContainerState(
+                        ContainerId.New(),
+                        ContainerKind.Hand,
+                        SeatId.Empty,
+                        ObjectVisibility.Public,
+                        0,
+                        ContainerArrivalFace.FaceUp);
                     MatchState match = new MatchState(
                         request.MatchId,
                         GameTemplateId.Empty,
@@ -325,7 +334,7 @@ namespace ConsoleCards.GameTemplates
                         Array.Empty<CardInstanceState>(),
                         Array.Empty<PawnState>(),
                         Array.Empty<TokenState>(),
-                        Array.Empty<ContainerState>(),
+                        new[] { emptyTableHand },
                         Array.Empty<SeatState>(),
                         Array.Empty<ContainerPlacementState>(),
                         Array.Empty<PlayAreaState>());

@@ -111,6 +111,22 @@ namespace ConsoleCards.Application.UseCases
                 return MapTransferFailure(transferResult.Error);
             }
 
+            // A destination that declares an arrival face (an Empty Table hand shows cards face up) sets it in
+            // the same command (doc 22, H-E).
+            if (destination.ArrivalFace != ContainerArrivalFace.Unchanged)
+            {
+                CardFace arrivalFace = destination.ArrivalFace == ContainerArrivalFace.FaceDown
+                    ? CardFace.FaceDown
+                    : CardFace.FaceUp;
+                for (int i = 0; i < drawnObjectIds.Count; i++)
+                {
+                    if (matchState.Cards.TryGetValue(drawnObjectIds[i], out CardInstanceState drawnCard))
+                    {
+                        drawnCard.SetFace(arrivalFace);
+                    }
+                }
+            }
+
             long revision = matchState.AdvanceRevision(
                 command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.DrawCards);
             return DrawCardsResult.Accepted(revision);

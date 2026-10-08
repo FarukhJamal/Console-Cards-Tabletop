@@ -14,11 +14,22 @@ namespace ConsoleCards.Presentation.UI.Toolbox
         public ComponentToolboxBindings(
             ComponentLibrary library,
             GameDefinition currentGame,
-            Action<ComponentCatalogEntry, int> place)
+            Action<ComponentCatalogEntry, int> place,
+            bool showHandSwitch = false,
+            bool handOn = false,
+            Action<bool> setHand = null)
         {
             Library = library ?? throw new ArgumentNullException(nameof(library));
             CurrentGame = currentGame;
             Place = place ?? throw new ArgumentNullException(nameof(place));
+            if (showHandSwitch && setHand == null)
+            {
+                throw new ArgumentNullException(nameof(setHand), "A shown Hand switch needs its handler.");
+            }
+
+            ShowHandSwitch = showHandSwitch;
+            HandOn = handOn;
+            SetHand = setHand;
         }
 
         public ComponentLibrary Library { get; }
@@ -28,6 +39,52 @@ namespace ConsoleCards.Presentation.UI.Toolbox
 
         /// <summary>Place an entry; the value is the tile's count, chosen size, or 0.</summary>
         public Action<ComponentCatalogEntry, int> Place { get; }
+
+        /// <summary>The footer's Hand switch is shown (an Empty Table, doc 22 H-E).</summary>
+        public bool ShowHandSwitch { get; }
+
+        public bool HandOn { get; }
+
+        /// <summary>Called with the new state when the player flips the Hand switch.</summary>
+        public Action<bool> SetHand { get; }
+    }
+
+    /// <summary>An authored ON / OFF switch row (the Toolbox footer's Hand switch). The state is shown in words.</summary>
+    [Serializable]
+    public sealed class ToolboxSwitch
+    {
+        [SerializeField] private GameObject row;
+        [SerializeField] private Button button;
+        [SerializeField] private Image fill;
+        [SerializeField] private RectTransform knob;
+        [SerializeField] private Text word;
+        [SerializeField] private Text hint;
+        [SerializeField] private Color onFill = Color.green;
+        [SerializeField] private Color offFill = Color.gray;
+        [SerializeField] private Color onWordColor = Color.white;
+        [SerializeField] private Color offWordColor = Color.black;
+        [SerializeField] private float knobOffset = 22f;
+        [SerializeField] private float wordOffset = 14f;
+        [SerializeField] private string onHint = string.Empty;
+        [SerializeField] private string offHint = string.Empty;
+
+        public bool IsComplete =>
+            row != null && button != null && fill != null && knob != null && word != null && hint != null;
+
+        public GameObject Row => row;
+
+        public Button Button => button;
+
+        public void Show(bool on)
+        {
+            fill.color = on ? onFill : offFill;
+            knob.anchoredPosition = new Vector2(on ? knobOffset : -knobOffset, knob.anchoredPosition.y);
+            RectTransform wordRect = word.rectTransform;
+            wordRect.anchoredPosition = new Vector2(on ? -wordOffset : wordOffset, wordRect.anchoredPosition.y);
+            word.text = on ? "ON" : "OFF";
+            word.color = on ? onWordColor : offWordColor;
+            hint.text = on ? onHint : offHint;
+        }
     }
 
     /// <summary>A group of authored tiles for one catalog, with the message shown when it has none.</summary>
@@ -113,6 +170,12 @@ namespace ConsoleCards.Presentation.UI.Toolbox
         [SerializeField] private Text placingSubtitle;
         [SerializeField] private GameObject placingControls;
 
+        [Header("Footer Hand switch (Empty Table, H-E)")]
+        [SerializeField] private ToolboxSwitch handSwitch = new ToolboxSwitch();
+        [SerializeField] private RectTransform contentViewport;
+        [SerializeField] private float viewportBottomWithSwitch;
+        [SerializeField] private float viewportBottomWithoutSwitch;
+
         [Header("Tab and chip colours")]
         [SerializeField] private Color tabFill = Color.gray;
         [SerializeField] private Color tabText = Color.gray;
@@ -130,6 +193,8 @@ namespace ConsoleCards.Presentation.UI.Toolbox
         private ToolboxEntryTile selectedTile;
         private int tabIndex;
         private int chipIndex;
+        private Action<bool> setHand;
+        private bool handOn;
 
         public void ValidateReferences()
         {
@@ -195,6 +260,7 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             Unbind();
             place = bindings.Place;
             beforeOpen = beforeOpenToolbox;
+            BindHandSwitch(bindings);
             IndexAndMatchTiles(bindings.Library);
 
             openButton.onClick.AddListener(OpenToolbox);
@@ -229,6 +295,52 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             SelectTab(0);
             CloseToolbox();
             ClearPlacementHint();
+        }
+
+        private void BindHandSwitch(ComponentToolboxBindings bindings)
+        {
+            if (handSwitch == null || !handSwitch.IsComplete)
+            {
+                if (bindings.ShowHandSwitch)
+                {
+                    throw new InvalidOperationException(
+                        "The Toolbox prefab has no footer Hand switch. Run Console Cards > Toolbox > Build Toolbox Prefab.");
+                }
+
+                return;
+            }
+
+            handSwitch.Row.SetActive(bindings.ShowHandSwitch);
+            if (contentViewport != null)
+            {
+                contentViewport.offsetMin = new Vector2(
+                    contentViewport.offsetMin.x,
+                    bindings.ShowHandSwitch ? viewportBottomWithSwitch : viewportBottomWithoutSwitch);
+            }
+
+            if (!bindings.ShowHandSwitch)
+            {
+                setHand = null;
+                return;
+            }
+
+            setHand = bindings.SetHand;
+            handOn = bindings.HandOn;
+            handSwitch.Show(handOn);
+            handSwitch.Button.onClick.AddListener(FlipHandSwitch);
+        }
+
+        private void FlipHandSwitch()
+        {
+            if (setHand == null)
+            {
+                return;
+            }
+
+            handOn = !handOn;
+            handSwitch.Show(handOn);
+            ClearSelectedUiObject();
+            setHand(handOn);
         }
 
         public void OpenToolbox()
@@ -308,6 +420,8 @@ namespace ConsoleCards.Presentation.UI.Toolbox
         {
             Clear(openButton);
             Clear(closeButton);
+            Clear(handSwitch?.Button);
+            setHand = null;
             for (int i = 0; i < tabs.Length; i++)
             {
                 Clear(tabs[i]?.Button);

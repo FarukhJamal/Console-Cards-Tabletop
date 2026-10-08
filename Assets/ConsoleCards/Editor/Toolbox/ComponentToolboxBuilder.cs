@@ -40,6 +40,7 @@ namespace ConsoleCards.Editor.Toolbox
         private static readonly Color Teal = Hex("2fa58a");
         private static readonly Color Selected = Hex("fff3c4");
         private static readonly Color Rule = Hex("c9bf9e");
+        private static readonly Color Go = Hex("1f7a66");
 
         // Layout, in Canvas reference units (1920 x 1080): the mockup at 1440 x 900 scaled by 1.2.
         private const float Margin = 29f;
@@ -48,6 +49,7 @@ namespace ConsoleCards.Editor.Toolbox
         private const float HeaderHeight = 100f;
         private const float TabStripHeight = 62f;
         private const float FooterHeight = 52f;
+        private const float SwitchRowHeight = 72f;
         private const float Pad = 19f;
         private const float Gap = 14f;
         private const float ChipRowHeight = 60f;
@@ -212,6 +214,30 @@ namespace ConsoleCards.Editor.Toolbox
                 Key("Click") + " a piece    " + Key("Click") + " the table to place    " + Key("R") + " rotate    "
                 + Key("Right-click") + " cancel");
 
+            // Footer Hand switch (Empty Table, doc 22 H-E): shown only when the session has a switchable Hand;
+            // the view then raises the content's bottom edge above it.
+            RectTransform handRow = Rect("HandSwitchRow", panel, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(0f, Border + FooterHeight), new Vector2(-2f * Border, SwitchRowHeight));
+            Img(handRow, "Solid", CreamDark).raycastTarget = false;
+            Img(Rect("Rule", handRow, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero,
+                new Vector2(0f, 4f)), "Solid", Ink).raycastTarget = false;
+            Label(Rect("Title", handRow, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f), new Vector2(22f, -12f),
+                new Vector2(-160f, 26f)), boldFont, 19, Ink, TextAnchor.UpperLeft, "Hand");
+            Text handHint = Label(Rect("Hint", handRow, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f),
+                new Vector2(22f, -40f), new Vector2(-160f, 24f)), bodyFont, 15, Muted, TextAnchor.UpperLeft,
+                "Your private cards at the bottom of the screen");
+            RectTransform handSwitch = Rect("Switch", handRow, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                new Vector2(-22f, -2f), new Vector2(91f, 46f));
+            Image handSwitchFill = Img(handSwitch, "PillOutlined", Go);
+            Button handSwitchButton = handSwitch.gameObject.AddComponent<Button>();
+            handSwitchButton.targetGraphic = handSwitchFill;
+            RectTransform handKnob = Rect("Knob", handSwitch, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(22f, 0f), new Vector2(32f, 32f));
+            Img(handKnob, "ButtonOutlined", Cream).raycastTarget = false;
+            Text handWord = Label(Rect("Word", handSwitch, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(-14f, 0f), new Vector2(46f, 30f)), titleFont, 15, Cream, TextAnchor.MiddleCenter, "ON");
+            handRow.gameObject.SetActive(false);
+
             // Placing card (top left) and placing controls (bottom centre).
             RectTransform placing = Rect("PlacingCard", root, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
                 new Vector2(Margin, -Margin), new Vector2(PanelWidth, 91f));
@@ -254,6 +280,24 @@ namespace ConsoleCards.Editor.Toolbox
             so.FindProperty("chipText").colorValue = Ink;
             so.FindProperty("chipSelectedFill").colorValue = Teal;
             so.FindProperty("chipSelectedText").colorValue = Cream;
+            SerializedProperty handSwitchProperty = so.FindProperty("handSwitch");
+            handSwitchProperty.FindPropertyRelative("row").objectReferenceValue = handRow.gameObject;
+            handSwitchProperty.FindPropertyRelative("button").objectReferenceValue = handSwitchButton;
+            handSwitchProperty.FindPropertyRelative("fill").objectReferenceValue = handSwitchFill;
+            handSwitchProperty.FindPropertyRelative("knob").objectReferenceValue = handKnob;
+            handSwitchProperty.FindPropertyRelative("word").objectReferenceValue = handWord;
+            handSwitchProperty.FindPropertyRelative("hint").objectReferenceValue = handHint;
+            handSwitchProperty.FindPropertyRelative("onFill").colorValue = Go;
+            handSwitchProperty.FindPropertyRelative("offFill").colorValue = TabIdle;
+            handSwitchProperty.FindPropertyRelative("onWordColor").colorValue = Cream;
+            handSwitchProperty.FindPropertyRelative("offWordColor").colorValue = Muted;
+            handSwitchProperty.FindPropertyRelative("knobOffset").floatValue = 22f;
+            handSwitchProperty.FindPropertyRelative("wordOffset").floatValue = 14f;
+            handSwitchProperty.FindPropertyRelative("onHint").stringValue = "Your private cards at the bottom of the screen";
+            handSwitchProperty.FindPropertyRelative("offHint").stringValue = "No hand: every card stays on the table";
+            so.FindProperty("contentViewport").objectReferenceValue = viewport;
+            so.FindProperty("viewportBottomWithSwitch").floatValue = Border + FooterHeight + SwitchRowHeight;
+            so.FindProperty("viewportBottomWithoutSwitch").floatValue = Border + FooterHeight;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

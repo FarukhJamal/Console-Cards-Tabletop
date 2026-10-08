@@ -112,6 +112,12 @@ namespace ConsoleCards.Presentation.UI
             root.ClearSelectedUiObject();
         }
 
+        /// <summary>Opens the Toolbox panel (after a table rebuild started from inside it, such as the Hand switch).</summary>
+        public void OpenComponentToolbox()
+        {
+            componentToolboxView?.OpenToolbox();
+        }
+
         public void SetUndoState(bool enabled, string label) =>
             activeSessionToolbarView?.SetUndoState(enabled, label);
 

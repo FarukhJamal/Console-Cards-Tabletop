@@ -198,6 +198,10 @@ namespace ConsoleCards.Presentation.Prototype
         private MatchState undoTrackedMatch;
         private bool undoTransactionInProgress;
         private bool rebuildingFromUndo;
+        // Empty Table hand (doc 22, H-E): the session's Hand container and whether the Hand is on. The switch is a
+        // table setting, not a move: it survives Undo and Redo; Reset and loading a table turn it back on.
+        private ContainerId emptyTableHandContainerId;
+        private bool emptyTableHandEnabled = true;
         private TrapFloorSessionState pendingRestoredTrapFloorState;
         private PendingControllerPurchaseState pendingRestoredControllerPurchaseState;
 
@@ -576,6 +580,7 @@ namespace ConsoleCards.Presentation.Prototype
                 if (!rebuildingFromUndo) cameraInputAdapter.CameraController.ShowDefaultView();
                 BuildToolboxRuntime();
                 RebuildEmptyTableLooseObjectPresentation();
+                BuildEmptyTableHand();
                 ProjectUnprojectedPlacedComponents();
 
                 BuildInteractionGraph();
@@ -1211,8 +1216,11 @@ namespace ConsoleCards.Presentation.Prototype
             PrototypeSessionUndoSnapshot previousSnapshot = CaptureUndoSnapshot();
             try
             {
+                // Reset returns the table to its start, Empty Table Hand switched on included (H-E).
+                emptyTableHandEnabled = true;
                 Shutdown(true);
                 InitializeActiveSession(true);
+                ShowActiveSessionUi();
             }
             catch (Exception exception)
             {
@@ -3171,6 +3179,52 @@ namespace ConsoleCards.Presentation.Prototype
 
         private TabletopPose CreateNextToolboxSpawnPose()
         {
+            return CreateToolboxSpawnPose(toolboxSpawnSequence);
+        }
+
+        // The first quick-spawn grid cell with no placed Deck, Stack, Discard Pile or Console in it (H-E): a pile
+        // made outside the Toolbox (the hand turned off) never lands on another, even after a rebuild.
+        private TabletopPose CreateFreeToolboxSpawnPose()
+        {
+            ConsoleAdjacentPlacementSettings footprint = ConsoleAdjacentPlacementSettings.Standard;
+            double cellWidth = footprint.BayWidth + footprint.MinimumClearance;
+            double cellDepth = footprint.BayDepth + footprint.MinimumClearance;
+            for (int sequence = 0; sequence < 12; sequence++)
+            {
+                TabletopPose candidate = CreateToolboxSpawnPose(sequence);
+                bool occupied = false;
+                foreach (ContainerPlacementState placement in matchState.ContainerPlacements.Values)
+                {
+                    if (!placement.HasExtent
+                        && Math.Abs(placement.Pose.Position.X - candidate.Position.X) < cellWidth
+                        && Math.Abs(placement.Pose.Position.Y - candidate.Position.Y) < cellDepth)
+                    {
+                        occupied = true;
+                        break;
+                    }
+                }
+
+                foreach (PlacedConsoleState console in matchState.PlacedConsoles.Values)
+                {
+                    if (Math.Abs(console.Pose.Position.X - candidate.Position.X) < cellWidth * 2d
+                        && Math.Abs(console.Pose.Position.Y - candidate.Position.Y) < cellDepth * 1.5d)
+                    {
+                        occupied = true;
+                        break;
+                    }
+                }
+
+                if (!occupied)
+                {
+                    return candidate;
+                }
+            }
+
+            return CreateToolboxSpawnPose(toolboxSpawnSequence);
+        }
+
+        private TabletopPose CreateToolboxSpawnPose(int sequence)
+        {
             // Grid cells are the largest catalog footprint, a pile's bay, plus the placement clearance, so
             // quick-spawned piles never overlap (doc 22, C2b).
             ConsoleAdjacentPlacementSettings footprint = ConsoleAdjacentPlacementSettings.Standard;
@@ -3210,15 +3264,15 @@ namespace ConsoleCards.Presentation.Prototype
                 rotation = playerZonePose.RotationDegrees;
             }
 
-            int column = toolboxSpawnSequence % 4;
-            int row = (toolboxSpawnSequence / 4) % 3;
+            int column = sequence % 4;
+            int row = (sequence / 4) % 3;
             return new TabletopPose(
                 new TableCoordinate(
                     baseX + (column * columnX) + (row * rowX),
                     baseY + (column * columnY) + (row * rowY)),
                 rotation,
                 0,
-                toolboxSpawnSequence * ToolboxPhysicalOrderStride);
+                sequence * ToolboxPhysicalOrderStride);
         }
 
         private GameObject CreateToolboxPlacementPreview(
@@ -3696,6 +3750,164 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
+        // ---------- Empty Table hand (doc 22, H-E) ----------
+
+        private bool HasLocalHand()
+        {
+            return handView != null && handView.IsBound && !handContainerId.IsEmpty;
+        }
+
+        // The Empty Table's Hand from the catalog Hand entry with the camera tray, when the Hand is on. An Undo
+        // that puts cards back into a Hand that is off turns it back on, so cards are never hidden.
+        private void BuildEmptyTableHand()
+        {
+            emptyTableHandContainerId = ContainerId.Empty;
+            foreach (ContainerState container in matchState.Containers.Values)
+            {
+                if (container.Kind == ContainerKind.Hand)
+                {
+                    emptyTableHandContainerId = container.Id;
+                    break;
+                }
+            }
+
+            if (emptyTableHandContainerId.IsEmpty)
+            {
+                return;
+            }
+
+            ContainerState hand = matchState.GetContainer(emptyTableHandContainerId);
+            if (!emptyTableHandEnabled && hand.Count > 0)
+            {
+                emptyTableHandEnabled = true;
+            }
+
+            if (!emptyTableHandEnabled)
+            {
+                return;
+            }
+
+            handContainerId = emptyTableHandContainerId;
+            localHandVisual = CreateLocalHandVisual();
+            handView = localHandVisual.GetView<HandView>();
+            handView.ConfigurePresentation(presentationTransitions, localHandVisual.FeedbackRenderer);
+            if (handTrayRig == null)
+            {
+                handTrayRig = HandTrayRig.Create(
+                    targetCamera,
+                    localHandVisual.TargetCollider.gameObject.layer,
+                    localHandVisual.FeedbackRenderer.sharedMaterial);
+            }
+
+            handTrayRig.Activate();
+            handView.ConfigureTray(handTrayRig);
+            handView.Bind(hand, localHandVisual.LayoutAnchor, coordinateConverter, cardViews);
+            ConfigureContainerLabel(localHandVisual.Label, "HAND");
+            ConfigureHandTrayDropTarget();
+            RefreshCardContentVisibility();
+        }
+
+        // The Toolbox footer's Hand switch. Off: the Hand's cards go to the table as one face-down Deck (one Undo
+        // step); the table is then rebuilt without the Hand. On: the table is rebuilt with it.
+        private void SetEmptyTableHandEnabled(bool enabled)
+        {
+            if (!IsInitialized
+                || activeSession == null
+                || activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom
+                || emptyTableHandContainerId.IsEmpty
+                || enabled == emptyTableHandEnabled)
+            {
+                return;
+            }
+
+            if (interactionRouter != null && interactionRouter.HasActiveInteraction)
+            {
+                ShowMessage("Finish the current move first.");
+                ShowActiveSessionUi();
+                return;
+            }
+
+            CloseContextMenu();
+            componentPlacementController?.Cancel();
+            string message = enabled ? "Hand on." : "Hand off.";
+            ContainerState hand = matchState.GetContainer(emptyTableHandContainerId);
+            if (!enabled && hand.Count > 0)
+            {
+                int count = hand.Count;
+                CollectHandIntoDeckResult result = new CollectHandIntoDeckUseCase(
+                        componentIdentitySource,
+                        physicalSurfaceQuery.ResolveContainerSurfaceHeight)
+                    .Execute(
+                        matchState,
+                        new CollectHandIntoDeckRequest(
+                            CreateCommandContext(),
+                            emptyTableHandContainerId,
+                            CreateFreeToolboxSpawnPose()));
+                if (!result.Succeeded)
+                {
+                    ShowMessage($"Hand off rejected: {result.Error}.");
+                    ShowActiveSessionUi();
+                    return;
+                }
+
+                message = count == 1
+                    ? "Hand off: your card went back to the table as a face-down deck. Undo brings it back."
+                    : $"Hand off: your {count} cards went back to the table as a face-down deck. Undo brings them back.";
+            }
+
+            emptyTableHandEnabled = enabled;
+            RebuildActiveTablePresentation();
+            ShowMessage(message);
+            runtimeUi?.OpenComponentToolbox();
+        }
+
+        // Rebuilds the table from the current Match, as Undo does, keeping the camera and the Undo history.
+        private void RebuildActiveTablePresentation()
+        {
+            rebuildingFromUndo = true;
+            try
+            {
+                Shutdown(true);
+                InitializeActiveSession(false);
+                ShowActiveSessionUi();
+            }
+            finally
+            {
+                rebuildingFromUndo = false;
+                RefreshUndoUi();
+            }
+        }
+
+        // Deck right-click "Draw to Hand": a count, then the draw goes from the top of the deck into the local Hand.
+        private void OpenDrawToHandPopup(ContainerId deckId)
+        {
+            CloseContextMenu();
+            if (!HasLocalHand() || !matchState.Containers.TryGetValue(deckId, out ContainerState deck) || deck.Count == 0)
+            {
+                ShowMessage("Draw to Hand is unavailable.");
+                return;
+            }
+
+            int maximum = Math.Max(1, deck.Count);
+            selectedQuantity = Mathf.Clamp(selectedQuantity, 1, maximum);
+            runtimeUi.ShowQuantityPopup(
+                "DRAW TO HAND",
+                $"Draw from the top of this deck into your hand. {deck.Count} card{(deck.Count == 1 ? string.Empty : "s")} left.",
+                "Draw",
+                selectedQuantity,
+                1,
+                maximum,
+                () => ChangeSelectedQuantity(-1, maximum),
+                () => ChangeSelectedQuantity(1, maximum),
+                () =>
+                {
+                    int count = Mathf.Clamp(selectedQuantity, 1, maximum);
+                    runtimeUi?.CloseTabletopPopup();
+                    DrawCards(deckId, count);
+                },
+                CloseContextMenu);
+        }
+
         private void ProjectCreatedCardBatch(IReadOnlyList<TabletopObjectId> cardIds)
         {
             List<Transform> appearedTransforms = new List<Transform>(cardIds.Count);
@@ -4001,7 +4213,10 @@ namespace ConsoleCards.Presentation.Prototype
                 new ComponentToolboxBindings(
                     componentLibrary,
                     activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom ? null : trapFloorGameDefinition,
-                    PlaceCatalogEntry));
+                    PlaceCatalogEntry,
+                    activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom && !emptyTableHandContainerId.IsEmpty,
+                    emptyTableHandEnabled,
+                    SetEmptyTableHandEnabled));
             RefreshUndoUi();
             RefreshTrapFloorStatusUi();
         }
@@ -4650,6 +4865,7 @@ namespace ConsoleCards.Presentation.Prototype
                 }
 
                 activeSession = result.Session;
+                emptyTableHandEnabled = true;
                 prototypeTemplateContext = candidateContext;
                 trapFloorTemplate = candidateTemplate;
                 InitializeActiveSession(false);
@@ -5164,6 +5380,13 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             AddControllerDrawAction(actions, targetDeckId);
+            if (HasLocalHand() && !IsAssistedControllerDeck(targetDeckId) && targetDeck.Count > 0)
+            {
+                actions.Add(new PrototypePopupActionOption(
+                    "Draw to Hand",
+                    true,
+                    () => OpenDrawToHandPopup(targetDeckId)));
+            }
 
             if (targetDeck.Count == 0)
             {

@@ -2,7 +2,7 @@
 
 **Document ID:** 22_Component_Catalog_Architecture
 **Version:** 0.3
-**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8); C3a written 2026-10-09 (every spawn from the catalogs, §9); C3b-1 written 2026-10-09 (local Console, Hand, Avatar card and pawn from the catalogs, §10). C3b-2 and C3c pending; each needs its own approved plan. Binding rule: doc 21 principle 18.
+**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8); C3a written 2026-10-09 (every spawn from the catalogs, §9); C3b-1 written 2026-10-09 (local Console, Hand, Avatar card and pawn from the catalogs, §10); H-E written 2026-10-09 (Empty Table hand and its switch, §11). C3b-2 and C3c pending; each needs its own approved plan. Binding rule: doc 21 principle 18.
 **Source:** Owner decisions 2026-10-08 and the product material (box set, controller box and game box images).
 **Purpose:** Define how every component and its definitions are registered, so the table, the Toolbox and the UI resolve the same component from one place.
 
@@ -68,6 +68,7 @@
 - **C2b (written):** Discard Pile in Runtime (create, move, delete) and in the Toolbox (cards arrive face down, declared on the pile style); Undo and Redo rebuild every Toolbox-placed piece; the quick-spawn grid uses catalog footprints (§8).
 - **C3a (written):** Card, Pawn, Token, Die and Console spawns from the catalogs; the seven old prefab fields and their scene lines removed (§9).
 - **C3b-1 (written):** the local Console and Hand, the local Avatar card and pawn become catalog spawns (§10).
+- **H-E (written):** an Empty Table hand, on by default, with a Toolbox footer switch (§11).
 - **C3b-2:** the unused scene pieces (scene Console, Hand, loose card, pawn and token, the first-prototype deck, stacks A and B and discard pile), their fields and dead code removed; the tests for the removed pieces removed and the rest updated (owner choice A).
 - **C3c:** game board and mapping board prefabs; Controller and Trap Floor boxes filled, and their tiles place real game pieces (§6).
 
@@ -111,3 +112,11 @@
 - **Hand:** the local Hand is built from the catalog Hand entry (`PrototypeHand`) at the scene Hand's old pose and drives the camera tray as before. It uses the prefab's Tray Handoff Duration (0.28 s); the scene Hand's 5 s override is dropped (owner choice).
 - **Avatar card and pawn:** created like every other card and pawn; the scene loose card, pawn and token are no longer used.
 - The unused scene pieces stay hidden until C3b-2 removes them.
+
+## 11. Empty Table hand (H-E, 2026-10-09)
+
+- **Runtime:** an Empty Table starts with one unowned Hand container (arrival face up), part of the baseline. `DrawCardsUseCase` now applies the destination's arrival face to the drawn cards. `CollectHandIntoDeckUseCase` moves every card of a Hand, in order and face down, into a new placed Deck in one command.
+- **Hand switch (owner choice):** in the Toolbox footer, ON / OFF with a one-line hint, shown only on an Empty Table. Off with cards in the hand: they go to the table as one face-down Deck at the first free quick-spawn cell (one Undo step) and the table is rebuilt without the Hand. On: the table is rebuilt with it.
+- **A table setting, not a move:** Undo and Redo keep it, except that an Undo which puts cards back into a Hand that is off turns it back on. Reset and loading a table turn it on.
+- **Draw to Hand (owner choice):** dragging, plus "Draw to Hand" with a count on a Deck's right-click menu whenever the local player has a Hand that is on (not on Trap Floor's controller decks, which keep their own Draw). The hand comfort cap applies.
+- **Prefab:** `Build Toolbox Prefab` adds the footer `HandSwitchRow`; the view hides it and lowers the content edge when no switch is shown.
