@@ -22,6 +22,8 @@ namespace ConsoleCards.Presentation.Views.Containers
         private TabletopCoordinateConverter converter;
         private bool isBound;
         private float restLift;
+        private bool restsOnTable;
+        private float maximumPileHeight;
 
         public bool IsBound => isBound;
 
@@ -45,11 +47,33 @@ namespace ConsoleCards.Presentation.Views.Containers
 
         public float TableOffsetPerCard
         {
-            get => tableOffsetPerCard;
+            // Effective per-card drift: a plate-less pile is neat.
+            get => restsOnTable ? 0f : tableOffsetPerCard;
             set
             {
                 ContainerViewBinding.ValidateFiniteNonNegative(value, nameof(value));
                 tableOffsetPerCard = value;
+            }
+        }
+
+        /// <summary>
+        /// Plate-less pile (every pile but a legacy split stack, doc 21): the root rests at the placement surface and each card rests on
+        /// the table (surface + PivotToBottom + RestClearance + i x step), with step = min(card step,
+        /// maximumHeight / card count). Call before Bind; when already bound the layout is re-applied.
+        /// </summary>
+        internal void ConfigureTableRest(bool enabled, float maximumHeight)
+        {
+            if (enabled && (float.IsNaN(maximumHeight) || float.IsInfinity(maximumHeight) || maximumHeight <= 0f))
+            {
+                throw new ArgumentOutOfRangeException(nameof(maximumHeight));
+            }
+
+            restsOnTable = enabled;
+            maximumPileHeight = maximumHeight;
+            if (isBound)
+            {
+                restLift = restsOnTable ? 0f : ComponentRestHeight.RestLift(transform);
+                ApplyAcceptedLayout();
             }
         }
 
@@ -88,7 +112,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             ContainerViewBinding.ValidateFiniteNonNegative(tableOffsetPerCard, nameof(tableOffsetPerCard));
             Dictionary<TabletopObjectId, CardView> lookup = ContainerViewBinding.BuildLookup(cardViews);
             List<CardView> resolvedCards = ContainerViewBinding.ResolveOrderedCards(container, lookup);
-            restLift = ComponentRestHeight.RestLift(transform);
+            restLift = restsOnTable ? 0f : ComponentRestHeight.RestLift(transform);
             CachePlateRenderers();
             SetPlacementTransform(placement, coordinateConverter);
             List<CardLayoutPlan> plan = BuildLayoutPlan(
@@ -160,15 +184,29 @@ namespace ConsoleCards.Presentation.Views.Containers
             Vector3 placementWorldPosition = coordinateConverter.ToWorldPosition(placement.Pose);
             TableCoordinate anchorCoordinate = coordinateConverter.ToTableCoordinate(authoredLayoutAnchor.position);
             float anchorWorldUpOffset = authoredLayoutAnchor.position.y - placementWorldPosition.y;
-            float plateTop = PlateTop();
+            // A plate-less pile rests on the placement surface, neatly (no per-card drift).
+            float plateTop = restsOnTable
+                ? ContainerViewBinding.PlacementWorldPosition(placement, coordinateConverter).y
+                : PlateTop();
+            float offsetPerCard = restsOnTable ? 0f : tableOffsetPerCard;
             float physicalStep = Mathf.Max(
                 verticalOffset,
                 ContainerViewBinding.MinimumPhysicalCardSeparation);
+            if (restsOnTable)
+            {
+                physicalStep = PileStep(physicalStep, maximumPileHeight, orderedCards.Count);
+            }
+
             for (int i = 0; i < orderedCards.Count; i++)
             {
+                if (restsOnTable)
+                {
+                    orderedCards[i].ClearOverlayPresentation();
+                }
+
                 TableCoordinate coordinate = new TableCoordinate(
-                    anchorCoordinate.X + (i * tableOffsetPerCard),
-                    anchorCoordinate.Y + (i * tableOffsetPerCard));
+                    anchorCoordinate.X + (i * offsetPerCard),
+                    anchorCoordinate.Y + (i * offsetPerCard));
                 TabletopPose pose = ContainerViewBinding.CreatePose(
                     coordinate,
                     placement.Pose.RotationDegrees,
@@ -247,6 +285,11 @@ namespace ConsoleCards.Presentation.Views.Containers
             transform.SetPositionAndRotation(
                 ContainerViewBinding.PlacementWorldPosition(placement, coordinateConverter) + (Vector3.up * restLift),
                 coordinateConverter.ToWorldRotation(placement.Pose));
+        }
+
+        private static float PileStep(float cardStep, float maximumHeight, int cardCount)
+        {
+            return cardCount > 0 ? Mathf.Min(cardStep, maximumHeight / cardCount) : cardStep;
         }
 
         private void EnsureBound()

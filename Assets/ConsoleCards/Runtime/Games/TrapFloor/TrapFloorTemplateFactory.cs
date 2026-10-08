@@ -31,6 +31,9 @@ namespace ConsoleCards.Games.TrapFloor
         private const double HandZoneAlongZ = 0d;
         private const double ActionStackAlongZ = 0d;
         private const double StartingAbilityStagingAlongZ = -0.9d;
+        // Each seat's Controller Deck rests in a bay marked Draw (default maximum pile height).
+        private static readonly GameTemplatePileStyle ControllerDeckPileStyle =
+            new GameTemplatePileStyle(GameTemplateBayMark.Draw);
         private const double FloorfallDiceX = 3.45d;
         private const double FloorfallDiceY = 3.45d;
         private const double FloorfallDiceSpacing = 0.9d;
@@ -628,7 +631,8 @@ namespace ConsoleCards.Games.TrapFloor
                 ObjectVisibility.Public,
                 0,
                 true,
-                ConsoleAdjacentPlacement.ToTablePose(GetConsolePose(layoutSeat), seatPieces.ControllerDeck)));
+                ConsoleAdjacentPlacement.ToTablePose(GetConsolePose(layoutSeat), seatPieces.ControllerDeck),
+                pileStyle: ControllerDeckPileStyle));
 
             TabletopObjectId avatarId = new TabletopObjectId(CreateGuid(42, playerNumber));
             TabletopObjectId pawnId = new TabletopObjectId(CreateGuid(45, playerNumber));

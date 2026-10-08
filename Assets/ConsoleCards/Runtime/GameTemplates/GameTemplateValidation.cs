@@ -288,6 +288,13 @@ namespace ConsoleCards.GameTemplates
                     Add(issues, "ContainerExtentInvalid", "Only a Hand zone has an extent, and it must be finite and above zero.");
                 }
 
+                if (container.PileStyle != null
+                    && ((container.Kind != ContainerKind.Deck && container.Kind != ContainerKind.Stack)
+                        || !Enum.IsDefined(typeof(GameTemplateBayMark), container.PileStyle.BayMark)))
+                {
+                    Add(issues, "ContainerPileStyleInvalid", "Only a Deck or Stack declares a pile style, with a mark from the system set.");
+                }
+
                 if (container.HasTabletopPose && !IsFinite(container.TabletopPose))
                 {
                     Add(issues, "ContainerPoseInvalid", "Container placement poses must be finite.");

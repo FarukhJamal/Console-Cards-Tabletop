@@ -125,7 +125,8 @@ namespace ConsoleCards.GameTemplates
             bool hasTabletopPose,
             TabletopPose tabletopPose,
             float? extentWidth = null,
-            float? extentDepth = null)
+            float? extentDepth = null,
+            GameTemplatePileStyle pileStyle = null)
         {
             Id = id;
             Kind = kind;
@@ -137,6 +138,7 @@ namespace ConsoleCards.GameTemplates
             HasExtent = extentWidth.HasValue && extentDepth.HasValue;
             ExtentWidth = extentWidth ?? 0f;
             ExtentDepth = extentDepth ?? 0f;
+            PileStyle = pileStyle;
         }
 
         public ContainerId Id { get; }
@@ -159,6 +161,52 @@ namespace ConsoleCards.GameTemplates
         public float ExtentWidth { get; }
 
         public float ExtentDepth { get; }
+
+        /// <summary>Declared pile presentation of a Deck or Stack; null uses the system default pile style.</summary>
+        public GameTemplatePileStyle PileStyle { get; }
+    }
+
+    /// <summary>
+    /// The system set of bay marks (doc 21): what a pile's spot is for. Games choose from this set; they do
+    /// not add their own symbols or text. Playing a card means putting it into a Console slot, so there is
+    /// no play mark.
+    /// </summary>
+    public enum GameTemplateBayMark
+    {
+        None = 0,
+        Draw = 1,
+        Discard = 2
+    }
+
+    /// <summary>
+    /// Configurable pile parameters a Deck or Stack component declares, set by a template: the bay mark and
+    /// the maximum pile height, which caps the per-card step so a large pile stays low. Every pile is
+    /// plate-less (its cards rest on the table); there is no plate option. Presentation data only; not part
+    /// of Match State.
+    /// </summary>
+    public sealed class GameTemplatePileStyle
+    {
+        public const float DefaultMaximumPileHeight = 0.25f;
+
+        /// <summary>No mark, default maximum pile height.</summary>
+        public static GameTemplatePileStyle Default { get; } = new GameTemplatePileStyle();
+
+        public GameTemplatePileStyle(
+            GameTemplateBayMark bayMark = GameTemplateBayMark.None,
+            float maximumPileHeight = DefaultMaximumPileHeight)
+        {
+            if (float.IsNaN(maximumPileHeight) || float.IsInfinity(maximumPileHeight) || maximumPileHeight <= 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(maximumPileHeight));
+            }
+
+            BayMark = bayMark;
+            MaximumPileHeight = maximumPileHeight;
+        }
+
+        public GameTemplateBayMark BayMark { get; }
+
+        public float MaximumPileHeight { get; }
     }
 
     public sealed class GameTemplateObjectInstanceDefinition

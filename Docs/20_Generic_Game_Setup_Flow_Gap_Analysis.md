@@ -249,3 +249,12 @@ The layout model (`PlayerLayoutDefinition`, `PlayerSeatLayoutEntry`) accepts any
 ## 12. Second-template pipeline as its own stage (2026-10-07)
 
 The game setup pipeline removes the Trap Floor-only wiring so a second template can load: GS1 catalog, GS3 decoupling, GS5 generic setup format and builder, and GS6 where a game needs it. It is its own stage, scheduled after (b) in the order of doc 19 §9.1. The GS contents above are unchanged; GS2, GS4, GS7–GS9 and GS-T stay unscheduled. Binding rules: doc 21.
+
+### 12.1 Template selection flow (owner, 2026-10-08)
+
+- **Order:** Genre → Game → Difficulty (if the game has any) → Rules → Layout → Start (doc 21 principle 8).
+- **Difficulty is a rules preset.** It sets the default rule values; "add your own rules" edits from that starting point. A game without difficulties starts from its default rules. (Alternative noted: merge Difficulty into Rules as "Easy, Hard, Impossible, or Your own".)
+- **Rules:** game-defined defaults, or the player's own. The rules decide which pieces exist (hand on or off, slots, cube cells, decks); the hand switch lives here and is declared per template.
+- **Layout:** one default per game, or the player's own. Chosen after the rules because it places the pieces the rules produce; it is checked by the placement check (clearance, table bounds) before Start, so an invalid layout is refused before the match begins.
+- **Start:** the chosen Game, rules and layout become the match's game template.
+- **In game:** a rules card at the side that can be shown or hidden, and the Hints switch, in one HUD group.

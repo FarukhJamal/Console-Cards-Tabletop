@@ -313,6 +313,9 @@ namespace ConsoleCards.Presentation.Prototype
         private Action toggleHandTrayAction;
         // Other seats' hands as face-down piles on their hand zones; rebuilt with each session.
         private readonly List<HiddenHandView> hiddenHandViews = new List<HiddenHandView>();
+        // Pile bays (doc 21): each plate-less pile's bay and the seat whose Console its mouth faces.
+        private readonly List<PileBayView> pileBays = new List<PileBayView>();
+        private readonly List<SeatId> pileBayOwnerSeats = new List<SeatId>();
         private DiscardPileView discardPileView;
         private ConsoleView consoleView;
         private ConsoleLayoutData consoleLayout;
@@ -830,6 +833,8 @@ namespace ConsoleCards.Presentation.Prototype
             tokenSelectionVisuals.Clear();
             dieSelectionVisuals.Clear();
             controllerDeckViews.Clear();
+            pileBays.Clear();
+            pileBayOwnerSeats.Clear();
             playerConsoleViews.Clear();
             consoleSlotViews.Clear();
             resolvedSceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
@@ -2204,11 +2209,96 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            bool cardDragActive = interactionStateMachine != null
+            bool cardDragActive = IsCardDragActive();
+            handTrayRig.SetDropTargetActive(cardDragActive);
+        }
+
+        private bool IsCardDragActive()
+        {
+            return interactionStateMachine != null
                 && interactionStateMachine.Phase == TabletopInteractionPhase.DraggingObject
                 && ((containedCardDragCoordinator != null && containedCardDragCoordinator.ActiveCardView != null)
                     || (moveCoordinator != null && moveCoordinator.ActiveView is CardView));
-            handTrayRig.SetDropTargetActive(cardDragActive);
+        }
+
+        // The pile style the active template declares for a Deck or Stack (null: not declared, or no style).
+        private GameTemplatePileStyle ResolveTemplatePileStyle(ContainerId containerId)
+        {
+            if (trapFloorTemplate == null)
+            {
+                return null;
+            }
+
+            IReadOnlyList<GameTemplateContainerDefinition> definitions = trapFloorTemplate.Template.Containers;
+            for (int i = 0; i < definitions.Count; i++)
+            {
+                if (definitions[i].Id == containerId)
+                {
+                    return definitions[i].PileStyle;
+                }
+            }
+
+            return null;
+        }
+
+        // Plate-less pile with its bay (doc 21): the plate never shows (labels kept) and the root drop box
+        // becomes a trigger so the pile no longer blocks loose pieces; drops and right-clicks still resolve
+        // through it. A fixed pile (declared by the template) always shows its bay; a free pile only while
+        // empty. The mouth faces the owner seat's Console once the Consoles are bound.
+        private void AttachPileBay(
+            PrototypeFixedContainerVisual visual,
+            IContainerView view,
+            GameTemplatePileStyle pileStyle,
+            bool fixedSpot,
+            SeatId ownerSeatId)
+        {
+            visual.TargetCollider.isTrigger = true;
+            PileBayView bay = CreatePileBay(visual.transform, pileStyle.BayMark, fixedSpot, view);
+            visual.AttachBay(bay);
+            pileBays.Add(bay);
+            pileBayOwnerSeats.Add(ownerSeatId);
+        }
+
+        // The bay hugs the system card footprint (ConsoleAdjacentPlacementSettings.Standard, world units).
+        private PileBayView CreatePileBay(
+            Transform pileRoot,
+            GameTemplateBayMark mark,
+            bool fixedSpot,
+            IContainerView view)
+        {
+            ConsoleAdjacentPlacementSettings footprint = ConsoleAdjacentPlacementSettings.Standard;
+            return PileBayView.Create(
+                pileRoot,
+                prototypeDeckPrefab.FeedbackRenderer.sharedMaterial,
+                (float)footprint.PieceWidth,
+                (float)footprint.PieceDepth,
+                mark,
+                fixedSpot,
+                view);
+        }
+
+        // Points each owned pile's bay mouth at its owner seat's Console (call after the Consoles are bound).
+        private void AssignPileBayMouthTargets()
+        {
+            for (int i = 0; i < pileBays.Count; i++)
+            {
+                if (pileBays[i] == null || pileBayOwnerSeats[i].IsEmpty)
+                {
+                    continue;
+                }
+
+                for (int c = 0; c < playerConsoleViews.Count; c++)
+                {
+                    ConsoleView console = playerConsoleViews[c];
+                    if (console != null
+                        && console.IsBound
+                        && console.ConsoleState.OwnerSeatId == pileBayOwnerSeats[i])
+                    {
+                        pileBays[i].SetMouthTarget(console.transform);
+                        break;
+                    }
+                }
+            }
         }
 
         private void HandleHandTrayShortcut()
@@ -2982,6 +3072,8 @@ namespace ConsoleCards.Presentation.Prototype
                     preview.ValidateReferences();
                     ConfigureContainerLabel(preview.Label, "DECK");
                     preview.Label.gameObject.SetActive(!HidesPrototypeVisual(PrototypeVisualHide.ContainerLabels));
+                    preview.FeedbackRenderer.enabled = false;
+                    CreatePileBay(preview.transform, GameTemplateBayMark.None, true, null);
                     previewRoot = preview.gameObject;
                     break;
                 }
@@ -2991,6 +3083,8 @@ namespace ConsoleCards.Presentation.Prototype
                     preview.ValidateReferences();
                     ConfigureContainerLabel(preview.Label, "STACK");
                     preview.Label.gameObject.SetActive(!HidesPrototypeVisual(PrototypeVisualHide.ContainerLabels));
+                    preview.FeedbackRenderer.enabled = false;
+                    CreatePileBay(preview.transform, GameTemplateBayMark.None, true, null);
                     previewRoot = preview.gameObject;
                     break;
                 }
@@ -3146,6 +3240,8 @@ namespace ConsoleCards.Presentation.Prototype
                         true);
                     runtimeDeckInstances.Add(instance);
                     controllerDeckViews.Add(instance.View);
+                    instance.View.ConfigureTableRest(true, GameTemplatePileStyle.Default.MaximumPileHeight);
+                    AttachPileBay(instance.Visual, instance.View, GameTemplatePileStyle.Default, false, SeatId.Empty);
                     instance.View.Bind(
                         matchState.GetContainer(result.ContainerId),
                         matchState.ContainerPlacements[result.ContainerId],
@@ -3160,7 +3256,12 @@ namespace ConsoleCards.Presentation.Prototype
                 {
                     ContainerState container = matchState.GetContainer(result.ContainerId);
                     ContainerPlacementState placement = matchState.ContainerPlacements[result.ContainerId];
-                    StackRuntimeView stack = CreateStackRuntimeView("STACK", container, placement, true);
+                    StackRuntimeView stack = CreateStackRuntimeView(
+                        "STACK",
+                        container,
+                        placement,
+                        true,
+                        PileBayRole.Free);
                     stackViewsByContainerId.Add(result.ContainerId, stack);
                     appearedTransform = stack.Root.transform;
                     layoutCollectionChanged = true;
@@ -8501,13 +8602,20 @@ namespace ConsoleCards.Presentation.Prototype
                     player.ControllerDeckId,
                     false);
                 runtimeDeckInstances.Add(controllerDeck);
+                GameTemplatePileStyle deckPileStyle =
+                    ResolveTemplatePileStyle(player.ControllerDeckId) ?? GameTemplatePileStyle.Default;
+                controllerDeck.View.ConfigureTableRest(true, deckPileStyle.MaximumPileHeight);
+                AttachPileBay(controllerDeck.Visual, controllerDeck.View, deckPileStyle, true, player.SeatId);
+
                 controllerDeckViews.Add(controllerDeck.View);
                 ContainerId actionAreaId = player.ActionAbilityAreaContainerId;
                 StackRuntimeView actionArea = CreateStackRuntimeView(
                     $"P{playerIndex + 1} ACTIONS",
                     matchState.GetContainer(actionAreaId),
                     matchState.ContainerPlacements[actionAreaId],
-                    false);
+                    false,
+                    PileBayRole.Fixed,
+                    ResolveTemplatePileStyle(actionAreaId));
                 stackViewsByContainerId.Add(actionAreaId, actionArea);
 
                 if (player.LayoutSeatIndex != localPlayerLayoutSeatIndex
@@ -8592,6 +8700,8 @@ namespace ConsoleCards.Presentation.Prototype
                     instance.SlotViews,
                     instance.SlotVisuals);
             }
+
+            AssignPileBayMouthTargets();
 
             for (int i = 0; i < runtimeDeckInstances.Count; i++)
             {
@@ -10248,11 +10358,22 @@ namespace ConsoleCards.Presentation.Prototype
             return $"\n\nInput Cost: {string.Join(", ", entries)}";
         }
 
+        // How a stack pile is presented: a legacy plate (split stacks, until they become free piles), a
+        // fixed pile in its bay (declared by the template), or a free pile (bay only while empty).
+        private enum PileBayRole
+        {
+            LegacyPlate,
+            Fixed,
+            Free,
+        }
+
         private StackRuntimeView CreateStackRuntimeView(
             string name,
             ContainerState container,
             ContainerPlacementState placement,
-            bool labelIsDecoration)
+            bool labelIsDecoration,
+            PileBayRole bayRole = PileBayRole.LegacyPlate,
+            GameTemplatePileStyle pileStyle = null)
         {
             PrototypeFixedContainerVisual visual = Instantiate(prototypeStackPrefab);
             GameObject root = visual.gameObject;
@@ -10267,6 +10388,13 @@ namespace ConsoleCards.Presentation.Prototype
             visual.ValidateReferences();
             StackView view = visual.GetView<StackView>();
             ConfigureContainerLabel(visual.Label, name);
+            bool plateLess = bayRole != PileBayRole.LegacyPlate;
+            GameTemplatePileStyle style = pileStyle ?? GameTemplatePileStyle.Default;
+            if (plateLess)
+            {
+                view.ConfigureTableRest(true, style.MaximumPileHeight);
+            }
+
             view.Bind(container, placement, visual.LayoutAnchor, coordinateConverter, cardViews);
             StackRuntimeView stackRuntimeView = new StackRuntimeView(
                 StackViewOwnership.RuntimeOwned,
@@ -10278,6 +10406,11 @@ namespace ConsoleCards.Presentation.Prototype
                 visual.DropTarget);
             ConfigureFixedContainer(visual, view);
             ApplyFixedContainerVisualHide(visual, labelIsDecoration);
+            if (plateLess)
+            {
+                AttachPileBay(visual, view, style, bayRole == PileBayRole.Fixed, container.OwnerSeatId);
+            }
+
             return stackRuntimeView;
         }
 

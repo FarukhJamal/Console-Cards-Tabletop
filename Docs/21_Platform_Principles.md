@@ -1,9 +1,9 @@
 # Console Cards - Platform Principles
 
 **Document ID:** 21_Platform_Principles
-**Version:** 0.1
+**Version:** 0.2
 **Status:** Binding owner rules (recorded 2026-10-07). Every stage plan must comply; a plan that needs an exception must name the rule and get the owner's approval first.
-**Source:** Owner decisions 2026-10-03 to 2026-10-07 (doc 19 §2.1, doc 20 §8, stage reviews).
+**Source:** Owner decisions 2026-10-03 to 2026-10-08 (doc 19 §2.1 and §12.1, doc 20 §8 and §12.1, stage reviews).
 
 ## Product
 
@@ -19,9 +19,9 @@ Console Cards is a platform of generic components and console-card-specific comp
 
 ## Games and templates
 
-6. **Templates only select, place and set declared parameters.** Games and templates choose components, place them and set parameters a component declares configurable. They never change how a component behaves, and contain no component code or prefab overrides. Rule hooks may refer to slots by key.
+6. **Templates only select, place and set declared parameters.** Games and templates choose components, place them and set parameters a component declares configurable. They never change how a component behaves, and contain no component code or prefab overrides. Rule hooks may refer to slots by key. Example: a Deck or Stack declares its pile style (bay mark from the system set, maximum pile height); a template may set it (doc 19 §12.1).
 7. **Turns and phases are advisory.** The platform tracks and shows them, but never blocks an action because of them.
-8. **Generic setup flow.** Every game uses the same flow: Games → Genre (e.g. Game Show) → Game → Variant → Player count (set by the game) → Rules (paginated rule cards the player can open and close) → Components → Table setup (layout preset) → Play menu → Game space.
+8. **Generic setup flow.** Every game uses the same flow: Genre (e.g. Game Show) → Game (sets the player count) → Difficulty, if the game has any (a named rules preset) → Rules (the game's defaults or the player's own) → Layout (the game's default or the player's own, checked against the pieces the rules produce) → Start. The chosen combination becomes the match's game template. In game, a rules card at the side and the hints can each be turned on and off (doc 20 §12.1).
 
 ## Hand
 
@@ -41,3 +41,8 @@ Console Cards is a platform of generic components and console-card-specific comp
 ## Persistence
 
 15. **Per-player save and load comes later.** It will build on the in-memory snapshots, with a versioned save format.
+
+## Design language
+
+16. **One design language.** Components follow the platform's design language. Games choose from what it offers (for example the bay marks) and never restyle it or add their own visual vocabulary.
+17. **Every pile is plate-less.** Every Deck, Stack and pile is a pile of cards resting on its surface; there are no plates. A fixed pile spot (declared by the template) shows a bay; a free pile shows one only while empty; Console slots are their own bays. Drop feedback tints the bay or slot. Visual hints for new players can be turned off (doc 19 §12.1).

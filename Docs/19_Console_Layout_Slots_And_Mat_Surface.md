@@ -2,7 +2,7 @@
 
 **Document ID:** 19_Console_Layout_Slots_And_Mat_Surface
 **Version:** 0.2
-**Status:** Stages (a) and (a2) implemented (2026-10-06/07; records in §4.4 and §11). Stages (a2b) onward each need their own approved plan; the current order is §9.1. Binding platform rules: `21_Platform_Principles.md`.
+**Status:** Stages (a), (a2) and (a2b) implemented (2026-10-06/07/08; records in §4.4, §11 and §12); (a2b) 3a pile bays written 2026-10-08 (§12.1), 3b and 4 pending. Later stages each need their own approved plan; the current order is §9.1. Binding platform rules: `21_Platform_Principles.md`.
 **Source:** Stage 3c-1 read-only report (cube cells and the mat as a surface) and the user's decisions on it.
 **Purpose:** Define the console as one generic component whose mat exposes every card slot and every cube position as data, so any Game can choose what to use.
 
@@ -153,9 +153,9 @@ Inputs:
 
 - **Seats do not overlap.** The nearest pair (neighbouring seats) is 1.159 apart.
 - **Seat 0 near edge:** a 1.4 card in a bottom plate hangs 0.037 past the table edge. A landscape card (0.5 half-depth) stays inside.
-- **Trap Floor seat containers versus the larger console (status 2026-10-07).** These are code constants in `TrapFloorTemplateFactory`, not console data:
-  - Hand: the radius-4.15 hand pose is removed (a2); the hand is a camera tray, and its zone default is console-local (+6.40, 0.00), 2.0 × 1.4.
-  - Controller Deck at console-local x +4.45, Purchased Ability stack at −4.45, and starting-ability staging at −7.6 are stopgaps (clearance ≥ 0.175, table margin ≥ 0.444) until (a2b) replaces them with `ConsoleAdjacentPlacement`.
+- **Trap Floor seat containers versus the larger console (status 2026-10-08).** Placed by `ConsoleAdjacentPlacement` from the real console shape (§12):
+  - Hand: the radius-4.15 hand pose is removed (a2); the hand is a camera tray, and its zone default is console-local (+5.575, 0.00), 1.0 × 1.4.
+  - Controller Deck at console-local (+4.375, 0), Action stack at (−4.375, 0), starting-ability staging (Easy) at (−5.575, −0.9) and (−6.775, −0.9). Minimum clearance 0.200, table margin ≥ 0.844 (Easy) / 1.744 (Hard, Impossible).
 
 ### 4.4 Stage (a) record (2026-10-06)
 
@@ -235,10 +235,10 @@ Inputs:
 
 ### 9.1 Stage order (2026-10-07)
 
-Done: (a) definition + variant (2026-10-06); (a2) hand tray (2026-10-07, §11).
+Done: (a) definition + variant (2026-10-06); (a2) hand tray (2026-10-07, §11); (a2b) deck, stack and staging placement (2026-10-08, §12).
 
-1. (a2b) Deck, stack and staging placement: `ConsoleAdjacentPlacement` helper and table bounds as data, plate-less controller deck and action stack, staging and hand-zone defaults; replaces the three stopgap constants.
-2. (a2c) Hand optional in Core, before the first template without a hand.
+1. ~~(a2b) Deck, stack and staging placement~~ — done (§12). Follow-up in progress (§12.1): 3a plate-less fixed piles with bays; 3b new-player hints (Hints switch, legal targets light during a drag); 4 split stacks become free piles.
+2. (a2c) Hand optional (declared per template, in its rules), before the first template without a hand. Includes: removing Trap Floor's Action area; one routing rule for granted cards (starting cards, purchases): into the owner's hand when the template uses one, otherwise loose on the table at the next free staging spot (placement-checked); the purchase service accepts the seat's own Hand as destination.
 3. (c) Mat support surface.
 4. (b) Card slot targeting and settle.
 5. Game setup pipeline: the second-template pipeline that removes Trap Floor-only wiring (doc 20 §12).
@@ -248,7 +248,8 @@ Done: (a) definition + variant (2026-10-06); (a2) hand tray (2026-10-07, §11).
 
 ## 10. Open items
 
-- Trap Floor seat container stopgaps (Controller Deck +4.45, Ability stack −4.45, staging −7.6) until (a2b) (§4.3). The hand radius is gone (a2).
+- ~~Trap Floor seat container stopgaps~~ — resolved by (a2b) (§12).
+- **Split stacks (until (a2b) Stage 4):** stacks created by Split keep the plate and the old rest rule. Stage 4 makes them free piles (§12.1); the rest of the stacking/decks work stays in the interaction queue (§9.1).
 - Seat 0 worst-case overhang of 0.037 past the near table edge.
 - Mapping of the current Trap Floor Main/Side slots to layout keys, to be fixed in the Stage (a) plan from the current prefab's anchor order.
 - **Multiplayer (open, for the multiplayer stage):** `TransferCardUseCase` has no owner rule for Hand destinations, so any player can transfer a card into another player's hand. The H2 hand comfort cap is a local setting that only guards the owner's own draws and drops, so it does not close this. Do not fix before the multiplayer stage.
@@ -260,9 +261,32 @@ Done: (a) definition + variant (2026-10-06); (a2) hand tray (2026-10-07, §11).
 ## 11. Stage (a2) record: hand (2026-10-07)
 
 - **Tray:** the local hand is a camera-anchored tray at the bottom centre of the screen (`HandTrayRig`, `HandView` tray mode). It keeps a constant on-screen size and faces the owner at any pitch or yaw. Hover, select, reorder, and drag out to the table and back all ease smoothly. H or the HUD button collapses and expands it. Tray cards cast no shadows and their colliders are triggers while in the tray. The tray band is the hand's drop target, enabled only during a card drag.
-- **Zone data:** the hand container has a placement with pose and extent (`ContainerPlacementState`); the initial snapshot captures it, so Undo and reset restore it. Trap Floor default: console-local (+6.40, 0.00), 2.0 × 1.4, temporary until (a2b).
+- **Zone data:** the hand container has a placement with pose and extent (`ContainerPlacementState`); the initial snapshot captures it, so Undo and reset restore it. Trap Floor default: console-local (+5.575, 0.00), 1.0 × 1.4 (one card pile; set in (a2b), §12).
 - **Other seats:** each other seat's hand is a face-down pile with a card count at its zone pose (`HiddenHandView`). Faces are hidden and Inspect is not offered; the cards cannot be dragged out.
 - **Dropped:** the table zone view (trigger plus outline) and Move Hand Zone were built and then removed. The tray band replaces the zone as the drop target; the zone pose now only places other seats' piles. Application still supports moving a hand zone (owner only); a UI for it is tracked in §10.
 - **Owner-only moves:** `MoveContainerUseCase` rejects moving a seat-owned Deck, Stack or Hand zone by anyone except that seat's occupant (`NotContainerOwner`). Unowned Toolbox decks and stacks stay movable by anyone. `BeginContainerMove` runs the same check (`MoveContainerUseCase.IsMoveBlockedByOwner`) before any preview, hiding or placement starts.
 - **Removed:** `PlayerHandRadius` (4.15) and `GetHandPose`. The table hand plate is hidden at runtime and no longer part of camera framing.
 - **Optional hand:** Core still requires a hand per seat. Making it optional per game, with no fixed size, is Stage (a2c).
+
+## 12. Stage (a2b) record: deck, stack and staging placement (2026-10-08)
+
+- **Helper:** `ConsoleAdjacentPlacement` (GameTemplates, pure data) places pieces beside a console from its real shape: the mat plus every Card slot footprint of the layout. A piece goes outward from the console, or from an inner piece on the same side, by the gap, within the z band it occupies. `ConsoleAdjacentPlacementSettings.Standard`: gap 0.2, pile 1.0 × 1.4, minimum clearance 0.15, minimum table margin 0.1. These are helper parameters, not game constants.
+- **Trap Floor placement choices** (console-local along-z): right side Controller Deck then the Hand zone (both z 0); left side Action stack (z 0) then the Easy staging row (z −0.9). Resulting centres: deck (+4.375, 0), hand zone (+5.575, 0), stack (−4.375, 0), staging (−5.575, −0.9) and (−6.775, −0.9). This also fixes the earlier staging cards overlapping each other along z.
+- **Table bounds as data:** `PlayerLayoutDefinition.TableBounds` (optional). Standard 4-player: x −12.578…12.178, y −8.544…8.644 (TCGTable2). Compact and 8-player leave it unset, which skips the margin check.
+- **Build check:** the factory checks every seat's console shape and pieces, the board and the table, and throws when clearance < 0.15 or margin < 0.1. Result: minimum clearance 0.200 (console to deck/stack), table margin 0.844 (Easy) and 1.744 (Hard, Impossible). The shipped Trap Floor path always passes the console layout, so the check always runs there; factory overloads without a layout (tests) use a worst-case box and skip the check. The Floorfall dice are physical and are not part of the check (their start is 0.178 from seat 3's console).
+- **Pile style (declared parameter):** `GameTemplateContainerDefinition.PileStyle` (`GameTemplatePileStyle`: plate-less on/off, maximum pile height, default 0.25), allowed only on Deck and Stack (`ContainerPileStyleInvalid` otherwise). The Trap Floor factory sets it for each seat's Controller Deck and Action stack; the composition reads it when it builds the pile views. Presentation data only: no Core change, nothing in Match State or snapshots.
+- **Plate-less piles:** the pile is the visual. The root rests at the placement surface; each card rests on the table at surface + `PivotToBottom` + `RestClearance` + i × step, with step = min(0.02, maximum pile height / card count), so the 48-card controller deck is about 0.25 high. Piles are neat (no per-card drift). The plate never shows at rest; labels are kept. The root drop box becomes a trigger, so the pile no longer blocks loose pieces while drops and right-clicks still resolve through it. Slot stacks and Toolbox decks/stacks keep their plates and the 0.02 step.
+- **Empty-pile affordance:** while a card is dragged, an empty plate-less pile within 1.5 of the pointer shows its plate faintly (base material); over it, the existing valid/invalid feedback tints it. Visual only: the trigger drop target is always enabled.
+- **Owner-only moves** of the seat deck and stack are unchanged (Stage (a2) rule).
+- **Split stacks** are unchanged for now (§10).
+
+### 12.1 Plate-less everywhere, with bays (2026-10-08)
+
+- **Decision (owner):** one rule for every pile; plate-less everywhere, with visual hints for new players. Recorded as doc 21 principles 16 and 17. This replaces the plate-less on/off switch and the 1.5 empty-pile hint above.
+- **Term:** a *bay* is a marked pile spot on the table, part of the console visual family (doc 00 §3.1). "Cartridge" stays the docs' word for a game, so bays have a cartridge-slot look but are not called cartridges.
+- **Bay (`PileBayView`):** a thin dim frame flat on the table around the card footprint (1.0 × 1.4 plus a 0.08 margin), with a slot mouth on the edge facing the owner seat's Console (the near edge when the pile has no owner) and an optional mark. Built from collider-less bars with no shadows; a child of the pile root, so moving a pile and Undo carry it.
+- **Marks (system set):** `GameTemplateBayMark` None, Draw, Discard. Games choose; they add no symbols or text. There is no play mark: playing a card means putting it into a Console slot, and the slots are the play bays.
+- **Pile style:** `GameTemplatePileStyle(bayMark, maximumPileHeight)`; the plate-less flag is removed. Validation: only a Deck or Stack declares one, with a mark from the set (`ContainerPileStyleInvalid`). Trap Floor: Controller Deck marked Draw.
+- **Which piles (3a):** fixed piles declared by the template (Trap Floor Controller Decks; the Action area until (a2c) removes it) always show their bay. Toolbox decks and stacks are free piles: plate-less, bay only while empty. The Toolbox spawn and move ghosts show a bay outline instead of the plate. Console slot stacks are unchanged (the slot is the bay). Split stacks: Stage 4. The scene deck, stacks and discard pile are never shown in either session, so they are untouched.
+- **Feedback:** valid, source and invalid drop feedback tint the bay frame (thicker; invalid is a darker red), not a plate.
+- **Kept for the scene value:** `PrototypeVisualHide.ContainerPlates` still exists so the saved scene loads; a pile with a bay ignores it.

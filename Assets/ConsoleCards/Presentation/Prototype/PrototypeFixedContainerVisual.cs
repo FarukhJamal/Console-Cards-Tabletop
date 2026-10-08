@@ -18,6 +18,7 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] private Material sourceTargetMaterial;
         [SerializeField] private Material invalidTargetMaterial;
         private bool basePlateHidden;
+        private PileBayView bay;
 
         public IContainerView ContainerView => containerView as IContainerView;
 
@@ -30,6 +31,9 @@ namespace ConsoleCards.Presentation.Prototype
         public TextMesh Label => label;
 
         public Renderer FeedbackRenderer => feedbackRenderer;
+
+        /// <summary>The pile's bay; when set the plate never shows and drop feedback tints the bay.</summary>
+        public PileBayView Bay => bay;
 
         public TView GetView<TView>() where TView : MonoBehaviour, IContainerView
         {
@@ -104,6 +108,13 @@ namespace ConsoleCards.Presentation.Prototype
             SetFeedbackMaterial(feedbackRenderer.sharedMaterial);
         }
 
+        /// <summary>Plate-less pile: the plate never shows; drop feedback (valid, source, invalid) tints the bay.</summary>
+        public void AttachBay(PileBayView pileBay)
+        {
+            bay = pileBay ?? throw new ArgumentNullException(nameof(pileBay));
+            SetFeedbackMaterial(feedbackRenderer.sharedMaterial);
+        }
+
         public void ClearFeedback()
         {
             SetFeedbackMaterial(baseMaterial);
@@ -112,6 +123,17 @@ namespace ConsoleCards.Presentation.Prototype
         private void SetFeedbackMaterial(Material material)
         {
             feedbackRenderer.sharedMaterial = material;
+            if (bay != null)
+            {
+                feedbackRenderer.enabled = false;
+                bay.ShowFeedback(
+                    ReferenceEquals(material, validTargetMaterial) ? PileBayFeedback.Valid
+                    : ReferenceEquals(material, invalidTargetMaterial) ? PileBayFeedback.Invalid
+                    : ReferenceEquals(material, sourceTargetMaterial) ? PileBayFeedback.Source
+                    : PileBayFeedback.None);
+                return;
+            }
+
             feedbackRenderer.enabled = !basePlateHidden
                 || ReferenceEquals(material, validTargetMaterial)
                 || ReferenceEquals(material, sourceTargetMaterial)

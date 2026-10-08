@@ -18,6 +18,8 @@ namespace ConsoleCards.Presentation.Views.Containers
         private TabletopCoordinateConverter converter;
         private bool isBound;
         private float restLift;
+        private bool restsOnTable;
+        private float maximumPileHeight;
 
         public bool IsBound => isBound;
 
@@ -39,6 +41,27 @@ namespace ConsoleCards.Presentation.Views.Containers
             }
         }
 
+        /// <summary>
+        /// Plate-less pile (every pile but a legacy split stack, doc 21): the root rests at the placement surface and each card rests on
+        /// the table (surface + PivotToBottom + RestClearance + i x step), with step = min(card step,
+        /// maximumHeight / card count). Call before Bind; when already bound the layout is re-applied.
+        /// </summary>
+        internal void ConfigureTableRest(bool enabled, float maximumHeight)
+        {
+            if (enabled && (float.IsNaN(maximumHeight) || float.IsInfinity(maximumHeight) || maximumHeight <= 0f))
+            {
+                throw new ArgumentOutOfRangeException(nameof(maximumHeight));
+            }
+
+            restsOnTable = enabled;
+            maximumPileHeight = maximumHeight;
+            if (isBound)
+            {
+                restLift = restsOnTable ? 0f : ComponentRestHeight.RestLift(transform);
+                ApplyAcceptedLayout();
+            }
+        }
+
         public void Bind(
             ContainerState container,
             ContainerPlacementState placement,
@@ -51,7 +74,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             ContainerViewBinding.ValidateFiniteNonNegative(cardThicknessOffset, nameof(cardThicknessOffset));
             Dictionary<TabletopObjectId, CardView> lookup = ContainerViewBinding.BuildLookup(cardViews);
             List<CardView> resolvedCards = ContainerViewBinding.ResolveOrderedCards(container, lookup);
-            restLift = ComponentRestHeight.RestLift(transform);
+            restLift = restsOnTable ? 0f : ComponentRestHeight.RestLift(transform);
             List<CardLayoutPlan> plan = BuildLayoutPlan(placement, coordinateConverter, resolvedCards);
 
             ContainerViewBinding.ClearAppliedCards(layoutAppliedCards);
@@ -110,6 +133,25 @@ namespace ConsoleCards.Presentation.Views.Containers
             float physicalStep = Mathf.Max(
                 cardThicknessOffset,
                 ContainerViewBinding.MinimumPhysicalCardSeparation);
+            if (restsOnTable)
+            {
+                float surfaceHeight = ContainerViewBinding.PlacementWorldPosition(placement, coordinateConverter).y;
+                float poseHeight = coordinateConverter.ToWorldPosition(placement.Pose).y;
+                float pileStep = PileStep(physicalStep, maximumPileHeight, orderedCards.Count);
+                for (int i = 0; i < orderedCards.Count; i++)
+                {
+                    CardView card = orderedCards[i];
+                    card.ClearOverlayPresentation();
+                    float restingPivotY = surfaceHeight
+                        + ComponentRestHeight.PivotToBottom(card.transform)
+                        + ComponentRestHeight.RestClearance
+                        + (i * pileStep);
+                    plan.Add(new CardLayoutPlan(card, placement.Pose, restingPivotY - poseHeight));
+                }
+
+                return plan;
+            }
+
             for (int i = 0; i < orderedCards.Count; i++)
             {
                 plan.Add(new CardLayoutPlan(
@@ -128,6 +170,11 @@ namespace ConsoleCards.Presentation.Views.Containers
                 converter.ToWorldRotation(placementState.Pose));
             ContainerViewBinding.ApplyPlan(plan, layoutAppliedCards, containerState.Id);
             VisibleCardCount = plan.Count;
+        }
+
+        private static float PileStep(float cardStep, float maximumHeight, int cardCount)
+        {
+            return cardCount > 0 ? Mathf.Min(cardStep, maximumHeight / cardCount) : cardStep;
         }
 
         private void EnsureBound()
