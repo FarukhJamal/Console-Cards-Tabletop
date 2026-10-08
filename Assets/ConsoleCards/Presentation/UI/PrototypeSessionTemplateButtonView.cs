@@ -41,6 +41,8 @@ namespace ConsoleCards.Presentation.UI
             label.text = displayName;
             button.onClick.RemoveAllListeners();
             button.onClick.AddListener(selected.Invoke);
+            // Pooled rows come back non-interactable from Unbind; a bound row is always selectable.
+            button.interactable = true;
         }
 
         public override void Unbind()
