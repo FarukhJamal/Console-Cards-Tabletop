@@ -443,7 +443,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             for (int i = pickOrder.Count - 1; i >= 0; i--)
             {
                 CardView card = pickOrder[i];
-                if (card == null || !card.IsBound)
+                if (card == null || !card.IsBound || IsArrivingInTray(card))
                 {
                     continue;
                 }
@@ -1011,12 +1011,32 @@ namespace ConsoleCards.Presentation.Views.Containers
             return true;
         }
 
-        // How far a card has currently risen up the screen; picking extends its strip by this much.
+        // How far a card has currently risen up the screen; picking extends its strip by this much, never past
+        // the hover or selected lift, so a card still moving in cannot claim the space above the tray.
         private float TrayRise(CardView card)
         {
             return card != null && trayMotions.TryGetValue(card.ObjectId, out TrayMotion motion)
-                ? Mathf.Max(0f, motion.Position.z)
+                ? Mathf.Clamp(motion.Position.z, 0f, MaximumTrayRise())
                 : 0f;
+        }
+
+        private float MaximumTrayRise()
+        {
+            return Mathf.Max(traySelectedRise, trayHoverRise);
+        }
+
+        // A card flying into the tray from above (a draw, a drop from the table) is not hoverable or pickable
+        // until it has come down to the tray strip; otherwise a resting pointer catches it mid-flight.
+        private bool IsArrivingInTray(CardView card)
+        {
+            if (trayRig == null
+                || ReferenceEquals(card, trayDraggedCard)
+                || !trayMotions.TryGetValue(card.ObjectId, out TrayMotion motion))
+            {
+                return false;
+            }
+
+            return motion.Position.z > MaximumTrayRise() + (cardLayoutWidth * 0.5f);
         }
 
         // Half depth from the authored (unscaled) collider, so tray scaling does not change picking.
