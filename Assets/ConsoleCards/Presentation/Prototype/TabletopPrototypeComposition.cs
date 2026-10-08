@@ -95,23 +95,6 @@ namespace ConsoleCards.Presentation.Prototype
         // components (stable ID, prefab, linked definitions). Every spawn prefab comes from it (C1 piles, C3a
         // cards, pawns, tokens, dice and Consoles).
         [SerializeField] internal ComponentLibrary componentLibrary;
-        [SerializeField] internal CardView cardView;
-        [SerializeField] internal PawnView pawnView;
-        [SerializeField] internal TokenView tokenView;
-        [SerializeField] internal TabletopSelectionVisual cardSelectionVisual;
-        [SerializeField] internal GameObject cardHighlightRoot;
-        [SerializeField] internal TabletopSelectionVisual pawnSelectionVisual;
-        [SerializeField] internal GameObject pawnHighlightRoot;
-        [SerializeField] internal TabletopSelectionVisual tokenSelectionVisual;
-        [SerializeField] internal GameObject tokenHighlightRoot;
-        [SerializeField] internal PrototypeFixedContainerVisual sceneDeckVisual;
-        [SerializeField] internal PrototypeFixedContainerVisual sceneStackAVisual;
-        [SerializeField] internal PrototypeFixedContainerVisual sceneStackBVisual;
-        [SerializeField] internal PrototypeFixedContainerVisual sceneDiscardPileVisual;
-        [SerializeField] internal PrototypeFixedContainerVisual sceneHandVisual;
-        [SerializeField] internal ConsoleView sceneConsoleView;
-        [SerializeField] internal ConsoleSlotView[] sceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
-        [SerializeField] internal PrototypeConsoleSlotVisual[] sceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
         [SerializeField] internal PrototypeRuntimeUiController runtimeUi;
         [Tooltip("Optional authored local Controller Mapping area included by Camera presets that request it.")]
         [SerializeField] private Transform sceneControllerMappingArea;
@@ -189,9 +172,6 @@ namespace ConsoleCards.Presentation.Prototype
         private bool prototypeUiInputConfiguredByComposition;
         private bool componentPlacementInputConfiguredByComposition;
         private bool objectAdapterInitializedByComposition;
-        private bool cardViewBoundByComposition;
-        private bool pawnViewBoundByComposition;
-        private bool tokenViewBoundByComposition;
         private bool gameTemplatesPanelVisible;
         private readonly ActiveSessionUndoHistory<PrototypeSessionUndoSnapshot> undoHistory =
             new ActiveSessionUndoHistory<PrototypeSessionUndoSnapshot>();
@@ -256,7 +236,6 @@ namespace ConsoleCards.Presentation.Prototype
         private CardInstanceState cardState;
         private PawnState pawnState;
         private TokenState tokenState;
-        private PrototypeCardVisualReferences looseCardVisualReferences;
         private TabletopCoordinateConverter coordinateConverter;
         private TabletopSelectionState selectionState;
         private TabletopObjectHitResolver hitResolver;
@@ -278,13 +257,9 @@ namespace ConsoleCards.Presentation.Prototype
         private TabletopPresentationTransitionController presentationTransitions;
 
         private SeatId localSeatId;
-        private ContainerId deckContainerId;
         private ContainerId handContainerId;
         // Local comfort setting for this player's own hand; never game state, Undo or authority.
         private readonly PlayerHandComfortSettings handComfortSettings = new PlayerHandComfortSettings();
-        private ContainerId discardContainerId;
-        private ContainerId stackAContainerId;
-        private ContainerId stackBContainerId;
         private ContainerId primaryStackContainerId;
         private ContainerId sourceFeedbackContainerId;
         private int dynamicStackSequence;
@@ -314,7 +289,6 @@ namespace ConsoleCards.Presentation.Prototype
         private readonly List<TabletopObjectId> assistedHandCardIds =
             new List<TabletopObjectId>();
 
-        private DeckView deckView;
         private HandView handView;
         // Camera hand tray: created once, reused across session rebuilds (keeps its collapsed state).
         private HandTrayRig handTrayRig;
@@ -337,12 +311,9 @@ namespace ConsoleCards.Presentation.Prototype
         private PrototypeFixedContainerVisual catalogHandPrefab;
         // The local Hand, built from the catalog Hand entry for each session (C3b-1).
         private PrototypeFixedContainerVisual localHandVisual;
-        private DiscardPileView discardPileView;
         private ConsoleView consoleView;
         private ConsoleLayoutData consoleLayout;
         private readonly List<ConsoleSlotView> consoleSlotViews = new List<ConsoleSlotView>();
-        private ConsoleSlotView[] resolvedSceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
-        private PrototypeConsoleSlotVisual[] resolvedSceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
 
         public bool IsInitialized { get; private set; }
 
@@ -430,11 +401,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         public IReadOnlyList<CardView> CardViews => cardViews.AsReadOnly();
 
-        public DeckView DeckView => deckView;
-
         public HandView HandView => handView;
-
-        public DiscardPileView DiscardPileView => discardPileView;
 
         public ConsoleView ConsoleView => consoleView;
 
@@ -442,15 +409,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         public IReadOnlyDictionary<ObjectDefinitionId, ButtonCardDefinition> ButtonDefinitions => buttonDefinitions;
 
-        public ContainerId DeckContainerId => deckContainerId;
-
         public ContainerId HandContainerId => handContainerId;
-
-        public ContainerId DiscardContainerId => discardContainerId;
-
-        public ContainerId StackAContainerId => stackAContainerId;
-
-        public ContainerId StackBContainerId => stackBContainerId;
 
         public void Initialize()
         {
@@ -492,7 +451,6 @@ namespace ConsoleCards.Presentation.Prototype
                 RestorePrototypeTemplateContext(restoreInitialBaseline);
                 ValidateTrapFloorConfiguration();
                 presentationTransitions = new TabletopPresentationTransitionController();
-                ReactivateSceneOwnedObjectViews();
                 BuildRuntimeGraph();
                 BuildToolboxRuntime();
                 BuildFloorfallRuntime();
@@ -565,7 +523,6 @@ namespace ConsoleCards.Presentation.Prototype
                 ValidateCommonConfiguration();
                 ValidateInputPreInitializationState();
                 presentationTransitions = new TabletopPresentationTransitionController();
-                HideSceneOwnedTemplatePresentation();
                 interactionOwnerId = InteractionOwnerId.New();
                 coordinateConverter = new TabletopCoordinateConverter(
                     worldUnitsPerTableUnit,
@@ -656,10 +613,6 @@ namespace ConsoleCards.Presentation.Prototype
             componentPlacementInputConfiguredByComposition = false;
             componentPlacementController = null;
 
-            // Scene-owned roots are reusable, but must not expose their previous bindings while
-            // runtime-owned Presentation is being removed and the baseline Match is replaced.
-            HideSceneOwnedTemplatePresentation();
-
             if (prototypeUiInputConfiguredByComposition && inputFrameCoordinator != null)
             {
                 inputFrameCoordinator.ClearPrototypeUiInput();
@@ -701,25 +654,12 @@ namespace ConsoleCards.Presentation.Prototype
 
             selectionPresenter?.Clear();
             selectionPresenter = null;
-            DeactivateSelectionVisual(cardSelectionVisual);
-            DeactivateSelectionVisual(pawnSelectionVisual);
-            DeactivateSelectionVisual(tokenSelectionVisual);
 
             // ConsoleView depends on its bound Slot Views while applying layout, so release the
             // parent binding before releasing the Slot bindings. Rebuild performs the inverse.
             consoleView?.Unbind();
             for (int i = 0; i < consoleSlotViews.Count; i++)
             {
-                if (i < resolvedSceneConsoleSlotVisuals.Length)
-                {
-                    PrototypeConsoleSlotVisual slotVisual = resolvedSceneConsoleSlotVisuals[i];
-                    if (slotVisual != null)
-                    {
-                        slotVisual.DropTarget?.ClearConfiguration();
-                        slotVisual.ClearFeedback();
-                    }
-                }
-
                 if (consoleSlotViews[i] != null && consoleSlotViews[i].IsBound)
                 {
                     consoleSlotViews[i].Unbind();
@@ -751,11 +691,6 @@ namespace ConsoleCards.Presentation.Prototype
             ReleaseRuntimeDiscardPileInstances();
             ReleaseRuntimeConsoleInstances();
             ReleaseRuntimeTokenContainerInstances();
-            // Container layouts own the contained-object presentation. Release every Container
-            // binding before releasing the scene-owned object bindings they may still reference.
-            UnbindIfOwned(cardView, ref cardViewBoundByComposition);
-            UnbindIfOwned(pawnView, ref pawnViewBoundByComposition);
-            UnbindIfOwned(tokenView, ref tokenViewBoundByComposition);
             ClearOfficialPawnPresentation();
             ReleaseRuntimeObjectInstances(runtimePawnInstances, pawnViews, pawnSelectionVisuals);
             ReleaseRuntimeObjectInstances(runtimeTokenInstances, tokenViews, tokenSelectionVisuals);
@@ -807,18 +742,13 @@ namespace ConsoleCards.Presentation.Prototype
             localPlayerLayoutSeatIndex = -1;
             interactionOwnerId = InteractionOwnerId.Empty;
             localSeatId = SeatId.Empty;
-            deckContainerId = ContainerId.Empty;
             handContainerId = ContainerId.Empty;
-            discardContainerId = ContainerId.Empty;
-            stackAContainerId = ContainerId.Empty;
-            stackBContainerId = ContainerId.Empty;
             primaryStackContainerId = ContainerId.Empty;
             sourceFeedbackContainerId = ContainerId.Empty;
             dynamicStackSequence = 0;
             cardState = null;
             pawnState = null;
             tokenState = null;
-            looseCardVisualReferences = null;
             coordinateConverter = null;
             selectionState = null;
             hitResolver = null;
@@ -835,9 +765,7 @@ namespace ConsoleCards.Presentation.Prototype
             containedCardDragCoordinator = null;
             interactionRouter = null;
             layoutViewLookup = null;
-            deckView = null;
             handView = null;
-            discardPileView = null;
             consoleView = null;
             cardViews.Clear();
             cardVisualReferences.Clear();
@@ -862,8 +790,6 @@ namespace ConsoleCards.Presentation.Prototype
             pileBayOwnerSeats.Clear();
             playerConsoleViews.Clear();
             consoleSlotViews.Clear();
-            resolvedSceneConsoleSlotViews = Array.Empty<ConsoleSlotView>();
-            resolvedSceneConsoleSlotVisuals = Array.Empty<PrototypeConsoleSlotVisual>();
             layoutViews.Clear();
             labelsByCardId.Clear();
             buttonDefinitions.Clear();
@@ -895,11 +821,6 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             IsInitialized = false;
-        }
-
-        public ShuffleDeckResult ShuffleDeck()
-        {
-            return ShuffleDeck(deckContainerId);
         }
 
         public ShuffleDeckResult ShuffleDeck(ContainerId targetDeckContainerId)
@@ -944,21 +865,6 @@ namespace ConsoleCards.Presentation.Prototype
 
             RefreshCardContentVisibility();
             return result;
-        }
-
-        public DrawCardsResult DrawOne()
-        {
-            return DrawCards(1);
-        }
-
-        public DrawCardsResult DrawThree()
-        {
-            return DrawCards(3);
-        }
-
-        public DrawCardsResult DrawCards(int count)
-        {
-            return DrawCards(deckContainerId, count);
         }
 
         public ControllerInputHandDrawResult DrawUpToConfiguredHandLimit()
@@ -1117,16 +1023,6 @@ namespace ConsoleCards.Presentation.Prototype
         public ReorderContainerResult MoveSelectedStackCardUp()
         {
             return MoveSelectedCardInSelectedStack(1);
-        }
-
-        public MergeStacksResult MergeStackAOntoStackB()
-        {
-            return MergeStacks(stackAContainerId, stackBContainerId);
-        }
-
-        public MergeStacksResult MergeStackBOntoStackA()
-        {
-            return MergeStacks(stackBContainerId, stackAContainerId);
         }
 
         public SplitStackResult SplitSelectedOrPrimaryStack()
@@ -1985,10 +1881,10 @@ namespace ConsoleCards.Presentation.Prototype
                 return result;
             }
 
-            deckView.ApplyAcceptedLayout();
+            ApplyLayout(trapFloorTemplate.FloormasterDeckId);
             if (result.ReshuffledDiscard)
             {
-                discardPileView.ApplyAcceptedLayout();
+                ApplyLayout(trapFloorTemplate.FloormasterDiscardId);
             }
 
             CardView pendingCardView = FindCardView(result.PendingCard.CardId);
@@ -2028,7 +1924,7 @@ namespace ConsoleCards.Presentation.Prototype
                 return result;
             }
 
-            discardPileView.ApplyAcceptedLayout();
+            ApplyLayout(trapFloorTemplate.FloormasterDiscardId);
             RefreshCardContentVisibility();
             ShowMessage("Pending Floormaster Card discarded. Prototype acknowledgement only; no Card effect was resolved.");
             return result;
@@ -2445,26 +2341,6 @@ namespace ConsoleCards.Presentation.Prototype
         {
             GUILayout.BeginArea(ControlsPanelScreenRect, GUI.skin.box);
             GUILayout.Label("Developer Controls");
-            if (!deckContainerId.IsEmpty && matchState.Containers.ContainsKey(deckContainerId))
-            {
-                if (GUILayout.Button("Shuffle Deck"))
-                {
-                    ShuffleDeck();
-                }
-
-                GUILayout.BeginHorizontal();
-                if (GUILayout.Button("Draw 1"))
-                {
-                    DrawOne();
-                }
-
-                if (GUILayout.Button("Draw 3"))
-                {
-                    DrawThree();
-                }
-
-                GUILayout.EndHorizontal();
-            }
             GUILayout.BeginHorizontal();
             GUILayout.Label(handComfortSettings.CapLabel);
             if (GUILayout.Button("-"))
@@ -2506,16 +2382,6 @@ namespace ConsoleCards.Presentation.Prototype
 
             GUILayout.EndHorizontal();
             GUILayout.Space(4f);
-            if (GUILayout.Button("Merge Stack A onto Stack B"))
-            {
-                MergeStackAOntoStackB();
-            }
-
-            if (GUILayout.Button("Merge Stack B onto Stack A"))
-            {
-                MergeStackBOntoStackA();
-            }
-
             if (GUILayout.Button("Split Selected/Primary Stack"))
             {
                 SplitSelectedOrPrimaryStack();
@@ -3631,8 +3497,6 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 ContainerId containerId = containerIds[i];
                 if (!matchState.Containers.TryGetValue(containerId, out ContainerState container)
-                    || containerId == deckContainerId
-                    || containerId == discardContainerId
                     || containerId == handContainerId)
                 {
                     continue;
@@ -4307,7 +4171,7 @@ namespace ConsoleCards.Presentation.Prototype
                 $"Search + Trigger: {trapFloorRoundState.CompletedSearchTriggerCount} / "
                     + $"{trapFloorRoundState.ParticipatingPlayerIds.Count} Players complete",
                 detail,
-                $"Deck: {ContainerCount(deckContainerId)}   Discard: {ContainerCount(discardContainerId)}",
+                $"Hand: {ContainerCount(handContainerId)}",
                 TrapFloorActionHelpText());
 
             PrototypeFloorfallStatusModel floorfall = BuildFloorfallStatusModel();
@@ -7857,19 +7721,7 @@ namespace ConsoleCards.Presentation.Prototype
                     "The Trap Floor Board visual must be a child of its authored physical surface.");
             }
 
-            RequireReference(cardView, nameof(cardView));
-            RequireReference(pawnView, nameof(pawnView));
-            RequireReference(tokenView, nameof(tokenView));
-            RequireReference(cardSelectionVisual, nameof(cardSelectionVisual));
-            RequireReference(cardHighlightRoot, nameof(cardHighlightRoot));
-            RequireReference(pawnSelectionVisual, nameof(pawnSelectionVisual));
-            RequireReference(pawnHighlightRoot, nameof(pawnHighlightRoot));
-            RequireReference(tokenSelectionVisual, nameof(tokenSelectionVisual));
-            RequireReference(tokenHighlightRoot, nameof(tokenHighlightRoot));
-            ValidateFixedContainerReferences();
             ValidateFiniteGreaterThanZero(floorCardVisualScale, nameof(floorCardVisualScale));
-            ValidateDistinctViews();
-            ValidateSelectionPresentationReferences();
             ValidateCardPrefabReferences();
             ValidateTrapFloorPrefabReferences();
             ValidatePreInitializationState();
@@ -8156,96 +8008,6 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             catalogCardPrefab.ValidateReferences();
-            looseCardVisualReferences = cardView.GetComponent<PrototypeCardVisualReferences>();
-            RequireReference(looseCardVisualReferences, nameof(looseCardVisualReferences));
-            looseCardVisualReferences.ValidateReferences();
-
-            if (!ReferenceEquals(looseCardVisualReferences.CardView, cardView)
-                || !ReferenceEquals(looseCardVisualReferences.SelectionVisual, cardSelectionVisual))
-            {
-                throw new InvalidOperationException(
-                    "The scene-owned loose Card references must resolve from its PrototypeCard instance.");
-            }
-        }
-
-        private void ReactivateSceneOwnedObjectViews()
-        {
-            sceneDeckVisual.Reactivate();
-            sceneStackAVisual.Reactivate();
-            sceneStackBVisual.Reactivate();
-            sceneDiscardPileVisual.Reactivate();
-            ApplyFixedContainerVisualHide(sceneDeckVisual, true);
-            ApplyFixedContainerVisualHide(sceneStackAVisual, true);
-            ApplyFixedContainerVisualHide(sceneStackBVisual, true);
-            ApplyFixedContainerVisualHide(sceneDiscardPileVisual, true);
-        }
-
-        private void HideSceneOwnedTemplatePresentation()
-        {
-            SetActiveIfPresent(cardView, false);
-            SetActiveIfPresent(pawnView, false);
-            SetActiveIfPresent(tokenView, false);
-            SetActiveIfPresent(sceneDeckVisual, false);
-            SetActiveIfPresent(sceneStackAVisual, false);
-            SetActiveIfPresent(sceneStackBVisual, false);
-            SetActiveIfPresent(sceneDiscardPileVisual, false);
-            SetActiveIfPresent(sceneHandVisual, false);
-            SetActiveIfPresent(sceneConsoleView, false);
-        }
-
-        private static void SetActiveIfPresent(Component component, bool active)
-        {
-            if (component != null)
-            {
-                component.gameObject.SetActive(active);
-            }
-        }
-
-        private void ValidateFixedContainerReferences()
-        {
-            RequireReference(sceneDeckVisual, nameof(sceneDeckVisual));
-            RequireReference(sceneStackAVisual, nameof(sceneStackAVisual));
-            RequireReference(sceneStackBVisual, nameof(sceneStackBVisual));
-            RequireReference(sceneDiscardPileVisual, nameof(sceneDiscardPileVisual));
-            RequireReference(sceneHandVisual, nameof(sceneHandVisual));
-
-            sceneDeckVisual.ValidateReferences();
-            sceneStackAVisual.ValidateReferences();
-            sceneStackBVisual.ValidateReferences();
-            sceneDiscardPileVisual.ValidateReferences();
-            sceneHandVisual.ValidateReferences();
-
-            DeckView resolvedDeckView = sceneDeckVisual.GetView<DeckView>();
-            StackView resolvedStackAView = sceneStackAVisual.GetView<StackView>();
-            StackView resolvedStackBView = sceneStackBVisual.GetView<StackView>();
-            DiscardPileView resolvedDiscardView = sceneDiscardPileVisual.GetView<DiscardPileView>();
-            HandView resolvedHandView = sceneHandVisual.GetView<HandView>();
-
-            if (ReferenceEquals(resolvedStackAView, resolvedStackBView))
-            {
-                throw new InvalidOperationException(
-                    "TabletopPrototypeComposition requires distinct scene-owned Stack A and Stack B Views.");
-            }
-
-            ValidateStackLayoutAnchor(sceneStackAVisual);
-            ValidateStackLayoutAnchor(sceneStackBVisual);
-
-            if (!ReferenceEquals(resolvedHandView.LayoutAnchor, sceneHandVisual.LayoutAnchor)
-                || ReferenceEquals(resolvedHandView.transform, sceneHandVisual.LayoutAnchor))
-            {
-                throw new InvalidOperationException(
-                    "The scene-owned Hand must use its distinct authored layout anchor.");
-            }
-
-            if (resolvedDeckView.gameObject.scene != gameObject.scene
-                || resolvedStackAView.gameObject.scene != gameObject.scene
-                || resolvedStackBView.gameObject.scene != gameObject.scene
-                || resolvedDiscardView.gameObject.scene != gameObject.scene
-                || resolvedHandView.gameObject.scene != gameObject.scene)
-            {
-                throw new InvalidOperationException(
-                    "TabletopPrototypeComposition requires fixed container Views from its scene.");
-            }
         }
 
         private void ValidatePreInitializationState()
@@ -8258,45 +8020,6 @@ namespace ConsoleCards.Presentation.Prototype
             if (!objectInputAdapter.HasValidActionConfiguration)
             {
                 throw new InvalidOperationException("TabletopPrototypeComposition requires a valid Object input adapter action configuration.");
-            }
-
-            if (cardView.IsBound)
-            {
-                throw new InvalidOperationException("TabletopPrototypeComposition requires the CardView to begin unbound.");
-            }
-
-            if (pawnView.IsBound)
-            {
-                throw new InvalidOperationException("TabletopPrototypeComposition requires the PawnView to begin unbound.");
-            }
-
-            if (tokenView.IsBound)
-            {
-                throw new InvalidOperationException("TabletopPrototypeComposition requires the TokenView to begin unbound.");
-            }
-
-            ValidateFixedContainerPreInitializationState(sceneDeckVisual);
-            ValidateFixedContainerPreInitializationState(sceneStackAVisual);
-            ValidateFixedContainerPreInitializationState(sceneStackBVisual);
-            ValidateFixedContainerPreInitializationState(sceneDiscardPileVisual);
-            ValidateFixedContainerPreInitializationState(sceneHandVisual);
-
-            if (sceneConsoleView.IsBound)
-            {
-                throw new InvalidOperationException("TabletopPrototypeComposition requires the scene ConsoleView to begin unbound.");
-            }
-
-            for (int i = 0; i < resolvedSceneConsoleSlotViews.Length; i++)
-            {
-                if (resolvedSceneConsoleSlotViews[i].IsBound)
-                {
-                    throw new InvalidOperationException("TabletopPrototypeComposition requires scene ConsoleSlotViews to begin unbound.");
-                }
-
-                if (resolvedSceneConsoleSlotVisuals[i].DropTarget.IsConfigured)
-                {
-                    throw new InvalidOperationException("TabletopPrototypeComposition requires scene Console Slot drop targets to begin unconfigured.");
-                }
             }
 
             if (objectInputAdapter.IsInitialized)
@@ -8555,11 +8278,7 @@ namespace ConsoleCards.Presentation.Prototype
                 requestingPlayerId,
                 localPlayer.SeatId,
                 localPlayer.LayoutSeatIndex,
-                ContainerId.Empty,
                 localPlayer.HandContainerId,
-                ContainerId.Empty,
-                ContainerId.Empty,
-                ContainerId.Empty,
                 templateDefinition.BoardPlayAreaId,
                 localPlayer.AvatarCardId,
                 localPlayer.PawnId,
@@ -9054,12 +8773,8 @@ namespace ConsoleCards.Presentation.Prototype
 
             localPlayerId = context.LocalPlayerId;
             localSeatId = context.LocalSeatId;
-            deckContainerId = context.DeckContainerId;
             handContainerId = context.HandContainerId;
-            discardContainerId = context.DiscardContainerId;
-            stackAContainerId = context.StackAContainerId;
-            stackBContainerId = context.StackBContainerId;
-            primaryStackContainerId = stackAContainerId;
+            primaryStackContainerId = ContainerId.Empty;
             centralPlayAreaId = context.CentralPlayAreaId;
             cardState = matchState.Cards[context.LooseCardId];
             pawnState = matchState.Pawns[context.PawnId];
@@ -9197,8 +8912,6 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void BuildContainerViews()
         {
-            deckView = null;
-            sceneDeckVisual.gameObject.SetActive(false);
             localHandVisual = CreateLocalHandVisual();
             handView = localHandVisual.GetView<HandView>();
             handView.ConfigurePresentation(presentationTransitions, localHandVisual.FeedbackRenderer);
@@ -9212,10 +8925,6 @@ namespace ConsoleCards.Presentation.Prototype
 
             handTrayRig.Activate();
             handView.ConfigureTray(handTrayRig);
-            DeactivateUnusedSceneStack(sceneStackAVisual);
-            DeactivateUnusedSceneStack(sceneStackBVisual);
-            discardPileView = null;
-            sceneDiscardPileVisual.gameObject.SetActive(false);
 
             for (int playerIndex = 0; playerIndex < trapFloorTemplate.Players.Count; playerIndex++)
             {
@@ -9276,31 +8985,6 @@ namespace ConsoleCards.Presentation.Prototype
             visual.ValidateReferences();
             ApplyFixedContainerVisualHide(visual, true);
             return visual;
-        }
-
-        private static void DeactivateUnusedSceneStack(PrototypeFixedContainerVisual visual)
-        {
-            visual.DropTarget.ClearConfiguration();
-            visual.DropTarget.enabled = false;
-            visual.TargetCollider.enabled = false;
-            visual.ClearFeedback();
-            visual.gameObject.SetActive(false);
-        }
-
-        private static StackRuntimeView CreateSceneOwnedStackView(
-            PrototypeFixedContainerVisual visual,
-            ContainerState container,
-            ContainerPlacementState placement)
-        {
-            StackView view = visual.GetView<StackView>();
-            return new StackRuntimeView(
-                StackViewOwnership.SceneOwned,
-                visual.gameObject,
-                visual,
-                view,
-                container,
-                placement,
-                visual.DropTarget);
         }
 
         private void BindContainerViews()
@@ -9683,11 +9367,6 @@ namespace ConsoleCards.Presentation.Prototype
         private void RebuildLayoutViewCollection()
         {
             layoutViews.Clear();
-            if (deckView != null && deckView.IsBound)
-            {
-                layoutViews.Add(deckView);
-            }
-
             for (int i = 0; i < controllerDeckViews.Count; i++)
             {
                 if (controllerDeckViews[i] != null && controllerDeckViews[i].IsBound)
@@ -9707,11 +9386,6 @@ namespace ConsoleCards.Presentation.Prototype
                 {
                     layoutViews.Add(stackRuntimeView.View);
                 }
-            }
-
-            if (discardPileView != null && discardPileView.IsBound)
-            {
-                layoutViews.Add(discardPileView);
             }
 
             for (int i = 0; i < runtimeDiscardPileInstances.Count; i++)
@@ -9942,17 +9616,14 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ApplyLayout(ContainerId containerId)
         {
-            if (containerId == deckContainerId)
+            if (containerId.IsEmpty)
             {
-                deckView.ApplyAcceptedLayout();
+                return;
             }
-            else if (containerId == handContainerId)
+
+            if (containerId == handContainerId && handView != null)
             {
                 handView.ApplyAcceptedLayout();
-            }
-            else if (containerId == discardContainerId)
-            {
-                discardPileView.ApplyAcceptedLayout();
             }
             else if (stackViewsByContainerId.TryGetValue(containerId, out StackRuntimeView stackRuntimeView))
             {
@@ -9998,16 +9669,6 @@ namespace ConsoleCards.Presentation.Prototype
             out DeckView resolvedView,
             out PrototypeFixedContainerVisual resolvedVisual)
         {
-            if (!containerId.IsEmpty
-                && deckView != null
-                && deckView.IsBound
-                && deckView.ContainerId == containerId)
-            {
-                resolvedView = deckView;
-                resolvedVisual = sceneDeckVisual;
-                return resolvedVisual != null;
-            }
-
             for (int i = 0; i < runtimeDeckInstances.Count; i++)
             {
                 RuntimeDeckInstance instance = runtimeDeckInstances[i];
@@ -10333,7 +9994,7 @@ namespace ConsoleCards.Presentation.Prototype
             boundary.transform.localPosition = new Vector3(0f, 0.0125f, 0f);
             boundary.transform.localScale = new Vector3(width, 0.025f, depth);
             Renderer renderer = boundary.GetComponent<Renderer>();
-            renderer.sharedMaterial = sceneDeckVisual.FeedbackRenderer.sharedMaterial;
+            renderer.sharedMaterial = catalogHandPrefab.FeedbackRenderer.sharedMaterial;
             MaterialPropertyBlock properties = new MaterialPropertyBlock();
             renderer.GetPropertyBlock(properties);
             Color areaColor = new Color(color.r * 0.55f, color.g * 0.55f, color.b * 0.55f, 1f);
@@ -11474,11 +11135,6 @@ namespace ConsoleCards.Presentation.Prototype
             return "Player";
         }
 
-        private int AvailableDrawableCount()
-        {
-            return AvailableDrawableCount(deckContainerId);
-        }
-
         private int AvailableDrawableCount(ContainerId sourceDeckContainerId)
         {
             if (matchState == null
@@ -11638,22 +11294,6 @@ namespace ConsoleCards.Presentation.Prototype
             feedbackTargetsByContainerId[view.ContainerId] = new ContainerFeedbackTarget(visual);
         }
 
-        private static void ValidateFixedContainerPreInitializationState(
-            PrototypeFixedContainerVisual visual)
-        {
-            if (visual.ContainerView.IsBound)
-            {
-                throw new InvalidOperationException(
-                    $"TabletopPrototypeComposition requires scene {visual.name} to begin unbound.");
-            }
-
-            if (visual.DropTarget.IsConfigured)
-            {
-                throw new InvalidOperationException(
-                    $"TabletopPrototypeComposition requires scene {visual.name} drop target to begin unconfigured.");
-            }
-        }
-
         private static void ValidateStackLayoutAnchor(PrototypeFixedContainerVisual visual)
         {
             visual.GetView<StackView>();
@@ -11666,10 +11306,6 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ReleaseSceneOwnedFixedContainerViews()
         {
-            ReleaseSceneOwnedFixedStack(sceneStackAVisual, stackAContainerId);
-            ReleaseSceneOwnedFixedStack(sceneStackBVisual, stackBContainerId);
-            ReleaseSceneOwnedFixedContainer(sceneDeckVisual, deckView, deckContainerId);
-            deckView = null;
             ReleaseSceneOwnedFixedContainer(localHandVisual, handView, handContainerId);
             if (localHandVisual != null)
             {
@@ -11685,40 +11321,6 @@ namespace ConsoleCards.Presentation.Prototype
             ReleaseHiddenHandViews();
 
             handView = null;
-            ReleaseSceneOwnedFixedContainer(sceneDiscardPileVisual, discardPileView, discardContainerId);
-            discardPileView = null;
-        }
-
-        private void ReleaseSceneOwnedFixedStack(
-            PrototypeFixedContainerVisual visual,
-            ContainerId containerId)
-        {
-            if (visual == null)
-            {
-                return;
-            }
-
-            visual.DropTarget?.ClearConfiguration();
-            if (visual.DropTarget != null)
-            {
-                visual.DropTarget.enabled = false;
-            }
-
-            if (visual.TargetCollider != null)
-            {
-                visual.TargetCollider.enabled = false;
-            }
-
-            visual.ClearFeedback();
-            StackView view = visual.GetView<StackView>();
-            if (view.IsBound)
-            {
-                view.Unbind();
-            }
-
-            feedbackTargetsByContainerId.Remove(containerId);
-            layoutViews.Remove(view);
-            visual.gameObject.SetActive(false);
         }
 
         private void ReleaseSceneOwnedFixedContainer(
@@ -12182,287 +11784,6 @@ namespace ConsoleCards.Presentation.Prototype
             Destroy(root);
         }
 
-        private void ValidateDistinctViews()
-        {
-            if (ReferenceEquals(cardView, pawnView)
-                || ReferenceEquals(cardView, tokenView)
-                || ReferenceEquals(pawnView, tokenView))
-            {
-                throw new InvalidOperationException("TabletopPrototypeComposition requires distinct Card, Pawn, and Token Views.");
-            }
-
-            if (ReferenceEquals(cardView.gameObject, pawnView.gameObject)
-                || ReferenceEquals(cardView.gameObject, tokenView.gameObject)
-                || ReferenceEquals(pawnView.gameObject, tokenView.gameObject))
-            {
-                throw new InvalidOperationException("TabletopPrototypeComposition requires Card, Pawn, and Token Views on distinct GameObjects.");
-            }
-        }
-
-        private void ValidateSelectionPresentationReferences()
-        {
-            if (!ReferenceEquals(cardSelectionVisual.gameObject, cardView.gameObject))
-            {
-                throw new InvalidOperationException("TabletopPrototypeComposition requires the Card selection visual on the CardView GameObject.");
-            }
-
-            if (!ReferenceEquals(pawnSelectionVisual.gameObject, pawnView.gameObject))
-            {
-                throw new InvalidOperationException("TabletopPrototypeComposition requires the Pawn selection visual on the PawnView GameObject.");
-            }
-
-            if (!ReferenceEquals(tokenSelectionVisual.gameObject, tokenView.gameObject))
-            {
-                throw new InvalidOperationException("TabletopPrototypeComposition requires the Token selection visual on the TokenView GameObject.");
-            }
-
-            if (ReferenceEquals(cardSelectionVisual, pawnSelectionVisual)
-                || ReferenceEquals(cardSelectionVisual, tokenSelectionVisual)
-                || ReferenceEquals(pawnSelectionVisual, tokenSelectionVisual))
-            {
-                throw new InvalidOperationException("TabletopPrototypeComposition requires distinct selection visual components.");
-            }
-
-            if (ReferenceEquals(cardHighlightRoot, pawnHighlightRoot)
-                || ReferenceEquals(cardHighlightRoot, tokenHighlightRoot)
-                || ReferenceEquals(pawnHighlightRoot, tokenHighlightRoot))
-            {
-                throw new InvalidOperationException("TabletopPrototypeComposition requires distinct selection highlight roots.");
-            }
-
-            if (!cardSelectionVisual.IsConfigured
-                || !pawnSelectionVisual.IsConfigured
-                || !tokenSelectionVisual.IsConfigured)
-            {
-                throw new InvalidOperationException(
-                    "TabletopPrototypeComposition requires prefab-authored selection visual references.");
-            }
-
-            if (!ReferenceEquals(cardSelectionVisual.ObjectView, cardView)
-                || !ReferenceEquals(pawnSelectionVisual.ObjectView, pawnView)
-                || !ReferenceEquals(tokenSelectionVisual.ObjectView, tokenView))
-            {
-                throw new InvalidOperationException(
-                    "TabletopPrototypeComposition requires each selection visual to reference its scene-owned View.");
-            }
-
-            if (!ReferenceEquals(cardSelectionVisual.HighlightRoot, cardHighlightRoot)
-                || !ReferenceEquals(pawnSelectionVisual.HighlightRoot, pawnHighlightRoot)
-                || !ReferenceEquals(tokenSelectionVisual.HighlightRoot, tokenHighlightRoot))
-            {
-                throw new InvalidOperationException(
-                    "TabletopPrototypeComposition selection roots must match the prefab-authored references.");
-            }
-
-            if (cardHighlightRoot.activeSelf
-                || pawnHighlightRoot.activeSelf
-                || tokenHighlightRoot.activeSelf)
-            {
-                throw new InvalidOperationException(
-                    "TabletopPrototypeComposition requires selection highlight roots to begin inactive.");
-            }
-        }
-
-        private void ValidateSceneConsoleReferences()
-        {
-            RequireReference(sceneConsoleView, nameof(sceneConsoleView));
-            resolvedSceneConsoleSlotViews = ResolveSceneConsoleSlotViews();
-            int expectedSlotCount = resolvedSceneConsoleSlotViews.Length;
-            resolvedSceneConsoleSlotVisuals = new PrototypeConsoleSlotVisual[expectedSlotCount];
-
-            HashSet<ConsoleSlotView> seenViews = new HashSet<ConsoleSlotView>();
-            for (int i = 0; i < expectedSlotCount; i++)
-            {
-                ConsoleSlotView slotView = resolvedSceneConsoleSlotViews[i];
-                if (!seenViews.Add(slotView))
-                {
-                    throw new InvalidOperationException("Duplicate ConsoleSlotView detected.");
-                }
-
-                if (!slotView.transform.IsChildOf(sceneConsoleView.transform))
-                {
-                    throw new InvalidOperationException("ConsoleSlotView must belong to sceneConsoleView hierarchy.");
-                }
-
-                Collider targetCollider = slotView.GetComponent<Collider>();
-                if (targetCollider == null)
-                {
-                    throw new InvalidOperationException("ConsoleSlotView requires a Collider on its Slot root.");
-                }
-
-                TabletopContainerDropTarget dropTarget = slotView.GetComponent<TabletopContainerDropTarget>();
-                if (dropTarget == null)
-                {
-                    throw new InvalidOperationException("ConsoleSlotView requires a TabletopContainerDropTarget on its Slot root.");
-                }
-
-                PrototypeConsoleSlotVisual slotVisual = ResolveSceneConsoleSlotVisual(slotView);
-                RequireReference(slotVisual, $"PrototypeConsoleSlotVisual for Console Slot {i}");
-                slotVisual.ValidateReferences();
-                if (!ReferenceEquals(slotVisual.SlotView, slotView))
-                {
-                    throw new InvalidOperationException("TabletopPrototypeComposition Console Slot View order must match its authored visual order.");
-                }
-
-                if (!ReferenceEquals(slotVisual.TargetCollider, targetCollider)
-                    || !ReferenceEquals(slotVisual.DropTarget, dropTarget))
-                {
-                    throw new InvalidOperationException("ConsoleSlotView Collider and drop target must match its authored visual references.");
-                }
-
-                resolvedSceneConsoleSlotVisuals[i] = slotVisual;
-            }
-
-            for (int i = 1; i < resolvedSceneConsoleSlotViews.Length; i++)
-            {
-                if (CompareConsoleHierarchyOrder(
-                        resolvedSceneConsoleSlotViews[i - 1].transform,
-                        resolvedSceneConsoleSlotViews[i].transform) >= 0)
-                {
-                    throw new InvalidOperationException("ConsoleSlotView sibling order must be stable.");
-                }
-            }
-        }
-
-        private ConsoleSlotView[] ResolveSceneConsoleSlotViews()
-        {
-            int expectedSlotCount = matchState.GetSeat(localSeatId).Console.SlotCount;
-            // The scene Console persists across sessions: re-activate every Slot before applying this count.
-            ConsoleSlotView[] authoredViews = sceneConsoleView.GetComponentsInChildren<ConsoleSlotView>(true);
-            for (int i = 0; i < authoredViews.Length; i++) authoredViews[i].gameObject.SetActive(true);
-
-            ConsoleSlotView[] resolvedViews;
-            if (sceneConsoleSlotViews != null
-                && sceneConsoleSlotViews.Length == expectedSlotCount
-                && Array.TrueForAll(sceneConsoleSlotViews, view => view != null))
-            {
-                resolvedViews = (ConsoleSlotView[])sceneConsoleSlotViews.Clone();
-            }
-            else
-            {
-                if (authoredViews.Length != expectedSlotCount)
-                {
-                    throw new InvalidOperationException(
-                        $"sceneConsoleView authors {authoredViews.Length} ConsoleSlotViews; its Console state needs {expectedSlotCount}.");
-                }
-
-                Array.Sort(
-                    authoredViews,
-                    (left, right) => CompareConsoleHierarchyOrder(left.transform, right.transform));
-                resolvedViews = new ConsoleSlotView[Math.Min(expectedSlotCount, authoredViews.Length)];
-                Array.Copy(authoredViews, resolvedViews, resolvedViews.Length);
-            }
-
-            if (resolvedViews.Length != expectedSlotCount)
-            {
-                throw new InvalidOperationException(
-                    $"Expected at least {expectedSlotCount} ConsoleSlotView components under sceneConsoleView.");
-            }
-
-            for (int i = 0; i < resolvedViews.Length; i++)
-            {
-                if (resolvedViews[i] == null)
-                {
-                    throw new InvalidOperationException("ConsoleSlotView resolution returned a null entry.");
-                }
-
-                if (!resolvedViews[i].transform.IsChildOf(sceneConsoleView.transform))
-                {
-                    throw new InvalidOperationException("ConsoleSlotView must belong to sceneConsoleView hierarchy.");
-                }
-            }
-
-            Array.Sort(
-                resolvedViews,
-                (left, right) => CompareConsoleHierarchyOrder(left.transform, right.transform));
-            for (int i = 0; i < authoredViews.Length; i++)
-            {
-                if (Array.IndexOf(resolvedViews, authoredViews[i]) < 0) authoredViews[i].gameObject.SetActive(false);
-            }
-
-            return resolvedViews;
-        }
-
-        private PrototypeConsoleSlotVisual ResolveSceneConsoleSlotVisual(ConsoleSlotView slotView)
-        {
-            if (sceneConsoleSlotVisuals != null)
-            {
-                for (int i = 0; i < sceneConsoleSlotVisuals.Length; i++)
-                {
-                    PrototypeConsoleSlotVisual explicitVisual = sceneConsoleSlotVisuals[i];
-                    if (explicitVisual != null && ReferenceEquals(explicitVisual.SlotView, slotView))
-                    {
-                        return explicitVisual;
-                    }
-                }
-            }
-
-            return slotView.GetComponent<PrototypeConsoleSlotVisual>();
-        }
-
-        private int CompareConsoleHierarchyOrder(Transform left, Transform right)
-        {
-            if (ReferenceEquals(left, right))
-            {
-                return 0;
-            }
-
-            List<int> leftOrder = GetConsoleHierarchyOrder(left);
-            List<int> rightOrder = GetConsoleHierarchyOrder(right);
-            int sharedDepth = Math.Min(leftOrder.Count, rightOrder.Count);
-            for (int i = 0; i < sharedDepth; i++)
-            {
-                int comparison = leftOrder[i].CompareTo(rightOrder[i]);
-                if (comparison != 0)
-                {
-                    return comparison;
-                }
-            }
-
-            return leftOrder.Count.CompareTo(rightOrder.Count);
-        }
-
-        private List<int> GetConsoleHierarchyOrder(Transform slotTransform)
-        {
-            List<int> order = new List<int>();
-            Transform current = slotTransform;
-            while (!ReferenceEquals(current, sceneConsoleView.transform))
-            {
-                order.Add(current.GetSiblingIndex());
-                current = current.parent;
-                if (current == null)
-                {
-                    throw new InvalidOperationException("ConsoleSlotView must belong to sceneConsoleView hierarchy.");
-                }
-            }
-
-            order.Reverse();
-            return order;
-        }
-
-        private static void UnbindIfOwned(TabletopObjectView view, ref bool boundByComposition)
-        {
-            if (!boundByComposition)
-            {
-                return;
-            }
-
-            if (view != null && view.IsBound)
-            {
-                view.Unbind();
-            }
-
-            boundByComposition = false;
-        }
-
-        private static void DeactivateSelectionVisual(TabletopSelectionVisual visual)
-        {
-            if (visual != null && visual.IsConfigured)
-            {
-                visual.SetSelected(false);
-            }
-        }
-
         private static void RequireReference(UnityEngine.Object reference, string name)
         {
             if (reference == null)
@@ -12594,11 +11915,7 @@ namespace ConsoleCards.Presentation.Prototype
                 PlayerId localPlayerId,
                 SeatId localSeatId,
                 int localPlayerLayoutSeatIndex,
-                ContainerId deckContainerId,
                 ContainerId handContainerId,
-                ContainerId discardContainerId,
-                ContainerId stackAContainerId,
-                ContainerId stackBContainerId,
                 PlayAreaId centralPlayAreaId,
                 TabletopObjectId looseCardId,
                 TabletopObjectId pawnId,
@@ -12611,11 +11928,7 @@ namespace ConsoleCards.Presentation.Prototype
                 LocalPlayerId = localPlayerId;
                 LocalSeatId = localSeatId;
                 LocalPlayerLayoutSeatIndex = localPlayerLayoutSeatIndex;
-                DeckContainerId = deckContainerId;
                 HandContainerId = handContainerId;
-                DiscardContainerId = discardContainerId;
-                StackAContainerId = stackAContainerId;
-                StackBContainerId = stackBContainerId;
                 CentralPlayAreaId = centralPlayAreaId;
                 LooseCardId = looseCardId;
                 PawnId = pawnId;
@@ -12638,11 +11951,7 @@ namespace ConsoleCards.Presentation.Prototype
             public PlayerId LocalPlayerId { get; }
             public SeatId LocalSeatId { get; }
             public int LocalPlayerLayoutSeatIndex { get; }
-            public ContainerId DeckContainerId { get; }
             public ContainerId HandContainerId { get; }
-            public ContainerId DiscardContainerId { get; }
-            public ContainerId StackAContainerId { get; }
-            public ContainerId StackBContainerId { get; }
             public PlayAreaId CentralPlayAreaId { get; }
             public TabletopObjectId LooseCardId { get; }
             public TabletopObjectId PawnId { get; }

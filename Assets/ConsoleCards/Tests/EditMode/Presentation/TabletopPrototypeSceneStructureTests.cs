@@ -66,14 +66,15 @@ namespace ConsoleCards.Tests.EditMode.Presentation
                     "TabletopInput",
                     "PrototypeControlPanel",
                     "PrototypeInteractionGuide");
-                AssertDirectChildren(FindRoot(scene, "TabletopObjects"), "PrototypeCard", "PrototypePawn", "PrototypeToken");
+                // C3b-2: every card, pawn and token is a catalog spawn; the scene holds none.
+                AssertDirectChildren(FindRoot(scene, "TabletopObjects"));
                 AssertDirectChildren(FindRoot(scene, "Containers"));
                 AssertDirectChildren(FindRoot(scene, "DynamicContainers"));
                 AssertDirectChildren(FindRoot(scene, "LooseCards"));
 
-                Assert.That(AllObjects(scene).Count(go => go.name == "PrototypeCard"), Is.EqualTo(1));
-                Assert.That(AllObjects(scene).Count(go => go.name == "PrototypePawn"), Is.EqualTo(1));
-                Assert.That(AllObjects(scene).Count(go => go.name == "PrototypeToken"), Is.EqualTo(1));
+                Assert.That(AllObjects(scene).Count(go => go.name == "PrototypeCard"), Is.EqualTo(0));
+                Assert.That(AllObjects(scene).Count(go => go.name == "PrototypePawn"), Is.EqualTo(0));
+                Assert.That(AllObjects(scene).Count(go => go.name == "PrototypeToken"), Is.EqualTo(0));
                 AssertNoMissingScripts(scene);
             });
         }
@@ -92,10 +93,10 @@ namespace ConsoleCards.Tests.EditMode.Presentation
                 Assert.That(GetComponents<TabletopInputFrameCoordinator>(scene), Has.Length.EqualTo(1));
                 Assert.That(GetComponents<TabletopPrototypeComposition>(scene), Has.Length.EqualTo(1));
                 Assert.That(GetComponents<PrototypeInteractionGuide>(scene), Has.Length.EqualTo(1));
-                Assert.That(GetComponents<CardView>(scene), Has.Length.EqualTo(1));
-                Assert.That(GetComponents<PawnView>(scene), Has.Length.EqualTo(1));
-                Assert.That(GetComponents<TokenView>(scene), Has.Length.EqualTo(1));
-                Assert.That(GetComponents<TabletopSelectionVisual>(scene), Has.Length.EqualTo(3));
+                Assert.That(GetComponents<CardView>(scene), Is.Empty);
+                Assert.That(GetComponents<PawnView>(scene), Is.Empty);
+                Assert.That(GetComponents<TokenView>(scene), Is.Empty);
+                Assert.That(GetComponents<TabletopSelectionVisual>(scene), Is.Empty);
                 Assert.That(GetComponents<TabletopSurfaceProxy>(scene), Has.Length.EqualTo(1));
 
                 Assert.That(CountComponents(objects, "UnityEngine.InputSystem.PlayerInput"), Is.EqualTo(0));
@@ -150,9 +151,6 @@ namespace ConsoleCards.Tests.EditMode.Presentation
                 TabletopObjectInputAdapter objectAdapter = GetSingle<TabletopObjectInputAdapter>(scene);
                 TabletopInputFrameCoordinator frameCoordinator = GetSingle<TabletopInputFrameCoordinator>(scene);
                 TabletopPrototypeComposition composition = GetSingle<TabletopPrototypeComposition>(scene);
-                CardView cardView = GetSingle<CardView>(scene);
-                PawnView pawnView = GetSingle<PawnView>(scene);
-                TokenView tokenView = GetSingle<TokenView>(scene);
 
                 SerializedObject frameSerialized = new SerializedObject(frameCoordinator);
                 Assert.That(frameCoordinator.enabled, Is.False);
@@ -165,33 +163,11 @@ namespace ConsoleCards.Tests.EditMode.Presentation
                 AssertObjectReference(compositionSerialized, "cameraInputAdapter", cameraAdapter);
                 AssertObjectReference(compositionSerialized, "objectInputAdapter", objectAdapter);
                 AssertObjectReference(compositionSerialized, "inputFrameCoordinator", frameCoordinator);
-                AssertObjectReference(compositionSerialized, "cardView", cardView);
-                AssertObjectReference(compositionSerialized, "pawnView", pawnView);
-                AssertObjectReference(compositionSerialized, "tokenView", tokenView);
-                AssertObjectReference(
-                    compositionSerialized,
-                    "cardSelectionVisual",
-                    cardView.GetComponent<TabletopSelectionVisual>());
-                AssertObjectReference(
-                    compositionSerialized,
-                    "pawnSelectionVisual",
-                    pawnView.GetComponent<TabletopSelectionVisual>());
-                AssertObjectReference(
-                    compositionSerialized,
-                    "tokenSelectionVisual",
-                    tokenView.GetComponent<TabletopSelectionVisual>());
-                AssertObjectReference(
-                    compositionSerialized,
-                    "cardHighlightRoot",
-                    FindChild(cardView.gameObject, "SelectionHighlightRoot"));
-                AssertObjectReference(
-                    compositionSerialized,
-                    "pawnHighlightRoot",
-                    FindChild(pawnView.gameObject, "SelectionHighlightRoot"));
-                AssertObjectReference(
-                    compositionSerialized,
-                    "tokenHighlightRoot",
-                    FindChild(tokenView.gameObject, "SelectionHighlightRoot"));
+                // C3b-2: the scene-owned pieces and their fields are gone; spawns come from the component library.
+                Assert.That(compositionSerialized.FindProperty("cardView"), Is.Null);
+                Assert.That(compositionSerialized.FindProperty("sceneHandVisual"), Is.Null);
+                Assert.That(compositionSerialized.FindProperty("sceneConsoleView"), Is.Null);
+                Assert.That(compositionSerialized.FindProperty("componentLibrary").objectReferenceValue, Is.Not.Null);
                 Assert.That(compositionSerialized.FindProperty("interactionLayerMask").intValue,
                     Is.EqualTo(1 << LayerMask.NameToLayer(TabletopObjectLayerName)));
                 AssertFloat(compositionSerialized, "maximumHitDistance", 100f);
@@ -201,17 +177,6 @@ namespace ConsoleCards.Tests.EditMode.Presentation
                 Assert.That(compositionSerialized.FindProperty("matchState"), Is.Null);
                 Assert.That(compositionSerialized.FindProperty("selectionState"), Is.Null);
                 Assert.That(compositionSerialized.FindProperty("moveCoordinator"), Is.Null);
-            });
-        }
-
-        [Test]
-        public void PrefabInstances_RemainConnectedAndUnmodifiedForRuntimeState()
-        {
-            WithScene(scene =>
-            {
-                AssertPrefabInstance(FindPath(scene, "TabletopObjects/PrototypeCard"), CardPrefabPath, typeof(CardView));
-                AssertPrefabInstance(FindPath(scene, "TabletopObjects/PrototypePawn"), PawnPrefabPath, typeof(PawnView));
-                AssertPrefabInstance(FindPath(scene, "TabletopObjects/PrototypeToken"), TokenPrefabPath, typeof(TokenView));
             });
         }
 

@@ -2,7 +2,7 @@
 
 **Document ID:** 22_Component_Catalog_Architecture
 **Version:** 0.3
-**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8); C3a written 2026-10-09 (every spawn from the catalogs, §9); C3b-1 written 2026-10-09 (local Console, Hand, Avatar card and pawn from the catalogs, §10); H-E written 2026-10-09 (Empty Table hand and its switch, §11). C3b-2 and C3c pending; each needs its own approved plan. Binding rule: doc 21 principle 18.
+**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8); C3a written 2026-10-09 (every spawn from the catalogs, §9); C3b-1 written 2026-10-09 (local Console, Hand, Avatar card and pawn from the catalogs, §10); H-E written 2026-10-09 (Empty Table hand and its switch, §11); C3b-2 written 2026-10-09 (scene-owned pieces removed, §12). C3c pending; each needs its own approved plan. Binding rule: doc 21 principle 18.
 **Source:** Owner decisions 2026-10-08 and the product material (box set, controller box and game box images).
 **Purpose:** Define how every component and its definitions are registered, so the table, the Toolbox and the UI resolve the same component from one place.
 
@@ -69,7 +69,7 @@
 - **C3a (written):** Card, Pawn, Token, Die and Console spawns from the catalogs; the seven old prefab fields and their scene lines removed (§9).
 - **C3b-1 (written):** the local Console and Hand, the local Avatar card and pawn become catalog spawns (§10).
 - **H-E (written):** an Empty Table hand, on by default, with a Toolbox footer switch (§11).
-- **C3b-2:** the unused scene pieces (scene Console, Hand, loose card, pawn and token, the first-prototype deck, stacks A and B and discard pile), their fields and dead code removed; the tests for the removed pieces removed and the rest updated (owner choice A).
+- **C3b-2 (written, §12):** the unused scene pieces (scene Console, Hand, loose card, pawn and token, the first-prototype deck, stacks A and B and discard pile), their fields and dead code removed; the tests for the removed pieces removed and the rest updated (owner choice A).
 - **C3c:** game board and mapping board prefabs; Controller and Trap Floor boxes filled, and their tiles place real game pieces (§6).
 
 ## 6. Open items
@@ -111,7 +111,7 @@
 - **Console:** every seat's Console, the local one included, is built from the catalog Console entry and posed from its seat; the scene Console is no longer used.
 - **Hand:** the local Hand is built from the catalog Hand entry (`PrototypeHand`) at the scene Hand's old pose and drives the camera tray as before. It uses the prefab's Tray Handoff Duration (0.28 s); the scene Hand's 5 s override is dropped (owner choice).
 - **Avatar card and pawn:** created like every other card and pawn; the scene loose card, pawn and token are no longer used.
-- The unused scene pieces stay hidden until C3b-2 removes them.
+- The unused scene pieces were removed in C3b-2 (§12).
 
 ## 11. Empty Table hand (H-E, 2026-10-09)
 
@@ -120,3 +120,9 @@
 - **A table setting, not a move:** Undo and Redo keep it, except that an Undo which puts cards back into a Hand that is off turns it back on. Reset and loading a table turn it on.
 - **Draw to Hand (owner choice):** dragging, plus "Draw to Hand" with a count on a Deck's right-click menu whenever the local player has a Hand that is on (not on Trap Floor's controller decks, which keep their own Draw). The hand comfort cap applies.
 - **Prefab:** `Build Toolbox Prefab` adds the footer `HandSwitchRow`; the view hides it and lowers the content edge when no switch is shown.
+
+## 12. Scene-owned pieces removed (C3b-2, 2026-10-09)
+
+- **Scene:** the nine first-prototype prefab instances are gone (loose card, pawn and token; deck, stacks A and B, discard pile; Hand; Console), with their composition fields (`cardView`, `pawnView`, `tokenView`, their selection visuals and highlight roots, `sceneDeckVisual`, `sceneStackAVisual`, `sceneStackBVisual`, `sceneDiscardPileVisual`, `sceneHandVisual`, `sceneConsoleView`, `sceneConsoleSlotViews`, `sceneConsoleSlotVisuals`). The empty `TabletopObjects` and `Containers` roots stay.
+- **Composition:** the first-prototype deck, discard and stack A/B paths are removed (their IDs were always empty in Trap Floor and Empty Table), with the old developer-panel Shuffle / Draw 1 / Draw 3 / Merge buttons and the public `ShuffleDeck()`, `DrawOne`, `DrawThree`, `DrawCards(int)`, `MergeStackAOntoStackB/BOntoA`, `DeckView`, `DiscardPileView`, `DeckContainerId`, `DiscardContainerId`, `StackAContainerId`, `StackBContainerId`. Trap Floor's Floormaster deck and discard refresh through `ApplyLayout` of their template containers. The coin area takes its plate material from the catalog Hand prefab. The Trap Floor status line shows the hand count in place of the old deck/discard counts.
+- **Tests (owner choice A):** `TabletopPrototypeCompositionTests` and `TabletopM3PrototypeSceneTests` are removed: every case built or loaded the first-prototype composition. `TabletopPrototypeSceneStructureTests` now expects no scene-owned pieces and drops its prefab-instance case. The other tests are unchanged.
