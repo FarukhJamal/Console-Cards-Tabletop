@@ -244,6 +244,9 @@ namespace ConsoleCards.Application.UseCases
                 case ContainerKind.Stack:
                     componentKind = TabletopComponentKind.Stack;
                     break;
+                case ContainerKind.DiscardPile:
+                    componentKind = TabletopComponentKind.DiscardPile;
+                    break;
                 default:
                     return DeleteTabletopComponentResult.Failure(
                         CommandResultStatus.Rejected,

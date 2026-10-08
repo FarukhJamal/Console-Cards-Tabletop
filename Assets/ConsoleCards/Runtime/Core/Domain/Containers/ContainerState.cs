@@ -15,7 +15,8 @@ namespace ConsoleCards.Core.Domain.Containers
             ContainerKind kind,
             SeatId ownerSeatId,
             ObjectVisibility visibility,
-            int capacity)
+            int capacity,
+            ContainerArrivalFace arrivalFace = ContainerArrivalFace.Unchanged)
         {
             if (id.IsEmpty)
             {
@@ -27,11 +28,17 @@ namespace ConsoleCards.Core.Domain.Containers
                 throw new ArgumentOutOfRangeException(nameof(capacity), "Capacity cannot be below zero.");
             }
 
+            if (!Enum.IsDefined(typeof(ContainerArrivalFace), arrivalFace))
+            {
+                throw new ArgumentOutOfRangeException(nameof(arrivalFace));
+            }
+
             Id = id;
             Kind = kind;
             OwnerSeatId = ownerSeatId;
             Visibility = visibility;
             Capacity = capacity;
+            ArrivalFace = arrivalFace;
             objectIds = new List<TabletopObjectId>();
             readOnlyObjectIds = objectIds.AsReadOnly();
         }
@@ -45,6 +52,9 @@ namespace ConsoleCards.Core.Domain.Containers
         public ObjectVisibility Visibility { get; }
 
         public int Capacity { get; }
+
+        /// <summary>The face a Card takes when it is transferred into this Container (doc 22, C2b).</summary>
+        public ContainerArrivalFace ArrivalFace { get; }
 
         public int Count => objectIds.Count;
 

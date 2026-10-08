@@ -64,7 +64,8 @@ namespace ConsoleCards.Application.UseCases
             }
 
             bool isFixedCollection = container.Kind == ContainerKind.Deck
-                || container.Kind == ContainerKind.Stack;
+                || container.Kind == ContainerKind.Stack
+                || container.Kind == ContainerKind.DiscardPile;
             bool isConsoleSlot = container.Kind == ContainerKind.ConsoleSlot;
             bool isHandZone = container.Kind == ContainerKind.Hand;
             if (!isFixedCollection && !isConsoleSlot && !isHandZone)
@@ -146,7 +147,7 @@ namespace ConsoleCards.Application.UseCases
         }
 
         /// <summary>
-        /// True when a seat-owned Deck, Stack, or Hand zone belongs to a seat not occupied by the requester.
+        /// True when a seat-owned Deck, Stack, Discard Pile or Hand zone belongs to a seat not occupied by the requester.
         /// Read-only; callers may use it to reject a move before any placement preview starts.
         /// </summary>
         public static bool IsMoveBlockedByOwner(MatchState matchState, ContainerState container, PlayerId requestedBy)
@@ -158,6 +159,7 @@ namespace ConsoleCards.Application.UseCases
 
             bool ownerRestricted = container.Kind == ContainerKind.Deck
                 || container.Kind == ContainerKind.Stack
+                || container.Kind == ContainerKind.DiscardPile
                 || container.Kind == ContainerKind.Hand;
             return ownerRestricted
                 && !container.OwnerSeatId.IsEmpty

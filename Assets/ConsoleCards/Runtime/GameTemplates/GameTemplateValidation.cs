@@ -292,9 +292,10 @@ namespace ConsoleCards.GameTemplates
                     && ((container.Kind != ContainerKind.Deck
                             && container.Kind != ContainerKind.Stack
                             && container.Kind != ContainerKind.DiscardPile)
-                        || !Enum.IsDefined(typeof(GameTemplateBayMark), container.PileStyle.BayMark)))
+                        || !Enum.IsDefined(typeof(GameTemplateBayMark), container.PileStyle.BayMark)
+                        || !Enum.IsDefined(typeof(ContainerArrivalFace), container.PileStyle.ArrivalFace)))
                 {
-                    Add(issues, "ContainerPileStyleInvalid", "Only a Deck, Stack or Discard Pile declares a pile style, with a mark from the system set.");
+                    Add(issues, "ContainerPileStyleInvalid", "Only a Deck, Stack or Discard Pile declares a pile style, with a mark from the system set and a defined arrival face.");
                 }
 
                 if (container.HasTabletopPose && !IsFinite(container.TabletopPose))

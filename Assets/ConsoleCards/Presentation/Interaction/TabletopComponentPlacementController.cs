@@ -141,6 +141,7 @@ namespace ConsoleCards.Presentation.Interaction
             componentKind = requestedKind;
             containerPlacement = requestedKind == TabletopComponentKind.Deck
                 || requestedKind == TabletopComponentKind.Stack
+                || requestedKind == TabletopComponentKind.DiscardPile
                 || requestedKind == TabletopComponentKind.Console;
             physicalPlacement = requestedKind == TabletopComponentKind.Card || requestedKind == TabletopComponentKind.Pawn
                 || requestedKind == TabletopComponentKind.Token || requestedKind == TabletopComponentKind.Die;

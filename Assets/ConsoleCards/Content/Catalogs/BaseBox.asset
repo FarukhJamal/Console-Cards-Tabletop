@@ -54,7 +54,7 @@ MonoBehaviour:
     kind: 3
     prefab: {fileID: 100100, guid: 9c2b6d4f7abe4d3bdf6c8aaecd7b9fb5, type: 3}
     icon: {fileID: 21300000, guid: db083f4cbc89b7a41aa1e47af1c5e741, type: 3}
-    showInToolbox: 0
+    showInToolbox: 1
     toolboxOrder: 3
     definitions:
     - role: BayStyle

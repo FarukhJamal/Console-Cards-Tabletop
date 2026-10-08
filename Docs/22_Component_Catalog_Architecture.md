@@ -1,8 +1,8 @@
 # Console Cards - Component Catalog Architecture
 
 **Document ID:** 22_Component_Catalog_Architecture
-**Version:** 0.1
-**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox). C2b and C3 pending; each needs its own approved plan. Binding rule: doc 21 principle 18.
+**Version:** 0.2
+**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8). C3 pending; it needs its own approved plan. Binding rule: doc 21 principle 18.
 **Source:** Owner decisions 2026-10-08 and the product material (box set, controller box and game box images).
 **Purpose:** Define how every component and its definitions are registered, so the table, the Toolbox and the UI resolve the same component from one place.
 
@@ -65,7 +65,7 @@
 - **C1 (written):** catalog types and validation, `BaseBox`/`ControllerBox`/`TrapFloor` catalogs, `PileBayStyle`, the three pile prefabs, one behaviour per pile kind, bay footprint in placement; the composition spawns Decks and Stacks from the catalogs.
 - **C1b (written):** `ComponentLibrary` (Base, Controller, Game boxes, Environment); Game boxes name their game; Super Leroy Sisters box (empty); the scene references the library through one field (`componentLibrary`).
 - **C2a (written):** the authored Toolbox (§7); several cards placed at once become one Deck; the Real UI prefab catalog; the scene's `RuntimeUiManager` uses it.
-- **C2b:** Discard Pile in Runtime (create, move, delete) and in the Toolbox (cards arrive face down, declared on the pile style). Also: the quick-spawn grid uses catalog footprints.
+- **C2b (written):** Discard Pile in Runtime (create, move, delete) and in the Toolbox (cards arrive face down, declared on the pile style); Undo and Redo rebuild every Toolbox-placed piece; the quick-spawn grid uses catalog footprints (§8).
 - **C3:** every other spawn (card, pawn, token, die, console, hand) from the catalogs; game board and mapping board prefabs; Controller and Trap Floor boxes filled; the old prefab fields and their scene lines removed.
 
 ## 6. Open items
@@ -80,5 +80,15 @@
 - **Look (approved mockup, canvas "Toolbox" page):** cream panel with a thick dark outline and offset shadow, orange header, pixel-font titles (Silkscreen) and Chakra Petch text (both OFL, `Content/UI/Fonts/`), tabs Base Box / Controller Box / Games (one chip per game box; the current game's chip is selected) / Environment when the library has one; two-column tiles with icon, name and the entry's description; an empty-box message for shelves with no tiles; controls in the footer. While placing, the panel folds into a Placing card (icon, "PLACING", subject and rotation) with the controls at the bottom centre.
 - **Cards:** the Card tile has a − / + counter (1–99). 1 places one loose card; 2 or more place one Deck holding that many face-down cards, in one command (`CreateTabletopComponentRequest.DeckCardCount`), so one Undo removes both. The ghost shows the deck in its bay with the cards stacked.
 - **Dice:** the Die tile's size chips come from the entry's linked Shape definitions; a chip places that size at once.
-- **Discard Pile** is hidden from the Toolbox until C2b (`showInToolbox` off).
+- **Discard Pile** is in the Toolbox from C2b (§8).
 - **Real UI prefab catalog:** `Content/Prefabs/Real/UI/RealUiPrefabCatalog.asset` holds the new Toolbox plus the ten Prototype UI prefabs not yet remade; the scene's `RuntimeUiManager.prefabCatalog` points at it. The Prototype Toolbox prefab and view stay untouched and unused.
+
+## 8. Discard Pile (C2b, 2026-10-09)
+
+- **Runtime:** `TabletopComponentKind.DiscardPile` (added last). Creating one makes an empty placed Discard Pile container in one command; it moves like a Deck or Stack (a seat-owned pile only by that seat's player) and a Toolbox pile can be deleted when empty. Template piles stay protected.
+- **Arrival face (authority):** `ContainerArrivalFace { Unchanged, FaceDown, FaceUp }` on `ContainerState`, carried by the Undo snapshot. A single-card transfer into a container with an arrival face sets the card's face in the same command; rollback restores it. Batch transfers (draw, merge) do not apply it.
+- **Declared on the pile style:** `GameTemplatePileStyle.ArrivalFace`. `DefaultFor(DiscardPile)` is the Discard mark and `FaceDown`; Deck and Stack are `Unchanged`. A template container copies its declared style (or the kind's default) onto the Container when the Match is built; a Toolbox pile passes the default through `CreateTabletopComponentRequest.ContainerArrivalFace`. Validation requires a defined arrival face.
+- **Presentation:** every Discard Pile, from the Toolbox or declared by a template, is the catalog's `DiscardPile.prefab` resting plate-less on the table in its bay with the Discard mark (cards squared in the bay, height capped like a Deck). Right-click gives "DISCARD PILE": Move, and Delete for Toolbox piles. A card's look flips when it lands.
+- **Undo and Redo rebuild:** after the session rebuild, every placed Deck, Stack and Console made by the Toolbox or a split, and every Discard Pile, is recreated from the catalog (before C2b, such pieces disappeared from the table after a later Undo).
+- **Quick-spawn grid:** cells are a pile's bay plus the placement clearance (1.36 × 1.76); rows step toward the table centre.
+- **Not yet:** the old scene-owned discard pile stays until C3.

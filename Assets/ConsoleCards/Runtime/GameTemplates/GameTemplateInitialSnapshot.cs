@@ -194,7 +194,8 @@ namespace ConsoleCards.GameTemplates
                         snapshot.Kind,
                         snapshot.OwnerSeatId,
                         snapshot.Visibility,
-                        snapshot.Capacity));
+                        snapshot.Capacity,
+                        snapshot.ArrivalFace));
             }
 
             List<CardInstanceState> restoredCards = new List<CardInstanceState>();
@@ -388,6 +389,7 @@ namespace ConsoleCards.GameTemplates
                 OwnerSeatId = container.OwnerSeatId;
                 Visibility = container.Visibility;
                 Capacity = container.Capacity;
+                ArrivalFace = container.ArrivalFace;
                 OrderedObjectIds = new ReadOnlyCollection<TabletopObjectId>(
                     new List<TabletopObjectId>(container.ObjectIds));
             }
@@ -397,6 +399,7 @@ namespace ConsoleCards.GameTemplates
             public SeatId OwnerSeatId { get; }
             public ObjectVisibility Visibility { get; }
             public int Capacity { get; }
+            public ContainerArrivalFace ArrivalFace { get; }
             public IReadOnlyList<TabletopObjectId> OrderedObjectIds { get; }
         }
 

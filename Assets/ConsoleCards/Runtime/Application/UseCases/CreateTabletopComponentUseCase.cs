@@ -22,6 +22,7 @@ namespace ConsoleCards.Application.UseCases
         Token,
         Die,
         Console,
+        DiscardPile,
     }
 
     public enum CreateTabletopComponentError
@@ -41,6 +42,7 @@ namespace ConsoleCards.Application.UseCases
         PhysicalSurfaceRequired,
         ConsoleLayoutRequired,
         DeckCardCountInvalid,
+        ArrivalFaceInvalid,
     }
 
     public sealed class CreateTabletopComponentRequest
@@ -52,7 +54,8 @@ namespace ConsoleCards.Application.UseCases
             int dieSideCount = 0,
             CardFace initialCardFace = CardFace.FaceUp,
             AuthoritativeActionKind actionKind = AuthoritativeActionKind.CreateComponent,
-            int deckCardCount = 0)
+            int deckCardCount = 0,
+            ContainerArrivalFace containerArrivalFace = ContainerArrivalFace.Unchanged)
         {
             if (!IsFinite(initialPose.Position.X)
                 || !IsFinite(initialPose.Position.Y)
@@ -68,6 +71,7 @@ namespace ConsoleCards.Application.UseCases
             InitialCardFace = initialCardFace;
             ActionKind = actionKind;
             DeckCardCount = deckCardCount;
+            ContainerArrivalFace = containerArrivalFace;
         }
 
         public CommandContext Context { get; }
@@ -78,6 +82,11 @@ namespace ConsoleCards.Application.UseCases
         public AuthoritativeActionKind ActionKind { get; }
         /// <summary>Deck only: generic face-down Cards created inside the new Deck in the same command (0 = empty).</summary>
         public int DeckCardCount { get; }
+        /// <summary>
+        /// Deck, Stack or Discard Pile only: the face a Card takes when it arrives, from the pile style
+        /// (doc 22, C2b). Unchanged keeps the Card's face.
+        /// </summary>
+        public ContainerArrivalFace ContainerArrivalFace { get; }
 
         private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
@@ -244,7 +253,8 @@ namespace ConsoleCards.Application.UseCases
             }
 
             if (request.ComponentKind == TabletopComponentKind.Deck
-                || request.ComponentKind == TabletopComponentKind.Stack)
+                || request.ComponentKind == TabletopComponentKind.Stack
+                || request.ComponentKind == TabletopComponentKind.DiscardPile)
             {
                 float? surfaceHeight = resolveContainerSurfaceHeight?.Invoke(request.InitialPose);
                 if (resolveContainerSurfaceHeight != null && !surfaceHeight.HasValue)
@@ -272,14 +282,17 @@ namespace ConsoleCards.Application.UseCases
 
                 ContainerKind containerKind = request.ComponentKind == TabletopComponentKind.Deck
                     ? ContainerKind.Deck
-                    : ContainerKind.Stack;
+                    : request.ComponentKind == TabletopComponentKind.DiscardPile
+                        ? ContainerKind.DiscardPile
+                        : ContainerKind.Stack;
                 matchState.AddEmptyPlacedContainer(
                     new ContainerState(
                         containerId,
                         containerKind,
                         SeatId.Empty,
                         ObjectVisibility.Public,
-                        0),
+                        0,
+                        request.ContainerArrivalFace),
                     new ContainerPlacementState(containerId, request.InitialPose, surfaceHeight));
                 if (deckCardIds != null)
                 {
@@ -499,6 +512,17 @@ namespace ConsoleCards.Application.UseCases
                 return CreateTabletopComponentResult.Failure(
                     CommandResultStatus.Invalid,
                     CreateTabletopComponentError.DeckCardCountInvalid);
+            }
+
+            bool pileKind = request.ComponentKind == TabletopComponentKind.Deck
+                || request.ComponentKind == TabletopComponentKind.Stack
+                || request.ComponentKind == TabletopComponentKind.DiscardPile;
+            if (!Enum.IsDefined(typeof(ContainerArrivalFace), request.ContainerArrivalFace)
+                || (!pileKind && request.ContainerArrivalFace != ContainerArrivalFace.Unchanged))
+            {
+                return CreateTabletopComponentResult.Failure(
+                    CommandResultStatus.Invalid,
+                    CreateTabletopComponentError.ArrivalFaceInvalid);
             }
 
             if (matchState.Revision == long.MaxValue)

@@ -179,10 +179,11 @@ namespace ConsoleCards.GameTemplates
     }
 
     /// <summary>
-    /// Configurable pile parameters a Deck, Stack or Discard Pile declares, set by a template: the bay mark and
-    /// the maximum pile height, which caps the per-card step so a large pile stays low. Every pile is
-    /// plate-less (its cards rest on the table); there is no plate option. Presentation data only; not part
-    /// of Match State.
+    /// Configurable pile parameters a Deck, Stack or Discard Pile declares, set by a template: the bay mark,
+    /// the maximum pile height, which caps the per-card step so a large pile stays low, and the face a Card
+    /// takes when it arrives. Every pile is plate-less (its cards rest on the table); there is no plate
+    /// option. The mark and height are Presentation data; the arrival face is copied onto the Container when
+    /// the Match is built, so the authoritative transfer applies it (doc 22, C2b).
     /// </summary>
     public sealed class GameTemplatePileStyle
     {
@@ -193,11 +194,12 @@ namespace ConsoleCards.GameTemplates
 
         private static readonly GameTemplatePileStyle DrawDefault = new GameTemplatePileStyle(GameTemplateBayMark.Draw);
         private static readonly GameTemplatePileStyle DiscardDefault =
-            new GameTemplatePileStyle(GameTemplateBayMark.Discard);
+            new GameTemplatePileStyle(GameTemplateBayMark.Discard, arrivalFace: ContainerArrivalFace.FaceDown);
 
         /// <summary>
         /// The system default for a pile kind, used wherever a pile has no declared style (template or Toolbox
-        /// alike): a Deck is marked Draw, a Discard Pile Discard, a Stack has no mark.
+        /// alike): a Deck is marked Draw, a Discard Pile Discard and turns arriving Cards face down, a Stack has
+        /// no mark. Only the Discard Pile changes a Card's face on arrival.
         /// </summary>
         public static GameTemplatePileStyle DefaultFor(ContainerKind kind)
         {
@@ -214,7 +216,8 @@ namespace ConsoleCards.GameTemplates
 
         public GameTemplatePileStyle(
             GameTemplateBayMark bayMark = GameTemplateBayMark.None,
-            float maximumPileHeight = DefaultMaximumPileHeight)
+            float maximumPileHeight = DefaultMaximumPileHeight,
+            ContainerArrivalFace arrivalFace = ContainerArrivalFace.Unchanged)
         {
             if (float.IsNaN(maximumPileHeight) || float.IsInfinity(maximumPileHeight) || maximumPileHeight <= 0f)
             {
@@ -223,11 +226,14 @@ namespace ConsoleCards.GameTemplates
 
             BayMark = bayMark;
             MaximumPileHeight = maximumPileHeight;
+            ArrivalFace = arrivalFace;
         }
 
         public GameTemplateBayMark BayMark { get; }
 
         public float MaximumPileHeight { get; }
+
+        public ContainerArrivalFace ArrivalFace { get; }
     }
 
     public sealed class GameTemplateObjectInstanceDefinition

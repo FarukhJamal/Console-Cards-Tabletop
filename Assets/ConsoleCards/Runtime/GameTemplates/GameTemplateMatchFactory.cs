@@ -124,7 +124,8 @@ namespace ConsoleCards.GameTemplates
                     definition.Kind,
                     definition.OwnerSeatId,
                     definition.Visibility,
-                    definition.Capacity);
+                    definition.Capacity,
+                    (definition.PileStyle ?? GameTemplatePileStyle.DefaultFor(definition.Kind)).ArrivalFace);
                 containers.Add(container.Id, container);
                 if (definition.HasTabletopPose)
                 {

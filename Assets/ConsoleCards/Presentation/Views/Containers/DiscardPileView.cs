@@ -20,6 +20,8 @@ namespace ConsoleCards.Presentation.Views.Containers
         private TabletopCoordinateConverter converter;
         private bool isBound;
         private float restLift;
+        private bool restsOnTable;
+        private float maximumPileHeight;
 
         public bool IsBound => isBound;
 
@@ -51,6 +53,28 @@ namespace ConsoleCards.Presentation.Views.Containers
             }
         }
 
+        /// <summary>
+        /// Plate-less pile (doc 21, C2b): the root rests at the placement surface and each card rests on the
+        /// table squared in the bay (surface + PivotToBottom + RestClearance + i x step), with step =
+        /// min(card step, maximumHeight / card count), the same rule as a Deck. Without it the legacy
+        /// diagonal fan is used. Call before Bind; when already bound the layout is re-applied.
+        /// </summary>
+        internal void ConfigureTableRest(bool enabled, float maximumHeight)
+        {
+            if (enabled && (float.IsNaN(maximumHeight) || float.IsInfinity(maximumHeight) || maximumHeight <= 0f))
+            {
+                throw new ArgumentOutOfRangeException(nameof(maximumHeight));
+            }
+
+            restsOnTable = enabled;
+            maximumPileHeight = maximumHeight;
+            if (isBound)
+            {
+                restLift = restsOnTable ? 0f : ComponentRestHeight.RestLift(transform);
+                ApplyAcceptedLayout();
+            }
+        }
+
         public void Bind(
             ContainerState container,
             ContainerPlacementState placement,
@@ -64,13 +88,13 @@ namespace ConsoleCards.Presentation.Views.Containers
             ContainerViewBinding.ValidateFiniteNonNegative(diagonalTableOffsetPerCard, nameof(diagonalTableOffsetPerCard));
             Dictionary<TabletopObjectId, CardView> lookup = ContainerViewBinding.BuildLookup(cardViews);
             List<CardView> resolvedCards = ContainerViewBinding.ResolveOrderedCards(container, lookup);
-            restLift = ComponentRestHeight.RestLift(transform);
+            restLift = restsOnTable ? 0f : ComponentRestHeight.RestLift(transform);
+            converter = coordinateConverter;
             List<CardLayoutPlan> plan = BuildLayoutPlan(placement, resolvedCards);
 
             ContainerViewBinding.ClearAppliedCards(layoutAppliedCards);
             containerState = container;
             placementState = placement;
-            converter = coordinateConverter;
             suppliedCardViews.Clear();
             suppliedCardViews.AddRange(cardViews);
             isBound = true;
@@ -120,6 +144,27 @@ namespace ConsoleCards.Presentation.Views.Containers
             float physicalStep = Mathf.Max(
                 verticalOffset,
                 ContainerViewBinding.MinimumPhysicalCardSeparation);
+            if (restsOnTable)
+            {
+                float surfaceHeight = ContainerViewBinding.PlacementWorldPosition(placement, converter).y;
+                float poseHeight = converter.ToWorldPosition(placement.Pose).y;
+                float pileStep = orderedCards.Count > 0
+                    ? Mathf.Min(physicalStep, maximumPileHeight / orderedCards.Count)
+                    : physicalStep;
+                for (int i = 0; i < orderedCards.Count; i++)
+                {
+                    CardView card = orderedCards[i];
+                    card.ClearOverlayPresentation();
+                    float restingPivotY = surfaceHeight
+                        + ComponentRestHeight.PivotToBottom(card.transform)
+                        + ComponentRestHeight.RestClearance
+                        + (i * pileStep);
+                    plan.Add(new CardLayoutPlan(card, placement.Pose, restingPivotY - poseHeight));
+                }
+
+                return plan;
+            }
+
             for (int i = 0; i < orderedCards.Count; i++)
             {
                 TableCoordinate coordinate = new TableCoordinate(
@@ -140,8 +185,11 @@ namespace ConsoleCards.Presentation.Views.Containers
 
         private void ApplyPlan(IReadOnlyList<CardLayoutPlan> plan)
         {
+            Vector3 rootPosition = restsOnTable
+                ? ContainerViewBinding.PlacementWorldPosition(placementState, converter)
+                : converter.ToWorldPosition(placementState.Pose);
             transform.SetPositionAndRotation(
-                converter.ToWorldPosition(placementState.Pose) + (Vector3.up * restLift),
+                rootPosition + (Vector3.up * restLift),
                 converter.ToWorldRotation(placementState.Pose));
             ContainerViewBinding.ApplyPlan(plan, layoutAppliedCards, containerState.Id);
             VisibleCardCount = plan.Count;

@@ -137,6 +137,10 @@ namespace ConsoleCards.Application.UseCases
 
             TabletopPoseSnapshot cardSnapshot = TabletopPoseSnapshot.Capture(cardObject, source);
             ContainerTransferService transferService = new ContainerTransferService();
+            // A pile that declares an arrival face (a Discard Pile turns Cards face down) sets it here, inside
+            // the same command, so Undo and rollback restore the previous face (doc 22, C2b).
+            matchState.Cards.TryGetValue(command.CardObjectId, out CardInstanceState card);
+            CardFace previousFace = card != null ? card.Face : CardFace.FaceUp;
 
             try
             {
@@ -159,6 +163,18 @@ namespace ConsoleCards.Application.UseCases
                 }
                 else cardObject.SetPhysicalState(null);
 
+                if (card != null && destination != null)
+                {
+                    if (destination.ArrivalFace == ContainerArrivalFace.FaceDown)
+                    {
+                        card.SetFace(CardFace.FaceDown);
+                    }
+                    else if (destination.ArrivalFace == ContainerArrivalFace.FaceUp)
+                    {
+                        card.SetFace(CardFace.FaceUp);
+                    }
+                }
+
                 long revision = matchState.AdvanceRevision(
                     command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.TransferCard);
                 IReadOnlyList<IConsoleCardInteraction> consoleInteractions =
@@ -167,6 +183,7 @@ namespace ConsoleCards.Application.UseCases
             }
             catch
             {
+                card?.SetFace(previousFace);
                 RollBackTransfer(
                     transferService,
                     cardObject,
