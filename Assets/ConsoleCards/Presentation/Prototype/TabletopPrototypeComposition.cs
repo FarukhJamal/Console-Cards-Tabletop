@@ -73,10 +73,6 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal TabletopCameraInputAdapter cameraInputAdapter;
         [SerializeField] internal TabletopObjectInputAdapter objectInputAdapter;
         [SerializeField] internal TabletopInputFrameCoordinator inputFrameCoordinator;
-        [SerializeField] internal PrototypeCardVisualReferences prototypeCardPrefab;
-        [SerializeField] internal PawnView prototypePawnPrefab;
-        [SerializeField] internal TokenView prototypeTokenPrefab;
-        [SerializeField] internal DieView prototypeDiePrefab;
         // Session-owned Trap Floor Board. Placement discovery still uses PhysicalTabletopSurface registration.
         [Tooltip("Trap Floor Board collider/surface. The Board is shown only while the Trap Floor Template is active.")]
         [SerializeField] private Collider gameBoardPhysicalSurface;
@@ -94,11 +90,9 @@ namespace ConsoleCards.Presentation.Prototype
         private bool physicalBlindDirectionPending;
         private PlayerId physicalBlindDirectionActor;
         private TabletopObjectId physicalBlindDirectionDieId;
-        [SerializeField] internal PrototypeFixedContainerVisual prototypeDeckPrefab;
-        [SerializeField] internal ConsoleView prototypeConsolePrefab;
         // Component library (doc 22): Base box, Controller box, Game boxes and environment, each a catalog of
-        // components (stable ID, prefab, linked definitions). C1 spawns Decks and Stacks from it; the other
-        // prefab fields move here in C3.
+        // components (stable ID, prefab, linked definitions). Every spawn prefab comes from it (C1 piles, C3a
+        // cards, pawns, tokens, dice and Consoles).
         [SerializeField] internal ComponentLibrary componentLibrary;
         [SerializeField] internal CardView cardView;
         [SerializeField] internal PawnView pawnView;
@@ -112,7 +106,6 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal PrototypeFixedContainerVisual sceneDeckVisual;
         [SerializeField] internal PrototypeFixedContainerVisual sceneStackAVisual;
         [SerializeField] internal PrototypeFixedContainerVisual sceneStackBVisual;
-        [SerializeField] internal PrototypeFixedContainerVisual prototypeStackPrefab;
         [SerializeField] internal PrototypeFixedContainerVisual sceneDiscardPileVisual;
         [SerializeField] internal PrototypeFixedContainerVisual sceneHandVisual;
         [SerializeField] internal ConsoleView sceneConsoleView;
@@ -330,6 +323,12 @@ namespace ConsoleCards.Presentation.Prototype
         private PrototypeFixedContainerVisual catalogDeckPrefab;
         private PrototypeFixedContainerVisual catalogStackPrefab;
         private PrototypeFixedContainerVisual catalogDiscardPilePrefab;
+        // Object and Console prefabs resolved from the box catalogs (doc 22, C3a); no prefab field in the scene.
+        private PrototypeCardVisualReferences catalogCardPrefab;
+        private PawnView catalogPawnPrefab;
+        private TokenView catalogTokenPrefab;
+        private DieView catalogDiePrefab;
+        private ConsoleView catalogConsolePrefab;
         private DiscardPileView discardPileView;
         private ConsoleView consoleView;
         private ConsoleLayoutData consoleLayout;
@@ -2677,7 +2676,7 @@ namespace ConsoleCards.Presentation.Prototype
             int shown = Mathf.Min(quantity, 12);
             for (int i = 0; i < shown; i++)
             {
-                PrototypeCardVisualReferences preview = Instantiate(prototypeCardPrefab, previewRoot.transform, false);
+                PrototypeCardVisualReferences preview = Instantiate(catalogCardPrefab, previewRoot.transform, false);
                 preview.ValidateReferences();
                 preview.FrontLabel.gameObject.SetActive(false);
                 preview.BackLabel.gameObject.SetActive(false);
@@ -3227,7 +3226,7 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 case TabletopComponentKind.Card:
                 {
-                    PrototypeCardVisualReferences preview = Instantiate(prototypeCardPrefab);
+                    PrototypeCardVisualReferences preview = Instantiate(catalogCardPrefab);
                     preview.ValidateReferences();
                     preview.AlignFaceLabelsToSurface(tabletopLocalOrderHeight);
                     ConfigurePrototypeLabel(
@@ -3277,10 +3276,10 @@ namespace ConsoleCards.Presentation.Prototype
                     break;
                 }
                 case TabletopComponentKind.Pawn:
-                    previewRoot = Instantiate(prototypePawnPrefab).gameObject;
+                    previewRoot = Instantiate(catalogPawnPrefab).gameObject;
                     break;
                 case TabletopComponentKind.Token:
-                    previewRoot = Instantiate(prototypeTokenPrefab).gameObject;
+                    previewRoot = Instantiate(catalogTokenPrefab).gameObject;
                     break;
                 case TabletopComponentKind.Die:
                 {
@@ -3289,7 +3288,7 @@ namespace ConsoleCards.Presentation.Prototype
                         throw new ArgumentOutOfRangeException(nameof(dieSideCount));
                     }
 
-                    DieView preview = Instantiate(prototypeDiePrefab);
+                    DieView preview = Instantiate(catalogDiePrefab);
                     preview.ConfigurePhysicalShape(dieSideCount);
                     ConfigurePrototypeLabel(preview.ResultLabel, $"d{dieSideCount}\n1", 0.18f, 64);
                     ApplyLabelRendererHide(preview.ResultLabel, PrototypeVisualHide.DieResultLabel);
@@ -3298,7 +3297,7 @@ namespace ConsoleCards.Presentation.Prototype
                 }
                 case TabletopComponentKind.Console:
                 {
-                    ConsoleView preview = Instantiate(prototypeConsolePrefab);
+                    ConsoleView preview = Instantiate(catalogConsolePrefab);
                     previewRoot = preview.gameObject;
                     break;
                 }
@@ -3319,7 +3318,7 @@ namespace ConsoleCards.Presentation.Prototype
             TabletopPose origin = TabletopPose.Default;
             for (int i = 0; i < quantity; i++)
             {
-                PrototypeCardVisualReferences preview = Instantiate(prototypeCardPrefab, previewRoot.transform, false);
+                PrototypeCardVisualReferences preview = Instantiate(catalogCardPrefab, previewRoot.transform, false);
                 preview.ValidateReferences();
                 preview.AlignFaceLabelsToSurface(tabletopLocalOrderHeight);
                 ConfigurePrototypeLabel(
@@ -7631,11 +7630,6 @@ namespace ConsoleCards.Presentation.Prototype
                     "The Trap Floor Board visual must be a child of its authored physical surface.");
             }
 
-            RequireReference(prototypeCardPrefab, nameof(prototypeCardPrefab));
-            RequireReference(prototypePawnPrefab, nameof(prototypePawnPrefab));
-            RequireReference(prototypeTokenPrefab, nameof(prototypeTokenPrefab));
-            RequireReference(prototypeDeckPrefab, nameof(prototypeDeckPrefab));
-            RequireReference(prototypeConsolePrefab, nameof(prototypeConsolePrefab));
             RequireReference(cardView, nameof(cardView));
             RequireReference(pawnView, nameof(pawnView));
             RequireReference(tokenView, nameof(tokenView));
@@ -7680,8 +7674,8 @@ namespace ConsoleCards.Presentation.Prototype
             ValidateFiniteGreaterThanOrEqualToZero(magneticDistance, nameof(magneticDistance));
             ValidateFiniteGreaterThanOrEqualToZero(feedbackDuration, nameof(feedbackDuration));
             ValidateFiniteGreaterThanOrEqualToZero(shuffleCompression, nameof(shuffleCompression));
-            ValidateToolboxPrefabReferences();
             ValidateComponentCatalogs();
+            ValidateToolboxPrefabReferences();
         }
 
         // Component library (doc 22): validated once; IDs are unique across every catalog. Resolves the pile
@@ -7704,51 +7698,74 @@ namespace ConsoleCards.Presentation.Prototype
             ValidateStackLayoutAnchor(catalogStackPrefab);
             catalogDiscardPilePrefab.ValidateReferences();
             catalogDiscardPilePrefab.GetView<DiscardPileView>();
+            ResolveCatalogSpawnPrefabs();
         }
 
-        private PrototypeFixedContainerVisual ResolveCatalogPilePrefab(ComponentCatalogKind kind)
+        // Card, Pawn, Token, Die and Console prefabs come from the library: the first entry of each kind in shelf
+        // order, the same rule as the piles (doc 22, C3a). Resolved once; the Console layout may ask for it before
+        // the session validates, so it resolves on first use too.
+        private void ResolveCatalogSpawnPrefabs()
+        {
+            if (catalogConsolePrefab != null)
+            {
+                return;
+            }
+
+            if (componentLibrary == null)
+            {
+                throw new InvalidOperationException(
+                    "TabletopPrototypeComposition requires its component library (doc 22).");
+            }
+
+            // The library lists its catalogs once validated; the Console layout can be asked for first.
+            if (componentLibrary.Catalogs.Count == 0)
+            {
+                componentLibrary.Validate();
+            }
+
+            catalogCardPrefab = ResolveCatalogEntry(ComponentCatalogKind.Card)
+                .GetPrefabComponent<PrototypeCardVisualReferences>();
+            catalogPawnPrefab = ResolveCatalogEntry(ComponentCatalogKind.Pawn).GetPrefabComponent<PawnView>();
+            catalogTokenPrefab = ResolveCatalogEntry(ComponentCatalogKind.Token).GetPrefabComponent<TokenView>();
+            catalogDiePrefab = ResolveCatalogEntry(ComponentCatalogKind.Die).GetPrefabComponent<DieView>();
+            catalogConsolePrefab = ResolveCatalogEntry(ComponentCatalogKind.Console).GetPrefabComponent<ConsoleView>();
+        }
+
+        private ComponentCatalogEntry ResolveCatalogEntry(ComponentCatalogKind kind)
         {
             IReadOnlyList<ComponentCatalog> catalogs = componentLibrary.Catalogs;
             for (int i = 0; i < catalogs.Count; i++)
             {
                 if (catalogs[i].TryGetFirst(kind, out ComponentCatalogEntry entry))
                 {
-                    return entry.GetPrefabComponent<PrototypeFixedContainerVisual>();
+                    return entry;
                 }
             }
 
             throw new InvalidOperationException($"No catalog in the component library has a {kind} entry.");
         }
 
+        private PrototypeFixedContainerVisual ResolveCatalogPilePrefab(ComponentCatalogKind kind)
+        {
+            return ResolveCatalogEntry(kind).GetPrefabComponent<PrototypeFixedContainerVisual>();
+        }
+
         private void ValidateToolboxPrefabReferences()
         {
-            RequireReference(prototypeCardPrefab, nameof(prototypeCardPrefab));
-            RequireReference(prototypePawnPrefab, nameof(prototypePawnPrefab));
-            RequireReference(prototypeTokenPrefab, nameof(prototypeTokenPrefab));
-            RequireReference(prototypeDiePrefab, nameof(prototypeDiePrefab));
-            RequireReference(prototypeDeckPrefab, nameof(prototypeDeckPrefab));
-            RequireReference(prototypeStackPrefab, nameof(prototypeStackPrefab));
+            RequireReference(catalogCardPrefab, nameof(catalogCardPrefab));
+            RequireReference(catalogPawnPrefab, nameof(catalogPawnPrefab));
+            RequireReference(catalogTokenPrefab, nameof(catalogTokenPrefab));
+            RequireReference(catalogDiePrefab, nameof(catalogDiePrefab));
 
-            if (prototypeCardPrefab.gameObject.scene.IsValid())
+            if (catalogCardPrefab.gameObject.scene.IsValid())
             {
-                throw new InvalidOperationException("prototypeCardPrefab must reference a prefab asset.");
+                throw new InvalidOperationException("The catalog Card entry must reference a prefab asset.");
             }
 
-            prototypeCardPrefab.ValidateReferences();
-            ValidateObjectPrefab(prototypePawnPrefab, nameof(prototypePawnPrefab));
-            ValidateObjectPrefab(prototypeTokenPrefab, nameof(prototypeTokenPrefab));
-            ValidateObjectPrefab(prototypeDiePrefab, nameof(prototypeDiePrefab));
-
-            if (prototypeDeckPrefab.gameObject.scene.IsValid()
-                || prototypeStackPrefab.gameObject.scene.IsValid())
-            {
-                throw new InvalidOperationException("Toolbox container prefabs must reference prefab assets.");
-            }
-
-            prototypeDeckPrefab.ValidateReferences();
-            prototypeDeckPrefab.GetView<DeckView>();
-            prototypeStackPrefab.ValidateReferences();
-            ValidateStackLayoutAnchor(prototypeStackPrefab);
+            catalogCardPrefab.ValidateReferences();
+            ValidateObjectPrefab(catalogPawnPrefab, nameof(catalogPawnPrefab));
+            ValidateObjectPrefab(catalogTokenPrefab, nameof(catalogTokenPrefab));
+            ValidateObjectPrefab(catalogDiePrefab, nameof(catalogDiePrefab));
             ValidateConsolePrefabLayout();
         }
 
@@ -7756,17 +7773,17 @@ namespace ConsoleCards.Presentation.Prototype
         // Card slot, and each Slot anchor sits at its layout position. Games never add, remove or hide Slots.
         private void ValidateConsolePrefabLayout()
         {
-            RequireReference(prototypeConsolePrefab, nameof(prototypeConsolePrefab));
-            if (prototypeConsolePrefab.gameObject.scene.IsValid())
+            RequireReference(catalogConsolePrefab, nameof(catalogConsolePrefab));
+            if (catalogConsolePrefab.gameObject.scene.IsValid())
             {
                 throw new InvalidOperationException(
-                    "TabletopPrototypeComposition requires prototypeConsolePrefab to reference a prefab asset.");
+                    "The catalog Console entry must reference a prefab asset.");
             }
 
             ConsoleLayoutData layout = GetConsoleLayout();
             int cardSlotCount = layout.CardSlots.Count;
-            ConsoleSlotView[] slotViews = prototypeConsolePrefab.GetComponentsInChildren<ConsoleSlotView>(true);
-            IReadOnlyList<Transform> anchors = prototypeConsolePrefab.SlotAnchors;
+            ConsoleSlotView[] slotViews = catalogConsolePrefab.GetComponentsInChildren<ConsoleSlotView>(true);
+            IReadOnlyList<Transform> anchors = catalogConsolePrefab.SlotAnchors;
             if (slotViews.Length != cardSlotCount || anchors.Count != cardSlotCount)
             {
                 throw new InvalidOperationException(
@@ -7774,7 +7791,7 @@ namespace ConsoleCards.Presentation.Prototype
                     + $"its layout '{layout.StableId}' has {cardSlotCount} Card slots.");
             }
 
-            Transform root = prototypeConsolePrefab.transform;
+            Transform root = catalogConsolePrefab.transform;
             for (int i = 0; i < cardSlotCount; i++)
             {
                 ConsoleLayoutSlotData slot = layout.CardSlots[i];
@@ -7813,9 +7830,9 @@ namespace ConsoleCards.Presentation.Prototype
                 return consoleLayout;
             }
 
-            RequireReference(prototypeConsolePrefab, nameof(prototypeConsolePrefab));
-            ConsoleLayoutBinding binding = prototypeConsolePrefab.GetComponent<ConsoleLayoutBinding>();
-            RequireReference(binding, $"{nameof(ConsoleLayoutBinding)} on {nameof(prototypeConsolePrefab)}");
+            ResolveCatalogSpawnPrefabs();
+            ConsoleLayoutBinding binding = catalogConsolePrefab.GetComponent<ConsoleLayoutBinding>();
+            RequireReference(binding, $"{nameof(ConsoleLayoutBinding)} on the catalog Console prefab");
             consoleLayout = binding.ResolveLayoutData();
             return consoleLayout;
         }
@@ -7896,13 +7913,13 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ValidateCardPrefabReferences()
         {
-            if (prototypeCardPrefab.gameObject.scene.IsValid())
+            if (catalogCardPrefab.gameObject.scene.IsValid())
             {
                 throw new InvalidOperationException(
-                    "TabletopPrototypeComposition requires prototypeCardPrefab to reference a prefab asset.");
+                    "TabletopPrototypeComposition requires catalogCardPrefab to reference a prefab asset.");
             }
 
-            prototypeCardPrefab.ValidateReferences();
+            catalogCardPrefab.ValidateReferences();
             looseCardVisualReferences = cardView.GetComponent<PrototypeCardVisualReferences>();
             RequireReference(looseCardVisualReferences, nameof(looseCardVisualReferences));
             looseCardVisualReferences.ValidateReferences();
@@ -7959,7 +7976,6 @@ namespace ConsoleCards.Presentation.Prototype
             RequireReference(sceneDeckVisual, nameof(sceneDeckVisual));
             RequireReference(sceneStackAVisual, nameof(sceneStackAVisual));
             RequireReference(sceneStackBVisual, nameof(sceneStackBVisual));
-            RequireReference(prototypeStackPrefab, nameof(prototypeStackPrefab));
             RequireReference(sceneDiscardPileVisual, nameof(sceneDiscardPileVisual));
             RequireReference(sceneHandVisual, nameof(sceneHandVisual));
 
@@ -7968,15 +7984,6 @@ namespace ConsoleCards.Presentation.Prototype
             sceneStackBVisual.ValidateReferences();
             sceneDiscardPileVisual.ValidateReferences();
             sceneHandVisual.ValidateReferences();
-
-            if (prototypeStackPrefab.gameObject.scene.IsValid())
-            {
-                throw new InvalidOperationException(
-                    "TabletopPrototypeComposition requires prototypeStackPrefab to reference a prefab asset.");
-            }
-
-            prototypeStackPrefab.ValidateReferences();
-            ValidateStackLayoutAnchor(prototypeStackPrefab);
 
             DeckView resolvedDeckView = sceneDeckVisual.GetView<DeckView>();
             StackView resolvedStackAView = sceneStackAVisual.GetView<StackView>();
@@ -8888,25 +8895,16 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ValidateTrapFloorPrefabReferences()
         {
-            ValidateObjectPrefab(prototypePawnPrefab, nameof(prototypePawnPrefab));
-            ValidateObjectPrefab(prototypeTokenPrefab, nameof(prototypeTokenPrefab));
+            ValidateObjectPrefab(catalogPawnPrefab, nameof(catalogPawnPrefab));
+            ValidateObjectPrefab(catalogTokenPrefab, nameof(catalogTokenPrefab));
 
-            if (prototypeDeckPrefab.gameObject.scene.IsValid())
+            if (catalogConsolePrefab.gameObject.scene.IsValid())
             {
                 throw new InvalidOperationException(
-                    "TabletopPrototypeComposition requires prototypeDeckPrefab to reference a prefab asset.");
+                    "The catalog Console entry must reference a prefab asset.");
             }
 
-            prototypeDeckPrefab.ValidateReferences();
-            prototypeDeckPrefab.GetView<DeckView>();
-
-            if (prototypeConsolePrefab.gameObject.scene.IsValid())
-            {
-                throw new InvalidOperationException(
-                    "TabletopPrototypeComposition requires prototypeConsolePrefab to reference a prefab asset.");
-            }
-
-            ConsoleSlotView[] slotViews = prototypeConsolePrefab.GetComponentsInChildren<ConsoleSlotView>(true);
+            ConsoleSlotView[] slotViews = catalogConsolePrefab.GetComponentsInChildren<ConsoleSlotView>(true);
             ValidateSeatConsolesMatchLayout();
 
             for (int i = 0; i < slotViews.Length; i++)
@@ -9976,7 +9974,7 @@ namespace ConsoleCards.Presentation.Prototype
             string label,
             out TabletopSelectionVisual selectionVisual)
         {
-            PrototypeCardVisualReferences createdVisualReferences = Instantiate(prototypeCardPrefab);
+            PrototypeCardVisualReferences createdVisualReferences = Instantiate(catalogCardPrefab);
             GameObject clone = createdVisualReferences.gameObject;
             if (clone.scene != gameObject.scene)
             {
@@ -10014,7 +10012,7 @@ namespace ConsoleCards.Presentation.Prototype
             PawnState pawn,
             out TabletopSelectionVisual selectionVisual)
         {
-            PawnView createdView = Instantiate(prototypePawnPrefab);
+            PawnView createdView = Instantiate(catalogPawnPrefab);
             GameObject root = PrepareRuntimeRoot(createdView.gameObject, "Trap Floor Pawn");
             selectionVisual = createdView.GetComponent<TabletopSelectionVisual>();
             ValidateRuntimeSelectionVisual(createdView, selectionVisual);
@@ -10117,7 +10115,7 @@ namespace ConsoleCards.Presentation.Prototype
             out TabletopSelectionVisual selectionVisual,
             float visualScale)
         {
-            TokenView createdView = Instantiate(prototypeTokenPrefab);
+            TokenView createdView = Instantiate(catalogTokenPrefab);
             GameObject root = PrepareRuntimeRoot(createdView.gameObject, "Token");
             selectionVisual = createdView.GetComponent<TabletopSelectionVisual>();
             ValidateRuntimeSelectionVisual(createdView, selectionVisual);
@@ -10142,7 +10140,7 @@ namespace ConsoleCards.Presentation.Prototype
             Color color)
         {
             GameObject root = PrepareRuntimeRoot(new GameObject(name), name);
-            root.layer = prototypeTokenPrefab.gameObject.layer;
+            root.layer = catalogTokenPrefab.gameObject.layer;
             TokenContainerView view = root.AddComponent<TokenContainerView>();
             TabletopTokenContainerDropTarget dropTarget =
                 root.AddComponent<TabletopTokenContainerDropTarget>();
@@ -10206,7 +10204,7 @@ namespace ConsoleCards.Presentation.Prototype
             string name,
             out TabletopSelectionVisual selectionVisual)
         {
-            DieView createdView = Instantiate(prototypeDiePrefab);
+            DieView createdView = Instantiate(catalogDiePrefab);
             GameObject root = PrepareRuntimeRoot(createdView.gameObject, name);
             ConfigurePrototypeLabel(createdView.ResultLabel, createdView.ResultLabel.text, 0.18f, 64);
             ApplyLabelRendererHide(createdView.ResultLabel, PrototypeVisualHide.DieResultLabel);
@@ -10243,7 +10241,7 @@ namespace ConsoleCards.Presentation.Prototype
             int layoutSeatIndex,
             SeatId seatId)
         {
-            ConsoleView view = Instantiate(prototypeConsolePrefab);
+            ConsoleView view = Instantiate(catalogConsolePrefab);
             GameObject root = PrepareRuntimeRoot(view.gameObject, name);
             if (!playerLayout.TryGetSeat(layoutSeatIndex, out _))
             {
@@ -10271,7 +10269,7 @@ namespace ConsoleCards.Presentation.Prototype
             string name,
             PlacedConsoleState placedConsole)
         {
-            ConsoleView view = Instantiate(prototypeConsolePrefab);
+            ConsoleView view = Instantiate(catalogConsolePrefab);
             GameObject root = PrepareRuntimeRoot(view.gameObject, name);
             ApplyConsolePose(root.transform, placedConsole.Pose, placedConsole.SurfaceHeight);
             ConsoleSlotView[] slotViews = view.GetComponentsInChildren<ConsoleSlotView>(true);

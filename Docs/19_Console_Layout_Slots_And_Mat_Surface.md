@@ -2,7 +2,7 @@
 
 **Document ID:** 19_Console_Layout_Slots_And_Mat_Surface
 **Version:** 0.2
-**Status:** Stages (a), (a2) and (a2b) implemented (2026-10-06/07/08; records in §4.4, §11 and §12); (a2b) 3a pile bays written 2026-10-08 (§12.1); C1 component catalogs and pile prefabs written 2026-10-08 (§12.2, doc 22); C2a and C2b written 2026-10-08/09 (doc 22); 3b pending. Later stages each need their own approved plan; the current order is §9.1. Binding platform rules: `21_Platform_Principles.md`.
+**Status:** Stages (a), (a2) and (a2b) implemented (2026-10-06/07/08; records in §4.4, §11 and §12); (a2b) 3a pile bays written 2026-10-08 (§12.1); C1 component catalogs and pile prefabs written 2026-10-08 (§12.2, doc 22); C2a, C2b and C3a written 2026-10-08/09 (doc 22); 3b pending. Later stages each need their own approved plan; the current order is §9.1. Binding platform rules: `21_Platform_Principles.md`.
 **Source:** Stage 3c-1 read-only report (cube cells and the mat as a surface) and the user's decisions on it.
 **Purpose:** Define the console as one generic component whose mat exposes every card slot and every cube position as data, so any Game can choose what to use.
 
@@ -237,7 +237,7 @@ Inputs:
 
 Done: (a) definition + variant (2026-10-06); (a2) hand tray (2026-10-07, §11); (a2b) deck, stack and staging placement (2026-10-08, §12).
 
-1. ~~(a2b) Deck, stack and staging placement~~ — done (§12). Follow-up (§12.1, §12.2): 3a plate-less piles with bays (done); catalog stages C1 and C1b (done), C2a (written: authored Toolbox prefab from the library, Real UI prefab catalog, several cards become one Deck), C2b (written: Discard Pile in Runtime and the Toolbox, face-down arrival, Undo rebuilds Toolbox pieces) and C3 (every other spawn from the catalogs, Controller and Trap Floor boxes filled, old prefab fields removed), doc 22; then 3b new-player hints (Hints switch, legal targets light during a drag). Stage 4 (split stacks) is absorbed by C1.
+1. ~~(a2b) Deck, stack and staging placement~~ — done (§12). Follow-up (§12.1, §12.2): 3a plate-less piles with bays (done); catalog stages C1 and C1b (done), C2a (written: authored Toolbox prefab from the library, Real UI prefab catalog, several cards become one Deck), C2b (written: Discard Pile in Runtime and the Toolbox, face-down arrival, Undo rebuilds Toolbox pieces), C3a (written: every spawn from the catalogs, old prefab fields removed), C3b (scene-owned pieces become catalog spawns) and C3c (game board and mapping board prefabs, Controller and Trap Floor boxes filled), doc 22; then 3b new-player hints (Hints switch, legal targets light during a drag). Stage 4 (split stacks) is absorbed by C1.
 2. (a2c) Hand optional (declared per template, in its rules), before the first template without a hand. Includes: removing Trap Floor's Action area; one routing rule for granted cards (starting cards, purchases): into the owner's hand when the template uses one, otherwise loose on the table at the next free staging spot (placement-checked); the purchase service accepts the seat's own Hand as destination.
 3. (c) Mat support surface.
 4. (b) Card slot targeting and settle.

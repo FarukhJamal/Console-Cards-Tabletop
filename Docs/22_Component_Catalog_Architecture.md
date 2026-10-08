@@ -1,8 +1,8 @@
 # Console Cards - Component Catalog Architecture
 
 **Document ID:** 22_Component_Catalog_Architecture
-**Version:** 0.2
-**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8). C3 pending; it needs its own approved plan. Binding rule: doc 21 principle 18.
+**Version:** 0.3
+**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8); C3a written 2026-10-09 (every spawn from the catalogs, §9). C3b and C3c pending; each needs its own approved plan. Binding rule: doc 21 principle 18.
 **Source:** Owner decisions 2026-10-08 and the product material (box set, controller box and game box images).
 **Purpose:** Define how every component and its definitions are registered, so the table, the Toolbox and the UI resolve the same component from one place.
 
@@ -51,8 +51,8 @@
 | Hand | Hand | `PrototypeHand` (not in the Toolbox) | — |
 
 - Card, Pawn, Token and Die keep the GUIDs of `ToolboxComponentDefinitions`.
-- Not yet in a catalog: the game board and the controller mapping board are scene objects today and get prefabs in C3.
-- `ControllerBox.asset` and `TrapFloor.asset` are empty in C1 and are filled in C3.
+- Not yet in a catalog: the game board is a scene object today and the controller mapping board does not exist yet; both get prefabs in C3c.
+- `ControllerBox.asset` and `TrapFloor.asset` are empty in C1 and are filled in C3c.
 
 ## 4. Pile prefabs
 
@@ -66,11 +66,15 @@
 - **C1b (written):** `ComponentLibrary` (Base, Controller, Game boxes, Environment); Game boxes name their game; Super Leroy Sisters box (empty); the scene references the library through one field (`componentLibrary`).
 - **C2a (written):** the authored Toolbox (§7); several cards placed at once become one Deck; the Real UI prefab catalog; the scene's `RuntimeUiManager` uses it.
 - **C2b (written):** Discard Pile in Runtime (create, move, delete) and in the Toolbox (cards arrive face down, declared on the pile style); Undo and Redo rebuild every Toolbox-placed piece; the quick-spawn grid uses catalog footprints (§8).
-- **C3:** every other spawn (card, pawn, token, die, console, hand) from the catalogs; game board and mapping board prefabs; Controller and Trap Floor boxes filled; the old prefab fields and their scene lines removed.
+- **C3a (written):** Card, Pawn, Token, Die and Console spawns from the catalogs; the seven old prefab fields and their scene lines removed (§9).
+- **C3b:** the scene-owned pieces become catalog spawns: the local Console and Hand, the starting loose card, pawn and token; the first-prototype scene deck, stacks and discard pile removed.
+- **C3c:** game board and mapping board prefabs; Controller and Trap Floor boxes filled, and their tiles place real game pieces (§6).
 
 ## 6. Open items
 
-- **Controller deck size:** Trap Floor's controller deck is 48 cards today (no Start or Select). Owner to decide whether Trap Floor uses Start and Select.
+- **Controller deck size (decided 2026-10-09):** the controller deck stays 48 cards (6 each of Up, Down, Left, Right, A, B, X, Y); Start and Select are left out. Whether a game uses them is part of the rules stage.
+- **Box tiles (decided 2026-10-09):** Controller and Game box tiles place real game pieces (for example a full labelled controller deck, or a game's real Item cards), not generic ones.
+- **Controller mapping board (decided 2026-10-09):** one spot per input where a player lays a card; the mapping rules come later.
 - **UI faces:** icons and card art per entry are empty until the art is supplied.
 
 ## 7. Toolbox (C2a, owner decisions 2026-10-08)
@@ -92,3 +96,9 @@
 - **Undo and Redo rebuild:** after the session rebuild, every placed Deck, Stack and Console made by the Toolbox or a split, and every Discard Pile, is recreated from the catalog (before C2b, such pieces disappeared from the table after a later Undo).
 - **Quick-spawn grid:** cells are a pile's bay plus the placement clearance (1.36 × 1.76); rows step toward the table centre.
 - **Not yet:** the old scene-owned discard pile stays until C3.
+
+## 9. Spawns from the catalogs (C3a, 2026-10-09)
+
+- The composition resolves its Card, Pawn, Token, Die and Console prefabs from the library: the first entry of each kind in shelf order (the same rule as the piles). They are the same prefabs as before (`PrototypeCard`, `PrototypePawn`, `PrototypeToken`, `PrototypeDie`, `Real/ConsoleMat`).
+- The Console layout comes from the catalog Console prefab's `ConsoleLayoutBinding`; catalog validation already requires its `Layout` link to match.
+- Removed: `prototypeCardPrefab`, `prototypePawnPrefab`, `prototypeTokenPrefab`, `prototypeDiePrefab`, `prototypeDeckPrefab`, `prototypeStackPrefab`, `prototypeConsolePrefab` and their seven scene lines. Their prefab checks run in the catalog validation.

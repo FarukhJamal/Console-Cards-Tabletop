@@ -3369,10 +3369,6 @@ MonoBehaviour:
   cameraInputAdapter: {fileID: 1862448553}
   objectInputAdapter: {fileID: 2100000022}
   inputFrameCoordinator: {fileID: 2100000023}
-  prototypeCardPrefab: {fileID: 114102, guid: f3dcc30c78f848c587e75bb31bc47e3b, type: 3}
-  prototypePawnPrefab: {fileID: 114100, guid: 5239af82a047422eb755f790bbe5daea, type: 3}
-  prototypeTokenPrefab: {fileID: 114100, guid: 2f85d772fd64424baa3eeb27b542f608, type: 3}
-  prototypeDiePrefab: {fileID: 611100, guid: 7a41f6c247cc4a47a0fe1586125cc1a6, type: 3}
   gameBoardPhysicalSurface: {fileID: 234356918}
   gameBoardVisualRoot: {fileID: 234356922}
   gameBoardVisualMaterial: {fileID: 2100000, guid: 4fb7f4b8103a8954dbf13d614cca7b06, type: 2}
@@ -3481,8 +3477,6 @@ MonoBehaviour:
       gentlePlacementDescentResponseSeconds: 0.06
       gentlePlacementOrientationStrength: 1.4
       gentlePlacementAngularVelocityScale: 0.03
-  prototypeDeckPrefab: {fileID: 114102, guid: e81b395902c476d7f8192a3b4c5d6e78, type: 3}
-  prototypeConsolePrefab: {fileID: 114100, guid: fa0ce3f8f1894f7591391129804cdd82, type: 3}
   componentLibrary: {fileID: 11400000, guid: d06fab8dbefc4b7fbdaa0ceecbbffd0b, type: 2}
   cardView: {fileID: 2100000102}
   pawnView: {fileID: 2100000202}
@@ -3496,7 +3490,6 @@ MonoBehaviour:
   sceneDeckVisual: {fileID: 5100000103}
   sceneStackAVisual: {fileID: 5200000103}
   sceneStackBVisual: {fileID: 5300000103}
-  prototypeStackPrefab: {fileID: 114102, guid: f92c4a6a13d587e8092a3b4c5d6e7f89, type: 3}
   sceneDiscardPileVisual: {fileID: 5400000103}
   sceneHandVisual: {fileID: 5500000103}
   sceneConsoleView: {fileID: 4100000002}
