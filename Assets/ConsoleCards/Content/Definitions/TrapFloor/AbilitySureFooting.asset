@@ -15,7 +15,7 @@ MonoBehaviour:
   stableId: 54460015-4f4f-4000-8000-00150000001f
   displayName: Dodge
   category: Ability
-  description: Authored Trap Floor Ability. Resolve Dodge manually according to the current agreed rules.
+  description: 'Reaction. Play on the Trap you are on. Resolve Dodge manually according to the current agreed rules.'
   frontArtwork: {fileID: 0}
   frontArtworkReference: 
   backArtwork: {fileID: 0}
@@ -30,5 +30,5 @@ MonoBehaviour:
   orientation: 0
   preferredConsolePlacement: Side
   consoleBehavior: 1
-  tags: [trap-floor, ability, dodge, provisional-input-cost]
+  tags: [trap-floor, ability, dodge, reaction, provisional-input-cost]
   effectMetadata: trap-floor-ability-dodge

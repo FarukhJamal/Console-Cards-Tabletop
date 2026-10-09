@@ -1,8 +1,8 @@
 # Console Cards — Rules, House Rules and Hints
 
 **Document ID:** 23_Rules_House_Rules_And_Hints
-**Version:** 0.2
-**Status:** Approved direction (owner, 2026-10-09). R1 and R2a implemented; R2b–R4 planned.
+**Version:** 0.3
+**Status:** Approved direction (owner, 2026-10-09). R1, R2a and R2b implemented; R3–R4 planned.
 
 > **Contract note:** type names and field lists here are illustrative unless labelled **Approved Contract**. They describe the direction agreed with the owner, not fixed public APIs.
 
@@ -60,7 +60,7 @@ Each game supplies its own entries and setting keys. The platform only knows how
 |---|---|---|
 | R1 | Rule set data model; Trap Floor default rules drafted from the code; rules card (left column, foldable, changed-line marks, house-rules badge); Table menu switches for Rules card, Hints and Help; developer wording replaced with player wording | Implemented |
 | R2a | Rule settings feed the game data before the template is built (`GameDefinition.ToData(ruleSet)` → `RuleSettingsApplication`): hand size, Keys needed per difficulty, win mode (Team / Survival, separate from difficulty). Default rule set rewritten for the revised Trap Floor (doc 18 §15) | Implemented |
-| R2b | Board mix and Avatars as data: floor groups with counts and random pools, placement method setting, new card definitions (Spring, Crane, Overcharged, Push, Check, Rush), each Avatar's starting ability | Planned |
+| R2b | Board mix and Avatars as data: floor groups (content sets with role `floor`, a draw count and optional repeats), floor count and placement settings, new card definitions (Spring ×4, Crane, Overcharged, Push), Action/Reaction text on every Ability, each seat's Avatar and its starting ability, a Setup section on the rules card | Implemented |
 | R3 | House rules: propose a change in game, every player agrees, the change is saved as a named set based on the current one, the card shows the difference, and saved sets can be picked in the start flow's Rules step | Planned |
 | R4 | Hints engine built on the assistance layer: legal-move highlights and "why / why not" explanations for the active phase and rule set. Pings arrive with multiplayer (doc 10) as a separate social layer | Planned |
 
@@ -71,6 +71,10 @@ Each game supplies its own entries and setting keys. The platform only knows how
 | `controller.hand-size` | Number | game | `ControllerConfiguration.MaximumHandSize` (draw limit) |
 | `mode.keys-needed` | Number | per mode (mode filter) | `Mode.RequiredKeyCount` and its any-Key objective |
 | `game.win-mode` | Choice: Team / Survival | all modes or per mode | `Mode.Behavior` |
+| `floor.count.<content set ID>` | Number | all modes or per mode | How many cards the setup draws from that floor group (R2b). Passed through as `GameDefinitionData.RuleSettings` |
+| `floor.placement` | Choice: random / pattern | all modes or per mode | Placement method (R2b). Passed through; until G2 every floor is placed at random |
+
+**Pass-through settings** are checked when the rule set is applied and then kept on the game data (`GameDefinitionData.TryGetRuleSetting(key, mode)`) for the game's setup to read. A floor count for a group the game does not have is skipped with a warning. If the floor groups no longer add up to the grid, the setup reports it and does not build; R3's rule editor will check the total before a house rule is saved.
 
 A setting may carry a **display value** shown on the rules card in place of the raw value. Unknown keys and unreadable values are skipped with a console warning, and the authored value is kept.
 

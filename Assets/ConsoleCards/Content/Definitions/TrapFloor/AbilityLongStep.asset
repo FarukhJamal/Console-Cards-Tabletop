@@ -15,7 +15,7 @@ MonoBehaviour:
   stableId: 54460015-4f4f-4000-8000-001500000021
   displayName: Rush
   category: Ability
-  description: Authored Trap Floor Ability. Resolve Rush manually according to the current agreed rules.
+  description: 'Action. Instead of moving, move up to 3 tiles quickly, even over a missing (collapsed) tile.'
   frontArtwork: {fileID: 0}
   frontArtworkReference: 
   backArtwork: {fileID: 0}
@@ -26,5 +26,5 @@ MonoBehaviour:
   orientation: 0
   preferredConsolePlacement: Side
   consoleBehavior: 1
-  tags: [trap-floor, ability, rush]
+  tags: [trap-floor, ability, rush, action, cost-pending]
   effectMetadata: trap-floor-ability-rush

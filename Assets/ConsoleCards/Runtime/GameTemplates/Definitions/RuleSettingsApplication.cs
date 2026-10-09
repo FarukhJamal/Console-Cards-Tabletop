@@ -4,7 +4,7 @@ using System.Globalization;
 
 namespace ConsoleCards.GameTemplates.Definitions
 {
-    /// <summary>The platform setting keys a rule set can carry (doc 23, R2a). Each game decides which it uses.</summary>
+    /// <summary>The platform setting keys a rule set can carry (doc 23, R2a/R2b). Each game decides which it uses.</summary>
     public static class RuleSettingKeys
     {
         /// <summary>Number: the Controller hand limit drawn up to at the start of a turn.</summary>
@@ -15,6 +15,18 @@ namespace ConsoleCards.GameTemplates.Definitions
 
         /// <summary>Choice, all or some modes: Team (one player must escape) or Survival (all must escape).</summary>
         public const string WinMode = "game.win-mode";
+
+        /// <summary>
+        /// Number, prefix: "floor.count." + a content set ID sets how many cards the setup draws from that set
+        /// (for example floor.count.trap-floor-floor-traps). Passed through to the game's setup.
+        /// </summary>
+        public const string FloorCountPrefix = "floor.count.";
+
+        /// <summary>Choice: how floor cards are placed, <see cref="FloorPlacementRandom"/> or <see cref="FloorPlacementPattern"/>.</summary>
+        public const string FloorPlacement = "floor.placement";
+
+        public const string FloorPlacementRandom = "random";
+        public const string FloorPlacementPattern = "pattern";
     }
 
     /// <summary>One typed setting taken from a rule set: its key, raw value and the modes it applies to.</summary>
@@ -53,9 +65,10 @@ namespace ConsoleCards.GameTemplates.Definitions
     }
 
     /// <summary>
-    /// Applies a rule set's settings to game data before a template is built (doc 23, R2a). The game's services
-    /// already read everything from this data, so rules change play without code changes. Settings it cannot
-    /// read are skipped with a warning and the authored value is kept.
+    /// Applies a rule set's settings to game data before a template is built (doc 23, R2a/R2b). The game's services
+    /// already read everything from this data, so rules change play without code changes. Floor settings are
+    /// checked and passed through for the setup to read. Settings it cannot read are skipped with a warning and
+    /// the authored value is kept.
     /// </summary>
     public static class RuleSettingsApplication
     {
@@ -75,6 +88,7 @@ namespace ConsoleCards.GameTemplates.Definitions
             }
 
             ControllerConfigurationData controller = data.ControllerConfiguration;
+            List<RuleSettingValue> passedThrough = new List<RuleSettingValue>(data.RuleSettings);
             for (int i = 0; i < settings.Count; i++)
             {
                 RuleSettingValue setting = settings[i];
@@ -92,6 +106,34 @@ namespace ConsoleCards.GameTemplates.Definitions
                             controller.UnusedCardsCarryOver,
                             controller.CostsAreAllOrNothing,
                             controller.SharedPaymentAllowed);
+                    }
+                }
+                else if (setting.Key.StartsWith(RuleSettingKeys.FloorCountPrefix, StringComparison.Ordinal))
+                {
+                    string contentSetId = setting.Key.Substring(RuleSettingKeys.FloorCountPrefix.Length);
+                    if (!data.TryGetContentSet(contentSetId, out _))
+                    {
+                        Warn(warnings, setting, $"the game has no content set '{contentSetId}'");
+                    }
+                    else if (TryReadCount(setting, warnings, out _))
+                    {
+                        passedThrough.Add(setting);
+                    }
+                }
+                else if (string.Equals(setting.Key, RuleSettingKeys.FloorPlacement, StringComparison.Ordinal))
+                {
+                    string placement = setting.Value.Trim();
+                    if (string.Equals(placement, RuleSettingKeys.FloorPlacementRandom, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(placement, RuleSettingKeys.FloorPlacementPattern, StringComparison.OrdinalIgnoreCase))
+                    {
+                        passedThrough.Add(new RuleSettingValue(
+                            setting.Key,
+                            placement.ToLowerInvariant(),
+                            setting.ModeStableIds));
+                    }
+                    else
+                    {
+                        Warn(warnings, setting, "expected random or pattern");
                     }
                 }
                 else if (!string.Equals(setting.Key, RuleSettingKeys.KeysNeeded, StringComparison.Ordinal)
@@ -124,7 +166,8 @@ namespace ConsoleCards.GameTemplates.Definitions
                 controller,
                 data.ControllerMappingKind,
                 data.PresentationReference,
-                data.AssistanceConfiguration);
+                data.AssistanceConfiguration,
+                passedThrough);
         }
 
         private static ModeDefinitionData ApplyToMode(
@@ -205,9 +248,14 @@ namespace ConsoleCards.GameTemplates.Definitions
             return false;
         }
 
+        // A per-mode setting is read once for each mode it applies to, so the same warning is reported once.
         private static void Warn(ICollection<string> warnings, RuleSettingValue setting, string reason)
         {
-            warnings?.Add($"Rule setting '{setting.Key}' = '{setting.Value}' was skipped: {reason}.");
+            string warning = $"Rule setting '{setting.Key}' = '{setting.Value}' was skipped: {reason}.";
+            if (warnings != null && !warnings.Contains(warning))
+            {
+                warnings.Add(warning);
+            }
         }
     }
 }

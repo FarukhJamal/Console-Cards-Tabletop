@@ -5,11 +5,12 @@ using NUnit.Framework;
 
 namespace ConsoleCards.Tests.EditMode.GameTemplates
 {
-    /// <summary>Doc 23, R2a: a rule set's settings feed the game data that templates are built from.</summary>
+    /// <summary>Doc 23, R2a/R2b: a rule set's settings feed the game data that templates are built from.</summary>
     public sealed class RuleSettingsApplicationTests
     {
         private const string Easy = "mode-easy";
         private const string Hard = "mode-hard";
+        private const string Traps = "test-floor-traps";
 
         [Test]
         public void NoSettings_ReturnsTheSameData()
@@ -96,6 +97,46 @@ namespace ConsoleCards.Tests.EditMode.GameTemplates
             Assert.AreNotSame(FindMode(data, Easy), FindMode(result, Easy));
         }
 
+        [Test]
+        public void FloorSettings_ArePassedThroughForTheSetup_PerMode()
+        {
+            GameDefinitionData result = RuleSettingsApplication.Apply(
+                CreateData(),
+                new[]
+                {
+                    Setting(RuleSettingKeys.FloorCountPrefix + Traps, "12"),
+                    Setting(RuleSettingKeys.FloorCountPrefix + Traps, "16", Hard),
+                    Setting(RuleSettingKeys.FloorPlacement, " Pattern "),
+                },
+                null);
+
+            Assert.IsTrue(result.TryGetRuleSetting(RuleSettingKeys.FloorCountPrefix + Traps, Easy, out string easyTraps));
+            Assert.AreEqual("12", easyTraps);
+            Assert.IsTrue(result.TryGetRuleSetting(RuleSettingKeys.FloorCountPrefix + Traps, Hard, out string hardTraps));
+            Assert.AreEqual("16", hardTraps);
+            Assert.IsTrue(result.TryGetRuleSetting(RuleSettingKeys.FloorPlacement, Easy, out string placement));
+            Assert.AreEqual(RuleSettingKeys.FloorPlacementPattern, placement);
+        }
+
+        [Test]
+        public void FloorSettings_ForAMissingSetOrWithBadValues_AreSkippedWithWarnings()
+        {
+            List<string> warnings = new List<string>();
+            GameDefinitionData result = RuleSettingsApplication.Apply(
+                CreateData(),
+                new[]
+                {
+                    Setting(RuleSettingKeys.FloorCountPrefix + "no-such-set", "4"),
+                    Setting(RuleSettingKeys.FloorCountPrefix + Traps, "many"),
+                    Setting(RuleSettingKeys.FloorPlacement, "spiral"),
+                },
+                warnings);
+
+            Assert.AreEqual(3, warnings.Count);
+            Assert.AreEqual(0, result.RuleSettings.Count);
+            Assert.IsFalse(result.TryGetRuleSetting(RuleSettingKeys.FloorCountPrefix + Traps, Easy, out _));
+        }
+
         private static RuleSettingValue Setting(string key, string value, params string[] modes)
         {
             return new RuleSettingValue(key, value, modes);
@@ -128,7 +169,7 @@ namespace ConsoleCards.Tests.EditMode.GameTemplates
                 4,
                 null,
                 Array.Empty<CardDefinitionData>(),
-                Array.Empty<GameContentSetData>(),
+                new[] { new GameContentSetData(Traps, "Traps", Array.Empty<string>(), "floor", 18) },
                 Array.Empty<AvatarDefinitionData>(),
                 new[] { easy, hard },
                 Easy,

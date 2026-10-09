@@ -12,18 +12,34 @@ namespace ConsoleCards.GameTemplates.Definitions
         public GameContentSetData(
             string stableId,
             string displayName,
-            IEnumerable<string> cardDefinitionIds)
+            IEnumerable<string> cardDefinitionIds,
+            string role = null,
+            int drawCount = 0,
+            bool allowRepeats = false)
         {
             if (string.IsNullOrWhiteSpace(stableId)) throw new ArgumentException("Content Set ID is required.", nameof(stableId));
+            if (drawCount < 0) throw new ArgumentOutOfRangeException(nameof(drawCount));
             StableId = stableId;
             DisplayName = displayName ?? string.Empty;
             this.cardDefinitionIds = new ReadOnlyCollection<string>(
                 new List<string>(cardDefinitionIds ?? throw new ArgumentNullException(nameof(cardDefinitionIds))));
+            Role = role ?? string.Empty;
+            DrawCount = drawCount;
+            AllowRepeats = allowRepeats;
         }
 
         public string StableId { get; }
         public string DisplayName { get; }
         public IReadOnlyList<string> CardDefinitionIds => cardDefinitionIds;
+
+        /// <summary>What the game uses the set for, for example "floor" (doc 18 §15.6). Empty for plain sets.</summary>
+        public string Role { get; }
+
+        /// <summary>How many cards a setup draws from the set's pool (each card counted by quantity); 0 takes the whole pool.</summary>
+        public int DrawCount { get; }
+
+        /// <summary>When true, each draw picks from the whole pool again, so a card can appear more than its quantity.</summary>
+        public bool AllowRepeats { get; }
     }
 
     [Serializable]
@@ -59,6 +75,7 @@ namespace ConsoleCards.GameTemplates.Definitions
         private readonly ReadOnlyCollection<AvatarDefinitionData> avatars;
         private readonly ReadOnlyCollection<ModeDefinitionData> modes;
         private readonly ReadOnlyCollection<ControllerInput> inputVocabulary;
+        private readonly ReadOnlyCollection<RuleSettingValue> ruleSettings;
 
         public GameDefinitionData(
             string stableId,
@@ -77,7 +94,8 @@ namespace ConsoleCards.GameTemplates.Definitions
             ControllerConfigurationData controllerConfiguration,
             ControllerMappingKind controllerMappingKind,
             string presentationReference,
-            string assistanceConfiguration)
+            string assistanceConfiguration,
+            IEnumerable<RuleSettingValue> ruleSettings = null)
         {
             if (string.IsNullOrWhiteSpace(stableId)) throw new ArgumentException("Game ID is required.", nameof(stableId));
             if (string.IsNullOrWhiteSpace(displayName)) throw new ArgumentException("Game name is required.", nameof(displayName));
@@ -101,6 +119,8 @@ namespace ConsoleCards.GameTemplates.Definitions
             ControllerMappingKind = controllerMappingKind;
             PresentationReference = presentationReference ?? string.Empty;
             AssistanceConfiguration = assistanceConfiguration ?? string.Empty;
+            this.ruleSettings = new ReadOnlyCollection<RuleSettingValue>(
+                ruleSettings == null ? new List<RuleSettingValue>() : new List<RuleSettingValue>(ruleSettings));
         }
 
         public string StableId { get; }
@@ -120,6 +140,29 @@ namespace ConsoleCards.GameTemplates.Definitions
         public ControllerMappingKind ControllerMappingKind { get; }
         public string PresentationReference { get; }
         public string AssistanceConfiguration { get; }
+
+        /// <summary>
+        /// Rule settings a game reads while building its setup (doc 23, R2b), for example floor counts. Only
+        /// settings the platform passes through are here; the rest are already applied to the data above.
+        /// </summary>
+        public IReadOnlyList<RuleSettingValue> RuleSettings => ruleSettings;
+
+        /// <summary>The last rule setting with this key that applies to the mode; false when there is none.</summary>
+        public bool TryGetRuleSetting(string key, string modeStableId, out string value)
+        {
+            for (int i = ruleSettings.Count - 1; i >= 0; i--)
+            {
+                if (string.Equals(ruleSettings[i].Key, key, StringComparison.Ordinal)
+                    && ruleSettings[i].AppliesToMode(modeStableId))
+                {
+                    value = ruleSettings[i].Value;
+                    return true;
+                }
+            }
+
+            value = null;
+            return false;
+        }
 
         public bool TryGetCard(string stableId, out CardDefinitionData definition)
         {

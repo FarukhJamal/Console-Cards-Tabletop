@@ -20,7 +20,7 @@ MonoBehaviour:
   frontArtworkReference: 
   backArtwork: {fileID: 0}
   backArtworkReference: 
-  quantity: 2
+  quantity: 3
   inputCost:
     requirements: []
   orientation: 0

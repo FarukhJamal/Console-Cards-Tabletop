@@ -12,10 +12,19 @@ namespace ConsoleCards.Definitions
         [SerializeField] private string stableId;
         [SerializeField] private string displayName;
         [SerializeField] private List<CardDefinition> cards = new List<CardDefinition>();
+        [Tooltip("What the game uses this set for, for example \"floor\". Leave empty for a plain set.")]
+        [SerializeField] private string role;
+        [Tooltip("Cards a setup draws from this set (each card counted by its quantity). 0 takes them all.")]
+        [SerializeField, Min(0)] private int drawCount;
+        [Tooltip("Each draw picks from the whole set again, so a card can appear more often than its quantity.")]
+        [SerializeField] private bool allowRepeats;
 
         public string StableId => stableId;
         public string DisplayName => displayName;
         public IReadOnlyList<CardDefinition> Cards => cards;
+        public string Role => role;
+        public int DrawCount => drawCount;
+        public bool AllowRepeats => allowRepeats;
 
         internal GameContentSetData ToData()
         {
@@ -26,7 +35,7 @@ namespace ConsoleCards.Definitions
                 cardIds.Add(cards[i].StableId);
             }
 
-            return new GameContentSetData(stableId, displayName, cardIds);
+            return new GameContentSetData(stableId, displayName, cardIds, role, drawCount, allowRepeats);
         }
     }
 
@@ -106,8 +115,8 @@ namespace ConsoleCards.Definitions
         }
 
         /// <summary>
-        /// The game data with a rule set's settings applied (doc 23, R2a): the hand size, Keys needed per mode and
-        /// win mode come from the rules players see. Unreadable settings are skipped with a console warning.
+        /// The game data with a rule set's settings applied (doc 23, R2a/R2b): the hand size, Keys needed per mode,
+        /// win mode and floor mix come from the rules players see. Unreadable settings are skipped with a console warning.
         /// </summary>
         public GameDefinitionData ToData(RuleSetDefinition ruleSet)
         {

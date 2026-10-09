@@ -15,7 +15,7 @@ MonoBehaviour:
   stableId: 54460015-4f4f-4000-8000-001500000023
   displayName: Disarm
   category: Ability
-  description: Authored Trap Floor Ability. Resolve Disarm manually according to the current agreed rules.
+  description: 'Action. Resolve Disarm manually according to the current agreed rules.'
   frontArtwork: {fileID: 0}
   frontArtworkReference: 
   backArtwork: {fileID: 0}
@@ -26,5 +26,5 @@ MonoBehaviour:
   orientation: 0
   preferredConsolePlacement: Side
   consoleBehavior: 1
-  tags: [trap-floor, ability, disarm]
+  tags: [trap-floor, ability, disarm, action, cost-pending]
   effectMetadata: trap-floor-ability-disarm

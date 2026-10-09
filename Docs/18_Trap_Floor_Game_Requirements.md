@@ -1,7 +1,7 @@
 # Console Cards - Trap Floor Game Requirements
 
 **Document ID:** 18_Trap_Floor_Game_Requirements
-**Version:** 1.5
+**Version:** 1.6
 **Status:** Approved with Open Decisions
 **Authoritative source:** User-approved Console Cards System & Games direction supplied 2026-09-21, superseding conflicting historical Trap Floor direction
 **Purpose:** Define the current approved minimum Game-specific direction for Trap Floor while keeping provisional design values open and preserving manual tabletop play.
@@ -254,7 +254,19 @@ Placement is either random or follows a difficulty pattern (§15.7). The exact m
 | Sticky | 3 |
 | Blind | 3 |
 
-Overcharged is a special Floor Card. **Open:** which group of the 36 it counts in (§15.8).
+Overcharged is a special Floor Card in the Friend pool (§15.10).
+
+**Implementation (R2b, 2026-10-09):** the floor is built from five **floor groups** in the game definition (content sets with the role `floor`). Each draws its count at random:
+
+| Group | Draws | From |
+|---|---|---|
+| Traps | 18 | the Trap mix above (each card counted by its quantity) |
+| Friends | 4 | the four Friend cards plus Overcharged |
+| Keys | 6 | Bronze, Silver and Golden, two of each |
+| Exits | 2 | Grand Exit and Secret Exit |
+| Abilities | 6 | Check, Rush, Dodge, Disarm, Shield and Push, repeats allowed |
+
+The Trap, Friend and Ability counts and the placement method are rule settings (doc 23 §5), so a house rule can change them. The groups must still add up to the 36 tiles. The earlier provisional Traps (Chain Snare, Crushing Walls and the rest) are no longer on the floor.
 
 ### 15.7 Difficulty placement patterns (proposal)
 
@@ -341,10 +353,7 @@ Difficulty and win mode are **two separate choices**. A table picks one of each,
 - Resolved: Overcharged joins the Friend pool. The 4 Friend slots are filled at random from the Friend cards plus Overcharged.
 - Resolved: the 6 Ability Cards on the Floor are chosen at random from the Ability roster (Check, Rush, Dodge, Disarm, Shield, Push). **Safe Search is removed for now**; Check covers making a Trap harmless.
 - Resolved in §15.9: starting Abilities come from the Avatar; Hard starts with 0.
-- Final Trap-type mix and the patterns in §15.7, after playtest.
-- Grand Exit: §15.6 lists a Grand Exit Floor Card, but the How to win card places the Exit by a 2d6 roll once the Keys are collected. Is there a Grand Exit card on the floor at all, and what does the Secret Exit do?
-- "Stepping on tiles automatically triggers Traps" after the Exit is revealed: does this mean already flipped (face-up) Traps trigger again, given that Traps are otherwise one-time (§15.5)?
-- "Prizes are disabled": does this mean Friends and floor Abilities can no longer be taken, or no longer played?
-- Impossible: does Floor collapse happen at all before the first player exits?
-- Survival with per-floor elimination: does an eliminated player simply try again next round?
-- Hard, "by any means possible": may players pass Keys to each other (for example by sharing a tile)?
+- Resolved in §15.9: the Grand Exit, the Secret Exit, Traps triggering again after the Exit is revealed, prizes after the Exit, Impossible collapse, Survival retries and passing Keys.
+- **Open:** the final Trap-type mix and the §15.7 patterns, after playtest.
+- **Open:** the costs of Check, Rush, Disarm and Push. Their cards have no cost yet (marked `cost-pending`); Shield and Dodge keep their provisional costs.
+- **Open:** the exact card text for Dodge, Shield and Disarm. Their cards now say whether they are Action or Reaction, and are otherwise resolved by the table.

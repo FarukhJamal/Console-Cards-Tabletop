@@ -17,6 +17,51 @@ MonoBehaviour:
   gameStableId: 54460001-4f4f-4000-8000-000100000001
   basedOn: {fileID: 0}
   sections:
+  - heading: 'Setup'
+    numbered: 0
+    entries:
+    - stableId: tf-setup-traps
+      text: 'The floor holds {value} Traps, picked at random from Spring, Crane, Fall, Slow, Sticky and Blind.'
+      settingKind: 1
+      settingKey: floor.count.trap-floor-floor-traps
+      value: '18'
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-setup-friends
+      text: '{value} Friends, picked at random from the Friend cards and Overcharged.'
+      settingKind: 1
+      settingKey: floor.count.trap-floor-floor-friends
+      value: '4'
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-setup-abilities
+      text: '{value} Abilities, picked at random. The same Ability can appear more than once.'
+      settingKind: 1
+      settingKey: floor.count.trap-floor-floor-abilities
+      value: '6'
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-setup-fixed
+      text: 'Also 6 Keys, the Grand Exit and the Secret Exit. All the counts must add up to the 36 tiles.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-setup-placement
+      text: 'Tiles are placed {value}.'
+      settingKind: 3
+      settingKey: floor.placement
+      value: 'random'
+      displayValue: 'at random'
+      modeStableIds: []
+    - stableId: tf-setup-avatar
+      text: 'Each player starts with their Avatar''s ability.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      displayValue: ''
+      modeStableIds: []
   - heading: 'Your turn'
     numbered: 1
     entries:

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using ConsoleCards.Application.Random;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
@@ -19,14 +20,17 @@ namespace ConsoleCards.Games.TrapFloor
     public static class TrapFloorTemplateFactory
     {
         public const int PrototypePlayerCount = 4;
-        public const string FloorContentSetId = "trap-floor-floor-pool";
-        public const string AbilityContentSetId = "trap-floor-abilities";
+        /// <summary>
+        /// Content sets with this role are the floor groups (doc 18 §15.6). Each draws its count at random, and
+        /// together they must fill the Grid.
+        /// </summary>
+        public const string FloorContentRole = "floor";
         public const string ControllerInputContentSetId = "trap-floor-controller-inputs";
 
         private const double PlayerConsoleRadius = 6.1d;
         // Trap Floor's placement choices beside each Console (console-local along-z). Positions come from
         // ConsoleAdjacentPlacement with its Standard settings (gap, pile size, clearance and margin rules).
-        // Right side: Controller Deck, then the Hand zone; left side: Action stack, then the staging row (Easy).
+        // Right side: Controller Deck, then the Hand zone; left side: Action stack, then the staging row (the Avatar's starting Abilities).
         private const double ControllerDeckAlongZ = 0d;
         private const double HandZoneAlongZ = 0d;
         private const double ActionStackAlongZ = 0d;
@@ -89,8 +93,8 @@ namespace ConsoleCards.Games.TrapFloor
             Guid gameDefinitionId = ParseStableGuid(gameDefinition.StableId, "Game");
             GridDefinitionData grid = gameDefinition.Grid;
             IReadOnlyList<TrapFloorFloorContentDefinition> floorContent =
-                ResolveFloorContent(gameDefinition, activeMode, grid);
-            IReadOnlyList<CardDefinitionData> abilityDefinitions = ResolveAbilities(gameDefinition, activeMode);
+                ResolveFloorContent(gameDefinition, activeMode, grid, randomValueSource);
+            IReadOnlyList<TrapFloorAvatarSetup> avatars = ResolveAvatars(gameDefinition);
             IReadOnlyList<CardDefinitionData> controllerInputCards = ResolveControllerInputCards(gameDefinition);
             ConsoleSlotDefinitionData mainSlot = ResolveConsoleSlot(gameDefinition.Console, "Main", 1);
             ConsoleSlotDefinitionData sideSlots = ResolveConsoleSlot(gameDefinition.Console, "Side", 1);
@@ -101,19 +105,18 @@ namespace ConsoleCards.Games.TrapFloor
             ConsoleAdjacentPlacement adjacentPlacement = new ConsoleAdjacentPlacement(
                 consoleLayout,
                 ConsoleAdjacentPlacementSettings.Standard);
-            TrapFloorSeatPieces seatPieces = CreateSeatPieces(adjacentPlacement, activeMode.StartingAbilityCount);
+            TrapFloorSeatPieces seatPieces = CreateSeatPieces(adjacentPlacement, MaximumStartingAbilityCount(avatars));
             GameTemplateId templateId = new GameTemplateId(
                 string.Equals(activeMode.StableId, gameDefinition.DefaultModeStableId, StringComparison.OrdinalIgnoreCase)
                     ? gameDefinitionId
                     : CreateGuid(1, StableStringHash(activeMode.StableId)));
             PlayAreaId boardPlayAreaId = new PlayAreaId(CreateGuid(2, 1));
-            ObjectDefinitionId avatarDefinitionId = ResolveAvatarDefinitionId(gameDefinition);
             ObjectDefinitionId pawnDefinitionId = new ObjectDefinitionId(CreateGuid(20, 8));
             ObjectDefinitionId dieDefinitionId = new ObjectDefinitionId(CreateGuid(20, 10));
 
             List<GameTemplateObjectDefinition> objectDefinitions = BuildObjectDefinitions(
                 gameDefinition,
-                avatarDefinitionId,
+                avatars,
                 pawnDefinitionId,
                 dieDefinitionId);
             List<GameTemplateSeatDefinition> seats = new List<GameTemplateSeatDefinition>(PrototypePlayerCount);
@@ -142,14 +145,12 @@ namespace ConsoleCards.Games.TrapFloor
                     seatIndex,
                     layoutSeat,
                     startingCorners[seatIndex],
-                    avatarDefinitionId,
+                    AvatarForSeat(avatars, seatIndex),
                     pawnDefinitionId,
                     grid,
                     mainSlot,
                     sideSlots,
                     controllerInputCards,
-                    abilityDefinitions,
-                    activeMode.StartingAbilityCount,
                     seats,
                     containers,
                     memberships,
@@ -272,42 +273,47 @@ namespace ConsoleCards.Games.TrapFloor
             return mode;
         }
 
+        // Draws every floor group (content sets with the floor role) at random, then checks the whole floor.
+        // A floor.count.<set> rule setting overrides a group's authored count. The floor.placement setting
+        // ("pattern", doc 18 §15.7) is not read yet; until G2 every floor is placed at random.
         private static IReadOnlyList<TrapFloorFloorContentDefinition> ResolveFloorContent(
             GameDefinitionData gameDefinition,
             ModeDefinitionData activeMode,
-            GridDefinitionData grid)
+            GridDefinitionData grid,
+            IRandomValueSource randomValueSource)
         {
-            if (!gameDefinition.TryGetContentSet(FloorContentSetId, out GameContentSetData contentSet))
+            List<TrapFloorFloorContentDefinition> drawn = new List<TrapFloorFloorContentDefinition>(grid.CellCount);
+            int groupCount = 0;
+            for (int setIndex = 0; setIndex < gameDefinition.ContentSets.Count; setIndex++)
+            {
+                GameContentSetData contentSet = gameDefinition.ContentSets[setIndex];
+                if (!string.Equals(contentSet.Role, FloorContentRole, StringComparison.OrdinalIgnoreCase)) continue;
+                groupCount++;
+                List<TrapFloorFloorContentDefinition> pool = ExpandFloorGroup(gameDefinition, contentSet);
+                int drawCount = ResolveFloorDrawCount(gameDefinition, activeMode, contentSet, pool.Count);
+                DrawFloorGroup(contentSet, pool, drawCount, randomValueSource, drawn);
+            }
+
+            if (groupCount == 0)
             {
                 throw new ArgumentException(
-                    $"Trap Floor requires authored content set '{FloorContentSetId}'.",
+                    $"Trap Floor requires at least one authored content set with role '{FloorContentRole}'.",
                     nameof(gameDefinition));
             }
 
-            List<TrapFloorFloorContentDefinition> expanded = new List<TrapFloorFloorContentDefinition>();
             int keyCount = 0;
             int exitCount = 0;
-            for (int i = 0; i < contentSet.CardDefinitionIds.Count; i++)
+            for (int i = 0; i < drawn.Count; i++)
             {
-                string cardId = contentSet.CardDefinitionIds[i];
-                if (!gameDefinition.TryGetCard(cardId, out CardDefinitionData card))
-                {
-                    throw new ArgumentException(
-                        $"Trap Floor Floor content set references missing Card Definition '{cardId}'.",
-                        nameof(gameDefinition));
-                }
-
-                TrapFloorFloorContentDefinition content = new TrapFloorFloorContentDefinition(card);
-                for (int copyIndex = 0; copyIndex < card.Quantity; copyIndex++) expanded.Add(content);
-                if (content.Category == TrapFloorFloorContentCategory.Key) keyCount += card.Quantity;
-                if (content.Category == TrapFloorFloorContentCategory.SecretExit) exitCount += card.Quantity;
+                if (drawn[i].Category == TrapFloorFloorContentCategory.Key) keyCount++;
+                if (drawn[i].Category == TrapFloorFloorContentCategory.SecretExit) exitCount++;
             }
 
-            if (expanded.Count != grid.CellCount)
+            if (drawn.Count != grid.CellCount)
             {
                 throw new ArgumentException(
-                    $"Trap Floor Grid '{grid.StableId}' has {grid.CellCount} cells, but authored content set "
-                    + $"'{FloorContentSetId}' produces {expanded.Count} Floor Cards. Configure matching Card quantities.",
+                    $"Trap Floor Grid '{grid.StableId}' has {grid.CellCount} cells, but the floor groups draw "
+                    + $"{drawn.Count} Floor Cards. Change the groups' draw counts (or the floor.count rules) so they add up to {grid.CellCount}.",
                     nameof(gameDefinition));
             }
 
@@ -315,51 +321,150 @@ namespace ConsoleCards.Games.TrapFloor
             {
                 throw new ArgumentException(
                     $"Trap Floor Mode '{activeMode.DisplayName}' requires {activeMode.RequiredKeyCount} Keys, "
-                    + $"but the authored Floor content produces {keyCount}.",
+                    + $"but the floor groups draw {keyCount}.",
                     nameof(gameDefinition));
             }
 
             if (exitCount < 1)
             {
                 throw new ArgumentException(
-                    "Trap Floor's authored Floor content must produce at least one SecretExit Card.",
+                    "Trap Floor's floor groups must draw at least one SecretExit Card.",
                     nameof(gameDefinition));
             }
 
-            return expanded;
+            return drawn;
         }
 
-        private static IReadOnlyList<CardDefinitionData> ResolveAbilities(
+        // The group's pool: every card once per copy (its quantity).
+        private static List<TrapFloorFloorContentDefinition> ExpandFloorGroup(
             GameDefinitionData gameDefinition,
-            ModeDefinitionData activeMode)
+            GameContentSetData contentSet)
         {
-            if (!gameDefinition.TryGetContentSet(AbilityContentSetId, out GameContentSetData contentSet))
-            {
-                throw new ArgumentException(
-                    $"Trap Floor requires authored content set '{AbilityContentSetId}'.",
-                    nameof(gameDefinition));
-            }
-
-            List<CardDefinitionData> abilities = new List<CardDefinitionData>(contentSet.CardDefinitionIds.Count);
+            List<TrapFloorFloorContentDefinition> pool = new List<TrapFloorFloorContentDefinition>();
             for (int i = 0; i < contentSet.CardDefinitionIds.Count; i++)
             {
-                if (!gameDefinition.TryGetCard(contentSet.CardDefinitionIds[i], out CardDefinitionData card))
-                    throw new ArgumentException("Trap Floor Ability content references a missing Card Definition.", nameof(gameDefinition));
-                if (!string.Equals(card.Category, "Ability", StringComparison.OrdinalIgnoreCase)
-                    && !string.Equals(card.Category, "Action", StringComparison.OrdinalIgnoreCase))
-                    throw new ArgumentException($"Starting Card '{card.DisplayName}' is not an Ability/Action.", nameof(gameDefinition));
-                abilities.Add(card);
+                string cardId = contentSet.CardDefinitionIds[i];
+                if (!gameDefinition.TryGetCard(cardId, out CardDefinitionData card))
+                {
+                    throw new ArgumentException(
+                        $"Trap Floor floor group '{contentSet.StableId}' references missing Card Definition '{cardId}'.",
+                        nameof(gameDefinition));
+                }
+
+                TrapFloorFloorContentDefinition content = new TrapFloorFloorContentDefinition(card);
+                for (int copyIndex = 0; copyIndex < card.Quantity; copyIndex++) pool.Add(content);
             }
 
-            if (activeMode.StartingAbilityCount > abilities.Count)
+            return pool;
+        }
+
+        private static int ResolveFloorDrawCount(
+            GameDefinitionData gameDefinition,
+            ModeDefinitionData activeMode,
+            GameContentSetData contentSet,
+            int poolCount)
+        {
+            int count = contentSet.DrawCount > 0 ? contentSet.DrawCount : poolCount;
+            if (gameDefinition.TryGetRuleSetting(
+                    RuleSettingKeys.FloorCountPrefix + contentSet.StableId,
+                    activeMode.StableId,
+                    out string ruled)
+                && int.TryParse(ruled, NumberStyles.Integer, CultureInfo.InvariantCulture, out int ruledCount)
+                && ruledCount >= 0)
+            {
+                count = ruledCount;
+            }
+
+            return count;
+        }
+
+        // Without repeats the group is partly shuffled and its first cards taken; with repeats every draw picks
+        // from the whole pool again.
+        private static void DrawFloorGroup(
+            GameContentSetData contentSet,
+            List<TrapFloorFloorContentDefinition> pool,
+            int drawCount,
+            IRandomValueSource randomValueSource,
+            List<TrapFloorFloorContentDefinition> drawn)
+        {
+            if (drawCount == 0) return;
+            if (pool.Count == 0)
             {
                 throw new ArgumentException(
-                    $"Trap Floor Mode '{activeMode.DisplayName}' requires {activeMode.StartingAbilityCount} starting Abilities, "
-                    + $"but '{AbilityContentSetId}' contains {abilities.Count} definitions.",
-                    nameof(gameDefinition));
+                    $"Trap Floor floor group '{contentSet.StableId}' has no cards to draw {drawCount} from.");
             }
 
-            return abilities;
+            if (contentSet.AllowRepeats)
+            {
+                for (int i = 0; i < drawCount; i++) drawn.Add(pool[randomValueSource.NextInt(0, pool.Count)]);
+                return;
+            }
+
+            if (drawCount > pool.Count)
+            {
+                throw new ArgumentException(
+                    $"Trap Floor floor group '{contentSet.StableId}' holds {pool.Count} cards, so it cannot draw "
+                    + $"{drawCount} without repeats.");
+            }
+
+            for (int i = 0; i < drawCount; i++)
+            {
+                int pick = randomValueSource.NextInt(i, pool.Count);
+                TrapFloorFloorContentDefinition swap = pool[i];
+                pool[i] = pool[pick];
+                pool[pick] = swap;
+                drawn.Add(pool[i]);
+            }
+        }
+
+        // Every Avatar with its starting Abilities (doc 18 §15.9); the pairing is data on each Avatar.
+        private static IReadOnlyList<TrapFloorAvatarSetup> ResolveAvatars(GameDefinitionData definition)
+        {
+            if (definition.Avatars.Count == 0)
+                throw new ArgumentException("Trap Floor requires at least one authored Avatar Definition.", nameof(definition));
+
+            List<TrapFloorAvatarSetup> avatars = new List<TrapFloorAvatarSetup>(definition.Avatars.Count);
+            for (int i = 0; i < definition.Avatars.Count; i++)
+            {
+                AvatarDefinitionData avatar = definition.Avatars[i];
+                List<CardDefinitionData> abilities = new List<CardDefinitionData>(avatar.StartingAbilityIds.Count);
+                for (int abilityIndex = 0; abilityIndex < avatar.StartingAbilityIds.Count; abilityIndex++)
+                {
+                    string abilityId = avatar.StartingAbilityIds[abilityIndex];
+                    if (!definition.TryGetCard(abilityId, out CardDefinitionData card))
+                    {
+                        throw new ArgumentException(
+                            $"Avatar '{avatar.DisplayName}' starts with Card '{abilityId}', which is in none of the game's content sets.",
+                            nameof(definition));
+                    }
+
+                    if (!string.Equals(card.Category, "Ability", StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(card.Category, "Action", StringComparison.OrdinalIgnoreCase))
+                        throw new ArgumentException($"Starting Card '{card.DisplayName}' is not an Ability/Action.", nameof(definition));
+                    abilities.Add(card);
+                }
+
+                avatars.Add(new TrapFloorAvatarSetup(
+                    new ObjectDefinitionId(ParseStableGuid(avatar.StableId, $"Avatar '{avatar.DisplayName}'")),
+                    avatar.DisplayName,
+                    abilities));
+            }
+
+            return avatars;
+        }
+
+        // Until the start flow lets players choose (doc 18 §15.9), seats take the Avatars in authored order.
+        private static TrapFloorAvatarSetup AvatarForSeat(IReadOnlyList<TrapFloorAvatarSetup> avatars, int seatIndex)
+        {
+            return avatars[seatIndex % avatars.Count];
+        }
+
+        private static int MaximumStartingAbilityCount(IReadOnlyList<TrapFloorAvatarSetup> avatars)
+        {
+            int maximum = 0;
+            for (int seatIndex = 0; seatIndex < PrototypePlayerCount; seatIndex++)
+                maximum = Math.Max(maximum, AvatarForSeat(avatars, seatIndex).StartingAbilities.Count);
+            return maximum;
         }
 
         private static IReadOnlyList<CardDefinitionData> ResolveControllerInputCards(
@@ -474,31 +579,36 @@ namespace ConsoleCards.Games.TrapFloor
             throw new ArgumentException($"Trap Floor Console configuration is missing role '{role}'.");
         }
 
-        private static ObjectDefinitionId ResolveAvatarDefinitionId(GameDefinitionData definition)
-        {
-            if (definition.Avatars.Count == 0)
-                throw new ArgumentException("Trap Floor requires at least one authored Avatar Definition.", nameof(definition));
-            return new ObjectDefinitionId(ParseStableGuid(definition.Avatars[0].StableId, "Avatar"));
-        }
-
         private static List<GameTemplateObjectDefinition> BuildObjectDefinitions(
             GameDefinitionData definition,
-            ObjectDefinitionId avatarDefinitionId,
+            IReadOnlyList<TrapFloorAvatarSetup> avatars,
             ObjectDefinitionId pawnDefinitionId,
             ObjectDefinitionId dieDefinitionId)
         {
             List<GameTemplateObjectDefinition> definitions = new List<GameTemplateObjectDefinition>
             {
-                new GameTemplateObjectDefinition(avatarDefinitionId, TabletopObjectKind.Card, definition.Avatars[0].DisplayName),
                 new GameTemplateObjectDefinition(pawnDefinitionId, TabletopObjectKind.Pawn, "Player Pawn"),
                 new GameTemplateObjectDefinition(dieDefinitionId, TabletopObjectKind.Die, "Six-sided Die"),
             };
             HashSet<ObjectDefinitionId> seen = new HashSet<ObjectDefinitionId>
             {
-                avatarDefinitionId,
                 pawnDefinitionId,
                 dieDefinitionId,
             };
+            // Every Avatar needs its own Card definition. An authored ID that matches the Pawn, the Die or another
+            // Avatar would make the Avatar card resolve to the wrong kind, so it is reported by name here.
+            for (int i = 0; i < avatars.Count; i++)
+            {
+                if (!seen.Add(avatars[i].DefinitionId))
+                {
+                    throw new ArgumentException(
+                        $"Avatar '{avatars[i].DisplayName}' uses stable ID '{avatars[i].DefinitionId}', which is already used by "
+                        + "the Player Pawn, the Die or another Avatar. Give the Avatar a unique stable ID.",
+                        nameof(definition));
+                }
+
+                definitions.Add(new GameTemplateObjectDefinition(avatars[i].DefinitionId, TabletopObjectKind.Card, avatars[i].DisplayName));
+            }
             for (int i = 0; i < definition.Cards.Count; i++)
             {
                 CardDefinitionData card = definition.Cards[i];
@@ -552,14 +662,12 @@ namespace ConsoleCards.Games.TrapFloor
             int seatIndex,
             PlayerSeatLayoutEntry layoutSeat,
             TrapFloorCoordinate startingCorner,
-            ObjectDefinitionId avatarDefinitionId,
+            TrapFloorAvatarSetup avatar,
             ObjectDefinitionId pawnDefinitionId,
             GridDefinitionData grid,
             ConsoleSlotDefinitionData mainSlot,
             ConsoleSlotDefinitionData sideSlot,
             IReadOnlyList<CardDefinitionData> controllerInputCards,
-            IReadOnlyList<CardDefinitionData> abilityDefinitions,
-            int startingAbilityCount,
             ICollection<GameTemplateSeatDefinition> seats,
             ICollection<GameTemplateContainerDefinition> containers,
             ICollection<GameTemplateContainerMembership> memberships,
@@ -640,8 +748,8 @@ namespace ConsoleCards.Games.TrapFloor
             TabletopPose avatarPose = mainSlotYawOffset.HasValue
                 ? new TabletopPose(TableCoordinate.Zero, consolePose.RotationDegrees + mainSlotYawOffset.Value, 0, 0)
                 : TabletopPose.Default;
-            objects.Add(CreatePlayerCard(avatarId, avatarDefinitionId, seatId, avatarPose));
-            labels.Add(avatarId, $"P{playerNumber}\nAVATAR");
+            objects.Add(CreatePlayerCard(avatarId, avatar.DefinitionId, seatId, avatarPose));
+            labels.Add(avatarId, $"P{playerNumber}\n{avatar.DisplayName}");
             objects.Add(new GameTemplateObjectInstanceDefinition(
                 pawnId,
                 pawnDefinitionId,
@@ -658,9 +766,9 @@ namespace ConsoleCards.Games.TrapFloor
                 memberships.Add(new GameTemplateContainerMembership(sideSlotIds[i], Array.Empty<TabletopObjectId>()));
             }
 
-            for (int i = 0; i < startingAbilityCount; i++)
+            for (int i = 0; i < avatar.StartingAbilities.Count; i++)
             {
-                CardDefinitionData ability = abilityDefinitions[i];
+                CardDefinitionData ability = avatar.StartingAbilities[i];
                 TabletopObjectId abilityId = new TabletopObjectId(CreateGuid(46, (seatIndex * 100) + i + 1));
                 ObjectDefinitionId abilityDefinitionId = new ObjectDefinitionId(
                     ParseStableGuid(ability.StableId, $"Ability '{ability.DisplayName}'"));
@@ -832,6 +940,23 @@ namespace ConsoleCards.Games.TrapFloor
             public ConsoleLocalRect HandZone { get; }
             public ConsoleLocalRect ActionStack { get; }
             public IReadOnlyList<ConsoleLocalRect> Staging { get; }
+        }
+
+        private sealed class TrapFloorAvatarSetup
+        {
+            public TrapFloorAvatarSetup(
+                ObjectDefinitionId definitionId,
+                string displayName,
+                IReadOnlyList<CardDefinitionData> startingAbilities)
+            {
+                DefinitionId = definitionId;
+                DisplayName = displayName;
+                StartingAbilities = startingAbilities;
+            }
+
+            public ObjectDefinitionId DefinitionId { get; }
+            public string DisplayName { get; }
+            public IReadOnlyList<CardDefinitionData> StartingAbilities { get; }
         }
 
         private static GameTemplateObjectInstanceDefinition CreateFloorfallDie(

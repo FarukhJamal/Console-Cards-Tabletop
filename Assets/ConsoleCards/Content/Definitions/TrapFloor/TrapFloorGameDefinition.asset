@@ -19,36 +19,61 @@ MonoBehaviour:
   maximumPlayers: 4
   playAreaDefinition: {fileID: 11400000, guid: 058ebfe6eb3848e2a0a8a59cd22883a4, type: 2}
   contentSets:
-  - stableId: trap-floor-floor-pool
-    displayName: Trap Floor Floor Pool
+  - stableId: trap-floor-floor-traps
+    displayName: Floor Traps
     cards:
-    - {fileID: 11400000, guid: b0000000000000000000000000000001, type: 2}
-    - {fileID: 11400000, guid: b0000000000000000000000000000002, type: 2}
-    - {fileID: 11400000, guid: b0000000000000000000000000000003, type: 2}
-    - {fileID: 11400000, guid: b0000000000000000000000000000004, type: 2}
+    - {fileID: 11400000, guid: 8a8337d031484b90a78ca764261d5798, type: 2}
+    - {fileID: 11400000, guid: 9c76a3d212e148c798d1597c7a7951cc, type: 2}
+    - {fileID: 11400000, guid: b3cf53f382b440efa3ff5b2074fde73f, type: 2}
+    - {fileID: 11400000, guid: e6e8d71e2ff842018943415d5cfa9780, type: 2}
+    - {fileID: 11400000, guid: 67ee0ddf1824408f80a5c0f001e3b76d, type: 2}
     - {fileID: 11400000, guid: b0000000000000000000000000000005, type: 2}
     - {fileID: 11400000, guid: b0000000000000000000000000000006, type: 2}
     - {fileID: 11400000, guid: b0000000000000000000000000000007, type: 2}
-    - {fileID: 11400000, guid: b0000000000000000000000000000008, type: 2}
-    - {fileID: 11400000, guid: b0000000000000000000000000000009, type: 2}
-    - {fileID: 11400000, guid: b000000000000000000000000000000a, type: 2}
-    - {fileID: 11400000, guid: b000000000000000000000000000000b, type: 2}
-    - {fileID: 11400000, guid: b000000000000000000000000000000c, type: 2}
-    - {fileID: 11400000, guid: b000000000000000000000000000000d, type: 2}
-    - {fileID: 11400000, guid: b000000000000000000000000000000e, type: 2}
-    - {fileID: 11400000, guid: b000000000000000000000000000000f, type: 2}
     - {fileID: 11400000, guid: b0000000000000000000000000000010, type: 2}
-    - {fileID: 11400000, guid: b0000000000000000000000000000011, type: 2}
-    - {fileID: 11400000, guid: b0000000000000000000000000000012, type: 2}
-    - {fileID: 11400000, guid: b0000000000000000000000000000013, type: 2}
+    role: floor
+    drawCount: 18
+    allowRepeats: 0
+  - stableId: trap-floor-floor-friends
+    displayName: Floor Friends
+    cards:
     - {fileID: 11400000, guid: b0000000000000000000000000000014, type: 2}
-    - {fileID: 11400000, guid: b0000000000000000000000000000015, type: 2}
     - {fileID: 11400000, guid: b0000000000000000000000000000016, type: 2}
+    - {fileID: 11400000, guid: b0000000000000000000000000000013, type: 2}
+    - {fileID: 11400000, guid: b0000000000000000000000000000015, type: 2}
+    - {fileID: 11400000, guid: ace7bef2fb444d45a3a37d84f222e944, type: 2}
+    role: floor
+    drawCount: 4
+    allowRepeats: 0
+  - stableId: trap-floor-floor-keys
+    displayName: Floor Keys
+    cards:
     - {fileID: 11400000, guid: b0000000000000000000000000000017, type: 2}
     - {fileID: 11400000, guid: b0000000000000000000000000000018, type: 2}
     - {fileID: 11400000, guid: b0000000000000000000000000000019, type: 2}
-    - {fileID: 11400000, guid: b000000000000000000000000000001d, type: 2}
+    role: floor
+    drawCount: 6
+    allowRepeats: 0
+  - stableId: trap-floor-floor-exits
+    displayName: Floor Exits
+    cards:
     - {fileID: 11400000, guid: b000000000000000000000000000001e, type: 2}
+    - {fileID: 11400000, guid: b000000000000000000000000000001d, type: 2}
+    role: floor
+    drawCount: 2
+    allowRepeats: 0
+  - stableId: trap-floor-floor-abilities
+    displayName: Floor Abilities
+    cards:
+    - {fileID: 11400000, guid: a4444444444444448444444444444444, type: 2}
+    - {fileID: 11400000, guid: a3333333333343338333333333333333, type: 2}
+    - {fileID: 11400000, guid: a1111111111141118111111111111111, type: 2}
+    - {fileID: 11400000, guid: a5555555555545558555555555555555, type: 2}
+    - {fileID: 11400000, guid: a2222222222242228222222222222222, type: 2}
+    - {fileID: 11400000, guid: fd525b561aca4c5dadc5336438e94f7c, type: 2}
+    role: floor
+    drawCount: 6
+    allowRepeats: 1
   - stableId: trap-floor-abilities
     displayName: Trap Floor Abilities
     cards:
@@ -57,6 +82,10 @@ MonoBehaviour:
     - {fileID: 11400000, guid: a3333333333343338333333333333333, type: 2}
     - {fileID: 11400000, guid: a4444444444444448444444444444444, type: 2}
     - {fileID: 11400000, guid: a5555555555545558555555555555555, type: 2}
+    - {fileID: 11400000, guid: fd525b561aca4c5dadc5336438e94f7c, type: 2}
+    role: 
+    drawCount: 0
+    allowRepeats: 0
   - stableId: trap-floor-controller-inputs
     displayName: Trap Floor Controller Inputs
     cards:
@@ -68,6 +97,9 @@ MonoBehaviour:
     - {fileID: 11400000, guid: c6666666666646668666666666666666, type: 2}
     - {fileID: 11400000, guid: c7777777777747778777777777777777, type: 2}
     - {fileID: 11400000, guid: c8888888888848888888888888888888, type: 2}
+    role: 
+    drawCount: 0
+    allowRepeats: 0
   modes:
   - {fileID: 11400000, guid: e6fc968bd0524b30b74dd03b849015e1, type: 2}
   - {fileID: 11400000, guid: 6ff21f7274b542939d3fa5c727c7d7ad, type: 2}
