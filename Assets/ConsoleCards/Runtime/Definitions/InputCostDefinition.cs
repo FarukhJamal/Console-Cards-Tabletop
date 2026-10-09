@@ -9,14 +9,19 @@ namespace ConsoleCards.Definitions
     public sealed class InputRequirement
     {
         [SerializeField] private ControllerInput input;
+        [Tooltip("Other inputs that also pay this part, as in A/B/X/Y on the card. Leave empty for a single input.")]
+        [SerializeField] private List<ControllerInput> alsoAccepts = new List<ControllerInput>();
         [SerializeField, Min(1)] private int count = 1;
 
         public ControllerInput Input => input;
+        public IReadOnlyList<ControllerInput> AlsoAccepts => alsoAccepts;
         public int Count => count;
 
         internal InputRequirementData ToData()
         {
-            return new InputRequirementData(input, count);
+            List<ControllerInput> inputs = new List<ControllerInput>(1 + alsoAccepts.Count) { input };
+            inputs.AddRange(alsoAccepts);
+            return new InputRequirementData(inputs, count);
         }
     }
 

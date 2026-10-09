@@ -25,6 +25,12 @@ namespace ConsoleCards.GameTemplates.Definitions
         /// <summary>Choice: how floor cards are placed, <see cref="FloorPlacementRandom"/> or <see cref="FloorPlacementPattern"/>.</summary>
         public const string FloorPlacement = "floor.placement";
 
+        /// <summary>
+        /// Text, prefix: "card.cost." + a card's stable ID sets that card's input cost in card notation, for
+        /// example "Up + A/B/X/Y" (see <see cref="InputCostNotation"/>). Empty means the card has no cost yet.
+        /// </summary>
+        public const string CardCostPrefix = "card.cost.";
+
         public const string FloorPlacementRandom = "random";
         public const string FloorPlacementPattern = "pattern";
     }
@@ -67,8 +73,8 @@ namespace ConsoleCards.GameTemplates.Definitions
     /// <summary>
     /// Applies a rule set's settings to game data before a template is built (doc 23, R2a/R2b). The game's services
     /// already read everything from this data, so rules change play without code changes. Floor settings are
-    /// checked and passed through for the setup to read. Settings it cannot read are skipped with a warning and
-    /// the authored value is kept.
+    /// checked and passed through for the setup to read; card costs replace the authored ones (C1). Settings it
+    /// cannot read are skipped with a warning and the authored value is kept.
     /// </summary>
     public static class RuleSettingsApplication
     {
@@ -89,6 +95,7 @@ namespace ConsoleCards.GameTemplates.Definitions
 
             ControllerConfigurationData controller = data.ControllerConfiguration;
             List<RuleSettingValue> passedThrough = new List<RuleSettingValue>(data.RuleSettings);
+            Dictionary<string, InputCostData> costs = null;
             for (int i = 0; i < settings.Count; i++)
             {
                 RuleSettingValue setting = settings[i];
@@ -106,6 +113,23 @@ namespace ConsoleCards.GameTemplates.Definitions
                             controller.UnusedCardsCarryOver,
                             controller.CostsAreAllOrNothing,
                             controller.SharedPaymentAllowed);
+                    }
+                }
+                else if (setting.Key.StartsWith(RuleSettingKeys.CardCostPrefix, StringComparison.Ordinal))
+                {
+                    string cardId = setting.Key.Substring(RuleSettingKeys.CardCostPrefix.Length);
+                    if (!data.TryGetCard(cardId, out CardDefinitionData card))
+                    {
+                        Warn(warnings, setting, $"the game has no card '{cardId}'");
+                    }
+                    else if (!InputCostNotation.TryParse(setting.Value, out InputCostData cost, out string error))
+                    {
+                        Warn(warnings, setting, error);
+                    }
+                    else
+                    {
+                        costs = costs ?? new Dictionary<string, InputCostData>(StringComparer.OrdinalIgnoreCase);
+                        costs[card.StableId] = cost;
                     }
                 }
                 else if (setting.Key.StartsWith(RuleSettingKeys.FloorCountPrefix, StringComparison.Ordinal))
@@ -143,6 +167,19 @@ namespace ConsoleCards.GameTemplates.Definitions
                 }
             }
 
+            IReadOnlyList<CardDefinitionData> cards = data.Cards;
+            if (costs != null)
+            {
+                List<CardDefinitionData> costed = new List<CardDefinitionData>(data.Cards.Count);
+                for (int c = 0; c < data.Cards.Count; c++)
+                {
+                    CardDefinitionData card = data.Cards[c];
+                    costed.Add(costs.TryGetValue(card.StableId, out InputCostData cost) ? card.WithInputCost(cost) : card);
+                }
+
+                cards = costed;
+            }
+
             List<ModeDefinitionData> modes = new List<ModeDefinitionData>(data.Modes.Count);
             for (int m = 0; m < data.Modes.Count; m++)
             {
@@ -156,7 +193,7 @@ namespace ConsoleCards.GameTemplates.Definitions
                 data.MinimumPlayers,
                 data.MaximumPlayers,
                 data.Grid,
-                data.Cards,
+                cards,
                 data.ContentSets,
                 data.Avatars,
                 modes,

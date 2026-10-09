@@ -114,8 +114,9 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
     }
 
     /// <summary>
-    /// Selects an exact, identity-based payment from one authoritative Hand. Requirements are
-    /// unordered and repeated entries are aggregated before any state is changed.
+    /// Selects an exact, identity-based payment from one authoritative Hand. Requirements are unordered; a
+    /// requirement may accept any one of several inputs ("A/B/X/Y", C1), so cards are matched to requirement
+    /// slots so that every slot is filled. Runs only when a cost is checked or paid, never per frame.
     /// </summary>
     public sealed class ControllerInputCostEvaluator
     {
@@ -146,9 +147,9 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
                     ControllerInputCostEvaluationError.InvalidControllerCardDefinition);
             }
 
-            Dictionary<ControllerInput, int> remaining = AggregateRequirements(cost);
-            List<TabletopObjectId> selected = new List<TabletopObjectId>();
-            for (int index = 0; index < playerHand.Count && remaining.Count > 0; index++)
+            List<TabletopObjectId> candidateIds = new List<TabletopObjectId>();
+            List<ControllerInput> candidateInputs = new List<ControllerInput>();
+            for (int index = 0; index < playerHand.Count; index++)
             {
                 TabletopObjectId objectId = playerHand.GetObjectAt(index);
                 if (!matchState.Cards.TryGetValue(objectId, out CardInstanceState card))
@@ -159,26 +160,36 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
                             : ControllerInputCostEvaluationError.HandObjectMissing);
                 }
 
-                if (!catalog.TryGetInput(card.BaseState.DefinitionId, out ControllerInput input)
-                    || !remaining.TryGetValue(input, out int requiredCount))
+                if (catalog.TryGetInput(card.BaseState.DefinitionId, out ControllerInput input) && cost.Accepts(input))
                 {
-                    continue;
-                }
-
-                selected.Add(objectId);
-                if (requiredCount == 1)
-                {
-                    remaining.Remove(input);
-                }
-                else
-                {
-                    remaining[input] = requiredCount - 1;
+                    candidateIds.Add(objectId);
+                    candidateInputs.Add(input);
                 }
             }
 
-            return remaining.Count == 0
-                ? ControllerInputCostEvaluation.Affordable(selected)
-                : ControllerInputCostEvaluation.Failure(ControllerInputCostEvaluationError.InsufficientInput);
+            List<InputRequirementData> slots = ExpandSlots(cost);
+            if (!TryMatch(slots, candidateInputs, out int[] cardForSlot))
+            {
+                return ControllerInputCostEvaluation.Failure(ControllerInputCostEvaluationError.InsufficientInput);
+            }
+
+            // The payment keeps the Hand's order.
+            bool[] used = new bool[candidateIds.Count];
+            for (int slot = 0; slot < cardForSlot.Length; slot++)
+            {
+                used[cardForSlot[slot]] = true;
+            }
+
+            List<TabletopObjectId> selected = new List<TabletopObjectId>(slots.Count);
+            for (int i = 0; i < candidateIds.Count; i++)
+            {
+                if (used[i])
+                {
+                    selected.Add(candidateIds[i]);
+                }
+            }
+
+            return ControllerInputCostEvaluation.Affordable(selected);
         }
 
         /// <summary>
@@ -203,9 +214,8 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
                     ControllerInputCostEvaluationError.InvalidControllerCardDefinition);
             }
 
-            Dictionary<ControllerInput, int> remaining = AggregateRequirements(cost);
             HashSet<TabletopObjectId> unique = new HashSet<TabletopObjectId>();
-            List<TabletopObjectId> selected = new List<TabletopObjectId>(selectedCardIds.Count);
+            List<ControllerInput> selectedInputs = new List<ControllerInput>(selectedCardIds.Count);
             for (int i = 0; i < selectedCardIds.Count; i++)
             {
                 TabletopObjectId objectId = selectedCardIds[i];
@@ -220,33 +230,108 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
                             : ControllerInputCostEvaluationError.HandObjectMissing);
                 }
                 if (!catalog.TryGetInput(card.BaseState.DefinitionId, out ControllerInput input)
-                    || !remaining.TryGetValue(input, out int requiredCount))
+                    || !cost.Accepts(input))
                 {
                     return ControllerInputCostEvaluation.Failure(
                         ControllerInputCostEvaluationError.InsufficientInput);
                 }
 
-                selected.Add(objectId);
-                if (requiredCount == 1) remaining.Remove(input);
-                else remaining[input] = requiredCount - 1;
+                selectedInputs.Add(input);
             }
 
-            return remaining.Count == 0
-                ? ControllerInputCostEvaluation.Affordable(selected)
+            List<InputRequirementData> slots = ExpandSlots(cost);
+            return selectedInputs.Count == slots.Count && TryMatch(slots, selectedInputs, out _)
+                ? ControllerInputCostEvaluation.Affordable(new List<TabletopObjectId>(selectedCardIds))
                 : ControllerInputCostEvaluation.Failure(ControllerInputCostEvaluationError.InsufficientInput);
         }
 
-        private static Dictionary<ControllerInput, int> AggregateRequirements(InputCostData cost)
+        // One slot per card the cost takes. Single-input slots come first so they claim their exact cards
+        // before any choice slot does; the matching below still finds a payment whenever one exists.
+        private static List<InputRequirementData> ExpandSlots(InputCostData cost)
         {
-            Dictionary<ControllerInput, int> requirements = new Dictionary<ControllerInput, int>();
-            for (int i = 0; i < cost.Requirements.Count; i++)
+            List<InputRequirementData> slots = new List<InputRequirementData>(cost.CardCount);
+            for (int pass = 0; pass < 2; pass++)
             {
-                InputRequirementData requirement = cost.Requirements[i];
-                requirements.TryGetValue(requirement.Input, out int current);
-                requirements[requirement.Input] = checked(current + requirement.Count);
+                for (int i = 0; i < cost.Requirements.Count; i++)
+                {
+                    InputRequirementData requirement = cost.Requirements[i];
+                    if (requirement.IsChoice != (pass == 1))
+                    {
+                        continue;
+                    }
+
+                    for (int copy = 0; copy < requirement.Count; copy++)
+                    {
+                        slots.Add(requirement);
+                    }
+                }
             }
 
-            return requirements;
+            return slots;
+        }
+
+        // Assigns a distinct card to every slot (bipartite matching by augmenting paths). Costs and Hands are
+        // a handful of cards, so this is cheap.
+        private static bool TryMatch(
+            IReadOnlyList<InputRequirementData> slots,
+            IReadOnlyList<ControllerInput> cardInputs,
+            out int[] cardForSlot)
+        {
+            cardForSlot = new int[slots.Count];
+            if (slots.Count > cardInputs.Count)
+            {
+                return false;
+            }
+
+            int[] slotForCard = new int[cardInputs.Count];
+            for (int i = 0; i < slotForCard.Length; i++)
+            {
+                slotForCard[i] = -1;
+            }
+
+            for (int slot = 0; slot < slots.Count; slot++)
+            {
+                bool[] visited = new bool[cardInputs.Count];
+                if (!TryAssign(slot, slots, cardInputs, slotForCard, visited))
+                {
+                    return false;
+                }
+            }
+
+            for (int card = 0; card < slotForCard.Length; card++)
+            {
+                if (slotForCard[card] >= 0)
+                {
+                    cardForSlot[slotForCard[card]] = card;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool TryAssign(
+            int slot,
+            IReadOnlyList<InputRequirementData> slots,
+            IReadOnlyList<ControllerInput> cardInputs,
+            int[] slotForCard,
+            bool[] visited)
+        {
+            for (int card = 0; card < cardInputs.Count; card++)
+            {
+                if (visited[card] || !slots[slot].Accepts(cardInputs[card]))
+                {
+                    continue;
+                }
+
+                visited[card] = true;
+                if (slotForCard[card] < 0 || TryAssign(slotForCard[card], slots, cardInputs, slotForCard, visited))
+                {
+                    slotForCard[card] = slot;
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

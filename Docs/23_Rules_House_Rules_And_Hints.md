@@ -1,8 +1,8 @@
 # Console Cards — Rules, House Rules and Hints
 
 **Document ID:** 23_Rules_House_Rules_And_Hints
-**Version:** 0.3
-**Status:** Approved direction (owner, 2026-10-09). R1, R2a and R2b implemented; R3–R4 planned.
+**Version:** 0.4
+**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b and C1 implemented; R3–R4 planned.
 
 > **Contract note:** type names and field lists here are illustrative unless labelled **Approved Contract**. They describe the direction agreed with the owner, not fixed public APIs.
 
@@ -64,7 +64,7 @@ Each game supplies its own entries and setting keys. The platform only knows how
 | R3 | House rules: propose a change in game, every player agrees, the change is saved as a named set based on the current one, the card shows the difference, and saved sets can be picked in the start flow's Rules step | Planned |
 | R4 | Hints engine built on the assistance layer: legal-move highlights and "why / why not" explanations for the active phase and rule set. Pings arrive with multiplayer (doc 10) as a separate social layer | Planned |
 
-## 5. Setting keys (R2a, approved contract)
+## 5. Setting keys (R2a–C1, approved contract)
 
 | Key | Kind | Scope | Feeds |
 |---|---|---|---|
@@ -73,6 +73,9 @@ Each game supplies its own entries and setting keys. The platform only knows how
 | `game.win-mode` | Choice: Team / Survival | all modes or per mode | `Mode.Behavior` |
 | `floor.count.<content set ID>` | Number | all modes or per mode | How many cards the setup draws from that floor group (R2b). Passed through as `GameDefinitionData.RuleSettings` |
 | `floor.placement` | Choice: random / pattern | all modes or per mode | Placement method (R2b). Passed through; until G2 every floor is placed at random |
+| `card.cost.<card stable ID>` | Text, in card cost notation | game | That card's input cost (C1). Replaces the authored cost in the game data, so the purchase popup, payment check and inspect text all use it. Empty means no cost yet |
+
+**Card cost notation (C1).** Parts are joined with `+`. A part lists one or more inputs separated by `/`, and any one of them pays it. `x2` after a part repeats it. Examples: `Up + A/B/X/Y` (an Up card and one of A, B, X or Y), `Left/Right + A/B/X/Y`, `A + B + X + Y`, `Right x2 + A`. Input names are Up, Down, Left, Right, A, B, X and Y, in any letter case. A cost that cannot be read is skipped with a warning and the card keeps its authored cost. Card assets store the same thing: each requirement has an input, optional `alsoAccepts` inputs and a count.
 
 **Pass-through settings** are checked when the rule set is applied and then kept on the game data (`GameDefinitionData.TryGetRuleSetting(key, mode)`) for the game's setup to read. A floor count for a group the game does not have is skipped with a warning. If the floor groups no longer add up to the grid, the setup reports it and does not build; R3's rule editor will check the total before a house rule is saved.
 

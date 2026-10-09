@@ -22,9 +22,19 @@ MonoBehaviour:
   backArtworkReference: 
   quantity: 1
   inputCost:
-    requirements: []
+    requirements:
+    - input: 2
+      alsoAccepts:
+      - 3
+      count: 1
+    - input: 4
+      alsoAccepts:
+      - 5
+      - 6
+      - 7
+      count: 1
   orientation: 0
   preferredConsolePlacement: Side
   consoleBehavior: 1
-  tags: [trap-floor, ability, rush, action, cost-pending]
+  tags: [trap-floor, ability, rush, action, provisional-input-cost]
   effectMetadata: trap-floor-ability-rush

@@ -6579,7 +6579,7 @@ namespace ConsoleCards.Presentation.Prototype
                 string inputCostContext = TryGetAuthoredCardDefinition(
                         card.BaseState.DefinitionId,
                         out CardDefinition floorCardDefinition)
-                    ? FormatInputCost(floorCardDefinition.InputCost)
+                    ? FormatInputCost(floorCardDefinition)
                     : string.Empty;
                 PrototypePopupActionOption? primaryAction = null;
                 if (floorCard.Content.Category == TrapFloorFloorContentCategory.Trap)
@@ -6672,7 +6672,7 @@ namespace ConsoleCards.Presentation.Prototype
                 ? authoredDefinition.DisplayName
                 : "FRONT";
             string authoredFrontBody = hasAuthoredDefinition
-                ? authoredDefinition.Description + FormatInputCost(authoredDefinition.InputCost)
+                ? authoredDefinition.Description + FormatInputCost(authoredDefinition)
                 : visualReferences.FrontLabel.text;
             model = new PrototypeCardInspectModel(
                 targetCardId.ToString(),
@@ -7077,7 +7077,7 @@ namespace ConsoleCards.Presentation.Prototype
                     option.Eligible));
             }
 
-            int requiredCardCount = PurchaseRequiredCardCount(purchasedDefinition.InputCost);
+            int requiredCardCount = purchasedDefinition.InputCost.CardCount;
             string status = string.IsNullOrEmpty(missing)
                 ? "Select the exact Controller Card instances for this purchase."
                 : $"Missing: {missing}";
@@ -7118,9 +7118,7 @@ namespace ConsoleCards.Presentation.Prototype
                 || hand.Kind != ContainerKind.Hand)
                 return false;
 
-            Dictionary<ControllerInput, int> required =
-                AggregatePurchaseRequirements(purchasedDefinition.InputCost);
-            Dictionary<ControllerInput, int> available = new Dictionary<ControllerInput, int>();
+            InputCostData cost = purchasedDefinition.InputCost;
             for (int i = 0; i < hand.Count; i++)
             {
                 TabletopObjectId cardId = hand.GetObjectAt(i);
@@ -7130,12 +7128,7 @@ namespace ConsoleCards.Presentation.Prototype
                     out ControllerInput resolvedInput)
                     ? resolvedInput
                     : (ControllerInput?)null;
-                bool eligible = input.HasValue && required.ContainsKey(input.Value);
-                if (eligible)
-                {
-                    available.TryGetValue(input.Value, out int count);
-                    available[input.Value] = count + 1;
-                }
+                bool eligible = input.HasValue && cost.Accepts(input.Value);
 
                 CardDefinition authoredDefinition = null;
                 string displayName = TryGetAuthoredCardDefinition(
@@ -7151,14 +7144,14 @@ namespace ConsoleCards.Presentation.Prototype
                     eligible));
             }
 
-            List<string> missing = new List<string>();
-            foreach (KeyValuePair<ControllerInput, int> requirement in required)
-            {
-                available.TryGetValue(requirement.Key, out int count);
-                if (count < requirement.Value)
-                    missing.Add($"{requirement.Key} ×{requirement.Value - count}");
-            }
-            missingRequirements = string.Join(", ", missing);
+            // With "any one of" costs there is no single missing input, so the whole cost is named.
+            missingRequirements = new ControllerInputCostEvaluator().Evaluate(
+                    matchState,
+                    hand,
+                    cost,
+                    trapFloorTemplate.GameDefinition).CanPay
+                ? string.Empty
+                : $"your Hand cannot pay {InputCostNotation.Format(cost)}";
             return true;
         }
 
@@ -7254,28 +7247,6 @@ namespace ConsoleCards.Presentation.Prototype
                 : "ABILITY";
         }
 
-        private static Dictionary<ControllerInput, int> AggregatePurchaseRequirements(
-            InputCostData cost)
-        {
-            Dictionary<ControllerInput, int> requirements =
-                new Dictionary<ControllerInput, int>();
-            for (int i = 0; i < cost.Requirements.Count; i++)
-            {
-                InputRequirementData requirement = cost.Requirements[i];
-                requirements.TryGetValue(requirement.Input, out int count);
-                requirements[requirement.Input] = checked(count + requirement.Count);
-            }
-            return requirements;
-        }
-
-        private static int PurchaseRequiredCardCount(InputCostData cost)
-        {
-            int count = 0;
-            for (int i = 0; i < cost.Requirements.Count; i++)
-                count = checked(count + cost.Requirements[i].Count);
-            return count;
-        }
-
         private List<PrototypeActionAbilityPurchaseOption> BuildActionAbilityPurchaseOptions()
         {
             List<PrototypeActionAbilityPurchaseOption> options =
@@ -7330,28 +7301,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private static string FormatPurchaseInputCost(InputCostData cost)
         {
-            Dictionary<ControllerInput, int> totals = new Dictionary<ControllerInput, int>();
-            List<ControllerInput> authoredOrder = new List<ControllerInput>();
-            for (int i = 0; i < cost.Requirements.Count; i++)
-            {
-                InputRequirementData requirement = cost.Requirements[i];
-                if (!totals.ContainsKey(requirement.Input))
-                {
-                    totals.Add(requirement.Input, 0);
-                    authoredOrder.Add(requirement.Input);
-                }
-
-                totals[requirement.Input] = checked(totals[requirement.Input] + requirement.Count);
-            }
-
-            List<string> entries = new List<string>(authoredOrder.Count);
-            for (int i = 0; i < authoredOrder.Count; i++)
-            {
-                ControllerInput input = authoredOrder[i];
-                entries.Add($"{input} ×{totals[input]}");
-            }
-
-            return string.Join(", ", entries);
+            return InputCostNotation.Format(cost);
         }
 
         private bool IsAssistedTrapFloorConsoleSlot(ContainerId slotContainerId)
@@ -10728,21 +10678,49 @@ namespace ConsoleCards.Presentation.Prototype
                 && !trap.IsPending;
         }
 
-        private static string FormatInputCost(InputCostDefinition inputCost)
+        // The cost line on inspect text, in card notation (C1). The active game data wins, so a cost set by the
+        // rules shows; without a loaded game the card's authored cost is shown.
+        private string FormatInputCost(CardDefinition definition)
+        {
+            if (definition == null)
+            {
+                return string.Empty;
+            }
+
+            string cost;
+            if (trapFloorTemplate != null
+                && trapFloorTemplate.GameDefinition.TryGetCard(definition.StableId, out CardDefinitionData data))
+            {
+                cost = InputCostNotation.Format(data.InputCost);
+            }
+            else
+            {
+                cost = FormatAuthoredInputCost(definition.InputCost);
+            }
+
+            return string.IsNullOrEmpty(cost) ? string.Empty : $"\n\nCost: {cost}";
+        }
+
+        private static string FormatAuthoredInputCost(InputCostDefinition inputCost)
         {
             if (inputCost == null || inputCost.Requirements.Count == 0)
             {
                 return string.Empty;
             }
 
-            List<string> entries = new List<string>(inputCost.Requirements.Count);
+            List<InputRequirementData> requirements = new List<InputRequirementData>(inputCost.Requirements.Count);
             for (int i = 0; i < inputCost.Requirements.Count; i++)
             {
                 InputRequirement requirement = inputCost.Requirements[i];
-                entries.Add($"{requirement.Input} x{requirement.Count}");
+                List<ControllerInput> inputs = new List<ControllerInput>(1 + requirement.AlsoAccepts.Count)
+                {
+                    requirement.Input,
+                };
+                inputs.AddRange(requirement.AlsoAccepts);
+                requirements.Add(new InputRequirementData(inputs, requirement.Count));
             }
 
-            return $"\n\nInput Cost: {string.Join(", ", entries)}";
+            return InputCostNotation.Format(new InputCostData(requirements));
         }
 
         // Every Stack (template, Toolbox or Split) is the catalog's Stack pile in its bay; pileStyle null uses

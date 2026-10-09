@@ -137,6 +137,58 @@ MonoBehaviour:
       value: ''
       displayValue: ''
       modeStableIds: []
+  - heading: 'Ability costs'
+    numbered: 0
+    entries:
+    - stableId: tf-cost-check
+      text: 'Check: {value}'
+      settingKind: 4
+      settingKey: card.cost.54460015-4f4f-4000-8000-001500000022
+      value: 'Up + A/B/X/Y'
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-cost-dodge
+      text: 'Dodge: {value}'
+      settingKind: 4
+      settingKey: card.cost.54460015-4f4f-4000-8000-00150000001f
+      value: 'Down + A/B/X/Y'
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-cost-shield
+      text: 'Shield: {value}'
+      settingKind: 4
+      settingKey: card.cost.54460015-4f4f-4000-8000-001500000020
+      value: 'A + B + X + Y'
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-cost-rush
+      text: 'Rush: {value}'
+      settingKind: 4
+      settingKey: card.cost.54460015-4f4f-4000-8000-001500000021
+      value: 'Left/Right + A/B/X/Y'
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-cost-disarm
+      text: 'Disarm: {value}'
+      settingKind: 4
+      settingKey: card.cost.54460015-4f4f-4000-8000-001500000023
+      value: ''
+      displayValue: 'not set yet'
+      modeStableIds: []
+    - stableId: tf-cost-push
+      text: 'Push: {value}'
+      settingKind: 4
+      settingKey: card.cost.54460015-4f4f-4000-8000-00150000002a
+      value: ''
+      displayValue: 'not set yet'
+      modeStableIds: []
+    - stableId: tf-cost-notation
+      text: 'A slash means any one of those cards, so Up + A/B/X/Y is an Up card and one of A, B, X or Y.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      displayValue: ''
+      modeStableIds: []
   - heading: 'Traps'
     numbered: 0
     entries:

@@ -1,7 +1,7 @@
 # Console Cards - Trap Floor Game Requirements
 
 **Document ID:** 18_Trap_Floor_Game_Requirements
-**Version:** 1.6
+**Version:** 1.7
 **Status:** Approved with Open Decisions
 **Authoritative source:** User-approved Console Cards System & Games direction supplied 2026-09-21, superseding conflicting historical Trap Floor direction
 **Purpose:** Define the current approved minimum Game-specific direction for Trap Floor while keeping provisional design values open and preserving manual tabletop play.
@@ -92,7 +92,7 @@ The available Controller input vocabulary is **Up, Down, Left, Right, A, B, X, Y
 
 - Maximum Controller hand size is 10.
 - At the start of a Player turn, draw up to 10; unused Controller Cards carry over. For example, a hand of four draws six.
-- Ability/Action Card costs are authored collections of Controller inputs and may repeat an input, such as Right x2 and A x1.
+- Ability/Action Card costs are authored collections of Controller inputs and may repeat an input, such as Right x2 and A x1. A part of a cost may also accept any one of several inputs, written with a slash: *Up + A/B/X/Y* (C1).
 - Costs are all-or-nothing. Partial payment is not permitted.
 - Players do not contribute Controller Cards to another Player's purchase.
 - A future cartridge may use fixed mappings, Player mappings, Controller Cards, or no mapping.
@@ -312,7 +312,19 @@ Difficulty and win mode are **two separate choices**. A table picks one of each,
 
 **Abilities (from the owner's card notes):**
 
-- Every Ability Card shows its own cost on the card.
+- Every Ability Card shows its own cost on the card. Costs are still being playtested, so they live in the rule set (`card.cost.<card ID>`, doc 23 §5) as well as on the card assets. Defaults from the owner's cards (2026-10-09), where "/" means any one of:
+
+  | Ability | Cost |
+  |---|---|
+  | Check (art: Jump) | Up + A/B/X/Y |
+  | Dodge | Down + A/B/X/Y |
+  | Shield | A + B + X + Y |
+  | Rush (art: Run) | Left/Right + A/B/X/Y |
+  | Disarm | not set yet |
+  | Push | not set yet |
+
+- Card art with the cost printed on it goes out of date when a rule changes the cost. Proposed for the card-face prefab work (C3c): draw the cost row from data.
+- **Floor card backs:** one back for the whole floor, changing each round in order (for example red, then blue, then yellow). Recorded as data on the game definition (an ordered list of floor backs) and shown by the board prefab in C3c.
 - **Check** (replaces the earlier "Jump" card): if the tile is a Trap, the Trap does not hurt anyone.
 - **Rush** (replaces the earlier "Run" card; Run and Jump combined): move over up to 3 spaces quickly, even over a missing (collapsed) space.
 

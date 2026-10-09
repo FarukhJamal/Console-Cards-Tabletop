@@ -79,5 +79,27 @@ namespace ConsoleCards.GameTemplates.Definitions
         public string EffectMetadata { get; }
         public string ObjectiveMetadata { get; }
         public ConsoleCardBehavior ConsoleBehavior { get; }
+
+        /// <summary>The same card with another input cost, for example one set by a rule (doc 23, C1).</summary>
+        public CardDefinitionData WithInputCost(InputCostData inputCost)
+        {
+            return new CardDefinitionData(
+                StableId,
+                DisplayName,
+                Category,
+                Description,
+                FrontArtworkReference,
+                BackArtworkReference,
+                Quantity,
+                inputCost,
+                Orientation,
+                PreferredConsolePlacement,
+                tags,
+                RepresentedControllerInput,
+                DefaultFace,
+                EffectMetadata,
+                ObjectiveMetadata,
+                ConsoleBehavior);
+        }
     }
 }
