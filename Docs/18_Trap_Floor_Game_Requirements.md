@@ -1,10 +1,12 @@
 # Console Cards - Trap Floor Game Requirements
 
 **Document ID:** 18_Trap_Floor_Game_Requirements
-**Version:** 1.4
+**Version:** 1.5
 **Status:** Approved with Open Decisions
 **Authoritative source:** User-approved Console Cards System & Games direction supplied 2026-09-21, superseding conflicting historical Trap Floor direction
 **Purpose:** Define the current approved minimum Game-specific direction for Trap Floor while keeping provisional design values open and preserving manual tabletop play.
+
+> **Revision 1.5 (2026-10-09, owner):** the first playtest changes in §15 are approved and supersede the conflicting parts of §4 (Search), §6 (Trap consequences), §9 (buying Abilities) and §10 (Floor counts). Where §15 and an earlier section disagree, §15 wins.
 
 ## 1. Authority and Supersession
 
@@ -181,3 +183,168 @@ After this manually playable state is reached, the next Trap Floor work is a ded
 Do not restore the superseded 50-coin objective/economy, 14 Trap + 14 Coin + 8 Item Floormaster Deck, Floormaster draw/discard Search lifecycle, fixed six-Slot Trap Floor Console allocation, or fixed 10-round sequence as current authority. The Easy/Hard/Impossible Mode definitions in §9 replace conflicting historical Mode direction.
 
 Do not infer the current content counts or provisional rules from either the old Trap Floor prototype or the older Trap Door concept. Keys and the Exit are current Trap Floor concepts; the obsolete sequential Level Deck/dungeon progression and enemies are not.
+
+## 15. Playtest Revision 1.5 (approved 2026-10-09)
+
+Sources: *Trap Floor — Playtest Feedback & Proposed Changes* and *Trap Floor: New Cards* (Oct 1, 2026, @zakwan), plus the owner's answers of 2026-10-09.
+
+### 15.1 Playtest issues being addressed
+
+1. Ability timing was unclear (Dodge and Shield are used after a Trap triggers, yet the turn rule said "move or use an ability").
+2. Trap variety felt flat and early elimination felt unfun on a physical board.
+3. Too few kinds of Ability.
+4. Search and Safe Search slowed the game down.
+5. Unused Controller Cards piled up in hand.
+6. Buying Abilities from a separate market was slow and hard to track.
+
+### 15.2 Turn and Search
+
+- On your turn you draw Controller Cards up to the hand limit (§9), then either **move** or play an **Action** Ability in place of moving.
+- **Search is free.** Moving onto a face-down Floor Card flips it and it takes effect. The paid Search action is retired. *(Supersedes the A/B/X/Y Search cost.)*
+- ~~**Safe Search is an Ability**~~ Removed for now (§15.9 follow-up): Check covers making a Trap harmless.
+
+### 15.3 Action and Reaction Abilities
+
+Every Ability Card is one of two kinds, printed on the card:
+
+- **Action:** played on your turn, in place of your movement. Examples: Rush, Disarm, Push.
+- **Reaction:** played in response to a Trap, on the Trap card the player is on. Examples: Shield, Dodge, Check (the former "Jump").
+
+The card's own text states exactly what it does (for example, *"Push a player who shares your tile 2 tiles horizontally"*). Edge cases (grid edges, collapsed tiles) are handled by the card text and by players at the table.
+
+### 15.4 Abilities on the Floor (market retired)
+
+- Ability Cards are part of the Floor Cards. The separate purchase market (Buy Ability) is retired for now.
+- A player who flips an Ability Card may **take it into their hand by paying its cost**, and **plays it later by paying the same cost again**.
+- A player may decline. The card stays face up, and the next player who lands on it may take it on the same terms.
+- Costs remain all-or-nothing and are not shared (§9).
+
+### 15.5 Traps
+
+- **General:** Trap and special Floor Cards are one-time effects. They only affect the player on the turn the card is flipped.
+- **Chaining:** if a Trap moves a player onto another face-down card, that card flips and resolves too. Each card flips once, so chains always end.
+- Players can always share a tile.
+- **Elimination lasts for the current Floor only.** An eliminated player sits out the rest of that round and returns next round. This matches the current runtime.
+- **New Trap types:**
+  - **Spring Trap** (4 variants: ▲ ▼ ◀ ▶). It launches the player one tile in the direction shown. Off the grid or onto a collapsed tile, the player is eliminated. Onto a face-down card, that card flips and resolves.
+  - **Crane Trap.** The player rolls 2d6 and is placed on that tile (first die = column, second die = row). Onto a collapsed tile, the player is eliminated. Onto a face-down card, that card flips and resolves.
+- **New special Floor Card:**
+  - **Overcharged.** The player who flips it gets +1 movement on their next turn.
+
+### 15.6 Floor composition (36 Floor Cards)
+
+| Content | Count |
+|---|---|
+| Trap Cards | 18 |
+| Friend Cards | 4 |
+| Keys | 6 |
+| Secret Exit | 1 |
+| Grand Exit | 1 |
+| Ability Cards | 6 |
+| **Total** | **36** |
+
+Placement is either random or follows a difficulty pattern (§15.7). The exact mix of Trap types within the 18 is still being set. A starting proposal for playtest:
+
+| Trap type | Proposed count |
+|---|---|
+| Spring (1 per direction) | 4 |
+| Crane | 2 |
+| Fall (eliminate this Floor) | 3 |
+| Slow | 3 |
+| Sticky | 3 |
+| Blind | 3 |
+
+Overcharged is a special Floor Card. **Open:** which group of the 36 it counts in (§15.8).
+
+### 15.7 Difficulty placement patterns (proposal)
+
+Placement is authored per Mode. It is data, not code, so it can be tuned between playtests.
+
+- **Easy (guided):**
+  - The tiles next to each starting corner hold no Fall, Spring or Crane.
+  - At least one Ability lies within two tiles of each start.
+  - Keys are spread across different quadrants.
+  - The Grand Exit is away from the starting corners.
+  - No Spring sits on an edge tile pointing off the grid.
+- **Hard (constrained random):** random, except that no Fall lies next to a starting corner and no Key lies next to one.
+- **Impossible (random):** fully random. Edge Springs pointing off the grid are allowed.
+
+### 15.8 Difficulty and win mode (owner cards, 2026-10-09)
+
+Difficulty and win mode are **two separate choices**. A table picks one of each, for example *Hard · Team*.
+
+**Difficulty (Settings card):**
+
+| Difficulty | Rule |
+|---|---|
+| Easy | Bring only 1 Key to the Grand Exit. |
+| Hard | Bring all 3 Keys to the Grand Exit, by any means possible. |
+| Impossible | All 3 Keys are required to escape. Once a player exits, the floor collapses at each player's turn (a race against time). Turn order changes to player → floor → player → floor. |
+
+**Win mode (How to win card):**
+
+| Win mode | Rule |
+|---|---|
+| Team | Only one player from the team needs to escape. |
+| Survival | All team members must escape. |
+
+**Exit and endgame (How to win card):**
+
+- Players must collect 3 Keys to unlock the Grand Exit and escape. On Easy, 1 Key.
+- When all required Keys are collected, roll 2d6 to determine the Exit's position.
+- Once the Exit is revealed, stepping on tiles automatically triggers Traps, and prizes are disabled.
+
+**Change from the current build:** each authored Mode today fixes one behaviour (Easy and Hard are Team; Impossible is Survival). It also sets real-time collapse for Impossible, which differs from the card. Runtime and content must split Difficulty from win mode, and the start flow's Difficulty step gains a Team/Survival choice.
+
+### 15.9 Owner decisions (2026-10-09, second round)
+
+**Abilities (from the owner's card notes):**
+
+- Every Ability Card shows its own cost on the card.
+- **Check** (replaces the earlier "Jump" card): if the tile is a Trap, the Trap does not hurt anyone.
+- **Rush** (replaces the earlier "Run" card; Run and Jump combined): move over up to 3 spaces quickly, even over a missing (collapsed) space.
+
+**Avatars and starting abilities:**
+
+- At the start, every player chooses an Avatar card. Each Avatar brings its own starting Ability:
+
+  | Avatar | Starting Ability |
+  |---|---|
+  | Clairvoyant | Dodge |
+  | Strategist | Check |
+  | Athlete | Rush |
+  | Engineer | Disarm |
+
+- Avatar-to-Ability pairings must be **data-driven** (editable without code).
+- Mode starting-Ability counts are replaced by the Avatar's Ability. Hard starts with **0** extra Abilities.
+
+**Floor placement method:** chosen when the game is set up (start flow Layout step). The choices are **Random**, the **difficulty pattern** (§15.7), or **any other saved layout**. The §15.6 Trap mix and §15.7 patterns are kept as the default options.
+
+**Exits:**
+
+- **Grand Exit:** once the Keys are collected, it lets all players exit.
+- **Secret Exit:** an instant win for one player for one round, once that player meets the Key requirement.
+
+**Endgame:**
+
+- Once the Exit is revealed, stepping on any Trap tile triggers it again, including Traps already flipped.
+- Prizes (Friends, floor Abilities) can still be taken. A taken prize tile then acts as a collapsed tile.
+
+**Other answers:**
+
+- Impossible: no collapse before the first player exits.
+- Survival: an eliminated player returns and tries again next round.
+- Hard, "by any means possible": players may pass Keys to each other.
+
+### 15.10 Open decisions from this revision
+
+- Resolved: Overcharged joins the Friend pool. The 4 Friend slots are filled at random from the Friend cards plus Overcharged.
+- Resolved: the 6 Ability Cards on the Floor are chosen at random from the Ability roster (Check, Rush, Dodge, Disarm, Shield, Push). **Safe Search is removed for now**; Check covers making a Trap harmless.
+- Resolved in §15.9: starting Abilities come from the Avatar; Hard starts with 0.
+- Final Trap-type mix and the patterns in §15.7, after playtest.
+- Grand Exit: §15.6 lists a Grand Exit Floor Card, but the How to win card places the Exit by a 2d6 roll once the Keys are collected. Is there a Grand Exit card on the floor at all, and what does the Secret Exit do?
+- "Stepping on tiles automatically triggers Traps" after the Exit is revealed: does this mean already flipped (face-up) Traps trigger again, given that Traps are otherwise one-time (§15.5)?
+- "Prizes are disabled": does this mean Friends and floor Abilities can no longer be taken, or no longer played?
+- Impossible: does Floor collapse happen at all before the first player exits?
+- Survival with per-floor elimination: does an eliminated player simply try again next round?
+- Hard, "by any means possible": may players pass Keys to each other (for example by sharing a tile)?

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ConsoleCards.GameTemplates.Definitions;
 using UnityEngine;
 
 namespace ConsoleCards.Definitions
@@ -29,6 +30,8 @@ namespace ConsoleCards.Definitions
         [SerializeField] private RuleSettingKind settingKind;
         [SerializeField] private string settingKey;
         [SerializeField] private string value;
+        [Tooltip("Optional friendlier text shown on the rules card instead of the raw value (e.g. 'A, B, X or Y' for 'A,B,X,Y').")]
+        [SerializeField] private string displayValue;
         [SerializeField] private List<string> modeStableIds = new List<string>();
 
         public string StableId => stableId;
@@ -36,6 +39,7 @@ namespace ConsoleCards.Definitions
         public RuleSettingKind SettingKind => settingKind;
         public string SettingKey => settingKey ?? string.Empty;
         public string Value => value ?? string.Empty;
+        public string DisplayValue => string.IsNullOrWhiteSpace(displayValue) ? Value : displayValue;
         public IReadOnlyList<string> ModeStableIds => modeStableIds;
         public bool HasSetting => settingKind != RuleSettingKind.None;
 
@@ -66,7 +70,7 @@ namespace ConsoleCards.Definitions
                 return body;
             }
 
-            return body.Replace(ValueToken, string.Format(valueFormat, Value));
+            return body.Replace(ValueToken, string.Format(valueFormat, DisplayValue));
         }
     }
 
@@ -103,6 +107,31 @@ namespace ConsoleCards.Definitions
         public RuleSetDefinition BasedOn => basedOn;
         public bool IsDefault => basedOn == null;
         public IReadOnlyList<RuleSection> Sections => sections;
+
+        /// <summary>The typed settings of this set, for <see cref="RuleSettingsApplication"/> (doc 23, R2a).</summary>
+        public List<RuleSettingValue> CollectSettings()
+        {
+            List<RuleSettingValue> settings = new List<RuleSettingValue>();
+            for (int s = 0; s < sections.Count; s++)
+            {
+                RuleSection section = sections[s];
+                if (section == null)
+                {
+                    continue;
+                }
+
+                for (int e = 0; e < section.Entries.Count; e++)
+                {
+                    RuleEntry entry = section.Entries[e];
+                    if (entry != null && entry.HasSetting && !string.IsNullOrWhiteSpace(entry.SettingKey))
+                    {
+                        settings.Add(new RuleSettingValue(entry.SettingKey, entry.Value, entry.ModeStableIds));
+                    }
+                }
+            }
+
+            return settings;
+        }
 
         public bool TryGetEntry(string entryStableId, out RuleEntry entry)
         {

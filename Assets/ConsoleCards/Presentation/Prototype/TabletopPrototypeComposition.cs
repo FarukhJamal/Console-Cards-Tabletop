@@ -4014,7 +4014,8 @@ namespace ConsoleCards.Presentation.Prototype
                 authoritativeRandomValueSource = new SystemRandomValueSource();
             }
 
-            var gameDefinition = trapFloorGameDefinition.ToData();
+            // Rules drive play (doc 23, R2a): the default rule set's settings feed the game data the template uses.
+            var gameDefinition = trapFloorGameDefinition.ToData(trapFloorGameDefinition.DefaultRuleSet);
             if (gameDefinition.Modes.Count == 0)
                 throw new InvalidOperationException("Trap Floor requires at least one authored Mode.");
 

@@ -17,88 +17,150 @@ MonoBehaviour:
   gameStableId: 54460001-4f4f-4000-8000-000100000001
   basedOn: {fileID: 0}
   sections:
-  - heading: 'Each round'
+  - heading: 'Your turn'
     numbered: 1
     entries:
-    - stableId: tf-round-start
-      text: 'Start: draw Controller Cards until you hold {value}.'
+    - stableId: tf-turn-draw
+      text: 'Draw Controller Cards until you hold {value}.'
       settingKind: 1
-      settingKey: trap-floor.hand-size
+      settingKey: controller.hand-size
       value: '10'
+      displayValue: ''
       modeStableIds: []
-    - stableId: tf-round-search
-      text: 'Search: in turn, each player searches one Floor by paying one of {value}.'
-      settingKind: 3
-      settingKey: trap-floor.search-cost
-      value: 'A, B, X or Y'
-      modeStableIds: []
-    - stableId: tf-round-careful
-      text: 'Or search carefully by paying {value}; a careful search stops a Trap from springing.'
-      settingKind: 3
-      settingKey: trap-floor.careful-search-cost
-      value: 'A + B + X + Y'
-      modeStableIds: []
-    - stableId: tf-round-trigger
-      text: 'Trigger: the searched Floor''s card takes effect: a Trap, a Coin or an Item.'
+    - stableId: tf-turn-move
+      text: 'Move up to 3 tiles (no diagonals), or play an Action ability instead of moving.'
       settingKind: 0
       settingKey: 
       value: ''
+      displayValue: ''
       modeStableIds: []
-    - stableId: tf-round-floorfall
-      text: 'Floorfall: roll the two dice; the Floor they point to falls. In round 1 the starting corners are safe.'
+    - stableId: tf-turn-flip
+      text: 'Land on a face-down tile and it flips and takes effect. Searching is free.'
       settingKind: 0
       settingKey: 
       value: ''
+      displayValue: ''
       modeStableIds: []
-    - stableId: tf-round-end
-      text: 'End: the next round begins. The game lasts {value} rounds.'
-      settingKind: 1
-      settingKey: trap-floor.rounds
-      value: '10'
+    - stableId: tf-turn-take
+      text: 'Flip an ability and you may take it by paying its cost. If you skip it, the next player to land there may take it.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      displayValue: ''
+      modeStableIds: []
+  - heading: 'Floor turn'
+    numbered: 1
+    entries:
+    - stableId: tf-floor-roll
+      text: 'After every player has had a turn, one player rolls the two dice and that tile collapses. Whoever rolls changes each round.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      displayValue: ''
+      modeStableIds:
+      - trap-floor-mode-easy
+      - trap-floor-mode-hard
+    - stableId: tf-floor-impossible
+      text: 'Turns go player, floor, player, floor. The floor starts collapsing once the first player exits.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      displayValue: ''
+      modeStableIds:
+      - trap-floor-mode-impossible
+  - heading: 'Abilities'
+    numbered: 0
+    entries:
+    - stableId: tf-ability-action
+      text: 'Action abilities are played on your turn instead of moving.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-ability-reaction
+      text: 'Reaction abilities are played when a Trap hits you.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-ability-cost
+      text: 'Each card shows its cost. Pay it in full to take the card and again to play it; players never share a payment.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      displayValue: ''
+      modeStableIds: []
+  - heading: 'Traps'
+    numbered: 0
+    entries:
+    - stableId: tf-trap-once
+      text: 'A Trap only affects the player who flips it, once.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-trap-chain
+      text: 'If a Trap moves you onto a face-down tile, that tile flips too.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-trap-out
+      text: 'Knocked out? You sit out the rest of the round and come back next round.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      displayValue: ''
       modeStableIds: []
   - heading: 'Goal'
     numbered: 0
     entries:
     - stableId: tf-goal-easy
-      text: 'Find {value} Key and bring it to an Exit.'
+      text: 'Bring {value} Key to the Grand Exit.'
       settingKind: 1
-      settingKey: trap-floor.keys-needed
+      settingKey: mode.keys-needed
       value: '1'
+      displayValue: ''
       modeStableIds:
       - trap-floor-mode-easy
     - stableId: tf-goal-hard
-      text: 'Find {value} Keys and bring them to an Exit.'
+      text: 'Bring all {value} Keys to the Grand Exit, by any means. Keys can be passed between players.'
       settingKind: 1
-      settingKey: trap-floor.keys-needed
+      settingKey: mode.keys-needed
       value: '3'
+      displayValue: ''
       modeStableIds:
       - trap-floor-mode-hard
     - stableId: tf-goal-impossible
-      text: 'Find {value} Keys and reach an Exit while the floor collapses in real time.'
+      text: '{value} Keys are needed to escape.'
       settingKind: 1
-      settingKey: trap-floor.keys-needed
+      settingKey: mode.keys-needed
       value: '3'
+      displayValue: ''
       modeStableIds:
       - trap-floor-mode-impossible
-  - heading: 'Payments'
-    numbered: 0
-    entries:
-    - stableId: tf-pay-all-or-nothing
-      text: 'Costs are paid in full or not at all, and players do not share a payment.'
+    - stableId: tf-goal-win-mode
+      text: 'Win mode: {value}.'
+      settingKind: 3
+      settingKey: game.win-mode
+      value: 'Team'
+      displayValue: 'Team, one player must escape'
+      modeStableIds: []
+    - stableId: tf-goal-exit-roll
+      text: 'When the Keys are collected, roll 2d6 to place the Exit. From then on every Trap triggers again, and a prize you take leaves a hole.'
       settingKind: 0
       settingKey: 
       value: ''
+      displayValue: ''
       modeStableIds: []
-    - stableId: tf-pay-abilities
-      text: 'Abilities can be bought by paying their input cost.'
+    - stableId: tf-goal-secret-exit
+      text: 'Secret Exit: one player wins at once if they meet the Key requirement.'
       settingKind: 0
       settingKey: 
       value: ''
+      displayValue: ''
       modeStableIds: []
-    - stableId: tf-start-abilities-easy
-      text: 'You start with {value} abilities.'
-      settingKind: 1
-      settingKey: trap-floor.starting-abilities
-      value: '2'
-      modeStableIds:
-      - trap-floor-mode-easy

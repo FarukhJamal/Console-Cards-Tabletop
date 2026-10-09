@@ -1,8 +1,8 @@
 # Console Cards — Rules, House Rules and Hints
 
 **Document ID:** 23_Rules_House_Rules_And_Hints
-**Version:** 0.1
-**Status:** Approved direction (owner, 2026-10-09). R1 implemented; R2–R4 planned.
+**Version:** 0.2
+**Status:** Approved direction (owner, 2026-10-09). R1 and R2a implemented; R2b–R4 planned.
 
 > **Contract note:** type names and field lists here are illustrative unless labelled **Approved Contract**. They describe the direction agreed with the owner, not fixed public APIs.
 
@@ -59,11 +59,22 @@ Each game supplies its own entries and setting keys. The platform only knows how
 | Stage | Content | Status |
 |---|---|---|
 | R1 | Rule set data model; Trap Floor default rules drafted from the code; rules card (left column, foldable, changed-line marks, house-rules badge); Table menu switches for Rules card, Hints and Help; developer wording replaced with player wording | Implemented |
-| R2 | Trap Floor assistance reads its values from the active rule set instead of fixed values (rounds, keys needed, search costs, hand size, collapse, starting abilities) | Planned |
+| R2a | Rule settings feed the game data before the template is built (`GameDefinition.ToData(ruleSet)` → `RuleSettingsApplication`): hand size, Keys needed per difficulty, win mode (Team / Survival, separate from difficulty). Default rule set rewritten for the revised Trap Floor (doc 18 §15) | Implemented |
+| R2b | Board mix and Avatars as data: floor groups with counts and random pools, placement method setting, new card definitions (Spring, Crane, Overcharged, Push, Check, Rush), each Avatar's starting ability | Planned |
 | R3 | House rules: propose a change in game, every player agrees, the change is saved as a named set based on the current one, the card shows the difference, and saved sets can be picked in the start flow's Rules step | Planned |
 | R4 | Hints engine built on the assistance layer: legal-move highlights and "why / why not" explanations for the active phase and rule set. Pings arrive with multiplayer (doc 10) as a separate social layer | Planned |
 
-## 5. Hints (R1 behaviour)
+## 5. Setting keys (R2a, approved contract)
+
+| Key | Kind | Scope | Feeds |
+|---|---|---|---|
+| `controller.hand-size` | Number | game | `ControllerConfiguration.MaximumHandSize` (draw limit) |
+| `mode.keys-needed` | Number | per mode (mode filter) | `Mode.RequiredKeyCount` and its any-Key objective |
+| `game.win-mode` | Choice: Team / Survival | all modes or per mode | `Mode.Behavior` |
+
+A setting may carry a **display value** shown on the rules card in place of the raw value. Unknown keys and unreadable values are skipped with a console warning, and the authored value is kept.
+
+## 6. Hints (R1 behaviour)
 
 The Hints switch is a viewer setting. It is not table state, so Undo and Reset never change it. In R1 it switches guidance text only:
 
@@ -73,7 +84,7 @@ The Hints switch is a viewer setting. It is not table state, so Undo and Reset n
 
 Lit drop targets and status messages are always shown, because play depends on them.
 
-## 6. Open questions
+## 7. Open questions
 
 - R3 agreement: unanimous, majority, or the host decides? (Owner to choose before R3.)
 - Where saved rule sets live: per player profile, or shared with the table? (Depends on doc 11 persistence.)

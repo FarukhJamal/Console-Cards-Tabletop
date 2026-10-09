@@ -105,6 +105,28 @@ namespace ConsoleCards.Definitions
             return false;
         }
 
+        /// <summary>
+        /// The game data with a rule set's settings applied (doc 23, R2a): the hand size, Keys needed per mode and
+        /// win mode come from the rules players see. Unreadable settings are skipped with a console warning.
+        /// </summary>
+        public GameDefinitionData ToData(RuleSetDefinition ruleSet)
+        {
+            GameDefinitionData data = ToData();
+            if (ruleSet == null)
+            {
+                return data;
+            }
+
+            List<string> warnings = new List<string>();
+            GameDefinitionData applied = RuleSettingsApplication.Apply(data, ruleSet.CollectSettings(), warnings);
+            for (int i = 0; i < warnings.Count; i++)
+            {
+                Debug.LogWarning($"[{displayName} rules '{ruleSet.DisplayName}'] {warnings[i]}", ruleSet);
+            }
+
+            return applied;
+        }
+
         public GameDefinitionData ToData()
         {
             if (playAreaDefinition == null) throw new InvalidOperationException("Game Definition requires a Play Area/Grid Definition.");
