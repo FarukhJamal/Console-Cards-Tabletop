@@ -7,6 +7,8 @@ namespace ConsoleCards.Presentation.UI
     public sealed class PrototypeInteractionGuide : ReusableUiView
     {
         [SerializeField] private GameObject guidePanel;
+        [Tooltip("The always-on controls strip; hidden while Hints are off (doc 23, R1).")]
+        [SerializeField] private GameObject controlsStrip;
         [SerializeField] private Button toggleButton;
         [SerializeField] private Text toggleButtonLabel;
         [SerializeField] private Button closeButton;
@@ -56,6 +58,24 @@ namespace ConsoleCards.Presentation.UI
             closeButton.onClick.AddListener(HideGuide);
             // Starts closed (UI-1b): the controls strip covers everyday play; the full help opens on demand.
             SetGuideVisible(false);
+        }
+
+        /// <summary>Shows or hides the controls strip (Hints switch). The help card stays reachable from the Table menu.</summary>
+        public void SetStripVisible(bool visible)
+        {
+            if (controlsStrip != null)
+            {
+                controlsStrip.SetActive(visible);
+            }
+        }
+
+        /// <summary>Opens the help card (Table menu > Help).</summary>
+        public void OpenGuide()
+        {
+            if (guidePanel != null && toggleButtonLabel != null)
+            {
+                SetGuideVisible(true);
+            }
         }
 
         public override void Unbind()

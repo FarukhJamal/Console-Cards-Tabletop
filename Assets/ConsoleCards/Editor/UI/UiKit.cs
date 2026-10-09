@@ -210,6 +210,56 @@ namespace ConsoleCards.Editor.UI
             selectable.colors = colors;
         }
 
+        /// <summary>
+        /// An ON/OFF switch row in the Toolbox Hand switch style: title, hint line and a pill switch at the right.
+        /// Assign the parts to a ToolboxSwitch with <see cref="AssignSwitch"/>.
+        /// </summary>
+        public static RectTransform SwitchRow(Transform parent, string name, string title, string hint, Font titleFont,
+            Font hintFont, Font wordFont, float height, out Button button, out Image fill, out RectTransform knob,
+            out Text word, out Text hintLabel)
+        {
+            RectTransform row = Child(name, parent);
+            Img(row, "Solid", CreamDark).raycastTarget = false;
+            Size(row.gameObject, -1f, height);
+            Img(Rect("Rule", row, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero,
+                new Vector2(0f, 3f)), "Solid", TabIdle).raycastTarget = false;
+            Label(Rect("Title", row, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f), new Vector2(18f, -10f),
+                new Vector2(-140f, 26f)), titleFont, 19, Ink, TextAnchor.UpperLeft, title);
+            hintLabel = Label(Rect("Hint", row, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f),
+                new Vector2(18f, -38f), new Vector2(-140f, 24f)), hintFont, 15, Muted, TextAnchor.UpperLeft, hint);
+            RectTransform pill = Rect("Switch", row, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                new Vector2(-18f, -1f), new Vector2(91f, 46f));
+            fill = Img(pill, "PillOutlined", Go);
+            button = pill.gameObject.AddComponent<Button>();
+            button.targetGraphic = fill;
+            knob = Rect("Knob", pill, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(22f, 0f), new Vector2(32f, 32f));
+            Img(knob, "ButtonOutlined", Cream).raycastTarget = false;
+            word = Label(Rect("Word", pill, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(-14f, 0f), new Vector2(46f, 30f)), wordFont, 15, Cream, TextAnchor.MiddleCenter, "ON");
+            return row;
+        }
+
+        /// <summary>Fills a serialized ToolboxSwitch with the parts of a <see cref="SwitchRow"/>.</summary>
+        public static void AssignSwitch(SerializedProperty property, RectTransform row, Button button, Image fill,
+            RectTransform knob, Text word, Text hint, string onHint, string offHint)
+        {
+            property.FindPropertyRelative("row").objectReferenceValue = row.gameObject;
+            property.FindPropertyRelative("button").objectReferenceValue = button;
+            property.FindPropertyRelative("fill").objectReferenceValue = fill;
+            property.FindPropertyRelative("knob").objectReferenceValue = knob;
+            property.FindPropertyRelative("word").objectReferenceValue = word;
+            property.FindPropertyRelative("hint").objectReferenceValue = hint;
+            property.FindPropertyRelative("onFill").colorValue = Go;
+            property.FindPropertyRelative("offFill").colorValue = TabIdle;
+            property.FindPropertyRelative("onWordColor").colorValue = Cream;
+            property.FindPropertyRelative("offWordColor").colorValue = Muted;
+            property.FindPropertyRelative("knobOffset").floatValue = 22f;
+            property.FindPropertyRelative("wordOffset").floatValue = 14f;
+            property.FindPropertyRelative("onHint").stringValue = onHint;
+            property.FindPropertyRelative("offHint").stringValue = offHint;
+        }
+
         public static Color Hex(string hex)
         {
             ColorUtility.TryParseHtmlString("#" + hex, out Color color);

@@ -1307,6 +1307,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: ConsoleCards.Presentation::ConsoleCards.Presentation.UI.PrototypeInteractionGuide
   guidePanel: {fileID: 392574757857455899}
+  controlsStrip: {fileID: 0}
   toggleButton: {fileID: 5976914252818555792}
   toggleButtonLabel: {fileID: 4388478939167518193}
   closeButton: {fileID: 2516314149581959335}

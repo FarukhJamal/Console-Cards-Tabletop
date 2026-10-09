@@ -10,7 +10,7 @@ namespace ConsoleCards.Editor.UI
 {
     /// <summary>
     /// Builds the authored session bar prefab (UI-1): the game chip, Undo, Redo, the hover tip and the Table
-    /// menu, in the Toolbox design language (same sprites, fonts and colours). Everything is made at edit time
+    /// menu (with the Rules card and Hints switches and Help, doc 23 R1), in the Toolbox design language (same sprites, fonts and colours). Everything is made at edit time
     /// and saved as a prefab you can restyle; nothing is built at runtime. The build also adds the prefab to
     /// the Real UI prefab catalog as platform.session-bar (HUD layer, cached).
     /// </summary>
@@ -33,6 +33,9 @@ namespace ConsoleCards.Editor.UI
         private const float MenuHeaderHeight = 58f;
         private const float MenuRowHeight = 60f;
         private const float MenuRowRule = 3f;
+        private const float SwitchRowHeight = 72f;
+        private const string RulesOnHint = "Shown in the left column";
+        private const string HintsOnHint = "Controls strip and how-to lines";
 
         private static Font titleFont;
         private static Font bodyFont;
@@ -184,24 +187,32 @@ namespace ConsoleCards.Editor.UI
                 bodyFont, 16, Cream, "Undo");
             tip.gameObject.SetActive(false);
 
-            // Table menu (placed under the Table button when it opens).
-            float menuHeight = Border + MenuHeaderHeight + Border + 3f * MenuRowHeight + 2f * MenuRowRule + Border;
+            // Table menu (placed under the Table button when it opens); a column sized to its rows (doc 23, R1).
             RectTransform menu = Rect("TableMenu", root, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(Margin, -Margin - 100f), new Vector2(MenuWidth, menuHeight));
+                new Vector2(Margin, -Margin - 100f), new Vector2(MenuWidth, 400f));
             Backdrop(menu, ShadowOffset + 1f);
-            RectTransform header = TopBand("Header", menu, Border, MenuHeaderHeight);
+            Column(menu.gameObject, (int)Border, (int)Border, (int)Border, (int)Border, 0f);
+            Fit(menu.gameObject, false, true);
+            RectTransform header = Child("Header", menu);
             Img(header, "TopRounded", Orange).raycastTarget = false;
+            Size(header.gameObject, -1f, MenuHeaderHeight);
             Label(Rect("Title", header, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(9f, 0f), new Vector2(-36f, 0f)),
                 titleFont, 22, Cream, TextAnchor.MiddleLeft, "TABLE");
-            Img(TopBand("HeaderRule", menu, Border + MenuHeaderHeight, Border), "Solid", Ink).raycastTarget = false;
-            float rowTop = Border + MenuHeaderHeight + Border;
-            Button newTableButton = MenuRow(menu, "NewTableRow", rowTop, "New table…", false);
-            Img(TopBand("Rule1", menu, rowTop + MenuRowHeight, MenuRowRule), "Solid", TabIdle).raycastTarget = false;
-            rowTop += MenuRowHeight + MenuRowRule;
-            Button resetButton = MenuRow(menu, "ResetRow", rowTop, "Reset to start", false);
-            Img(TopBand("Rule2", menu, rowTop + MenuRowHeight, MenuRowRule), "Solid", TabIdle).raycastTarget = false;
-            rowTop += MenuRowHeight + MenuRowRule;
-            Button clearTableButton = MenuRow(menu, "ClearTableRow", rowTop, "Clear table", true);
+            Separator(menu, "HeaderRule", Ink, Border);
+            Button newTableButton = MenuRow(menu, "NewTableRow", "New table…", false);
+            Separator(menu, "Rule1", TabIdle, MenuRowRule);
+            Button resetButton = MenuRow(menu, "ResetRow", "Reset to start", false);
+            Separator(menu, "Rule2", TabIdle, MenuRowRule);
+            Button clearTableButton = MenuRow(menu, "ClearTableRow", "Clear table", false);
+            Separator(menu, "SettingsRule", Ink, MenuRowRule);
+            RectTransform rulesRow = SwitchRow(menu, "RulesCardRow", "Rules card", RulesOnHint, boldFont, bodyFont, titleFont,
+                SwitchRowHeight, out Button rulesButton, out Image rulesFill, out RectTransform rulesKnob, out Text rulesWord,
+                out Text rulesHint);
+            RectTransform hintsRow = SwitchRow(menu, "HintsRow", "Hints", HintsOnHint, boldFont, bodyFont, titleFont,
+                SwitchRowHeight, out Button hintsButton, out Image hintsFill, out RectTransform hintsKnob, out Text hintsWord,
+                out Text hintsHint);
+            Separator(menu, "Rule3", TabIdle, MenuRowRule);
+            Button helpButton = MenuRow(menu, "HelpRow", "Help", true);
             menu.gameObject.SetActive(false);
 
             SerializedObject so = new SerializedObject(view);
@@ -232,6 +243,11 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("newTableButton").objectReferenceValue = newTableButton;
             so.FindProperty("resetButton").objectReferenceValue = resetButton;
             so.FindProperty("clearTableButton").objectReferenceValue = clearTableButton;
+            AssignSwitch(so.FindProperty("rulesSwitch"), rulesRow, rulesButton, rulesFill, rulesKnob, rulesWord, rulesHint,
+                RulesOnHint, "Hidden; switch on to read the rules");
+            AssignSwitch(so.FindProperty("hintsSwitch"), hintsRow, hintsButton, hintsFill, hintsKnob, hintsWord, hintsHint,
+                HintsOnHint, "Off; the Table menu still has Help");
+            so.FindProperty("helpButton").objectReferenceValue = helpButton;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -254,9 +270,10 @@ namespace ConsoleCards.Editor.UI
             return button;
         }
 
-        private static Button MenuRow(RectTransform menu, string name, float top, string text, bool last)
+        private static Button MenuRow(RectTransform menu, string name, string text, bool last)
         {
-            RectTransform row = TopBand(name, menu, top, MenuRowHeight);
+            RectTransform row = Child(name, menu);
+            Size(row.gameObject, -1f, MenuRowHeight);
             Image fill = Img(row, last ? "BottomRounded" : "Solid", Cream);
             Button button = row.gameObject.AddComponent<Button>();
             button.targetGraphic = fill;
@@ -269,6 +286,13 @@ namespace ConsoleCards.Editor.UI
             Label(Rect("Label", row, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(9f, 0f), new Vector2(-36f, 0f)),
                 boldFont, 20, Ink, TextAnchor.MiddleLeft, text);
             return button;
+        }
+
+        private static void Separator(RectTransform menu, string name, Color color, float height)
+        {
+            RectTransform rule = Child(name, menu);
+            Img(rule, "Solid", color).raycastTarget = false;
+            Size(rule.gameObject, -1f, height);
         }
 
         private static void PrepareArt()

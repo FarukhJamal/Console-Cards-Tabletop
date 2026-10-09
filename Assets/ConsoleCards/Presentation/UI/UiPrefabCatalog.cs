@@ -91,6 +91,9 @@ namespace ConsoleCards.Presentation.UI
     {
         public const string ComponentToolbox = "platform.component-toolbox";
         public const string SessionBar = "platform.session-bar";
+        public const string RulesCard = "platform.rules-card";
+        public const string RulesHeading = "platform.rules-heading";
+        public const string RulesLine = "platform.rules-line";
         public const string TabletopPopup = "platform.tabletop-popup";
         public const string QuantityPopup = "platform.quantity-popup";
         public const string CardInspect = "platform.card-inspect";

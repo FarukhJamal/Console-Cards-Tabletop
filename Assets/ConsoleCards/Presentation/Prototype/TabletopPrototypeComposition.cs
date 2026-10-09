@@ -182,6 +182,9 @@ namespace ConsoleCards.Presentation.Prototype
         // table setting, not a move: it survives Undo and Redo; Reset and loading a table turn it back on.
         private ContainerId emptyTableHandContainerId;
         private bool emptyTableHandEnabled = true;
+        // Viewer settings from the Table menu (doc 23, R1); not table state, so Undo and Reset never change them.
+        private bool rulesCardEnabled = true;
+        private bool hintsEnabled = true;
         private TrapFloorSessionState pendingRestoredTrapFloorState;
         private PendingControllerPurchaseState pendingRestoredControllerPurchaseState;
 
@@ -1519,7 +1522,7 @@ namespace ConsoleCards.Presentation.Prototype
             ShowMessage(result.Succeeded
                 ? trapFloorRoundState.CurrentRoundNumber == 1
                     ? "Round 1 Start complete. Each participating Player may now Search once."
-                    : $"Round {trapFloorRoundState.CurrentRoundNumber} Start/movement acknowledged for prototype orchestration; no Pawn moved."
+                    : $"Round {trapFloorRoundState.CurrentRoundNumber} started. Move your pawns by hand if the round asks for it."
                 : $"Start progression rejected: {result.Error}.");
             return result;
         }
@@ -1907,7 +1910,7 @@ namespace ConsoleCards.Presentation.Prototype
             TrapFloorPendingFloormasterCard pendingCard = floormasterLifecycleState.PendingCard;
             if (pendingCard == null)
             {
-                ShowMessage("Prototype Trigger completion rejected: no pending Floormaster Card.");
+                ShowMessage("There is no searched card waiting to be resolved.");
                 return TrapFloorRoundTriggerResult.Failure(
                     CommandResultStatus.Rejected,
                     TrapFloorRoundOrchestrationError.PendingCardStateMismatch);
@@ -1920,13 +1923,13 @@ namespace ConsoleCards.Presentation.Prototype
                 string detail = result.Error == TrapFloorRoundOrchestrationError.FloormasterLifecycleRejected
                     ? result.LifecycleError.ToString()
                     : result.Error.ToString();
-                ShowMessage($"Prototype Trigger completion rejected: {detail}.");
+                ShowMessage($"The searched card could not be marked done: {detail}.");
                 return result;
             }
 
             ApplyLayout(trapFloorTemplate.FloormasterDiscardId);
             RefreshCardContentVisibility();
-            ShowMessage("Pending Floormaster Card discarded. Prototype acknowledgement only; no Card effect was resolved.");
+            ShowMessage("Searched card discarded. Its effect is carried out by the players at the table.");
             return result;
         }
 
@@ -1941,7 +1944,7 @@ namespace ConsoleCards.Presentation.Prototype
             TrapFloorRoundActionResult result = trapFloorRoundOrchestrationService.CompleteFloorfallPhase(
                 new TrapFloorRoundActionRequest(CreateCommandContext()));
             ShowMessage(result.Succeeded
-                ? "Floorfall requirement acknowledged for prototype orchestration. Mode requirements were not evaluated."
+                ? "Floorfall done. Check together that your mode's Floorfalls were all rolled."
                 : $"Floorfall phase completion rejected: {result.Error}.");
             return result;
         }
@@ -4105,9 +4108,46 @@ namespace ConsoleCards.Presentation.Prototype
                     activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom && !emptyTableHandContainerId.IsEmpty,
                     emptyTableHandEnabled,
                     SetEmptyTableHandEnabled));
+            runtimeUi.ShowTableSettings(
+                BuildRulesCardModel(),
+                rulesCardEnabled,
+                SetRulesCardEnabled,
+                hintsEnabled,
+                SetHintsEnabled);
             RefreshUndoUi();
             RefreshTrapFloorStatusUi();
         }
+
+        // The rules card for this table (doc 23, R1): the game's default rule set, filtered to the active mode.
+        // Empty Table has no rules. Shown only; nothing is enforced.
+        private RulesCardModel BuildRulesCardModel()
+        {
+            if (activeSession == null
+                || activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom
+                || trapFloorGameDefinition == null)
+            {
+                return null;
+            }
+
+            string modeStableId = trapFloorTemplate != null ? trapFloorTemplate.ActiveMode.StableId : string.Empty;
+            return RulesCardModel.FromRuleSet(trapFloorGameDefinition.DefaultRuleSet, modeStableId);
+        }
+
+        private void SetRulesCardEnabled(bool enabled)
+        {
+            rulesCardEnabled = enabled;
+            runtimeUi?.ShowRulesCard(BuildRulesCardModel(), enabled);
+        }
+
+        // Hints switch: guidance text only (controls strip, Toolbox placing bar, status card help line).
+        private void SetHintsEnabled(bool enabled)
+        {
+            hintsEnabled = enabled;
+            runtimeUi?.SetHintsVisible(enabled);
+            RefreshTrapFloorStatusUi();
+        }
+
+        private string HintText(string text) => hintsEnabled ? text : string.Empty;
 
         private void HandleUndoButtonPressed()
         {
@@ -4156,7 +4196,7 @@ namespace ConsoleCards.Presentation.Prototype
                     trapFloorTurnState.IsCurrentFloorFailed
                         ? "ALL PLAYERS ELIMINATED"
                         : trapFloorObjectiveState.IsWon ? "VICTORY" : string.Empty,
-                    TrapFloorTurnGuidanceText());
+                    HintText(TrapFloorTurnGuidanceText()));
                 runtimeUi.ShowTrapFloorStatus(
                     turnStatus,
                     BuildFloorfallStatusModel(),
@@ -4176,17 +4216,17 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 detail =
                     $"Pending Trigger: {FormatPlayerName(pendingCard.SearchingPlayerId)} / {pendingCard.Category}\n"
-                    + "Effect unresolved; awaiting prototype/external completion.";
+                    + "Resolve the card's effect at the table, then continue.";
             }
             else if (trapFloorRoundState.Phase == TrapFloorRoundPhase.Floorfall)
             {
                 detail =
                     $"Floorfalls performed this phase: {trapFloorRoundState.AcceptedFloorfallCount}\n"
-                    + "Mode-required count remains external.";
+                    + "Roll as many Floorfalls as your mode asks for.";
             }
             else if (trapFloorRoundState.IsScheduleCompleted)
             {
-                detail = "10-round schedule complete. Win/loss unresolved.";
+                detail = "All 10 rounds are played. Decide the result together.";
             }
 
             PrototypeTrapFloorStatusModel status = new PrototypeTrapFloorStatusModel(
@@ -4196,7 +4236,7 @@ namespace ConsoleCards.Presentation.Prototype
                     + $"{trapFloorRoundState.ParticipatingPlayerIds.Count} Players complete",
                 detail,
                 $"Hand: {ContainerCount(handContainerId)}",
-                TrapFloorActionHelpText());
+                HintText(TrapFloorActionHelpText()));
 
             PrototypeFloorfallStatusModel floorfall = BuildFloorfallStatusModel();
             runtimeUi.ShowTrapFloorStatus(status, floorfall, AddHandTrayToggleAction(BuildTrapFloorAssistedActions()));
@@ -4226,7 +4266,7 @@ namespace ConsoleCards.Presentation.Prototype
                     actions.Add(new PrototypePopupActionOption(
                         trapFloorRoundState.CurrentRoundNumber == 1
                             ? "Begin Round / Continue to Search"
-                            : "Complete Start / Movement (Prototype)",
+                            : "Movement done / Continue",
                         true,
                         () => CompleteTrapFloorStart()));
                     break;
@@ -4249,7 +4289,7 @@ namespace ConsoleCards.Presentation.Prototype
                     break;
                 case TrapFloorRoundPhase.Trigger:
                     actions.Add(new PrototypePopupActionOption(
-                        "Complete Pending Trigger (Prototype)",
+                        "Card effect done",
                         true,
                         () => CompletePendingFloormasterTriggerPrototype()));
                     break;
@@ -4259,13 +4299,13 @@ namespace ConsoleCards.Presentation.Prototype
                         true,
                         () => BeginPhysicalFloorfall()));
                     actions.Add(new PrototypePopupActionOption(
-                        "Complete Floorfall Phase (Prototype)",
+                        "Floorfall done",
                         trapFloorRoundState.AcceptedFloorfallCount > 0,
                         () => CompleteFloorfallPhasePrototype()));
                     break;
                 case TrapFloorRoundPhase.End:
                     actions.Add(new PrototypePopupActionOption(
-                        "Complete End (Prototype)",
+                        "End round",
                         true,
                         () => CompleteEndPrototype()));
                     break;
@@ -4370,7 +4410,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             if (trapFloorTurnState.IsCurrentFloorFailed)
             {
-                return "Round failed. Freeform tabletop actions remain available; end Floor Turn to continue.";
+                return "This round failed. You can still move pieces by hand; end the Floor Turn to continue.";
             }
 
             if (trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
@@ -4588,17 +4628,17 @@ namespace ConsoleCards.Presentation.Prototype
                 case TrapFloorRoundPhase.Start:
                     return trapFloorRoundState.CurrentRoundNumber == 1
                         ? string.Empty
-                        : "Prototype acknowledgement only; no Pawn movement occurs.";
+                        : "Move your pawns by hand as the round starts, then continue.";
                 case TrapFloorRoundPhase.Search:
-                    return "Choose any eligible searching Player.";
+                    return "Choose the player who searches next.";
                 case TrapFloorRoundPhase.Trigger:
-                    return "Card effects remain unresolved; completion acknowledges external resolution only.";
+                    return "Carry out the card's effect at the table, then mark it done.";
                 case TrapFloorRoundPhase.Floorfall:
-                    return "Mode count is acknowledged externally; Easy/Hard is not selected here.";
+                    return "Roll as many Floorfalls as your mode asks for, then continue.";
                 case TrapFloorRoundPhase.End:
-                    return "Prototype acknowledgement only; survival and win/loss are not evaluated.";
+                    return "Check together who survived and whether you won, then continue.";
                 case TrapFloorRoundPhase.Completed:
-                    return "10-round schedule complete. No winner has been declared.";
+                    return "All 10 rounds are played. Decide the result together.";
                 default:
                     return string.Empty;
             }
@@ -5609,7 +5649,7 @@ namespace ConsoleCards.Presentation.Prototype
             runtimeUi.ShowContextMenu(
                 contextMenuAnchorScreenPosition,
                 "PENDING FLOORMASTER CARD",
-                $"Category: {pendingCard.Category}\nPrototype only: acknowledges future Trigger completion. No Card effect is resolved.",
+                $"Category: {pendingCard.Category}\nCarry out its effect at the table, then mark it done.",
                 new[]
                 {
                     new PrototypePopupActionOption(
@@ -5617,7 +5657,7 @@ namespace ConsoleCards.Presentation.Prototype
                         true,
                         () => OpenCardInspect(targetCardId)),
                     new PrototypePopupActionOption(
-                        "Complete Pending Trigger (Prototype)",
+                        "Card effect done",
                         canComplete,
                         () =>
                         {
@@ -11020,9 +11060,21 @@ namespace ConsoleCards.Presentation.Prototype
                 ? usable
                 : $"{usable} | LAST {roll.XAxisResult}/{roll.YAxisResult} → {roll.Coordinate}";
             if (trapFloorTemplate == null) return collapse;
-            return $"{trapFloorTemplate.ActiveMode.DisplayName.ToUpperInvariant()} | "
-                + $"{trapFloorTemplate.ActiveMode.Behavior} | "
-                + $"{trapFloorTemplate.ActiveMode.Collapse.ScheduleKind} | {collapse}";
+            return $"{trapFloorTemplate.ActiveMode.DisplayName} · {trapFloorTemplate.ActiveMode.Behavior} game · "
+                + $"{FormatCollapseSchedule(trapFloorTemplate.ActiveMode.Collapse.ScheduleKind)}\n{collapse}";
+        }
+
+        private static string FormatCollapseSchedule(CollapseScheduleKind schedule)
+        {
+            switch (schedule)
+            {
+                case CollapseScheduleKind.RoundBased:
+                    return "floor collapses each round";
+                case CollapseScheduleKind.RealTime:
+                    return "floor collapses in real time";
+                default:
+                    return "no collapse";
+            }
         }
 
         private void ApplyCollapsedFloorPresentation(TabletopObjectId floorCardId)

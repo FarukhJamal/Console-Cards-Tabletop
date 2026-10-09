@@ -61,3 +61,15 @@ MonoBehaviour:
     prefab: {fileID: 3427891475327730328, guid: 6ab80bf6cd2967746bbe8d78dbaa9e05, type: 3}
     layer: 1
     retention: 0
+  - id: platform.rules-card
+    prefab: {fileID: 4688033256292327073, guid: 2fa5493d804f18541a2f07c37a2fa89d, type: 3}
+    layer: 1
+    retention: 0
+  - id: platform.rules-heading
+    prefab: {fileID: 3196971671703334695, guid: a78c4c02e84029a4682261d4eb0c294d, type: 3}
+    layer: 1
+    retention: 1
+  - id: platform.rules-line
+    prefab: {fileID: 4115498720553793502, guid: aab1e4d83bf72fe4eb66706c8713e059, type: 3}
+    layer: 1
+    retention: 1

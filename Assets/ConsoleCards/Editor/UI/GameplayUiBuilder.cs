@@ -10,7 +10,8 @@ namespace ConsoleCards.Editor.UI
     /// <summary>
     /// Builds the authored gameplay UI prefabs in the Toolbox design language: the controls strip and help card,
     /// the Trap Floor turn strip and status card and the action row (UI-1b); the right-click menu, draw count and
-    /// merge panels, the quantity popup, card inspection, ability purchase and focused card choice (UI-1c). Each prefab carries the existing view script with the same references, and the build points the
+    /// merge panels, the quantity popup, card inspection, ability purchase and focused card choice (UI-1c); the rules
+    /// card and its lines (doc 23, R1). Each prefab carries the existing view script with the same references, and the build points the
     /// Real UI prefab catalog's entries at the new prefabs. Nothing is built at runtime.
     /// </summary>
     public static class GameplayUiBuilder
@@ -25,6 +26,10 @@ namespace ConsoleCards.Editor.UI
         public const string AbilityPurchasePath = Folder + "AbilityPurchase.prefab";
         public const string FocusedSelectionPath = Folder + "FocusedCardSelection.prefab";
         public const string FocusedOptionPath = Folder + "FocusedCardOption.prefab";
+        public const string RulesCardPath = Folder + "RulesCard.prefab";
+        public const string RulesHeadingPath = Folder + "RulesHeading.prefab";
+        public const string RulesLinePath = Folder + "RulesLine.prefab";
+        private const string SessionIconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
 
         // Layout, in canvas units at the 1920 x 1080 reference.
         private const float Margin = 29f;
@@ -34,6 +39,10 @@ namespace ConsoleCards.Editor.UI
         private const float StripHeight = 60f;
         private const float RowHeight = 50f;
         private const float MenuWidth = 400f;
+        // Rules card: left column below the session bar, + TOOLBOX and the Placing card (which ends at 226).
+        private const float RulesCardTop = 250f;
+        private const float RulesCardWidth = 440f;
+        private const float RulesBodyHeight = 430f;
 
         private const string GuideText =
             "<color=#e0531f><b>SELECT AND MOVE</b></color>\n"
@@ -62,6 +71,7 @@ namespace ConsoleCards.Editor.UI
         public static void Build()
         {
             ConfigureTexture(ToolboxIconPath + "IconClose.png", Vector4.zero);
+            ConfigureTexture(SessionIconPath + "IconChevron.png", Vector4.zero);
             titleFont = RequireFont("Silkscreen-Bold.ttf");
             bodyFont = RequireFont("ChakraPetch-Medium.ttf");
             boldFont = RequireFont("ChakraPetch-Bold.ttf");
@@ -76,6 +86,9 @@ namespace ConsoleCards.Editor.UI
             Save<PrototypeActionAbilityPurchasePopupView>(AbilityPurchasePath, "AbilityPurchase", BuildAbilityPurchase, stretch: true);
             Save<PrototypeFocusedCardSelectionView>(FocusedSelectionPath, "FocusedCardSelection", BuildFocusedSelection, stretch: true);
             Save<PrototypeFocusedCardOptionView>(FocusedOptionPath, "FocusedCardOption", BuildFocusedOption, stretch: false);
+            Save<RulesCardLineView>(RulesHeadingPath, "RulesHeading", BuildRulesHeading, stretch: false);
+            Save<RulesCardLineView>(RulesLinePath, "RulesLine", BuildRulesLine, stretch: false);
+            Save<RulesCardView>(RulesCardPath, "RulesCard", BuildRulesCard, stretch: true);
 
             AssignCatalogEntry(PrototypeUiPrefabIds.PopupActionRow,
                 AssetDatabase.LoadAssetAtPath<PrototypePopupActionRowView>(ActionRowPath), UiLayer.Popup, UiRetention.Pooled);
@@ -97,6 +110,12 @@ namespace ConsoleCards.Editor.UI
                 UiRetention.CachedSingleInstance);
             AssignCatalogEntry(PrototypeUiPrefabIds.FocusedCardOption,
                 AssetDatabase.LoadAssetAtPath<PrototypeFocusedCardOptionView>(FocusedOptionPath), UiLayer.Modal, UiRetention.Pooled);
+            AssignCatalogEntry(PrototypeUiPrefabIds.RulesCard,
+                AssetDatabase.LoadAssetAtPath<RulesCardView>(RulesCardPath), UiLayer.Hud, UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(PrototypeUiPrefabIds.RulesHeading,
+                AssetDatabase.LoadAssetAtPath<RulesCardLineView>(RulesHeadingPath), UiLayer.Hud, UiRetention.Pooled);
+            AssignCatalogEntry(PrototypeUiPrefabIds.RulesLine,
+                AssetDatabase.LoadAssetAtPath<RulesCardLineView>(RulesLinePath), UiLayer.Hud, UiRetention.Pooled);
             AssetDatabase.SaveAssets();
             Debug.Log("[Gameplay UI] Built the gameplay UI prefabs and updated the Real UI prefab catalog.");
         }
@@ -671,6 +690,103 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("ineligibleArtwork").colorValue = new Color(0.55f, 0.55f, 0.55f, 0.75f);
             so.FindProperty("eligibleText").colorValue = Ink;
             so.FindProperty("ineligibleText").colorValue = Muted;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // ---------- rules card (doc 23, R1) ----------
+
+        private static void BuildRulesCard(RectTransform root, RulesCardView view)
+        {
+            RectTransform card = Rect("Card", root, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(Margin, -RulesCardTop), new Vector2(RulesCardWidth, 300f));
+            Backdrop(card, ShadowOffset);
+            Column(card.gameObject, 5, 5, 5, 5, 0f);
+            Fit(card.gameObject, false, true);
+
+            RectTransform header = Child("Header", card);
+            Img(header, "TopRounded", Orange).raycastTarget = false;
+            Size(header.gameObject, -1f, 56f);
+            Label(Rect("Title", header, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(18f, 0f),
+                new Vector2(110f, 0f)), titleFont, 22, Cream, TextAnchor.MiddleLeft, "RULES");
+            Text setName = Label(Rect("SetName", header, Vector2.zero, Vector2.one, new Vector2(0f, 0.5f), new Vector2(128f, 0f),
+                new Vector2(-312f, 0f)), boldFont, 16, Cream, TextAnchor.MiddleLeft, "Default");
+            setName.horizontalOverflow = HorizontalWrapMode.Overflow;
+            RectTransform badge = Rect("HouseRulesBadge", header, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                new Vector2(1f, 0.5f), new Vector2(-64f, 0f), new Vector2(124f, 28f));
+            Img(badge, "ButtonOutlined", Mustard).raycastTarget = false;
+            Label(Rect("Label", badge, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero),
+                titleFont, 12, Ink, TextAnchor.MiddleCenter, "HOUSE RULES");
+            badge.gameObject.SetActive(false);
+            RectTransform collapse = Rect("CollapseButton", header, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                new Vector2(1f, 0.5f), new Vector2(-10f, 0f), new Vector2(42f, 42f));
+            Image collapseFill = Img(collapse, "ButtonOutlined", Cream);
+            Button collapseButton = collapse.gameObject.AddComponent<Button>();
+            collapseButton.targetGraphic = collapseFill;
+            RectTransform chevron = Rect("Chevron", collapse, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(22f, 22f));
+            Img(chevron, null, Ink, SessionIconPath + "IconChevron.png").raycastTarget = false;
+            RectTransform rule = Child("HeaderRule", card);
+            Img(rule, "Solid", Ink).raycastTarget = false;
+            Size(rule.gameObject, -1f, 5f);
+
+            // Body: a scrolling list of pooled heading and rule lines.
+            RectTransform body = Child("Body", card);
+            Img(body, "BottomRounded", Cream);
+            body.gameObject.AddComponent<RectMask2D>();
+            Size(body.gameObject, -1f, RulesBodyHeight);
+            RectTransform lines = Rect("Lines", body, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
+                Vector2.zero, Vector2.zero);
+            Column(lines.gameObject, 22, 18, 14, 18, 8f);
+            Fit(lines.gameObject, false, true);
+            ScrollRect scroll = body.gameObject.AddComponent<ScrollRect>();
+            scroll.content = lines;
+            scroll.horizontal = false;
+            scroll.vertical = true;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = 30f;
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("setNameLabel").objectReferenceValue = setName;
+            so.FindProperty("houseRulesBadge").objectReferenceValue = badge.gameObject;
+            so.FindProperty("collapseButton").objectReferenceValue = collapseButton;
+            so.FindProperty("chevron").objectReferenceValue = chevron;
+            so.FindProperty("body").objectReferenceValue = body.gameObject;
+            so.FindProperty("linesRoot").objectReferenceValue = lines;
+            so.FindProperty("scrollRect").objectReferenceValue = scroll;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void BuildRulesHeading(RectTransform root, RulesCardLineView view)
+        {
+            root.sizeDelta = new Vector2(380f, 30f);
+            Size(root.gameObject, -1f, 30f);
+            Text text = Label(Rect("Text", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(0f, -3f),
+                Vector2.zero), titleFont, 15, Orange, TextAnchor.LowerLeft, "HEADING");
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("textLabel").objectReferenceValue = text;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void BuildRulesLine(RectTransform root, RulesCardLineView view)
+        {
+            root.sizeDelta = new Vector2(380f, 24f);
+            Row(root.gameObject, 0, 0, 0, 0, 10f, TextAnchor.UpperLeft);
+            Text number = Label(Child("Number", root), titleFont, 16, Orange, TextAnchor.UpperLeft, "1");
+            Size(number.gameObject, 24f, -1f, 24f);
+            Text text = Label(Child("Text", root), bodyFont, 16, Ink, TextAnchor.UpperLeft, "Rule");
+            text.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            // Changed mark: a mustard bar at the line's left edge when it differs from the rules it is based on.
+            RectTransform mark = Rect("ChangedMark", root, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(1f, 0.5f),
+                new Vector2(-8f, 0f), new Vector2(6f, 0f));
+            Img(mark, "Solid", Mustard).raycastTarget = false;
+            mark.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            mark.gameObject.SetActive(false);
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("numberLabel").objectReferenceValue = number;
+            so.FindProperty("textLabel").objectReferenceValue = text;
+            so.FindProperty("changedMark").objectReferenceValue = mark.gameObject;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
     }

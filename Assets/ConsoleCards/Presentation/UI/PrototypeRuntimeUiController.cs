@@ -22,6 +22,8 @@ namespace ConsoleCards.Presentation.UI
         private IRuntimeUiService uiService;
         private ComponentToolboxView componentToolboxView;
         private SessionBarView sessionBarView;
+        private RulesCardView rulesCardView;
+        private bool rulesCardShown;
         private PrototypeTabletopPopupView tabletopPopupView;
         private PrototypeQuantityPopupView quantityPopupView;
         private PrototypeCardInspectView cardInspectPopupView;
@@ -127,6 +129,53 @@ namespace ConsoleCards.Presentation.UI
             HideTrapFloorStatus();
             statusMessageView.SetMessage(statusMessage);
             root.ClearSelectedUiObject();
+        }
+
+        /// <summary>
+        /// Binds the Table menu's view settings and applies them (doc 23, R1): the rules card for this table
+        /// (null when it has no rules), whether it is shown, and whether Hints are on. Call after ShowActiveSession.
+        /// </summary>
+        public void ShowTableSettings(
+            RulesCardModel rules,
+            bool rulesCardOn,
+            Action<bool> setRulesCard,
+            bool hintsOn,
+            Action<bool> setHints)
+        {
+            EnsureSessionBarView();
+            sessionBarView.BindTableSettings(rules != null, rulesCardOn, setRulesCard, hintsOn, setHints, OpenHelp);
+            ShowRulesCard(rules, rulesCardOn);
+            SetHintsVisible(hintsOn);
+        }
+
+        /// <summary>Shows the rules card with these rules, or hides it (null rules or switched off).</summary>
+        public void ShowRulesCard(RulesCardModel rules, bool visible)
+        {
+            if (rules == null || !visible)
+            {
+                rulesCardShown = false;
+                ReleaseView(rulesCardView);
+                return;
+            }
+
+            EnsureService();
+            rulesCardView = uiService.AcquireCached<RulesCardView>(PrototypeUiPrefabIds.RulesCard);
+            rulesCardView.Initialize(uiService);
+            rulesCardView.ValidateReferences();
+            rulesCardView.Bind(rules);
+            rulesCardView.Show();
+            rulesCardShown = true;
+            if (componentToolboxView != null && componentToolboxView.IsPanelOpen)
+            {
+                rulesCardView.Hide();
+            }
+        }
+
+        /// <summary>Hints switch: the controls strip and the Toolbox placing bar (guidance text only).</summary>
+        public void SetHintsVisible(bool on)
+        {
+            interactionGuideView?.SetStripVisible(on);
+            componentToolboxView?.SetPlacingHintVisible(on);
         }
 
         /// <summary>Opens the Toolbox panel (after a table rebuild started from inside it, such as the Hand switch).</summary>
@@ -396,6 +445,8 @@ namespace ConsoleCards.Presentation.UI
         public void ReleaseBindings()
         {
             HideGameTemplatesPanel();
+            rulesCardShown = false;
+            ReleaseView(rulesCardView);
             ReleaseView(sessionBarView);
             ReleaseView(componentToolboxView);
             HideTrapFloorStatus();
@@ -441,7 +492,24 @@ namespace ConsoleCards.Presentation.UI
             CloseTabletopPopup();
         }
 
-        private void HandleToolboxPanelOpenChanged(bool open) => sessionBarView?.SetShiftedForPanel(open);
+        // The open Toolbox panel covers the left column, so the rules card steps aside while it is open.
+        private void HandleToolboxPanelOpenChanged(bool open)
+        {
+            sessionBarView?.SetShiftedForPanel(open);
+            if (rulesCardShown && rulesCardView != null && rulesCardView.IsAcquired)
+            {
+                if (open)
+                {
+                    rulesCardView.Hide();
+                }
+                else
+                {
+                    rulesCardView.Show();
+                }
+            }
+        }
+
+        private void OpenHelp() => interactionGuideView?.OpenGuide();
 
         private void EnsureTabletopPopupView()
         {

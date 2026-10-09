@@ -69,6 +69,8 @@ namespace ConsoleCards.Definitions
         [SerializeField] private ControllerMappingKind controllerMappingKind;
         [SerializeField] private string presentationReference;
         [SerializeField, TextArea] private string assistanceConfiguration;
+        [Tooltip("The rules shipped in the game box (doc 23). Shown to players; never enforced by itself.")]
+        [SerializeField] private RuleSetDefinition defaultRuleSet;
 
         public string StableId => stableId;
         public string DisplayName => displayName;
@@ -78,6 +80,7 @@ namespace ConsoleCards.Definitions
         public IReadOnlyList<ModeDefinition> Modes => modes;
         public IReadOnlyList<AvatarDefinition> Avatars => avatars;
         public ConsoleConfiguration ConsoleConfiguration => consoleConfiguration;
+        public RuleSetDefinition DefaultRuleSet => defaultRuleSet;
 
         public bool TryGetCard(ObjectDefinitionId id, out CardDefinition definition)
         {

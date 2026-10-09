@@ -196,6 +196,7 @@ namespace ConsoleCards.Presentation.UI.Toolbox
         private Action<bool> setHand;
         private bool handOn;
         private Action<bool> panelOpenChanged;
+        private bool placingHintVisible = true;
 
         public void ValidateReferences()
         {
@@ -344,6 +345,18 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             setHand(handOn);
         }
 
+        public bool IsPanelOpen => panel != null && panel.activeSelf;
+
+        /// <summary>Shows or hides the "Left-click place…" bar while placing (Hints switch, doc 23 R1).</summary>
+        public void SetPlacingHintVisible(bool visible)
+        {
+            placingHintVisible = visible;
+            if (placingControls != null && placingCard != null && placingCard.activeSelf)
+            {
+                placingControls.SetActive(visible);
+            }
+        }
+
         /// <summary>Told whenever the panel opens or closes (the session bar moves beside the open panel, UI-1).</summary>
         public void SetPanelOpenListener(Action<bool> listener)
         {
@@ -394,7 +407,7 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             panelOpenChanged?.Invoke(false);
             openButton.gameObject.SetActive(false);
             placingCard.SetActive(true);
-            placingControls.SetActive(true);
+            placingControls.SetActive(placingHintVisible);
             placingSubtitle.text = $"{placementSubject} · rotation {Mathf.RoundToInt(rotationDegrees)}°";
             if (placingIcon != null)
             {

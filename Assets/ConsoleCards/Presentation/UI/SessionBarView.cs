@@ -1,4 +1,5 @@
 using System;
+using ConsoleCards.Presentation.UI.Toolbox;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
@@ -47,6 +48,11 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button resetButton;
         [SerializeField] private Button clearTableButton;
 
+        [Header("Table settings (doc 23, R1)")]
+        [SerializeField] private ToolboxSwitch rulesSwitch = new ToolboxSwitch();
+        [SerializeField] private ToolboxSwitch hintsSwitch = new ToolboxSwitch();
+        [SerializeField] private Button helpButton;
+
         private readonly Vector3[] corners = new Vector3[4];
         private Action undo;
         private Action redo;
@@ -57,6 +63,11 @@ namespace ConsoleCards.Presentation.UI
         private string undoLabel = "Undo";
         private string redoLabel = "Redo";
         private RectTransform tipOwner;
+        private Action<bool> setRules;
+        private Action<bool> setHints;
+        private Action openHelp;
+        private bool rulesOn;
+        private bool hintsOn;
 
         public bool IsMenuOpen => menu != null && menu.gameObject.activeSelf;
 
@@ -67,7 +78,9 @@ namespace ConsoleCards.Presentation.UI
                 || redoButton == null || redoIcon == null || redoHover == null
                 || tableButton == null || tip == null || tipLabel == null
                 || menuBlocker == null || menu == null
-                || newTableButton == null || resetButton == null || clearTableButton == null)
+                || newTableButton == null || resetButton == null || clearTableButton == null
+                || rulesSwitch == null || !rulesSwitch.IsComplete || hintsSwitch == null || !hintsSwitch.IsComplete
+                || helpButton == null)
             {
                 throw new InvalidOperationException("SessionBarView is missing an authored reference. " + BuildHint);
             }
@@ -124,6 +137,36 @@ namespace ConsoleCards.Presentation.UI
             CloseMenu();
             HideTip();
             LayoutRebuilder.ForceRebuildLayoutImmediate(bar);
+        }
+
+        /// <summary>
+        /// Binds the Table menu's view settings (doc 23, R1): the Rules card switch (shown only when the table has
+        /// rules), the Hints switch and Help. These are the viewer's settings, not table state.
+        /// </summary>
+        public void BindTableSettings(
+            bool showRulesSwitch,
+            bool rulesCardOn,
+            Action<bool> setRulesCard,
+            bool hintsEnabled,
+            Action<bool> setHintsEnabled,
+            Action openHelpAction)
+        {
+            RequireAcquired();
+            ValidateReferences();
+            setRules = setRulesCard;
+            setHints = setHintsEnabled ?? throw new ArgumentNullException(nameof(setHintsEnabled));
+            openHelp = openHelpAction ?? throw new ArgumentNullException(nameof(openHelpAction));
+            rulesOn = rulesCardOn;
+            hintsOn = hintsEnabled;
+            rulesSwitch.Row.SetActive(showRulesSwitch && setRules != null);
+            rulesSwitch.Show(rulesOn);
+            hintsSwitch.Show(hintsOn);
+            Clear(rulesSwitch.Button);
+            Clear(hintsSwitch.Button);
+            Clear(helpButton);
+            rulesSwitch.Button.onClick.AddListener(FlipRules);
+            hintsSwitch.Button.onClick.AddListener(FlipHints);
+            helpButton.onClick.AddListener(HandleHelp);
         }
 
         public void SetUndoState(bool enabled, string label)
@@ -203,6 +246,9 @@ namespace ConsoleCards.Presentation.UI
             HideTip();
             undo = null;
             redo = null;
+            setRules = null;
+            setHints = null;
+            openHelp = null;
             newTable = null;
             resetTable = null;
             clearTable = null;
@@ -257,6 +303,36 @@ namespace ConsoleCards.Presentation.UI
         {
             CloseMenu();
             clearTable?.Invoke();
+        }
+
+        private void FlipRules()
+        {
+            if (setRules == null)
+            {
+                return;
+            }
+
+            rulesOn = !rulesOn;
+            rulesSwitch.Show(rulesOn);
+            setRules(rulesOn);
+        }
+
+        private void FlipHints()
+        {
+            if (setHints == null)
+            {
+                return;
+            }
+
+            hintsOn = !hintsOn;
+            hintsSwitch.Show(hintsOn);
+            setHints(hintsOn);
+        }
+
+        private void HandleHelp()
+        {
+            CloseMenu();
+            openHelp?.Invoke();
         }
 
         private void HandleUndoHover(bool hovered) => SetTip(undoButton, undoLabel, hovered);
@@ -340,6 +416,9 @@ namespace ConsoleCards.Presentation.UI
             Clear(newTableButton);
             Clear(resetButton);
             Clear(clearTableButton);
+            Clear(rulesSwitch?.Button);
+            Clear(hintsSwitch?.Button);
+            Clear(helpButton);
         }
 
         private static void Clear(Button button)

@@ -1,0 +1,104 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a12e43eec8a42b4aed60566566cea6d, type: 3}
+  m_Name: TrapFloorDefaultRules
+  m_EditorClassIdentifier: ConsoleCards.Definitions::ConsoleCards.Definitions.RuleSetDefinition
+  stableId: trap-floor-rules-default
+  displayName: Default
+  gameStableId: 54460001-4f4f-4000-8000-000100000001
+  basedOn: {fileID: 0}
+  sections:
+  - heading: 'Each round'
+    numbered: 1
+    entries:
+    - stableId: tf-round-start
+      text: 'Start: draw Controller Cards until you hold {value}.'
+      settingKind: 1
+      settingKey: trap-floor.hand-size
+      value: '10'
+      modeStableIds: []
+    - stableId: tf-round-search
+      text: 'Search: in turn, each player searches one Floor by paying one of {value}.'
+      settingKind: 3
+      settingKey: trap-floor.search-cost
+      value: 'A, B, X or Y'
+      modeStableIds: []
+    - stableId: tf-round-careful
+      text: 'Or search carefully by paying {value}; a careful search stops a Trap from springing.'
+      settingKind: 3
+      settingKey: trap-floor.careful-search-cost
+      value: 'A + B + X + Y'
+      modeStableIds: []
+    - stableId: tf-round-trigger
+      text: 'Trigger: the searched Floor''s card takes effect: a Trap, a Coin or an Item.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      modeStableIds: []
+    - stableId: tf-round-floorfall
+      text: 'Floorfall: roll the two dice; the Floor they point to falls. In round 1 the starting corners are safe.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      modeStableIds: []
+    - stableId: tf-round-end
+      text: 'End: the next round begins. The game lasts {value} rounds.'
+      settingKind: 1
+      settingKey: trap-floor.rounds
+      value: '10'
+      modeStableIds: []
+  - heading: 'Goal'
+    numbered: 0
+    entries:
+    - stableId: tf-goal-easy
+      text: 'Find {value} Key and bring it to an Exit.'
+      settingKind: 1
+      settingKey: trap-floor.keys-needed
+      value: '1'
+      modeStableIds:
+      - trap-floor-mode-easy
+    - stableId: tf-goal-hard
+      text: 'Find {value} Keys and bring them to an Exit.'
+      settingKind: 1
+      settingKey: trap-floor.keys-needed
+      value: '3'
+      modeStableIds:
+      - trap-floor-mode-hard
+    - stableId: tf-goal-impossible
+      text: 'Find {value} Keys and reach an Exit while the floor collapses in real time.'
+      settingKind: 1
+      settingKey: trap-floor.keys-needed
+      value: '3'
+      modeStableIds:
+      - trap-floor-mode-impossible
+  - heading: 'Payments'
+    numbered: 0
+    entries:
+    - stableId: tf-pay-all-or-nothing
+      text: 'Costs are paid in full or not at all, and players do not share a payment.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      modeStableIds: []
+    - stableId: tf-pay-abilities
+      text: 'Abilities can be bought by paying their input cost.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      modeStableIds: []
+    - stableId: tf-start-abilities-easy
+      text: 'You start with {value} abilities.'
+      settingKind: 1
+      settingKey: trap-floor.starting-abilities
+      value: '2'
+      modeStableIds:
+      - trap-floor-mode-easy
