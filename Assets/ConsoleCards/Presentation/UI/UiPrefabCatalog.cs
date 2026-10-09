@@ -90,6 +90,7 @@ namespace ConsoleCards.Presentation.UI
     public static class PrototypeUiPrefabIds
     {
         public const string ComponentToolbox = "platform.component-toolbox";
+        public const string SessionBar = "platform.session-bar";
         public const string TabletopPopup = "platform.tabletop-popup";
         public const string QuantityPopup = "platform.quantity-popup";
         public const string CardInspect = "platform.card-inspect";

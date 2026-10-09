@@ -17,11 +17,11 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private GameObject popupLayer;
         [SerializeField] private GameObject modalLayer;
         [SerializeField] private PrototypeGameTemplatesPanelView gameTemplatesPanelView;
-        [SerializeField] private PrototypeActiveSessionToolbarView activeSessionToolbarView;
         [SerializeField] private PrototypeStatusMessageView statusMessageView;
 
         private IRuntimeUiService uiService;
         private ComponentToolboxView componentToolboxView;
+        private SessionBarView sessionBarView;
         private PrototypeTabletopPopupView tabletopPopupView;
         private PrototypeQuantityPopupView quantityPopupView;
         private PrototypeCardInspectView cardInspectPopupView;
@@ -47,7 +47,6 @@ namespace ConsoleCards.Presentation.UI
                 || popupLayer == null
                 || modalLayer == null
                 || gameTemplatesPanelView == null
-                || activeSessionToolbarView == null
                 || statusMessageView == null)
             {
                 throw new InvalidOperationException(
@@ -58,7 +57,6 @@ namespace ConsoleCards.Presentation.UI
             EnsureService();
             gameTemplatesPanelView.Initialize(uiService);
             gameTemplatesPanelView.ValidateReferences();
-            activeSessionToolbarView.ValidateReferences();
             statusMessageView.ValidateReferences();
         }
 
@@ -87,23 +85,42 @@ namespace ConsoleCards.Presentation.UI
             root?.ClearSelectedUiObject();
         }
 
+        /// <summary>
+        /// Shows the table's HUD: the session bar (UI-1: game chip, Undo, Redo, Table menu), the Toolbox and the
+        /// interaction guide. <paramref name="isGameSession"/> picks the game chip with its mode line.
+        /// </summary>
         public void ShowActiveSession(
             string sessionTitle,
+            string sessionSubtitle,
+            bool isGameSession,
             Action undo,
             Action redo,
-            Action resetSession,
             Action openGameTemplates,
+            Action resetSession,
+            Action clearTable,
             string statusMessage,
             ComponentToolboxBindings componentToolboxBindings)
         {
             ValidateReferences();
             EnsureComponentToolboxView();
+            EnsureSessionBarView();
             EnsureInteractionGuideView();
             HideGameTemplatesPanel();
             CloseTabletopPopup();
             hudLayer.SetActive(true);
-            activeSessionToolbarView.Bind(sessionTitle, undo, redo, resetSession, openGameTemplates);
-            componentToolboxView.Bind(componentToolboxBindings, CloseTabletopPopup);
+            sessionBarView.Bind(
+                sessionTitle,
+                sessionSubtitle,
+                isGameSession,
+                undo,
+                redo,
+                openGameTemplates,
+                resetSession,
+                clearTable,
+                BeforeTableMenuOpens);
+            sessionBarView.Show();
+            componentToolboxView.Bind(componentToolboxBindings, BeforeToolboxOpens);
+            componentToolboxView.SetPanelOpenListener(HandleToolboxPanelOpenChanged);
             componentToolboxView.Show();
             interactionGuideView.Bind();
             interactionGuideView.Show();
@@ -119,10 +136,10 @@ namespace ConsoleCards.Presentation.UI
         }
 
         public void SetUndoState(bool enabled, string label) =>
-            activeSessionToolbarView?.SetUndoState(enabled, label);
+            sessionBarView?.SetUndoState(enabled, label);
 
         public void SetRedoState(bool enabled, string label) =>
-            activeSessionToolbarView?.SetRedoState(enabled, label);
+            sessionBarView?.SetRedoState(enabled, label);
 
         public void SetGameTemplatesError(string errorMessage) =>
             gameTemplatesPanelView.SetError(errorMessage);
@@ -370,6 +387,7 @@ namespace ConsoleCards.Presentation.UI
 
         public void ClearActiveSessionTransientUi()
         {
+            sessionBarView?.CloseMenu();
             componentToolboxView?.CloseToolbox();
             componentToolboxView?.ClearPlacementHint();
             CloseTabletopPopup();
@@ -378,7 +396,7 @@ namespace ConsoleCards.Presentation.UI
         public void ReleaseBindings()
         {
             HideGameTemplatesPanel();
-            activeSessionToolbarView?.Unbind();
+            ReleaseView(sessionBarView);
             ReleaseView(componentToolboxView);
             HideTrapFloorStatus();
             ReleaseView(interactionGuideView);
@@ -402,6 +420,28 @@ namespace ConsoleCards.Presentation.UI
                 PrototypeUiPrefabIds.ComponentToolbox);
             componentToolboxView.ValidateReferences();
         }
+
+        private void EnsureSessionBarView()
+        {
+            EnsureService();
+            sessionBarView = uiService.AcquireCached<SessionBarView>(PrototypeUiPrefabIds.SessionBar);
+            sessionBarView.ValidateReferences();
+        }
+
+        // The Toolbox panel and the Table menu close each other; the bar sits beside the open panel.
+        private void BeforeToolboxOpens()
+        {
+            CloseTabletopPopup();
+            sessionBarView?.CloseMenu();
+        }
+
+        private void BeforeTableMenuOpens()
+        {
+            componentToolboxView?.CloseToolbox();
+            CloseTabletopPopup();
+        }
+
+        private void HandleToolboxPanelOpenChanged(bool open) => sessionBarView?.SetShiftedForPanel(open);
 
         private void EnsureTabletopPopupView()
         {

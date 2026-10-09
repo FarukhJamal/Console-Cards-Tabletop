@@ -133,10 +133,11 @@ namespace ConsoleCards.Presentation.UI
                 ? model.Front
                 : model.Back;
             bool isInspectionOnlySide = displayedFace != model.AuthoritativeFace;
-            identityLabel.text = $"Card ID: {model.CardIdentity}";
+            // Player-facing wording (UI-1c): the card's name, and which side is shown versus how it lies.
+            identityLabel.text = string.IsNullOrWhiteSpace(side.Title) ? "Card" : side.Title;
             faceStateLabel.text = isInspectionOnlySide
-                ? $"Authoritative face: {FormatFace(model.AuthoritativeFace)} | Inspection view: {FormatFace(displayedFace)} (Card unchanged)"
-                : $"Authoritative face: {FormatFace(model.AuthoritativeFace)}";
+                ? $"{FormatFace(model.AuthoritativeFace)} on the table. Showing its {SideName(displayedFace)} here only; the card is not flipped."
+                : $"{FormatFace(model.AuthoritativeFace)} on the table.";
             cardSurface.color = side.SurfaceColor;
             sideTitleLabel.text = side.Title;
             sideTitleLabel.color = side.TextColor;
@@ -164,8 +165,8 @@ namespace ConsoleCards.Presentation.UI
             else if (model.CanViewOtherSide)
             {
                 viewOtherSideButtonLabel.text = displayedFace == CardFace.FaceUp
-                    ? "View Back (Inspection Only)"
-                    : "View Front (Inspection Only)";
+                    ? "View back"
+                    : "View front";
                 BindButton(viewOtherSideButton, ToggleInspectionSide);
             }
         }
@@ -180,7 +181,12 @@ namespace ConsoleCards.Presentation.UI
 
         private static string FormatFace(CardFace face)
         {
-            return face == CardFace.FaceUp ? "Face Up" : "Face Down";
+            return face == CardFace.FaceUp ? "Face up" : "Face down";
+        }
+
+        private static string SideName(CardFace face)
+        {
+            return face == CardFace.FaceUp ? "front" : "back";
         }
 
         private static void BindButton(Button button, Action callback)

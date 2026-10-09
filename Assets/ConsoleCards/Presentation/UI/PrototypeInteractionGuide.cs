@@ -54,7 +54,8 @@ namespace ConsoleCards.Presentation.UI
             bodyLabel.text = guideText;
             toggleButton.onClick.AddListener(ToggleGuide);
             closeButton.onClick.AddListener(HideGuide);
-            SetGuideVisible(true);
+            // Starts closed (UI-1b): the controls strip covers everyday play; the full help opens on demand.
+            SetGuideVisible(false);
         }
 
         public override void Unbind()
@@ -83,7 +84,7 @@ namespace ConsoleCards.Presentation.UI
         private void SetGuideVisible(bool visible)
         {
             guidePanel.SetActive(visible);
-            toggleButtonLabel.text = visible ? "Hide Help" : "Show Help";
+            toggleButtonLabel.text = visible ? "Close help" : "? Help";
         }
 
     }

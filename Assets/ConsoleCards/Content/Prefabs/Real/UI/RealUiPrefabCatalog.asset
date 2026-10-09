@@ -18,35 +18,35 @@ MonoBehaviour:
     layer: 1
     retention: 0
   - id: platform.tabletop-popup
-    prefab: {fileID: 114001, guid: 306faf8f74ea40c29778d2e89f85ec24, type: 3}
+    prefab: {fileID: 3522589389718324386, guid: d38b1dac79a86bc46b8dac1416f7bc36, type: 3}
     layer: 2
     retention: 0
   - id: platform.quantity-popup
-    prefab: {fileID: 114000, guid: 5bce6ed160af4b9da30a80cc6e3957d3, type: 3}
+    prefab: {fileID: 677089967940591085, guid: 04a5543eba5aa7843bc39dc8001166c3, type: 3}
     layer: 3
     retention: 0
   - id: platform.card-inspect
-    prefab: {fileID: 114000, guid: a4b986c16e8b42afb2a87e7189fd126d, type: 3}
+    prefab: {fileID: 8960332244895446581, guid: eb21171bd7e764048be990a5bdae37a8, type: 3}
     layer: 3
     retention: 0
   - id: platform.action-ability-purchase
-    prefab: {fileID: 114000, guid: e8bbd25402d845509d0e63d57b4d2ac1, type: 3}
+    prefab: {fileID: 7964997745369819829, guid: 31c44a6b88b189d4f904c477e2044772, type: 3}
     layer: 3
     retention: 0
   - id: platform.focused-card-selection
-    prefab: {fileID: 114001, guid: e8bbd25402d845509d0e63d57b4d2ac1, type: 3}
+    prefab: {fileID: 2041643355706426548, guid: 4353284956c4d2d40a8c195147524631, type: 3}
     layer: 3
     retention: 0
   - id: platform.interaction-guide
-    prefab: {fileID: 114000, guid: 18ff22796a2b4e2aaec1e8cd3a815910, type: 3}
+    prefab: {fileID: 3121806973628423350, guid: 6ca0f1e948610e7409f2d5c733fb0f31, type: 3}
     layer: 1
     retention: 0
   - id: platform.popup-action-row
-    prefab: {fileID: 114003, guid: 7e02bb55013040a7879b457a2f45fd88, type: 3}
+    prefab: {fileID: 3662043002929201794, guid: 36efe3fe46d305d44999f9b8a5bd79f4, type: 3}
     layer: 2
     retention: 1
   - id: platform.focused-card-option
-    prefab: {fileID: 114006, guid: 7e02bb55013040a7879b457a2f45fd88, type: 3}
+    prefab: {fileID: 9015022688284027131, guid: 23e2c90b3b8b63740ae64628ebe0279c, type: 3}
     layer: 3
     retention: 1
   - id: platform.game-template-row
@@ -54,6 +54,10 @@ MonoBehaviour:
     layer: 0
     retention: 1
   - id: trap-floor.hud
-    prefab: {fileID: 114000, guid: 93d8ee6f65234c63bdb3ced54189a2ad, type: 3}
+    prefab: {fileID: 810426476747869471, guid: 4e214a5994c28d24da8cdddf65517442, type: 3}
+    layer: 1
+    retention: 0
+  - id: platform.session-bar
+    prefab: {fileID: 3427891475327730328, guid: 6ab80bf6cd2967746bbe8d78dbaa9e05, type: 3}
     layer: 1
     retention: 0

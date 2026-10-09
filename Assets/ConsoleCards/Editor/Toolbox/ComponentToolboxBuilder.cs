@@ -8,6 +8,7 @@ using ConsoleCards.Presentation.Views;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
+using static ConsoleCards.Editor.UI.UiKit;
 
 namespace ConsoleCards.Editor.Toolbox
 {
@@ -30,17 +31,6 @@ namespace ConsoleCards.Editor.Toolbox
         private const string FontPath = "Assets/ConsoleCards/Content/UI/Fonts/";
 
         // Palette (from the approved mockup).
-        private static readonly Color Cream = Hex("fdf8e6");
-        private static readonly Color CreamDark = Hex("f4ecd2");
-        private static readonly Color TabIdle = Hex("e2d7b4");
-        private static readonly Color Ink = Hex("1d1d1f");
-        private static readonly Color Muted = Hex("4a4a4a");
-        private static readonly Color Orange = Hex("e0531f");
-        private static readonly Color Mustard = Hex("f2a81d");
-        private static readonly Color Teal = Hex("2fa58a");
-        private static readonly Color Selected = Hex("fff3c4");
-        private static readonly Color Rule = Hex("c9bf9e");
-        private static readonly Color Go = Hex("1f7a66");
 
         // Layout, in Canvas reference units (1920 x 1080): the mockup at 1440 x 900 scaled by 1.2.
         private const float Margin = 29f;
@@ -56,6 +46,8 @@ namespace ConsoleCards.Editor.Toolbox
         private const float TileBaseHeight = 100f;
         private const float TileCounterHeight = 168f;
         private const float TileChoicesHeight = 215f;
+        // Top of the open button and Placing card: below the session bar (86 high at the margin) and its shadow.
+        private const float BelowSessionBar = Margin + 86f + 20f;
 
         private static Font titleFont;
         private static Font bodyFont;
@@ -138,9 +130,9 @@ namespace ConsoleCards.Editor.Toolbox
 
         private static void BuildStatic(Transform root, ComponentToolboxView view)
         {
-            // Open button (HUD), bottom left.
-            RectTransform open = Rect("OpenButton", root, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f),
-                new Vector2(Margin, Margin), new Vector2(250f, 62f));
+            // Open button (HUD), top left under the session bar (UI-1).
+            RectTransform open = Rect("OpenButton", root, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(Margin, -BelowSessionBar), new Vector2(250f, 62f));
             Image openShadow = Img(Rect("Shadow", open, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(6f, -6f), Vector2.zero),
                 "PillOutlined", Ink);
             openShadow.raycastTarget = false;
@@ -151,17 +143,17 @@ namespace ConsoleCards.Editor.Toolbox
             Label(Rect("Label", open, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero),
                 titleFont, 24, Cream, TextAnchor.MiddleCenter, "+ TOOLBOX");
 
-            // Panel group (panel and its offset shadow open and close together), full height on the left.
+            // Panel group (panel and its offset shadow open and close together), on the left below the session bar.
             RectTransform group = Rect("PanelGroup", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             RectTransform panelShadow = Rect("PanelShadow", group, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f),
                 Vector2.zero, Vector2.zero);
             panelShadow.offsetMin = new Vector2(Margin + 10f, Margin - 10f);
-            panelShadow.offsetMax = new Vector2(Margin + 10f + PanelWidth, -Margin - 10f);
+            panelShadow.offsetMax = new Vector2(Margin + 10f + PanelWidth, -BelowSessionBar - 10f);
             Img(panelShadow, "PanelOutlined", Ink).raycastTarget = false;
             RectTransform panel = Rect("Panel", group, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f),
                 Vector2.zero, Vector2.zero);
             panel.offsetMin = new Vector2(Margin, Margin);
-            panel.offsetMax = new Vector2(Margin + PanelWidth, -Margin);
+            panel.offsetMax = new Vector2(Margin + PanelWidth, -BelowSessionBar);
             Img(panel, "PanelOutlined", Cream);
 
             // Header.
@@ -211,7 +203,7 @@ namespace ConsoleCards.Editor.Toolbox
             Img(footer, "BottomRounded", Ink).raycastTarget = false;
             Label(Rect("Controls", footer, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(8f, 0f), new Vector2(-30f, 0f)),
                 bodyFont, 17, Cream, TextAnchor.MiddleLeft,
-                Key("Click") + " a piece    " + Key("Click") + " the table to place    " + Key("R") + " rotate    "
+                Key("Click") + " a piece    " + Key("Click") + " the table to place    " + Key("Wheel") + " rotate    "
                 + Key("Right-click") + " cancel");
 
             // Footer Hand switch (Empty Table, doc 22 H-E): shown only when the session has a switchable Hand;
@@ -238,9 +230,9 @@ namespace ConsoleCards.Editor.Toolbox
                 new Vector2(-14f, 0f), new Vector2(46f, 30f)), titleFont, 15, Cream, TextAnchor.MiddleCenter, "ON");
             handRow.gameObject.SetActive(false);
 
-            // Placing card (top left) and placing controls (bottom centre).
+            // Placing card (top left under the session bar, where the open button was) and placing controls (bottom centre).
             RectTransform placing = Rect("PlacingCard", root, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(Margin, -Margin), new Vector2(PanelWidth, 91f));
+                new Vector2(Margin, -BelowSessionBar), new Vector2(PanelWidth, 91f));
             Img(Rect("Shadow", placing, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(7f, -7f), Vector2.zero),
                 "PanelOutlined", Ink).raycastTarget = false;
             Img(Rect("Fill", placing, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero),
@@ -260,7 +252,7 @@ namespace ConsoleCards.Editor.Toolbox
             Img(placingControls, "ButtonOutlined", Ink).raycastTarget = false;
             Label(Rect("Controls", placingControls, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero),
                 bodyFont, 18, Cream, TextAnchor.MiddleCenter,
-                Key("Left-click") + " place     " + Key("R") + " rotate     " + Key("Right-click / Esc") + " cancel");
+                Key("Left-click") + " place     " + Key("Wheel") + " rotate     " + Key("Right-click / Esc") + " cancel");
 
             BuildTemplates(root);
 
@@ -742,53 +734,11 @@ namespace ConsoleCards.Editor.Toolbox
             ConfigureTexture(SpritePath + name + ".png", new Vector4(left, bottom, right, top));
         }
 
-        private static void ConfigureTexture(string path, Vector4 border)
-        {
-            TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
-            if (importer == null)
-            {
-                throw new InvalidOperationException($"Toolbox art missing: {path}.");
-            }
-
-            bool changed = importer.textureType != TextureImporterType.Sprite
-                || importer.spriteImportMode != SpriteImportMode.Single
-                || importer.spriteBorder != border
-                || importer.mipmapEnabled
-                || !importer.alphaIsTransparency
-                || importer.textureCompression != TextureImporterCompression.Uncompressed;
-            if (!changed)
-            {
-                return;
-            }
-
-            importer.textureType = TextureImporterType.Sprite;
-            importer.spriteImportMode = SpriteImportMode.Single;
-            importer.spriteBorder = border;
-            importer.mipmapEnabled = false;
-            importer.alphaIsTransparency = true;
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
-            importer.wrapMode = path.EndsWith("Dash.png", StringComparison.Ordinal)
-                ? TextureWrapMode.Repeat
-                : TextureWrapMode.Clamp;
-            importer.SaveAndReimport();
-        }
-
         private static void LoadFonts()
         {
             titleFont = RequireFont("Silkscreen-Bold.ttf");
             bodyFont = RequireFont("ChakraPetch-Medium.ttf");
             boldFont = RequireFont("ChakraPetch-Bold.ttf");
-        }
-
-        private static Font RequireFont(string file)
-        {
-            Font font = AssetDatabase.LoadAssetAtPath<Font>(FontPath + file);
-            if (font == null)
-            {
-                throw new InvalidOperationException($"Toolbox font missing: {FontPath + file}.");
-            }
-
-            return font;
         }
 
         // Points the Real UI prefab catalog's Toolbox entry at the built prefab.
@@ -857,72 +807,6 @@ namespace ConsoleCards.Editor.Toolbox
 
         // ---------- small helpers ----------
 
-        private static RectTransform Rect(
-            string name,
-            Transform parent,
-            Vector2 anchorMin,
-            Vector2 anchorMax,
-            Vector2 pivot,
-            Vector2 anchoredPosition,
-            Vector2 sizeDelta)
-        {
-            GameObject go = new GameObject(name, typeof(RectTransform));
-            go.layer = 5;
-            RectTransform rect = go.GetComponent<RectTransform>();
-            rect.SetParent(parent, false);
-            rect.anchorMin = anchorMin;
-            rect.anchorMax = anchorMax;
-            rect.pivot = pivot;
-            rect.anchoredPosition = anchoredPosition;
-            rect.sizeDelta = sizeDelta;
-            return rect;
-        }
-
-        private static RectTransform TopBand(string name, Transform parent, float top, float height)
-        {
-            RectTransform rect = Rect(name, parent, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
-                Vector2.zero, Vector2.zero);
-            rect.offsetMin = new Vector2(Border, -top - height);
-            rect.offsetMax = new Vector2(-Border, -top);
-            return rect;
-        }
-
-        private static void Stretch(RectTransform rect)
-        {
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
-        }
-
-        private static Image Img(RectTransform rect, string sprite, Color color, string spriteAssetPath = null)
-        {
-            Image image = rect.gameObject.AddComponent<Image>();
-            string path = spriteAssetPath ?? (sprite != null ? SpritePath + sprite + ".png" : null);
-            image.sprite = path != null ? AssetDatabase.LoadAssetAtPath<Sprite>(path) : null;
-            image.color = color;
-            image.type = sprite != null && sprite != "Solid" ? Image.Type.Sliced : Image.Type.Simple;
-            image.pixelsPerUnitMultiplier = 1f;
-            image.preserveAspect = spriteAssetPath != null;
-            return image;
-        }
-
-        private static Text Label(RectTransform rect, Font font, int size, Color color, TextAnchor alignment, string text)
-        {
-            Text label = rect.gameObject.AddComponent<Text>();
-            label.font = font;
-            label.fontSize = size;
-            label.color = color;
-            label.alignment = alignment;
-            label.text = text;
-            label.supportRichText = true;
-            label.raycastTarget = false;
-            label.horizontalOverflow = HorizontalWrapMode.Wrap;
-            label.verticalOverflow = VerticalWrapMode.Overflow;
-            return label;
-        }
-
         private static void SmallButton(RectTransform parent, string name, string glyph, Vector2 rightOffset)
         {
             RectTransform rect = Rect(name, parent, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
@@ -941,11 +825,6 @@ namespace ConsoleCards.Editor.Toolbox
             image.type = Image.Type.Tiled;
             image.preserveAspect = false;
             image.raycastTarget = false;
-        }
-
-        private static string Key(string key)
-        {
-            return $"<b><color=#{ColorUtility.ToHtmlStringRGB(Mustard)}>{key}</color></b>";
         }
 
         private static float TextWidth(Text label, string text)
@@ -977,10 +856,5 @@ namespace ConsoleCards.Editor.Toolbox
             }
         }
 
-        private static Color Hex(string hex)
-        {
-            ColorUtility.TryParseHtmlString("#" + hex, out Color color);
-            return color;
-        }
     }
 }

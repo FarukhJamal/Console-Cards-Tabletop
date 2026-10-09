@@ -22,11 +22,14 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Text label;
         [SerializeField] private LayoutElement layoutElement;
 
-        private static readonly Color EligibleSurface = new Color(0.16f, 0.25f, 0.36f, 1f);
-        private static readonly Color SelectedSurface = new Color(0.20f, 0.62f, 0.78f, 1f);
-        private static readonly Color IneligibleSurface = new Color(0.075f, 0.09f, 0.12f, 0.92f);
-        private static readonly Color EligibleArtwork = Color.white;
-        private static readonly Color IneligibleArtwork = new Color(0.30f, 0.30f, 0.30f, 0.72f);
+        [Header("Card colours (set by the prefab builder, UI-1c)")]
+        [SerializeField] private Color eligibleSurface = new Color(0.16f, 0.25f, 0.36f, 1f);
+        [SerializeField] private Color selectedSurface = new Color(0.20f, 0.62f, 0.78f, 1f);
+        [SerializeField] private Color ineligibleSurface = new Color(0.075f, 0.09f, 0.12f, 0.92f);
+        [SerializeField] private Color eligibleArtwork = Color.white;
+        [SerializeField] private Color ineligibleArtwork = new Color(0.30f, 0.30f, 0.30f, 0.72f);
+        [SerializeField] private Color eligibleText = Color.white;
+        [SerializeField] private Color ineligibleText = new Color(0.50f, 0.54f, 0.60f, 1f);
 
         private TabletopObjectId cardId;
         private bool eligible;
@@ -113,12 +116,12 @@ namespace ConsoleCards.Presentation.UI
             selected = false;
             hovered = false;
             button.interactable = false;
-            surface.color = EligibleSurface;
+            surface.color = eligibleSurface;
             artwork.texture = backArtwork;
             artwork.enabled = backArtwork != null;
-            artwork.color = Color.white;
+            artwork.color = eligibleArtwork;
             label.text = "MYSTERY";
-            label.color = Color.white;
+            label.color = eligibleText;
             revealRoutine = StartCoroutine(RevealSequence(
                 frontArtwork,
                 frontTitle,
@@ -200,9 +203,9 @@ namespace ConsoleCards.Presentation.UI
 
         private void ApplyVisualState(bool immediate)
         {
-            surface.color = !eligible ? IneligibleSurface : selected ? SelectedSurface : EligibleSurface;
-            artwork.color = eligible ? EligibleArtwork : IneligibleArtwork;
-            label.color = eligible ? Color.white : new Color(0.50f, 0.54f, 0.60f, 1f);
+            surface.color = !eligible ? ineligibleSurface : selected ? selectedSurface : eligibleSurface;
+            artwork.color = eligible ? eligibleArtwork : ineligibleArtwork;
+            label.color = eligible ? eligibleText : ineligibleText;
             if (selected || hovered) cardTransform.SetAsLastSibling();
             if (!immediate) return;
             cardTransform.anchoredPosition = restingPosition + new Vector2(0f, selected ? 28f : 0f);

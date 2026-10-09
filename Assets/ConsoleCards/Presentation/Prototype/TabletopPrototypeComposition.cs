@@ -3966,6 +3966,18 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshGameTemplatesPanelUi();
         }
 
+        // Table menu > New table… (UI-1): opens the game selection panel (the start flow replaces it later).
+        private void OpenGameTemplatesPanel()
+        {
+            if (!IsInitialized)
+            {
+                return;
+            }
+
+            gameTemplatesPanelVisible = true;
+            RefreshGameTemplatesPanelUi();
+        }
+
         private void CloseGameTemplatesPanel()
         {
             gameTemplatesPanelVisible = false;
@@ -4064,15 +4076,27 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            string sessionTitle = activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom
-                ? "EMPTY / CUSTOM TABLE"
-                : activeSession.Template.DisplayName.ToUpperInvariant();
+            // Session bar chip (UI-1): a game shows its name and mode ("Trap Floor — Easy"); Empty Table its name.
+            bool isGameSession = activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom;
+            string sessionTitle = "EMPTY TABLE";
+            string sessionSubtitle = string.Empty;
+            if (isGameSession)
+            {
+                string displayName = activeSession.Template.DisplayName;
+                int separator = displayName.IndexOf(" — ", StringComparison.Ordinal);
+                sessionTitle = (separator < 0 ? displayName : displayName.Substring(0, separator)).ToUpperInvariant();
+                sessionSubtitle = separator < 0 ? string.Empty : displayName.Substring(separator + 3);
+            }
+
             runtimeUi.ShowActiveSession(
                 sessionTitle,
+                sessionSubtitle,
+                isGameSession,
                 HandleUndoButtonPressed,
                 HandleRedoButtonPressed,
+                OpenGameTemplatesPanel,
                 ResetPrototype,
-                ToggleGameTemplatesPanel,
+                ClearTable,
                 CurrentStatusText(),
                 new ComponentToolboxBindings(
                     componentLibrary,

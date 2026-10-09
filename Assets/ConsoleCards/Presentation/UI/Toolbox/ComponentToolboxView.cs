@@ -195,6 +195,7 @@ namespace ConsoleCards.Presentation.UI.Toolbox
         private int chipIndex;
         private Action<bool> setHand;
         private bool handOn;
+        private Action<bool> panelOpenChanged;
 
         public void ValidateReferences()
         {
@@ -343,12 +344,19 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             setHand(handOn);
         }
 
+        /// <summary>Told whenever the panel opens or closes (the session bar moves beside the open panel, UI-1).</summary>
+        public void SetPanelOpenListener(Action<bool> listener)
+        {
+            panelOpenChanged = listener;
+        }
+
         public void OpenToolbox()
         {
             beforeOpen?.Invoke();
             ClearPlacementHint();
             panel.SetActive(true);
             openButton.gameObject.SetActive(false);
+            panelOpenChanged?.Invoke(true);
             ClearSelectedUiObject();
         }
 
@@ -358,6 +366,8 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             {
                 panel.SetActive(false);
             }
+
+            panelOpenChanged?.Invoke(false);
 
             if (openButton != null)
             {
@@ -381,6 +391,7 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             }
 
             panel.SetActive(false);
+            panelOpenChanged?.Invoke(false);
             openButton.gameObject.SetActive(false);
             placingCard.SetActive(true);
             placingControls.SetActive(true);
@@ -422,6 +433,7 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             Clear(closeButton);
             Clear(handSwitch?.Button);
             setHand = null;
+            panelOpenChanged = null;
             for (int i = 0; i < tabs.Length; i++)
             {
                 Clear(tabs[i]?.Button);
