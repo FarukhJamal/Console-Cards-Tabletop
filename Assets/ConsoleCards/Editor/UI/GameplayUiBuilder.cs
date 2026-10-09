@@ -35,6 +35,8 @@ namespace ConsoleCards.Editor.UI
         private const float Margin = 29f;
         private const float ShadowOffset = 7f;
         private const float StatusCardWidth = 440f;
+        private const float TurnStripWidth = 800f;
+        private const float TurnStripCentreOffset = 55f;
         private const float GuideWidth = 580f;
         private const float StripHeight = 60f;
         private const float RowHeight = 50f;
@@ -226,15 +228,18 @@ namespace ConsoleCards.Editor.UI
 
         private static void BuildTrapFloorHud(RectTransform root, PrototypeTrapFloorHudView view)
         {
+            // Fixed width in the gap between the session bar (ends near x 580) and the status card (starts at
+            // x 1451): it never runs under either. Long progress text wraps and the strip grows downward.
             RectTransform strip = Rect("TurnStrip", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(0f, -Margin), new Vector2(500f, 64f));
+                new Vector2(TurnStripCentreOffset, -Margin), new Vector2(TurnStripWidth, 64f));
             Img(strip, "ButtonOutlined", Ink);
-            Row(strip.gameObject, 24, 24, 10, 10, 28f, TextAnchor.MiddleCenter);
-            Fit(strip.gameObject, true, true);
+            Row(strip.gameObject, 22, 22, 10, 10, 22f, TextAnchor.MiddleLeft);
+            Fit(strip.gameObject, false, true);
             Size(strip.gameObject, -1f, 64f);
-            Text round = FitLabel(Child("Round", strip), titleFont, 18, Mustard, "ROUND 1");
-            Text phase = FitLabel(Child("Phase", strip), boldFont, 21, Cream, "PLAYER 1 TURN");
-            Text keys = FitLabel(Child("Keys", strip), boldFont, 19, Cream, "KEYS 0 / 1");
+            Text round = FitLabel(Child("Round", strip), titleFont, 17, Mustard, "ROUND 1");
+            Text phase = FitLabel(Child("Phase", strip), boldFont, 20, Cream, "PLAYER 1 TURN");
+            Text keys = Label(Child("Keys", strip), boldFont, 16, Cream, TextAnchor.MiddleLeft, "KEYS 0 / 1");
+            keys.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 
             RectTransform card = Rect("StatusCard", root, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
                 new Vector2(-Margin, -Margin), new Vector2(StatusCardWidth, 400f));

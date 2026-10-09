@@ -9,7 +9,8 @@ namespace ConsoleCards.Presentation.UI
     /// <summary>
     /// The session bar (UI-1): the table's game chip, Undo, Redo and the Table menu, top left. An authored
     /// prefab built by Console Cards > UI > Build Session Bar Prefab; at runtime it only binds clicks and
-    /// switches what is shown. The bar moves beside the Toolbox panel while that panel is open.
+    /// switches what is shown. Every element (bar, tips, Table menu) is placed in the prefab; nothing is
+    /// positioned at runtime.
     /// </summary>
     public sealed class SessionBarView : ReusableUiView
     {
@@ -17,8 +18,6 @@ namespace ConsoleCards.Presentation.UI
 
         [Header("Bar")]
         [SerializeField] private RectTransform bar;
-        [SerializeField] private float barLeft;
-        [SerializeField] private float barLeftBesidePanel;
         [SerializeField] private Image chipFill;
         [SerializeField] private GameObject chipGlyph;
         [SerializeField] private Text chipTitle;
@@ -35,15 +34,15 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Color iconColor = Color.black;
         [SerializeField] private float disabledIconAlpha = 0.35f;
 
-        [Header("Hover tip")]
-        [SerializeField] private RectTransform tip;
-        [SerializeField] private Text tipLabel;
-        [SerializeField] private float tipGap = 10f;
+        [Header("Hover tips (each placed under its button in the prefab)")]
+        [SerializeField] private GameObject undoTip;
+        [SerializeField] private Text undoTipLabel;
+        [SerializeField] private GameObject redoTip;
+        [SerializeField] private Text redoTipLabel;
 
         [Header("Table menu")]
         [SerializeField] private Button menuBlocker;
         [SerializeField] private RectTransform menu;
-        [SerializeField] private float menuGap = 12f;
         [SerializeField] private Button newTableButton;
         [SerializeField] private Button resetButton;
         [SerializeField] private Button clearTableButton;
@@ -53,7 +52,6 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private ToolboxSwitch hintsSwitch = new ToolboxSwitch();
         [SerializeField] private Button helpButton;
 
-        private readonly Vector3[] corners = new Vector3[4];
         private Action undo;
         private Action redo;
         private Action newTable;
@@ -62,7 +60,6 @@ namespace ConsoleCards.Presentation.UI
         private Action beforeMenuOpen;
         private string undoLabel = "Undo";
         private string redoLabel = "Redo";
-        private RectTransform tipOwner;
         private Action<bool> setRules;
         private Action<bool> setHints;
         private Action openHelp;
@@ -76,7 +73,8 @@ namespace ConsoleCards.Presentation.UI
             if (bar == null || chipFill == null || chipGlyph == null || chipTitle == null || chipSubtitle == null
                 || undoButton == null || undoIcon == null || undoHover == null
                 || redoButton == null || redoIcon == null || redoHover == null
-                || tableButton == null || tip == null || tipLabel == null
+                || tableButton == null || undoTip == null || undoTipLabel == null
+                || redoTip == null || redoTipLabel == null
                 || menuBlocker == null || menu == null
                 || newTableButton == null || resetButton == null || clearTableButton == null
                 || rulesSwitch == null || !rulesSwitch.IsComplete || hintsSwitch == null || !hintsSwitch.IsComplete
@@ -183,17 +181,9 @@ namespace ConsoleCards.Presentation.UI
             RefreshTip(redoButton, redoLabel);
         }
 
-        /// <summary>Moves the bar beside the open Toolbox panel, or back to the corner.</summary>
+        /// <summary>The Toolbox panel opened or closed: the menu closes when it opens (the bar keeps its place).</summary>
         public void SetShiftedForPanel(bool shifted)
         {
-            if (bar == null)
-            {
-                return;
-            }
-
-            Vector2 position = bar.anchoredPosition;
-            position.x = shifted ? barLeftBesidePanel : barLeft;
-            bar.anchoredPosition = position;
             if (shifted)
             {
                 CloseMenu();
@@ -211,7 +201,6 @@ namespace ConsoleCards.Presentation.UI
 
             beforeMenuOpen?.Invoke();
             HideTip();
-            PlaceBelow(menu, (RectTransform)tableButton.transform, menuGap);
             menuBlocker.gameObject.SetActive(true);
             menu.gameObject.SetActive(true);
         }
@@ -341,32 +330,27 @@ namespace ConsoleCards.Presentation.UI
 
         private void SetTip(Button owner, string label, bool hovered)
         {
-            RectTransform ownerRect = (RectTransform)owner.transform;
-            if (!hovered)
-            {
-                if (tipOwner == ownerRect)
-                {
-                    HideTip();
-                }
-
-                return;
-            }
-
-            if (IsMenuOpen)
+            GameObject tip = owner == undoButton ? undoTip : redoTip;
+            Text tipLabel = owner == undoButton ? undoTipLabel : redoTipLabel;
+            if (tip == null || tipLabel == null)
             {
                 return;
             }
 
-            tipOwner = ownerRect;
+            if (!hovered || IsMenuOpen)
+            {
+                tip.SetActive(false);
+                return;
+            }
+
             tipLabel.text = label;
-            tip.gameObject.SetActive(true);
-            LayoutRebuilder.ForceRebuildLayoutImmediate(tip);
-            PlaceBelow(tip, ownerRect, tipGap);
+            tip.SetActive(true);
         }
 
         private void RefreshTip(Button owner, string label)
         {
-            if (tip != null && tip.gameObject.activeSelf && tipOwner == (RectTransform)owner.transform)
+            Text tipLabel = owner == undoButton ? undoTipLabel : redoTipLabel;
+            if (tipLabel != null)
             {
                 tipLabel.text = label;
             }
@@ -374,21 +358,15 @@ namespace ConsoleCards.Presentation.UI
 
         private void HideTip()
         {
-            tipOwner = null;
-            if (tip != null)
+            if (undoTip != null)
             {
-                tip.gameObject.SetActive(false);
+                undoTip.SetActive(false);
             }
-        }
 
-        // Puts the target's top-left corner under the anchor's bottom-left corner (both pivot top left).
-        private void PlaceBelow(RectTransform target, RectTransform anchor, float gap)
-        {
-            anchor.GetWorldCorners(corners);
-            target.position = corners[0];
-            Vector2 position = target.anchoredPosition;
-            position.y -= gap;
-            target.anchoredPosition = position;
+            if (redoTip != null)
+            {
+                redoTip.SetActive(false);
+            }
         }
 
         private void SetButtonState(Button button, Image icon, bool enabled)

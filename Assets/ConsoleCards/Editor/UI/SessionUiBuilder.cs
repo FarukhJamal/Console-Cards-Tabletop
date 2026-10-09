@@ -27,8 +27,8 @@ namespace ConsoleCards.Editor.UI
         private const float ButtonSize = 56f;
         private const float BarGap = 12f;
         private const float ShadowOffset = 7f;
-        // The Toolbox panel opens below the bar (UI-1b), so the bar keeps its corner while the panel is open.
-        private const float BarLeftBesidePanel = Margin;
+        // Distance from a bar button's bottom edge to just below the bar and its shadow (tips and the menu sit here).
+        private const float BelowBar = 15f + 7f + 10f;
         private const float MenuWidth = 400f;
         private const float MenuHeaderHeight = 58f;
         private const float MenuRowHeight = 60f;
@@ -146,8 +146,10 @@ namespace ConsoleCards.Editor.UI
                 new Vector2(0f, 20f)), boldFont, 15, Cream, "Easy");
 
             // Undo and Redo.
-            Button undoButton = IconButton(bar, "UndoButton", "IconUndo.png", out Image undoIcon, out SessionBarHoverTarget undoHover);
-            Button redoButton = IconButton(bar, "RedoButton", "IconRedo.png", out Image redoIcon, out SessionBarHoverTarget redoHover);
+            Button undoButton = IconButton(bar, "UndoButton", "IconUndo.png", "Undo", out Image undoIcon,
+                out SessionBarHoverTarget undoHover, out GameObject undoTip, out Text undoTipLabel);
+            Button redoButton = IconButton(bar, "RedoButton", "IconRedo.png", "Redo", out Image redoIcon,
+                out SessionBarHoverTarget redoHover, out GameObject redoTip, out Text redoTipLabel);
 
             // Table button: menu icon and word.
             RectTransform table = Rect("TableButton", bar, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
@@ -169,28 +171,17 @@ namespace ConsoleCards.Editor.UI
             FitLabel(Rect("Label", table, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero),
                 boldFont, 19, Ink, "Table");
 
-            // Hover tip (dark pill under the hovered button).
-            RectTransform tip = Rect("Tip", root, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(Margin, -Margin - 100f), new Vector2(120f, 36f));
-            Img(tip, "ButtonOutlined", Ink).raycastTarget = false;
-            HorizontalLayoutGroup tipLayout = tip.gameObject.AddComponent<HorizontalLayoutGroup>();
-            tipLayout.padding = new RectOffset(14, 14, 7, 7);
-            tipLayout.childAlignment = TextAnchor.MiddleLeft;
-            tipLayout.childControlWidth = true;
-            tipLayout.childControlHeight = true;
-            tipLayout.childForceExpandWidth = false;
-            tipLayout.childForceExpandHeight = false;
-            ContentSizeFitter tipFit = tip.gameObject.AddComponent<ContentSizeFitter>();
-            tipFit.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            tipFit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            Text tipLabel = FitLabel(Rect("Label", tip, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero),
-                bodyFont, 16, Cream, "Undo");
-            tip.gameObject.SetActive(false);
-
-            // Table menu (placed under the Table button when it opens); a column sized to its rows (doc 23, R1).
-            RectTransform menu = Rect("TableMenu", root, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(Margin, -Margin - 100f), new Vector2(MenuWidth, 400f));
+            // Table menu: placed in the prefab under the bar's right end (the Table button), outside the bar's
+            // layout; a column sized to its rows (doc 23, R1). It swallows clicks so they do not reach the bar.
+            RectTransform menu = Rect("TableMenu", bar, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f),
+                new Vector2(-(Border + BarPad), -(ShadowOffset + 10f)), new Vector2(MenuWidth, 400f));
+            menu.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
             Backdrop(menu, ShadowOffset + 1f);
+            Button menuClickBlock = menu.gameObject.AddComponent<Button>();
+            menuClickBlock.transition = Selectable.Transition.None;
+            Navigation menuNavigation = menuClickBlock.navigation;
+            menuNavigation.mode = Navigation.Mode.None;
+            menuClickBlock.navigation = menuNavigation;
             Column(menu.gameObject, (int)Border, (int)Border, (int)Border, (int)Border, 0f);
             Fit(menu.gameObject, false, true);
             RectTransform header = Child("Header", menu);
@@ -217,8 +208,6 @@ namespace ConsoleCards.Editor.UI
 
             SerializedObject so = new SerializedObject(view);
             so.FindProperty("bar").objectReferenceValue = bar;
-            so.FindProperty("barLeft").floatValue = Margin;
-            so.FindProperty("barLeftBesidePanel").floatValue = BarLeftBesidePanel;
             so.FindProperty("chipFill").objectReferenceValue = chipFill;
             so.FindProperty("chipGlyph").objectReferenceValue = glyph.gameObject;
             so.FindProperty("chipTitle").objectReferenceValue = chipTitle;
@@ -234,12 +223,12 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("tableButton").objectReferenceValue = tableButton;
             so.FindProperty("iconColor").colorValue = Ink;
             so.FindProperty("disabledIconAlpha").floatValue = 0.3f;
-            so.FindProperty("tip").objectReferenceValue = tip;
-            so.FindProperty("tipLabel").objectReferenceValue = tipLabel;
-            so.FindProperty("tipGap").floatValue = 22f;
+            so.FindProperty("undoTip").objectReferenceValue = undoTip;
+            so.FindProperty("undoTipLabel").objectReferenceValue = undoTipLabel;
+            so.FindProperty("redoTip").objectReferenceValue = redoTip;
+            so.FindProperty("redoTipLabel").objectReferenceValue = redoTipLabel;
             so.FindProperty("menuBlocker").objectReferenceValue = blockerButton;
             so.FindProperty("menu").objectReferenceValue = menu;
-            so.FindProperty("menuGap").floatValue = 22f;
             so.FindProperty("newTableButton").objectReferenceValue = newTableButton;
             so.FindProperty("resetButton").objectReferenceValue = resetButton;
             so.FindProperty("clearTableButton").objectReferenceValue = clearTableButton;
@@ -255,8 +244,11 @@ namespace ConsoleCards.Editor.UI
             RectTransform parent,
             string name,
             string icon,
+            string tipText,
             out Image iconImage,
-            out SessionBarHoverTarget hover)
+            out SessionBarHoverTarget hover,
+            out GameObject tip,
+            out Text tipLabel)
         {
             RectTransform rect = Rect(name, parent, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             Image fill = Img(rect, "ButtonOutlined", Cream);
@@ -267,6 +259,16 @@ namespace ConsoleCards.Editor.UI
                 Vector2.zero, new Vector2(28f, 28f)), null, Ink, IconPath + icon);
             iconImage.raycastTarget = false;
             hover = rect.gameObject.AddComponent<SessionBarHoverTarget>();
+
+            // Hover tip: a dark pill placed in the prefab just under this button, sized to its text.
+            RectTransform tipRect = Rect("Tip", rect, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 1f),
+                new Vector2(0f, -BelowBar), new Vector2(120f, 36f));
+            Img(tipRect, "ButtonOutlined", Ink).raycastTarget = false;
+            Row(tipRect.gameObject, 14, 14, 7, 7, 0f);
+            Fit(tipRect.gameObject, true, true);
+            tipLabel = FitLabel(Child("Label", tipRect), bodyFont, 16, Cream, tipText);
+            tip = tipRect.gameObject;
+            tip.SetActive(false);
             return button;
         }
 
