@@ -1,6 +1,6 @@
 # 24 — Content Packs
 
-Version 0.1 · Status: Approved direction, A1 implemented
+Version 0.2 · Status: Approved direction, A1 implemented
 
 ## Purpose
 
@@ -50,6 +50,17 @@ A1 implements step 3 only. Steps 1 and 2 arrive with A2–A4.
 - When a card shows art, its tint is white and its placeholder labels are hidden.
 - A collapsed floor tile shows no art and keeps its `HOLE (x,y)` label on both sides.
 - Floor card backs follow the round: round 1 uses the first back, round 2 the second, and so on.
+
+## Card sizes
+
+- Every card has a size class: Standard or Large. `CardDefinition.sizeClass` defaults to Standard;
+  `AvatarDefinition.cardSize` defaults to Large (avatar/hero cards are bigger cards).
+- Presentation draws a Large card at `largeCardVisualScale` (1.486 by default) times a Standard card,
+  including its click box. It is a drawing scale only; the card's position is unchanged.
+- Avatar/hero cards never go into a hand.
+- A card in a Console screen slot (layout key `Main`) has its model raised by `screenSlotVisualLift`
+  (0.01 by default) so it does not clip the screen.
+- Art is drawn on the supplied card model's two material slots: `face` takes the front art, `back` the back art.
 
 ## Built-in Trap Floor art (A1)
 

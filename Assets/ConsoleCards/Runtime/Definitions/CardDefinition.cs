@@ -7,6 +7,13 @@ using UnityEngine;
 
 namespace ConsoleCards.Definitions
 {
+    /// <summary>Physical size of a card. Large is a hero/avatar-size card (doc 24); presentation sets the scale.</summary>
+    public enum CardSizeClass
+    {
+        Standard = 0,
+        Large = 1
+    }
+
     [CreateAssetMenu(fileName = "CardDefinition", menuName = "Console Cards/Definitions/Card")]
     public sealed class CardDefinition : ScriptableObject
     {
@@ -29,6 +36,8 @@ namespace ConsoleCards.Definitions
         [SerializeField, TextArea] private string objectiveMetadata;
         [SerializeField] private bool representsControllerInput;
         [SerializeField] private ControllerInput representedControllerInput;
+        [Tooltip("Large draws the card at hero/avatar size. Most cards are Standard.")]
+        [SerializeField] private CardSizeClass sizeClass;
 
         public string StableId => stableId;
         public string DisplayName => displayName;
@@ -45,6 +54,7 @@ namespace ConsoleCards.Definitions
         public IReadOnlyList<string> Tags => tags;
         public string EffectMetadata => effectMetadata;
         public string ObjectiveMetadata => objectiveMetadata;
+        public CardSizeClass SizeClass => sizeClass;
         public ControllerInput? RepresentedControllerInput =>
             representsControllerInput ? representedControllerInput : (ControllerInput?)null;
 

@@ -26,9 +26,12 @@ namespace ConsoleCards.Definitions
         [SerializeField] private string artworkReference;
         [SerializeField] private List<AuthoredStat> stats = new List<AuthoredStat>();
         [SerializeField] private List<CardDefinition> startingAbilities = new List<CardDefinition>();
+        [Tooltip("Avatar (hero) cards are Large by default.")]
+        [SerializeField] private CardSizeClass cardSize = CardSizeClass.Large;
 
         public string StableId => stableId;
         public Texture2D Artwork => artwork;
+        public CardSizeClass CardSize => cardSize;
 
         public AvatarDefinitionData ToData()
         {

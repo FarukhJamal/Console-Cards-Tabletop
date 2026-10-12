@@ -119,6 +119,10 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal float feedbackDuration = 0.18f;
         [SerializeField] internal float shuffleCompression = 0.06f;
         [SerializeField] internal float floorCardVisualScale = 0.62f;
+        [Tooltip("Scale of Large (hero/avatar) cards relative to a Standard card (doc 24).")]
+        [SerializeField] internal float largeCardVisualScale = 1.486f;
+        [Tooltip("World height a card's model is raised while it sits in a Console screen (Main) slot, so it does not clip the screen.")]
+        [SerializeField] internal float screenSlotVisualLift = 0.01f;
         [SerializeField] internal bool showDeveloperControls;
         [Tooltip("Prototype visuals hidden at bind time. After changing in Play mode, press Reset or restart the session.")]
         [SerializeField] internal PrototypeVisualHide prototypeVisualHide =
@@ -159,6 +163,8 @@ namespace ConsoleCards.Presentation.Prototype
         // Texture overrides in a MaterialPropertyBlock are not drawn on every render path, so art never goes there.
         private readonly Dictionary<(Material, Texture2D), Material> cardArtMaterials = new Dictionary<(Material, Texture2D), Material>();
         private readonly Dictionary<Material, Material> cardArtBaseMaterials = new Dictionary<Material, Material>();
+        private const string ScreenConsoleSlotKey = "Main";
+        private readonly HashSet<ContainerId> screenSlotContainerIds = new HashSet<ContainerId>();
         private MaterialPropertyBlock cardSlotProperties; // created on first use: Unity forbids it in field initializers
         private readonly Dictionary<ObjectDefinitionId, ButtonCardDefinition> buttonDefinitions =
             new Dictionary<ObjectDefinitionId, ButtonCardDefinition>();
@@ -811,6 +817,7 @@ namespace ConsoleCards.Presentation.Prototype
             stackViewsByContainerId.Clear();
             feedbackTargetsByContainerId.Clear();
             consoleSlotVisualsByContainerId.Clear();
+            screenSlotContainerIds.Clear();
             feedbackHoldUntil = 0f;
             contextMenuMode = PrototypeContextMenuMode.None;
             contextMenuCardId = TabletopObjectId.Empty;
@@ -8066,6 +8073,8 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             ValidateFiniteGreaterThanZero(floorCardVisualScale, nameof(floorCardVisualScale));
+            ValidateFiniteGreaterThanZero(largeCardVisualScale, nameof(largeCardVisualScale));
+            ValidateFiniteGreaterThanOrEqualToZero(screenSlotVisualLift, nameof(screenSlotVisualLift));
             ValidateCardPrefabReferences();
             ValidateTrapFloorPrefabReferences();
             ValidatePreInitializationState();
@@ -9406,9 +9415,16 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             List<ConsoleSlotView> orderedSlots = new List<ConsoleSlotView>(runtimeConsole.SlotCount);
+            ConsoleLayoutData layout = GetConsoleLayout();
             for (int i = 0; i < runtimeConsole.SlotCount; i++)
             {
                 ContainerState slot = matchState.GetContainer(runtimeConsole.SlotContainerIds[i]);
+                if (i < layout.CardSlots.Count
+                    && string.Equals(layout.CardSlots[i].Key, ScreenConsoleSlotKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    screenSlotContainerIds.Add(slot.Id);
+                }
+
                 ConsoleSlotView slotView = slotViews[i];
                 PrototypeConsoleSlotVisual slotVisual = slotVisuals[i];
                 slotView.Bind(slot, slotVisual.LayoutAnchor, coordinateConverter, cardViews);
@@ -10080,6 +10096,10 @@ namespace ConsoleCards.Presentation.Prototype
 
                 visualReferences.SetCardContentVisible(
                     ShouldShowCardContent(boundCardView.CardState));
+                visualReferences.SetSuppliedVisualLift(
+                    screenSlotContainerIds.Contains(boundCardView.CardState.BaseState.ContainerId)
+                        ? screenSlotVisualLift
+                        : 0f);
             }
         }
 
@@ -10188,6 +10208,12 @@ namespace ConsoleCards.Presentation.Prototype
                     card.BaseState.Id,
                     createdVisualReferences.FaceUpRenderer,
                     createdVisualReferences.FaceDownRenderer);
+            }
+
+            else if (CardSizeClassOf(card) == CardSizeClass.Large)
+            {
+                // Hero/avatar-size card: the whole card (model and click box) is drawn larger, like floor cards.
+                clone.transform.localScale = Vector3.one * largeCardVisualScale;
             }
 
             cardVisualReferences.Add(createdVisualReferences);
@@ -10582,9 +10608,9 @@ namespace ConsoleCards.Presentation.Prototype
                 frontArtwork = authoredDefinition.FrontArtwork;
                 backArtwork = authoredDefinition.BackArtwork;
             }
-            else if (TryGetAuthoredAvatarArtwork(card.BaseState.DefinitionId, out Texture2D avatarArtwork))
+            else if (TryGetAuthoredAvatar(card.BaseState.DefinitionId, out AvatarDefinition avatarDefinition))
             {
-                frontArtwork = avatarArtwork;
+                frontArtwork = avatarDefinition.Artwork;
             }
             if (isFloorCard
                 && trapFloorTemplate.TryGetFloorCardState(
@@ -10726,9 +10752,9 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
-        private bool TryGetAuthoredAvatarArtwork(ObjectDefinitionId definitionId, out Texture2D artwork)
+        private bool TryGetAuthoredAvatar(ObjectDefinitionId definitionId, out AvatarDefinition avatar)
         {
-            artwork = null;
+            avatar = null;
             if (trapFloorTemplate == null || trapFloorGameDefinition == null)
             {
                 return false;
@@ -10737,18 +10763,29 @@ namespace ConsoleCards.Presentation.Prototype
             IReadOnlyList<AvatarDefinition> avatars = trapFloorGameDefinition.Avatars;
             for (int i = 0; i < avatars.Count; i++)
             {
-                AvatarDefinition avatar = avatars[i];
-                if (avatar != null
-                    && avatar.Artwork != null
-                    && Guid.TryParse(avatar.StableId, out Guid avatarGuid)
+                AvatarDefinition candidate = avatars[i];
+                if (candidate != null
+                    && Guid.TryParse(candidate.StableId, out Guid avatarGuid)
                     && new ObjectDefinitionId(avatarGuid) == definitionId)
                 {
-                    artwork = avatar.Artwork;
+                    avatar = candidate;
                     return true;
                 }
             }
 
             return false;
+        }
+
+        private CardSizeClass CardSizeClassOf(CardInstanceState card)
+        {
+            if (TryGetAuthoredCardDefinition(card.BaseState.DefinitionId, out CardDefinition definition))
+            {
+                return definition.SizeClass;
+            }
+
+            return TryGetAuthoredAvatar(card.BaseState.DefinitionId, out AvatarDefinition avatar)
+                ? avatar.CardSize
+                : CardSizeClass.Standard;
         }
 
         private static Color TrapFloorContentColor(TrapFloorFloorContentCategory category)
