@@ -1,7 +1,7 @@
 # Console Cards - Trap Floor Game Requirements
 
 **Document ID:** 18_Trap_Floor_Game_Requirements
-**Version:** 1.7
+**Version:** 1.8
 **Status:** Approved with Open Decisions
 **Authoritative source:** User-approved Console Cards System & Games direction supplied 2026-09-21, superseding conflicting historical Trap Floor direction
 **Purpose:** Define the current approved minimum Game-specific direction for Trap Floor while keeping provisional design values open and preserving manual tabletop play.
@@ -218,6 +218,14 @@ The card's own text states exactly what it does (for example, *"Push a player wh
 - A player who flips an Ability Card may **take it into their hand by paying its cost**, and **plays it later by paying the same cost again**.
 - A player may decline. The card stays face up, and the next player who lands on it may take it on the same terms.
 - Costs remain all-or-nothing and are not shared (§9).
+
+**Implementation (G2a, 2026-10-12):**
+
+- **Flip on landing.** When the active player's pawn is dropped on a face-down tile, the tile flips for free through the reveal rules ("Landing" reveal, no payment). Undo reverses the pawn move and the flip together. Only the active player's own pawn changing tile triggers it.
+- **Taking a prize.** On a face-up Ability or Friend under the active player's pawn, the turn menu offers *Take …*. An Ability's cost is paid with the C1 payment step (choose cards, place them in the Console, Confirm Payment); a Friend, or an Ability with no cost set yet, is free.
+- **Where it goes.** A copy of the card goes to the player's Hand, or to the Action stack beside the Console when the Hand already holds the hand limit.
+- **The tile becomes a hole** (shown as HOLE, counted as collapsed). The player who took it is safe and walks off next turn; a reward never eliminates.
+- Search, Careful Search and Buy Ability are gone from the menus. Their code stays unused until G2d.
 
 ### 15.5 Traps
 

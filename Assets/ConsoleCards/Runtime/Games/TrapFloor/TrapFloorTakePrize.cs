@@ -1,0 +1,345 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using ConsoleCards.Application.Commands;
+using ConsoleCards.Application.Results;
+using ConsoleCards.Core.Coordinates;
+using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Containers;
+using ConsoleCards.Core.Domain.Match;
+using ConsoleCards.Core.Domain.Seats;
+using ConsoleCards.Core.Identifiers;
+using ConsoleCards.Core.Results;
+using ConsoleCards.GameTemplates.ControllerInputs;
+using ConsoleCards.GameTemplates.Definitions;
+
+namespace ConsoleCards.Games.TrapFloor
+{
+    public enum TrapFloorTakePrizeError
+    {
+        None = 0,
+        MatchRequired = 1,
+        CommandRequired = 2,
+        MatchIdMismatch = 3,
+        MatchRevisionConflict = 4,
+        MatchTemplateMismatch = 5,
+        ActorIsNotActivePlayer = 6,
+        PlayerSetupMissing = 7,
+        FloorCardMissingOrInvalid = 8,
+        FloorNotRevealed = 9,
+        FloorIsHole = 10,
+        NotAPrize = 11,
+        PawnNotOnTile = 12,
+        CardDefinitionMissing = 13,
+        GrantedCardIdAlreadyExists = 14,
+        PaymentInvalid = 15,
+        PaymentCardNotInConsole = 16,
+        PaymentCardLocked = 17,
+        DestinationMissing = 18,
+        RevisionOverflow = 19,
+        MutationFailed = 20,
+    }
+
+    public sealed class TrapFloorTakePrizeCommand : ITabletopCommand
+    {
+        public TrapFloorTakePrizeCommand(
+            CommandContext context,
+            TabletopObjectId floorCardId,
+            TabletopObjectId grantedCardId,
+            IEnumerable<TabletopObjectId> paymentCardIds)
+        {
+            if (floorCardId.IsEmpty) throw new ArgumentException("Floor Card ID cannot be empty.", nameof(floorCardId));
+            if (grantedCardId.IsEmpty) throw new ArgumentException("Granted Card ID cannot be empty.", nameof(grantedCardId));
+            Context = context;
+            FloorCardId = floorCardId;
+            GrantedCardId = grantedCardId;
+            PaymentCardIds = new ReadOnlyCollection<TabletopObjectId>(
+                new List<TabletopObjectId>(paymentCardIds ?? throw new ArgumentNullException(nameof(paymentCardIds))));
+        }
+
+        public CommandContext Context { get; }
+        public TabletopObjectId FloorCardId { get; }
+        public TabletopObjectId GrantedCardId { get; }
+        public IReadOnlyList<TabletopObjectId> PaymentCardIds { get; }
+    }
+
+    public readonly struct TrapFloorTakePrizeResult
+    {
+        private TrapFloorTakePrizeResult(
+            CommandResultStatus status,
+            long revision,
+            TrapFloorFloorCardState floorCard,
+            TabletopObjectId grantedCardId,
+            ContainerId destinationContainerId,
+            bool placedInHand,
+            TrapFloorTakePrizeError error)
+        {
+            Status = status;
+            Revision = revision;
+            FloorCard = floorCard;
+            GrantedCardId = grantedCardId;
+            DestinationContainerId = destinationContainerId;
+            PlacedInHand = placedInHand;
+            Error = error;
+        }
+
+        public CommandResultStatus Status { get; }
+        public bool Succeeded => Status == CommandResultStatus.Accepted;
+        public long Revision { get; }
+        public TrapFloorFloorCardState FloorCard { get; }
+        public TabletopObjectId GrantedCardId { get; }
+        public ContainerId DestinationContainerId { get; }
+
+        /// <summary>False when the Hand was at its limit and the card went to the Action stack beside the Console.</summary>
+        public bool PlacedInHand { get; }
+
+        public TrapFloorTakePrizeError Error { get; }
+
+        internal static TrapFloorTakePrizeResult Accepted(
+            long revision,
+            TrapFloorFloorCardState floorCard,
+            TabletopObjectId grantedCardId,
+            ContainerId destinationContainerId,
+            bool placedInHand) =>
+            new TrapFloorTakePrizeResult(
+                CommandResultStatus.Accepted,
+                revision,
+                floorCard,
+                grantedCardId,
+                destinationContainerId,
+                placedInHand,
+                TrapFloorTakePrizeError.None);
+
+        internal static TrapFloorTakePrizeResult Failure(CommandResultStatus status, TrapFloorTakePrizeError error) =>
+            new TrapFloorTakePrizeResult(status, -1, null, TabletopObjectId.Empty, ContainerId.Empty, false, error);
+    }
+
+    /// <summary>
+    /// Takes the prize on a revealed Ability or Friend tile (doc 18 §15.4, G2a). The active Player's pawn must stand
+    /// on the tile. An Ability with a cost needs the exact payment placed in the Player's Console side slots; a
+    /// Friend, or an Ability with no cost yet, is free. A copy of the card goes to the Player's Hand, or to the
+    /// Action stack beside the Console when the Hand is at its limit, and the tile becomes a hole. The Player
+    /// standing there is safe and walks off on a later turn.
+    /// </summary>
+    public sealed class TrapFloorTakePrizeUseCase
+    {
+        private readonly TrapFloorTemplateDefinition template;
+        private readonly TrapFloorCollapseState collapseState;
+        private readonly TrapFloorTurnState turnState;
+
+        public TrapFloorTakePrizeUseCase(
+            TrapFloorTemplateDefinition template,
+            TrapFloorCollapseState collapseState,
+            TrapFloorTurnState turnState)
+        {
+            this.template = template ?? throw new ArgumentNullException(nameof(template));
+            this.collapseState = collapseState ?? throw new ArgumentNullException(nameof(collapseState));
+            this.turnState = turnState ?? throw new ArgumentNullException(nameof(turnState));
+        }
+
+        /// <summary>True for the floor content a Player can take.</summary>
+        public static bool IsPrize(TrapFloorFloorContentDefinition content)
+        {
+            return content != null
+                && (content.Category == TrapFloorFloorContentCategory.Ability
+                    || content.Category == TrapFloorFloorContentCategory.Friend);
+        }
+
+        /// <summary>The cost of taking this content; empty for a Friend or an Ability without a cost yet.</summary>
+        public static InputCostData CostOf(TrapFloorFloorContentDefinition content)
+        {
+            return content != null
+                && content.Category == TrapFloorFloorContentCategory.Ability
+                && content.AuthoredCard != null
+                && content.AuthoredCard.InputCost != null
+                    ? content.AuthoredCard.InputCost
+                    : new InputCostData(Array.Empty<InputRequirementData>());
+        }
+
+        public TrapFloorTakePrizeResult Execute(MatchState matchState, TrapFloorTakePrizeCommand command)
+        {
+            if (matchState == null) return Failure(CommandResultStatus.Invalid, TrapFloorTakePrizeError.MatchRequired);
+            if (command == null) return Failure(CommandResultStatus.Invalid, TrapFloorTakePrizeError.CommandRequired);
+            if (command.Context.MatchId != matchState.Id)
+                return Failure(CommandResultStatus.Invalid, TrapFloorTakePrizeError.MatchIdMismatch);
+            if (command.Context.ExpectedRevision.HasValue
+                && command.Context.ExpectedRevision.Value != matchState.Revision)
+                return Failure(CommandResultStatus.Conflict, TrapFloorTakePrizeError.MatchRevisionConflict);
+            if (matchState.GameTemplateId != template.Template.Id
+                || collapseState.MatchId != matchState.Id
+                || turnState.MatchId != matchState.Id)
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.MatchTemplateMismatch);
+
+            PlayerId actor = command.Context.RequestedByPlayerId;
+            if (turnState.IsCurrentFloorFailed
+                || turnState.Phase != TrapFloorTurnPhase.PlayerTurn
+                || turnState.ActivePlayerId != actor)
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.ActorIsNotActivePlayer);
+            if (!TryGetPlayerSetup(matchState, actor, out TrapFloorPlayerSetupDefinition player))
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.PlayerSetupMissing);
+
+            if (!template.TryGetFloorCardState(matchState, command.FloorCardId, out TrapFloorFloorCardState floorCard))
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.FloorCardMissingOrInvalid);
+            if (!floorCard.IsRevealed)
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.FloorNotRevealed);
+            if (collapseState.IsCollapsed(command.FloorCardId))
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.FloorIsHole);
+            if (!IsPrize(floorCard.Content))
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.NotAPrize);
+            if (!matchState.Pawns.TryGetValue(player.PawnId, out PawnState pawn)
+                || !template.TryGetFloorCoordinateAt(matchState, pawn.BaseState.Pose.Position, out TrapFloorCoordinate pawnTile)
+                || pawnTile != floorCard.Coordinate)
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.PawnNotOnTile);
+            if (floorCard.Content.AuthoredCard == null)
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.CardDefinitionMissing);
+            if (matchState.ContainsObject(command.GrantedCardId))
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.GrantedCardIdAlreadyExists);
+
+            TrapFloorTakePrizeError paymentError = ValidatePayment(matchState, player, floorCard.Content, command);
+            if (paymentError != TrapFloorTakePrizeError.None)
+                return Failure(CommandResultStatus.Rejected, paymentError);
+
+            if (!TryResolveDestination(matchState, player, out ContainerState destination, out bool placedInHand))
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.DestinationMissing);
+            if (matchState.Revision == long.MaxValue)
+                return Failure(CommandResultStatus.Conflict, TrapFloorTakePrizeError.RevisionOverflow);
+
+            long revision = checked(matchState.Revision + 1L);
+            CardInstanceState grantedCard = new CardInstanceState(
+                new TabletopObjectState(
+                    command.GrantedCardId,
+                    floorCard.Content.Id,
+                    TabletopObjectKind.Card,
+                    TabletopPose.Default,
+                    ContainerId.Empty,
+                    actor,
+                    destination.Visibility,
+                    false),
+                CardFace.FaceUp);
+            ContainerTransferService transfer = new ContainerTransferService();
+            bool holeRecorded = false;
+            try
+            {
+                matchState.AddUncontainedCard(grantedCard);
+                ContainerTransferResult placement = transfer.PlaceIntoContainer(grantedCard.BaseState, destination);
+                if (!placement.Succeeded)
+                    throw new InvalidOperationException($"Taken prize placement failed: {placement.Error}.");
+                collapseState.RecordTakenPrize(command.FloorCardId, floorCard.Coordinate, actor, revision);
+                holeRecorded = true;
+            }
+            catch
+            {
+                if (holeRecorded) collapseState.RemoveTakenPrize(command.FloorCardId);
+                if (matchState.ContainsObject(grantedCard.BaseState.Id))
+                {
+                    if (grantedCard.BaseState.ContainerId == destination.Id && destination.Contains(grantedCard.BaseState.Id))
+                        transfer.RemoveFromContainer(grantedCard.BaseState, destination);
+                    matchState.RemoveObject(grantedCard.BaseState.Id);
+                }
+
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.MutationFailed);
+            }
+
+            matchState.AdvanceRevision(command.Context.Id, actor, AuthoritativeActionKind.PurchaseActionOrAbility);
+            return TrapFloorTakePrizeResult.Accepted(
+                revision,
+                floorCard,
+                command.GrantedCardId,
+                destination.Id,
+                placedInHand);
+        }
+
+        private TrapFloorTakePrizeError ValidatePayment(
+            MatchState matchState,
+            TrapFloorPlayerSetupDefinition player,
+            TrapFloorFloorContentDefinition content,
+            TrapFloorTakePrizeCommand command)
+        {
+            InputCostData cost = CostOf(content);
+            if (cost.IsEmpty)
+            {
+                return command.PaymentCardIds.Count == 0
+                    ? TrapFloorTakePrizeError.None
+                    : TrapFloorTakePrizeError.PaymentInvalid;
+            }
+
+            ControllerInputCostEvaluation payment = new ControllerInputCostEvaluator().EvaluateExact(
+                matchState,
+                command.PaymentCardIds,
+                cost,
+                template.GameDefinition);
+            if (!payment.CanPay) return TrapFloorTakePrizeError.PaymentInvalid;
+            for (int i = 0; i < command.PaymentCardIds.Count; i++)
+            {
+                CardInstanceState card = matchState.Cards[command.PaymentCardIds[i]];
+                if (!IsCardInPlayerSideSlot(matchState, player, card)) return TrapFloorTakePrizeError.PaymentCardNotInConsole;
+                if (card.BaseState.IsUserLocked) return TrapFloorTakePrizeError.PaymentCardLocked;
+            }
+
+            return TrapFloorTakePrizeError.None;
+        }
+
+        // The Hand, unless it already holds the game's hand limit; then the Action stack beside the Console.
+        private bool TryResolveDestination(
+            MatchState matchState,
+            TrapFloorPlayerSetupDefinition player,
+            out ContainerState destination,
+            out bool placedInHand)
+        {
+            placedInHand = false;
+            int handLimit = template.GameDefinition.ControllerConfiguration?.MaximumHandSize ?? 0;
+            if (matchState.Containers.TryGetValue(player.HandContainerId, out ContainerState hand)
+                && !hand.IsFull
+                && (handLimit <= 0 || hand.Count < handLimit))
+            {
+                destination = hand;
+                placedInHand = true;
+                return true;
+            }
+
+            return matchState.Containers.TryGetValue(player.ActionAbilityAreaContainerId, out destination)
+                && !destination.IsFull;
+        }
+
+        private bool TryGetPlayerSetup(
+            MatchState matchState,
+            PlayerId playerId,
+            out TrapFloorPlayerSetupDefinition resolvedPlayer)
+        {
+            for (int i = 0; i < template.Players.Count; i++)
+            {
+                TrapFloorPlayerSetupDefinition player = template.Players[i];
+                if (matchState.Seats.TryGetValue(player.SeatId, out SeatState seat)
+                    && seat.OccupantPlayerId == playerId)
+                {
+                    resolvedPlayer = player;
+                    return true;
+                }
+            }
+
+            resolvedPlayer = null;
+            return false;
+        }
+
+        private static bool IsCardInPlayerSideSlot(
+            MatchState matchState,
+            TrapFloorPlayerSetupDefinition player,
+            CardInstanceState card)
+        {
+            ContainerId containerId = card.BaseState.ContainerId;
+            for (int i = 0; i < player.SideSlotContainerIds.Count; i++)
+            {
+                if (player.SideSlotContainerIds[i] != containerId) continue;
+                return matchState.Containers.TryGetValue(containerId, out ContainerState slot)
+                    && slot.Kind == ContainerKind.ConsoleSlot
+                    && slot.OwnerSeatId == player.SeatId
+                    && slot.Contains(card.BaseState.Id);
+            }
+
+            return false;
+        }
+
+        private static TrapFloorTakePrizeResult Failure(CommandResultStatus status, TrapFloorTakePrizeError error) =>
+            TrapFloorTakePrizeResult.Failure(status, error);
+    }
+}

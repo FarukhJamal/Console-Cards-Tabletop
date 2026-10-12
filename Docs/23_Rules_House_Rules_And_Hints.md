@@ -1,8 +1,8 @@
 # Console Cards — Rules, House Rules and Hints
 
 **Document ID:** 23_Rules_House_Rules_And_Hints
-**Version:** 0.4
-**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b and C1 implemented; R3–R4 planned.
+**Version:** 0.5
+**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b and C1 implemented (Trap Floor G2a applies the revised turn); R3–R4 planned.
 
 > **Contract note:** type names and field lists here are illustrative unless labelled **Approved Contract**. They describe the direction agreed with the owner, not fixed public APIs.
 

@@ -207,6 +207,12 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorCollapseUseCase trapFloorCollapseUseCase;
         private TrapFloorTurnState trapFloorTurnState;
         private TrapFloorTurnService trapFloorTurnService;
+        private TrapFloorTakePrizeUseCase trapFloorTakePrizeUseCase;
+        // G2a landing flips: the tile each pawn stood on when last checked, and whether an accepted move is
+        // waiting to be checked. Checked once per accepted move, never per frame.
+        private readonly Dictionary<TabletopObjectId, TrapFloorCoordinate?> landingPawnTiles =
+            new Dictionary<TabletopObjectId, TrapFloorCoordinate?>();
+        private bool landingCheckPending;
         private TrapFloorAbilityResolutionState trapFloorAbilityResolutionState;
         private TrapFloorAbilityResolutionService trapFloorAbilityResolutionService;
         private TrapFloorPendingSearchState trapFloorPendingSearchState;
@@ -1389,6 +1395,13 @@ namespace ConsoleCards.Presentation.Prototype
                 abilityTargetPresenter?.ClearCurrent();
             }
 
+            if ((acceptance.Kind == AuthoritativeActionKind.MoveObject
+                    || acceptance.Kind == AuthoritativeActionKind.PhysicalObjectSettled)
+                && trapFloorTemplate != null)
+            {
+                landingCheckPending = true;
+            }
+
             switch (acceptance.RecordMode)
             {
                 case AuthoritativeActionRecordMode.Intermediate:
@@ -2114,6 +2127,7 @@ namespace ConsoleCards.Presentation.Prototype
             if (HandleUndoShortcut()) return;
             HandleHandTrayShortcut();
             physicalAuthority?.Tick();
+            CompletePendingLandingFlip();
             CompletePhysicalFloorfallIfSettled();
             CompletePhysicalFloorCollapseIfSettled();
             CompletePhysicalBlindDirectionIfSettled();
@@ -4344,14 +4358,7 @@ namespace ConsoleCards.Presentation.Prototype
                         !physicalBlindDirectionPending,
                         () => BeginPhysicalBlindDirection()));
                 }
-                actions.Add(new PrototypePopupActionOption(
-                    "Search",
-                    !searchPending,
-                    SearchSelectedTrapFloorCard));
-                actions.Add(new PrototypePopupActionOption(
-                    "Careful Search",
-                    !searchPending,
-                    CarefulSearchSelectedTrapFloorCard));
+                // Search and Careful Search are retired (doc 18 §15.2): landing on a tile flips it for free.
                 if (searchPending)
                 {
                     actions.Add(new PrototypePopupActionOption(
@@ -4365,20 +4372,21 @@ namespace ConsoleCards.Presentation.Prototype
                 if (purchasePending)
                 {
                     actions.Add(new PrototypePopupActionOption(
-                        "Confirm Purchase",
+                        "Confirm Payment",
                         pendingControllerPurchaseState.IsPaymentComplete,
                         ConfirmPendingActionAbilityPurchase));
                     actions.Add(new PrototypePopupActionOption(
-                        "Cancel Purchase",
+                        "Cancel Payment",
                         true,
                         CancelPendingActionAbilityPurchase));
                 }
-                else
+                else if (TryGetActivePawnPrizeTile(out TrapFloorFloorCardState prizeTile))
                 {
+                    // The Buy Ability market is retired (doc 18 §15.4); prizes are taken from the floor.
                     actions.Add(new PrototypePopupActionOption(
-                        "Buy Ability",
+                        TakePrizeLabel(prizeTile),
                         true,
-                        OpenActionAbilityPurchase));
+                        BeginTakeFloorPrize));
                 }
                 actions.Add(new PrototypePopupActionOption(
                     "Skip Turn",
@@ -6081,7 +6089,7 @@ namespace ConsoleCards.Presentation.Prototype
                 revealedFloor.ObjectId,
                 backArtwork,
                 frontArtwork,
-                "SEARCH RESULT",
+                result.SearchKind == TrapFloorSearchKind.Landing ? "YOU LANDED ON" : "SEARCH RESULT",
                 $"{revealedFloor.Content.Category.ToString().ToUpperInvariant()} • REVEALED",
                 revealedFloor.Content.DisplayName,
                 revealedFloor.Content.DisplayText,
@@ -6834,14 +6842,6 @@ namespace ConsoleCards.Presentation.Prototype
             ConsoleId targetConsoleId = contextMenuConsoleId;
             ContainerId targetSlotContainerId = contextMenuContainerId;
             List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
-            if (IsAssistedTrapFloorConsoleSlot(targetSlotContainerId))
-            {
-                actions.Add(new PrototypePopupActionOption(
-                    "Buy Ability",
-                    true,
-                    OpenActionAbilityPurchase));
-            }
-
             actions.Add(new PrototypePopupActionOption(
                 "Move",
                 true,
@@ -7016,6 +7016,254 @@ namespace ConsoleCards.Presentation.Prototype
             ShowMessage(handComfortSettings.ReachedMessage + ".");
         }
 
+        // G2a: the face-up Ability or Friend tile under the active Player's pawn, if it can still be taken.
+        private bool TryGetActivePawnPrizeTile(out TrapFloorFloorCardState prizeTile)
+        {
+            prizeTile = null;
+            if (trapFloorTemplate == null
+                || matchState == null
+                || trapFloorTurnState == null
+                || trapFloorCollapseState == null
+                || trapFloorTurnState.IsCurrentFloorFailed
+                || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn
+                || !TryGetTrapFloorPlayerSetup(
+                    trapFloorTurnState.ActivePlayerId,
+                    out TrapFloorPlayerSetupDefinition player)
+                || !TryReadPawnTile(player.PawnId, out TrapFloorCoordinate tile)
+                || !trapFloorTemplate.TryGetFloorCardId(tile, out TabletopObjectId floorCardId)
+                || !trapFloorTemplate.TryGetFloorCardState(matchState, floorCardId, out TrapFloorFloorCardState floorCard)
+                || !floorCard.IsRevealed
+                || trapFloorCollapseState.IsCollapsed(floorCardId)
+                || !TrapFloorTakePrizeUseCase.IsPrize(floorCard.Content))
+            {
+                return false;
+            }
+
+            prizeTile = floorCard;
+            return true;
+        }
+
+        private static string TakePrizeLabel(TrapFloorFloorCardState prizeTile)
+        {
+            InputCostData cost = TrapFloorTakePrizeUseCase.CostOf(prizeTile.Content);
+            return cost.IsEmpty
+                ? $"Take {prizeTile.Content.DisplayName}"
+                : $"Take {prizeTile.Content.DisplayName} ({InputCostNotation.Format(cost)})";
+        }
+
+        // Take Ability / Take Friend (doc 18 §15.4). A free prize is taken at once; a cost opens the Hand picker
+        // and then the usual Console payment, confirmed from the turn menu.
+        private void BeginTakeFloorPrize()
+        {
+            CloseContextMenu();
+            if (pendingControllerPurchaseState != null && pendingControllerPurchaseState.IsActive)
+            {
+                ShowMessage("Finish or cancel the current payment first.");
+                return;
+            }
+
+            if (!TryGetActivePawnPrizeTile(out TrapFloorFloorCardState prizeTile)
+                || prizeTile.Content.AuthoredCard == null)
+            {
+                ShowMessage("Stand on a face-up Ability or Friend to take it.");
+                return;
+            }
+
+            InputCostData cost = TrapFloorTakePrizeUseCase.CostOf(prizeTile.Content);
+            if (cost.IsEmpty)
+            {
+                CompleteTakeFloorPrize(prizeTile.ObjectId, Array.Empty<TabletopObjectId>());
+                RefreshTrapFloorStatusUi();
+                return;
+            }
+
+            string cardDefinitionStableId = prizeTile.Content.AuthoredCard.StableId;
+            if (!TryBuildPurchasePaymentOptions(
+                    cardDefinitionStableId,
+                    out CardDefinitionData prizeDefinition,
+                    out List<PurchasePaymentCardOption> options,
+                    out string missing))
+            {
+                ShowMessage($"{prizeTile.Content.DisplayName} cannot be taken: its cost could not be read.");
+                return;
+            }
+
+            pendingPurchaseDefinitionStableId = cardDefinitionStableId;
+            List<PrototypeFocusedCardOptionModel> cards =
+                new List<PrototypeFocusedCardOptionModel>(options.Count);
+            for (int i = 0; i < options.Count; i++)
+            {
+                PurchasePaymentCardOption option = options[i];
+                cards.Add(new PrototypeFocusedCardOptionModel(
+                    option.CardId,
+                    option.DisplayName,
+                    option.Input.HasValue ? option.Input.Value.ToString() : "Not eligible",
+                    option.Artwork,
+                    option.Eligible));
+            }
+
+            string costText = InputCostNotation.Format(prizeDefinition.InputCost);
+            runtimeUi.ShowFocusedCardSelection(new PrototypeFocusedCardSelectionModel(
+                $"TAKE {prizeDefinition.DisplayName.ToUpperInvariant()} — HAND",
+                $"Choose {costText} from your Hand.",
+                string.IsNullOrEmpty(missing)
+                    ? "Pick the cards that pay the cost."
+                    : $"Missing: {missing}",
+                "Confirm Cards",
+                cards,
+                prizeDefinition.InputCost.CardCount,
+                IsPurchasePaymentReady,
+                ConfirmFocusedPurchasePayment,
+                CancelFocusedPurchaseSelection));
+        }
+
+        private void CompleteTakeFloorPrize(
+            TabletopObjectId floorCardId,
+            IReadOnlyList<TabletopObjectId> paymentCardIds)
+        {
+            if (trapFloorTakePrizeUseCase == null || trapFloorTurnState == null)
+            {
+                ShowMessage("Taking prizes is unavailable.");
+                return;
+            }
+
+            TrapFloorTakePrizeResult result = trapFloorTakePrizeUseCase.Execute(
+                matchState,
+                new TrapFloorTakePrizeCommand(
+                    CreateCommandContext(trapFloorTurnState.ActivePlayerId),
+                    floorCardId,
+                    TabletopObjectId.New(),
+                    paymentCardIds));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Take rejected: {result.Error}.");
+                return;
+            }
+
+            if (pendingControllerPurchaseState != null && pendingControllerPurchaseState.IsActive)
+            {
+                pendingControllerPurchaseState.Clear();
+            }
+
+            pendingPurchaseDefinitionStableId = string.Empty;
+            ReplaceCurrentUndoStateForPurchaseAssistance();
+
+            string prizeName = result.FloorCard.Content.DisplayName;
+            labelsByCardId[result.GrantedCardId] = prizeName;
+            CardView grantedView = CreateCardView(
+                matchState.Cards[result.GrantedCardId],
+                prizeName,
+                out TabletopSelectionVisual selectionVisual);
+            cardViews.Add(grantedView);
+            cardSelectionVisuals.Add(selectionVisual);
+            physicalAuthority?.Register(grantedView);
+            RefreshContainerCardViewSources();
+            ApplyLayout(result.DestinationContainerId);
+            RefreshSelectionPresenterAfterRuntimeProjection();
+            presentationTransitions.Appear(grantedView.transform, settleDuration);
+            ApplyCollapsedFloorPresentation(floorCardId);
+            ShowMessage(result.PlacedInHand
+                ? $"Took {prizeName} into your Hand. The tile is now a hole."
+                : $"Took {prizeName}. Your Hand is full, so it is beside your Console. The tile is now a hole.");
+        }
+
+        // G2a: remembers the tile under every pawn, so only a real move onto a new tile flips it.
+        private void SyncLandingPawnTiles()
+        {
+            landingPawnTiles.Clear();
+            landingCheckPending = false;
+            if (trapFloorTemplate == null || matchState == null) return;
+            for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+            {
+                TabletopObjectId pawnId = trapFloorTemplate.Players[i].PawnId;
+                landingPawnTiles[pawnId] = TryReadPawnTile(pawnId, out TrapFloorCoordinate tile)
+                    ? tile
+                    : (TrapFloorCoordinate?)null;
+            }
+        }
+
+        private bool TryReadPawnTile(TabletopObjectId pawnId, out TrapFloorCoordinate tile)
+        {
+            tile = default;
+            return matchState != null
+                && trapFloorTemplate != null
+                && matchState.Pawns.TryGetValue(pawnId, out PawnState pawn)
+                && trapFloorTemplate.TryGetFloorCoordinateAt(matchState, pawn.BaseState.Pose.Position, out tile);
+        }
+
+        // Flip on landing (doc 18 §15.2): when the active Player's pawn has moved onto a new face-down tile, that
+        // tile flips for free through the reveal use case. The flip amends the move's Undo step.
+        private void CompletePendingLandingFlip()
+        {
+            if (!landingCheckPending || undoTransactionInProgress) return;
+            landingCheckPending = false;
+            if (trapFloorTemplate == null
+                || matchState == null
+                || trapFloorTurnState == null
+                || trapFloorRevealFloorUseCase == null
+                || trapFloorCollapseState == null)
+            {
+                return;
+            }
+
+            TabletopObjectId activePawnId = TabletopObjectId.Empty;
+            if (!trapFloorTurnState.IsCurrentFloorFailed
+                && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                && TryGetTrapFloorPlayerSetup(trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition player))
+            {
+                activePawnId = player.PawnId;
+            }
+
+            TrapFloorCoordinate? landedTile = null;
+            for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+            {
+                TabletopObjectId pawnId = trapFloorTemplate.Players[i].PawnId;
+                TrapFloorCoordinate? tile = TryReadPawnTile(pawnId, out TrapFloorCoordinate readTile)
+                    ? readTile
+                    : (TrapFloorCoordinate?)null;
+                bool known = landingPawnTiles.TryGetValue(pawnId, out TrapFloorCoordinate? previous);
+                if (pawnId == activePawnId && known && tile.HasValue && !Nullable.Equals(previous, tile))
+                {
+                    landedTile = tile;
+                }
+
+                landingPawnTiles[pawnId] = tile;
+            }
+
+            if (!landedTile.HasValue
+                || !trapFloorTemplate.TryGetFloorCardId(landedTile.Value, out TabletopObjectId floorCardId)
+                || !trapFloorTemplate.TryGetFloorCardState(matchState, floorCardId, out TrapFloorFloorCardState floorCard)
+                || floorCard.IsRevealed
+                || trapFloorCollapseState.IsCollapsed(floorCardId))
+            {
+                return;
+            }
+
+            TrapFloorRevealFloorResult result = trapFloorRevealFloorUseCase.Execute(
+                matchState,
+                new TrapFloorRevealFloorCommand(
+                    CreateCommandContext(trapFloorTurnState.ActivePlayerId),
+                    floorCardId,
+                    TrapFloorSearchKind.Landing,
+                    Array.Empty<TabletopObjectId>()));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Landing flip rejected: {result.Error}.");
+                return;
+            }
+
+            if (TryGetCardView(floorCardId, out CardView floorCardView))
+                floorCardView.ApplyAcceptedState();
+            RefreshCardContentVisibility();
+            selectionPresenter?.Refresh();
+            activeFloorRevealActivity = result.RevealedActivity;
+            ShowFocusedSearchReveal(result);
+            RefreshTrapFloorStatusUi();
+            ShowMessage(
+                $"{FormatPlayerShortName(result.RevealedActivity.ActorPlayerId)} landed on "
+                + $"{result.FloorCard.Content.DisplayName}.");
+        }
+
         private void OpenActionAbilityPurchase()
         {
             CloseContextMenu();
@@ -7181,7 +7429,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             if (!IsPurchasePaymentReady(selectedCardIds))
             {
-                ShowMessage("Purchase payment selection is incomplete.");
+                ShowMessage("Choose exactly the cards the cost asks for.");
                 return;
             }
 
@@ -7193,15 +7441,15 @@ namespace ConsoleCards.Presentation.Prototype
             ReplaceCurrentUndoStateForPurchaseAssistance();
             RefreshTrapFloorStatusUi();
             ShowMessage(
-                $"BUY {FindPurchaseDisplayName(definitionId).ToUpperInvariant()} — "
-                + "Place the selected Cards in your Console");
+                $"TAKE {FindPurchaseDisplayName(definitionId).ToUpperInvariant()} — "
+                + "Place the chosen cards in your Console, then Confirm Payment");
         }
 
         private void CancelFocusedPurchaseSelection()
         {
             pendingPurchaseDefinitionStableId = string.Empty;
             runtimeUi?.CloseFocusedCardSelection();
-            ShowMessage("Purchase selection cancelled.");
+            ShowMessage("Payment cancelled.");
         }
 
         private void ConfirmPendingActionAbilityPurchase()
@@ -7212,12 +7460,22 @@ namespace ConsoleCards.Presentation.Prototype
                 || trapFloorTurnState == null
                 || pendingControllerPurchaseState.PlayerId != trapFloorTurnState.ActivePlayerId)
             {
-                ShowMessage("Purchase payment is not ready.");
+                ShowMessage("Place the chosen cards in your Console first.");
                 return;
             }
 
-            PurchaseActionOrAbility(
-                pendingControllerPurchaseState.PurchasedCardDefinitionStableId);
+            if (!TryGetActivePawnPrizeTile(out TrapFloorFloorCardState prizeTile)
+                || prizeTile.Content.AuthoredCard == null
+                || !string.Equals(
+                    prizeTile.Content.AuthoredCard.StableId,
+                    pendingControllerPurchaseState.PurchasedCardDefinitionStableId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                ShowMessage("Stand on the Ability you are paying for, then confirm.");
+                return;
+            }
+
+            CompleteTakeFloorPrize(prizeTile.ObjectId, pendingControllerPurchaseState.SelectedCardIds);
             RefreshTrapFloorStatusUi();
         }
 
@@ -7234,7 +7492,7 @@ namespace ConsoleCards.Presentation.Prototype
             ReplaceCurrentUndoStateForPurchaseAssistance();
             RefreshTrapFloorStatusUi();
             ShowMessage(
-                "Purchase assistance cancelled. Cards remain where the Player placed them.");
+                "Payment cancelled. Cards stay where you placed them.");
         }
 
         private string FindPurchaseDisplayName(string cardDefinitionStableId)
@@ -8149,9 +8407,14 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorActivityFeed,
                 trapFloorTemplate,
                 trapFloorCollapseState);
+            trapFloorTakePrizeUseCase = new TrapFloorTakePrizeUseCase(
+                trapFloorTemplate,
+                trapFloorCollapseState,
+                trapFloorTurnState);
             ConsoleCardInteractionAccepted -= HandleTrapFloorConsoleCardInteractionAccepted;
             ConsoleCardInteractionAccepted += HandleTrapFloorConsoleCardInteractionAccepted;
             activeFloorRevealActivity = null;
+            SyncLandingPawnTiles();
         }
 
         private void BuildFloorfallRuntime()

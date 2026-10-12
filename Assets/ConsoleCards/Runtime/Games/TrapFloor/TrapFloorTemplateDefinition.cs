@@ -151,6 +151,45 @@ namespace ConsoleCards.Games.TrapFloor
             return floorCoordinates.TryGetValue(objectId, out coordinate);
         }
 
+        /// <summary>
+        /// The floor tile under a table position: the nearest tile whose card footprint contains it. Used to
+        /// find where a pawn stands (G2a). False when the position is off the board.
+        /// </summary>
+        public bool TryGetFloorCoordinateAt(
+            MatchState matchState,
+            TableCoordinate position,
+            out TrapFloorCoordinate coordinate)
+        {
+            coordinate = default;
+            if (matchState == null)
+            {
+                return false;
+            }
+
+            double halfWidth = Grid.CellWidth * 0.5d;
+            double halfHeight = Grid.CellHeight * 0.5d;
+            double nearestDistanceSquared = double.MaxValue;
+            bool found = false;
+            foreach (KeyValuePair<TrapFloorCoordinate, TabletopObjectId> floor in floorCardIds)
+            {
+                if (!matchState.Cards.TryGetValue(floor.Value, out CardInstanceState floorCard)) continue;
+                TableCoordinate floorPosition = floorCard.BaseState.Pose.Position;
+                double deltaX = position.X - floorPosition.X;
+                double deltaY = position.Y - floorPosition.Y;
+                double distanceSquared = (deltaX * deltaX) + (deltaY * deltaY);
+                if (Math.Abs(deltaX) <= halfWidth
+                    && Math.Abs(deltaY) <= halfHeight
+                    && distanceSquared < nearestDistanceSquared)
+                {
+                    coordinate = floor.Key;
+                    nearestDistanceSquared = distanceSquared;
+                    found = true;
+                }
+            }
+
+            return found;
+        }
+
         public bool IsFloorCard(TabletopObjectId objectId)
         {
             return floorCoordinates.ContainsKey(objectId);

@@ -87,7 +87,7 @@ MonoBehaviour:
       displayValue: ''
       modeStableIds: []
     - stableId: tf-turn-take
-      text: 'Flip an ability and you may take it by paying its cost. If you skip it, the next player to land there may take it.'
+      text: 'Standing on a face-up Ability or Friend? You may take it: pay the Ability''s cost (a Friend is free). It goes to your Hand, or beside your Console if your Hand is full, and the tile becomes a hole. You are safe there and walk off next turn. Skip it and the next player to land there may take it.'
       settingKind: 0
       settingKey: 
       value: ''

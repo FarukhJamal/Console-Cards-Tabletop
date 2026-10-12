@@ -44,6 +44,9 @@ namespace ConsoleCards.Games.TrapFloor
     {
         Normal = 0,
         Careful = 1,
+
+        /// <summary>Free reveal when the active Player's pawn lands on the tile (doc 18 §15.2, G2a). No payment.</summary>
+        Landing = 2,
     }
 
     /// <summary>
@@ -409,18 +412,23 @@ namespace ConsoleCards.Games.TrapFloor
                 throw new ArgumentNullException(nameof(floorCard));
             }
 
-            searchedEntry = CreateEntry(
-                acceptedRevision,
-                actorPlayerId,
-                floorCard,
-                searchKind == TrapFloorSearchKind.Careful
-                    ? TrapFloorActivityKind.CarefullySearchedFloor
-                    : TrapFloorActivityKind.SearchedFloor,
-                searchKind,
-                paymentCardIds,
-                paymentInputs,
-                trapSuppressed);
-            entries.Add(searchedEntry);
+            // Landing on a tile is not a Search, so it records only the reveal.
+            searchedEntry = null;
+            if (searchKind != TrapFloorSearchKind.Landing)
+            {
+                searchedEntry = CreateEntry(
+                    acceptedRevision,
+                    actorPlayerId,
+                    floorCard,
+                    searchKind == TrapFloorSearchKind.Careful
+                        ? TrapFloorActivityKind.CarefullySearchedFloor
+                        : TrapFloorActivityKind.SearchedFloor,
+                    searchKind,
+                    paymentCardIds,
+                    paymentInputs,
+                    trapSuppressed);
+                entries.Add(searchedEntry);
+            }
             revealedEntry = CreateEntry(
                 acceptedRevision,
                 actorPlayerId,
@@ -1245,9 +1253,12 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
 
-            if (!TrapFloorSearchConfiguration.TryCreate(
+            bool landing = command.SearchKind == TrapFloorSearchKind.Landing;
+            TrapFloorSearchConfiguration searchConfiguration = null;
+            if (!landing
+                && !TrapFloorSearchConfiguration.TryCreate(
                     template.GameDefinition,
-                    out TrapFloorSearchConfiguration searchConfiguration))
+                    out searchConfiguration))
             {
                 return Failure(CommandResultStatus.Rejected, TrapFloorRevealFloorError.SearchConfigurationMissing);
             }
@@ -1260,12 +1271,20 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(CommandResultStatus.Rejected, TrapFloorRevealFloorError.HandMissing);
             }
 
-            if (!TryValidatePayment(
+            List<ControllerInput> paymentInputs = new List<ControllerInput>();
+            if (landing)
+            {
+                if (command.PaymentCardIds.Count != 0)
+                {
+                    return Failure(CommandResultStatus.Rejected, TrapFloorRevealFloorError.PaymentCardCountInvalid);
+                }
+            }
+            else if (!TryValidatePayment(
                     matchState,
                     player,
                     command,
                     searchConfiguration,
-                    out List<ControllerInput> paymentInputs,
+                    out paymentInputs,
                     out TrapFloorRevealFloorError paymentError))
             {
                 return Failure(CommandResultStatus.Rejected, paymentError);
@@ -1312,10 +1331,13 @@ namespace ConsoleCards.Games.TrapFloor
                     revealedFloorCard);
             }
 
+            // A landing flip belongs to the pawn move that caused it, so it amends that Undo step instead of
+            // adding its own (record mode None).
             matchState.AdvanceRevision(
                 command.Context.Id,
                 command.Context.RequestedByPlayerId,
-                AuthoritativeActionKind.TrapFloorReveal);
+                AuthoritativeActionKind.TrapFloorReveal,
+                landing ? AuthoritativeActionRecordMode.None : AuthoritativeActionRecordMode.Transaction);
 
             return TrapFloorRevealFloorResult.Accepted(
                 acceptedRevision,

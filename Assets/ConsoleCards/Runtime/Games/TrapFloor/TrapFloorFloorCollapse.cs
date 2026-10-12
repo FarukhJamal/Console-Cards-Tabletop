@@ -18,7 +18,8 @@ namespace ConsoleCards.Games.TrapFloor
             PlayerId collapsedByPlayerId,
             int xAxisResult,
             int yAxisResult,
-            long acceptedRevision)
+            long acceptedRevision,
+            bool isTakenPrize = false)
         {
             FloorCardId = floorCardId;
             Coordinate = coordinate;
@@ -26,6 +27,7 @@ namespace ConsoleCards.Games.TrapFloor
             XAxisResult = xAxisResult;
             YAxisResult = yAxisResult;
             AcceptedRevision = acceptedRevision;
+            IsTakenPrize = isTakenPrize;
         }
 
         public TabletopObjectId FloorCardId { get; }
@@ -34,6 +36,12 @@ namespace ConsoleCards.Games.TrapFloor
         public int XAxisResult { get; }
         public int YAxisResult { get; }
         public long AcceptedRevision { get; }
+
+        /// <summary>
+        /// True when the tile became a hole because its prize (an Ability or Friend) was taken (doc 18 §15.4, G2a),
+        /// not because of a collapse roll. Both count as holes everywhere.
+        /// </summary>
+        public bool IsTakenPrize { get; }
     }
 
     public sealed class TrapFloorCollapseRollState
@@ -159,6 +167,36 @@ namespace ConsoleCards.Games.TrapFloor
             IsCollapsePending = false;
             PendingActorPlayerId = PlayerId.Empty;
             return collapsed;
+        }
+
+        // A prize was taken from this tile (G2a). It leaves the in-flight collapse roll, if any, untouched.
+        internal TrapFloorCollapsedFloorState RecordTakenPrize(
+            TabletopObjectId floorCardId,
+            TrapFloorCoordinate coordinate,
+            PlayerId actorPlayerId,
+            long acceptedRevision)
+        {
+            TrapFloorCollapsedFloorState collapsed = new TrapFloorCollapsedFloorState(
+                floorCardId,
+                coordinate,
+                actorPlayerId,
+                coordinate.X,
+                coordinate.Y,
+                acceptedRevision,
+                isTakenPrize: true);
+            collapsedFloors.Add(collapsed);
+            collapsedById.Add(floorCardId, collapsed);
+            return collapsed;
+        }
+
+        internal void RemoveTakenPrize(TabletopObjectId floorCardId)
+        {
+            if (collapsedById.TryGetValue(floorCardId, out TrapFloorCollapsedFloorState collapsed)
+                && collapsed.IsTakenPrize)
+            {
+                collapsedById.Remove(floorCardId);
+                collapsedFloors.Remove(collapsed);
+            }
         }
 
         public void Clear()
