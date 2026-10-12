@@ -13,7 +13,8 @@ namespace ConsoleCards.Presentation.UI
             string searchProgress,
             string detail,
             string containerCounts,
-            string actionHelp)
+            string actionHelp,
+            Color? playerColor = null)
         {
             Round = round ?? string.Empty;
             Phase = phase ?? string.Empty;
@@ -21,6 +22,7 @@ namespace ConsoleCards.Presentation.UI
             Detail = detail ?? string.Empty;
             ContainerCounts = containerCounts ?? string.Empty;
             ActionHelp = actionHelp ?? string.Empty;
+            PlayerColor = playerColor;
         }
 
         public string Round { get; }
@@ -34,6 +36,9 @@ namespace ConsoleCards.Presentation.UI
         public string ContainerCounts { get; }
 
         public string ActionHelp { get; }
+
+        /// <summary>The colour of the player whose turn it is (UX-1); null hides the turn strip's colour chip.</summary>
+        public Color? PlayerColor { get; }
     }
 
     public readonly struct PrototypeFloorfallStatusModel
@@ -63,6 +68,8 @@ namespace ConsoleCards.Presentation.UI
     {
         [SerializeField] private Text roundLabel;
         [SerializeField] private Text phaseLabel;
+        [Tooltip("Turn strip chip tinted with the active player's colour. Optional until the HUD prefab is rebuilt.")]
+        [SerializeField] private Image playerChip;
         [SerializeField] private Text searchProgressLabel;
         [SerializeField] private Text detailLabel;
         [SerializeField] private Text containerCountsLabel;
@@ -118,6 +125,12 @@ namespace ConsoleCards.Presentation.UI
             ValidateReferences();
             roundLabel.text = status.Round;
             phaseLabel.text = status.Phase;
+            if (playerChip != null)
+            {
+                playerChip.gameObject.SetActive(status.PlayerColor.HasValue);
+                if (status.PlayerColor.HasValue) playerChip.color = status.PlayerColor.Value;
+            }
+
             searchProgressLabel.text = status.SearchProgress;
             detailLabel.text = status.Detail;
             containerCountsLabel.text = status.ContainerCounts;
@@ -156,6 +169,7 @@ namespace ConsoleCards.Presentation.UI
             roundLabel.text = keyProgress ?? string.Empty;
             phaseLabel.gameObject.SetActive(isWon);
             phaseLabel.text = isWon ? "VICTORY" : string.Empty;
+            if (playerChip != null) playerChip.gameObject.SetActive(false);
             searchProgressLabel.gameObject.SetActive(!string.IsNullOrWhiteSpace(collapseStatus));
             searchProgressLabel.text = collapseStatus ?? string.Empty;
             detailLabel.gameObject.SetActive(false);

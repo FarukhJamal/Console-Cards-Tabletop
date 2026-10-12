@@ -4191,10 +4191,21 @@ namespace ConsoleCards.Presentation.Prototype
 
             if (trapFloorObjectiveState != null && trapFloorTurnState != null)
             {
+                // UX-1: the turn names the player's colour, and the strip's chip shows it.
+                PlayerId turnPlayerId = trapFloorTurnState.IsCurrentFloorFailed
+                    ? PlayerId.Empty
+                    : trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                        ? trapFloorTurnState.ActivePlayerId
+                        : trapFloorTurnState.FloorOperatorPlayerId;
+                Color? turnColor = TryGetTrapFloorSeatIndex(turnPlayerId, out int turnSeatIndex)
+                    ? PlayerPrototypeColor(turnSeatIndex)
+                    : (Color?)null;
                 string phase = trapFloorTurnState.IsCurrentFloorFailed
                     ? "ALL PLAYERS ELIMINATED"
                     : trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
-                        ? $"{FormatPlayerName(trapFloorTurnState.ActivePlayerId).ToUpperInvariant()} TURN"
+                        ? turnColor.HasValue
+                            ? $"{FormatPlayerName(turnPlayerId).ToUpperInvariant()} ({PlayerColorName(turnSeatIndex)}) TURN"
+                            : $"{FormatPlayerName(turnPlayerId).ToUpperInvariant()} TURN"
                         : "FLOOR TURN";
                 string turnDetail = CurrentTrapFloorCollapseStatusText();
                 if (!trapFloorTurnState.IsCurrentFloorFailed
@@ -4203,15 +4214,18 @@ namespace ConsoleCards.Presentation.Prototype
                     turnDetail += $"\nOperator: {FormatPlayerName(trapFloorTurnState.FloorOperatorPlayerId)}";
                 }
 
+                // The player list lives on the status card; the one-line turn strip keeps only the Keys.
+                turnDetail += $"\n{CurrentTrapFloorPlayerStatesText()}";
                 PrototypeTrapFloorStatusModel turnStatus = new PrototypeTrapFloorStatusModel(
                     $"ROUND {trapFloorTurnState.CurrentRound}",
                     phase,
-                    $"{CurrentTrapFloorObjectiveProgressText()}\n{CurrentTrapFloorPlayerStatesText()}",
+                    CurrentTrapFloorObjectiveProgressText(),
                     turnDetail,
                     trapFloorTurnState.IsCurrentFloorFailed
                         ? "ALL PLAYERS ELIMINATED"
                         : trapFloorObjectiveState.IsWon ? "VICTORY" : string.Empty,
-                    HintText(TrapFloorTurnGuidanceText()));
+                    HintText(TrapFloorTurnGuidanceText()),
+                    turnColor);
                 runtimeUi.ShowTrapFloorStatus(
                     turnStatus,
                     BuildFloorfallStatusModel(),
@@ -4446,15 +4460,16 @@ namespace ConsoleCards.Presentation.Prototype
                 && pendingControllerPurchaseState.PlayerId == trapFloorTurnState.ActivePlayerId)
             {
                 if (pendingControllerPurchaseState.IsPaymentComplete)
-                    return "PAYMENT READY — Confirm Purchase";
+                    return "PAYMENT READY — Confirm Payment";
                 string abilityName = FindPurchaseDisplayName(
                     pendingControllerPurchaseState.PurchasedCardDefinitionStableId)
                     .ToUpperInvariant();
-                return $"BUY {abilityName} — Place the selected Cards in your Console";
+                return $"TAKE {abilityName} — Place the chosen cards in your Console";
             }
 
             int handLimit = trapFloorTemplate.GameDefinition.ControllerConfiguration.MaximumHandSize;
-            string standardGuidance = $"Draw up to {handLimit} if needed\nMove / Search / Buy / Skip";
+            string standardGuidance =
+                $"Draw up to {handLimit} if needed\nMove your pawn onto a tile to flip it, take a prize you stand on, then End Turn";
             bool isBlind = TryGetActiveBlindStatus(out TrapFloorBlindStatusState blindStatus);
             bool isSlow = TryGetActiveSlowStatus(out TrapFloorSlowStatusState slowStatus);
             bool isSticky = TryGetActiveStickyStatus(out _);
@@ -7121,7 +7136,12 @@ namespace ConsoleCards.Presentation.Prototype
             TabletopObjectId floorCardId,
             IReadOnlyList<TabletopObjectId> paymentCardIds)
         {
-            if (trapFloorTakePrizeUseCase == null || trapFloorTurnState == null)
+            if (trapFloorTakePrizeUseCase == null
+                || trapFloorTurnState == null
+                || !TryGetTrapFloorPlayerSetup(
+                    trapFloorTurnState.ActivePlayerId,
+                    out TrapFloorPlayerSetupDefinition taker)
+                || !matchState.Pawns.TryGetValue(taker.PawnId, out PawnState takerPawn))
             {
                 ShowMessage("Taking prizes is unavailable.");
                 return;
@@ -7133,7 +7153,8 @@ namespace ConsoleCards.Presentation.Prototype
                     CreateCommandContext(trapFloorTurnState.ActivePlayerId),
                     floorCardId,
                     TabletopObjectId.New(),
-                    paymentCardIds));
+                    paymentCardIds,
+                    PawnTablePosition(takerPawn)));
             if (!result.Succeeded)
             {
                 ShowMessage($"Take rejected: {result.Error}.");
@@ -7182,13 +7203,35 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
+        private bool IsHiddenUsableTile(TrapFloorCoordinate tile)
+        {
+            return trapFloorTemplate.TryGetFloorCardId(tile, out TabletopObjectId floorCardId)
+                && trapFloorTemplate.TryGetFloorCardState(matchState, floorCardId, out TrapFloorFloorCardState floorCard)
+                && !floorCard.IsRevealed
+                && (trapFloorCollapseState == null || !trapFloorCollapseState.IsCollapsed(floorCardId));
+        }
+
         private bool TryReadPawnTile(TabletopObjectId pawnId, out TrapFloorCoordinate tile)
         {
             tile = default;
             return matchState != null
                 && trapFloorTemplate != null
                 && matchState.Pawns.TryGetValue(pawnId, out PawnState pawn)
-                && trapFloorTemplate.TryGetFloorCoordinateAt(matchState, pawn.BaseState.Pose.Position, out tile);
+                && trapFloorTemplate.TryGetFloorCoordinateAt(matchState, PawnTablePosition(pawn), out tile);
+        }
+
+        // Where a pawn stands on the table. A dragged pawn keeps its position in its physics state (world space);
+        // its pose only holds the position it was placed at, so the physics state wins when there is one.
+        private TableCoordinate PawnTablePosition(PawnState pawn)
+        {
+            PhysicalObjectState physical = pawn.BaseState.PhysicalState;
+            if (physical != null && coordinateConverter != null)
+            {
+                return coordinateConverter.ToTableCoordinate(
+                    new Vector3(physical.Position.X, physical.Position.Y, physical.Position.Z));
+            }
+
+            return pawn.BaseState.Pose.Position;
         }
 
         // Flip on landing (doc 18 §15.2): when the active Player's pawn has moved onto a new face-down tile, that
@@ -7215,6 +7258,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             TrapFloorCoordinate? landedTile = null;
+            bool otherPawnOnHiddenTile = false;
             for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
             {
                 TabletopObjectId pawnId = trapFloorTemplate.Players[i].PawnId;
@@ -7222,12 +7266,31 @@ namespace ConsoleCards.Presentation.Prototype
                     ? readTile
                     : (TrapFloorCoordinate?)null;
                 bool known = landingPawnTiles.TryGetValue(pawnId, out TrapFloorCoordinate? previous);
-                if (pawnId == activePawnId && known && tile.HasValue && !Nullable.Equals(previous, tile))
+                if (known && tile.HasValue && !Nullable.Equals(previous, tile))
                 {
-                    landedTile = tile;
+                    if (pawnId == activePawnId)
+                    {
+                        landedTile = tile;
+                    }
+                    else if (!activePawnId.IsEmpty && IsHiddenUsableTile(tile.Value))
+                    {
+                        otherPawnOnHiddenTile = true;
+                    }
                 }
 
                 landingPawnTiles[pawnId] = tile;
+            }
+
+            if (!landedTile.HasValue && otherPawnOnHiddenTile)
+            {
+                // UX-1 hint: moving another player's pawn never flips; say whose pawn does.
+                string colour = TryGetTrapFloorSeatIndex(trapFloorTurnState.ActivePlayerId, out int seatIndex)
+                    ? $" ({PlayerColorName(seatIndex).ToLowerInvariant()})"
+                    : string.Empty;
+                ShowMessage(
+                    $"It's {FormatPlayerName(trapFloorTurnState.ActivePlayerId)}'s turn{colour}. "
+                    + "Only their pawn flips tiles.");
+                return;
             }
 
             if (!landedTile.HasValue
@@ -10213,16 +10276,47 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
+        // One table for every player colour (UX-1): pawns, the turn strip chip and turn text all read it.
+        private static readonly Color[] PlayerColors =
+        {
+            new Color(0.20f, 0.55f, 0.96f),
+            new Color(0.94f, 0.28f, 0.24f),
+            new Color(0.28f, 0.78f, 0.38f),
+            new Color(0.92f, 0.72f, 0.18f),
+        };
+
+        private static readonly string[] PlayerColorNames = { "BLUE", "RED", "GREEN", "YELLOW" };
+
         private static Color PlayerPrototypeColor(int playerIndex)
         {
-            switch (playerIndex)
+            return playerIndex >= 0 && playerIndex < PlayerColors.Length
+                ? PlayerColors[playerIndex]
+                : new Color(0.75f, 0.75f, 0.75f);
+        }
+
+        private static string PlayerColorName(int playerIndex)
+        {
+            return playerIndex >= 0 && playerIndex < PlayerColorNames.Length
+                ? PlayerColorNames[playerIndex]
+                : "GREY";
+        }
+
+        // The layout seat index of a participating player; it picks the player's colour.
+        private bool TryGetTrapFloorSeatIndex(PlayerId playerId, out int seatIndex)
+        {
+            seatIndex = -1;
+            if (playerId.IsEmpty || trapFloorTemplate == null || matchState == null) return false;
+            for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
             {
-                case 0: return new Color(0.20f, 0.55f, 0.96f);
-                case 1: return new Color(0.94f, 0.28f, 0.24f);
-                case 2: return new Color(0.28f, 0.78f, 0.38f);
-                case 3: return new Color(0.92f, 0.72f, 0.18f);
-                default: return new Color(0.75f, 0.75f, 0.75f);
+                TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[i];
+                if (matchState.Seats.TryGetValue(player.SeatId, out SeatState seat) && seat.OccupantPlayerId == playerId)
+                {
+                    seatIndex = player.LayoutSeatIndex;
+                    return true;
+                }
             }
+
+            return false;
         }
 
         private TokenView CreateTokenView(

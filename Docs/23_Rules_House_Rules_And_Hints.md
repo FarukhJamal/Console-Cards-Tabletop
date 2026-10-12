@@ -1,7 +1,7 @@
 # Console Cards — Rules, House Rules and Hints
 
 **Document ID:** 23_Rules_House_Rules_And_Hints
-**Version:** 0.5
+**Version:** 0.6
 **Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b and C1 implemented (Trap Floor G2a applies the revised turn); R3–R4 planned.
 
 > **Contract note:** type names and field lists here are illustrative unless labelled **Approved Contract**. They describe the direction agreed with the owner, not fixed public APIs.
@@ -90,6 +90,8 @@ The Hints switch is a viewer setting. It is not table state, so Undo and Reset n
 - the Toolbox "Left-click place…" bar.
 
 Lit drop targets and status messages are always shown, because play depends on them.
+
+**Whose turn (UX-1).** The turn strip shows a chip with the pawn icon in the turn player's colour (Player 1 blue, 2 red, 3 green, 4 yellow), and the turn text names the colour, for example "PLAYER 1 (BLUE) TURN". During the floor turn the chip shows the player who rolls. If another player's pawn is dropped on a face-down tile, a status message says whose pawn flips tiles. These are always shown, like status messages.
 
 ## 7. Open questions
 

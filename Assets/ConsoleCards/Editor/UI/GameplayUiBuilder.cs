@@ -237,6 +237,13 @@ namespace ConsoleCards.Editor.UI
             Fit(strip.gameObject, false, true);
             Size(strip.gameObject, -1f, 64f);
             Text round = FitLabel(Child("Round", strip), titleFont, 17, Mustard, "ROUND 1");
+            // Whose turn it is, by colour (UX-1): the pawn icon on a chip filled with that player's colour.
+            RectTransform chip = Child("PlayerChip", strip);
+            Image chipFill = Img(chip, "ChipOutlined", Cream);
+            chipFill.raycastTarget = false;
+            Size(chip.gameObject, 40f, 40f);
+            Img(Rect("Icon", chip, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(26f, 26f)), null, Ink, ToolboxIconPath + "IconPawn.png").raycastTarget = false;
             Text phase = FitLabel(Child("Phase", strip), boldFont, 20, Cream, "PLAYER 1 TURN");
             Text keys = Label(Child("Keys", strip), boldFont, 16, Cream, TextAnchor.MiddleLeft, "KEYS 0 / 1");
             keys.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
@@ -278,6 +285,7 @@ namespace ConsoleCards.Editor.UI
             SerializedObject so = new SerializedObject(view);
             so.FindProperty("roundLabel").objectReferenceValue = round;
             so.FindProperty("phaseLabel").objectReferenceValue = phase;
+            so.FindProperty("playerChip").objectReferenceValue = chipFill;
             so.FindProperty("searchProgressLabel").objectReferenceValue = keys;
             so.FindProperty("detailLabel").objectReferenceValue = detail;
             so.FindProperty("containerCountsLabel").objectReferenceValue = counts;

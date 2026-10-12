@@ -46,13 +46,15 @@ namespace ConsoleCards.Games.TrapFloor
             CommandContext context,
             TabletopObjectId floorCardId,
             TabletopObjectId grantedCardId,
-            IEnumerable<TabletopObjectId> paymentCardIds)
+            IEnumerable<TabletopObjectId> paymentCardIds,
+            TableCoordinate pawnPosition)
         {
             if (floorCardId.IsEmpty) throw new ArgumentException("Floor Card ID cannot be empty.", nameof(floorCardId));
             if (grantedCardId.IsEmpty) throw new ArgumentException("Granted Card ID cannot be empty.", nameof(grantedCardId));
             Context = context;
             FloorCardId = floorCardId;
             GrantedCardId = grantedCardId;
+            PawnPosition = pawnPosition;
             PaymentCardIds = new ReadOnlyCollection<TabletopObjectId>(
                 new List<TabletopObjectId>(paymentCardIds ?? throw new ArgumentNullException(nameof(paymentCardIds))));
         }
@@ -61,6 +63,12 @@ namespace ConsoleCards.Games.TrapFloor
         public TabletopObjectId FloorCardId { get; }
         public TabletopObjectId GrantedCardId { get; }
         public IReadOnlyList<TabletopObjectId> PaymentCardIds { get; }
+
+        /// <summary>
+        /// Where the taker's pawn stands on the table. A dragged pawn's position lives in its physics state, which
+        /// only the host can turn into table coordinates, so the host supplies it.
+        /// </summary>
+        public TableCoordinate PawnPosition { get; }
     }
 
     public readonly struct TrapFloorTakePrizeResult
@@ -186,8 +194,8 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.FloorIsHole);
             if (!IsPrize(floorCard.Content))
                 return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.NotAPrize);
-            if (!matchState.Pawns.TryGetValue(player.PawnId, out PawnState pawn)
-                || !template.TryGetFloorCoordinateAt(matchState, pawn.BaseState.Pose.Position, out TrapFloorCoordinate pawnTile)
+            if (!matchState.Pawns.ContainsKey(player.PawnId)
+                || !template.TryGetFloorCoordinateAt(matchState, command.PawnPosition, out TrapFloorCoordinate pawnTile)
                 || pawnTile != floorCard.Coordinate)
                 return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.PawnNotOnTile);
             if (floorCard.Content.AuthoredCard == null)
