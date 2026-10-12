@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Sticky Trap
   category: Trap
   description: 'The affected Player is stuck in place during their next Round.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: fd2cb8ab52914a72bc6edf28454c653e, type: 3}
+  frontArtworkReference: trap-floor/fronts/sticky-trap.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 3

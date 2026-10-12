@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Disarm
   category: Ability
   description: 'Action. Resolve Disarm manually according to the current agreed rules.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: a1773e02ec2749c49e226eb3c09eb8a2, type: 3}
+  frontArtworkReference: trap-floor/fronts/disarm.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1

@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Down
   category: ControllerInput
   description: Shared Controller input card representing Down.
-  frontArtwork: {fileID: 0}
-  frontArtworkReference:
+  frontArtwork: {fileID: 2800000, guid: c90124f8f1e040d987459e62570c90ed, type: 3}
+  frontArtworkReference: trap-floor/controller/controller-down.png
   backArtwork: {fileID: 0}
   backArtworkReference:
   quantity: 6

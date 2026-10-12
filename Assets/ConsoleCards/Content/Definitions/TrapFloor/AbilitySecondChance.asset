@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Shield
   category: Ability
   description: 'Reaction. Play on the Trap you are on. Resolve Shield manually according to the current agreed rules.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: 3812437a88db493ba61607f66fcc2d07, type: 3}
+  frontArtworkReference: trap-floor/fronts/shield.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1

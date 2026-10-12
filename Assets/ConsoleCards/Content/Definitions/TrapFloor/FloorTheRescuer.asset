@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Call-A-Friend
   category: Friend
   description: Authored Friend Card. Resolve Call-A-Friend manually according to the current agreed rules.
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: d2456f37d84a4344894a95f58e26b55b, type: 3}
+  frontArtworkReference: trap-floor/fronts/call-a-friend.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1

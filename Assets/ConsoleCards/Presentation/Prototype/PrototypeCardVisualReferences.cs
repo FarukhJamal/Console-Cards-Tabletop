@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ConsoleCards.Presentation.Views;
 using UnityEngine;
 
@@ -18,6 +19,7 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] private TextMesh frontLabel;
         [SerializeField] private TextMesh backLabel;
         private bool backLabelHidden;
+        private Renderer[] suppliedModelRenderers;
 
         public CardView CardView => cardView;
 
@@ -30,6 +32,49 @@ namespace ConsoleCards.Presentation.Prototype
         public TextMesh FrontLabel => frontLabel;
 
         public TextMesh BackLabel => backLabel;
+
+        /// <summary>
+        /// Renderers of the supplied card model (the Trading Card FBX) under the face roots, other than the
+        /// prototype plates and labels. Found once on first use; each has a "face" and a "back" material slot.
+        /// </summary>
+        public IReadOnlyList<Renderer> SuppliedModelRenderers
+        {
+            get
+            {
+                if (suppliedModelRenderers == null)
+                {
+                    suppliedModelRenderers = FindSuppliedModelRenderers();
+                }
+
+                return suppliedModelRenderers;
+            }
+        }
+
+        private Renderer[] FindSuppliedModelRenderers()
+        {
+            ValidateReferences();
+            MeshRenderer[] candidates = GetComponentsInChildren<MeshRenderer>(true);
+            List<Renderer> found = new List<Renderer>(candidates.Length);
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                MeshRenderer candidate = candidates[i];
+                if (ReferenceEquals(candidate, faceUpRenderer)
+                    || ReferenceEquals(candidate, faceDownRenderer)
+                    || candidate.GetComponent<TextMesh>() != null)
+                {
+                    continue;
+                }
+
+                Transform candidateTransform = candidate.transform;
+                if (candidateTransform.IsChildOf(cardView.FaceUpVisualRoot.transform)
+                    || candidateTransform.IsChildOf(cardView.FaceDownVisualRoot.transform))
+                {
+                    found.Add(candidate);
+                }
+            }
+
+            return found.ToArray();
+        }
 
         public void AlignFaceLabelsToSurface(float localOrderHeight)
         {

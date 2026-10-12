@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Slow Trap
   category: Trap
   description: 'Reduce the affected Player''s movement allowance by 1 space during their next Round.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: 87cf657b1d0c460aab0c55e60f8d128c, type: 3}
+  frontArtworkReference: trap-floor/fronts/slow-trap.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 3

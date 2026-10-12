@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Mystery Box
   category: Friend
   description: Authored Friend Card. Resolve Mystery Box manually according to the current agreed rules.
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: 1f6eecb64f8f4e0589b2858ca8ee773c, type: 3}
+  frontArtworkReference: trap-floor/fronts/mystery-box.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1

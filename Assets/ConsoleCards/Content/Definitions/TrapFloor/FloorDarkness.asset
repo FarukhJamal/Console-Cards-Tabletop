@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Blind Trap
   category: Trap
   description: 'During your next Round, do not draw Controller Cards. Roll a d4 for your movement direction.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: 4b366c024c184e37b64ab34b4e2ace2d, type: 3}
+  frontArtworkReference: trap-floor/fronts/blind-trap.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 3

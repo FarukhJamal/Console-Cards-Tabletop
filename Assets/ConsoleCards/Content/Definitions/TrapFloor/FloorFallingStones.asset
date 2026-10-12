@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Fall Trap
   category: Trap
   description: 'If unresolved, the affected Player is eliminated for the current Round.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: bcd4104b5fc1444f8a105fd8dedc3ad9, type: 3}
+  frontArtworkReference: trap-floor/fronts/fall-trap.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 3

@@ -155,6 +155,11 @@ namespace ConsoleCards.Presentation.Prototype
         private readonly List<ConsoleView> playerConsoleViews = new List<ConsoleView>();
         private readonly List<IContainerLayoutView> layoutViews = new List<IContainerLayoutView>();
         private readonly Dictionary<TabletopObjectId, string> labelsByCardId = new Dictionary<TabletopObjectId, string>();
+        // Card art is drawn through one shared material per (base material, picture), made once and reused.
+        // Texture overrides in a MaterialPropertyBlock are not drawn on every render path, so art never goes there.
+        private readonly Dictionary<(Material, Texture2D), Material> cardArtMaterials = new Dictionary<(Material, Texture2D), Material>();
+        private readonly Dictionary<Material, Material> cardArtBaseMaterials = new Dictionary<Material, Material>();
+        private MaterialPropertyBlock cardSlotProperties; // created on first use: Unity forbids it in field initializers
         private readonly Dictionary<ObjectDefinitionId, ButtonCardDefinition> buttonDefinitions =
             new Dictionary<ObjectDefinitionId, ButtonCardDefinition>();
         private readonly Dictionary<ContainerId, StackRuntimeView> stackViewsByContainerId =
@@ -227,6 +232,7 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorFloormasterLifecycleState floormasterLifecycleState;
         private TrapFloorFloormasterLifecycleService floormasterLifecycleService;
         private TrapFloorRoundState trapFloorRoundState;
+        private int boardCardBacksRound;
         private TrapFloorRoundOrchestrationService trapFloorRoundOrchestrationService;
         private SystemRandomValueSource authoritativeRandomValueSource;
         private ITabletopComponentIdentitySource componentIdentitySource;
@@ -2105,6 +2111,7 @@ namespace ConsoleCards.Presentation.Prototype
         private void OnDestroy()
         {
             Shutdown();
+            ReleaseCardArtMaterials();
             if (handTrayRig != null)
             {
                 Destroy(handTrayRig.gameObject);
@@ -2128,6 +2135,7 @@ namespace ConsoleCards.Presentation.Prototype
             HandleHandTrayShortcut();
             physicalAuthority?.Tick();
             CompletePendingLandingFlip();
+            RefreshBoardCardBacksIfRoundChanged();
             CompletePhysicalFloorfallIfSettled();
             CompletePhysicalFloorCollapseIfSettled();
             CompletePhysicalBlindDirectionIfSettled();
@@ -10566,11 +10574,17 @@ namespace ConsoleCards.Presentation.Prototype
             string backLabel = isFloorCard ? "MYSTERY" : visualReferences.BackLabel.text;
             bool backLabelIsPlaceholder = true;
             Color backColor = new Color(0.10f, 0.19f, 0.42f);
+            Texture2D frontArtwork = null;
+            Texture2D backArtwork = null;
             if (TryGetAuthoredCardDefinition(card.BaseState.DefinitionId, out CardDefinition authoredDefinition))
             {
                 frontLabel = authoredDefinition.DisplayName;
-                ApplyCardArtwork(visualReferences.FaceUpRenderer, authoredDefinition.FrontArtwork);
-                ApplyCardArtwork(visualReferences.FaceDownRenderer, authoredDefinition.BackArtwork);
+                frontArtwork = authoredDefinition.FrontArtwork;
+                backArtwork = authoredDefinition.BackArtwork;
+            }
+            else if (TryGetAuthoredAvatarArtwork(card.BaseState.DefinitionId, out Texture2D avatarArtwork))
+            {
+                frontArtwork = avatarArtwork;
             }
             if (isFloorCard
                 && trapFloorTemplate.TryGetFloorCardState(
@@ -10586,10 +10600,19 @@ namespace ConsoleCards.Presentation.Prototype
                     frontLabel = $"HOLE\n{floorCard.Coordinate}";
                     backLabel = frontLabel;
                     backLabelIsPlaceholder = false;
+                    frontArtwork = null;
+                    backArtwork = null;
                 }
                 else
                 {
                     frontColor = TrapFloorContentColor(floorCard.Content.Category);
+                    if (TryGetAuthoredCardDefinition(floorCard.Content.Id, out CardDefinition contentDefinition)
+                        && contentDefinition.FrontArtwork != null)
+                    {
+                        frontArtwork = contentDefinition.FrontArtwork;
+                    }
+
+                    backArtwork = CurrentBoardCardBack();
                     if (floorCard.Content.Category == TrapFloorFloorContentCategory.Key
                         && trapFloorObjectiveState != null)
                     {
@@ -10606,10 +10629,21 @@ namespace ConsoleCards.Presentation.Prototype
                 }
             }
 
+            // No art (including a hole) puts the plate back on its plain material.
+            ApplyCardArtwork(visualReferences.FaceUpRenderer, frontArtwork);
+            ApplyCardArtwork(visualReferences.FaceDownRenderer, backArtwork);
+            ApplySuppliedModelArtwork(
+                visualReferences,
+                frontArtwork,
+                backArtwork,
+                frontArtwork != null ? Color.white : frontColor,
+                backArtwork != null ? Color.white : backColor);
+
+            // Art carries its own colours, so the tint stays white wherever art is shown.
             ApplyCardColor(
                 visualReferences.FaceUpRenderer,
-                frontColor);
-            ApplyCardColor(visualReferences.FaceDownRenderer, backColor);
+                frontArtwork != null ? Color.white : frontColor);
+            ApplyCardColor(visualReferences.FaceDownRenderer, backArtwork != null ? Color.white : backColor);
             ConfigurePrototypeLabel(
                 visualReferences.FrontLabel,
                 frontLabel,
@@ -10629,6 +10663,92 @@ namespace ConsoleCards.Presentation.Prototype
                 : PrototypeVisualHide.None; // collapsed floor card: HOLE (x,y) stays visible on both sides
             ApplyLabelRendererHide(visualReferences.FrontLabel, faceLabelPart);
             ApplyLabelRendererHide(visualReferences.BackLabel, faceLabelPart);
+            if (frontArtwork != null)
+            {
+                SetLabelRendererVisible(visualReferences.FrontLabel, false);
+            }
+
+            if (backArtwork != null)
+            {
+                SetLabelRendererVisible(visualReferences.BackLabel, false);
+            }
+        }
+
+        private static void SetLabelRendererVisible(TextMesh label, bool visible)
+        {
+            Renderer labelRenderer = label != null ? label.GetComponent<Renderer>() : null;
+            if (labelRenderer != null)
+            {
+                labelRenderer.enabled = visible;
+            }
+        }
+
+        // Board (floor) card backs change per round: round 1 uses the first back, round 2 the second,
+        // and so on, repeating after the last (doc 24). Null when the game has no backs.
+        private Texture2D CurrentBoardCardBack()
+        {
+            if (trapFloorGameDefinition == null)
+            {
+                return null;
+            }
+
+            IReadOnlyList<Texture2D> backs = trapFloorGameDefinition.BoardCardBacks;
+            if (backs == null || backs.Count == 0)
+            {
+                return null;
+            }
+
+            int round = trapFloorRoundState != null ? Math.Max(1, trapFloorRoundState.CurrentRoundNumber) : 1;
+            return backs[(round - 1) % backs.Count];
+        }
+
+        // Only does work on the frame the round number changes; re-applies floor backs then.
+        private void RefreshBoardCardBacksIfRoundChanged()
+        {
+            int round = trapFloorRoundState != null ? trapFloorRoundState.CurrentRoundNumber : 0;
+            if (round == boardCardBacksRound)
+            {
+                return;
+            }
+
+            boardCardBacksRound = round;
+            if (trapFloorTemplate == null
+                || matchState == null
+                || trapFloorGameDefinition == null
+                || trapFloorGameDefinition.BoardCardBacks.Count < 2)
+            {
+                return;
+            }
+
+            foreach (TabletopObjectId floorCardId in trapFloorTemplate.FloorCardIds.Values)
+            {
+                RefreshTrapFloorFloorCardPresentation(floorCardId);
+            }
+        }
+
+        private bool TryGetAuthoredAvatarArtwork(ObjectDefinitionId definitionId, out Texture2D artwork)
+        {
+            artwork = null;
+            if (trapFloorTemplate == null || trapFloorGameDefinition == null)
+            {
+                return false;
+            }
+
+            IReadOnlyList<AvatarDefinition> avatars = trapFloorGameDefinition.Avatars;
+            for (int i = 0; i < avatars.Count; i++)
+            {
+                AvatarDefinition avatar = avatars[i];
+                if (avatar != null
+                    && avatar.Artwork != null
+                    && Guid.TryParse(avatar.StableId, out Guid avatarGuid)
+                    && new ObjectDefinitionId(avatarGuid) == definitionId)
+                {
+                    artwork = avatar.Artwork;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static Color TrapFloorContentColor(TrapFloorFloorContentCategory category)
@@ -10718,18 +10838,130 @@ namespace ConsoleCards.Presentation.Prototype
             renderer.SetPropertyBlock(properties);
         }
 
-        private static void ApplyCardArtwork(Renderer renderer, Texture2D artwork)
+        private void ApplyCardArtwork(Renderer renderer, Texture2D artwork)
         {
-            if (artwork == null)
+            Material current = renderer.sharedMaterial;
+            if (current == null)
             {
                 return;
             }
 
-            MaterialPropertyBlock properties = new MaterialPropertyBlock();
-            renderer.GetPropertyBlock(properties);
-            properties.SetTexture("_BaseMap", artwork);
-            properties.SetTexture("_MainTex", artwork);
-            renderer.SetPropertyBlock(properties);
+            Material wanted = CardArtMaterial(CardArtBaseMaterial(current), artwork);
+            if (!ReferenceEquals(current, wanted))
+            {
+                renderer.sharedMaterial = wanted;
+            }
+        }
+
+        // The supplied card model (Trading Card FBX) has a "back" material slot and a "face" slot.
+        // The face slot carries the front art, the back slot the back art; each slot is tinted on its own.
+        private void ApplySuppliedModelArtwork(
+            PrototypeCardVisualReferences visualReferences,
+            Texture2D frontArtwork,
+            Texture2D backArtwork,
+            Color frontTint,
+            Color backTint)
+        {
+            if (cardSlotProperties == null)
+            {
+                cardSlotProperties = new MaterialPropertyBlock();
+            }
+
+            IReadOnlyList<Renderer> renderers = visualReferences.SuppliedModelRenderers;
+            for (int rendererIndex = 0; rendererIndex < renderers.Count; rendererIndex++)
+            {
+                Renderer renderer = renderers[rendererIndex];
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                Material[] materials = renderer.sharedMaterials;
+                bool changed = false;
+                for (int slot = 0; slot < materials.Length; slot++)
+                {
+                    if (materials[slot] == null)
+                    {
+                        continue;
+                    }
+
+                    Material baseMaterial = CardArtBaseMaterial(materials[slot]);
+                    bool isBackSlot = IsCardBackMaterial(baseMaterial, slot);
+                    Material wanted = CardArtMaterial(baseMaterial, isBackSlot ? backArtwork : frontArtwork);
+                    if (!ReferenceEquals(materials[slot], wanted))
+                    {
+                        materials[slot] = wanted;
+                        changed = true;
+                    }
+
+                    Color tint = isBackSlot ? backTint : frontTint;
+                    renderer.GetPropertyBlock(cardSlotProperties, slot);
+                    cardSlotProperties.SetColor("_BaseColor", tint);
+                    cardSlotProperties.SetColor("_Color", tint);
+                    renderer.SetPropertyBlock(cardSlotProperties, slot);
+                    cardSlotProperties.Clear();
+                }
+
+                if (changed)
+                {
+                    renderer.sharedMaterials = materials;
+                }
+            }
+        }
+
+        // Slots are told apart by the model's material names ("back" / "face"); slot 0 is the back otherwise.
+        private static bool IsCardBackMaterial(Material baseMaterial, int slot)
+        {
+            string name = baseMaterial.name;
+            if (name.IndexOf("back", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            if (name.IndexOf("face", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return false;
+            }
+
+            return slot == 0;
+        }
+
+        private Material CardArtBaseMaterial(Material material)
+        {
+            return cardArtBaseMaterials.TryGetValue(material, out Material knownBase) ? knownBase : material;
+        }
+
+        private Material CardArtMaterial(Material baseMaterial, Texture2D artwork)
+        {
+            if (artwork == null)
+            {
+                return baseMaterial;
+            }
+
+            if (!cardArtMaterials.TryGetValue((baseMaterial, artwork), out Material material))
+            {
+                material = new Material(baseMaterial) { name = $"{baseMaterial.name} ({artwork.name})" };
+                material.SetTexture("_BaseMap", artwork);
+                material.SetTexture("_MainTex", artwork);
+                cardArtMaterials.Add((baseMaterial, artwork), material);
+                cardArtBaseMaterials.Add(material, baseMaterial);
+            }
+
+            return material;
+        }
+
+        private void ReleaseCardArtMaterials()
+        {
+            foreach (Material material in cardArtMaterials.Values)
+            {
+                if (material != null)
+                {
+                    Destroy(material);
+                }
+            }
+
+            cardArtMaterials.Clear();
+            cardArtBaseMaterials.Clear();
         }
 
         private bool TryGetAuthoredCardDefinition(

@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Up
   category: ControllerInput
   description: Shared Controller input card representing Up.
-  frontArtwork: {fileID: 0}
-  frontArtworkReference:
+  frontArtwork: {fileID: 2800000, guid: c4ff4926f0894c8cb7e25b2f73ff8eb0, type: 3}
+  frontArtworkReference: trap-floor/controller/controller-up.png
   backArtwork: {fileID: 0}
   backArtworkReference:
   quantity: 6

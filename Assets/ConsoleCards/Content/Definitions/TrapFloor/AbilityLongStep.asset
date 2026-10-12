@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Rush
   category: Ability
   description: 'Action. Instead of moving, move up to 3 tiles quickly, even over a missing (collapsed) tile.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: 827041e1c7734303936e8f1b3ae15df5, type: 3}
+  frontArtworkReference: trap-floor/fronts/rush.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1

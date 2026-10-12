@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Right
   category: ControllerInput
   description: Shared Controller input card representing Right.
-  frontArtwork: {fileID: 0}
-  frontArtworkReference:
+  frontArtwork: {fileID: 2800000, guid: 4170151069fc4b07885baeb4de691289, type: 3}
+  frontArtworkReference: trap-floor/controller/controller-right.png
   backArtwork: {fileID: 0}
   backArtworkReference:
   quantity: 6

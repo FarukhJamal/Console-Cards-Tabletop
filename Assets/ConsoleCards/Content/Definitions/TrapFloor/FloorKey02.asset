@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Silver Key
   category: Key
   description: 'CURRENT STAGE-03 OBJECTIVE - This revealed Key remains UNCLAIMED until a Player chooses Claim Key. A claimed Key contributes to the shared KEYS X / Y objective.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: 43cc7b9e82a5498c822fd9dcc8fb47ae, type: 3}
+  frontArtworkReference: trap-floor/fronts/silver-key.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 2

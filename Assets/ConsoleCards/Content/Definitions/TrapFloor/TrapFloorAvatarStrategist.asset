@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier:
   stableId: 54460014-4f4f-4000-8000-001400000009
   displayName: Strategist
-  artwork: {fileID: 0}
-  artworkReference:
+  artwork: {fileID: 2800000, guid: d805c23ec1ca4722976a2145c0115641, type: 3}
+  artworkReference: trap-floor/avatars/strategist.png
   stats: []
   startingAbilities:
   - {fileID: 11400000, guid: a4444444444444448444444444444444, type: 2}

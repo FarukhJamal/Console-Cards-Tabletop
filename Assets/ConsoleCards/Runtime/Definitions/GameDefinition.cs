@@ -80,6 +80,8 @@ namespace ConsoleCards.Definitions
         [SerializeField, TextArea] private string assistanceConfiguration;
         [Tooltip("The rules shipped in the game box (doc 23). Shown to players; never enforced by itself.")]
         [SerializeField] private RuleSetDefinition defaultRuleSet;
+        [Tooltip("Face-down backs for board (floor) cards. One back per round, in order, repeating after the last.")]
+        [SerializeField] private List<Texture2D> boardCardBacks = new List<Texture2D>();
 
         public string StableId => stableId;
         public string DisplayName => displayName;
@@ -90,6 +92,7 @@ namespace ConsoleCards.Definitions
         public IReadOnlyList<AvatarDefinition> Avatars => avatars;
         public ConsoleConfiguration ConsoleConfiguration => consoleConfiguration;
         public RuleSetDefinition DefaultRuleSet => defaultRuleSet;
+        public IReadOnlyList<Texture2D> BoardCardBacks => boardCardBacks;
 
         public bool TryGetCard(ObjectDefinitionId id, out CardDefinition definition)
         {

@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Golden Key
   category: Key
   description: 'CURRENT STAGE-03 OBJECTIVE - This revealed Key remains UNCLAIMED until a Player chooses Claim Key. A claimed Key contributes to the shared KEYS X / Y objective.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: be82632c30ea4fb38d5521219bf032f3, type: 3}
+  frontArtworkReference: trap-floor/fronts/golden-key.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 2

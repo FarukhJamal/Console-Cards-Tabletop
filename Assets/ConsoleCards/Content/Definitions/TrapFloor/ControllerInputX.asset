@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: X
   category: ControllerInput
   description: Shared Controller input card representing X.
-  frontArtwork: {fileID: 0}
-  frontArtworkReference:
+  frontArtwork: {fileID: 2800000, guid: 62a33c4cdbbc427e996b7ead6ac05274, type: 3}
+  frontArtworkReference: trap-floor/controller/controller-x.png
   backArtwork: {fileID: 0}
   backArtworkReference:
   quantity: 6

@@ -27,6 +27,7 @@ namespace ConsoleCards.Definitions
         [SerializeField] private List<AuthoredStat> stats = new List<AuthoredStat>();
         [SerializeField] private List<CardDefinition> startingAbilities = new List<CardDefinition>();
 
+        public string StableId => stableId;
         public Texture2D Artwork => artwork;
 
         public AvatarDefinitionData ToData()

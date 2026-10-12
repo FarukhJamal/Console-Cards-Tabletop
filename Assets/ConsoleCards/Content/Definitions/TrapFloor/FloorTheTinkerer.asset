@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Buddy Boots
   category: Friend
   description: Authored Friend Card. Resolve Buddy Boots manually according to the current agreed rules.
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: 466dde923816441eba2444b4cf3ffe0f, type: 3}
+  frontArtworkReference: trap-floor/fronts/buddy-boots.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1

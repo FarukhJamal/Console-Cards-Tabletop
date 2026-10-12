@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Left
   category: ControllerInput
   description: Shared Controller input card representing Left.
-  frontArtwork: {fileID: 0}
-  frontArtworkReference:
+  frontArtwork: {fileID: 2800000, guid: f98e031e73a4489e8cad011a8b33d84d, type: 3}
+  frontArtworkReference: trap-floor/controller/controller-left.png
   backArtwork: {fileID: 0}
   backArtworkReference:
   quantity: 6

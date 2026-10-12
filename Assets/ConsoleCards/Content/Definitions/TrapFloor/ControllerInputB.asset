@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: B
   category: ControllerInput
   description: Shared Controller input card representing B.
-  frontArtwork: {fileID: 0}
-  frontArtworkReference:
+  frontArtwork: {fileID: 2800000, guid: 30b014bd79ce44cbb8a01a7a488be837, type: 3}
+  frontArtworkReference: trap-floor/controller/controller-b.png
   backArtwork: {fileID: 0}
   backArtworkReference:
   quantity: 6

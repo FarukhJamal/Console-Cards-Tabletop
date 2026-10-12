@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Grand Exit
   category: SecretExit
   description: The standard/default Trap Floor Exit. Players decide when an Attempt Escape action is appropriate.
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: 4534767dbdb24611a43aa69590c36514, type: 3}
+  frontArtworkReference: trap-floor/fronts/grand-exit.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1

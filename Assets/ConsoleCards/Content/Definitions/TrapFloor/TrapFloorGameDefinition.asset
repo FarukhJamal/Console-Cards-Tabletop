@@ -130,3 +130,7 @@ MonoBehaviour:
   presentationReference: trap-floor-default-presentation
   assistanceConfiguration: Optional reveal, Key, Exit, and Collapse assistance may consume this data but must not block freeform actions.;trap-floor-search-normal-any=A,B,X,Y;trap-floor-search-careful=A+B+X+Y;trap-floor-careful-trap-suppression=true
   defaultRuleSet: {fileID: 11400000, guid: 8388f169f74d4e02a1e548831213c896, type: 2}
+  boardCardBacks:
+  - {fileID: 2800000, guid: c7c832924871488aa702f01ba3a36e8b, type: 3}
+  - {fileID: 2800000, guid: d02115e75f1b42b3b5823551f4a38a9f, type: 3}
+  - {fileID: 2800000, guid: af434103019b48c39ea75609f29e0523, type: 3}

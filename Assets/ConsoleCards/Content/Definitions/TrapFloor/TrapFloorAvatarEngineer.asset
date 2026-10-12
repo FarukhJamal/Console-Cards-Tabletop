@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier:
   stableId: 54460014-4f4f-4000-8000-001400000007
   displayName: Engineer
-  artwork: {fileID: 0}
-  artworkReference:
+  artwork: {fileID: 2800000, guid: 39bee7b57cb740e0a233d9506f384c15, type: 3}
+  artworkReference: trap-floor/avatars/engineer.png
   stats: []
   startingAbilities:
   - {fileID: 11400000, guid: a5555555555545558555555555555555, type: 2}

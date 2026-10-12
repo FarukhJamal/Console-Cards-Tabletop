@@ -16,8 +16,8 @@ MonoBehaviour:
   displayName: Check
   category: Ability
   description: 'Reaction. Play on the Trap you are on: the Trap does not hurt anyone.'
-  frontArtwork: {fileID: 0}
-  frontArtworkReference: 
+  frontArtwork: {fileID: 2800000, guid: db46b31ea3404c3a9b4c23e00960dfe8, type: 3}
+  frontArtworkReference: trap-floor/fronts/check.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1
