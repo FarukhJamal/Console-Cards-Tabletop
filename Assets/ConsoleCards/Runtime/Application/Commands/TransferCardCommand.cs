@@ -12,7 +12,8 @@ namespace ConsoleCards.Application.Commands
             TabletopObjectId cardObjectId,
             ContainerId expectedSourceContainerId,
             ContainerId destinationContainerId,
-            TabletopPose? targetTablePose, PhysicalObjectState physicalState = null)
+            TabletopPose? targetTablePose, PhysicalObjectState physicalState = null,
+            float? destinationRotationDegrees = null)
         {
             if (cardObjectId.IsEmpty)
             {
@@ -39,12 +40,21 @@ namespace ConsoleCards.Application.Commands
                 ValidatePose(targetTablePose.Value, nameof(targetTablePose));
             }
 
+            if (destinationRotationDegrees.HasValue
+                && (destinationContainerId.IsEmpty || !IsFinite(destinationRotationDegrees.Value)))
+            {
+                throw new ArgumentException(
+                    "A destination rotation must be finite and is only valid when transferring into a container.",
+                    nameof(destinationRotationDegrees));
+            }
+
             Context = context;
             CardObjectId = cardObjectId;
             ExpectedSourceContainerId = expectedSourceContainerId;
             DestinationContainerId = destinationContainerId;
             TargetTablePose = targetTablePose;
             PhysicalState = physicalState;
+            DestinationRotationDegrees = destinationRotationDegrees;
         }
 
         public CommandContext Context { get; }
@@ -58,18 +68,27 @@ namespace ConsoleCards.Application.Commands
         public TabletopPose? TargetTablePose { get; }
         public PhysicalObjectState PhysicalState { get; }
 
+        /// <summary>
+        /// Rotation the card takes on entering its destination container (a Console slot sets the slot's
+        /// orientation). Null keeps the card's own rotation.
+        /// </summary>
+        public float? DestinationRotationDegrees { get; }
+
         public static TransferCardCommand ToContainer(
             CommandContext context,
             TabletopObjectId cardObjectId,
             ContainerId expectedSourceContainerId,
-            ContainerId destinationContainerId)
+            ContainerId destinationContainerId,
+            float? destinationRotationDegrees = null)
         {
             return new TransferCardCommand(
                 context,
                 cardObjectId,
                 expectedSourceContainerId,
                 destinationContainerId,
-                null);
+                null,
+                null,
+                destinationRotationDegrees);
         }
 
         public static TransferCardCommand ToTabletop(

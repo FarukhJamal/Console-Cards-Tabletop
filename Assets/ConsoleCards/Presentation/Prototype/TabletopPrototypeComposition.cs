@@ -121,8 +121,6 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal float floorCardVisualScale = 0.62f;
         [Tooltip("Scale of Large (hero/avatar) cards relative to a Standard card (doc 24).")]
         [SerializeField] internal float largeCardVisualScale = 1.486f;
-        [Tooltip("World height a card's model is raised while it sits in a Console screen (Main) slot, so it does not clip the screen.")]
-        [SerializeField] internal float screenSlotVisualLift = 0.01f;
         [SerializeField] internal bool showDeveloperControls;
         [Tooltip("Prototype visuals hidden at bind time. After changing in Play mode, press Reset or restart the session.")]
         [SerializeField] internal PrototypeVisualHide prototypeVisualHide =
@@ -163,8 +161,6 @@ namespace ConsoleCards.Presentation.Prototype
         // Texture overrides in a MaterialPropertyBlock are not drawn on every render path, so art never goes there.
         private readonly Dictionary<(Material, Texture2D), Material> cardArtMaterials = new Dictionary<(Material, Texture2D), Material>();
         private readonly Dictionary<Material, Material> cardArtBaseMaterials = new Dictionary<Material, Material>();
-        private const string ScreenConsoleSlotKey = "Main";
-        private readonly HashSet<ContainerId> screenSlotContainerIds = new HashSet<ContainerId>();
         private MaterialPropertyBlock cardSlotProperties; // created on first use: Unity forbids it in field initializers
         private readonly Dictionary<ObjectDefinitionId, ButtonCardDefinition> buttonDefinitions =
             new Dictionary<ObjectDefinitionId, ButtonCardDefinition>();
@@ -817,7 +813,6 @@ namespace ConsoleCards.Presentation.Prototype
             stackViewsByContainerId.Clear();
             feedbackTargetsByContainerId.Clear();
             consoleSlotVisualsByContainerId.Clear();
-            screenSlotContainerIds.Clear();
             feedbackHoldUntil = 0f;
             contextMenuMode = PrototypeContextMenuMode.None;
             contextMenuCardId = TabletopObjectId.Empty;
@@ -8074,7 +8069,6 @@ namespace ConsoleCards.Presentation.Prototype
 
             ValidateFiniteGreaterThanZero(floorCardVisualScale, nameof(floorCardVisualScale));
             ValidateFiniteGreaterThanZero(largeCardVisualScale, nameof(largeCardVisualScale));
-            ValidateFiniteGreaterThanOrEqualToZero(screenSlotVisualLift, nameof(screenSlotVisualLift));
             ValidateCardPrefabReferences();
             ValidateTrapFloorPrefabReferences();
             ValidatePreInitializationState();
@@ -9419,14 +9413,16 @@ namespace ConsoleCards.Presentation.Prototype
             for (int i = 0; i < runtimeConsole.SlotCount; i++)
             {
                 ContainerState slot = matchState.GetContainer(runtimeConsole.SlotContainerIds[i]);
-                if (i < layout.CardSlots.Count
-                    && string.Equals(layout.CardSlots[i].Key, ScreenConsoleSlotKey, StringComparison.OrdinalIgnoreCase))
-                {
-                    screenSlotContainerIds.Add(slot.Id);
-                }
-
                 ConsoleSlotView slotView = slotViews[i];
                 PrototypeConsoleSlotVisual slotVisual = slotVisuals[i];
+                // Cards in a slot face the slot's layout default orientation relative to the Console (A1h).
+                if (i < layout.CardSlots.Count)
+                {
+                    slotView.ConfigureCardOrientation(
+                        targetConsole.transform,
+                        layout.CardSlots[i].DefaultOrientation == ConsoleSlotOrientation.Landscape ? 90f : 0f);
+                }
+
                 slotView.Bind(slot, slotVisual.LayoutAnchor, coordinateConverter, cardViews);
                 consoleSlotViews.Add(slotView);
                 consoleSlotVisualsByContainerId.Add(slot.Id, slotVisual);
@@ -10096,10 +10092,6 @@ namespace ConsoleCards.Presentation.Prototype
 
                 visualReferences.SetCardContentVisible(
                     ShouldShowCardContent(boundCardView.CardState));
-                visualReferences.SetSuppliedVisualLift(
-                    screenSlotContainerIds.Contains(boundCardView.CardState.BaseState.ContainerId)
-                        ? screenSlotVisualLift
-                        : 0f);
             }
         }
 

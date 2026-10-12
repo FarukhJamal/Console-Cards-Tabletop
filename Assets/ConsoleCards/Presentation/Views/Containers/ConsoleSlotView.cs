@@ -20,8 +20,30 @@ namespace ConsoleCards.Presentation.Views.Containers
         private ContainerState containerState;
         private TabletopCoordinateConverter converter;
         private bool isBound;
+        private Transform orientationReference;
+        private float orientationOffsetDegrees;
 
         public bool IsBound => isBound;
+
+        /// <summary>
+        /// The table rotation a card takes in this slot: the Console's yaw plus the slot's layout default
+        /// orientation (Landscape = +90). Null when no orientation is configured; cards then keep their own.
+        /// </summary>
+        public float? CardRotationDegrees => orientationReference != null
+            ? Mathf.Repeat(orientationReference.eulerAngles.y + orientationOffsetDegrees, 360f)
+            : (float?)null;
+
+        /// <summary>Sets the slot's card orientation from its Console root and the layout default (Presentation-only).</summary>
+        public void ConfigureCardOrientation(Transform consoleRoot, float offsetDegrees)
+        {
+            if (float.IsNaN(offsetDegrees) || float.IsInfinity(offsetDegrees))
+            {
+                throw new ArgumentOutOfRangeException(nameof(offsetDegrees), "Slot orientation offset must be finite.");
+            }
+
+            orientationReference = consoleRoot;
+            orientationOffsetDegrees = offsetDegrees;
+        }
 
         public ContainerId ContainerId => isBound ? containerState.Id : ContainerId.Empty;
 
@@ -104,7 +126,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             TabletopPose currentPose = cardView.BoundState.Pose;
             return ContainerViewBinding.CreatePose(
                 converter.ToTableCoordinate(layoutAnchor.position),
-                cardView.transform.eulerAngles.y,
+                CardRotationDegrees ?? cardView.transform.eulerAngles.y,
                 currentPose);
         }
 
@@ -134,6 +156,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             float physicalStep = PhysicalStackSeparation();
             TableCoordinate anchorCoordinate = coordinateConverter.ToTableCoordinate(anchor.position);
             float anchorWorldUpOffset = anchor.position.y - coordinateConverter.ToWorldPosition(anchorCoordinate).y;
+            float? slotRotation = CardRotationDegrees;
             for (int i = 0; i < orderedCards.Count; i++)
             {
                 TabletopPose currentPose = orderedCards[i].BoundState.Pose;
@@ -141,7 +164,7 @@ namespace ConsoleCards.Presentation.Views.Containers
                     orderedCards[i],
                     ContainerViewBinding.CreatePose(
                         anchorCoordinate,
-                        currentPose.RotationDegrees,
+                        slotRotation ?? currentPose.RotationDegrees,
                         currentPose),
                     anchorWorldUpOffset + (i * physicalStep)));
             }

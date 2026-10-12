@@ -168,7 +168,12 @@ namespace ConsoleCards.Presentation.Interaction
                     transitions != null
                         ? CaptureAffectedCardTransforms(cardView, sourceContainerId, target.ContainerId)
                         : null;
-                TransferCardCommand command = CreateCommand(matchCard, sourceContainerId, target, cardView);
+                TransferCardCommand command = CreateCommand(
+                    matchCard,
+                    sourceContainerId,
+                    target,
+                    cardView,
+                    destinationLayoutView);
                 TransferCardResult transferResult;
                 try
                 {
@@ -282,7 +287,8 @@ namespace ConsoleCards.Presentation.Interaction
         private TransferCardCommand CreateCommand(
             CardInstanceState card,
             ContainerId sourceContainerId,
-            CardDropTarget target, CardView cardView)
+            CardDropTarget target, CardView cardView,
+            IContainerLayoutView destinationLayoutView)
         {
             CommandContext context = new CommandContext(
                 CommandId.New(),
@@ -307,11 +313,16 @@ namespace ConsoleCards.Presentation.Interaction
                         ? cardView.PhysicalObject.ReleaseState() : null);
             }
 
+            // A Console slot sets the card to the slot's orientation as it enters (A1h).
+            float? slotRotation = destinationLayoutView is ConsoleSlotView consoleSlotView
+                ? consoleSlotView.CardRotationDegrees
+                : null;
             return TransferCardCommand.ToContainer(
                 context,
                 card.BaseState.Id,
                 sourceContainerId,
-                target.ContainerId);
+                target.ContainerId,
+                slotRotation);
         }
 
         private static void ReconcileAfterTransfer(

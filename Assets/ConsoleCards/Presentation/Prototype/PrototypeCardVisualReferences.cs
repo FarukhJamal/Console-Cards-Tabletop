@@ -20,8 +20,6 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] private TextMesh backLabel;
         private bool backLabelHidden;
         private Renderer[] suppliedModelRenderers;
-        private Transform[] suppliedVisualRoots;
-        private Vector3[] suppliedVisualBasePositions;
 
         public CardView CardView => cardView;
 
@@ -52,38 +50,6 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
-        /// <summary>
-        /// Raises the supplied card model by a world-space height without moving the card itself
-        /// (for example above a Console screen). 0 puts it back. Writes only when the target changes.
-        /// </summary>
-        public void SetSuppliedVisualLift(float worldLift)
-        {
-            if (suppliedModelRenderers == null)
-            {
-                suppliedModelRenderers = FindSuppliedModelRenderers();
-            }
-
-            for (int i = 0; i < suppliedVisualRoots.Length; i++)
-            {
-                Transform visualRoot = suppliedVisualRoots[i];
-                if (visualRoot == null)
-                {
-                    continue;
-                }
-
-                Vector3 target = suppliedVisualBasePositions[i];
-                if (worldLift != 0f && visualRoot.parent != null)
-                {
-                    target += visualRoot.parent.InverseTransformVector(new Vector3(0f, worldLift, 0f));
-                }
-
-                if ((visualRoot.localPosition - target).sqrMagnitude > 1e-12f)
-                {
-                    visualRoot.localPosition = target;
-                }
-            }
-        }
-
         private Renderer[] FindSuppliedModelRenderers()
         {
             ValidateReferences();
@@ -105,31 +71,6 @@ namespace ConsoleCards.Presentation.Prototype
                 {
                     found.Add(candidate);
                 }
-            }
-
-            // The node to lift is the model's own root under the face root (SuppliedCardVisual).
-            List<Transform> roots = new List<Transform>(found.Count);
-            for (int i = 0; i < found.Count; i++)
-            {
-                Transform node = found[i].transform;
-                while (node.parent != null
-                    && node.parent != cardView.FaceUpVisualRoot.transform
-                    && node.parent != cardView.FaceDownVisualRoot.transform)
-                {
-                    node = node.parent;
-                }
-
-                if (!roots.Contains(node))
-                {
-                    roots.Add(node);
-                }
-            }
-
-            suppliedVisualRoots = roots.ToArray();
-            suppliedVisualBasePositions = new Vector3[suppliedVisualRoots.Length];
-            for (int i = 0; i < suppliedVisualRoots.Length; i++)
-            {
-                suppliedVisualBasePositions[i] = suppliedVisualRoots[i].localPosition;
             }
 
             return found.ToArray();

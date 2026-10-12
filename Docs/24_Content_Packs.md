@@ -58,8 +58,7 @@ A1 implements step 3 only. Steps 1 and 2 arrive with A2–A4.
 - Presentation draws a Large card at `largeCardVisualScale` (1.486 by default) times a Standard card,
   including its click box. It is a drawing scale only; the card's position is unchanged.
 - Avatar/hero cards never go into a hand.
-- A card in a Console screen slot (layout key `Main`) has its model raised by `screenSlotVisualLift`
-  (0.01 by default) so it does not clip the screen.
+- Card height in a Console slot comes from the slot itself (authored on the Console prefab), never from code.
 - Art is drawn on the supplied card model's two material slots: `face` takes the front art, `back` the back art.
 
 ## Built-in Trap Floor art (A1)

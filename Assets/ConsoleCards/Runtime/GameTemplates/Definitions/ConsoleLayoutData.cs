@@ -12,9 +12,8 @@ namespace ConsoleCards.GameTemplates.Definitions
     }
 
     /// <summary>
-    /// Default card orientation of a Card slot, relative to the Console. A default only: a card placed in a slot
-    /// keeps its own orientation; the default applies when a card is placed without one (for example a
-    /// template's starting content). Cube entries use None.
+    /// Card orientation of a Card slot, relative to the Console. A card dropped into the slot is set to it
+    /// (doc 19 §13), as is a template's starting content. Cube entries use None.
     /// </summary>
     public enum ConsoleSlotOrientation
     {

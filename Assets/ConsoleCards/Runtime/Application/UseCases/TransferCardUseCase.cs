@@ -161,7 +161,20 @@ namespace ConsoleCards.Application.UseCases
                     cardObject.SetPose(targetTablePose);
                     cardObject.SetPhysicalState(command.PhysicalState);
                 }
-                else cardObject.SetPhysicalState(null);
+                else
+                {
+                    cardObject.SetPhysicalState(null);
+                    if (command.DestinationRotationDegrees.HasValue)
+                    {
+                        // Inside the same command, so rollback (snapshot pose) and Undo restore the old rotation.
+                        TabletopPose pose = cardObject.Pose;
+                        cardObject.SetPose(new TabletopPose(
+                            pose.Position,
+                            command.DestinationRotationDegrees.Value,
+                            pose.Layer,
+                            pose.LocalOrder));
+                    }
+                }
 
                 if (card != null && destination != null)
                 {

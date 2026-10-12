@@ -903,10 +903,13 @@ namespace ConsoleCards.Presentation.Interaction
 
             if (view.PhysicalObject != null)
             {
-                Quaternion currentOrientation = Quaternion.Euler(0f, view.transform.eulerAngles.y, 0f);
+                Quaternion slotOrientation = Quaternion.Euler(
+                    0f,
+                    consoleSlotView.CardRotationDegrees ?? view.transform.eulerAngles.y,
+                    0f);
                 return view.PhysicalObject.SnapHeldPreview(
                     consoleSlotView.PlacementPreviewWorldPosition(),
-                    currentOrientation);
+                    slotOrientation);
             }
 
             previewSession.UpdatePose(consoleSlotView.CreatePlacementPreviewPose(view));

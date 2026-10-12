@@ -1,7 +1,7 @@
 # Console Cards - Console Layout Slots, Cube Cells, and Mat Surface
 
 **Document ID:** 19_Console_Layout_Slots_And_Mat_Surface
-**Version:** 0.2
+**Version:** 0.3
 **Status:** Stages (a), (a2) and (a2b) implemented (2026-10-06/07/08; records in §4.4, §11 and §12); (a2b) 3a pile bays written 2026-10-08 (§12.1); C1 component catalogs and pile prefabs written 2026-10-08 (§12.2, doc 22); C2a, C2b and C3a written 2026-10-08/09 (doc 22); 3b pending. Later stages each need their own approved plan; the current order is §9.1. Binding platform rules: `21_Platform_Principles.md`.
 **Source:** Stage 3c-1 read-only report (cube cells and the mat as a surface) and the user's decisions on it.
 **Purpose:** Define the console as one generic component whose mat exposes every card slot and every cube position as data, so any Game can choose what to use.
@@ -44,7 +44,7 @@ World frame: W = 6.0, origin at the mat centre, +x right, +z toward the top of t
 
 ## 4. Slot table (layout asset content)
 
-Card footprints are the 1.4 × 1.4 worst case (either orientation, off-axis yaw accepted), except Main, which uses its measured screen rect. Cube footprints are the measured cell rects. Orientation is the slot's default card orientation for placement; any card can still be placed in either orientation. Capacity is the component's current default (0 = unbounded); it is a component property that templates do not change, and it should become a component-declared configurable parameter (§5). Ordinal is the stable `idOrdinal` (section 6). Card ordinals 5–9 were renumbered once in Stage (a), before any session used them; from now on ordinals are append-only and must never be reused or renumbered.
+Card footprints are the 1.4 × 1.4 worst case (either orientation, off-axis yaw accepted), except Main, which uses its measured screen rect. Cube footprints are the measured cell rects. Orientation is the slot's card orientation: a card dropped into a slot is set to it, relative to the Console (Landscape = +90°), whatever angle it was held at (A1h, 2026-10-13). Capacity is the component's current default (0 = unbounded); it is a component property that templates do not change, and it should become a component-declared configurable parameter (§5). Ordinal is the stable `idOrdinal` (section 6). Card ordinals 5–9 were renumbered once in Stage (a), before any session used them; from now on ordinals are append-only and must never be reused or renumbered.
 
 | Ordinal | Key | Kind | Group | x | z | Footprint w × d | Orientation | Default capacity | Marker | Source |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -297,3 +297,10 @@ Done: (a) definition + variant (2026-10-06); (a2) hand tray (2026-10-07, §11); 
 - **Pile prefabs:** `Content/Prefabs/Real/Deck.prefab`, `Stack.prefab` and `DiscardPile.prefab`, each with a `Model` placeholder (for the future model, e.g. the controller box whose lid is the card organizer) and a `Bay` child (`PileBayView`) reading the shared `PileBayStyle.asset` (material, colours, bar sizes). The composition spawns every runtime Deck and Stack, and the spawn and move ghosts, from the Base Box catalog (doc 22). The Prototype pile prefabs stay only for the hidden scene piles.
 - **Bays never overlap (owner):** placement uses the bay footprint for piles in a bay (`ConsoleAdjacentPlacementSettings.BayMargin` 0.08 → `BayWidth` × `BayDepth` 1.16 × 1.56; `PlaceBeside(..., inBay: true)`), and the card footprint for loose cards and hand zones. The bay is drawn inside that footprint. Trap Floor: deck (+4.455, 0), hand zone (+5.735, 0), Action area (−4.455, 0), Easy staging along-z moved from −0.9 to −1.1 so it clears the next seat's hand zone: (−5.735, −1.1) and (−6.935, −1.1). Build check: minimum clearance 0.200; table margin 0.644 (Easy), 1.664 (Hard, Impossible). Player drops stay free.
 - **Open:** the Toolbox quick-spawn grid (0.62 × 0.72 steps, used when a component is added without the ghost) is smaller than a card for every kind; it moves to catalog footprints in C2.
+
+## 13. A1h record: slot card orientation (2026-10-13)
+
+- A card dropped into a Console slot takes the slot's orientation: the Console's yaw plus the slot's layout default orientation (Portrait 0°, Landscape +90°). Its own held or rotated angle is not kept.
+- The rotation is set inside the same `TransferCardCommand` (`DestinationRotationDegrees`), so rollback and Undo restore the previous rotation, and the card keeps the slot angle when picked up again.
+- The drop preview (normal and physical held preview) shows the slot angle, and slot layout always draws its cards at the slot angle.
+- Card height in a slot comes from the slot (authored on the Console prefab), never from code.
