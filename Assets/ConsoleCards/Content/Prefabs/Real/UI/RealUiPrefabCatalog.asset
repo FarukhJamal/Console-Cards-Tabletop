@@ -73,3 +73,11 @@ MonoBehaviour:
     prefab: {fileID: 4115498720553793502, guid: 19772bbc7422492cbb67d95872a30746, type: 3}
     layer: 1
     retention: 1
+  - id: platform.feedback-banner
+    prefab: {fileID: 3241483268826107521, guid: 9b64419ae508d474cb37c2a250f43c0f, type: 3}
+    layer: 4
+    retention: 0
+  - id: platform.feedback-messages
+    prefab: {fileID: 6197989180252109277, guid: 80e3d471fb930744b8a564afec921d14, type: 3}
+    layer: 4
+    retention: 0

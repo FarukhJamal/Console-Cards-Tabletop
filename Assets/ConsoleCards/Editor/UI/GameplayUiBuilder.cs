@@ -29,6 +29,9 @@ namespace ConsoleCards.Editor.UI
         public const string RulesCardPath = Folder + "RulesCard.prefab";
         public const string RulesHeadingPath = Folder + "RulesHeading.prefab";
         public const string RulesLinePath = Folder + "RulesLine.prefab";
+        public const string FeedbackBannerPath = Folder + "FeedbackBanner.prefab";
+        public const string FeedbackMessagesPath = Folder + "FeedbackMessages.prefab";
+        private const string FeedbackAudioPath = "Assets/ConsoleCards/Content/Audio/Feedback/";
         private const string SessionIconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
 
         // Layout, in canvas units at the 1920 x 1080 reference.
@@ -91,6 +94,8 @@ namespace ConsoleCards.Editor.UI
             Save<RulesCardLineView>(RulesHeadingPath, "RulesHeading", BuildRulesHeading, stretch: false);
             Save<RulesCardLineView>(RulesLinePath, "RulesLine", BuildRulesLine, stretch: false);
             Save<RulesCardView>(RulesCardPath, "RulesCard", BuildRulesCard, stretch: true);
+            Save<FeedbackBannerView>(FeedbackBannerPath, "FeedbackBanner", BuildFeedbackBanner, stretch: true);
+            Save<FeedbackMessageStackView>(FeedbackMessagesPath, "FeedbackMessages", BuildFeedbackMessages, stretch: true);
 
             AssignCatalogEntry(PrototypeUiPrefabIds.PopupActionRow,
                 AssetDatabase.LoadAssetAtPath<PrototypePopupActionRowView>(ActionRowPath), UiLayer.Popup, UiRetention.Pooled);
@@ -118,6 +123,12 @@ namespace ConsoleCards.Editor.UI
                 AssetDatabase.LoadAssetAtPath<RulesCardLineView>(RulesHeadingPath), UiLayer.Hud, UiRetention.Pooled);
             AssignCatalogEntry(PrototypeUiPrefabIds.RulesLine,
                 AssetDatabase.LoadAssetAtPath<RulesCardLineView>(RulesLinePath), UiLayer.Hud, UiRetention.Pooled);
+            AssignCatalogEntry(PrototypeUiPrefabIds.FeedbackBanner,
+                AssetDatabase.LoadAssetAtPath<FeedbackBannerView>(FeedbackBannerPath), UiLayer.Notification,
+                UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(PrototypeUiPrefabIds.FeedbackMessages,
+                AssetDatabase.LoadAssetAtPath<FeedbackMessageStackView>(FeedbackMessagesPath), UiLayer.Notification,
+                UiRetention.CachedSingleInstance);
             AssetDatabase.SaveAssets();
             Debug.Log("[Gameplay UI] Created any missing Final UI gameplay prefabs and pointed the UI prefab catalog at them.");
         }
@@ -150,6 +161,93 @@ namespace ConsoleCards.Editor.UI
             {
                 Object.DestroyImmediate(root);
             }
+        }
+
+        // ---------- player feedback (doc 25, F1): announcement banner and message stack ----------
+
+        private static void BuildFeedbackBanner(RectTransform root, FeedbackBannerView view)
+        {
+            // Top centre, below the turn strip. Only the banner itself takes clicks (click to skip).
+            RectTransform panel = Rect("Banner", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0f, -122f), new Vector2(760f, 112f));
+            CanvasGroup group = panel.gameObject.AddComponent<CanvasGroup>();
+            Image fill = Backdrop(panel, ShadowOffset);
+            Button skip = panel.gameObject.AddComponent<Button>();
+            skip.targetGraphic = fill;
+            skip.transition = Selectable.Transition.None;
+            RectTransform accentRect = Rect("Accent", panel, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f),
+                new Vector2(12f, 0f), new Vector2(18f, -26f));
+            Image accent = Img(accentRect, "Solid", Orange);
+            accent.raycastTarget = false;
+            RectTransform titleRect = Rect("Title", panel, new Vector2(0f, 0.42f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero);
+            titleRect.offsetMin = new Vector2(48f, 0f);
+            titleRect.offsetMax = new Vector2(-24f, -10f);
+            Text title = Label(titleRect, titleFont, 30, Ink, TextAnchor.LowerLeft, "PLAYER 1 (BLUE) — YOUR TURN");
+            RectTransform subtitleRect = Rect("Subtitle", panel, new Vector2(0f, 0f), new Vector2(1f, 0.42f), new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero);
+            subtitleRect.offsetMin = new Vector2(50f, 12f);
+            subtitleRect.offsetMax = new Vector2(-24f, 0f);
+            Text subtitle = Label(subtitleRect, bodyFont, 19, Muted, TextAnchor.UpperLeft, "ROUND 1");
+            AudioSource audio = root.gameObject.AddComponent<AudioSource>();
+            audio.playOnAwake = false;
+            audio.spatialBlend = 0f;
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("group").objectReferenceValue = group;
+            so.FindProperty("panel").objectReferenceValue = panel;
+            so.FindProperty("accent").objectReferenceValue = accent;
+            so.FindProperty("titleLabel").objectReferenceValue = title;
+            so.FindProperty("subtitleLabel").objectReferenceValue = subtitle;
+            so.FindProperty("skipButton").objectReferenceValue = skip;
+            so.FindProperty("audioSource").objectReferenceValue = audio;
+            so.FindProperty("turnStartClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>(FeedbackAudioPath + "TurnPing.wav");
+            so.FindProperty("trapClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>(FeedbackAudioPath + "Trap.wav");
+            so.FindProperty("eliminatedClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>(FeedbackAudioPath + "Eliminated.wav");
+            so.FindProperty("rewardClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>(FeedbackAudioPath + "Reward.wav");
+            so.FindProperty("collapseClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>(FeedbackAudioPath + "Collapse.wav");
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void BuildFeedbackMessages(RectTransform root, FeedbackMessageStackView view)
+        {
+            // Bottom centre, above the status strip; newest row at the bottom. Never takes clicks.
+            const int RowCount = 4;
+            RectTransform stack = Rect("Messages", root, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(0f, 150f), new Vector2(760f, 4f * 46f));
+            VerticalLayoutGroup column = Column(stack.gameObject, 0, 0, 0, 0, 6f, TextAnchor.LowerCenter);
+            column.reverseArrangement = true;
+            GameObject[] rows = new GameObject[RowCount];
+            Image[] fills = new Image[RowCount];
+            Text[] labels = new Text[RowCount];
+            CanvasGroup[] groups = new CanvasGroup[RowCount];
+            for (int i = 0; i < RowCount; i++)
+            {
+                RectTransform row = Child($"Row{i}", stack);
+                fills[i] = Img(row, "ButtonOutlined", Ink);
+                fills[i].raycastTarget = false;
+                groups[i] = row.gameObject.AddComponent<CanvasGroup>();
+                groups[i].blocksRaycasts = false;
+                HorizontalLayoutGroup rowLayout = Row(row.gameObject, 18, 18, 8, 8, 0f, TextAnchor.MiddleCenter);
+                rowLayout.childForceExpandWidth = true;
+                labels[i] = Label(Child("Text", row), boldFont, 17, Cream, TextAnchor.MiddleCenter, "Message");
+                rows[i] = row.gameObject;
+                row.gameObject.SetActive(false);
+            }
+
+            SerializedObject so = new SerializedObject(view);
+            AssignArray(so.FindProperty("rows"), rows);
+            AssignArray(so.FindProperty("rowFills"), fills);
+            AssignArray(so.FindProperty("rowLabels"), labels);
+            AssignArray(so.FindProperty("rowGroups"), groups);
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void AssignArray(SerializedProperty property, Object[] values)
+        {
+            property.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++)
+                property.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
         }
 
         // ---------- action row (Trap Floor actions, right-click menus) ----------

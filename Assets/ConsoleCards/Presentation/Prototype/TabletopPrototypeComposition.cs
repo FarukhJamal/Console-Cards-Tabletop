@@ -121,6 +121,8 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal float floorCardVisualScale = 0.62f;
         [Tooltip("Scale of Large (hero/avatar) cards relative to a Standard card (doc 24).")]
         [SerializeField] internal float largeCardVisualScale = 1.486f;
+        [Tooltip("Player feedback (doc 25): announcement banners, the message stack and the turn ping.")]
+        [SerializeField] internal bool playerFeedback = true;
         [SerializeField] internal bool showDeveloperControls;
         [Tooltip("Prototype visuals hidden at bind time. After changing in Play mode, press Reset or restart the session.")]
         [SerializeField] internal PrototypeVisualHide prototypeVisualHide =
@@ -235,6 +237,13 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorFloormasterLifecycleService floormasterLifecycleService;
         private TrapFloorRoundState trapFloorRoundState;
         private int boardCardBacksRound;
+        // Player feedback (doc 25, F1): what has already been announced.
+        private TrapFloorActivityFeedState announcedFeed;
+        private TrapFloorTurnState announcedTurnState;
+        private long announcedSequence;
+        private int announcedRound;
+        private PlayerId announcedActivePlayer;
+        private TrapFloorTurnPhase announcedPhase;
         // Spring/Crane target the active player still has to move to (G2c); applied by End Turn if left.
         private PlayerId pendingLaunchPlayerId;
         private TabletopObjectId pendingLaunchTargetId;
@@ -2195,6 +2204,7 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshToolboxPlacementUi();
             RefreshOpenTabletopPopup();
             RefreshCardInspectPopup();
+            AnnounceTrapFloorFeedback();
         }
 
         // The tray band is a drop target only while a card drag is in progress.
@@ -12242,9 +12252,193 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ShowMessage(string message)
         {
+            // With the message stack, messages go there and the status strip keeps only the standing status.
+            if (playerFeedback
+                && runtimeUi != null
+                && runtimeUi.ShowFeedbackMessage(message, SeverityOf(message)))
+            {
+                operationMessageUntil = 0f;
+                runtimeUi.SetStatusMessage(CurrentStatusText());
+                return;
+            }
+
             operationMessage = message;
             operationMessageUntil = Time.unscaledTime + 2.5f;
             runtimeUi?.SetStatusMessage(CurrentStatusText());
+        }
+
+        private static FeedbackSeverity SeverityOf(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return FeedbackSeverity.Info;
+            if (message.IndexOf("ELIMINATED", StringComparison.Ordinal) >= 0) return FeedbackSeverity.Loss;
+            if (message.IndexOf("rejected", StringComparison.OrdinalIgnoreCase) >= 0
+                || message.IndexOf("unavailable", StringComparison.OrdinalIgnoreCase) >= 0
+                || message.IndexOf("cannot", StringComparison.OrdinalIgnoreCase) >= 0
+                || message.IndexOf("first", StringComparison.OrdinalIgnoreCase) >= 0)
+                return FeedbackSeverity.Warning;
+            return FeedbackSeverity.Info;
+        }
+
+        // Player feedback (doc 25, F1). Turns new activity-feed entries and turn changes into banners and
+        // messages. A rebuilt or reset session (new or shorter feed) is taken as already announced.
+        private void AnnounceTrapFloorFeedback()
+        {
+            if (!playerFeedback
+                || runtimeUi == null
+                || trapFloorActivityFeed == null
+                || trapFloorTurnState == null
+                || rebuildingFromUndo)
+            {
+                return;
+            }
+
+            IReadOnlyList<TrapFloorActivityEntry> entries = trapFloorActivityFeed.Entries;
+            long newest = entries.Count > 0 ? entries[entries.Count - 1].Sequence : 0L;
+            if (!ReferenceEquals(announcedFeed, trapFloorActivityFeed)
+                || !ReferenceEquals(announcedTurnState, trapFloorTurnState)
+                || newest < announcedSequence)
+            {
+                announcedFeed = trapFloorActivityFeed;
+                announcedTurnState = trapFloorTurnState;
+                announcedSequence = newest;
+                RememberAnnouncedTurn();
+                if (entries.Count == 0) AnnounceTurn(); // a new game: greet the first player
+                return;
+            }
+
+            if (newest > announcedSequence)
+            {
+                int first = entries.Count;
+                while (first > 0 && entries[first - 1].Sequence > announcedSequence) first--;
+                for (int i = first; i < entries.Count; i++) AnnounceActivity(entries[i]);
+                announcedSequence = newest;
+            }
+
+            if (trapFloorTurnState.CurrentRound != announcedRound
+                || trapFloorTurnState.Phase != announcedPhase
+                || trapFloorTurnState.ActivePlayerId != announcedActivePlayer)
+            {
+                RememberAnnouncedTurn();
+                AnnounceTurn();
+            }
+        }
+
+        private void RememberAnnouncedTurn()
+        {
+            announcedRound = trapFloorTurnState.CurrentRound;
+            announcedPhase = trapFloorTurnState.Phase;
+            announcedActivePlayer = trapFloorTurnState.ActivePlayerId;
+        }
+
+        private void AnnounceTurn()
+        {
+            if (trapFloorTurnState.IsCurrentFloorFailed) return;
+            if (trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn)
+            {
+                PlayerId active = trapFloorTurnState.ActivePlayerId;
+                string colour = TryGetTrapFloorSeatIndex(active, out int seat) ? $" ({PlayerColorName(seat)})" : string.Empty;
+                runtimeUi.ShowFeedbackBanner(new FeedbackBannerModel(
+                    FeedbackEventKind.TurnStart,
+                    $"{FormatPlayerName(active).ToUpperInvariant()}{colour} — YOUR TURN",
+                    $"ROUND {trapFloorTurnState.CurrentRound}",
+                    FeedbackColour(active)));
+            }
+            else if (trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
+            {
+                runtimeUi.ShowFeedbackBanner(new FeedbackBannerModel(
+                    FeedbackEventKind.RoundStart,
+                    "FLOOR TURN",
+                    $"{FormatPlayerName(trapFloorTurnState.FloorOperatorPlayerId)} rolls the floor",
+                    new Color(0.878f, 0.325f, 0.122f)));
+            }
+        }
+
+        private Color FeedbackColour(PlayerId player) =>
+            !player.IsEmpty && TryGetTrapFloorSeatIndex(player, out int seat)
+                ? PlayerPrototypeColor(seat)
+                : new Color(0.878f, 0.325f, 0.122f);
+
+        private void AnnounceActivity(TrapFloorActivityEntry entry)
+        {
+            PlayerId actor = entry.ActorPlayerId;
+            string who = actor.IsEmpty ? "A player" : FormatPlayerName(actor);
+            Color colour = FeedbackColour(actor);
+            string name = entry.ContentName ?? string.Empty;
+            switch (entry.Kind)
+            {
+                case TrapFloorActivityKind.RevealedFloorContent:
+                    if (entry.ContentCategory == TrapFloorFloorContentCategory.Trap && !entry.TrapSuppressed)
+                    {
+                        Banner(FeedbackEventKind.Trap, $"TRAP! {name.ToUpperInvariant()}", $"{who} flipped it", colour);
+                    }
+                    else if (entry.ContentCategory == TrapFloorFloorContentCategory.Key
+                        || entry.ContentCategory == TrapFloorFloorContentCategory.Entry
+                        || entry.ContentCategory == TrapFloorFloorContentCategory.SecretExit)
+                    {
+                        Banner(FeedbackEventKind.Reward, $"FOUND: {name.ToUpperInvariant()}", who, colour);
+                    }
+                    else if (entry.ContentCategory != TrapFloorFloorContentCategory.Trap)
+                    {
+                        runtimeUi.ShowFeedbackMessage($"{who} found {name}.", FeedbackSeverity.Gain);
+                    }
+                    break;
+                case TrapFloorActivityKind.ClaimedKey:
+                    Banner(FeedbackEventKind.Reward, "KEY CLAIMED", $"{who} — {name}", colour);
+                    break;
+                case TrapFloorActivityKind.CollapsedFloor:
+                    Banner(FeedbackEventKind.Collapse, "FLOOR COLLAPSED",
+                        entry.HasCoordinate ? $"Tile {entry.Coordinate} is now a hole" : string.Empty, colour);
+                    break;
+                case TrapFloorActivityKind.PlayerEliminated:
+                    Banner(FeedbackEventKind.Eliminated, $"{who.ToUpperInvariant()} ELIMINATED",
+                        "Out for the rest of this floor", colour);
+                    break;
+                case TrapFloorActivityKind.AllPlayersEliminated:
+                    Banner(FeedbackEventKind.Eliminated, "EVERYONE IS OUT", "This floor has failed",
+                        new Color(0.878f, 0.325f, 0.122f));
+                    break;
+                case TrapFloorActivityKind.PlayersReactivated:
+                    runtimeUi.ShowFeedbackMessage("Everyone is back in for the new round.", FeedbackSeverity.Gain);
+                    break;
+                case TrapFloorActivityKind.PlayerEscaped:
+                    Banner(FeedbackEventKind.Reward, $"{who.ToUpperInvariant()} ESCAPED", string.Empty, colour);
+                    break;
+                case TrapFloorActivityKind.WonGame:
+                    Banner(FeedbackEventKind.Reward, "YOU WIN!", who, colour);
+                    break;
+                case TrapFloorActivityKind.UsedShield:
+                    runtimeUi.ShowFeedbackMessage($"{who} used Shield.", FeedbackSeverity.Gain);
+                    break;
+                case TrapFloorActivityKind.UsedDodge:
+                    runtimeUi.ShowFeedbackMessage($"{who} used Dodge — move to a lit tile.", FeedbackSeverity.Gain);
+                    break;
+                case TrapFloorActivityKind.UsedCheck:
+                    runtimeUi.ShowFeedbackMessage($"{who} used Check — the Trap is harmless.", FeedbackSeverity.Gain);
+                    break;
+                case TrapFloorActivityKind.UsedDisarm:
+                    runtimeUi.ShowFeedbackMessage($"{who} used Disarm.", FeedbackSeverity.Gain);
+                    break;
+                case TrapFloorActivityKind.UsedRush:
+                    runtimeUi.ShowFeedbackMessage($"{who} used Rush — move to a lit tile.", FeedbackSeverity.Gain);
+                    break;
+                case TrapFloorActivityKind.BlindApplied:
+                    runtimeUi.ShowFeedbackMessage($"{who} will be BLIND next round.", FeedbackSeverity.Warning);
+                    break;
+                case TrapFloorActivityKind.SlowApplied:
+                    runtimeUi.ShowFeedbackMessage($"{who} will be SLOW next round.", FeedbackSeverity.Warning);
+                    break;
+                case TrapFloorActivityKind.StickyApplied:
+                    runtimeUi.ShowFeedbackMessage($"{who} is STUCK next round.", FeedbackSeverity.Warning);
+                    break;
+                case TrapFloorActivityKind.SkippedTurn:
+                    runtimeUi.ShowFeedbackMessage($"{who} skipped their turn.", FeedbackSeverity.Info);
+                    break;
+            }
+        }
+
+        private void Banner(FeedbackEventKind kind, string title, string subtitle, Color accent)
+        {
+            runtimeUi.ShowFeedbackBanner(new FeedbackBannerModel(kind, title, subtitle, accent));
         }
 
         private void EnsureInitialized()

@@ -1,6 +1,6 @@
 # 25 — Player Feedback
 
-Version 0.1 · Status: Approved plan (2026-10-13); stages F1–F4 planned
+Version 0.2 · Status: Approved plan (2026-10-13); F1 implemented, F2–F4 planned
 
 ## Purpose
 
@@ -44,7 +44,23 @@ shown on screen and on the board with authored prefabs (Final UI, doc 26). Nothi
 | Stage | Content | Status |
 |---|---|---|
 | UI-F | Final UI prefabs, no layout from code (doc 26) | Implemented |
-| F1 | Feedback event model, Trap Floor adapter, banner, message stack, turn ping | Planned |
+| F1 | Feedback event model, Trap Floor adapter, banner, message stack, turn ping | Implemented |
 | F2 | Board markers: active pawn, waiting Trap, move target and arrow, flip and collapse effects, camera kick | Planned |
 | F3 | End Turn warning, effect chips | Planned |
 | F4 | "What happened" log, pawn hop | Planned |
+
+## F1 record (2026-10-13)
+
+- **Prefabs** (Final UI, created by Console Cards > UI > Create Missing Gameplay UI Prefabs): `FeedbackBanner`
+  (top centre, Notification layer) and `FeedbackMessages` (bottom centre, four authored rows). Timings, colours,
+  queue size and sounds are Inspector fields on them.
+- **Sounds**: `Content/Audio/Feedback/` — TurnPing, Trap, Eliminated, Reward, Collapse. Replace a file, or the
+  clip slot on the banner prefab, to change a sound.
+- **Banners**: turn start ("PLAYER 2 (RED) — YOUR TURN", with the ping), floor turn, Trap flipped, Key /
+  Exit found, Key claimed, floor collapsed, player eliminated, everyone out, escaped, win.
+- **Messages**: every game message now goes to the stack (info, warning, loss, gain); the bottom strip keeps
+  only the standing status. Abilities used, Blind/Slow/Sticky applied, prizes found and skips also appear.
+- **Source**: the Trap Floor activity feed and the turn state; a rebuilt session (Undo, Reset) is not
+  re-announced. A new game greets the first player.
+- **Switch**: `Player Feedback` on the composition (Inspector) turns it off; the Table-menu switch comes with F3.
+  Without the prefabs the game falls back to the old status strip and logs one warning.

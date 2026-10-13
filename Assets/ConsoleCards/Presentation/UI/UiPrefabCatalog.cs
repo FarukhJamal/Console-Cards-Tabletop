@@ -104,5 +104,7 @@ namespace ConsoleCards.Presentation.UI
         public const string PopupActionRow = "platform.popup-action-row";
         public const string GameTemplateRow = "platform.game-template-row";
         public const string TrapFloorHud = "trap-floor.hud";
+        public const string FeedbackBanner = "platform.feedback-banner";
+        public const string FeedbackMessages = "platform.feedback-messages";
     }
 }

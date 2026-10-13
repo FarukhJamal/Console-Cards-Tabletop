@@ -31,6 +31,9 @@ namespace ConsoleCards.Presentation.UI
         private PrototypeFocusedCardSelectionView focusedCardSelectionView;
         private PrototypeTrapFloorHudView trapFloorHudView;
         private PrototypeInteractionGuide interactionGuideView;
+        private FeedbackBannerView feedbackBannerView;
+        private FeedbackMessageStackView feedbackMessageStackView;
+        private bool feedbackUnavailable;
 
         public IRuntimeUiService UiService
         {
@@ -192,6 +195,51 @@ namespace ConsoleCards.Presentation.UI
 
         public void SetGameTemplatesError(string errorMessage) =>
             gameTemplatesPanelView.SetError(errorMessage);
+
+        /// <summary>Queues an announcement banner (doc 25). False when the Final UI feedback prefabs are missing.</summary>
+        public bool ShowFeedbackBanner(FeedbackBannerModel model)
+        {
+            if (!EnsureFeedbackViews()) return false;
+            feedbackBannerView.Enqueue(model);
+            return true;
+        }
+
+        /// <summary>Adds a message to the message stack (doc 25). False when the prefab is missing.</summary>
+        public bool ShowFeedbackMessage(string message, FeedbackSeverity severity)
+        {
+            if (!EnsureFeedbackViews()) return false;
+            feedbackMessageStackView.Push(message, severity);
+            return true;
+        }
+
+        private bool EnsureFeedbackViews()
+        {
+            if (feedbackUnavailable) return false;
+            if (feedbackBannerView != null && feedbackBannerView.IsAcquired
+                && feedbackMessageStackView != null && feedbackMessageStackView.IsAcquired)
+            {
+                return true;
+            }
+
+            try
+            {
+                EnsureService();
+                feedbackBannerView = uiService.AcquireCached<FeedbackBannerView>(PrototypeUiPrefabIds.FeedbackBanner);
+                feedbackBannerView.ValidateReferences();
+                feedbackMessageStackView = uiService.AcquireCached<FeedbackMessageStackView>(
+                    PrototypeUiPrefabIds.FeedbackMessages);
+                feedbackMessageStackView.ValidateReferences();
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                feedbackUnavailable = true;
+                Debug.LogWarning(
+                    "Player feedback is off: run Console Cards > UI > Create Missing Gameplay UI Prefabs (Final UI). "
+                    + exception.Message);
+                return false;
+            }
+        }
 
         public void SetStatusMessage(string statusMessage)
         {
@@ -451,6 +499,8 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(componentToolboxView);
             HideTrapFloorStatus();
             ReleaseView(interactionGuideView);
+            ReleaseView(feedbackBannerView);
+            ReleaseView(feedbackMessageStackView);
             CloseTabletopPopup();
         }
 
