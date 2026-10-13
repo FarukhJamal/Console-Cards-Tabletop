@@ -55,6 +55,10 @@ namespace ConsoleCards.Presentation.Camera
         [SerializeField, Range(1f, 179f)] internal float perspectiveFieldOfView = 50f;
         [SerializeField] internal bool topDownUsesOrthographic = true;
 
+        [Header("Feedback effects (doc 25) — always return, never move the view")]
+        [SerializeField] internal float kickFrequency = 26f;
+        [SerializeField, Range(0f, 1f)] internal float glanceStrength = 0.35f;
+
         [Header("Zoom / Distance")]
         [SerializeField] internal float minimumOrthographicSize = 2f;
         [SerializeField] internal float maximumOrthographicSize = 20f;
@@ -151,6 +155,13 @@ namespace ConsoleCards.Presentation.Camera
         private float transitionStartOrthographicSize;
         private bool usesOrthographicProjection;
 
+        private float kickAmplitude;
+        private float kickSeconds;
+        private float kickElapsed = -1f;
+        private Vector3 glancePoint;
+        private float glanceSeconds;
+        private float glanceElapsed = -1f;
+
         public TabletopCameraState State { get; private set; }
         public UnityCamera TargetCamera => targetCamera;
         public Transform CameraRig => cameraRig;
@@ -188,6 +199,27 @@ namespace ConsoleCards.Presentation.Camera
             ApplyCurrentPose();
         }
 
+        /// <summary>A short shake that fades out (a Trap, an elimination). The view itself does not move.</summary>
+        public void Kick(float amplitude, float seconds)
+        {
+            if (amplitude <= 0f || seconds <= 0f) return;
+            kickAmplitude = Mathf.Max(amplitude, kickAmplitude * KickRemaining());
+            kickSeconds = seconds;
+            kickElapsed = 0f;
+        }
+
+        /// <summary>Leans the view toward a point and back again (an event elsewhere on the board).</summary>
+        public void Glance(Vector3 worldPoint, float seconds)
+        {
+            if (seconds <= 0f) return;
+            glancePoint = worldPoint;
+            glanceSeconds = seconds;
+            glanceElapsed = 0f;
+        }
+
+        private float KickRemaining() =>
+            kickSeconds > 0f && kickElapsed >= 0f ? Mathf.Clamp01(1f - (kickElapsed / kickSeconds)) : 0f;
+
         private void LateUpdate()
         {
             if (!isInitialized)
@@ -196,6 +228,18 @@ namespace ConsoleCards.Presentation.Camera
             }
 
             float deltaTime = Time.unscaledDeltaTime;
+            if (kickElapsed >= 0f)
+            {
+                kickElapsed += deltaTime;
+                if (kickElapsed >= kickSeconds) kickElapsed = -1f;
+            }
+
+            if (glanceElapsed >= 0f)
+            {
+                glanceElapsed += deltaTime;
+                if (glanceElapsed >= glanceSeconds) glanceElapsed = -1f;
+            }
+
             if (transitionActive)
             {
                 transitionElapsed += deltaTime;
@@ -858,9 +902,30 @@ namespace ConsoleCards.Presentation.Camera
                 ClampPitch(currentPitchDegrees),
                 NormalizeYaw(currentYawDegrees),
                 0f);
-            cameraRig.SetPositionAndRotation(currentPivot, rotation);
-            targetCamera.transform.localPosition = Vector3.back
+            // Feedback effects are offsets on top of the current pose only; the pose and State never change.
+            Vector3 pivot = currentPivot;
+            if (glanceElapsed >= 0f && glanceSeconds > 0f)
+            {
+                float weight = Mathf.Sin(Mathf.PI * Mathf.Clamp01(glanceElapsed / glanceSeconds)) * glanceStrength;
+                Vector3 toward = glancePoint;
+                toward.y = currentPivot.y;
+                pivot = Vector3.Lerp(currentPivot, toward, weight);
+            }
+
+            cameraRig.SetPositionAndRotation(pivot, rotation);
+            Vector3 cameraLocal = Vector3.back
                 * Mathf.Clamp(currentDistance, minimumDistance, maximumDistance);
+            if (kickElapsed >= 0f)
+            {
+                float strength = kickAmplitude * KickRemaining();
+                float time = kickElapsed * kickFrequency;
+                cameraLocal += new Vector3(
+                    (Mathf.PerlinNoise(time, 0.37f) - 0.5f) * 2f * strength,
+                    (Mathf.PerlinNoise(0.71f, time) - 0.5f) * 2f * strength,
+                    0f);
+            }
+
+            targetCamera.transform.localPosition = cameraLocal;
             targetCamera.transform.localRotation = Quaternion.identity;
             targetCamera.orthographic = usesOrthographicProjection;
             targetCamera.fieldOfView = perspectiveFieldOfView;

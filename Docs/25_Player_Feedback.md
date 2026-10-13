@@ -1,6 +1,6 @@
 # 25 — Player Feedback
 
-Version 0.2 · Status: Approved plan (2026-10-13); F1 implemented, F2–F4 planned
+Version 0.3 · Status: Approved plan (2026-10-13); F1–F2 implemented, F3–F4 planned
 
 ## Purpose
 
@@ -45,7 +45,7 @@ shown on screen and on the board with authored prefabs (Final UI, doc 26). Nothi
 |---|---|---|
 | UI-F | Final UI prefabs, no layout from code (doc 26) | Implemented |
 | F1 | Feedback event model, Trap Floor adapter, banner, message stack, turn ping | Implemented |
-| F2 | Board markers: active pawn, waiting Trap, move target and arrow, flip and collapse effects, camera kick | Planned |
+| F2 | Board markers: active pawn, waiting Trap, move target and arrow, flip and collapse effects, camera kick | Implemented |
 | F3 | End Turn warning, effect chips | Planned |
 | F4 | "What happened" log, pawn hop | Planned |
 
@@ -64,3 +64,19 @@ shown on screen and on the board with authored prefabs (Final UI, doc 26). Nothi
   re-announced. A new game greets the first player.
 - **Switch**: `Player Feedback` on the composition (Inspector) turns it off; the Table-menu switch comes with F3.
   Without the prefabs the game falls back to the old status strip and logs one warning.
+
+## F2 record (2026-10-13)
+
+- **Prefabs** (Final World, created by Console Cards > Feedback > Create Missing Board Feedback Prefabs):
+  `ActivePawnRing`, `TrapWarning`, `MoveTarget`, `FlipFlash`, `CollapseBurst`, `MoveArrow`; materials in
+  `Content/Materials/Feedback/`, pictures in `Content/Art/Feedback/`. The set
+  `Content/Resources/BoardFeedbackSet.asset` names the prefabs, their heights and the camera-kick strengths.
+  The builder never overwrites; all of these are yours to edit.
+- **Board**: a spinning ring in the player's colour under the active pawn; a pulsing red outline and "!" on
+  every waiting Trap; a pulsing outline in the player's colour on each tile a move must reach (Spring, Crane,
+  Dodge, Rush) with a dashed arc from the pawn when there is one target; a flash where a tile flips (red for
+  a Trap); a burst where the floor collapses.
+- **Camera**: `Kick` (a short shake that fades) for a Trap, a collapse or an elimination, and `Glance` (lean
+  toward a collapse and back). Both are offsets on top of the view; the camera's own position and saved view
+  never change. Strength and frequency are on the camera controller and the feedback set.
+- Markers are pooled (made once); they only move and recolour themselves and never change game state.

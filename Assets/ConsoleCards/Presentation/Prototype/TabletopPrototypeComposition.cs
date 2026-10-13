@@ -24,6 +24,7 @@ using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Catalog;
 using ConsoleCards.Presentation.Coordinates;
+using ConsoleCards.Presentation.Feedback;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
 using ConsoleCards.Presentation.Settings;
@@ -244,6 +245,11 @@ namespace ConsoleCards.Presentation.Prototype
         private int announcedRound;
         private PlayerId announcedActivePlayer;
         private TrapFloorTurnPhase announcedPhase;
+        // Board feedback markers (doc 25, F2), made once from Resources/BoardFeedbackSet.
+        private BoardFeedbackPresenter boardFeedback;
+        private bool boardFeedbackUnavailable;
+        private readonly List<Vector3> boardFeedbackTraps = new List<Vector3>(8);
+        private readonly List<Vector3> boardFeedbackTargets = new List<Vector3>(16);
         // Spring/Crane target the active player still has to move to (G2c); applied by End Turn if left.
         private PlayerId pendingLaunchPlayerId;
         private TabletopObjectId pendingLaunchTargetId;
@@ -624,6 +630,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
             SetGameBoardActive(false);
             ClearFeedback();
+            boardFeedback?.HideAll();
             floorfallTargetPresenter?.Clear();
             abilityTargetPresenter?.Clear();
             floorfallState?.Clear();
@@ -2162,6 +2169,8 @@ namespace ConsoleCards.Presentation.Prototype
         private void OnDestroy()
         {
             Shutdown();
+            boardFeedback?.Destroy();
+            boardFeedback = null;
             ReleaseCardArtMaterials();
             if (handTrayRig != null)
             {
@@ -2205,6 +2214,7 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshOpenTabletopPopup();
             RefreshCardInspectPopup();
             AnnounceTrapFloorFeedback();
+            RefreshBoardFeedback();
         }
 
         // The tray band is a drop target only while a card drag is in progress.
@@ -12364,6 +12374,7 @@ namespace ConsoleCards.Presentation.Prototype
             string who = actor.IsEmpty ? "A player" : FormatPlayerName(actor);
             Color colour = FeedbackColour(actor);
             string name = entry.ContentName ?? string.Empty;
+            BoardFeedbackAt(entry, colour);
             switch (entry.Kind)
             {
                 case TrapFloorActivityKind.RevealedFloorContent:
@@ -12434,6 +12445,123 @@ namespace ConsoleCards.Presentation.Prototype
                     runtimeUi.ShowFeedbackMessage($"{who} skipped their turn.", FeedbackSeverity.Info);
                     break;
             }
+        }
+
+        // F2: a flash where a tile flipped, a burst and a glance where the floor collapsed, and short camera
+        // kicks for a Trap or an elimination. The camera always returns to where it was.
+        private void BoardFeedbackAt(TrapFloorActivityEntry entry, Color colour)
+        {
+            if (!EnsureBoardFeedback()) return;
+            BoardFeedbackSet set = boardFeedback.Set;
+            TabletopCameraController cameraController = cameraInputAdapter != null ? cameraInputAdapter.CameraController : null;
+            CardView tileView = null;
+            bool hasTile = !entry.FloorCardId.IsEmpty && TryGetCardView(entry.FloorCardId, out tileView);
+            Vector3 tile = hasTile ? tileView.transform.position : Vector3.zero;
+            switch (entry.Kind)
+            {
+                case TrapFloorActivityKind.RevealedFloorContent:
+                    bool trap = entry.ContentCategory == TrapFloorFloorContentCategory.Trap && !entry.TrapSuppressed;
+                    if (hasTile) boardFeedback.Flash(tile, trap ? new Color(0.94f, 0.28f, 0.24f, 1f) : colour);
+                    if (trap) cameraController?.Kick(set.TrapKick, set.KickSeconds);
+                    break;
+                case TrapFloorActivityKind.CollapsedFloor:
+                    if (hasTile)
+                    {
+                        boardFeedback.Burst(tile, new Color(0.878f, 0.325f, 0.122f, 1f));
+                        cameraController?.Glance(tile, set.CollapseGlanceSeconds);
+                    }
+
+                    cameraController?.Kick(set.CollapseKick, set.KickSeconds);
+                    break;
+                case TrapFloorActivityKind.PlayerEliminated:
+                case TrapFloorActivityKind.AllPlayersEliminated:
+                    cameraController?.Kick(set.EliminatedKick, set.KickSeconds * 1.4f);
+                    break;
+            }
+        }
+
+        private bool EnsureBoardFeedback()
+        {
+            if (boardFeedback != null) return true;
+            if (boardFeedbackUnavailable) return false;
+            BoardFeedbackSet set = Resources.Load<BoardFeedbackSet>(BoardFeedbackSet.ResourcePath);
+            if (set == null)
+            {
+                boardFeedbackUnavailable = true;
+                Debug.LogWarning(
+                    "Board feedback is off: run Console Cards > Feedback > Create Missing Board Feedback Prefabs (Final World).");
+                return false;
+            }
+
+            boardFeedback = new BoardFeedbackPresenter(set, transform);
+            return true;
+        }
+
+        // F2 markers every frame: a ring on the active pawn, a warning on each waiting Trap, and the tiles a
+        // move must reach (Spring, Crane, Dodge, Rush) with an arrow from the pawn when there is one target.
+        private void RefreshBoardFeedback()
+        {
+            if (!playerFeedback
+                || trapFloorTemplate == null
+                || trapFloorTurnState == null
+                || matchState == null)
+            {
+                boardFeedback?.HideAll();
+                return;
+            }
+
+            if (!EnsureBoardFeedback()) return;
+            bool playerTurn = !trapFloorTurnState.IsCurrentFloorFailed
+                && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn;
+            PlayerId active = trapFloorTurnState.ActivePlayerId;
+            Color colour = FeedbackColour(active);
+            bool pawnFound = false;
+            Vector3 pawnPosition = Vector3.zero;
+            if (playerTurn && TryGetTrapFloorPlayerSetup(active, out TrapFloorPlayerSetupDefinition setup))
+            {
+                for (int i = 0; i < pawnViews.Count; i++)
+                {
+                    PawnView pawnView = pawnViews[i];
+                    if (pawnView != null && pawnView.IsBound && pawnView.ObjectId == setup.PawnId)
+                    {
+                        pawnPosition = pawnView.transform.position;
+                        pawnFound = true;
+                        break;
+                    }
+                }
+            }
+
+            boardFeedback.ShowActivePawn(pawnFound, pawnPosition, colour);
+            boardFeedbackTraps.Clear();
+            if (trapFloorAbilityResolutionState != null)
+            {
+                IReadOnlyList<TrapFloorTrapResolutionRecord> records = trapFloorAbilityResolutionState.TrapRecords;
+                for (int i = 0; i < records.Count; i++)
+                {
+                    TrapFloorTrapResolutionRecord record = records[i];
+                    if (record.IsPending
+                        && record.Content.HasSupportedAssistedTrapEffect
+                        && TryGetCardView(record.FloorCardId, out CardView trapView))
+                    {
+                        boardFeedbackTraps.Add(trapView.transform.position);
+                    }
+                }
+            }
+
+            boardFeedback.ShowTrapWarnings(boardFeedbackTraps);
+            boardFeedbackTargets.Clear();
+            IReadOnlyList<TabletopObjectId> targetIds = trapFloorAbilityResolutionState?.ActiveRushAssistance?.TargetFloorCardIds
+                ?? trapFloorAbilityResolutionState?.ActiveDodgeAssistance?.TargetFloorCardIds;
+            if (playerTurn && targetIds != null)
+            {
+                for (int i = 0; i < targetIds.Count; i++)
+                {
+                    if (TryGetCardView(targetIds[i], out CardView targetView))
+                        boardFeedbackTargets.Add(targetView.transform.position);
+                }
+            }
+
+            boardFeedback.ShowMoveTargets(boardFeedbackTargets, colour, pawnFound, pawnPosition);
         }
 
         private void Banner(FeedbackEventKind kind, string title, string subtitle, Color accent)
