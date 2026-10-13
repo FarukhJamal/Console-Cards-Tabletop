@@ -1,7 +1,7 @@
 # Console Cards - Trap Floor Game Requirements
 
 **Document ID:** 18_Trap_Floor_Game_Requirements
-**Version:** 1.8
+**Version:** 1.9
 **Status:** Approved with Open Decisions
 **Authoritative source:** User-approved Console Cards System & Games direction supplied 2026-09-21, superseding conflicting historical Trap Floor direction
 **Purpose:** Define the current approved minimum Game-specific direction for Trap Floor while keeping provisional design values open and preserving manual tabletop play.
@@ -238,6 +238,14 @@ The card's own text states exactly what it does (for example, *"Push a player wh
   - **Crane Trap.** The player rolls 2d6 and is placed on that tile (first die = column, second die = row). Onto a collapsed tile, the player is eliminated. Onto a face-down card, that card flips and resolves.
 - **New special Floor Card:**
   - **Overcharged.** The player who flips it gets +1 movement on their next turn.
+
+**Implementation (G2b, 2026-10-13):**
+
+- **Spring.** A flipped Spring waits as a pending Trap, so Check, Dodge and Shield can still answer it. *Resolve Trap* works out the tile one step in the arrow's direction. The arrows follow the board as Player 1 sees it: ▲ is one row toward the far side, ◀ ▶ are columns. Off the grid or onto a hole, the player is eliminated for this Floor. Otherwise that tile is highlighted and the player moves their own pawn there by hand.
+- **Crane.** *Resolve Trap* reads the two dice once they have settled (first die = column, second die = row), then works like Spring: a hole eliminates, any other tile is highlighted for the player to move to.
+- **Chains.** Landing on a face-down target flips it through the normal landing rule, so a chain continues by itself and ends because each card flips once. Nothing moves a pawn automatically.
+- **Overcharged.** Flipping it gives that player +1 movement on their next turn, shown as OVERCHARGED in the status card. It adds to any Slow already scheduled for that turn. It is not a prize and cannot be taken.
+- **Real pawn position.** Rush, Dodge and Spring help read where the pawn actually is (its physical position), not where it was last placed.
 
 ### 15.6 Floor composition (36 Floor Cards)
 

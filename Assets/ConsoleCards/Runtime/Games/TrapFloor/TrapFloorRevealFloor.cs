@@ -1331,6 +1331,18 @@ namespace ConsoleCards.Games.TrapFloor
                     revealedFloorCard);
             }
 
+            // Overcharged (G2b): the player who flips it gets its movement change on their next turn.
+            if (abilityResolutionState != null
+                && turnState != null
+                && revealedFloorCard.Content.FlipMovementModifier.HasValue)
+            {
+                abilityResolutionState.AddMovementModifier(
+                    command.Context.RequestedByPlayerId,
+                    checked(turnState.CurrentRound + 1),
+                    revealedFloorCard.Content.FlipMovementModifier.Value,
+                    command.FloorCardId);
+            }
+
             // A landing flip belongs to the pawn move that caused it, so it amends that Undo step instead of
             // adding its own (record mode None).
             matchState.AdvanceRevision(

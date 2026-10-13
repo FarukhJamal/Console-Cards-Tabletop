@@ -31,6 +31,8 @@ namespace ConsoleCards.Games.TrapFloor
         BlindNextRound = 2,
         SlowNextRound = 3,
         StickyNextRound = 4,
+        SpringLaunch = 5,
+        CraneDrop = 6,
     }
 
     public enum TrapFloorBlindMovementDirection
@@ -80,6 +82,10 @@ namespace ConsoleCards.Games.TrapFloor
         public const string BlindNextRoundEffectMetadata = "trap-effect-blind-next-round";
         public const string SlowNextRoundEffectMetadata = "trap-effect-slow-next-round";
         public const string StickyNextRoundEffectMetadata = "trap-effect-sticky-next-round";
+        public const string SpringLaunchEffectMetadata = "trap-effect-spring";
+        public const string CraneDropEffectMetadata = "trap-effect-crane";
+        public const string OverchargedEffectMetadata = "friend-effect-overcharged";
+        private const string DirectionPrefix = "direction=";
         private const string BlindDirectionMappingPrefix = "d4-directions=";
         private const string MovementModifierPrefix = "movement-modifier=";
         private const string MovementAllowedPrefix = "movement-allowed=";
@@ -118,6 +124,16 @@ namespace ConsoleCards.Games.TrapFloor
             MovementAllowed = TrapEffect == TrapFloorTrapEffectCategory.StickyNextRound
                 ? ParseMovementAllowed(card.EffectMetadata)
                 : (bool?)null;
+            LaunchDirection = TrapEffect == TrapFloorTrapEffectCategory.SpringLaunch
+                ? ParseLaunchDirection(card.EffectMetadata)
+                : (TrapFloorBlindMovementDirection?)null;
+            FlipMovementModifier = category == TrapFloorFloorContentCategory.Friend
+                && string.Equals(
+                    EffectIdentifier(card.EffectMetadata),
+                    OverchargedEffectMetadata,
+                    StringComparison.OrdinalIgnoreCase)
+                ? ParseMovementModifier(card.EffectMetadata)
+                : (int?)null;
             AuthoredCard = card;
         }
 
@@ -173,6 +189,18 @@ namespace ConsoleCards.Games.TrapFloor
         public TrapFloorBlindDirectionMapping BlindDirectionMapping { get; }
         public int? MovementModifier { get; }
         public bool? MovementAllowed { get; }
+
+        /// <summary>Spring Trap: the board direction it launches the player (Up = toward the far row from Player 1).</summary>
+        public TrapFloorBlindMovementDirection? LaunchDirection { get; }
+
+        /// <summary>Overcharged: movement change the flipping player gets on their next turn. Not a prize.</summary>
+        public int? FlipMovementModifier { get; }
+
+        public bool IsLaunchTrap =>
+            Category == TrapFloorFloorContentCategory.Trap
+            && (TrapEffect == TrapFloorTrapEffectCategory.SpringLaunch
+                || TrapEffect == TrapFloorTrapEffectCategory.CraneDrop);
+
         public CardDefinitionData AuthoredCard { get; }
 
         public bool HasSupportedAssistedTrapEffect =>
@@ -180,7 +208,9 @@ namespace ConsoleCards.Games.TrapFloor
             && (TrapEffect == TrapFloorTrapEffectCategory.EliminateForCurrentRound
                 || TrapEffect == TrapFloorTrapEffectCategory.BlindNextRound
                 || TrapEffect == TrapFloorTrapEffectCategory.SlowNextRound
-                || TrapEffect == TrapFloorTrapEffectCategory.StickyNextRound);
+                || TrapEffect == TrapFloorTrapEffectCategory.StickyNextRound
+                || TrapEffect == TrapFloorTrapEffectCategory.SpringLaunch
+                || TrapEffect == TrapFloorTrapEffectCategory.CraneDrop);
 
         private static TrapFloorTrapEffectCategory ResolveTrapEffect(
             CardDefinitionData card,
@@ -207,12 +237,43 @@ namespace ConsoleCards.Games.TrapFloor
                     SlowNextRoundEffectMetadata,
                     StringComparison.OrdinalIgnoreCase))
                 return TrapFloorTrapEffectCategory.SlowNextRound;
+            if (string.Equals(
+                    effectIdentifier,
+                    SpringLaunchEffectMetadata,
+                    StringComparison.OrdinalIgnoreCase))
+                return TrapFloorTrapEffectCategory.SpringLaunch;
+            if (string.Equals(
+                    effectIdentifier,
+                    CraneDropEffectMetadata,
+                    StringComparison.OrdinalIgnoreCase))
+                return TrapFloorTrapEffectCategory.CraneDrop;
             return string.Equals(
                     effectIdentifier,
                     StickyNextRoundEffectMetadata,
                     StringComparison.OrdinalIgnoreCase)
                 ? TrapFloorTrapEffectCategory.StickyNextRound
                 : TrapFloorTrapEffectCategory.InformationalManual;
+        }
+
+        private static TrapFloorBlindMovementDirection ParseLaunchDirection(string metadata)
+        {
+            string[] segments = (metadata ?? string.Empty).Split(';');
+            for (int i = 1; i < segments.Length; i++)
+            {
+                string segment = segments[i].Trim();
+                if (!segment.StartsWith(DirectionPrefix, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (Enum.TryParse(
+                        segment.Substring(DirectionPrefix.Length).Trim(),
+                        true,
+                        out TrapFloorBlindMovementDirection direction)
+                    && Enum.IsDefined(typeof(TrapFloorBlindMovementDirection), direction))
+                    return direction;
+                break;
+            }
+
+            throw new ArgumentException("Spring Trap effect metadata requires direction=Up, Down, Left or Right.", nameof(metadata));
         }
 
         private static string EffectIdentifier(string metadata)
@@ -279,7 +340,7 @@ namespace ConsoleCards.Games.TrapFloor
                 break;
             }
 
-            throw new ArgumentException("Slow Trap effect metadata requires a non-zero authored movement modifier.", nameof(metadata));
+            throw new ArgumentException("Movement effect metadata requires a non-zero authored movement modifier.", nameof(metadata));
         }
 
         private static bool ParseMovementAllowed(string metadata)

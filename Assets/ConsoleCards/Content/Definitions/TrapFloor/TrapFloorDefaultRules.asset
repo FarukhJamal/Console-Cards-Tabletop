@@ -206,6 +206,20 @@ MonoBehaviour:
       value: ''
       displayValue: ''
       modeStableIds: []
+    - stableId: tf-trap-spring
+      text: 'Spring arrows follow the board as Player 1 sees it: up is toward the far side. Crane uses the two dice, first for the column, second for the row.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-overcharged
+      text: 'Overcharged gives the player who flips it +1 movement on their next turn. It is not a prize to take.'
+      settingKind: 0
+      settingKey: 
+      value: ''
+      displayValue: ''
+      modeStableIds: []
     - stableId: tf-trap-out
       text: 'Knocked out? You sit out the rest of the round and come back next round.'
       settingKind: 0

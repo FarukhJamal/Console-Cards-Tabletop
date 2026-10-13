@@ -149,6 +149,7 @@ namespace ConsoleCards.Games.TrapFloor
         public static bool IsPrize(TrapFloorFloorContentDefinition content)
         {
             return content != null
+                && !content.FlipMovementModifier.HasValue // Overcharged works on flip and is not taken
                 && (content.Category == TrapFloorFloorContentCategory.Ability
                     || content.Category == TrapFloorFloorContentCategory.Friend);
         }

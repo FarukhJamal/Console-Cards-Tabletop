@@ -556,6 +556,37 @@ namespace ConsoleCards.Games.TrapFloor
                 sourceTrapFloorCardId));
         }
 
+        /// <summary>
+        /// Adds a movement change for a Player's round (Overcharged +1), combined with any change already
+        /// scheduled for that round. A total of 0 removes the status.
+        /// </summary>
+        internal void AddMovementModifier(
+            PlayerId playerId,
+            int appliesInRound,
+            int movementModifier,
+            TabletopObjectId sourceFloorCardId)
+        {
+            int total = movementModifier;
+            for (int i = slowStatuses.Count - 1; i >= 0; i--)
+            {
+                if (slowStatuses[i].PlayerId == playerId
+                    && slowStatuses[i].AppliesInRound == appliesInRound)
+                {
+                    total += slowStatuses[i].MovementModifier;
+                    slowStatuses.RemoveAt(i);
+                }
+            }
+
+            if (total != 0)
+            {
+                slowStatuses.Add(new TrapFloorSlowStatusState(
+                    playerId,
+                    appliesInRound,
+                    total,
+                    sourceFloorCardId));
+            }
+        }
+
         internal bool ExpireSlowBeforeRound(int currentRound)
         {
             bool removed = false;
@@ -834,6 +865,59 @@ namespace ConsoleCards.Games.TrapFloor
             new TrapFloorAbilityActivationResult(false, error, effect, null);
     }
 
+    public enum TrapFloorLaunchError
+    {
+        None = 0,
+        NotAPendingLaunchTrap = 1,
+        Unavailable = 2,
+        RevisionConflict = 3,
+        ActorIsNotActivePlayer = 4,
+        DiceNotSettled = 5,
+        EliminationRejected = 6,
+    }
+
+    /// <summary>Outcome of a Spring or Crane Trap: the player is eliminated, or must move to the target tile.</summary>
+    public readonly struct TrapFloorLaunchResult
+    {
+        private TrapFloorLaunchResult(
+            bool succeeded,
+            TrapFloorLaunchError error,
+            long revision,
+            bool eliminated,
+            bool targetOnGrid,
+            int targetX,
+            int targetY,
+            TabletopObjectId targetFloorCardId)
+        {
+            Succeeded = succeeded;
+            Error = error;
+            Revision = revision;
+            IsEliminated = eliminated;
+            TargetOnGrid = targetOnGrid;
+            TargetX = targetX;
+            TargetY = targetY;
+            TargetFloorCardId = targetFloorCardId;
+        }
+
+        public bool Succeeded { get; }
+        public TrapFloorLaunchError Error { get; }
+        public long Revision { get; }
+        public bool IsEliminated { get; }
+        public bool TargetOnGrid { get; }
+        public int TargetX { get; }
+        public int TargetY { get; }
+        public TabletopObjectId TargetFloorCardId { get; }
+
+        internal static TrapFloorLaunchResult Failure(TrapFloorLaunchError error) =>
+            new TrapFloorLaunchResult(false, error, 0, false, false, 0, 0, TabletopObjectId.Empty);
+
+        internal static TrapFloorLaunchResult Eliminated(long revision, int x, int y, bool onGrid) =>
+            new TrapFloorLaunchResult(true, TrapFloorLaunchError.None, revision, true, onGrid, x, y, TabletopObjectId.Empty);
+
+        internal static TrapFloorLaunchResult MoveTo(long revision, TabletopObjectId target, TrapFloorCoordinate coordinate) =>
+            new TrapFloorLaunchResult(true, TrapFloorLaunchError.None, revision, false, true, coordinate.X, coordinate.Y, target);
+    }
+
     public enum TrapFloorBlindDirectionRollError
     {
         None = 0,
@@ -1083,6 +1167,15 @@ namespace ConsoleCards.Games.TrapFloor
 
         public bool ClearMovementAssistance() => state.ClearMovementAssistance();
 
+        /// <summary>
+        /// Where a Pawn really is on the table. Presentation supplies it (a dragged physical Pawn lives in its
+        /// physical state, not its placed pose); without it the placed pose is used.
+        /// </summary>
+        public Func<PawnState, TableCoordinate> PawnPositionResolver { get; set; }
+
+        private TableCoordinate PawnPosition(PawnState pawn) =>
+            PawnPositionResolver != null ? PawnPositionResolver(pawn) : pawn.BaseState.Pose.Position;
+
         public bool ClearMovementAssistanceIfPawnMoved(MatchState matchState)
         {
             TabletopObjectId pawnId;
@@ -1105,7 +1198,7 @@ namespace ConsoleCards.Games.TrapFloor
             if (matchState == null
                 || matchState.Id != state.MatchId
                 || !matchState.Pawns.TryGetValue(pawnId, out PawnState pawn)
-                || pawn.BaseState.Pose.Position == pawnStartPosition)
+                || PawnPosition(pawn) == pawnStartPosition)
             {
                 return false;
             }
@@ -1149,7 +1242,7 @@ namespace ConsoleCards.Games.TrapFloor
             assistance = new TrapFloorDodgeAssistanceState(
                 playerId,
                 player.PawnId,
-                pawn.BaseState.Pose.Position,
+                PawnPosition(pawn),
                 origin,
                 targets);
             return true;
@@ -1185,7 +1278,7 @@ namespace ConsoleCards.Games.TrapFloor
             assistance = new TrapFloorRushAssistanceState(
                 playerId,
                 player.PawnId,
-                pawn.BaseState.Pose.Position,
+                PawnPosition(pawn),
                 origin,
                 targets);
             return true;
@@ -1265,7 +1358,7 @@ namespace ConsoleCards.Games.TrapFloor
             PawnState pawn,
             out TrapFloorCoordinate coordinate)
         {
-            TableCoordinate pawnPosition = pawn.BaseState.Pose.Position;
+            TableCoordinate pawnPosition = PawnPosition(pawn);
             double halfWidth = template.Grid.CellWidth * 0.5d;
             double halfHeight = template.Grid.CellHeight * 0.5d;
             double nearestDistanceSquared = double.MaxValue;
@@ -1433,6 +1526,125 @@ namespace ConsoleCards.Games.TrapFloor
                 AuthoritativeActionKind.Unspecified);
             return TrapFloorTurnAdvanceResult.Accepted(revision, 0);
         }
+
+        /// <summary>
+        /// Resolves a pending Spring or Crane Trap (doc 18 §15.5, G2b). Spring launches one tile in its arrow's
+        /// board direction; Crane reads the two Floorfall dice (first = column, second = row). Off the grid or
+        /// onto a hole eliminates the player for this Floor. Otherwise the target tile is highlighted (movement
+        /// assistance) and the player moves the Pawn there by hand; a face-down target then flips on landing.
+        /// </summary>
+        public TrapFloorLaunchResult ResolveLaunchTrap(
+            MatchState matchState,
+            CommandContext context,
+            TabletopObjectId floorCardId,
+            TrapFloorTurnService turnService)
+        {
+            if (matchState == null) throw new ArgumentNullException(nameof(matchState));
+            if (turnService == null) throw new ArgumentNullException(nameof(turnService));
+            if (!state.TryGetTrap(floorCardId, out TrapFloorTrapResolutionRecord trap)
+                || !trap.IsPending
+                || !trap.Content.IsLaunchTrap)
+                return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.NotAPendingLaunchTrap);
+            if (template == null
+                || collapseState == null
+                || matchState.Id != state.MatchId
+                || context.MatchId != matchState.Id)
+                return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.Unavailable);
+            if (context.ExpectedRevision.HasValue && context.ExpectedRevision.Value != matchState.Revision)
+                return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.RevisionConflict);
+            if (turnState.Phase != TrapFloorTurnPhase.PlayerTurn
+                || turnState.IsCurrentFloorFailed
+                || trap.AffectedPlayerId != turnState.ActivePlayerId
+                || context.RequestedByPlayerId != turnState.ActivePlayerId)
+                return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.ActorIsNotActivePlayer);
+            if (!template.TryGetFloorCardState(matchState, floorCardId, out TrapFloorFloorCardState trapTile))
+                return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.Unavailable);
+
+            int x;
+            int y;
+            if (trap.Content.TrapEffect == TrapFloorTrapEffectCategory.SpringLaunch)
+            {
+                x = trapTile.Coordinate.X;
+                y = trapTile.Coordinate.Y;
+                switch (trap.Content.LaunchDirection)
+                {
+                    case TrapFloorBlindMovementDirection.Up: y += 1; break;
+                    case TrapFloorBlindMovementDirection.Down: y -= 1; break;
+                    case TrapFloorBlindMovementDirection.Left: x -= 1; break;
+                    case TrapFloorBlindMovementDirection.Right: x += 1; break;
+                    default: return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.Unavailable);
+                }
+            }
+            else
+            {
+                if (!matchState.Dice.TryGetValue(template.FloorfallXAxisDieId, out DieState columnDie)
+                    || !matchState.Dice.TryGetValue(template.FloorfallYAxisDieId, out DieState rowDie))
+                    return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.Unavailable);
+                if (!IsSettled(columnDie) || !IsSettled(rowDie))
+                    return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.DiceNotSettled);
+                x = columnDie.CurrentValue;
+                y = rowDie.CurrentValue;
+            }
+
+            bool onGrid = x >= TrapFloorCoordinate.MinimumAxisValue
+                && y >= TrapFloorCoordinate.MinimumAxisValue
+                && x <= template.GridColumns
+                && y <= template.GridRows;
+            TabletopObjectId targetFloorCardId = TabletopObjectId.Empty;
+            bool usable = onGrid
+                && template.TryGetFloorCardId(new TrapFloorCoordinate(x, y), out targetFloorCardId)
+                && matchState.Cards.ContainsKey(targetFloorCardId)
+                && !collapseState.IsCollapsed(targetFloorCardId);
+            if (!usable)
+            {
+                trap.SetDisposition(TrapFloorTrapResolutionDisposition.Resolved);
+                TrapFloorTurnAdvanceResult elimination = turnService.MarkPlayerEliminatedForCurrentRound(
+                    matchState,
+                    context,
+                    trap.AffectedPlayerId,
+                    trap);
+                if (!elimination.Succeeded)
+                {
+                    trap.SetDisposition(TrapFloorTrapResolutionDisposition.Pending);
+                    return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.EliminationRejected);
+                }
+
+                return TrapFloorLaunchResult.Eliminated(elimination.Revision, x, y, onGrid);
+            }
+
+            TrapFloorPlayerSetupDefinition player = null;
+            for (int i = 0; i < template.Players.Count; i++)
+            {
+                TrapFloorPlayerSetupDefinition candidate = template.Players[i];
+                if (matchState.GetSeat(candidate.SeatId).OccupantPlayerId == trap.AffectedPlayerId)
+                {
+                    player = candidate;
+                    break;
+                }
+            }
+
+            if (player == null || !matchState.Pawns.TryGetValue(player.PawnId, out PawnState pawn))
+                return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.Unavailable);
+
+            trap.SetDisposition(TrapFloorTrapResolutionDisposition.Resolved);
+            // The single-target movement assistance highlights where the Pawn must go; it clears once the
+            // Pawn moves, and the landing flip handles a face-down target (chains end: each card flips once).
+            state.BeginDodgeAssistance(new TrapFloorDodgeAssistanceState(
+                trap.AffectedPlayerId,
+                player.PawnId,
+                PawnPosition(pawn),
+                trapTile.Coordinate,
+                new[] { targetFloorCardId }));
+            long revision = matchState.AdvanceRevision(
+                context.Id,
+                context.RequestedByPlayerId,
+                AuthoritativeActionKind.Unspecified);
+            return TrapFloorLaunchResult.MoveTo(revision, targetFloorCardId, new TrapFloorCoordinate(x, y));
+        }
+
+        private static bool IsSettled(DieState die) =>
+            die.BaseState.PhysicalState == null
+            || die.BaseState.PhysicalState.Mode == PhysicalObjectMode.Sleeping;
 
         public TrapFloorBlindDirectionRollResult ResolveBlindDirection(
             MatchState matchState,

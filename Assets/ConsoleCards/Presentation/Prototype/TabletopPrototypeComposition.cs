@@ -4484,7 +4484,7 @@ namespace ConsoleCards.Presentation.Prototype
             bool isSlow = TryGetActiveSlowStatus(out TrapFloorSlowStatusState slowStatus);
             bool isSticky = TryGetActiveStickyStatus(out _);
             string slowGuidance = isSlow
-                ? $"SLOW — Movement {FormatSignedModifier(slowStatus.MovementModifier)} this round"
+                ? $"{(slowStatus.MovementModifier > 0 ? "OVERCHARGED" : "SLOW")} — Movement {FormatSignedModifier(slowStatus.MovementModifier)} this round"
                 : string.Empty;
             string movementGuidance = isSticky
                 ? "STICKY — Stay in place this round"
@@ -5845,6 +5845,10 @@ namespace ConsoleCards.Presentation.Prototype
                     return $"Assisted consequence: movement {FormatSignedModifier(content.MovementModifier.Value)} next Round.";
                 case TrapFloorTrapEffectCategory.StickyNextRound:
                     return "Assisted consequence: stay in place during the next Round.";
+                case TrapFloorTrapEffectCategory.SpringLaunch:
+                    return $"Assisted consequence: launched 1 tile {content.LaunchDirection.ToString().ToLowerInvariant()}; off the grid or onto a hole, out for this floor.";
+                case TrapFloorTrapEffectCategory.CraneDrop:
+                    return "Assisted consequence: roll both dice (column, row) and move there; onto a hole, out for this floor.";
                 default:
                     return "Manual consequence: follow the authored Trap text.";
             }
@@ -5861,6 +5865,12 @@ namespace ConsoleCards.Presentation.Prototype
                 || !floorCard.Content.HasSupportedAssistedTrapEffect)
             {
                 ShowMessage("Resolve Trap is unavailable for this Trap or assistance state.");
+                return;
+            }
+
+            if (floorCard.Content.IsLaunchTrap)
+            {
+                ResolveTrapFloorLaunchTrap(floorCardId, floorCard.Content);
                 return;
             }
 
@@ -5901,6 +5911,45 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 ShowMessage($"{FormatPlayerName(affectedPlayerId).ToUpperInvariant()} ELIMINATED");
             }
+        }
+
+        // Spring / Crane (G2b): eliminate, or highlight the tile the player must move their Pawn to.
+        private void ResolveTrapFloorLaunchTrap(
+            TabletopObjectId floorCardId,
+            TrapFloorFloorContentDefinition content)
+        {
+            PlayerId affectedPlayerId = trapFloorTurnState.ActivePlayerId;
+            bool spring = content.TrapEffect == TrapFloorTrapEffectCategory.SpringLaunch;
+            string trapName = spring ? "SPRING" : "CRANE";
+            TrapFloorLaunchResult result = trapFloorAbilityResolutionService.ResolveLaunchTrap(
+                matchState,
+                CreateCommandContext(affectedPlayerId),
+                floorCardId,
+                trapFloorTurnService);
+            if (!result.Succeeded)
+            {
+                ShowMessage(result.Error == TrapFloorLaunchError.DiceNotSettled
+                    ? "CRANE — roll both dice and let them settle, then choose Resolve Trap again."
+                    : $"Resolve Trap rejected: {result.Error}.");
+                return;
+            }
+
+            CloseContextMenu();
+            CloseCardInspect();
+            RefreshMovementAssistancePresentation();
+            RefreshTrapFloorStatusUi();
+            if (result.IsEliminated)
+            {
+                string where = result.TargetOnGrid
+                    ? $"onto a hole at ({result.TargetX},{result.TargetY})"
+                    : "off the floor";
+                ShowMessage($"{trapName} — {FormatPlayerName(affectedPlayerId).ToUpperInvariant()} launched {where}. ELIMINATED");
+                return;
+            }
+
+            ShowMessage(
+                $"{trapName} — move your pawn to ({result.TargetX},{result.TargetY}). "
+                + "A face-down tile there flips when you land.");
         }
 
         private void BeginTrapFloorSearch(TrapFloorSearchKind searchKind)
@@ -8481,6 +8530,8 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorActivityFeed,
                 trapFloorTemplate,
                 trapFloorCollapseState);
+            // Rush/Dodge/Spring help reads where the Pawn really is (physical state first), not its placed pose.
+            trapFloorAbilityResolutionService.PawnPositionResolver = PawnTablePosition;
             trapFloorTakePrizeUseCase = new TrapFloorTakePrizeUseCase(
                 trapFloorTemplate,
                 trapFloorCollapseState,
@@ -10204,8 +10255,9 @@ namespace ConsoleCards.Presentation.Prototype
 
             else if (CardSizeClassOf(card) == CardSizeClass.Large)
             {
-                // Hero/avatar-size card: the whole card (model and click box) is drawn larger, like floor cards.
-                clone.transform.localScale = Vector3.one * largeCardVisualScale;
+                // Hero/avatar-size card: wider and longer (model and click box), never taller, so the slot
+                // alone decides its height on the Console.
+                clone.transform.localScale = new Vector3(largeCardVisualScale, 1f, largeCardVisualScale);
             }
 
             cardVisualReferences.Add(createdVisualReferences);
@@ -11613,9 +11665,9 @@ namespace ConsoleCards.Presentation.Prototype
                     && trapFloorAbilityResolutionState.TryGetSlowStatus(
                         playerId,
                         trapFloorTurnState.CurrentRound,
-                        out _))
+                        out TrapFloorSlowStatusState movementStatus))
                 {
-                    state += " / SLOW";
+                    state += movementStatus.MovementModifier > 0 ? " / OVERCHARGED" : " / SLOW";
                 }
                 if (trapFloorAbilityResolutionState != null
                     && trapFloorAbilityResolutionState.TryGetStickyStatus(
