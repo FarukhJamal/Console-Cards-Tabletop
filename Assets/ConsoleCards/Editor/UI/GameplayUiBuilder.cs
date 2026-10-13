@@ -16,7 +16,7 @@ namespace ConsoleCards.Editor.UI
     /// </summary>
     public static class GameplayUiBuilder
     {
-        public const string Folder = "Assets/ConsoleCards/Content/Prefabs/Real/UI/";
+        public const string Folder = FinalUiFolder;
         public const string GuidePath = Folder + "InteractionGuide.prefab";
         public const string TrapFloorHudPath = Folder + "TrapFloorHud.prefab";
         public const string ActionRowPath = Folder + "ActionRow.prefab";
@@ -69,7 +69,7 @@ namespace ConsoleCards.Editor.UI
         private static Font bodyFont;
         private static Font boldFont;
 
-        [MenuItem("Console Cards/UI/Build Gameplay UI Prefabs")]
+        [MenuItem("Console Cards/UI/Create Missing Gameplay UI Prefabs (Final UI)")]
         public static void Build()
         {
             ConfigureTexture(ToolboxIconPath + "IconClose.png", Vector4.zero);
@@ -119,12 +119,19 @@ namespace ConsoleCards.Editor.UI
             AssignCatalogEntry(PrototypeUiPrefabIds.RulesLine,
                 AssetDatabase.LoadAssetAtPath<RulesCardLineView>(RulesLinePath), UiLayer.Hud, UiRetention.Pooled);
             AssetDatabase.SaveAssets();
-            Debug.Log("[Gameplay UI] Built the gameplay UI prefabs and updated the Real UI prefab catalog.");
+            Debug.Log("[Gameplay UI] Created any missing Final UI gameplay prefabs and pointed the UI prefab catalog at them.");
         }
 
         private static void Save<T>(string path, string name, System.Action<RectTransform, T> build, bool stretch)
             where T : ReusableUiView
         {
+            // Final UI prefabs belong to the designer: an existing one is never rebuilt or overwritten.
+            if (File.Exists(path))
+            {
+                Debug.Log($"[Gameplay UI] Kept {path} (already exists; edit it in the Final UI folder).");
+                return;
+            }
+
             GameObject root = new GameObject(name, typeof(RectTransform));
             root.layer = 5;
             try

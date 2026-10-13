@@ -22,7 +22,7 @@ namespace ConsoleCards.Editor.Toolbox
     [InitializeOnLoad]
     public static class ComponentToolboxBuilder
     {
-        public const string PrefabPath = "Assets/ConsoleCards/Content/Prefabs/Real/UI/ComponentToolbox.prefab";
+        public const string PrefabPath = "Assets/ConsoleCards/Content/Prefabs/Final/UI/ComponentToolbox.prefab";
         public const string UiCatalogPath = "Assets/ConsoleCards/Content/Prefabs/Real/UI/RealUiPrefabCatalog.asset";
         public const string LibraryPath = "Assets/ConsoleCards/Content/Catalogs/ComponentLibrary.asset";
         public const string ToolboxUiId = "platform.component-toolbox";
@@ -58,9 +58,18 @@ namespace ConsoleCards.Editor.Toolbox
             EditorApplication.delayCall += BuildIfMissing;
         }
 
-        [MenuItem("Console Cards/Toolbox/Build Toolbox Prefab")]
+        [MenuItem("Console Cards/Toolbox/Create Missing Toolbox Prefab (Final UI)")]
         public static void Build()
         {
+            // Final UI prefabs belong to the designer: never overwrite an existing one ("Sync Tiles" only
+            // updates the tile list and keeps everything else).
+            if (File.Exists(PrefabPath))
+            {
+                AssignToUiCatalog();
+                Debug.Log($"[Toolbox] Kept {PrefabPath} (already exists; edit it in the Final UI folder).");
+                return;
+            }
+
             PrepareArt();
             ComponentLibrary library = LoadLibrary();
             Directory.CreateDirectory(Path.GetDirectoryName(PrefabPath));

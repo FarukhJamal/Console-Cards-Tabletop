@@ -49,6 +49,8 @@ All code and type examples are illustrative unless explicitly labelled `Approved
 | `Docs/22_Component_Catalog_Architecture.md` | Product boxes, box catalogs (ID, 3D prefab, UI face, linked definitions), Toolbox from catalogs |
 | `Docs/23_Rules_House_Rules_And_Hints.md` | Rule sets (default and house rules), the rules card, Hints; stages R1–R4 |
 | `Docs/24_Content_Packs.md` | Game content packs: built-in art, art keys and lookup order, JSON packs, player-uploaded card art; stages A1–A4 |
+| `Docs/25_Player_Feedback.md` | Player feedback: events, banners, board markers, turn ping, camera kicks; stages F1–F4 |
+| `Docs/26_Final_UI.md` | Final UI prefabs: which prefab is which, builders never overwrite, no layout from code |
 | `Docs/AUDIT_RESOLUTION_v1.1.md` | v1.0 audit correction record |
 | `CHANGELOG.md` | Pack history |
 | `README.md` | Repository entry point |

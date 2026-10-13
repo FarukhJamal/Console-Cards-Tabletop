@@ -17,6 +17,11 @@ namespace ConsoleCards.Editor.UI
         public const string ToolboxIconPath = "Assets/ConsoleCards/Content/UI/Toolbox/Icons/";
         public const string FontPath = "Assets/ConsoleCards/Content/UI/Fonts/";
         public const string RealUiCatalogPath = "Assets/ConsoleCards/Content/Prefabs/Real/UI/RealUiPrefabCatalog.asset";
+        /// <summary>
+        /// The UI prefabs the game uses (UI-F). They are yours to edit: builders only create a prefab here when it
+        /// is missing and never overwrite one. Delete a prefab to get the built default back.
+        /// </summary>
+        public const string FinalUiFolder = "Assets/ConsoleCards/Content/Prefabs/Final/UI/";
         public const float KitBorder = 5f;
 
         public static readonly Color Cream = Hex("fdf8e6");

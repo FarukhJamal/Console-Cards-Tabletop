@@ -14,62 +14,62 @@ MonoBehaviour:
   m_EditorClassIdentifier: ConsoleCards.Presentation::ConsoleCards.Presentation.UI.UiPrefabCatalog
   entries:
   - id: platform.component-toolbox
-    prefab: {fileID: 659198539153712646, guid: 955433a77d308cb419b8152d72898af0, type: 3}
+    prefab: {fileID: 659198539153712646, guid: 568cd389194843d7896795f9591ca4b4, type: 3}
     layer: 1
     retention: 0
   - id: platform.tabletop-popup
-    prefab: {fileID: 3522589389718324386, guid: d38b1dac79a86bc46b8dac1416f7bc36, type: 3}
+    prefab: {fileID: 3522589389718324386, guid: 393c6296bbfe49b8840bed37f30ec6d7, type: 3}
     layer: 2
     retention: 0
   - id: platform.quantity-popup
-    prefab: {fileID: 677089967940591085, guid: 04a5543eba5aa7843bc39dc8001166c3, type: 3}
+    prefab: {fileID: 677089967940591085, guid: 38fad47b503044cc818b2194af8014c1, type: 3}
     layer: 3
     retention: 0
   - id: platform.card-inspect
-    prefab: {fileID: 8960332244895446581, guid: eb21171bd7e764048be990a5bdae37a8, type: 3}
+    prefab: {fileID: 8960332244895446581, guid: 682b082f09f14419a1b64341442578ec, type: 3}
     layer: 3
     retention: 0
   - id: platform.action-ability-purchase
-    prefab: {fileID: 7964997745369819829, guid: 31c44a6b88b189d4f904c477e2044772, type: 3}
+    prefab: {fileID: 7964997745369819829, guid: 0690fcf4abc54bfbbb4c9ea674d1aeb8, type: 3}
     layer: 3
     retention: 0
   - id: platform.focused-card-selection
-    prefab: {fileID: 2041643355706426548, guid: 4353284956c4d2d40a8c195147524631, type: 3}
+    prefab: {fileID: 2041643355706426548, guid: aed5640bee094cd7a7534e5ab96f71a3, type: 3}
     layer: 3
     retention: 0
   - id: platform.interaction-guide
-    prefab: {fileID: 3121806973628423350, guid: 6ca0f1e948610e7409f2d5c733fb0f31, type: 3}
+    prefab: {fileID: 3121806973628423350, guid: 1de0e464e7894442a0391c3a08d778f2, type: 3}
     layer: 1
     retention: 0
   - id: platform.popup-action-row
-    prefab: {fileID: 3662043002929201794, guid: 36efe3fe46d305d44999f9b8a5bd79f4, type: 3}
+    prefab: {fileID: 3662043002929201794, guid: a9fab3fdb46c476bb8643b5c92684a17, type: 3}
     layer: 2
     retention: 1
   - id: platform.focused-card-option
-    prefab: {fileID: 9015022688284027131, guid: 23e2c90b3b8b63740ae64628ebe0279c, type: 3}
+    prefab: {fileID: 9015022688284027131, guid: fefec0de802549b3861fe8499eff9e8f, type: 3}
     layer: 3
     retention: 1
   - id: platform.game-template-row
-    prefab: {fileID: 114004, guid: 775e290cd6544f5287c8c891adce0992, type: 3}
+    prefab: {fileID: 114004, guid: 483adb196e6c44b68cd140f12d870754, type: 3}
     layer: 0
     retention: 1
   - id: trap-floor.hud
-    prefab: {fileID: 810426476747869471, guid: 4e214a5994c28d24da8cdddf65517442, type: 3}
+    prefab: {fileID: 810426476747869471, guid: e585c82658bc42038bc76b7b5e1020f5, type: 3}
     layer: 1
     retention: 0
   - id: platform.session-bar
-    prefab: {fileID: 3427891475327730328, guid: 6ab80bf6cd2967746bbe8d78dbaa9e05, type: 3}
+    prefab: {fileID: 3427891475327730328, guid: 2bb43b1373724451adde4d04c82d6743, type: 3}
     layer: 1
     retention: 0
   - id: platform.rules-card
-    prefab: {fileID: 4688033256292327073, guid: 2fa5493d804f18541a2f07c37a2fa89d, type: 3}
+    prefab: {fileID: 4688033256292327073, guid: 56097f2e40d94c67a1fc7c6e0086d8a2, type: 3}
     layer: 1
     retention: 0
   - id: platform.rules-heading
-    prefab: {fileID: 3196971671703334695, guid: a78c4c02e84029a4682261d4eb0c294d, type: 3}
+    prefab: {fileID: 3196971671703334695, guid: 3b4867b44376490387e3baa3620b4403, type: 3}
     layer: 1
     retention: 1
   - id: platform.rules-line
-    prefab: {fileID: 4115498720553793502, guid: aab1e4d83bf72fe4eb66706c8713e059, type: 3}
+    prefab: {fileID: 4115498720553793502, guid: 19772bbc7422492cbb67d95872a30746, type: 3}
     layer: 1
     retention: 1

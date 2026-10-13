@@ -17,7 +17,7 @@ namespace ConsoleCards.Editor.UI
     [InitializeOnLoad]
     public static class SessionUiBuilder
     {
-        public const string PrefabPath = "Assets/ConsoleCards/Content/Prefabs/Real/UI/SessionBar.prefab";
+        public const string PrefabPath = FinalUiFolder + "SessionBar.prefab";
         private const string IconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
 
         // Layout, in canvas units at the 1920 x 1080 reference (about 1.25 x the approved boards).
@@ -46,9 +46,19 @@ namespace ConsoleCards.Editor.UI
             EditorApplication.delayCall += BuildIfMissing;
         }
 
-        [MenuItem("Console Cards/UI/Build Session Bar Prefab")]
+        [MenuItem("Console Cards/UI/Create Missing Session Bar Prefab (Final UI)")]
         public static void Build()
         {
+            // Final UI prefabs belong to the designer: never overwrite an existing one.
+            if (File.Exists(PrefabPath))
+            {
+                AssignCatalogEntry(PrototypeUiPrefabIds.SessionBar, AssetDatabase.LoadAssetAtPath<SessionBarView>(PrefabPath),
+                    UiLayer.Hud, UiRetention.CachedSingleInstance);
+                AssetDatabase.SaveAssets();
+                Debug.Log($"[Session UI] Kept {PrefabPath} (already exists; edit it in the Final UI folder).");
+                return;
+            }
+
             PrepareArt();
             Directory.CreateDirectory(Path.GetDirectoryName(PrefabPath));
             GameObject root = new GameObject("SessionBar", typeof(RectTransform));

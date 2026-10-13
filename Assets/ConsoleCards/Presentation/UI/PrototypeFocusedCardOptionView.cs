@@ -21,6 +21,8 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button button;
         [SerializeField] private Text label;
         [SerializeField] private LayoutElement layoutElement;
+        [Tooltip("Card size in a fan (canvas units). Edit on the Final UI prefab.")]
+        [SerializeField] private Vector2 cardSize = new Vector2(148f, 214f);
 
         [Header("Card colours (set by the prefab builder, UI-1c)")]
         [SerializeField] private Color eligibleSurface = new Color(0.16f, 0.25f, 0.36f, 1f);
@@ -72,11 +74,19 @@ namespace ConsoleCards.Presentation.UI
             label.text = string.IsNullOrWhiteSpace(model.Subtitle)
                 ? model.Title
                 : $"{model.Title}\n<size=12>{model.Subtitle}</size>";
-            layoutElement.preferredWidth = 148f;
-            layoutElement.preferredHeight = 214f;
+            layoutElement.preferredWidth = cardSize.x;
+            layoutElement.preferredHeight = cardSize.y;
             button.interactable = eligible;
             button.onClick.AddListener(Choose);
             ApplyVisualState(immediate: true);
+        }
+
+        /// <summary>Overrides the card size until the next Bind (the reveal shows one larger card).</summary>
+        public void SetCardSize(Vector2 size)
+        {
+            if (size.x <= 0f || size.y <= 0f) return;
+            layoutElement.preferredWidth = size.x;
+            layoutElement.preferredHeight = size.y;
         }
 
         public void SetFanPose(Vector2 anchoredPosition, float rotationDegrees, bool animateEntry)

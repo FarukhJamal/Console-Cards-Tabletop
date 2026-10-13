@@ -140,6 +140,16 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button cancelButton;
         [SerializeField] private Text cancelButtonLabel;
         [SerializeField] private GameObject[] unusedAuthoredRoots = Array.Empty<GameObject>();
+        // Fan layout (UI-F). The panel, card area and options root are laid out in the prefab; code only
+        // places the cards along the fan. Edit these on the Final UI prefab.
+        [Header("Card fan")]
+        [SerializeField] private float fanSpacing = 126f;
+        [SerializeField] private float fanMinimumWidth = 620f;
+        [SerializeField] private float fanHeight = 260f;
+        [SerializeField] private float fanDropPerCard = 2.5f;
+        [SerializeField] private float fanTiltPerCard = 2.4f;
+        [Tooltip("Size of the single card in a reveal (YOU LANDED ON).")]
+        [SerializeField] private Vector2 revealCardSize = new Vector2(196f, 284f);
 
         private readonly List<PrototypeFocusedCardOptionView> optionViews =
             new List<PrototypeFocusedCardOptionView>();
@@ -190,7 +200,6 @@ namespace ConsoleCards.Presentation.UI
             BindButton(confirmButton, Confirm);
             panel.SetActive(true);
             SetUnusedRootsActive(false);
-            ConfigureFocusedLayout();
             BuildOptions();
             RefreshSelectionState();
             ClearSelectedUiObject();
@@ -204,7 +213,6 @@ namespace ConsoleCards.Presentation.UI
             revealModel = cardReveal ?? throw new ArgumentNullException(nameof(cardReveal));
             panel.SetActive(true);
             SetUnusedRootsActive(false);
-            ConfigureFocusedLayout();
             titleLabel.text = revealModel.HeaderTitle;
             instructionLabel.text = revealModel.ResultState;
             statusLabel.text = revealModel.Body;
@@ -229,12 +237,13 @@ namespace ConsoleCards.Presentation.UI
                 string.Empty,
                 revealModel.BackArtwork,
                 false), IgnoreChoice);
-            optionsRoot.sizeDelta = new Vector2(620f, 260f);
+            optionsRoot.sizeDelta = new Vector2(fanMinimumWidth, fanHeight);
             RectTransform cardTransform = card.GetComponent<RectTransform>();
             cardTransform.anchorMin = new Vector2(0f, 0.5f);
             cardTransform.anchorMax = new Vector2(0f, 0.5f);
             cardTransform.pivot = new Vector2(0.5f, 0.5f);
-            card.SetFanPose(new Vector2(310f, 0f), 0f, false);
+            card.SetCardSize(revealCardSize);
+            card.SetFanPose(new Vector2(fanMinimumWidth * 0.5f, 0f), 0f, false);
             card.Show();
             optionViews.Add(card);
             optionsScrollRect.horizontalNormalizedPosition = 0.5f;
@@ -337,29 +346,11 @@ namespace ConsoleCards.Presentation.UI
         {
         }
 
-        private void ConfigureFocusedLayout()
-        {
-            optionsScrollRect.horizontal = true;
-            optionsScrollRect.vertical = false;
-            RectTransform viewport = optionsScrollRect.GetComponent<RectTransform>();
-            viewport.anchorMin = new Vector2(0.04f, 0.12f);
-            viewport.anchorMax = new Vector2(0.96f, 0.70f);
-            viewport.anchoredPosition = Vector2.zero;
-            viewport.sizeDelta = Vector2.zero;
-            optionsRoot.anchorMin = new Vector2(0f, 0.5f);
-            optionsRoot.anchorMax = new Vector2(0f, 0.5f);
-            optionsRoot.pivot = new Vector2(0f, 0.5f);
-            VerticalLayoutGroup vertical = optionsRoot.GetComponent<VerticalLayoutGroup>();
-            if (vertical != null) vertical.enabled = false;
-            ContentSizeFitter fitter = optionsRoot.GetComponent<ContentSizeFitter>();
-            if (fitter != null) fitter.enabled = false;
-        }
-
         private void ArrangeFan(bool animateEntry)
         {
-            const float spacing = 126f;
-            float width = Mathf.Max(620f, ((optionViews.Count - 1) * spacing) + 170f);
-            optionsRoot.sizeDelta = new Vector2(width, 260f);
+            float spacing = fanSpacing;
+            float width = Mathf.Max(fanMinimumWidth, ((optionViews.Count - 1) * spacing) + 170f);
+            optionsRoot.sizeDelta = new Vector2(width, fanHeight);
             float center = (optionViews.Count - 1) * 0.5f;
             for (int i = 0; i < optionViews.Count; i++)
             {
@@ -369,8 +360,8 @@ namespace ConsoleCards.Presentation.UI
                 card.anchorMax = new Vector2(0f, 0.5f);
                 card.pivot = new Vector2(0.5f, 0.5f);
                 optionViews[i].SetFanPose(
-                    new Vector2((width * 0.5f) + (offset * spacing), -Mathf.Abs(offset) * 2.5f),
-                    -offset * 2.4f,
+                    new Vector2((width * 0.5f) + (offset * spacing), -Mathf.Abs(offset) * fanDropPerCard),
+                    -offset * fanTiltPerCard,
                     animateEntry);
             }
             optionsScrollRect.horizontalNormalizedPosition = 0.5f;
