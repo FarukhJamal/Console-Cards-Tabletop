@@ -87,7 +87,9 @@ namespace ConsoleCards.Presentation.UI
             string cardSubtitle,
             string body,
             string completionLabel,
-            Action completed)
+            Action completed,
+            string secondaryLabel = null,
+            Action secondary = null)
         {
             if (cardId.IsEmpty) throw new ArgumentException("A focused reveal requires an authoritative Card ID.", nameof(cardId));
             CardId = cardId;
@@ -100,6 +102,8 @@ namespace ConsoleCards.Presentation.UI
             Body = body ?? string.Empty;
             CompletionLabel = string.IsNullOrWhiteSpace(completionLabel) ? "Return" : completionLabel;
             Completed = completed ?? throw new ArgumentNullException(nameof(completed));
+            SecondaryLabel = secondaryLabel ?? string.Empty;
+            Secondary = secondary;
         }
 
         public TabletopObjectId CardId { get; }
@@ -112,6 +116,10 @@ namespace ConsoleCards.Presentation.UI
         public string Body { get; }
         public string CompletionLabel { get; }
         public Action Completed { get; }
+
+        /// <summary>Optional second button (for example "Return to Tabletop" beside "Resolve Trap").</summary>
+        public string SecondaryLabel { get; }
+        public Action Secondary { get; }
     }
 
     /// <summary>
@@ -200,7 +208,13 @@ namespace ConsoleCards.Presentation.UI
             titleLabel.text = revealModel.HeaderTitle;
             instructionLabel.text = revealModel.ResultState;
             statusLabel.text = revealModel.Body;
-            cancelButton.gameObject.SetActive(false);
+            bool hasSecondary = revealModel.Secondary != null;
+            cancelButton.gameObject.SetActive(hasSecondary);
+            if (hasSecondary)
+            {
+                cancelButtonLabel.text = revealModel.SecondaryLabel;
+                BindButton(cancelButton, CompleteRevealSecondary);
+            }
             dismissOverlayButton.interactable = false;
             confirmButtonLabel.text = revealModel.CompletionLabel;
             confirmButton.interactable = true;
@@ -311,6 +325,12 @@ namespace ConsoleCards.Presentation.UI
         {
             Action completed = revealModel?.Completed;
             completed?.Invoke();
+        }
+
+        private void CompleteRevealSecondary()
+        {
+            Action secondary = revealModel?.Secondary;
+            secondary?.Invoke();
         }
 
         private static void IgnoreChoice(TabletopObjectId _)

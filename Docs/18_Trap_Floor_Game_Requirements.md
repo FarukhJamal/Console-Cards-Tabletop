@@ -1,7 +1,7 @@
 # Console Cards - Trap Floor Game Requirements
 
 **Document ID:** 18_Trap_Floor_Game_Requirements
-**Version:** 1.9
+**Version:** 1.10
 **Status:** Approved with Open Decisions
 **Authoritative source:** User-approved Console Cards System & Games direction supplied 2026-09-21, superseding conflicting historical Trap Floor direction
 **Purpose:** Define the current approved minimum Game-specific direction for Trap Floor while keeping provisional design values open and preserving manual tabletop play.
@@ -246,6 +246,13 @@ The card's own text states exactly what it does (for example, *"Push a player wh
 - **Chains.** Landing on a face-down target flips it through the normal landing rule, so a chain continues by itself and ends because each card flips once. Nothing moves a pawn automatically.
 - **Overcharged.** Flipping it gives that player +1 movement on their next turn, shown as OVERCHARGED in the status card. It adds to any Slow already scheduled for that turn. It is not a prize and cannot be taken.
 - **Real pawn position.** Rush, Dodge and Spring help read where the pawn actually is (its physical position), not where it was last placed.
+
+**Implementation (G2c, 2026-10-13):**
+
+- **Landing popup.** When a Trap is waiting, the "YOU LANDED ON" popup shows the Trap's art and text with **Resolve Trap** and **Return to Tabletop** (to play a Reaction first).
+- **A waiting Trap is applied before the turn passes.** End Turn and Skip Turn first apply every Trap still waiting on the active player, oldest first: Fall eliminates; Blind, Slow and Sticky are scheduled; Spring and Crane eliminate off the grid or onto a hole. Only a Reaction (Check, Dodge, Shield) prevents it.
+- **Spring and Crane at End Turn.** If the target is a real tile, End Turn moves the pawn there through the authority (a physical commit placed on the table, or a move command), flips a face-down target at once and applies any Trap there too, then passes the turn. A Crane whose dice have not settled keeps the turn and asks for a roll.
+- **One Undo step.** End Turn and everything it applied undo together.
 
 ### 15.6 Floor composition (36 Floor Cards)
 

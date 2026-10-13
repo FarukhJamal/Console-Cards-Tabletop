@@ -235,6 +235,13 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorFloormasterLifecycleService floormasterLifecycleService;
         private TrapFloorRoundState trapFloorRoundState;
         private int boardCardBacksRound;
+        // Spring/Crane target the active player still has to move to (G2c); applied by End Turn if left.
+        private PlayerId pendingLaunchPlayerId;
+        private TabletopObjectId pendingLaunchTargetId;
+        // Groups every accepted action between Begin/EndUndoBatch into one Undo step (End Turn + Trap effects).
+        private bool undoBatchActive;
+        private PrototypeSessionUndoSnapshot undoBatchBefore;
+        private AuthoritativeActionAcceptance? undoBatchLastAcceptance;
         private TrapFloorRoundOrchestrationService trapFloorRoundOrchestrationService;
         private SystemRandomValueSource authoritativeRandomValueSource;
         private ITabletopComponentIdentitySource componentIdentitySource;
@@ -1410,6 +1417,12 @@ namespace ConsoleCards.Presentation.Prototype
                 landingCheckPending = true;
             }
 
+            if (undoBatchActive)
+            {
+                undoBatchLastAcceptance = acceptance;
+                return;
+            }
+
             switch (acceptance.RecordMode)
             {
                 case AuthoritativeActionRecordMode.Intermediate:
@@ -1448,6 +1461,33 @@ namespace ConsoleCards.Presentation.Prototype
                     }
                     break;
             }
+        }
+
+        private void BeginUndoBatch()
+        {
+            undoBatchActive = undoTrackedMatch == matchState && undoHistory.CurrentStateIndex >= 0;
+            undoBatchBefore = undoBatchActive ? undoHistory.CurrentState : null;
+            undoBatchLastAcceptance = null;
+        }
+
+        private void EndUndoBatch()
+        {
+            if (!undoBatchActive) return;
+            undoBatchActive = false;
+            if (undoBatchLastAcceptance.HasValue && undoTrackedMatch == matchState)
+            {
+                AuthoritativeActionAcceptance last = undoBatchLastAcceptance.Value;
+                undoHistory.RecordAccepted(
+                    undoBatchBefore,
+                    CaptureUndoSnapshot(),
+                    last,
+                    DescribeUndoAction(last));
+                undoTransactionInProgress = false;
+                RefreshUndoUi();
+            }
+
+            undoBatchBefore = null;
+            undoBatchLastAcceptance = null;
         }
 
         private PrototypeSessionUndoSnapshot CaptureUndoSnapshot()
@@ -4607,15 +4647,37 @@ namespace ConsoleCards.Presentation.Prototype
                 : trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
                 ? trapFloorTurnState.ActivePlayerId
                 : trapFloorTurnState.FloorOperatorPlayerId;
-            TrapFloorTurnAdvanceResult result = skipped
-                ? trapFloorTurnService.Skip(matchState, CreateCommandContext(actor))
-                : trapFloorTurnService.Advance(matchState, CreateCommandContext(actor));
+            TrapFloorTurnAdvanceResult result;
+            string trapSummary = string.Empty;
+            BeginUndoBatch();
+            try
+            {
+                // A Trap left waiting is applied before the turn passes (G2c); only a Reaction prevents it.
+                if (!trapFloorTurnState.IsCurrentFloorFailed
+                    && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                    && !ApplyPendingTrapsBeforeTurnEnds(actor, out trapSummary))
+                {
+                    return;
+                }
+
+                result = skipped
+                    ? trapFloorTurnService.Skip(matchState, CreateCommandContext(actor))
+                    : trapFloorTurnService.Advance(matchState, CreateCommandContext(actor));
+            }
+            finally
+            {
+                EndUndoBatch();
+            }
+
             if (!result.Succeeded)
             {
                 string action = skipped ? "Skip Turn" : "End Turn";
-                ShowMessage($"{action} rejected: {result.Error}.");
+                ShowMessage($"{trapSummary}{action} rejected: {result.Error}.");
                 return;
             }
+
+            pendingLaunchPlayerId = PlayerId.Empty;
+            pendingLaunchTargetId = TabletopObjectId.Empty;
 
             if (trapFloorPendingSearchState != null && trapFloorPendingSearchState.IsActive)
             {
@@ -4633,7 +4695,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             RefreshTrapFloorStatusUi();
-            string skip = skipped ? $"{FormatPlayerName(actor)} skipped. " : string.Empty;
+            string skip = (skipped ? $"{FormatPlayerName(actor)} skipped. " : string.Empty) + trapSummary;
             if (wasFloorTurn)
             {
                 string reactivated = reactivatesPlayers ? " All Players reactivated." : string.Empty;
@@ -4653,6 +4715,227 @@ namespace ConsoleCards.Presentation.Prototype
                     $"{skip}{FormatPlayerName(trapFloorTurnState.ActivePlayerId)} turn. "
                     + $"Draw up to {handLimit} if needed.");
             }
+        }
+
+        // Applies every Trap still waiting on the player, in order, before their turn passes (G2c).
+        // Spring/Crane onto a real tile move the Pawn through the move/physical-commit command; a face-down
+        // target flips at once and any Trap there is applied too. False keeps the turn (message shown).
+        private bool ApplyPendingTrapsBeforeTurnEnds(PlayerId player, out string summary)
+        {
+            summary = string.Empty;
+            if (trapFloorAbilityResolutionState == null
+                || trapFloorAbilityResolutionService == null
+                || trapFloorTurnService == null)
+            {
+                return true;
+            }
+
+            for (int guard = 0; guard < 64; guard++)
+            {
+                if (trapFloorTurnState.IsCurrentFloorFailed
+                    || trapFloorTurnState.GetPlayerState(player)
+                        == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound)
+                {
+                    break;
+                }
+
+                if (HasPendingLaunchMove(player))
+                {
+                    TabletopObjectId target = pendingLaunchTargetId;
+                    pendingLaunchPlayerId = PlayerId.Empty;
+                    pendingLaunchTargetId = TabletopObjectId.Empty;
+                    if (!TryAutoMovePawnToFloor(player, target, out TrapFloorCoordinate targetTile))
+                    {
+                        ShowMessage("A Trap still has to move your pawn, but the move was rejected. Move it by hand, then End Turn.");
+                        return false;
+                    }
+
+                    if (trapFloorAbilityResolutionService.ClearMovementAssistance())
+                        abilityTargetPresenter?.ClearCurrent();
+                    summary += $"Pawn moved to {targetTile}. ";
+                    if (TryLandingFlipNow(player, target, out string flipped))
+                        summary += $"Flipped {flipped}. ";
+                    continue;
+                }
+
+                if (!TryGetOldestPendingTrap(player, out TrapFloorTrapResolutionRecord trap))
+                    break;
+
+                if (trap.Content.IsLaunchTrap)
+                {
+                    TrapFloorLaunchResult launch = trapFloorAbilityResolutionService.ResolveLaunchTrap(
+                        matchState,
+                        CreateCommandContext(player),
+                        trap.FloorCardId,
+                        trapFloorTurnService);
+                    if (!launch.Succeeded)
+                    {
+                        ShowMessage(launch.Error == TrapFloorLaunchError.DiceNotSettled
+                            ? "CRANE — roll both dice and let them settle, then End Turn again."
+                            : $"End Turn: {trap.Content.DisplayName} could not be applied ({launch.Error}).");
+                        return false;
+                    }
+
+                    if (launch.IsEliminated)
+                    {
+                        summary += $"{trap.Content.DisplayName}: {FormatPlayerName(player).ToUpperInvariant()} ELIMINATED. ";
+                        continue;
+                    }
+
+                    pendingLaunchPlayerId = player;
+                    pendingLaunchTargetId = launch.TargetFloorCardId;
+                    continue;
+                }
+
+                TrapFloorTurnAdvanceResult applied = trapFloorAbilityResolutionService.ResolveSupportedTrap(
+                    matchState,
+                    CreateCommandContext(player),
+                    trap.FloorCardId,
+                    trapFloorTurnService);
+                if (!applied.Succeeded)
+                {
+                    ShowMessage($"End Turn: {trap.Content.DisplayName} could not be applied ({applied.Error}).");
+                    return false;
+                }
+
+                summary += trap.Content.TrapEffect == TrapFloorTrapEffectCategory.EliminateForCurrentRound
+                    ? $"{trap.Content.DisplayName}: {FormatPlayerName(player).ToUpperInvariant()} ELIMINATED. "
+                    : $"{trap.Content.DisplayName} applied. ";
+            }
+
+            RefreshMovementAssistancePresentation();
+            return true;
+        }
+
+        private bool HasPendingLaunchMove(PlayerId player)
+        {
+            TrapFloorDodgeAssistanceState assistance = trapFloorAbilityResolutionState.ActiveDodgeAssistance;
+            return pendingLaunchPlayerId == player
+                && !pendingLaunchTargetId.IsEmpty
+                && assistance != null
+                && assistance.PlayerId == player
+                && assistance.TargetFloorCardIds.Count == 1
+                && assistance.TargetFloorCardIds[0] == pendingLaunchTargetId;
+        }
+
+        private bool TryGetOldestPendingTrap(PlayerId player, out TrapFloorTrapResolutionRecord trap)
+        {
+            IReadOnlyList<TrapFloorTrapResolutionRecord> records = trapFloorAbilityResolutionState.TrapRecords;
+            for (int i = 0; i < records.Count; i++)
+            {
+                TrapFloorTrapResolutionRecord candidate = records[i];
+                if (candidate.IsPending
+                    && candidate.AffectedPlayerId == player
+                    && candidate.Content.HasSupportedAssistedTrapEffect)
+                {
+                    trap = candidate;
+                    return true;
+                }
+            }
+
+            trap = null;
+            return false;
+        }
+
+        // Moves the player's Pawn onto a Floor tile through the authority: a physical Pawn by a physical
+        // commit resolved on the table surface, otherwise by MoveObject. Never a direct transform write.
+        private bool TryAutoMovePawnToFloor(
+            PlayerId player,
+            TabletopObjectId floorCardId,
+            out TrapFloorCoordinate targetTile)
+        {
+            targetTile = default;
+            if (!TryGetTrapFloorPlayerSetup(player, out TrapFloorPlayerSetupDefinition setup)
+                || !matchState.Pawns.TryGetValue(setup.PawnId, out PawnState pawn)
+                || !matchState.Cards.TryGetValue(floorCardId, out CardInstanceState floor)
+                || !trapFloorTemplate.TryGetFloorCardState(matchState, floorCardId, out TrapFloorFloorCardState floorState))
+            {
+                return false;
+            }
+
+            targetTile = floorState.Coordinate;
+            TabletopPose currentPose = pawn.BaseState.Pose;
+            TabletopPose targetPose = new TabletopPose(
+                floor.BaseState.Pose.Position,
+                currentPose.RotationDegrees,
+                currentPose.Layer,
+                currentPose.LocalOrder);
+            PawnView pawnView = null;
+            for (int i = 0; i < pawnViews.Count; i++)
+            {
+                if (pawnViews[i] != null && pawnViews[i].IsBound && pawnViews[i].ObjectId == pawn.BaseState.Id)
+                {
+                    pawnView = pawnViews[i];
+                    break;
+                }
+            }
+
+            bool moved;
+            if (pawn.BaseState.PhysicalState != null
+                && physicalAuthority != null
+                && pawnView != null
+                && pawnView.PhysicalObject != null)
+            {
+                if (!physicalAuthority.Surfaces.TryResolveAuthoredLooseObject(
+                        targetPose,
+                        player,
+                        pawnView.PhysicalObject.PhysicalCollider,
+                        pawn.BaseState.IsUserLocked,
+                        out PhysicalObjectState placed))
+                {
+                    return false;
+                }
+
+                moved = new CommitPhysicalObjectUseCase().Execute(
+                    matchState,
+                    activeSession.Request.ActivePlayerIds,
+                    new CommitPhysicalObjectCommand(
+                        CreateCommandContext(player),
+                        pawn.BaseState.Id,
+                        placed,
+                        pawn.BaseState.PhysicalRevision,
+                        null,
+                        AuthoritativeActionRecordMode.Transaction)).Succeeded;
+            }
+            else
+            {
+                moved = new MoveObjectUseCase().Execute(
+                    matchState,
+                    new MoveObjectCommand(CreateCommandContext(player), pawn.BaseState.Id, targetPose)).Succeeded;
+            }
+
+            if (!moved) return false;
+            pawnView?.ApplyAcceptedState();
+            landingPawnTiles[pawn.BaseState.Id] = targetTile;
+            return true;
+        }
+
+        // Flips a face-down, usable target at once for the player (same Landing reveal as a hand move).
+        private bool TryLandingFlipNow(PlayerId player, TabletopObjectId floorCardId, out string flippedName)
+        {
+            flippedName = string.Empty;
+            if (trapFloorRevealFloorUseCase == null
+                || !trapFloorTemplate.TryGetFloorCardState(matchState, floorCardId, out TrapFloorFloorCardState floorCard)
+                || floorCard.IsRevealed
+                || trapFloorCollapseState.IsCollapsed(floorCardId))
+            {
+                return false;
+            }
+
+            TrapFloorRevealFloorResult result = trapFloorRevealFloorUseCase.Execute(
+                matchState,
+                new TrapFloorRevealFloorCommand(
+                    CreateCommandContext(player),
+                    floorCardId,
+                    TrapFloorSearchKind.Landing,
+                    Array.Empty<TabletopObjectId>()));
+            if (!result.Succeeded) return false;
+            if (TryGetCardView(floorCardId, out CardView floorCardView))
+                floorCardView.ApplyAcceptedState();
+            RefreshCardContentVisibility();
+            activeFloorRevealActivity = result.RevealedActivity;
+            flippedName = result.FloorCard.Content.DisplayName;
+            return true;
         }
 
         private string TrapFloorActionHelpText()
@@ -5947,9 +6230,11 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
+            pendingLaunchPlayerId = affectedPlayerId;
+            pendingLaunchTargetId = result.TargetFloorCardId;
             ShowMessage(
                 $"{trapName} — move your pawn to ({result.TargetX},{result.TargetY}). "
-                + "A face-down tile there flips when you land.");
+                + "A face-down tile there flips when you land. End Turn moves it for you.");
         }
 
         private void BeginTrapFloorSearch(TrapFloorSearchKind searchKind)
@@ -6146,30 +6431,62 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            Texture backArtwork = null;
+            // The tile's own picture is its content's art; its back is the round's floor back (A1).
+            Texture backArtwork = CurrentBoardCardBack();
             Texture frontArtwork = null;
-            if (TryGetAuthoredCardDefinition(
-                    card.BaseState.DefinitionId,
-                    out CardDefinition definition))
+            if (TryGetAuthoredCardDefinition(revealedFloor.Content.Id, out CardDefinition contentDefinition))
             {
-                backArtwork = definition.BackArtwork;
+                frontArtwork = contentDefinition.FrontArtwork;
+            }
+            else if (TryGetAuthoredCardDefinition(card.BaseState.DefinitionId, out CardDefinition definition))
+            {
+                backArtwork = definition.BackArtwork != null ? definition.BackArtwork : backArtwork;
                 frontArtwork = definition.FrontArtwork;
             }
 
+            TabletopObjectId revealedId = revealedFloor.ObjectId;
+            bool trapWaiting = !result.TrapSuppressed
+                && revealedFloor.Content.HasSupportedAssistedTrapEffect
+                && IsTrapFloorTrapPending(revealedId)
+                && CanResolveTrapFloorTrap(revealedId);
             string body = result.TrapSuppressed
                 ? $"{revealedFloor.Content.DisplayText}\n\nREVEALED SAFELY"
+                : trapWaiting
+                ? $"{revealedFloor.Content.DisplayText}\n\nResolve it now, or return to play a Reaction first. "
+                    + "End Turn applies it if you leave it."
                 : revealedFloor.Content.DisplayText;
-            runtimeUi.ShowFocusedCardReveal(new PrototypeFocusedCardRevealModel(
-                revealedFloor.ObjectId,
-                backArtwork,
-                frontArtwork,
-                result.SearchKind == TrapFloorSearchKind.Landing ? "YOU LANDED ON" : "SEARCH RESULT",
-                $"{revealedFloor.Content.Category.ToString().ToUpperInvariant()} • REVEALED",
-                revealedFloor.Content.DisplayName,
-                revealedFloor.Content.DisplayText,
-                body,
-                "Return to Tabletop",
-                CloseFocusedSearchReveal));
+            string header = result.SearchKind == TrapFloorSearchKind.Landing ? "YOU LANDED ON" : "SEARCH RESULT";
+            string state = $"{revealedFloor.Content.Category.ToString().ToUpperInvariant()} • REVEALED";
+            PrototypeFocusedCardRevealModel model = trapWaiting
+                ? new PrototypeFocusedCardRevealModel(
+                    revealedId,
+                    backArtwork,
+                    frontArtwork,
+                    header,
+                    state,
+                    revealedFloor.Content.DisplayName,
+                    revealedFloor.Content.DisplayText,
+                    body,
+                    "Resolve Trap",
+                    () =>
+                    {
+                        CloseFocusedSearchReveal();
+                        ResolveTrapFloorTrap(revealedId);
+                    },
+                    "Return to Tabletop",
+                    CloseFocusedSearchReveal)
+                : new PrototypeFocusedCardRevealModel(
+                    revealedId,
+                    backArtwork,
+                    frontArtwork,
+                    header,
+                    state,
+                    revealedFloor.Content.DisplayName,
+                    revealedFloor.Content.DisplayText,
+                    body,
+                    "Return to Tabletop",
+                    CloseFocusedSearchReveal);
+            runtimeUi.ShowFocusedCardReveal(model);
         }
 
         private void CancelFocusedTrapFloorSearch()
