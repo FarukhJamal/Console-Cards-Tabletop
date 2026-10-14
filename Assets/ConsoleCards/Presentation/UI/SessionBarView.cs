@@ -366,6 +366,9 @@ namespace ConsoleCards.Presentation.UI
         {
             if (nextSeat == null || hotSeatOn)
             {
+                Debug.Log(hotSeatOn
+                    ? "[Seat] The Seat row is off while Hot-seat is on."
+                    : "[Seat] The Seat row has no action bound (not a table with seats).");
                 return;
             }
 

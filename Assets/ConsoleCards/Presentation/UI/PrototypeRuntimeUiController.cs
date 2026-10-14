@@ -188,6 +188,8 @@ namespace ConsoleCards.Presentation.UI
                     hotSeatHandoverView = uiService.AcquireCached<HotSeatHandoverView>(PrototypeUiPrefabIds.HotSeatHandover);
                 }
 
+                // The handover lives on the Modal layer, which is off unless a modal is up.
+                modalLayer.SetActive(true);
                 hotSeatHandoverView.Bind(model, confirm);
                 hotSeatHandoverView.Show();
                 root.ClearSelectedUiObject();
@@ -203,7 +205,26 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
-        public void HideHotSeatHandover() => ReleaseView(hotSeatHandoverView);
+        public void HideHotSeatHandover()
+        {
+            ReleaseView(hotSeatHandoverView);
+            if (!IsVisible(quantityPopupView)
+                && !IsVisible(cardInspectPopupView)
+                && !IsVisible(actionAbilityPurchasePopupView)
+                && !IsVisible(focusedCardSelectionView))
+            {
+                SetModalLayerOffUnlessHandover();
+            }
+        }
+
+        // Closing another modal never hides the hot-seat handover cover that may share the Modal layer.
+        private void SetModalLayerOffUnlessHandover()
+        {
+            if (modalLayer != null && !IsVisible(hotSeatHandoverView))
+            {
+                modalLayer.SetActive(false);
+            }
+        }
 
         /// <summary>Shows the rules card with these rules, or hides it (null rules or switched off).</summary>
         public void ShowRulesCard(RulesCardModel rules, bool visible)
@@ -411,7 +432,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(cardInspectPopupView);
             if (!IsVisible(quantityPopupView))
             {
-                modalLayer.SetActive(false);
+                SetModalLayerOffUnlessHandover();
             }
         }
 
@@ -436,7 +457,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(actionAbilityPurchasePopupView);
             if (!IsVisible(quantityPopupView) && !IsVisible(cardInspectPopupView))
             {
-                modalLayer.SetActive(false);
+                SetModalLayerOffUnlessHandover();
             }
         }
 
@@ -474,7 +495,7 @@ namespace ConsoleCards.Presentation.UI
                 && !IsVisible(cardInspectPopupView)
                 && !IsVisible(actionAbilityPurchasePopupView))
             {
-                modalLayer.SetActive(false);
+                SetModalLayerOffUnlessHandover();
             }
         }
 
@@ -533,7 +554,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(tabletopPopupView);
             ReleaseModalViews();
             popupLayer?.SetActive(false);
-            modalLayer?.SetActive(false);
+            SetModalLayerOffUnlessHandover();
         }
 
         public void ClearActiveSessionTransientUi()
@@ -593,6 +614,8 @@ namespace ConsoleCards.Presentation.UI
 
         private void BeforeTableMenuOpens()
         {
+            // The open menu draws over the rules card that shares the HUD layer.
+            sessionBarView?.transform.SetAsLastSibling();
             componentToolboxView?.CloseToolbox();
             CloseTabletopPopup();
         }
@@ -684,7 +707,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(cardInspectPopupView);
             ReleaseView(actionAbilityPurchasePopupView);
             ReleaseView(focusedCardSelectionView);
-            modalLayer?.SetActive(false);
+            SetModalLayerOffUnlessHandover();
         }
 
         private void ReleaseView(ReusableUiView view)

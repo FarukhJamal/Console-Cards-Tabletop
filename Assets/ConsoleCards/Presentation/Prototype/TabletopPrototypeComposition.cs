@@ -127,6 +127,8 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal bool playerFeedback = true;
         [Tooltip("Hot-seat (doc 18 §15.11): one screen shared by every player; it passes to whoever's turn it is after a handover screen. Also in the Table menu.")]
         [SerializeField] internal bool hotSeatMode;
+        [Tooltip("Camera view after this screen changes seat (Seat row or hot-seat). Mid: that seat's console and the board, from behind the seat.")]
+        [SerializeField] internal TabletopCameraPreset seatSwitchCameraView = TabletopCameraPreset.Mid;
         [SerializeField] internal bool showDeveloperControls;
         [Tooltip("Prototype visuals hidden at bind time. After changing in Play mode, press Reset or restart the session.")]
         [SerializeField] internal PrototypeVisualHide prototypeVisualHide =
@@ -4807,14 +4809,17 @@ namespace ConsoleCards.Presentation.Prototype
         // same path Undo uses (the camera turns to that seat); game state and the Undo history are not changed.
         private bool SwitchScreenSeat(PlayerId target, bool announceTurn)
         {
-            if (!IsInitialized
-                || rebuildingFromUndo
-                || activeSession == null
-                || prototypeTemplateContext == null
-                || prototypeTemplateContext.TrapFloorTemplate == null
-                || target.IsEmpty
-                || target == localPlayerId)
+            string blocked = !IsInitialized ? "the table is not ready"
+                : rebuildingFromUndo ? "the table is rebuilding"
+                : activeSession == null ? "there is no active session"
+                : prototypeTemplateContext == null || prototypeTemplateContext.TrapFloorTemplate == null
+                    ? "this table has no seats"
+                : target.IsEmpty ? "no player was chosen"
+                : target == localPlayerId ? "this screen already plays that seat"
+                : null;
+            if (blocked != null)
             {
+                SeatSwitchFailed(target, blocked);
                 return false;
             }
 
@@ -4826,9 +4831,10 @@ namespace ConsoleCards.Presentation.Prototype
                     prototypeTemplateContext.TrapFloorTemplate,
                     target);
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException exception)
             {
                 handSeatSyncFailedFor = target; // not retried every frame
+                SeatSwitchFailed(target, exception.Message);
                 return false;
             }
 
@@ -4855,7 +4861,8 @@ namespace ConsoleCards.Presentation.Prototype
                 prototypeTemplateContext = previousContext;
                 handSeatSyncFailedFor = target;
                 RestorePresentationAfterFailedRebuild(previousMatch, current, "Seat switch");
-                Debug.LogError($"Seat switch Presentation rebuild failed: {exception.Message}", this);
+                Debug.LogError($"[Seat] Presentation rebuild failed: {exception}", this);
+                ShowMessage($"Could not switch seat: {exception.Message}");
                 return false;
             }
             finally
@@ -4870,7 +4877,13 @@ namespace ConsoleCards.Presentation.Prototype
         // Table menu Seat row: this screen plays the next seated player (not in hot-seat mode).
         private void NextScreenSeat()
         {
-            if (!IsInitialized || trapFloorTemplate == null || matchState == null) return;
+            Debug.Log("[Seat] Seat row clicked.", this);
+            if (!IsInitialized || trapFloorTemplate == null || matchState == null)
+            {
+                SeatSwitchFailed(PlayerId.Empty, "this table has no seats");
+                return;
+            }
+
             if (hotSeatMode)
             {
                 ShowMessage("Hot-seat is on: the screen follows the turn.");
@@ -4901,9 +4914,27 @@ namespace ConsoleCards.Presentation.Prototype
         }
 
         // Slides the screen hand away, then (next frames) switches the screen to the target seat.
+        private void SeatSwitchFailed(PlayerId target, string reason)
+        {
+            Debug.LogWarning($"[Seat] Could not switch this screen to {PlayerLabel(target)}: {reason}.", this);
+            ShowMessage($"Could not switch seat: {reason}.");
+        }
+
         private void BeginSeatSwitch(PlayerId target, bool fromHandover)
         {
-            if (seatSwitchPending || target.IsEmpty || target == localPlayerId) return;
+            if (seatSwitchPending)
+            {
+                Debug.LogWarning("[Seat] A seat switch is already running.", this);
+                return;
+            }
+
+            if (target.IsEmpty || target == localPlayerId)
+            {
+                SeatSwitchFailed(target, target.IsEmpty ? "no player was chosen" : "this screen already plays that seat");
+                return;
+            }
+
+            Debug.Log($"[Seat] Switching this screen from {PlayerLabel(localPlayerId)} to {PlayerLabel(target)}.", this);
             seatSwitchPending = true;
             seatSwitchTarget = target;
             seatSwitchFromHandover = fromHandover;
@@ -4927,7 +4958,7 @@ namespace ConsoleCards.Presentation.Prototype
             bool switched = SwitchScreenSeat(target, fromHandover);
             handTrayRig?.SetCleared(false);
             if (!switched) return;
-            ProjectTrapFloorCameraBookmark(); // the camera moves to the new seat's view
+            MoveCameraToScreenSeat();
             if (fromHandover)
             {
                 if (gained.Length > 0) ShowMessage(gained.TrimStart());
@@ -4936,6 +4967,22 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 ShowMessage($"This screen now plays {PlayerLabel(target)}.");
             }
+        }
+
+        // The camera travels to the seat this screen now plays (its console and the board, from behind it).
+        private void MoveCameraToScreenSeat()
+        {
+            TabletopCameraController cameraController = cameraInputAdapter != null ? cameraInputAdapter.CameraController : null;
+            if (cameraController == null) return;
+            bool moved = cameraController.ShowPreset(seatSwitchCameraView)
+                || cameraController.ShowMidView()
+                || cameraController.ShowCloseView();
+            if (!moved) ProjectTrapFloorCameraBookmark();
+            Debug.Log(
+                $"[Seat] Screen seat is now {PlayerLabel(localPlayerId)} (layout seat {localPlayerLayoutSeatIndex + 1}, "
+                + $"facing {(localSeatLayout != null ? localSeatLayout.FacingRotationDegrees : 0f)}°); camera view "
+                + (moved ? seatSwitchCameraView.ToString() : "bookmark") + ".",
+                this);
         }
 
         private void SetHotSeatMode(bool on)
