@@ -495,10 +495,20 @@ namespace ConsoleCards.Presentation.Camera
             return ShowPreset(preset, immediate, 1f);
         }
 
+        /// <summary>
+        /// Moves to a preset over <paramref name="transitionSeconds"/> (eased), for slow, deliberate moves such as
+        /// travelling to another seat. Navigation input still interrupts it.
+        /// </summary>
+        public bool ShowPreset(TabletopCameraPreset preset, float transitionSeconds)
+        {
+            return ShowPreset(preset, false, 1f, transitionSeconds);
+        }
+
         private bool ShowPreset(
             TabletopCameraPreset preset,
             bool immediate,
-            float framingDistanceMultiplier)
+            float framingDistanceMultiplier,
+            float transitionSeconds = -1f)
         {
             EnsureInitialized();
             ValidateFinite(framingDistanceMultiplier, nameof(framingDistanceMultiplier));
@@ -549,7 +559,8 @@ namespace ConsoleCards.Presentation.Camera
                 distance,
                 size,
                 useOrthographicProjection,
-                immediate);
+                immediate,
+                transitionSeconds);
             if (controllerMappingAreaRoot != null)
             {
                 controllerMappingAreaRoot.SetActive(
@@ -649,7 +660,8 @@ namespace ConsoleCards.Presentation.Camera
             float distance,
             float orthographicSize,
             bool useOrthographicProjection,
-            bool immediate)
+            bool immediate,
+            float transitionSeconds = -1f)
         {
             SwitchProjection(useOrthographicProjection, true);
             targetPivot = SanitizePivot(pivot);
@@ -681,7 +693,7 @@ namespace ConsoleCards.Presentation.Camera
             transitionStartDistance = currentDistance;
             transitionStartOrthographicSize = currentOrthographicSize;
             transitionElapsed = 0f;
-            transitionDuration = presetTransitionDuration;
+            transitionDuration = transitionSeconds > 0f ? transitionSeconds : presetTransitionDuration;
             transitionActive = true;
             ResetSmoothingVelocities();
         }

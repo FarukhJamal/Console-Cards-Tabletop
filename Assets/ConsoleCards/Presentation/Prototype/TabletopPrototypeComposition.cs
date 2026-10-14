@@ -129,6 +129,8 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal bool hotSeatMode;
         [Tooltip("Camera view after this screen changes seat (Seat row or hot-seat). Mid: that seat's console and the board, from behind the seat.")]
         [SerializeField] internal TabletopCameraPreset seatSwitchCameraView = TabletopCameraPreset.Mid;
+        [Tooltip("Seconds the camera takes to travel to the new seat; the new hand slides in as it arrives.")]
+        [SerializeField, Min(0.1f)] internal float seatSwitchCameraSeconds = 1.2f;
         [SerializeField] internal bool showDeveloperControls;
         [Tooltip("Prototype visuals hidden at bind time. After changing in Play mode, press Reset or restart the session.")]
         [SerializeField] internal PrototypeVisualHide prototypeVisualHide =
@@ -273,6 +275,7 @@ namespace ConsoleCards.Presentation.Prototype
         private PlayerId seatSwitchTarget;
         private bool seatSwitchFromHandover;
         private float seatSwitchDeadline;
+        private float seatRevealAt = -1f;
         // Spring/Crane target the active player still has to move to (G2c); applied by End Turn if left.
         private PlayerId pendingLaunchPlayerId;
         private TabletopObjectId pendingLaunchTargetId;
@@ -644,6 +647,7 @@ namespace ConsoleCards.Presentation.Prototype
                 seatLeftHandCount.Clear();
                 handSeatSyncFailedFor = PlayerId.Empty;
                 seatSwitchPending = false;
+                seatRevealAt = -1f;
                 handTrayRig?.SetCleared(false, true);
             }
 
@@ -2246,6 +2250,12 @@ namespace ConsoleCards.Presentation.Prototype
                         || Time.unscaledTime >= seatSwitchDeadline))
                 {
                     CompleteSeatSwitch();
+                }
+
+                if (seatRevealAt >= 0f && Time.unscaledTime >= seatRevealAt)
+                {
+                    seatRevealAt = -1f;
+                    handTrayRig?.SetCleared(false); // the new hand slides in as the camera arrives
                 }
 
                 UpdateHotSeat();
@@ -4920,18 +4930,18 @@ namespace ConsoleCards.Presentation.Prototype
             ShowMessage($"Could not switch seat: {reason}.");
         }
 
-        private void BeginSeatSwitch(PlayerId target, bool fromHandover)
+        private bool BeginSeatSwitch(PlayerId target, bool fromHandover)
         {
             if (seatSwitchPending)
             {
                 Debug.LogWarning("[Seat] A seat switch is already running.", this);
-                return;
+                return false;
             }
 
             if (target.IsEmpty || target == localPlayerId)
             {
                 SeatSwitchFailed(target, target.IsEmpty ? "no player was chosen" : "this screen already plays that seat");
-                return;
+                return false;
             }
 
             Debug.Log($"[Seat] Switching this screen from {PlayerLabel(localPlayerId)} to {PlayerLabel(target)}.", this);
@@ -4939,7 +4949,9 @@ namespace ConsoleCards.Presentation.Prototype
             seatSwitchTarget = target;
             seatSwitchFromHandover = fromHandover;
             seatSwitchDeadline = Time.unscaledTime + HandTrayRig.ClearSeconds + 0.3f;
+            seatRevealAt = -1f;
             handTrayRig?.SetCleared(true);
+            return true;
         }
 
         private void CompleteSeatSwitch()
@@ -4951,14 +4963,21 @@ namespace ConsoleCards.Presentation.Prototype
                 && (trapFloorTurnState == null || trapFloorTurnState.ActivePlayerId != target))
             {
                 handTrayRig?.SetCleared(false);
-                return; // the turn moved meanwhile; hot-seat opens a new handover
+                runtimeUi?.FadeOutHotSeatHandover();
+                return; // the turn moved meanwhile; hot-seat opens a new handover if needed
             }
 
             string gained = fromHandover ? HandGainText(target) : string.Empty;
             bool switched = SwitchScreenSeat(target, fromHandover);
-            handTrayRig?.SetCleared(false);
-            if (!switched) return;
+            if (fromHandover) runtimeUi?.FadeOutHotSeatHandover(); // the cover lifts while the camera travels
+            if (!switched)
+            {
+                handTrayRig?.SetCleared(false);
+                return;
+            }
+
             MoveCameraToScreenSeat();
+            seatRevealAt = Time.unscaledTime + (seatSwitchCameraSeconds * 0.65f);
             if (fromHandover)
             {
                 if (gained.Length > 0) ShowMessage(gained.TrimStart());
@@ -4974,7 +4993,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             TabletopCameraController cameraController = cameraInputAdapter != null ? cameraInputAdapter.CameraController : null;
             if (cameraController == null) return;
-            bool moved = cameraController.ShowPreset(seatSwitchCameraView)
+            bool moved = cameraController.ShowPreset(seatSwitchCameraView, seatSwitchCameraSeconds)
                 || cameraController.ShowMidView()
                 || cameraController.ShowCloseView();
             if (!moved) ProjectTrapFloorCameraBookmark();
@@ -5024,7 +5043,7 @@ namespace ConsoleCards.Presentation.Prototype
             if (runtimeUi != null && runtimeUi.ShowHotSeatHandover(model, ConfirmHotSeatHandover))
             {
                 hotSeatHandoverOpen = true;
-                handTrayRig?.SetCleared(true, true); // the previous hand leaves under the cover
+                handTrayRig?.SetCleared(true); // the previous hand slides away as the cover fades in
                 return;
             }
 
@@ -5037,21 +5056,28 @@ namespace ConsoleCards.Presentation.Prototype
         private void ConfirmHotSeatHandover()
         {
             PlayerId target = hotSeatHandoverFor;
-            CloseHotSeatHandover();
+            hotSeatHandoverOpen = false; // the cover stays up until the new seat is ready, then fades
             if (!IsInitialized
                 || trapFloorTurnState == null
                 || trapFloorTurnState.ActivePlayerId != target)
             {
-                return; // the turn moved while the cover was up; the next frame opens a new handover
+                // The turn moved while the cover was up: lift it; the next frame opens a new handover if needed.
+                runtimeUi?.FadeOutHotSeatHandover();
+                handTrayRig?.SetCleared(false);
+                return;
             }
 
-            BeginSeatSwitch(target, true);
+            if (!BeginSeatSwitch(target, true))
+            {
+                runtimeUi?.FadeOutHotSeatHandover();
+                handTrayRig?.SetCleared(false);
+            }
         }
 
         private void CloseHotSeatHandover()
         {
             hotSeatHandoverOpen = false;
-            runtimeUi?.HideHotSeatHandover();
+            runtimeUi?.FadeOutHotSeatHandover();
             handTrayRig?.SetCleared(false);
         }
 
@@ -10074,6 +10100,31 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
+        // The authored label, or for a card made during play (a taken prize, a purchase) its definition's name.
+        // Rebuilds (Undo, Redo, seat switch) reload only the template's labels, so the second case matters.
+        private string ResolveCardLabel(CardInstanceState card)
+        {
+            TabletopObjectId id = card.BaseState.Id;
+            if (labelsByCardId.TryGetValue(id, out string label)) return label;
+            label = "Card";
+            Guid definition = card.BaseState.DefinitionId.Value;
+            IReadOnlyList<CardDefinitionData> cards = trapFloorTemplate?.GameDefinition?.Cards;
+            if (cards != null)
+            {
+                for (int i = 0; i < cards.Count; i++)
+                {
+                    if (Guid.TryParse(cards[i].StableId, out Guid stableId) && stableId == definition)
+                    {
+                        label = cards[i].DisplayName;
+                        break;
+                    }
+                }
+            }
+
+            labelsByCardId[id] = label;
+            return label;
+        }
+
         private void BindObjectViews()
         {
             // Every card, the local Avatar included, and every pawn and token is a catalog spawn (C3b-1).
@@ -10081,7 +10132,7 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 CardView createdView = CreateCardView(
                     card,
-                    labelsByCardId[card.BaseState.Id],
+                    ResolveCardLabel(card),
                     out TabletopSelectionVisual createdSelectionVisual);
                 cardViews.Add(createdView);
                 cardSelectionVisuals.Add(createdSelectionVisual);

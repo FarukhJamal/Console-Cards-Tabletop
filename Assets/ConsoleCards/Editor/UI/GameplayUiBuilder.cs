@@ -243,8 +243,10 @@ namespace ConsoleCards.Editor.UI
             AudioSource audio = root.gameObject.AddComponent<AudioSource>();
             audio.playOnAwake = false;
             audio.spatialBlend = 0f;
+            CanvasGroup group = root.gameObject.AddComponent<CanvasGroup>();
 
             SerializedObject so = new SerializedObject(view);
+            so.FindProperty("group").objectReferenceValue = group;
             so.FindProperty("cover").objectReferenceValue = cover;
             so.FindProperty("accentPlate").objectReferenceValue = accent;
             so.FindProperty("titleLabel").objectReferenceValue = title;

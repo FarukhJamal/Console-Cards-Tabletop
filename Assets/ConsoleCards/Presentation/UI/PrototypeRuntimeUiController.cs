@@ -205,6 +205,15 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
+        /// <summary>Fades the handover cover away, then releases it.</summary>
+        public void FadeOutHotSeatHandover()
+        {
+            if (IsVisible(hotSeatHandoverView))
+            {
+                hotSeatHandoverView.FadeOut(HideHotSeatHandover);
+            }
+        }
+
         public void HideHotSeatHandover()
         {
             ReleaseView(hotSeatHandoverView);
