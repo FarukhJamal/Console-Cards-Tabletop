@@ -52,6 +52,11 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private ToolboxSwitch hintsSwitch = new ToolboxSwitch();
         [SerializeField] private Button helpButton;
 
+        [Header("Play (doc 18 §15.11; optional, added by Add Missing Table Menu Rows)")]
+        [SerializeField] private Button seatButton;
+        [SerializeField] private Text seatLabel;
+        [SerializeField] private ToolboxSwitch hotSeatSwitch = new ToolboxSwitch();
+
         private Action undo;
         private Action redo;
         private Action newTable;
@@ -65,6 +70,9 @@ namespace ConsoleCards.Presentation.UI
         private Action openHelp;
         private bool rulesOn;
         private bool hintsOn;
+        private Action nextSeat;
+        private Action<bool> setHotSeat;
+        private bool hotSeatOn;
 
         public bool IsMenuOpen => menu != null && menu.gameObject.activeSelf;
 
@@ -167,6 +175,40 @@ namespace ConsoleCards.Presentation.UI
             helpButton.onClick.AddListener(HandleHelp);
         }
 
+        /// <summary>
+        /// Binds the optional play rows: Seat (which player this screen plays; click for the next seat) and the
+        /// Hot-seat switch. Rows are hidden when <paramref name="available"/> is false. Returns false when the
+        /// prefab does not have the rows.
+        /// </summary>
+        public bool BindPlaySettings(
+            bool available,
+            string seatText,
+            Action nextSeatAction,
+            bool hotSeatEnabled,
+            Action<bool> setHotSeatEnabled)
+        {
+            RequireAcquired();
+            bool hasRows = seatButton != null && seatLabel != null && hotSeatSwitch != null && hotSeatSwitch.IsComplete;
+            if (!hasRows)
+            {
+                return false;
+            }
+
+            Clear(seatButton);
+            Clear(hotSeatSwitch.Button);
+            nextSeat = available ? nextSeatAction : null;
+            setHotSeat = available ? setHotSeatEnabled : null;
+            hotSeatOn = hotSeatEnabled;
+            seatButton.gameObject.SetActive(available && nextSeat != null);
+            hotSeatSwitch.Row.SetActive(available && setHotSeat != null);
+            seatLabel.text = seatText ?? string.Empty;
+            seatButton.interactable = !hotSeatOn;
+            hotSeatSwitch.Show(hotSeatOn);
+            seatButton.onClick.AddListener(HandleNextSeat);
+            hotSeatSwitch.Button.onClick.AddListener(FlipHotSeat);
+            return true;
+        }
+
         public void SetUndoState(bool enabled, string label)
         {
             undoLabel = string.IsNullOrWhiteSpace(label) ? "Undo" : label;
@@ -237,6 +279,8 @@ namespace ConsoleCards.Presentation.UI
             redo = null;
             setRules = null;
             setHints = null;
+            nextSeat = null;
+            setHotSeat = null;
             openHelp = null;
             newTable = null;
             resetTable = null;
@@ -318,6 +362,31 @@ namespace ConsoleCards.Presentation.UI
             setHints(hintsOn);
         }
 
+        private void HandleNextSeat()
+        {
+            if (nextSeat == null || hotSeatOn)
+            {
+                return;
+            }
+
+            Action action = nextSeat;
+            CloseMenu();
+            action();
+        }
+
+        private void FlipHotSeat()
+        {
+            if (setHotSeat == null)
+            {
+                return;
+            }
+
+            hotSeatOn = !hotSeatOn;
+            hotSeatSwitch.Show(hotSeatOn);
+            seatButton.interactable = !hotSeatOn;
+            setHotSeat(hotSeatOn);
+        }
+
         private void HandleHelp()
         {
             CloseMenu();
@@ -397,6 +466,8 @@ namespace ConsoleCards.Presentation.UI
             Clear(rulesSwitch?.Button);
             Clear(hintsSwitch?.Button);
             Clear(helpButton);
+            Clear(seatButton);
+            Clear(hotSeatSwitch?.Button);
         }
 
         private static void Clear(Button button)

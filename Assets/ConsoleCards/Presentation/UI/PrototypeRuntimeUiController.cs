@@ -34,6 +34,9 @@ namespace ConsoleCards.Presentation.UI
         private FeedbackBannerView feedbackBannerView;
         private FeedbackMessageStackView feedbackMessageStackView;
         private bool feedbackUnavailable;
+        private HotSeatHandoverView hotSeatHandoverView;
+        private bool hotSeatHandoverUnavailable;
+        private bool playSettingsWarned;
 
         public IRuntimeUiService UiService
         {
@@ -150,6 +153,57 @@ namespace ConsoleCards.Presentation.UI
             ShowRulesCard(rules, rulesCardOn);
             SetHintsVisible(hintsOn);
         }
+
+        /// <summary>
+        /// Binds the Table menu's play rows (doc 18 §15.11): the Seat this screen plays and the Hot-seat switch.
+        /// Pass available false for tables without seats. Warns once when the SessionBar prefab lacks the rows.
+        /// </summary>
+        public void ShowPlaySettings(
+            bool available,
+            string seatText,
+            Action nextSeat,
+            bool hotSeatOn,
+            Action<bool> setHotSeat)
+        {
+            EnsureSessionBarView();
+            if (!sessionBarView.BindPlaySettings(available, seatText, nextSeat, hotSeatOn, setHotSeat)
+                && available
+                && !playSettingsWarned)
+            {
+                playSettingsWarned = true;
+                Debug.LogWarning(
+                    "The Table menu has no Seat or Hot-seat rows: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
+            }
+        }
+
+        /// <summary>Shows the hot-seat handover cover (doc 25, H2). False when its Final UI prefab is missing.</summary>
+        public bool ShowHotSeatHandover(HotSeatHandoverModel model, Action confirm)
+        {
+            if (hotSeatHandoverUnavailable) return false;
+            try
+            {
+                EnsureService();
+                if (hotSeatHandoverView == null || !hotSeatHandoverView.IsAcquired)
+                {
+                    hotSeatHandoverView = uiService.AcquireCached<HotSeatHandoverView>(PrototypeUiPrefabIds.HotSeatHandover);
+                }
+
+                hotSeatHandoverView.Bind(model, confirm);
+                hotSeatHandoverView.Show();
+                root.ClearSelectedUiObject();
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                hotSeatHandoverUnavailable = true;
+                Debug.LogWarning(
+                    "The hot-seat handover screen is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs (Final UI). "
+                    + exception.Message);
+                return false;
+            }
+        }
+
+        public void HideHotSeatHandover() => ReleaseView(hotSeatHandoverView);
 
         /// <summary>Shows the rules card with these rules, or hides it (null rules or switched off).</summary>
         public void ShowRulesCard(RulesCardModel rules, bool visible)
@@ -501,6 +555,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(interactionGuideView);
             ReleaseView(feedbackBannerView);
             ReleaseView(feedbackMessageStackView);
+            ReleaseView(hotSeatHandoverView);
             CloseTabletopPopup();
         }
 

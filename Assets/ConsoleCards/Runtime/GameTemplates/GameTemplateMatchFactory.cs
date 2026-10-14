@@ -107,6 +107,15 @@ namespace ConsoleCards.GameTemplates
             }
         }
 
+        // A Hand shows its cards to its owner: cards arriving in a Hand turn face up, as in the Empty Table hand
+        // (doc 22, H-E). Other hands are shown face down by Presentation only. Piles use their pile style.
+        private static ContainerArrivalFace ArrivalFaceFor(GameTemplateContainerDefinition definition)
+        {
+            return definition.Kind == ContainerKind.Hand
+                ? ContainerArrivalFace.FaceUp
+                : (definition.PileStyle ?? GameTemplatePileStyle.DefaultFor(definition.Kind)).ArrivalFace;
+        }
+
         private static MatchState ConstructMatch(
             GameTemplate template,
             PlayerLayoutDefinition playerLayout,
@@ -125,7 +134,7 @@ namespace ConsoleCards.GameTemplates
                     definition.OwnerSeatId,
                     definition.Visibility,
                     definition.Capacity,
-                    (definition.PileStyle ?? GameTemplatePileStyle.DefaultFor(definition.Kind)).ArrivalFace);
+                    ArrivalFaceFor(definition));
                 containers.Add(container.Id, container);
                 if (definition.HasTabletopPose)
                 {

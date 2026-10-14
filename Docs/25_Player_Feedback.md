@@ -81,7 +81,9 @@ shown on screen and on the board with authored prefabs (Final UI, doc 26). Nothi
   never change. Strength and frequency are on the camera controller and the feedback set.
 - Markers are pooled (made once); they only move and recolour themselves and never change game state.
 
-## H1 note (2026-10-14)
+## H1b / H2 record (2026-10-14)
 
-- When the screen hand switches to the next player at End Turn, the turn banner and ping play again for that player, so the hand change is announced and never silent.
-- A draw into another player's hand names that player in the message stack.
+- Every message and banner (except the turn banner) also goes into a short shared log of 16 lines. Hot-seat mode uses it for the handover summary: up to 6 latest lines since the player last had the screen, then their hand gain.
+- **Prefab:** `Final/UI/HotSeatHandover.prefab` (Modal layer, id `platform.hotseat-handover`), created by Console Cards > UI > Create Missing Gameplay UI Prefabs. Opaque cover, colour plate, player name in their colour, summary, confirm button, turn ping. Yours to edit.
+- **Table menu rows:** Seat and Hot-seat, added to an existing SessionBar prefab by Console Cards > UI > Add Missing Table Menu Rows (Final UI). Without them the features are hidden and the console warns once.
+- Draws into another player's hand name that player in the message stack.

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Random;
 using ConsoleCards.Application.Results;
@@ -124,6 +125,8 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal float largeCardVisualScale = 1.486f;
         [Tooltip("Player feedback (doc 25): announcement banners, the message stack and the turn ping.")]
         [SerializeField] internal bool playerFeedback = true;
+        [Tooltip("Hot-seat (doc 18 §15.11): one screen shared by every player; it passes to whoever's turn it is after a handover screen. Also in the Table menu.")]
+        [SerializeField] internal bool hotSeatMode;
         [SerializeField] internal bool showDeveloperControls;
         [Tooltip("Prototype visuals hidden at bind time. After changing in Play mode, press Reset or restart the session.")]
         [SerializeField] internal PrototypeVisualHide prototypeVisualHide =
@@ -250,9 +253,19 @@ namespace ConsoleCards.Presentation.Prototype
         private bool boardFeedbackUnavailable;
         private readonly List<Vector3> boardFeedbackTraps = new List<Vector3>(8);
         private readonly List<Vector3> boardFeedbackTargets = new List<Vector3>(16);
-        // Hot-seat hands (H1): the screen hand belongs to the active player.
-        private bool handSeatSyncRequested;
+        // Seats (H1b): the screen hand belongs to this screen's seat. Hot-seat mode (H2) passes the screen to the
+        // player whose turn it is, behind a handover cover, and summarises what happened since they last had it.
+        private const int HandoverLogSize = 16;
+        private const int HandoverSummaryLines = 6;
         private bool announceTurnAfterRebuild;
+        private PlayerId handSeatSyncFailedFor;
+        private bool hotSeatHandoverOpen;
+        private PlayerId hotSeatHandoverFor;
+        private readonly string[] handoverLog = new string[HandoverLogSize];
+        private long handoverLogCount;
+        private readonly Dictionary<PlayerId, long> seatLeftAtLog = new Dictionary<PlayerId, long>();
+        private readonly Dictionary<PlayerId, int> seatLeftHandCount = new Dictionary<PlayerId, int>();
+        private readonly StringBuilder handoverSummary = new StringBuilder(256);
         // Spring/Crane target the active player still has to move to (G2c); applied by End Turn if left.
         private PlayerId pendingLaunchPlayerId;
         private TabletopObjectId pendingLaunchTargetId;
@@ -617,6 +630,14 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void Shutdown(bool preserveTemplateContext)
         {
+            if (!rebuildingFromUndo)
+            {
+                // A new or reset table: forget who had the screen when (Undo and seat switches keep it).
+                seatLeftAtLog.Clear();
+                seatLeftHandCount.Clear();
+                handSeatSyncFailedFor = PlayerId.Empty;
+            }
+
             StopUndoTrackingCurrentMatch();
             physicalFloorfallPending = false;
             physicalFloorfallActor = PlayerId.Empty;
@@ -1033,7 +1054,12 @@ namespace ConsoleCards.Presentation.Prototype
                     handReflowDuration,
                     0.035f);
                 string whose = targetHandId == handContainerId ? "Hand" : $"{HandOwnerName(targetHandId)}'s hand";
-                if (targetHandId != handContainerId && trapFloorTurnState != null && !trapFloorTurnState.IsCurrentFloorFailed)
+                if (targetHandId != handContainerId
+                    && trapFloorTurnState != null
+                    && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                    && !trapFloorTurnState.IsCurrentFloorFailed
+                    && (!TryGetTrapFloorPlayerSetup(trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition activeSetup)
+                        || activeSetup.HandContainerId != targetHandId))
                 {
                     whose += " (not their turn)";
                 }
@@ -1246,7 +1272,6 @@ namespace ConsoleCards.Presentation.Prototype
                     this);
                 ShowActiveSessionUi();
                 ShowMessage($"Undid {transaction.Description}.");
-                handSeatSyncRequested = true;
                 return true;
             }
             catch (Exception exception)
@@ -1320,7 +1345,6 @@ namespace ConsoleCards.Presentation.Prototype
                 undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
                 ShowActiveSessionUi();
                 ShowMessage($"Redid {transaction.Description}.");
-                handSeatSyncRequested = true;
                 return true;
             }
             catch (Exception exception)
@@ -2203,10 +2227,9 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void Update()
         {
-            if (handSeatSyncRequested && IsInitialized && !rebuildingFromUndo)
+            if (IsInitialized && !rebuildingFromUndo)
             {
-                handSeatSyncRequested = false;
-                SyncHandSeatToActivePlayer(false);
+                UpdateHotSeat();
             }
 
             if (HandleRedoShortcut()) return;
@@ -4218,6 +4241,12 @@ namespace ConsoleCards.Presentation.Prototype
                 SetRulesCardEnabled,
                 hintsEnabled,
                 SetHintsEnabled);
+            runtimeUi.ShowPlaySettings(
+                trapFloorTemplate != null && activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom,
+                $"Seat: {PlayerLabel(localPlayerId)}",
+                NextScreenSeat,
+                hotSeatMode,
+                SetHotSeatMode);
             RefreshUndoUi();
             RefreshTrapFloorStatusUi();
         }
@@ -4733,7 +4762,6 @@ namespace ConsoleCards.Presentation.Prototype
                     undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
             }
 
-            SyncHandSeatToActivePlayer(true); // H1: the screen hand follows the turn
             RefreshTrapFloorStatusUi();
             string skip = (skipped ? $"{FormatPlayerName(actor)} skipped. " : string.Empty) + trapSummary;
             if (wasFloorTurn)
@@ -4757,37 +4785,37 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
-        // Hot-seat (H1): the screen hand belongs to the player whose turn it is, and every other hand lies
-        // face down at its owner's side. Switching rebuilds the Presentation for that player's seat through the
-        // same path Undo uses; game state and the Undo history are not changed.
-        private void SyncHandSeatToActivePlayer(bool announceTurn)
+        // Seats (H1b): this screen plays one seat. The screen hand is that seat's hand and every other hand lies
+        // face down at its owner's table edge. Switching rebuilds the Presentation for the new seat through the
+        // same path Undo uses (the camera turns to that seat); game state and the Undo history are not changed.
+        private bool SwitchScreenSeat(PlayerId target, bool announceTurn)
         {
             if (!IsInitialized
                 || rebuildingFromUndo
                 || activeSession == null
                 || prototypeTemplateContext == null
                 || prototypeTemplateContext.TrapFloorTemplate == null
-                || trapFloorTurnState == null
-                || trapFloorTurnState.IsCurrentFloorFailed
-                || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
+                || target.IsEmpty
+                || target == localPlayerId)
             {
-                return;
+                return false;
             }
 
-            PlayerId active = trapFloorTurnState.ActivePlayerId;
-            if (active.IsEmpty || active == localPlayerId) return;
             PrototypeTemplateContext next;
             try
             {
                 next = CreateTrapFloorPrototypeContext(
                     prototypeTemplateContext.Session,
                     prototypeTemplateContext.TrapFloorTemplate,
-                    active);
+                    target);
             }
             catch (InvalidOperationException)
             {
-                return;
+                handSeatSyncFailedFor = target; // not retried every frame
+                return false;
             }
+
+            RememberSeatLeaving(localPlayerId);
 
             PrototypeTemplateContext previousContext = prototypeTemplateContext;
             MatchState previousMatch = activeSession.CurrentMatch;
@@ -4803,12 +4831,15 @@ namespace ConsoleCards.Presentation.Prototype
                 undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
                 ShowActiveSessionUi();
                 announceTurnAfterRebuild = announceTurn;
+                return true;
             }
             catch (Exception exception)
             {
                 prototypeTemplateContext = previousContext;
-                RestorePresentationAfterFailedRebuild(previousMatch, current, "Hand switch");
-                Debug.LogError($"Hand switch Presentation rebuild failed: {exception.Message}", this);
+                handSeatSyncFailedFor = target;
+                RestorePresentationAfterFailedRebuild(previousMatch, current, "Seat switch");
+                Debug.LogError($"Seat switch Presentation rebuild failed: {exception.Message}", this);
+                return false;
             }
             finally
             {
@@ -4817,6 +4848,201 @@ namespace ConsoleCards.Presentation.Prototype
                 rebuildingFromUndo = false;
                 RefreshUndoUi();
             }
+        }
+
+        // Table menu Seat row: this screen plays the next seated player (not in hot-seat mode).
+        private void NextScreenSeat()
+        {
+            if (!IsInitialized || trapFloorTemplate == null || matchState == null) return;
+            if (hotSeatMode)
+            {
+                ShowMessage("Hot-seat is on: the screen follows the turn.");
+                return;
+            }
+
+            int count = trapFloorTemplate.Players.Count;
+            int localIndex = -1;
+            for (int i = 0; i < count; i++)
+            {
+                if (matchState.GetSeat(trapFloorTemplate.Players[i].SeatId).OccupantPlayerId == localPlayerId)
+                {
+                    localIndex = i;
+                    break;
+                }
+            }
+
+            for (int step = 1; step < count; step++)
+            {
+                PlayerId candidate = matchState.GetSeat(
+                    trapFloorTemplate.Players[(localIndex + step + count) % count].SeatId).OccupantPlayerId;
+                if (candidate.IsEmpty || candidate == localPlayerId) continue;
+                if (SwitchScreenSeat(candidate, false))
+                {
+                    ShowMessage($"This screen now plays {PlayerLabel(candidate)}.");
+                }
+
+                return;
+            }
+
+            ShowMessage("There is no other seated player.");
+        }
+
+        private void SetHotSeatMode(bool on)
+        {
+            hotSeatMode = on;
+            handSeatSyncFailedFor = PlayerId.Empty;
+            ShowMessage(on
+                ? "Hot-seat on: at each turn the screen passes to that player after a handover."
+                : "Hot-seat off: this screen keeps its seat.");
+        }
+
+        // H2: opens the handover when the turn belongs to someone else, keeps it on the right player, and closes
+        // it when it is no longer needed (mode off, the turn came back, or a Floor turn).
+        private void UpdateHotSeat()
+        {
+            if (!hotSeatMode || !ScreenHandBehindTurn())
+            {
+                if (hotSeatHandoverOpen) CloseHotSeatHandover();
+                return;
+            }
+
+            PlayerId active = trapFloorTurnState.ActivePlayerId;
+            if (hotSeatHandoverOpen && hotSeatHandoverFor == active) return;
+            OpenHotSeatHandover(active);
+        }
+
+        private void OpenHotSeatHandover(PlayerId player)
+        {
+            hotSeatHandoverFor = player;
+            runtimeUi?.ClearActiveSessionTransientUi();
+            string label = PlayerLabel(player);
+            HotSeatHandoverModel model = new HotSeatHandoverModel(
+                "PASS THE SCREEN",
+                label.ToUpperInvariant(),
+                BuildHandoverSummary(player),
+                $"I'm {FormatPlayerName(player)} — show my hand",
+                FeedbackColour(player));
+            if (runtimeUi != null && runtimeUi.ShowHotSeatHandover(model, ConfirmHotSeatHandover))
+            {
+                hotSeatHandoverOpen = true;
+                return;
+            }
+
+            // No handover prefab: pass the screen straight away so the mode still works.
+            hotSeatHandoverOpen = false;
+            string gained = HandGainText(player);
+            if (SwitchScreenSeat(player, true))
+            {
+                ShowMessage($"Screen passed to {label}.{gained}");
+            }
+        }
+
+        private void ConfirmHotSeatHandover()
+        {
+            PlayerId target = hotSeatHandoverFor;
+            CloseHotSeatHandover();
+            if (!IsInitialized
+                || trapFloorTurnState == null
+                || trapFloorTurnState.ActivePlayerId != target)
+            {
+                return; // the turn moved while the cover was up; the next frame opens a new handover
+            }
+
+            string gained = HandGainText(target);
+            if (SwitchScreenSeat(target, true) && gained.Length > 0)
+            {
+                ShowMessage(gained.TrimStart());
+            }
+        }
+
+        private void CloseHotSeatHandover()
+        {
+            hotSeatHandoverOpen = false;
+            runtimeUi?.HideHotSeatHandover();
+        }
+
+        // What happened since this player last had the screen: the latest lines of the shared log, and their hand.
+        private string BuildHandoverSummary(PlayerId player)
+        {
+            handoverSummary.Clear();
+            bool seenBefore = seatLeftAtLog.TryGetValue(player, out long from);
+            if (!seenBefore) from = Math.Max(0L, handoverLogCount - 4);
+            long start = Math.Max(Math.Max(from, handoverLogCount - HandoverSummaryLines), handoverLogCount - HandoverLogSize);
+            if (handoverLogCount > from)
+            {
+                handoverSummary.Append(seenBefore ? "Since your last turn:" : "Lately:");
+                if (start > from) handoverSummary.Append("\n• …");
+                for (long i = start; i < handoverLogCount; i++)
+                {
+                    handoverSummary.Append("\n• ").Append(handoverLog[i % HandoverLogSize]);
+                }
+            }
+            else
+            {
+                handoverSummary.Append(seenBefore ? "Nothing new since your last turn." : "Your first turn on this screen.");
+            }
+
+            string gained = HandGainText(player);
+            if (gained.Length > 0) handoverSummary.Append("\n\n").Append(gained.TrimStart());
+            return handoverSummary.ToString();
+        }
+
+        // " Your hand: +2 cards since your last turn." or empty.
+        private string HandGainText(PlayerId player)
+        {
+            if (!seatLeftHandCount.TryGetValue(player, out int before)) return string.Empty;
+            int gained = PlayerHandCount(player) - before;
+            return gained > 0
+                ? $" Your hand: +{gained} card{(gained == 1 ? string.Empty : "s")} since your last turn."
+                : string.Empty;
+        }
+
+        private int PlayerHandCount(PlayerId player)
+        {
+            return TryGetTrapFloorPlayerSetup(player, out TrapFloorPlayerSetupDefinition setup)
+                && matchState.Containers.TryGetValue(setup.HandContainerId, out ContainerState hand)
+                ? hand.Count
+                : 0;
+        }
+
+        private void RememberSeatLeaving(PlayerId player)
+        {
+            if (player.IsEmpty) return;
+            seatLeftAtLog[player] = handoverLogCount;
+            seatLeftHandCount[player] = PlayerHandCount(player);
+        }
+
+        // Every message and banner goes into a short shared log the handover summarises.
+        private void RecordHandoverLine(string line)
+        {
+            if (string.IsNullOrEmpty(line)) return;
+            handoverLog[handoverLogCount % HandoverLogSize] = line;
+            handoverLogCount++;
+        }
+
+        private void FeedbackLine(string message, FeedbackSeverity severity)
+        {
+            RecordHandoverLine(message);
+            runtimeUi.ShowFeedbackMessage(message, severity);
+        }
+
+        private string PlayerLabel(PlayerId player)
+        {
+            string colour = TryGetTrapFloorSeatIndex(player, out int seat) ? $" ({PlayerColorName(seat)})" : string.Empty;
+            return $"{FormatPlayerName(player)}{colour}";
+        }
+
+        // True while a Player turn belongs to someone whose hand is not the screen hand.
+        private bool ScreenHandBehindTurn()
+        {
+            return trapFloorTurnState != null
+                && prototypeTemplateContext != null
+                && prototypeTemplateContext.TrapFloorTemplate != null
+                && !trapFloorTurnState.IsCurrentFloorFailed
+                && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                && !trapFloorTurnState.ActivePlayerId.IsEmpty
+                && trapFloorTurnState.ActivePlayerId != localPlayerId
+                && trapFloorTurnState.ActivePlayerId != handSeatSyncFailedFor;
         }
 
         // The hand a draw from this deck fills: the deck owner's hand (a Console's Controller Deck belongs to
@@ -4839,6 +5065,12 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             return handContainerId;
+        }
+
+        // " to Player 2 (RED)'s hand" when the hand is not this screen's hand; empty otherwise.
+        private string ToHandSuffix(ContainerId handId)
+        {
+            return handId == handContainerId ? string.Empty : $" to {HandOwnerName(handId)}'s hand";
         }
 
         private string HandOwnerName(ContainerId handId)
@@ -7017,15 +7249,32 @@ namespace ConsoleCards.Presentation.Prototype
             List<PrototypePopupActionOption> actions,
             TabletopObjectId targetCardId)
         {
+            if (IsInAnotherPlayersHand(targetCardId)) return; // other hands stay private (H1b)
             actions.Add(new PrototypePopupActionOption(
                 "Inspect",
                 true,
                 () => OpenCardInspect(targetCardId)));
         }
 
+        private bool IsInAnotherPlayersHand(TabletopObjectId cardId)
+        {
+            return matchState != null
+                && matchState.Cards.TryGetValue(cardId, out CardInstanceState card)
+                && !card.BaseState.ContainerId.IsEmpty
+                && matchState.Containers.TryGetValue(card.BaseState.ContainerId, out ContainerState container)
+                && IsHiddenHandContainer(container);
+        }
+
         private void OpenCardInspect(TabletopObjectId targetCardId)
         {
             activeFloorRevealActivity = null;
+            if (IsInAnotherPlayersHand(targetCardId))
+            {
+                ShowMessage("That card is in another player's hand.");
+                CloseContextMenu();
+                return;
+            }
+
             if (!TryBuildCardInspectModel(targetCardId, out PrototypeCardInspectModel model))
             {
                 ShowMessage("Inspect unavailable: Card Presentation is no longer available.");
@@ -7460,7 +7709,7 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 ShowMessage(drawCount < deckLimitedCount
                     ? $"{handComfortSettings.ReachedMessage}: drew {drawCount} of {deckLimitedCount}."
-                    : $"Drew {drawCount} Controller Card{(drawCount == 1 ? string.Empty : "s")}.");
+                    : $"Drew {drawCount} Controller Card{(drawCount == 1 ? string.Empty : "s")}{ToHandSuffix(player.HandContainerId)}.");
                 CloseContextMenu();
             }
             else
@@ -7521,7 +7770,7 @@ namespace ConsoleCards.Presentation.Prototype
                 return ControllerInputHandDrawResult.NoChange(matchState.Revision);
             }
 
-            ShowMessage($"Drew {drawCount} Controller Card{(drawCount == 1 ? string.Empty : "s")} (hand cap {handComfortSettings.MaxHandCards}).");
+            ShowMessage($"Drew {drawCount} Controller Card{(drawCount == 1 ? string.Empty : "s")}{ToHandSuffix(player.HandContainerId)} (hand cap {handComfortSettings.MaxHandCards}).");
             return ControllerInputHandDrawResult.Accepted(result.Revision, drawCount);
         }
 
@@ -7702,9 +7951,10 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshSelectionPresenterAfterRuntimeProjection();
             presentationTransitions.Appear(grantedView.transform, settleDuration);
             ApplyCollapsedFloorPresentation(floorCardId);
+            string takerName = HandOwnerName(taker.HandContainerId);
             ShowMessage(result.PlacedInHand
-                ? $"Took {prizeName} into your Hand. The tile is now a hole."
-                : $"Took {prizeName}. Your Hand is full, so it is beside your Console. The tile is now a hole.");
+                ? $"Took {prizeName} into {takerName}'s hand. The tile is now a hole."
+                : $"Took {prizeName}. {takerName}'s hand is full, so it is beside their Console. The tile is now a hole.");
         }
 
         // G2a: remembers the tile under every pawn, so only a real move onto a new tile flips it.
@@ -12324,7 +12574,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             if (matchState == null
                 || !matchState.Containers.TryGetValue(sourceDeckContainerId, out ContainerState deck)
-                || !matchState.Containers.TryGetValue(handContainerId, out ContainerState hand))
+                || !matchState.Containers.TryGetValue(DrawTargetHandFor(sourceDeckContainerId), out ContainerState hand))
             {
                 return 0;
             }
@@ -12385,6 +12635,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void ShowMessage(string message)
         {
+            RecordHandoverLine(message);
             // With the message stack, messages go there and the status strip keeps only the standing status.
             if (playerFeedback
                 && runtimeUi != null
@@ -12514,7 +12765,7 @@ namespace ConsoleCards.Presentation.Prototype
                     }
                     else if (entry.ContentCategory != TrapFloorFloorContentCategory.Trap)
                     {
-                        runtimeUi.ShowFeedbackMessage($"{who} found {name}.", FeedbackSeverity.Gain);
+                        FeedbackLine($"{who} found {name}.", FeedbackSeverity.Gain);
                     }
                     break;
                 case TrapFloorActivityKind.ClaimedKey:
@@ -12533,7 +12784,7 @@ namespace ConsoleCards.Presentation.Prototype
                         new Color(0.878f, 0.325f, 0.122f));
                     break;
                 case TrapFloorActivityKind.PlayersReactivated:
-                    runtimeUi.ShowFeedbackMessage("Everyone is back in for the new round.", FeedbackSeverity.Gain);
+                    FeedbackLine("Everyone is back in for the new round.", FeedbackSeverity.Gain);
                     break;
                 case TrapFloorActivityKind.PlayerEscaped:
                     Banner(FeedbackEventKind.Reward, $"{who.ToUpperInvariant()} ESCAPED", string.Empty, colour);
@@ -12542,31 +12793,31 @@ namespace ConsoleCards.Presentation.Prototype
                     Banner(FeedbackEventKind.Reward, "YOU WIN!", who, colour);
                     break;
                 case TrapFloorActivityKind.UsedShield:
-                    runtimeUi.ShowFeedbackMessage($"{who} used Shield.", FeedbackSeverity.Gain);
+                    FeedbackLine($"{who} used Shield.", FeedbackSeverity.Gain);
                     break;
                 case TrapFloorActivityKind.UsedDodge:
-                    runtimeUi.ShowFeedbackMessage($"{who} used Dodge — move to a lit tile.", FeedbackSeverity.Gain);
+                    FeedbackLine($"{who} used Dodge — move to a lit tile.", FeedbackSeverity.Gain);
                     break;
                 case TrapFloorActivityKind.UsedCheck:
-                    runtimeUi.ShowFeedbackMessage($"{who} used Check — the Trap is harmless.", FeedbackSeverity.Gain);
+                    FeedbackLine($"{who} used Check — the Trap is harmless.", FeedbackSeverity.Gain);
                     break;
                 case TrapFloorActivityKind.UsedDisarm:
-                    runtimeUi.ShowFeedbackMessage($"{who} used Disarm.", FeedbackSeverity.Gain);
+                    FeedbackLine($"{who} used Disarm.", FeedbackSeverity.Gain);
                     break;
                 case TrapFloorActivityKind.UsedRush:
-                    runtimeUi.ShowFeedbackMessage($"{who} used Rush — move to a lit tile.", FeedbackSeverity.Gain);
+                    FeedbackLine($"{who} used Rush — move to a lit tile.", FeedbackSeverity.Gain);
                     break;
                 case TrapFloorActivityKind.BlindApplied:
-                    runtimeUi.ShowFeedbackMessage($"{who} will be BLIND next round.", FeedbackSeverity.Warning);
+                    FeedbackLine($"{who} will be BLIND next round.", FeedbackSeverity.Warning);
                     break;
                 case TrapFloorActivityKind.SlowApplied:
-                    runtimeUi.ShowFeedbackMessage($"{who} will be SLOW next round.", FeedbackSeverity.Warning);
+                    FeedbackLine($"{who} will be SLOW next round.", FeedbackSeverity.Warning);
                     break;
                 case TrapFloorActivityKind.StickyApplied:
-                    runtimeUi.ShowFeedbackMessage($"{who} is STUCK next round.", FeedbackSeverity.Warning);
+                    FeedbackLine($"{who} is STUCK next round.", FeedbackSeverity.Warning);
                     break;
                 case TrapFloorActivityKind.SkippedTurn:
-                    runtimeUi.ShowFeedbackMessage($"{who} skipped their turn.", FeedbackSeverity.Info);
+                    FeedbackLine($"{who} skipped their turn.", FeedbackSeverity.Info);
                     break;
             }
         }
@@ -12690,6 +12941,11 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void Banner(FeedbackEventKind kind, string title, string subtitle, Color accent)
         {
+            if (kind != FeedbackEventKind.TurnStart)
+            {
+                RecordHandoverLine(string.IsNullOrEmpty(subtitle) ? title : $"{title} — {subtitle}");
+            }
+
             runtimeUi.ShowFeedbackBanner(new FeedbackBannerModel(kind, title, subtitle, accent));
         }
 

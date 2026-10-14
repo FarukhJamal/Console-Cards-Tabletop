@@ -31,6 +31,7 @@ namespace ConsoleCards.Editor.UI
         public const string RulesLinePath = Folder + "RulesLine.prefab";
         public const string FeedbackBannerPath = Folder + "FeedbackBanner.prefab";
         public const string FeedbackMessagesPath = Folder + "FeedbackMessages.prefab";
+        public const string HotSeatHandoverPath = Folder + "HotSeatHandover.prefab";
         private const string FeedbackAudioPath = "Assets/ConsoleCards/Content/Audio/Feedback/";
         private const string SessionIconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
 
@@ -96,6 +97,7 @@ namespace ConsoleCards.Editor.UI
             Save<RulesCardView>(RulesCardPath, "RulesCard", BuildRulesCard, stretch: true);
             Save<FeedbackBannerView>(FeedbackBannerPath, "FeedbackBanner", BuildFeedbackBanner, stretch: true);
             Save<FeedbackMessageStackView>(FeedbackMessagesPath, "FeedbackMessages", BuildFeedbackMessages, stretch: true);
+            Save<HotSeatHandoverView>(HotSeatHandoverPath, "HotSeatHandover", BuildHotSeatHandover, stretch: true);
 
             AssignCatalogEntry(PrototypeUiPrefabIds.PopupActionRow,
                 AssetDatabase.LoadAssetAtPath<PrototypePopupActionRowView>(ActionRowPath), UiLayer.Popup, UiRetention.Pooled);
@@ -128,6 +130,9 @@ namespace ConsoleCards.Editor.UI
                 UiRetention.CachedSingleInstance);
             AssignCatalogEntry(PrototypeUiPrefabIds.FeedbackMessages,
                 AssetDatabase.LoadAssetAtPath<FeedbackMessageStackView>(FeedbackMessagesPath), UiLayer.Notification,
+                UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(PrototypeUiPrefabIds.HotSeatHandover,
+                AssetDatabase.LoadAssetAtPath<HotSeatHandoverView>(HotSeatHandoverPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
             AssetDatabase.SaveAssets();
             Debug.Log("[Gameplay UI] Created any missing Final UI gameplay prefabs and pointed the UI prefab catalog at them.");
@@ -206,6 +211,49 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("eliminatedClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>(FeedbackAudioPath + "Eliminated.wav");
             so.FindProperty("rewardClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>(FeedbackAudioPath + "Reward.wav");
             so.FindProperty("collapseClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>(FeedbackAudioPath + "Collapse.wav");
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // Hot-seat handover (doc 25, H2): an opaque cover hides the table and every hand; a centred card names the
+        // next player in their colour, lists what happened since their last turn, and shows their hand on confirm.
+        private static void BuildHotSeatHandover(RectTransform root, HotSeatHandoverView view)
+        {
+            RectTransform coverRect = Rect("Cover", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero);
+            Image cover = Img(coverRect, "Solid", new Color(0.05f, 0.06f, 0.06f, 0.97f));
+            Vector2 centre = new Vector2(0.5f, 0.5f);
+            RectTransform panel = ColumnCard(root, "HandoverPanel", centre, centre, 640f);
+            BlockClicks(panel);
+            Text title = CardHeader(panel, "PASS THE SCREEN", 22, 58f);
+            RectTransform plate = Child("PlayerPlate", panel);
+            Image accent = Img(plate, "Solid", Orange);
+            accent.raycastTarget = false;
+            Size(plate.gameObject, -1f, 18f);
+            RectTransform body = Body(panel, 26, 14f);
+            RectTransform playerRect = Child("Player", body);
+            Text player = Label(playerRect, titleFont, 34, Orange, TextAnchor.MiddleCenter, "PLAYER 2 (RED)");
+            Size(playerRect.gameObject, -1f, 54f);
+            Text summary = Label(Child("Summary", body), bodyFont, 18, Ink, TextAnchor.UpperLeft,
+                "Since your last turn:\n• Drew 2 to Player 2 (RED)'s hand");
+            Text note = Label(Child("Note", body), bodyFont, 15, Muted, TextAnchor.MiddleCenter,
+                "Only this player should look. Press Enter or the button when ready.");
+            note.raycastTarget = false;
+            RectTransform buttons = ButtonRow(body, TextAnchor.MiddleCenter);
+            Button confirm = GoButton(buttons, "ConfirmButton", "I'm Player 2 — show my hand", 380f, out Text confirmLabel);
+            AudioSource audio = root.gameObject.AddComponent<AudioSource>();
+            audio.playOnAwake = false;
+            audio.spatialBlend = 0f;
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("cover").objectReferenceValue = cover;
+            so.FindProperty("accentPlate").objectReferenceValue = accent;
+            so.FindProperty("titleLabel").objectReferenceValue = title;
+            so.FindProperty("playerLabel").objectReferenceValue = player;
+            so.FindProperty("summaryLabel").objectReferenceValue = summary;
+            so.FindProperty("confirmButton").objectReferenceValue = confirm;
+            so.FindProperty("confirmLabel").objectReferenceValue = confirmLabel;
+            so.FindProperty("audioSource").objectReferenceValue = audio;
+            so.FindProperty("handoverClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>(FeedbackAudioPath + "TurnPing.wav");
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

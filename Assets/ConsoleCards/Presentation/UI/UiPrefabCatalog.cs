@@ -106,5 +106,6 @@ namespace ConsoleCards.Presentation.UI
         public const string TrapFloorHud = "trap-floor.hud";
         public const string FeedbackBanner = "platform.feedback-banner";
         public const string FeedbackMessages = "platform.feedback-messages";
+        public const string HotSeatHandover = "platform.hotseat-handover";
     }
 }

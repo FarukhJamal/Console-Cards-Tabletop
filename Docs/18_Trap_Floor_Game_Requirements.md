@@ -393,10 +393,10 @@ Difficulty and win mode are **two separate choices**. A table picks one of each,
 - **Open:** the costs of Check, Rush, Disarm and Push. Their cards have no cost yet (marked `cost-pending`); Shield and Dodge keep their provisional costs.
 - **Open:** the exact card text for Dodge, Shield and Disarm. Their cards now say whether they are Action or Reaction, and are otherwise resolved by the table.
 
-### 15.11 Hot-seat hands (H1, 2026-10-14)
+### 15.11 Seats and hands (H1b and H2, 2026-10-14)
 
-- The hand on screen belongs to the player whose turn it is. When End Turn passes the turn, and after Undo or Redo, the screen hand switches to the active player's cards. During the Floor turn the last player's hand stays.
-- Every other hand lies face down at its owner's side of the table, at the same rest height as pieces recovered after a fall, with a card count.
-- Drawing from a player's deck puts the cards in that player's hand, never in the screen hand. The message names whose hand it was, e.g. "Drew 3 to Player 3 (GREEN)'s hand (not their turn)". Drawing from another player's deck on someone else's turn is allowed.
-- Switching hands only rebuilds the table view for the new seat. Game state and Undo history do not change.
-- Later (F3): a Table-menu switch "Hands on table" to show the screen hand on the table as well.
+- **Seats.** Each screen plays one seat, as in Tabletop Simulator. The screen hand is that seat's hand, face up toward the camera. Every other hand lies face down at its owner's table edge, at the same rest height as pieces recovered after a fall, with a card count. The screen hand does not follow the turn.
+- **Drawing.** A draw from a player's deck goes into that player's hand: the screen hand when it is this seat's deck, otherwise the owner's face-down hand at their table edge. The message names whose hand it was and adds "(not their turn)" when that player is not the active player. Controller draws and a taken Friend or Ability go to the active player's hand, named in the message.
+- **Faces.** Cards arriving in any Hand turn face up (the owner sees them). Other hands are shown face down by the table view only. Other players' hand cards cannot be inspected.
+- **Seat choice.** Table menu > Seat: click to play the next seated player on this screen (testing on one screen, like changing colour in TTS). The table view rebuilds for that seat and the camera turns to it; game state and Undo do not change.
+- **Hot-seat mode (H2).** Table menu > Hot-seat, off by default. When the turn belongs to a player who is not on screen, a full-screen handover covers the table and every hand: "PASS THE SCREEN", the player in their colour, what happened since their last turn (the latest messages and "+N cards" in their hand), and a confirm button (Enter or Space). Only after confirming does the screen switch to their seat, with the turn banner and ping. Undo across a turn shows the handover for the player whose turn it is again. During the Floor turn the screen stays on the last player. The Seat row is disabled while Hot-seat is on.

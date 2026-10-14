@@ -36,6 +36,8 @@ namespace ConsoleCards.Editor.UI
         private const float SwitchRowHeight = 72f;
         private const string RulesOnHint = "Shown in the left column";
         private const string HintsOnHint = "Controls strip and how-to lines";
+        private const string HotSeatOnHint = "The screen passes to whoever's turn it is";
+        private const string HotSeatOffHint = "Off; this screen keeps its seat";
 
         private static Font titleFont;
         private static Font bodyFont;
@@ -212,6 +214,7 @@ namespace ConsoleCards.Editor.UI
             RectTransform hintsRow = SwitchRow(menu, "HintsRow", "Hints", HintsOnHint, boldFont, bodyFont, titleFont,
                 SwitchRowHeight, out Button hintsButton, out Image hintsFill, out RectTransform hintsKnob, out Text hintsWord,
                 out Text hintsHint);
+            AddPlayRows(menu, view, -1);
             Separator(menu, "Rule3", TabIdle, MenuRowRule);
             Button helpButton = MenuRow(menu, "HelpRow", "Help", true);
             menu.gameObject.SetActive(false);
@@ -247,6 +250,77 @@ namespace ConsoleCards.Editor.UI
             AssignSwitch(so.FindProperty("hintsSwitch"), hintsRow, hintsButton, hintsFill, hintsKnob, hintsWord, hintsHint,
                 HintsOnHint, "Off; the Table menu still has Help");
             so.FindProperty("helpButton").objectReferenceValue = helpButton;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
+        /// Adds the Seat row and the Hot-seat switch (doc 18 §15.11) to an existing SessionBar prefab when it does
+        /// not have them. Nothing else in the prefab is changed; rows that already exist are kept.
+        /// </summary>
+        [MenuItem("Console Cards/UI/Add Missing Table Menu Rows (Final UI)")]
+        public static void AddMissingTableMenuRows()
+        {
+            if (!File.Exists(PrefabPath))
+            {
+                Build();
+                return;
+            }
+
+            GameObject root = PrefabUtility.LoadPrefabContents(PrefabPath);
+            try
+            {
+                SessionBarView view = root.GetComponent<SessionBarView>();
+                SerializedObject so = view != null ? new SerializedObject(view) : null;
+                RectTransform menu = so?.FindProperty("menu").objectReferenceValue as RectTransform;
+                if (view == null || menu == null)
+                {
+                    Debug.LogWarning($"[Session UI] {PrefabPath} has no SessionBarView with a Table menu; nothing added.");
+                    return;
+                }
+
+                if (so.FindProperty("seatButton").objectReferenceValue != null
+                    && so.FindProperty("hotSeatSwitch").FindPropertyRelative("row").objectReferenceValue != null)
+                {
+                    Debug.Log($"[Session UI] {PrefabPath} already has the Seat and Hot-seat rows.");
+                    return;
+                }
+
+                PrepareArt();
+                Transform before = menu.Find("Rule3");
+                int index = before != null ? before.GetSiblingIndex() : menu.childCount;
+                AddPlayRows(menu, view, index);
+                PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
+                Debug.Log($"[Session UI] Added the Seat and Hot-seat rows to {PrefabPath}.");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+        }
+
+        // Seat row (click for the next seat) and the Hot-seat switch, inserted at siblingIndex (-1: at the end).
+        private static void AddPlayRows(RectTransform menu, SessionBarView view, int siblingIndex)
+        {
+            int first = siblingIndex < 0 ? menu.childCount : siblingIndex;
+            Separator(menu, "PlayRule", Ink, MenuRowRule);
+            Button seatButton = MenuRow(menu, "SeatRow", "Seat: Player 1 (BLUE)", false);
+            Text seatLabel = seatButton.transform.Find("Label").GetComponent<Text>();
+            SetDisabledTint(seatButton);
+            RectTransform hotSeatRow = SwitchRow(menu, "HotSeatRow", "Hot-seat", HotSeatOffHint, boldFont, bodyFont, titleFont,
+                SwitchRowHeight, out Button hotSeatButton, out Image hotSeatFill, out RectTransform hotSeatKnob,
+                out Text hotSeatWord, out Text hotSeatHint);
+            if (siblingIndex >= 0)
+            {
+                menu.Find("PlayRule").SetSiblingIndex(first);
+                seatButton.transform.SetSiblingIndex(first + 1);
+                hotSeatRow.SetSiblingIndex(first + 2);
+            }
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("seatButton").objectReferenceValue = seatButton;
+            so.FindProperty("seatLabel").objectReferenceValue = seatLabel;
+            AssignSwitch(so.FindProperty("hotSeatSwitch"), hotSeatRow, hotSeatButton, hotSeatFill, hotSeatKnob, hotSeatWord,
+                hotSeatHint, HotSeatOnHint, HotSeatOffHint);
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

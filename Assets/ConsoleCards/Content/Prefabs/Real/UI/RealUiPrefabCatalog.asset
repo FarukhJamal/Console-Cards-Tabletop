@@ -81,3 +81,7 @@ MonoBehaviour:
     prefab: {fileID: 6197989180252109277, guid: 80e3d471fb930744b8a564afec921d14, type: 3}
     layer: 4
     retention: 0
+  - id: platform.hotseat-handover
+    prefab: {fileID: 8009978247689719891, guid: ce4098008b5278a4f8a1242663a4ff6d, type: 3}
+    layer: 3
+    retention: 0
