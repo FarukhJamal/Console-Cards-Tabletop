@@ -1,7 +1,7 @@
 # Console Cards - Trap Floor Game Requirements
 
 **Document ID:** 18_Trap_Floor_Game_Requirements
-**Version:** 1.10
+**Version:** 1.11
 **Status:** Approved with Open Decisions
 **Authoritative source:** User-approved Console Cards System & Games direction supplied 2026-09-21, superseding conflicting historical Trap Floor direction
 **Purpose:** Define the current approved minimum Game-specific direction for Trap Floor while keeping provisional design values open and preserving manual tabletop play.
@@ -392,3 +392,11 @@ Difficulty and win mode are **two separate choices**. A table picks one of each,
 - **Open:** the final Trap-type mix and the §15.7 patterns, after playtest.
 - **Open:** the costs of Check, Rush, Disarm and Push. Their cards have no cost yet (marked `cost-pending`); Shield and Dodge keep their provisional costs.
 - **Open:** the exact card text for Dodge, Shield and Disarm. Their cards now say whether they are Action or Reaction, and are otherwise resolved by the table.
+
+### 15.11 Hot-seat hands (H1, 2026-10-14)
+
+- The hand on screen belongs to the player whose turn it is. When End Turn passes the turn, and after Undo or Redo, the screen hand switches to the active player's cards. During the Floor turn the last player's hand stays.
+- Every other hand lies face down at its owner's side of the table, at the same rest height as pieces recovered after a fall, with a card count.
+- Drawing from a player's deck puts the cards in that player's hand, never in the screen hand. The message names whose hand it was, e.g. "Drew 3 to Player 3 (GREEN)'s hand (not their turn)". Drawing from another player's deck on someone else's turn is allowed.
+- Switching hands only rebuilds the table view for the new seat. Game state and Undo history do not change.
+- Later (F3): a Table-menu switch "Hands on table" to show the screen hand on the table as well.

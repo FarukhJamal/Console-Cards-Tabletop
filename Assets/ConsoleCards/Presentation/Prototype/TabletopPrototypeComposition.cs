@@ -250,6 +250,9 @@ namespace ConsoleCards.Presentation.Prototype
         private bool boardFeedbackUnavailable;
         private readonly List<Vector3> boardFeedbackTraps = new List<Vector3>(8);
         private readonly List<Vector3> boardFeedbackTargets = new List<Vector3>(16);
+        // Hot-seat hands (H1): the screen hand belongs to the active player.
+        private bool handSeatSyncRequested;
+        private bool announceTurnAfterRebuild;
         // Spring/Crane target the active player still has to move to (G2c); applied by End Turn if left.
         private PlayerId pendingLaunchPlayerId;
         private TabletopObjectId pendingLaunchTargetId;
@@ -1004,7 +1007,9 @@ namespace ConsoleCards.Presentation.Prototype
         {
             EnsureInitialized();
             int requestedCount = count;
-            count = ClampToHandComfortCap(handContainerId, count);
+            // H1: a draw from a player's own deck fills that player's hand, whoever's turn it is.
+            ContainerId targetHandId = DrawTargetHandFor(sourceDeckContainerId);
+            count = ClampToHandComfortCap(targetHandId, count);
             if (count <= 0)
             {
                 ShowMessage(handComfortSettings.ReachedMessage + ".");
@@ -1014,27 +1019,33 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
-                CaptureContainerCardTransforms(sourceDeckContainerId, handContainerId);
+                CaptureContainerCardTransforms(sourceDeckContainerId, targetHandId);
             DrawCardsResult result = new DrawCardsUseCase().Execute(
                 matchState,
-                new DrawCardsCommand(CreateCommandContext(), sourceDeckContainerId, handContainerId, count));
+                new DrawCardsCommand(CreateCommandContext(), sourceDeckContainerId, targetHandId, count));
             TryGetDeckPresentation(sourceDeckContainerId, out DeckView sourceDeckView, out _);
             if (result.Succeeded)
             {
                 sourceDeckView?.ApplyAcceptedLayout();
-                handView.ApplyAcceptedLayout();
+                ApplyLayout(targetHandId);
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
                     handReflowDuration,
                     0.035f);
+                string whose = targetHandId == handContainerId ? "Hand" : $"{HandOwnerName(targetHandId)}'s hand";
+                if (targetHandId != handContainerId && trapFloorTurnState != null && !trapFloorTurnState.IsCurrentFloorFailed)
+                {
+                    whose += " (not their turn)";
+                }
+
                 ShowMessage(count < requestedCount
                     ? $"{handComfortSettings.ReachedMessage}: drew {count} of {requestedCount}."
-                    : $"Drew {count} card{(count == 1 ? string.Empty : "s")} to Hand.");
+                    : $"Drew {count} card{(count == 1 ? string.Empty : "s")} to {whose}.");
             }
             else
             {
                 sourceDeckView?.ApplyAcceptedLayout();
-                handView.ApplyAcceptedLayout();
+                ApplyLayout(targetHandId);
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
                     returnDuration);
@@ -1235,6 +1246,7 @@ namespace ConsoleCards.Presentation.Prototype
                     this);
                 ShowActiveSessionUi();
                 ShowMessage($"Undid {transaction.Description}.");
+                handSeatSyncRequested = true;
                 return true;
             }
             catch (Exception exception)
@@ -1308,6 +1320,7 @@ namespace ConsoleCards.Presentation.Prototype
                 undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
                 ShowActiveSessionUi();
                 ShowMessage($"Redid {transaction.Description}.");
+                handSeatSyncRequested = true;
                 return true;
             }
             catch (Exception exception)
@@ -2190,6 +2203,12 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void Update()
         {
+            if (handSeatSyncRequested && IsInitialized && !rebuildingFromUndo)
+            {
+                handSeatSyncRequested = false;
+                SyncHandSeatToActivePlayer(false);
+            }
+
             if (HandleRedoShortcut()) return;
             if (HandleUndoShortcut()) return;
             HandleHandTrayShortcut();
@@ -4714,6 +4733,7 @@ namespace ConsoleCards.Presentation.Prototype
                     undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
             }
 
+            SyncHandSeatToActivePlayer(true); // H1: the screen hand follows the turn
             RefreshTrapFloorStatusUi();
             string skip = (skipped ? $"{FormatPlayerName(actor)} skipped. " : string.Empty) + trapSummary;
             if (wasFloorTurn)
@@ -4735,6 +4755,109 @@ namespace ConsoleCards.Presentation.Prototype
                     $"{skip}{FormatPlayerName(trapFloorTurnState.ActivePlayerId)} turn. "
                     + $"Draw up to {handLimit} if needed.");
             }
+        }
+
+        // Hot-seat (H1): the screen hand belongs to the player whose turn it is, and every other hand lies
+        // face down at its owner's side. Switching rebuilds the Presentation for that player's seat through the
+        // same path Undo uses; game state and the Undo history are not changed.
+        private void SyncHandSeatToActivePlayer(bool announceTurn)
+        {
+            if (!IsInitialized
+                || rebuildingFromUndo
+                || activeSession == null
+                || prototypeTemplateContext == null
+                || prototypeTemplateContext.TrapFloorTemplate == null
+                || trapFloorTurnState == null
+                || trapFloorTurnState.IsCurrentFloorFailed
+                || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
+            {
+                return;
+            }
+
+            PlayerId active = trapFloorTurnState.ActivePlayerId;
+            if (active.IsEmpty || active == localPlayerId) return;
+            PrototypeTemplateContext next;
+            try
+            {
+                next = CreateTrapFloorPrototypeContext(
+                    prototypeTemplateContext.Session,
+                    prototypeTemplateContext.TrapFloorTemplate,
+                    active);
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            PrototypeTemplateContext previousContext = prototypeTemplateContext;
+            MatchState previousMatch = activeSession.CurrentMatch;
+            PrototypeSessionUndoSnapshot current = CaptureUndoSnapshot();
+            rebuildingFromUndo = true;
+            try
+            {
+                Shutdown(true);
+                prototypeTemplateContext = next;
+                pendingRestoredTrapFloorState = current.TrapFloor?.Restore();
+                pendingRestoredControllerPurchaseState = current.PendingControllerPurchase?.Restore();
+                InitializeActiveSession(false);
+                undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
+                ShowActiveSessionUi();
+                announceTurnAfterRebuild = announceTurn;
+            }
+            catch (Exception exception)
+            {
+                prototypeTemplateContext = previousContext;
+                RestorePresentationAfterFailedRebuild(previousMatch, current, "Hand switch");
+                Debug.LogError($"Hand switch Presentation rebuild failed: {exception.Message}", this);
+            }
+            finally
+            {
+                pendingRestoredTrapFloorState = null;
+                pendingRestoredControllerPurchaseState = null;
+                rebuildingFromUndo = false;
+                RefreshUndoUi();
+            }
+        }
+
+        // The hand a draw from this deck fills: the deck owner's hand (a Console's Controller Deck belongs to
+        // its seat), otherwise the screen hand.
+        private ContainerId DrawTargetHandFor(ContainerId deckId)
+        {
+            if (trapFloorTemplate != null
+                && matchState != null
+                && matchState.Containers.TryGetValue(deckId, out ContainerState deck))
+            {
+                for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+                {
+                    TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[i];
+                    if (player.ControllerDeckId == deckId
+                        || (!deck.OwnerSeatId.IsEmpty && deck.OwnerSeatId == player.SeatId))
+                    {
+                        return player.HandContainerId;
+                    }
+                }
+            }
+
+            return handContainerId;
+        }
+
+        private string HandOwnerName(ContainerId handId)
+        {
+            if (trapFloorTemplate != null && matchState != null)
+            {
+                for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+                {
+                    TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[i];
+                    if (player.HandContainerId == handId)
+                    {
+                        PlayerId owner = matchState.GetSeat(player.SeatId).OccupantPlayerId;
+                        string colour = TryGetTrapFloorSeatIndex(owner, out int seat) ? $" ({PlayerColorName(seat)})" : string.Empty;
+                        return $"{FormatPlayerName(owner)}{colour}";
+                    }
+                }
+            }
+
+            return "the";
         }
 
         // Applies every Trap still waiting on the player, in order, before their turn passes (G2c).
@@ -12312,7 +12435,8 @@ namespace ConsoleCards.Presentation.Prototype
                 announcedTurnState = trapFloorTurnState;
                 announcedSequence = newest;
                 RememberAnnouncedTurn();
-                if (entries.Count == 0) AnnounceTurn(); // a new game: greet the first player
+                if (entries.Count == 0 || announceTurnAfterRebuild) AnnounceTurn(); // new game, or the hand moved on
+                announceTurnAfterRebuild = false;
                 return;
             }
 

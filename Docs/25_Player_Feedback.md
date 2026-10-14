@@ -80,3 +80,8 @@ shown on screen and on the board with authored prefabs (Final UI, doc 26). Nothi
   toward a collapse and back). Both are offsets on top of the view; the camera's own position and saved view
   never change. Strength and frequency are on the camera controller and the feedback set.
 - Markers are pooled (made once); they only move and recolour themselves and never change game state.
+
+## H1 note (2026-10-14)
+
+- When the screen hand switches to the next player at End Turn, the turn banner and ping play again for that player, so the hand change is announced and never silent.
+- A draw into another player's hand names that player in the message stack.
