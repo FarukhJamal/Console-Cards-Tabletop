@@ -1,6 +1,6 @@
 # 24 — Content Packs
 
-Version 0.2 · Status: Approved direction, A1 implemented
+Version 0.3 · Status: Approved direction, A1–A2 implemented
 
 ## Purpose
 
@@ -29,7 +29,8 @@ Every picture is named by a key string, not by a Unity asset:
 - Card fronts: `CardDefinition.frontArtworkReference`, for example `trap-floor/fronts/shield.png`.
 - Card backs: `CardDefinition.backArtworkReference`.
 - Avatars: `AvatarDefinition.artworkReference`.
-- Board (floor) card backs: `GameDefinition.boardCardBacks`, one per round in order, repeating.
+- Board (floor) card backs: `GameDefinition.boardCardBacks`, one per round in order, repeating, with their keys in
+  `GameDefinition.boardCardBackReferences` (same order).
 
 The key is lower case, uses `/`, and starts with the game's folder name. It never changes when the
 picture changes, which is what makes art replaceable: a new picture under the same key wins.
@@ -43,7 +44,7 @@ When a card needs a picture, the first match wins:
 3. The built-in texture on the ScriptableObject.
 4. No picture: the placeholder colour and label are shown.
 
-A1 implements step 3 only. Steps 1 and 2 arrive with A2–A4.
+A2 implements the lookup for all four steps; steps 1 and 2 are filled by A4 (uploads) and A3 (packs).
 
 ## Presentation rules
 
@@ -77,7 +78,7 @@ Stand-in art, to be replaced later under the same keys:
 | Stage | Scope | Status |
 |---|---|---|
 | A1 | Built-in Trap Floor art on cards and avatars; floor backs per round; this document | Implemented |
-| A2 | Art lookup service and texture cache keyed by art key | Planned |
+| A2 | Art lookup service and texture cache keyed by art key | Implemented |
 | A3 | JSON pack format: import and export of cards, rules and art | Planned |
 | A4 | Player upload UI and art overlays, stored per game | Planned |
 
@@ -85,3 +86,20 @@ Stand-in art, to be replaced later under the same keys:
 
 Player-uploaded pictures stay on the player's device and in the player's own packs. They are not
 shared unless the player shares the pack.
+
+## A2 record (2026-10-14)
+
+- **`ArtLibrary`** (`Presentation/Art/ArtLibrary.cs`): three layers in lookup order, PlayerUpload, GamePack,
+  BuiltIn, then the asset's own texture. Keys are normalised (lower case, `/`, no leading slash or spaces).
+  `LoadTexture(bytes, key)` makes a texture from PNG/JPG bytes for A3/A4; textures handed over with ownership are
+  destroyed when replaced, removed or cleared (only once no layer uses them). A change raises `Changed` first
+  (cards re-apply art in place, no table rebuild), then `TextureReleased` (card materials built from that texture
+  are destroyed).
+- **Every art read** on the table goes through the library: card fronts and backs, avatars, the round's floor
+  back, and the landing, reveal, search and purchase pictures. Built-in pictures are registered by key when the
+  game definition is first used.
+- **Editor:** Console Cards > Content > Fill Missing Art Keys fills empty keys from the texture's place under an
+  `Art` folder (`Art/TrapFloor/Fronts/shield.png` gives `trap-floor/fronts/shield.png`), never changes a set key,
+  and reports duplicate keys and keys that differ from their file.
+- **Test hook:** on the composition, Art Test Key and Art Test Texture, with the component menu items
+  Apply Art Test and Clear Art Test (Play mode), put a picture in the upload layer to check live replacement.

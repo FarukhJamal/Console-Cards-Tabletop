@@ -45,6 +45,8 @@ namespace ConsoleCards.Definitions
         public string Description => description;
         public Texture2D FrontArtwork => frontArtwork;
         public Texture2D BackArtwork => backArtwork;
+        public string FrontArtworkReference => frontArtworkReference;
+        public string BackArtworkReference => backArtworkReference;
         public int Quantity => quantity;
         public InputCostDefinition InputCost => inputCost;
         public CardOrientation Orientation => orientation;

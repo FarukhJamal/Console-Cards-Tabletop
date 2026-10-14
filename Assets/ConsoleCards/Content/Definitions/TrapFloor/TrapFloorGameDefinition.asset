@@ -14,7 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   stableId: 54460001-4f4f-4000-8000-000100000001
   displayName: Trap Floor
-  manualRules: Players interpret and enforce Trap Floor rules socially. Loading this definition establishes only the starting setup; generic tabletop manipulation remains available.
+  manualRules: Players interpret and enforce Trap Floor rules socially. Loading this
+    definition establishes only the starting setup; generic tabletop manipulation
+    remains available.
   minimumPlayers: 2
   maximumPlayers: 4
   playAreaDefinition: {fileID: 11400000, guid: 058ebfe6eb3848e2a0a8a59cd22883a4, type: 2}
@@ -111,15 +113,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: a2b3c4d5e6f7418092a3b4c5d6e7f809, type: 2}
   - {fileID: 11400000, guid: b3c4d5e6f7084192a3b4c5d6e7f8091a, type: 2}
   consoleConfiguration: {fileID: 11400000, guid: c68969506b5d405e88dfb4f30fe321c8, type: 2}
-  inputVocabulary:
-  - 0
-  - 1
-  - 2
-  - 3
-  - 4
-  - 5
-  - 6
-  - 7
+  inputVocabulary: 0000000001000000020000000300000004000000050000000600000007000000
   controllerConfiguration:
     maximumHandSize: 10
     drawToMaximumAtTurnStart: 1
@@ -128,9 +122,14 @@ MonoBehaviour:
     sharedPaymentAllowed: 0
   controllerMappingKind: 0
   presentationReference: trap-floor-default-presentation
-  assistanceConfiguration: Optional reveal, Key, Exit, and Collapse assistance may consume this data but must not block freeform actions.;trap-floor-search-normal-any=A,B,X,Y;trap-floor-search-careful=A+B+X+Y;trap-floor-careful-trap-suppression=true
+  assistanceConfiguration: Optional reveal, Key, Exit, and Collapse assistance may
+    consume this data but must not block freeform actions.;trap-floor-search-normal-any=A,B,X,Y;trap-floor-search-careful=A+B+X+Y;trap-floor-careful-trap-suppression=true
   defaultRuleSet: {fileID: 11400000, guid: 8388f169f74d4e02a1e548831213c896, type: 2}
   boardCardBacks:
   - {fileID: 2800000, guid: c7c832924871488aa702f01ba3a36e8b, type: 3}
   - {fileID: 2800000, guid: d02115e75f1b42b3b5823551f4a38a9f, type: 3}
   - {fileID: 2800000, guid: af434103019b48c39ea75609f29e0523, type: 3}
+  boardCardBackReferences:
+  - trap-floor/backs/floor-back-red.png
+  - trap-floor/backs/floor-back-blue.png
+  - trap-floor/backs/floor-back-yellow.png

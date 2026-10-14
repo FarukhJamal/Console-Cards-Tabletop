@@ -22,6 +22,7 @@ using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
 using ConsoleCards.Games.TrapFloor;
+using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Catalog;
 using ConsoleCards.Presentation.Coordinates;
@@ -138,6 +139,10 @@ namespace ConsoleCards.Presentation.Prototype
         [Tooltip("Pawn hop (doc 25, F4): seconds and height of the hop when End Turn moves a pawn for the player.")]
         [SerializeField, Min(0.05f)] internal float pawnHopSeconds = 0.5f;
         [SerializeField, Min(0f)] internal float pawnHopHeight = 0.35f;
+        [Header("Art test (doc 24, A2; Play mode, right-click the component > Apply Art Test)")]
+        [Tooltip("An art key, for example trap-floor/fronts/shield.png.")]
+        [SerializeField] internal string artTestKey;
+        [SerializeField] internal Texture2D artTestTexture;
         [SerializeField] internal bool showDeveloperControls;
         [Tooltip("Prototype visuals hidden at bind time. After changing in Play mode, press Reset or restart the session.")]
         [SerializeField] internal PrototypeVisualHide prototypeVisualHide =
@@ -178,6 +183,10 @@ namespace ConsoleCards.Presentation.Prototype
         // Texture overrides in a MaterialPropertyBlock are not drawn on every render path, so art never goes there.
         private readonly Dictionary<(Material, Texture2D), Material> cardArtMaterials = new Dictionary<(Material, Texture2D), Material>();
         private readonly Dictionary<Material, Material> cardArtBaseMaterials = new Dictionary<Material, Material>();
+        // A2: every picture is looked up by art key (uploads, then pack, then built-in, then the asset's texture).
+        private readonly ArtLibrary artLibrary = new ArtLibrary();
+        private GameDefinition builtInArtDefinition;
+        private bool artLibraryHooked;
         private MaterialPropertyBlock cardSlotProperties; // created on first use: Unity forbids it in field initializers
         private readonly Dictionary<ObjectDefinitionId, ButtonCardDefinition> buttonDefinitions =
             new Dictionary<ObjectDefinitionId, ButtonCardDefinition>();
@@ -2249,6 +2258,7 @@ namespace ConsoleCards.Presentation.Prototype
             boardFeedback?.Destroy();
             boardFeedback = null;
             ReleaseCardArtMaterials();
+            artLibrary.Dispose(); // A2: destroys the pictures it loaded
             if (handTrayRig != null)
             {
                 Destroy(handTrayRig.gameObject);
@@ -7212,12 +7222,13 @@ namespace ConsoleCards.Presentation.Prototype
             Texture frontArtwork = null;
             if (TryGetAuthoredCardDefinition(revealedFloor.Content.Id, out CardDefinition contentDefinition))
             {
-                frontArtwork = contentDefinition.FrontArtwork;
+                frontArtwork = FrontArt(contentDefinition);
             }
             else if (TryGetAuthoredCardDefinition(card.BaseState.DefinitionId, out CardDefinition definition))
             {
-                backArtwork = definition.BackArtwork != null ? definition.BackArtwork : backArtwork;
-                frontArtwork = definition.FrontArtwork;
+                Texture2D definitionBack = BackArt(definition);
+                backArtwork = definitionBack != null ? definitionBack : backArtwork;
+                frontArtwork = FrontArt(definition);
             }
 
             TabletopObjectId revealedId = revealedFloor.ObjectId;
@@ -7343,7 +7354,7 @@ namespace ConsoleCards.Presentation.Prototype
                     cardId,
                     input,
                     displayName,
-                    authoredDefinition != null ? authoredDefinition.FrontArtwork : null,
+                    FrontArt(authoredDefinition),
                     eligible));
             }
             return true;
@@ -8621,7 +8632,7 @@ namespace ConsoleCards.Presentation.Prototype
                     cardId,
                     input,
                     displayName,
-                    authoredDefinition != null ? authoredDefinition.FrontArtwork : null,
+                    FrontArt(authoredDefinition),
                     eligible));
             }
 
@@ -8775,7 +8786,7 @@ namespace ConsoleCards.Presentation.Prototype
                         new ObjectDefinitionId(definitionGuid),
                         out CardDefinition authoredDefinition))
                 {
-                    artwork = authoredDefinition.FrontArtwork;
+                    artwork = FrontArt(authoredDefinition);
                 }
                 options.Add(new PrototypeActionAbilityPurchaseOption(
                     definition.StableId,
@@ -11820,12 +11831,12 @@ namespace ConsoleCards.Presentation.Prototype
             if (TryGetAuthoredCardDefinition(card.BaseState.DefinitionId, out CardDefinition authoredDefinition))
             {
                 frontLabel = authoredDefinition.DisplayName;
-                frontArtwork = authoredDefinition.FrontArtwork;
-                backArtwork = authoredDefinition.BackArtwork;
+                frontArtwork = FrontArt(authoredDefinition);
+                backArtwork = BackArt(authoredDefinition);
             }
             else if (TryGetAuthoredAvatar(card.BaseState.DefinitionId, out AvatarDefinition avatarDefinition))
             {
-                frontArtwork = avatarDefinition.Artwork;
+                frontArtwork = AvatarArt(avatarDefinition);
             }
             if (isFloorCard
                 && trapFloorTemplate.TryGetFloorCardState(
@@ -11847,10 +11858,12 @@ namespace ConsoleCards.Presentation.Prototype
                 else
                 {
                     frontColor = TrapFloorContentColor(floorCard.Content.Category);
-                    if (TryGetAuthoredCardDefinition(floorCard.Content.Id, out CardDefinition contentDefinition)
-                        && contentDefinition.FrontArtwork != null)
+                    Texture2D contentFront = TryGetAuthoredCardDefinition(floorCard.Content.Id, out CardDefinition contentDefinition)
+                        ? FrontArt(contentDefinition)
+                        : null;
+                    if (contentFront != null)
                     {
-                        frontArtwork = contentDefinition.FrontArtwork;
+                        frontArtwork = contentFront;
                     }
 
                     backArtwork = CurrentBoardCardBack();
@@ -11933,14 +11946,162 @@ namespace ConsoleCards.Presentation.Prototype
                 return null;
             }
 
-            IReadOnlyList<Texture2D> backs = trapFloorGameDefinition.BoardCardBacks;
-            if (backs == null || backs.Count == 0)
+            int count = BoardCardBackCount();
+            if (count == 0)
             {
                 return null;
             }
 
             int round = trapFloorRoundState != null ? Math.Max(1, trapFloorRoundState.CurrentRoundNumber) : 1;
-            return backs[(round - 1) % backs.Count];
+            int index = (round - 1) % count;
+            IReadOnlyList<Texture2D> backs = trapFloorGameDefinition.BoardCardBacks;
+            IReadOnlyList<string> keys = trapFloorGameDefinition.BoardCardBackReferences;
+            return Art(
+                keys != null && index < keys.Count ? keys[index] : null,
+                backs != null && index < backs.Count ? backs[index] : null);
+        }
+
+        // A back counts when it has a texture or a key (a pack may supply the picture for a key).
+        private int BoardCardBackCount()
+        {
+            if (trapFloorGameDefinition == null) return 0;
+            int textures = trapFloorGameDefinition.BoardCardBacks != null ? trapFloorGameDefinition.BoardCardBacks.Count : 0;
+            int keys = trapFloorGameDefinition.BoardCardBackReferences != null
+                ? trapFloorGameDefinition.BoardCardBackReferences.Count
+                : 0;
+            return Math.Max(textures, keys);
+        }
+
+        // ---------- A2: art by key ----------
+
+        private Texture2D Art(string key, Texture2D builtIn)
+        {
+            EnsureBuiltInArt();
+            return artLibrary.Resolve(key, builtIn);
+        }
+
+        private Texture2D FrontArt(CardDefinition definition) =>
+            definition == null ? null : Art(definition.FrontArtworkReference, definition.FrontArtwork);
+
+        private Texture2D BackArt(CardDefinition definition) =>
+            definition == null ? null : Art(definition.BackArtworkReference, definition.BackArtwork);
+
+        private Texture2D AvatarArt(AvatarDefinition avatar) =>
+            avatar == null ? null : Art(avatar.ArtworkReference, avatar.Artwork);
+
+        // Registers the game's built-in pictures under their keys once per game definition, and listens for changes.
+        private void EnsureBuiltInArt()
+        {
+            if (!artLibraryHooked)
+            {
+                artLibraryHooked = true;
+                artLibrary.Changed += HandleArtChanged;
+                artLibrary.TextureReleased += HandleArtTextureReleased;
+            }
+
+            if (ReferenceEquals(builtInArtDefinition, trapFloorGameDefinition))
+            {
+                return;
+            }
+
+            builtInArtDefinition = trapFloorGameDefinition;
+            artLibrary.ClearBuiltIn();
+            if (trapFloorGameDefinition == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<GameContentSet> sets = trapFloorGameDefinition.ContentSets;
+            for (int setIndex = 0; sets != null && setIndex < sets.Count; setIndex++)
+            {
+                IReadOnlyList<CardDefinition> cards = sets[setIndex] != null ? sets[setIndex].Cards : null;
+                for (int i = 0; cards != null && i < cards.Count; i++)
+                {
+                    CardDefinition card = cards[i];
+                    if (card == null) continue;
+                    artLibrary.RegisterBuiltIn(card.FrontArtworkReference, card.FrontArtwork);
+                    artLibrary.RegisterBuiltIn(card.BackArtworkReference, card.BackArtwork);
+                }
+            }
+
+            IReadOnlyList<AvatarDefinition> avatars = trapFloorGameDefinition.Avatars;
+            for (int i = 0; avatars != null && i < avatars.Count; i++)
+            {
+                if (avatars[i] != null) artLibrary.RegisterBuiltIn(avatars[i].ArtworkReference, avatars[i].Artwork);
+            }
+
+            IReadOnlyList<Texture2D> backs = trapFloorGameDefinition.BoardCardBacks;
+            IReadOnlyList<string> keys = trapFloorGameDefinition.BoardCardBackReferences;
+            for (int i = 0; backs != null && keys != null && i < backs.Count && i < keys.Count; i++)
+            {
+                artLibrary.RegisterBuiltIn(keys[i], backs[i]);
+            }
+        }
+
+        // A picture changed: re-apply art on every card in place (no table rebuild).
+        private void HandleArtChanged(string key)
+        {
+            RefreshAllCardArt();
+        }
+
+        private void RefreshAllCardArt()
+        {
+            if (!IsInitialized || matchState == null) return;
+            for (int i = 0; i < cardVisualReferences.Count; i++)
+            {
+                PrototypeCardVisualReferences references = cardVisualReferences[i];
+                CardView view = references != null ? references.CardView : null;
+                if (view == null || !view.IsBound || view.CardState == null) continue;
+                ConfigureCardVisuals(references, view.CardState, ResolveCardLabel(view.CardState));
+                references.SetCardContentVisible(ShouldShowCardContent(view.CardState));
+            }
+        }
+
+        // A texture the library loaded is about to be destroyed: drop the card materials built from it.
+        private void HandleArtTextureReleased(Texture2D texture)
+        {
+            List<(Material, Texture2D)> stale = null;
+            foreach (KeyValuePair<(Material, Texture2D), Material> pair in cardArtMaterials)
+            {
+                if (ReferenceEquals(pair.Key.Item2, texture))
+                {
+                    if (stale == null) stale = new List<(Material, Texture2D)>(2);
+                    stale.Add(pair.Key);
+                }
+            }
+
+            for (int i = 0; stale != null && i < stale.Count; i++)
+            {
+                Material material = cardArtMaterials[stale[i]];
+                cardArtMaterials.Remove(stale[i]);
+                if (material == null) continue;
+                cardArtBaseMaterials.Remove(material);
+                Destroy(material);
+            }
+        }
+
+        [ContextMenu("Apply Art Test")]
+        private void ApplyArtTest()
+        {
+            if (string.IsNullOrWhiteSpace(artTestKey) || artTestTexture == null)
+            {
+                Debug.LogWarning("[Art] Set Art Test Key and Art Test Texture first.", this);
+                return;
+            }
+
+            EnsureBuiltInArt();
+            artLibrary.Set(ArtLayer.PlayerUpload, artTestKey, artTestTexture, false);
+            Debug.Log($"[Art] {ArtLibrary.NormalizeKey(artTestKey)} now shows {artTestTexture.name} (upload layer).", this);
+        }
+
+        [ContextMenu("Clear Art Test")]
+        private void ClearArtTest()
+        {
+            EnsureBuiltInArt();
+            if (!artLibrary.Remove(ArtLayer.PlayerUpload, artTestKey))
+            {
+                Debug.Log("[Art] Nothing to clear for that key.", this);
+            }
         }
 
         // Only does work on the frame the round number changes; re-applies floor backs then.
@@ -11956,7 +12117,7 @@ namespace ConsoleCards.Presentation.Prototype
             if (trapFloorTemplate == null
                 || matchState == null
                 || trapFloorGameDefinition == null
-                || trapFloorGameDefinition.BoardCardBacks.Count < 2)
+                || BoardCardBackCount() < 2)
             {
                 return;
             }

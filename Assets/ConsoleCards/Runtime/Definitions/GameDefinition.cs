@@ -82,6 +82,8 @@ namespace ConsoleCards.Definitions
         [SerializeField] private RuleSetDefinition defaultRuleSet;
         [Tooltip("Face-down backs for board (floor) cards. One back per round, in order, repeating after the last.")]
         [SerializeField] private List<Texture2D> boardCardBacks = new List<Texture2D>();
+        [Tooltip("Art keys for the board card backs (doc 24, A2), in the same order. A pack or upload can replace a back by its key.")]
+        [SerializeField] private List<string> boardCardBackReferences = new List<string>();
 
         public string StableId => stableId;
         public string DisplayName => displayName;
@@ -93,6 +95,8 @@ namespace ConsoleCards.Definitions
         public ConsoleConfiguration ConsoleConfiguration => consoleConfiguration;
         public RuleSetDefinition DefaultRuleSet => defaultRuleSet;
         public IReadOnlyList<Texture2D> BoardCardBacks => boardCardBacks;
+        public IReadOnlyList<string> BoardCardBackReferences => boardCardBackReferences;
+        public IReadOnlyList<GameContentSet> ContentSets => contentSets;
 
         public bool TryGetCard(ObjectDefinitionId id, out CardDefinition definition)
         {
