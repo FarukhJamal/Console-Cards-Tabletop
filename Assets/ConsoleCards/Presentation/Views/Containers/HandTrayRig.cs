@@ -34,6 +34,8 @@ namespace ConsoleCards.Presentation.Views.Containers
         public const float CollapsedVisibleFraction = 0.28f;
         // Margin around the card row, in unscaled tray units.
         public const float BandMargin = 0.12f;
+        // Seconds to slide the whole tray off (or back onto) the bottom of the screen (seat switch, H1b).
+        public const float ClearSeconds = 0.3f;
         private const float BandBehindCards = 0.02f;
         private const float FrameThickness = 0.03f;
         private const float FrameBehindCards = 0.01f;
@@ -55,6 +57,8 @@ namespace ConsoleCards.Presentation.Views.Containers
         private float bandHalfWidth;
         private float bandLowerDepth;
         private float bandUpperDepth;
+        private bool clearTarget;
+        private float clearAmount;
 
         public UnityCamera TargetCamera => targetCamera;
 
@@ -64,6 +68,9 @@ namespace ConsoleCards.Presentation.Views.Containers
         public float Scale => scale;
 
         public bool IsCollapsed { get; private set; }
+
+        /// <summary>True once a requested clear has slid the whole tray below the screen.</summary>
+        public bool IsCleared => clearTarget && clearAmount >= 1f;
 
         public bool IsDropTargetConfigured => dropTarget != null && dropTarget.IsConfigured;
 
@@ -102,6 +109,28 @@ namespace ConsoleCards.Presentation.Views.Containers
         public void SetCollapsed(bool collapsed)
         {
             IsCollapsed = collapsed;
+        }
+
+        /// <summary>
+        /// Slides the whole tray (and every card on it) below the screen, or back. Used to empty the screen before
+        /// the screen changes seat; a Presentation offset only.
+        /// </summary>
+        public void SetCleared(bool cleared, bool immediate = false)
+        {
+            clearTarget = cleared;
+            if (immediate)
+            {
+                clearAmount = cleared ? 1f : 0f;
+            }
+        }
+
+        private void Update()
+        {
+            float target = clearTarget ? 1f : 0f;
+            if (clearAmount != target)
+            {
+                clearAmount = Mathf.MoveTowards(clearAmount, target, Time.unscaledDeltaTime / ClearSeconds);
+            }
         }
 
         public void ConfigureDropTarget(IContainerView handView)
@@ -191,6 +220,13 @@ namespace ConsoleCards.Presentation.Views.Containers
             if (IsCollapsed)
             {
                 y -= scaledDepth * (1f - CollapsedVisibleFraction);
+            }
+
+            if (clearAmount > 0f)
+            {
+                // Eased slide to fully below the screen, lifted cards included.
+                float eased = clearAmount * clearAmount * (3f - (2f * clearAmount));
+                y -= eased * ((scaledDepth * 1.8f) + (BottomMarginFraction * viewportHeight));
             }
 
             anchor.localPosition = new Vector3(0f, y, distance);

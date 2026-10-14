@@ -266,6 +266,11 @@ namespace ConsoleCards.Presentation.Prototype
         private readonly Dictionary<PlayerId, long> seatLeftAtLog = new Dictionary<PlayerId, long>();
         private readonly Dictionary<PlayerId, int> seatLeftHandCount = new Dictionary<PlayerId, int>();
         private readonly StringBuilder handoverSummary = new StringBuilder(256);
+        // A seat switch first slides the screen hand off the screen, then rebuilds for the new seat (H1b).
+        private bool seatSwitchPending;
+        private PlayerId seatSwitchTarget;
+        private bool seatSwitchFromHandover;
+        private float seatSwitchDeadline;
         // Spring/Crane target the active player still has to move to (G2c); applied by End Turn if left.
         private PlayerId pendingLaunchPlayerId;
         private TabletopObjectId pendingLaunchTargetId;
@@ -636,6 +641,8 @@ namespace ConsoleCards.Presentation.Prototype
                 seatLeftAtLog.Clear();
                 seatLeftHandCount.Clear();
                 handSeatSyncFailedFor = PlayerId.Empty;
+                seatSwitchPending = false;
+                handTrayRig?.SetCleared(false, true);
             }
 
             StopUndoTrackingCurrentMatch();
@@ -1450,9 +1457,10 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void HandleAuthoritativeActionAccepted(AuthoritativeActionAcceptance acceptance)
         {
-            if (acceptance.Kind == AuthoritativeActionKind.TransferCard)
+            if (acceptance.Kind == AuthoritativeActionKind.TransferCard
+                || acceptance.Kind == AuthoritativeActionKind.DrawCards)
             {
-                RefreshAcceptedCardFaces();
+                RefreshAcceptedCardFaces(); // a Hand turns arriving cards face up (H1b)
             }
 
             if ((acceptance.Kind == AuthoritativeActionKind.MoveObject
@@ -2229,6 +2237,15 @@ namespace ConsoleCards.Presentation.Prototype
         {
             if (IsInitialized && !rebuildingFromUndo)
             {
+                if (seatSwitchPending
+                    && (handTrayRig == null
+                        || !handTrayRig.isActiveAndEnabled
+                        || handTrayRig.IsCleared
+                        || Time.unscaledTime >= seatSwitchDeadline))
+                {
+                    CompleteSeatSwitch();
+                }
+
                 UpdateHotSeat();
             }
 
@@ -4876,15 +4893,49 @@ namespace ConsoleCards.Presentation.Prototype
                 PlayerId candidate = matchState.GetSeat(
                     trapFloorTemplate.Players[(localIndex + step + count) % count].SeatId).OccupantPlayerId;
                 if (candidate.IsEmpty || candidate == localPlayerId) continue;
-                if (SwitchScreenSeat(candidate, false))
-                {
-                    ShowMessage($"This screen now plays {PlayerLabel(candidate)}.");
-                }
-
+                BeginSeatSwitch(candidate, false);
                 return;
             }
 
             ShowMessage("There is no other seated player.");
+        }
+
+        // Slides the screen hand away, then (next frames) switches the screen to the target seat.
+        private void BeginSeatSwitch(PlayerId target, bool fromHandover)
+        {
+            if (seatSwitchPending || target.IsEmpty || target == localPlayerId) return;
+            seatSwitchPending = true;
+            seatSwitchTarget = target;
+            seatSwitchFromHandover = fromHandover;
+            seatSwitchDeadline = Time.unscaledTime + HandTrayRig.ClearSeconds + 0.3f;
+            handTrayRig?.SetCleared(true);
+        }
+
+        private void CompleteSeatSwitch()
+        {
+            seatSwitchPending = false;
+            PlayerId target = seatSwitchTarget;
+            bool fromHandover = seatSwitchFromHandover;
+            if (fromHandover
+                && (trapFloorTurnState == null || trapFloorTurnState.ActivePlayerId != target))
+            {
+                handTrayRig?.SetCleared(false);
+                return; // the turn moved meanwhile; hot-seat opens a new handover
+            }
+
+            string gained = fromHandover ? HandGainText(target) : string.Empty;
+            bool switched = SwitchScreenSeat(target, fromHandover);
+            handTrayRig?.SetCleared(false);
+            if (!switched) return;
+            ProjectTrapFloorCameraBookmark(); // the camera moves to the new seat's view
+            if (fromHandover)
+            {
+                if (gained.Length > 0) ShowMessage(gained.TrimStart());
+            }
+            else
+            {
+                ShowMessage($"This screen now plays {PlayerLabel(target)}.");
+            }
         }
 
         private void SetHotSeatMode(bool on)
@@ -4900,6 +4951,7 @@ namespace ConsoleCards.Presentation.Prototype
         // it when it is no longer needed (mode off, the turn came back, or a Floor turn).
         private void UpdateHotSeat()
         {
+            if (seatSwitchPending) return;
             if (!hotSeatMode || !ScreenHandBehindTurn())
             {
                 if (hotSeatHandoverOpen) CloseHotSeatHandover();
@@ -4925,16 +4977,14 @@ namespace ConsoleCards.Presentation.Prototype
             if (runtimeUi != null && runtimeUi.ShowHotSeatHandover(model, ConfirmHotSeatHandover))
             {
                 hotSeatHandoverOpen = true;
+                handTrayRig?.SetCleared(true, true); // the previous hand leaves under the cover
                 return;
             }
 
             // No handover prefab: pass the screen straight away so the mode still works.
             hotSeatHandoverOpen = false;
-            string gained = HandGainText(player);
-            if (SwitchScreenSeat(player, true))
-            {
-                ShowMessage($"Screen passed to {label}.{gained}");
-            }
+            ShowMessage($"Screen passing to {label}.");
+            BeginSeatSwitch(player, true);
         }
 
         private void ConfirmHotSeatHandover()
@@ -4948,17 +4998,14 @@ namespace ConsoleCards.Presentation.Prototype
                 return; // the turn moved while the cover was up; the next frame opens a new handover
             }
 
-            string gained = HandGainText(target);
-            if (SwitchScreenSeat(target, true) && gained.Length > 0)
-            {
-                ShowMessage(gained.TrimStart());
-            }
+            BeginSeatSwitch(target, true);
         }
 
         private void CloseHotSeatHandover()
         {
             hotSeatHandoverOpen = false;
             runtimeUi?.HideHotSeatHandover();
+            handTrayRig?.SetCleared(false);
         }
 
         // What happened since this player last had the screen: the latest lines of the shared log, and their hand.
@@ -10821,7 +10868,8 @@ namespace ConsoleCards.Presentation.Prototype
                     && view.IsBound
                     && view.CardState != null
                     && view.IsFacePresentationConfigured
-                    && view.DisplayedFace != view.CardState.Face)
+                    && view.DisplayedFace != view.CardState.Face
+                    && !IsInAnotherPlayersHand(view.CardState.BaseState.Id))
                 {
                     view.ApplyAcceptedFacePresentation();
                 }
