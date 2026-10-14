@@ -254,7 +254,7 @@ namespace ConsoleCards.Editor.UI
         }
 
         /// <summary>
-        /// Adds the play and view rows (Seat, Hot-seat, Hands on table, Feedback; doc 18 §15.11, doc 25 F3) to an
+        /// Adds the play and view rows (Seat, Hot-seat, Hands on table, Feedback, Card art; doc 18 §15.11, doc 25 F3) to an
         /// existing SessionBar prefab when they are missing. Rows that already exist and everything else in the
         /// prefab are kept as they are.
         /// </summary>
@@ -327,8 +327,20 @@ namespace ConsoleCards.Editor.UI
                 next, ref added);
             next = AddSwitchIfMissing(menu, so, "handsOnTableSwitch", "HandsOnTableRow", "Hands on table",
                 "Your hand lies at your table edge", "Off; your hand is on screen", next, ref added);
-            AddSwitchIfMissing(menu, so, "fullFeedbackSwitch", "FeedbackRow", "Full feedback",
+            next = AddSwitchIfMissing(menu, so, "fullFeedbackSwitch", "FeedbackRow", "Full feedback",
                 "Banners, sounds and camera nudges", "Minimal: messages and board markers", next, ref added);
+            if (so.FindProperty("cardArtButton").objectReferenceValue == null)
+            {
+                RectTransform rule = Child("CardArtRule", menu);
+                Img(rule, "Solid", TabIdle).raycastTarget = false;
+                Size(rule.gameObject, -1f, MenuRowRule);
+                rule.SetSiblingIndex(next++);
+                Button cardArt = MenuRow(menu, "CardArtRow", "Card art…", false);
+                cardArt.transform.SetSiblingIndex(next);
+                so.FindProperty("cardArtButton").objectReferenceValue = cardArt;
+                added++;
+            }
+
             so.ApplyModifiedPropertiesWithoutUndo();
             return added;
         }

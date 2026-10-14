@@ -58,6 +58,7 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private ToolboxSwitch hotSeatSwitch = new ToolboxSwitch();
         [SerializeField] private ToolboxSwitch handsOnTableSwitch = new ToolboxSwitch();
         [SerializeField] private ToolboxSwitch fullFeedbackSwitch = new ToolboxSwitch();
+        [SerializeField] private Button cardArtButton;
 
         private Action undo;
         private Action redo;
@@ -79,6 +80,7 @@ namespace ConsoleCards.Presentation.UI
         private Action<bool> setFullFeedback;
         private bool handsOnTableOn;
         private bool fullFeedbackOn;
+        private Action openCardArt;
 
         public bool IsMenuOpen => menu != null && menu.gameObject.activeSelf;
 
@@ -250,6 +252,22 @@ namespace ConsoleCards.Presentation.UI
             return true;
         }
 
+        /// <summary>Binds the optional "Card art…" row (doc 24, A3/A4); null hides it. False when the prefab lacks it.</summary>
+        public bool BindCardArt(Action openCardArtAction)
+        {
+            RequireAcquired();
+            if (cardArtButton == null)
+            {
+                return false;
+            }
+
+            Clear(cardArtButton);
+            openCardArt = openCardArtAction;
+            cardArtButton.gameObject.SetActive(openCardArt != null);
+            cardArtButton.onClick.AddListener(HandleCardArt);
+            return true;
+        }
+
         public void SetUndoState(bool enabled, string label)
         {
             undoLabel = string.IsNullOrWhiteSpace(label) ? "Undo" : label;
@@ -324,6 +342,7 @@ namespace ConsoleCards.Presentation.UI
             setHotSeat = null;
             setHandsOnTable = null;
             setFullFeedback = null;
+            openCardArt = null;
             openHelp = null;
             newTable = null;
             resetTable = null;
@@ -459,6 +478,13 @@ namespace ConsoleCards.Presentation.UI
             setFullFeedback(fullFeedbackOn);
         }
 
+        private void HandleCardArt()
+        {
+            Action action = openCardArt;
+            CloseMenu();
+            action?.Invoke();
+        }
+
         private void HandleHelp()
         {
             CloseMenu();
@@ -542,6 +568,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(hotSeatSwitch?.Button);
             Clear(handsOnTableSwitch?.Button);
             Clear(fullFeedbackSwitch?.Button);
+            Clear(cardArtButton);
         }
 
         private static void Clear(Button button)

@@ -40,6 +40,8 @@ namespace ConsoleCards.Presentation.UI
         private bool viewSettingsWarned;
         private ActivityLogView activityLogView;
         private bool activityLogUnavailable;
+        private ContentArtPanelView contentArtPanelView;
+        private bool cardArtWarned;
 
         public IRuntimeUiService UiService
         {
@@ -197,6 +199,62 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
+        /// <summary>Binds the Table menu's "Card art…" row (doc 24, A3/A4); null hides it.</summary>
+        public void ShowCardArtEntry(Action openCardArt)
+        {
+            EnsureSessionBarView();
+            if (!sessionBarView.BindCardArt(openCardArt) && openCardArt != null && !cardArtWarned)
+            {
+                cardArtWarned = true;
+                Debug.LogWarning(
+                    "The Table menu has no Card art row: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
+            }
+        }
+
+        /// <summary>Shows or refreshes the Card Art panel (doc 24, A3/A4). False when its prefab is missing.</summary>
+        public bool ShowContentArtPanel(ContentArtPanelModel model, ContentArtPanelActions actions)
+        {
+            try
+            {
+                EnsureService();
+                if (contentArtPanelView == null || !contentArtPanelView.IsAcquired)
+                {
+                    ReleaseView(tabletopPopupView);
+                    popupLayer.SetActive(false);
+                    ReleaseModalViews();
+                    componentToolboxView?.CloseToolbox();
+                    contentArtPanelView = uiService.AcquireCached<ContentArtPanelView>(PrototypeUiPrefabIds.ContentArtPanel);
+                    contentArtPanelView.Initialize(uiService);
+                }
+
+                modalLayer.SetActive(true);
+                contentArtPanelView.Bind(model, actions);
+                contentArtPanelView.Show();
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                Debug.LogWarning(
+                    "The Card Art panel is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs (Final UI). "
+                    + exception.Message);
+                return false;
+            }
+        }
+
+        public bool IsContentArtPanelOpen => IsVisible(contentArtPanelView);
+
+        public void CloseContentArtPanel()
+        {
+            ReleaseView(contentArtPanelView);
+            if (!IsVisible(quantityPopupView)
+                && !IsVisible(cardInspectPopupView)
+                && !IsVisible(actionAbilityPurchasePopupView)
+                && !IsVisible(focusedCardSelectionView))
+            {
+                SetModalLayerOffUnlessHandover();
+            }
+        }
+
         /// <summary>Shows the "What happened" log tab with this text (doc 25, F4). False when its prefab is missing.</summary>
         public bool ShowActivityLog(string text)
         {
@@ -276,7 +334,7 @@ namespace ConsoleCards.Presentation.UI
         // Closing another modal never hides the hot-seat handover cover that may share the Modal layer.
         private void SetModalLayerOffUnlessHandover()
         {
-            if (modalLayer != null && !IsVisible(hotSeatHandoverView))
+            if (modalLayer != null && !IsVisible(hotSeatHandoverView) && !IsVisible(contentArtPanelView))
             {
                 modalLayer.SetActive(false);
             }
@@ -634,6 +692,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(feedbackMessageStackView);
             ReleaseView(hotSeatHandoverView);
             ReleaseView(activityLogView);
+            ReleaseView(contentArtPanelView);
             CloseTabletopPopup();
         }
 
@@ -760,6 +819,7 @@ namespace ConsoleCards.Presentation.UI
 
         private void ReleaseModalViews()
         {
+            ReleaseView(contentArtPanelView);
             ReleaseView(quantityPopupView);
             ReleaseView(cardInspectPopupView);
             ReleaseView(actionAbilityPurchasePopupView);

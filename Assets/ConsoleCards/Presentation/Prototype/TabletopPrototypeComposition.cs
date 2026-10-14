@@ -24,6 +24,7 @@ using ConsoleCards.GameTemplates.Definitions;
 using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
+using ConsoleCards.Presentation.Content;
 using ConsoleCards.Presentation.Catalog;
 using ConsoleCards.Presentation.Coordinates;
 using ConsoleCards.Presentation.Feedback;
@@ -183,10 +184,11 @@ namespace ConsoleCards.Presentation.Prototype
         // Texture overrides in a MaterialPropertyBlock are not drawn on every render path, so art never goes there.
         private readonly Dictionary<(Material, Texture2D), Material> cardArtMaterials = new Dictionary<(Material, Texture2D), Material>();
         private readonly Dictionary<Material, Material> cardArtBaseMaterials = new Dictionary<Material, Material>();
-        // A2: every picture is looked up by art key (uploads, then pack, then built-in, then the asset's texture).
-        private readonly ArtLibrary artLibrary = new ArtLibrary();
-        private GameDefinition builtInArtDefinition;
-        private bool artLibraryHooked;
+        // Content (doc 24, A2–A4): every picture is looked up by art key through the content service
+        // (your pictures, then the active pack, then built-in, then the asset's texture).
+        private ContentArtService contentArt;
+        private ContentArtPanelActions cardArtActions;
+        private bool artRefreshing;
         private MaterialPropertyBlock cardSlotProperties; // created on first use: Unity forbids it in field initializers
         private readonly Dictionary<ObjectDefinitionId, ButtonCardDefinition> buttonDefinitions =
             new Dictionary<ObjectDefinitionId, ButtonCardDefinition>();
@@ -2236,6 +2238,7 @@ namespace ConsoleCards.Presentation.Prototype
             try
             {
                 InitializeRuntimeUi();
+                EnsureContentArt(); // your pictures and the active pack load before the first table
                 PrepareTemplateCatalog();
                 if (!TryReplaceTable(TabletopSessionSelection.EmptyCustom))
                 {
@@ -2258,7 +2261,7 @@ namespace ConsoleCards.Presentation.Prototype
             boardFeedback?.Destroy();
             boardFeedback = null;
             ReleaseCardArtMaterials();
-            artLibrary.Dispose(); // A2: destroys the pictures it loaded
+            contentArt?.Dispose(); // destroys the pictures the content service loaded
             if (handTrayRig != null)
             {
                 Destroy(handTrayRig.gameObject);
@@ -4317,6 +4320,10 @@ namespace ConsoleCards.Presentation.Prototype
                 NextScreenSeat,
                 hotSeatMode,
                 SetHotSeatMode);
+            runtimeUi.ShowCardArtEntry(
+                trapFloorGameDefinition != null && activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom
+                    ? (Action)OpenCardArtPanel
+                    : null);
             runtimeUi.ShowViewSettings(
                 trapFloorTemplate != null && activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom,
                 handsOnTable,
@@ -11976,8 +11983,8 @@ namespace ConsoleCards.Presentation.Prototype
 
         private Texture2D Art(string key, Texture2D builtIn)
         {
-            EnsureBuiltInArt();
-            return artLibrary.Resolve(key, builtIn);
+            EnsureContentArt();
+            return contentArt.Resolve(key, builtIn);
         }
 
         private Texture2D FrontArt(CardDefinition definition) =>
@@ -11989,52 +11996,19 @@ namespace ConsoleCards.Presentation.Prototype
         private Texture2D AvatarArt(AvatarDefinition avatar) =>
             avatar == null ? null : Art(avatar.ArtworkReference, avatar.Artwork);
 
-        // Registers the game's built-in pictures under their keys once per game definition, and listens for changes.
-        private void EnsureBuiltInArt()
+        // The content service for this table's game: built-in art, the active pack and your pictures (A2–A4).
+        private void EnsureContentArt()
         {
-            if (!artLibraryHooked)
+            if (contentArt == null)
             {
-                artLibraryHooked = true;
-                artLibrary.Changed += HandleArtChanged;
-                artLibrary.TextureReleased += HandleArtTextureReleased;
+                contentArt = new ContentArtService(ContentPackStore.CreateDefault());
+                contentArt.Library.Changed += HandleArtChanged;
+                contentArt.Library.TextureReleased += HandleArtTextureReleased;
             }
 
-            if (ReferenceEquals(builtInArtDefinition, trapFloorGameDefinition))
+            if (!contentArt.HasGame && trapFloorGameDefinition != null)
             {
-                return;
-            }
-
-            builtInArtDefinition = trapFloorGameDefinition;
-            artLibrary.ClearBuiltIn();
-            if (trapFloorGameDefinition == null)
-            {
-                return;
-            }
-
-            IReadOnlyList<GameContentSet> sets = trapFloorGameDefinition.ContentSets;
-            for (int setIndex = 0; sets != null && setIndex < sets.Count; setIndex++)
-            {
-                IReadOnlyList<CardDefinition> cards = sets[setIndex] != null ? sets[setIndex].Cards : null;
-                for (int i = 0; cards != null && i < cards.Count; i++)
-                {
-                    CardDefinition card = cards[i];
-                    if (card == null) continue;
-                    artLibrary.RegisterBuiltIn(card.FrontArtworkReference, card.FrontArtwork);
-                    artLibrary.RegisterBuiltIn(card.BackArtworkReference, card.BackArtwork);
-                }
-            }
-
-            IReadOnlyList<AvatarDefinition> avatars = trapFloorGameDefinition.Avatars;
-            for (int i = 0; avatars != null && i < avatars.Count; i++)
-            {
-                if (avatars[i] != null) artLibrary.RegisterBuiltIn(avatars[i].ArtworkReference, avatars[i].Artwork);
-            }
-
-            IReadOnlyList<Texture2D> backs = trapFloorGameDefinition.BoardCardBacks;
-            IReadOnlyList<string> keys = trapFloorGameDefinition.BoardCardBackReferences;
-            for (int i = 0; backs != null && keys != null && i < backs.Count && i < keys.Count; i++)
-            {
-                artLibrary.RegisterBuiltIn(keys[i], backs[i]);
+                contentArt.UseGame(trapFloorGameDefinition);
             }
         }
 
@@ -12046,15 +12020,133 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void RefreshAllCardArt()
         {
-            if (!IsInitialized || matchState == null) return;
-            for (int i = 0; i < cardVisualReferences.Count; i++)
+            if (!IsInitialized || matchState == null || artRefreshing) return;
+            artRefreshing = true;
+            try
             {
-                PrototypeCardVisualReferences references = cardVisualReferences[i];
-                CardView view = references != null ? references.CardView : null;
-                if (view == null || !view.IsBound || view.CardState == null) continue;
-                ConfigureCardVisuals(references, view.CardState, ResolveCardLabel(view.CardState));
-                references.SetCardContentVisible(ShouldShowCardContent(view.CardState));
+                for (int i = 0; i < cardVisualReferences.Count; i++)
+                {
+                    PrototypeCardVisualReferences references = cardVisualReferences[i];
+                    CardView view = references != null ? references.CardView : null;
+                    if (view == null || !view.IsBound || view.CardState == null) continue;
+                    ConfigureCardVisuals(references, view.CardState, ResolveCardLabel(view.CardState));
+                    references.SetCardContentVisible(ShouldShowCardContent(view.CardState));
+                }
             }
+            finally
+            {
+                artRefreshing = false;
+            }
+        }
+
+        // ---------- Card Art panel (doc 24, A3/A4) ----------
+
+        private void OpenCardArtPanel()
+        {
+            EnsureContentArt();
+            if (!contentArt.HasGame)
+            {
+                ShowMessage("This table has no card art to change.");
+                return;
+            }
+
+            ShowCardArtPanel(string.Empty);
+        }
+
+        private void ShowCardArtPanel(string status)
+        {
+            if (runtimeUi == null || contentArt == null) return;
+            IReadOnlyList<ContentArtEntry> entries = contentArt.Entries;
+            List<ContentArtRowModel> rows = new List<ContentArtRowModel>(entries.Count);
+            for (int i = 0; i < entries.Count; i++)
+            {
+                ContentArtEntry entry = entries[i];
+                rows.Add(new ContentArtRowModel(
+                    entry.Key,
+                    entry.Label,
+                    contentArt.SourceText(entry.Key),
+                    contentArt.Resolve(entry.Key, entry.BuiltIn),
+                    contentArt.HasUpload(entry.Key)));
+            }
+
+            string text = status;
+            if (string.IsNullOrEmpty(text))
+            {
+                text = entries.Count == 0
+                    ? "No pictures have art keys yet: run Console Cards > Content > Fill Missing Art Keys."
+                    : PictureFilePicker.IsAvailable
+                        ? "Choose a picture for any card. Your pictures stay on this computer."
+                        : $"Choosing pictures is not available here. Packs go in {contentArt.Store.PacksFolder(contentArt.GameId)}.";
+            }
+
+            if (cardArtActions == null)
+            {
+                cardArtActions = new ContentArtPanelActions
+                {
+                    CyclePack = CycleArtPack,
+                    OpenFolder = OpenArtPacksFolder,
+                    Reload = ReloadContent,
+                    ChoosePicture = ChooseOwnPicture,
+                    ResetPicture = ResetOwnPicture,
+                    Close = () => runtimeUi?.CloseContentArtPanel(),
+                };
+            }
+
+            if (!runtimeUi.ShowContentArtPanel(
+                    new ContentArtPanelModel(contentArt.ActivePackName, contentArt.Packs.Count, text, rows,
+                        PictureFilePicker.IsAvailable),
+                    cardArtActions))
+            {
+                ShowMessage("The Card Art panel is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs.");
+            }
+        }
+
+        private void CycleArtPack(int step)
+        {
+            contentArt.ActivatePack(contentArt.NeighbourPackId(step), out string message);
+            ShowMessage(message);
+            ShowCardArtPanel(message);
+        }
+
+        private void OpenArtPacksFolder()
+        {
+            string folder = contentArt.Store.PacksFolder(contentArt.GameId);
+            try
+            {
+                System.IO.Directory.CreateDirectory(folder);
+                UnityEngine.Application.OpenURL(new Uri(folder).AbsoluteUri);
+                ShowCardArtPanel($"Packs folder: {folder}. Put a pack folder there, then press Reload.");
+            }
+            catch (Exception exception)
+            {
+                ShowCardArtPanel($"Could not open {folder}: {exception.Message}");
+            }
+        }
+
+        private void ReloadContent()
+        {
+            contentArt.ReloadFromDisk();
+            int packs = contentArt.Packs.Count;
+            ShowCardArtPanel($"Found {packs} pack{(packs == 1 ? string.Empty : "s")}. Active: {contentArt.ActivePackName}.");
+        }
+
+        private void ChooseOwnPicture(string key)
+        {
+            if (!PictureFilePicker.TryPick("Choose a picture (PNG or JPG)", out string path))
+            {
+                return;
+            }
+
+            contentArt.SetUpload(key, path, out string message);
+            ShowMessage(message);
+            ShowCardArtPanel(message);
+        }
+
+        private void ResetOwnPicture(string key)
+        {
+            contentArt.RemoveUpload(key, out string message);
+            ShowMessage(message);
+            ShowCardArtPanel(message);
         }
 
         // A texture the library loaded is about to be destroyed: drop the card materials built from it.
@@ -12089,16 +12181,16 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            EnsureBuiltInArt();
-            artLibrary.Set(ArtLayer.PlayerUpload, artTestKey, artTestTexture, false);
+            EnsureContentArt();
+            contentArt.Library.Set(ArtLayer.PlayerUpload, artTestKey, artTestTexture, false);
             Debug.Log($"[Art] {ArtLibrary.NormalizeKey(artTestKey)} now shows {artTestTexture.name} (upload layer).", this);
         }
 
         [ContextMenu("Clear Art Test")]
         private void ClearArtTest()
         {
-            EnsureBuiltInArt();
-            if (!artLibrary.Remove(ArtLayer.PlayerUpload, artTestKey))
+            EnsureContentArt();
+            if (!contentArt.Library.Remove(ArtLayer.PlayerUpload, artTestKey))
             {
                 Debug.Log("[Art] Nothing to clear for that key.", this);
             }

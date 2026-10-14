@@ -108,5 +108,7 @@ namespace ConsoleCards.Presentation.UI
         public const string FeedbackMessages = "platform.feedback-messages";
         public const string HotSeatHandover = "platform.hotseat-handover";
         public const string ActivityLog = "platform.activity-log";
+        public const string ContentArtPanel = "platform.content-art-panel";
+        public const string ContentArtRow = "platform.content-art-row";
     }
 }

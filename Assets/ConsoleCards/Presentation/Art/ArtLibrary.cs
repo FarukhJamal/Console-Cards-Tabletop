@@ -29,6 +29,9 @@ namespace ConsoleCards.Presentation.Art
         };
 
         private readonly HashSet<Texture2D> owned = new HashSet<Texture2D>();
+        private readonly List<Texture2D> pendingRelease = new List<Texture2D>();
+        private int batchDepth;
+        private bool batchChanged;
 
         /// <summary>A key changed (null: many keys, for example a whole layer was cleared).</summary>
         public event Action<string> Changed;
@@ -38,6 +41,34 @@ namespace ConsoleCards.Presentation.Art
 
         /// <summary>Goes up on every change, so callers can tell cheaply whether anything moved.</summary>
         public int Revision { get; private set; }
+
+        /// <summary>
+        /// Groups many changes (a whole pack) into one: listeners hear a single <see cref="Changed"/>(null) at the
+        /// end, and textures replaced meanwhile are released only after that. Batches nest.
+        /// </summary>
+        public void BeginBatch()
+        {
+            batchDepth++;
+        }
+
+        public void EndBatch()
+        {
+            if (batchDepth == 0) return;
+            batchDepth--;
+            if (batchDepth > 0) return;
+            if (batchChanged)
+            {
+                batchChanged = false;
+                Changed?.Invoke(null);
+            }
+
+            for (int i = 0; i < pendingRelease.Count; i++)
+            {
+                ReleaseIfUnused(pendingRelease[i]);
+            }
+
+            pendingRelease.Clear();
+        }
 
         /// <summary>Lower case, forward slashes, no leading slash or surrounding spaces. Empty for no key.</summary>
         public static string NormalizeKey(string key)
@@ -126,7 +157,7 @@ namespace ConsoleCards.Presentation.Art
             }
 
             Revision++;
-            Changed?.Invoke(normalized);
+            Notify(normalized);
             if (previous != null && !ReferenceEquals(previous, texture))
             {
                 ReleaseIfUnused(previous);
@@ -149,7 +180,7 @@ namespace ConsoleCards.Presentation.Art
 
             map.Remove(normalized);
             Revision++;
-            Changed?.Invoke(normalized);
+            Notify(normalized);
             ReleaseIfUnused(previous);
             return true;
         }
@@ -171,7 +202,7 @@ namespace ConsoleCards.Presentation.Art
             List<Texture2D> previous = new List<Texture2D>(map.Values);
             map.Clear();
             Revision++;
-            Changed?.Invoke(null);
+            Notify(null);
             for (int i = 0; i < previous.Count; i++)
             {
                 ReleaseIfUnused(previous[i]);
@@ -226,11 +257,28 @@ namespace ConsoleCards.Presentation.Art
             TextureReleased = null;
         }
 
+        private void Notify(string key)
+        {
+            if (batchDepth > 0)
+            {
+                batchChanged = true;
+                return;
+            }
+
+            Changed?.Invoke(key);
+        }
+
         // An owned texture still used under another key or layer stays alive.
         private void ReleaseIfUnused(Texture2D texture)
         {
             if (texture == null || !owned.Contains(texture))
             {
+                return;
+            }
+
+            if (batchDepth > 0)
+            {
+                if (!pendingRelease.Contains(texture)) pendingRelease.Add(texture);
                 return;
             }
 

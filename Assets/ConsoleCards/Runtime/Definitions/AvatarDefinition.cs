@@ -32,6 +32,7 @@ namespace ConsoleCards.Definitions
         public string StableId => stableId;
         public Texture2D Artwork => artwork;
         public string ArtworkReference => artworkReference;
+        public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? name : displayName;
         public CardSizeClass CardSize => cardSize;
 
         public AvatarDefinitionData ToData()

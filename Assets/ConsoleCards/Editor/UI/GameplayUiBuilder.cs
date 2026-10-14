@@ -33,6 +33,8 @@ namespace ConsoleCards.Editor.UI
         public const string FeedbackMessagesPath = Folder + "FeedbackMessages.prefab";
         public const string HotSeatHandoverPath = Folder + "HotSeatHandover.prefab";
         public const string ActivityLogPath = Folder + "ActivityLog.prefab";
+        public const string ContentArtPanelPath = Folder + "CardArtPanel.prefab";
+        public const string ContentArtRowPath = Folder + "CardArtRow.prefab";
         private const string FeedbackAudioPath = "Assets/ConsoleCards/Content/Audio/Feedback/";
         private const string SessionIconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
 
@@ -100,6 +102,8 @@ namespace ConsoleCards.Editor.UI
             Save<FeedbackMessageStackView>(FeedbackMessagesPath, "FeedbackMessages", BuildFeedbackMessages, stretch: true);
             Save<HotSeatHandoverView>(HotSeatHandoverPath, "HotSeatHandover", BuildHotSeatHandover, stretch: true);
             Save<ActivityLogView>(ActivityLogPath, "ActivityLog", BuildActivityLog, stretch: true);
+            Save<ContentArtRowView>(ContentArtRowPath, "CardArtRow", BuildContentArtRow, stretch: false);
+            Save<ContentArtPanelView>(ContentArtPanelPath, "CardArtPanel", BuildContentArtPanel, stretch: true);
 
             AssignCatalogEntry(PrototypeUiPrefabIds.PopupActionRow,
                 AssetDatabase.LoadAssetAtPath<PrototypePopupActionRowView>(ActionRowPath), UiLayer.Popup, UiRetention.Pooled);
@@ -139,6 +143,12 @@ namespace ConsoleCards.Editor.UI
             AssignCatalogEntry(PrototypeUiPrefabIds.ActivityLog,
                 AssetDatabase.LoadAssetAtPath<ActivityLogView>(ActivityLogPath), UiLayer.Hud,
                 UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(PrototypeUiPrefabIds.ContentArtPanel,
+                AssetDatabase.LoadAssetAtPath<ContentArtPanelView>(ContentArtPanelPath), UiLayer.Modal,
+                UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(PrototypeUiPrefabIds.ContentArtRow,
+                AssetDatabase.LoadAssetAtPath<ContentArtRowView>(ContentArtRowPath), UiLayer.Modal,
+                UiRetention.Pooled);
             AssetDatabase.SaveAssets();
             Debug.Log("[Gameplay UI] Created any missing Final UI gameplay prefabs and pointed the UI prefab catalog at them.");
         }
@@ -311,6 +321,76 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("panel").objectReferenceValue = panel.gameObject;
             so.FindProperty("body").objectReferenceValue = body;
             so.FindProperty("scroll").objectReferenceValue = scroll;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // ---------- Card Art panel (doc 24, A3/A4) ----------
+
+        // Centred modal: the art pack chooser, the packs folder, and every replaceable picture with its source.
+        private static void BuildContentArtPanel(RectTransform root, ContentArtPanelView view)
+        {
+            Button overlay = DismissOverlay(root);
+            Vector2 centre = new Vector2(0.5f, 0.5f);
+            RectTransform panel = ColumnCard(root, "CardArtPanel", centre, centre, 780f);
+            BlockClicks(panel);
+            CardHeader(panel, "CARD ART", 22, 58f);
+            Button close = HeaderCloseButton(panel);
+            RectTransform body = Body(panel, 20, 10f);
+            Label(Child("PackTitle", body), boldFont, 16, Muted, TextAnchor.MiddleLeft, "ART PACK");
+            RectTransform packRow = ButtonRow(body, TextAnchor.MiddleLeft);
+            Button previous = PlainButton(packRow, "PreviousPackButton", "<", 56f, out _);
+            RectTransform packLabelRect = Child("PackName", packRow);
+            Text packLabel = Label(packLabelRect, boldFont, 18, Ink, TextAnchor.MiddleCenter, "Built-in");
+            Size(packLabelRect.gameObject, 470f, 52f, 470f);
+            Button next = PlainButton(packRow, "NextPackButton", ">", 56f, out _);
+            RectTransform folderRow = ButtonRow(body, TextAnchor.MiddleLeft);
+            Button openFolder = PlainButton(folderRow, "OpenFolderButton", "Open packs folder", 230f, out _);
+            Button reload = PlainButton(folderRow, "ReloadButton", "Reload", 140f, out _);
+            Label(Child("PicturesTitle", body), boldFont, 16, Muted, TextAnchor.MiddleLeft, "PICTURES");
+            ScrollList(body, "PicturesViewport", 430f, out ScrollRect scroll, out RectTransform rows);
+            Text status = Label(Child("Status", body), bodyFont, 15, Muted, TextAnchor.MiddleLeft,
+                "Pictures you choose stay on this computer.");
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("dismissOverlayButton").objectReferenceValue = overlay;
+            so.FindProperty("closeButton").objectReferenceValue = close;
+            so.FindProperty("packLabel").objectReferenceValue = packLabel;
+            so.FindProperty("previousPackButton").objectReferenceValue = previous;
+            so.FindProperty("nextPackButton").objectReferenceValue = next;
+            so.FindProperty("openFolderButton").objectReferenceValue = openFolder;
+            so.FindProperty("reloadButton").objectReferenceValue = reload;
+            so.FindProperty("statusLabel").objectReferenceValue = status;
+            so.FindProperty("rowsRoot").objectReferenceValue = rows;
+            so.FindProperty("scroll").objectReferenceValue = scroll;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // One picture: thumbnail, name and source, then Choose picture and Reset.
+        private static void BuildContentArtRow(RectTransform root, ContentArtRowView view)
+        {
+            root.sizeDelta = new Vector2(700f, 96f);
+            Img(root, "ButtonOutlined", Cream).raycastTarget = false;
+            Row(root.gameObject, 10, 12, 8, 8, 12f, TextAnchor.MiddleLeft);
+            Size(root.gameObject, -1f, 96f);
+            RectTransform thumbRect = Child("Thumbnail", root);
+            RawImage thumbnail = thumbRect.gameObject.AddComponent<RawImage>();
+            thumbnail.raycastTarget = false;
+            Size(thumbRect.gameObject, 56f, 80f, 56f);
+            RectTransform words = Child("Words", root);
+            Column(words.gameObject, 0, 0, 4, 4, 2f, TextAnchor.MiddleLeft);
+            LayoutElement wordsLayout = Size(words.gameObject, 300f, 80f, 200f);
+            wordsLayout.flexibleWidth = 1f;
+            Text name = Label(Child("Name", words), boldFont, 18, Ink, TextAnchor.MiddleLeft, "Shield");
+            Text source = Label(Child("Source", words), bodyFont, 15, Muted, TextAnchor.MiddleLeft, "Built-in");
+            Button choose = GoButton(root, "ChooseButton", "Choose picture...", 190f, out _);
+            Button reset = PlainButton(root, "ResetButton", "Reset", 100f, out _);
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("thumbnail").objectReferenceValue = thumbnail;
+            so.FindProperty("nameLabel").objectReferenceValue = name;
+            so.FindProperty("sourceLabel").objectReferenceValue = source;
+            so.FindProperty("chooseButton").objectReferenceValue = choose;
+            so.FindProperty("resetButton").objectReferenceValue = reset;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
