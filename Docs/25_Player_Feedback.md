@@ -1,6 +1,6 @@
 # 25 — Player Feedback
 
-Version 0.3 · Status: Approved plan (2026-10-13); F1–F2 implemented, F3–F4 planned
+Version 0.3 · Status: Approved plan (2026-10-13); F1–F3 implemented, F4 planned
 
 ## Purpose
 
@@ -87,3 +87,11 @@ shown on screen and on the board with authored prefabs (Final UI, doc 26). Nothi
 - **Prefab:** `Final/UI/HotSeatHandover.prefab` (Modal layer, id `platform.hotseat-handover`), created by Console Cards > UI > Create Missing Gameplay UI Prefabs. Opaque cover, colour plate, player name in their colour, summary, confirm button, turn ping. Yours to edit.
 - **Table menu rows:** Seat and Hot-seat, added to an existing SessionBar prefab by Console Cards > UI > Add Missing Table Menu Rows (Final UI). Without them the features are hidden and the console warns once.
 - Draws into another player's hand name that player in the message stack.
+
+## F3 record (2026-10-14)
+
+- **End Turn warning:** End Turn / Skip Turn show "(applies N)" when Traps wait on the player, and ask first with a list of what will be applied.
+- **Effect chips:** the turn strip shows the active player's effects (BLIND, SLOW, OVERCHARGED, STUCK, N TRAPS WAITING).
+- **Feedback switch (Table menu, "Full feedback"):** on = every banner, sound and camera nudge; off = Minimal: only the turn and round banners (with the ping); other banners become messages, no camera kicks or glances. Board markers stay in both.
+- **Hands on table switch:** see doc 18 §15.11.
+- Run Console Cards > UI > Add Missing Table Menu Rows (Final UI) to add the two new rows to an existing SessionBar prefab.

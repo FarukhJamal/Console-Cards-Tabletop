@@ -254,8 +254,9 @@ namespace ConsoleCards.Editor.UI
         }
 
         /// <summary>
-        /// Adds the Seat row and the Hot-seat switch (doc 18 §15.11) to an existing SessionBar prefab when it does
-        /// not have them. Nothing else in the prefab is changed; rows that already exist are kept.
+        /// Adds the play and view rows (Seat, Hot-seat, Hands on table, Feedback; doc 18 §15.11, doc 25 F3) to an
+        /// existing SessionBar prefab when they are missing. Rows that already exist and everything else in the
+        /// prefab are kept as they are.
         /// </summary>
         [MenuItem("Console Cards/UI/Add Missing Table Menu Rows (Final UI)")]
         public static void AddMissingTableMenuRows()
@@ -278,19 +279,18 @@ namespace ConsoleCards.Editor.UI
                     return;
                 }
 
-                if (so.FindProperty("seatButton").objectReferenceValue != null
-                    && so.FindProperty("hotSeatSwitch").FindPropertyRelative("row").objectReferenceValue != null)
-                {
-                    Debug.Log($"[Session UI] {PrefabPath} already has the Seat and Hot-seat rows.");
-                    return;
-                }
-
                 PrepareArt();
                 Transform before = menu.Find("Rule3");
                 int index = before != null ? before.GetSiblingIndex() : menu.childCount;
-                AddPlayRows(menu, view, index);
+                int added = AddPlayRows(menu, view, index);
+                if (added == 0)
+                {
+                    Debug.Log($"[Session UI] {PrefabPath} already has every Table menu row.");
+                    return;
+                }
+
                 PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
-                Debug.Log($"[Session UI] Added the Seat and Hot-seat rows to {PrefabPath}.");
+                Debug.Log($"[Session UI] Added {added} Table menu row(s) to {PrefabPath}.");
             }
             finally
             {
@@ -298,30 +298,63 @@ namespace ConsoleCards.Editor.UI
             }
         }
 
-        // Seat row (click for the next seat) and the Hot-seat switch, inserted at siblingIndex (-1: at the end).
-        private static void AddPlayRows(RectTransform menu, SessionBarView view, int siblingIndex)
+        // Adds whichever of the Seat row and the Hot-seat, Hands on table and Feedback switches the view lacks,
+        // in that order, at siblingIndex (-1: at the end). Returns how many rows were added.
+        private static int AddPlayRows(RectTransform menu, SessionBarView view, int siblingIndex)
         {
-            int first = siblingIndex < 0 ? menu.childCount : siblingIndex;
-            Separator(menu, "PlayRule", Ink, MenuRowRule);
-            Button seatButton = MenuRow(menu, "SeatRow", "Seat: Player 1 (BLUE)", false);
-            Text seatLabel = seatButton.transform.Find("Label").GetComponent<Text>();
-            SetDisabledTint(seatButton);
-            RectTransform hotSeatRow = SwitchRow(menu, "HotSeatRow", "Hot-seat", HotSeatOffHint, boldFont, bodyFont, titleFont,
-                SwitchRowHeight, out Button hotSeatButton, out Image hotSeatFill, out RectTransform hotSeatKnob,
-                out Text hotSeatWord, out Text hotSeatHint);
-            if (siblingIndex >= 0)
+            SerializedObject so = new SerializedObject(view);
+            int next = siblingIndex < 0 ? menu.childCount : siblingIndex;
+            int added = 0;
+            if (so.FindProperty("seatButton").objectReferenceValue == null)
             {
-                menu.Find("PlayRule").SetSiblingIndex(first);
-                seatButton.transform.SetSiblingIndex(first + 1);
-                hotSeatRow.SetSiblingIndex(first + 2);
+                RectTransform rule = Child("PlayRule", menu);
+                Img(rule, "Solid", Ink).raycastTarget = false;
+                Size(rule.gameObject, -1f, MenuRowRule);
+                rule.SetSiblingIndex(next++);
+                Button seatButton = MenuRow(menu, "SeatRow", "Seat: Player 1 (BLUE)", false);
+                SetDisabledTint(seatButton);
+                seatButton.transform.SetSiblingIndex(next++);
+                so.FindProperty("seatButton").objectReferenceValue = seatButton;
+                so.FindProperty("seatLabel").objectReferenceValue = seatButton.transform.Find("Label").GetComponent<Text>();
+                added++;
+            }
+            else
+            {
+                next = AfterRow(menu, so.FindProperty("seatButton").objectReferenceValue as Component, next);
             }
 
-            SerializedObject so = new SerializedObject(view);
-            so.FindProperty("seatButton").objectReferenceValue = seatButton;
-            so.FindProperty("seatLabel").objectReferenceValue = seatLabel;
-            AssignSwitch(so.FindProperty("hotSeatSwitch"), hotSeatRow, hotSeatButton, hotSeatFill, hotSeatKnob, hotSeatWord,
-                hotSeatHint, HotSeatOnHint, HotSeatOffHint);
+            next = AddSwitchIfMissing(menu, so, "hotSeatSwitch", "HotSeatRow", "Hot-seat", HotSeatOnHint, HotSeatOffHint,
+                next, ref added);
+            next = AddSwitchIfMissing(menu, so, "handsOnTableSwitch", "HandsOnTableRow", "Hands on table",
+                "Your hand lies at your table edge", "Off; your hand is on screen", next, ref added);
+            AddSwitchIfMissing(menu, so, "fullFeedbackSwitch", "FeedbackRow", "Full feedback",
+                "Banners, sounds and camera nudges", "Minimal: messages and board markers", next, ref added);
             so.ApplyModifiedPropertiesWithoutUndo();
+            return added;
+        }
+
+        private static int AddSwitchIfMissing(RectTransform menu, SerializedObject so, string property, string name,
+            string title, string onHint, string offHint, int next, ref int added)
+        {
+            SerializedProperty switchProperty = so.FindProperty(property);
+            GameObject existing = switchProperty.FindPropertyRelative("row").objectReferenceValue as GameObject;
+            if (existing != null)
+            {
+                return AfterRow(menu, existing.transform, next);
+            }
+
+            RectTransform row = SwitchRow(menu, name, title, offHint, boldFont, bodyFont, titleFont, SwitchRowHeight,
+                out Button button, out Image fill, out RectTransform knob, out Text word, out Text hint);
+            row.SetSiblingIndex(next);
+            AssignSwitch(switchProperty, row, button, fill, knob, word, hint, onHint, offHint);
+            added++;
+            return next + 1;
+        }
+
+        // The index just after an existing row that sits directly in the menu (or the given index otherwise).
+        private static int AfterRow(RectTransform menu, Component row, int fallback)
+        {
+            return row != null && row.transform.parent == menu ? row.transform.GetSiblingIndex() + 1 : fallback;
         }
 
         private static Button IconButton(

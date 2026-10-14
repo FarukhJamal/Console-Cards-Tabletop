@@ -1,7 +1,7 @@
 # Console Cards - Trap Floor Game Requirements
 
 **Document ID:** 18_Trap_Floor_Game_Requirements
-**Version:** 1.11
+**Version:** 1.12
 **Status:** Approved with Open Decisions
 **Authoritative source:** User-approved Console Cards System & Games direction supplied 2026-09-21, superseding conflicting historical Trap Floor direction
 **Purpose:** Define the current approved minimum Game-specific direction for Trap Floor while keeping provisional design values open and preserving manual tabletop play.
@@ -400,3 +400,6 @@ Difficulty and win mode are **two separate choices**. A table picks one of each,
 - **Faces.** Cards arriving in any Hand turn face up (the owner sees them). Other hands are shown face down by the table view only. Other players' hand cards cannot be inspected.
 - **Seat choice.** Table menu > Seat: click to play the next seated player on this screen (testing on one screen, like changing colour in TTS). The screen hand first slides off the bottom of the screen, then the table view rebuilds for that seat, the camera moves to that seat's start view and the new hand slides in; game state and Undo do not change. In hot-seat the old hand leaves under the handover cover.
 - **Hot-seat mode (H2).** Table menu > Hot-seat, off by default. When the turn belongs to a player who is not on screen, a full-screen handover covers the table and every hand: "PASS THE SCREEN", the player in their colour, what happened since their last turn (the latest messages and "+N cards" in their hand), and a confirm button (Enter or Space). Only after confirming does the screen switch to their seat, with the turn banner and ping. Undo across a turn shows the handover for the player whose turn it is again. During the Floor turn the screen stays on the last player. The Seat row is disabled while Hot-seat is on.
+- **Starting corners (F3).** Each pawn starts on a corner on its own side of the board: of the two corners on the seat's side, the one to the player's left as they face the board (4 players: Blue bottom-left, Red top-left, Green top-right, Yellow bottom-right). Worked out from the seat positions, so other layouts follow the same rule.
+- **End Turn warning (F3).** When Traps are waiting on the player, End Turn and Skip Turn read "(applies N)" and first list what will be applied (and a launch move), with "Apply and End Turn" or "Not yet". The turn strip shows the active player's effects as chips: BLIND, SLOW, OVERCHARGED, STUCK and "N TRAPS WAITING".
+- **Hands on table (F3).** Table menu switch, off by default: your hand lies face up on your own table edge (its drop target is the hand plate) instead of the screen tray. Turning it on or off rebuilds the table view only.

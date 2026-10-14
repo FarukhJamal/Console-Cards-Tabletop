@@ -56,6 +56,8 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button seatButton;
         [SerializeField] private Text seatLabel;
         [SerializeField] private ToolboxSwitch hotSeatSwitch = new ToolboxSwitch();
+        [SerializeField] private ToolboxSwitch handsOnTableSwitch = new ToolboxSwitch();
+        [SerializeField] private ToolboxSwitch fullFeedbackSwitch = new ToolboxSwitch();
 
         private Action undo;
         private Action redo;
@@ -73,6 +75,10 @@ namespace ConsoleCards.Presentation.UI
         private Action nextSeat;
         private Action<bool> setHotSeat;
         private bool hotSeatOn;
+        private Action<bool> setHandsOnTable;
+        private Action<bool> setFullFeedback;
+        private bool handsOnTableOn;
+        private bool fullFeedbackOn;
 
         public bool IsMenuOpen => menu != null && menu.gameObject.activeSelf;
 
@@ -209,6 +215,41 @@ namespace ConsoleCards.Presentation.UI
             return true;
         }
 
+        /// <summary>
+        /// Binds the optional view rows (doc 25, F3): Hands on table (your hand on your table edge instead of the
+        /// screen tray; tables with seats only) and Feedback (Full, or Minimal: messages and board markers only).
+        /// Returns false when the prefab does not have the rows.
+        /// </summary>
+        public bool BindViewSettings(
+            bool handsOnTableAvailable,
+            bool handsOnTable,
+            Action<bool> setHandsOnTableAction,
+            bool fullFeedback,
+            Action<bool> setFullFeedbackAction)
+        {
+            RequireAcquired();
+            bool hasRows = handsOnTableSwitch != null && handsOnTableSwitch.IsComplete
+                && fullFeedbackSwitch != null && fullFeedbackSwitch.IsComplete;
+            if (!hasRows)
+            {
+                return false;
+            }
+
+            Clear(handsOnTableSwitch.Button);
+            Clear(fullFeedbackSwitch.Button);
+            setHandsOnTable = handsOnTableAvailable ? setHandsOnTableAction : null;
+            setFullFeedback = setFullFeedbackAction;
+            handsOnTableOn = handsOnTable;
+            fullFeedbackOn = fullFeedback;
+            handsOnTableSwitch.Row.SetActive(setHandsOnTable != null);
+            fullFeedbackSwitch.Row.SetActive(setFullFeedback != null);
+            handsOnTableSwitch.Show(handsOnTableOn);
+            fullFeedbackSwitch.Show(fullFeedbackOn);
+            handsOnTableSwitch.Button.onClick.AddListener(FlipHandsOnTable);
+            fullFeedbackSwitch.Button.onClick.AddListener(FlipFullFeedback);
+            return true;
+        }
+
         public void SetUndoState(bool enabled, string label)
         {
             undoLabel = string.IsNullOrWhiteSpace(label) ? "Undo" : label;
@@ -281,6 +322,8 @@ namespace ConsoleCards.Presentation.UI
             setHints = null;
             nextSeat = null;
             setHotSeat = null;
+            setHandsOnTable = null;
+            setFullFeedback = null;
             openHelp = null;
             newTable = null;
             resetTable = null;
@@ -390,6 +433,32 @@ namespace ConsoleCards.Presentation.UI
             setHotSeat(hotSeatOn);
         }
 
+        private void FlipHandsOnTable()
+        {
+            if (setHandsOnTable == null)
+            {
+                return;
+            }
+
+            handsOnTableOn = !handsOnTableOn;
+            handsOnTableSwitch.Show(handsOnTableOn);
+            Action<bool> action = setHandsOnTable;
+            CloseMenu(); // the table rebuilds for the new hand place
+            action(handsOnTableOn);
+        }
+
+        private void FlipFullFeedback()
+        {
+            if (setFullFeedback == null)
+            {
+                return;
+            }
+
+            fullFeedbackOn = !fullFeedbackOn;
+            fullFeedbackSwitch.Show(fullFeedbackOn);
+            setFullFeedback(fullFeedbackOn);
+        }
+
         private void HandleHelp()
         {
             CloseMenu();
@@ -471,6 +540,8 @@ namespace ConsoleCards.Presentation.UI
             Clear(helpButton);
             Clear(seatButton);
             Clear(hotSeatSwitch?.Button);
+            Clear(handsOnTableSwitch?.Button);
+            Clear(fullFeedbackSwitch?.Button);
         }
 
         private static void Clear(Button button)

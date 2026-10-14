@@ -130,13 +130,7 @@ namespace ConsoleCards.Games.TrapFloor
 
             CreateFloorBoard(floorContent, grid, randomValueSource, floorCardIds, labels, objects);
 
-            TrapFloorCoordinate[] startingCorners =
-            {
-                new TrapFloorCoordinate(1, 1),
-                new TrapFloorCoordinate(grid.Columns, 1),
-                new TrapFloorCoordinate(grid.Columns, grid.Rows),
-                new TrapFloorCoordinate(1, grid.Rows),
-            };
+            TrapFloorCoordinate[] startingCorners = AssignStartingCorners(playerLayout, grid, PrototypePlayerCount);
 
             for (int seatIndex = 0; seatIndex < PrototypePlayerCount; seatIndex++)
             {
@@ -976,6 +970,73 @@ namespace ConsoleCards.Games.TrapFloor
                 CardFace.FaceUp,
                 TrapFloorFloorfallService.DieSideCount,
                 1);
+        }
+
+        // Each pawn starts on a corner on its own side of the board: of the two corners on the seat's side, the one
+        // to the player's left as they face the board. Worked out from where each seat sits, so any layout works;
+        // a seat never takes a corner another seat already has (more seats than corners then share).
+        private static TrapFloorCoordinate[] AssignStartingCorners(
+            PlayerLayoutDefinition playerLayout,
+            GridDefinitionData grid,
+            int seatCount)
+        {
+            TrapFloorCoordinate[] corners =
+            {
+                new TrapFloorCoordinate(1, 1),
+                new TrapFloorCoordinate(grid.Columns, 1),
+                new TrapFloorCoordinate(grid.Columns, grid.Rows),
+                new TrapFloorCoordinate(1, grid.Rows),
+            };
+            double[] cornerX = { -1d, 1d, 1d, -1d };
+            double[] cornerY = { -1d, -1d, 1d, 1d };
+            bool[] taken = new bool[corners.Length];
+            TrapFloorCoordinate[] result = new TrapFloorCoordinate[seatCount];
+            for (int seat = 0; seat < seatCount; seat++)
+            {
+                double outX = 0d;
+                double outY = -1d;
+                if (playerLayout.TryGetSeat(seat, out PlayerSeatLayoutEntry entry))
+                {
+                    double dx = entry.PlayerZonePose.Position.X - grid.OriginX;
+                    double dy = entry.PlayerZonePose.Position.Y - grid.OriginY;
+                    double length = Math.Sqrt((dx * dx) + (dy * dy));
+                    if (length > 1e-6d)
+                    {
+                        outX = dx / length;
+                        outY = dy / length;
+                    }
+                }
+
+                // The player's left as they face the board centre.
+                double leftX = outY;
+                double leftY = -outX;
+                int best = -1;
+                double bestScore = double.NegativeInfinity;
+                for (int c = 0; c < corners.Length; c++)
+                {
+                    if (taken[c]) continue;
+                    double score = (cornerX[c] * outX) + (cornerY[c] * outY)
+                        + (0.5d * ((cornerX[c] * leftX) + (cornerY[c] * leftY)));
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        best = c;
+                    }
+                }
+
+                if (best < 0)
+                {
+                    best = seat % corners.Length;
+                }
+                else
+                {
+                    taken[best] = true;
+                }
+
+                result[seat] = corners[best];
+            }
+
+            return result;
         }
 
         private static TabletopPose CreateFloorPose(

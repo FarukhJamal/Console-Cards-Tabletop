@@ -37,6 +37,7 @@ namespace ConsoleCards.Presentation.UI
         private HotSeatHandoverView hotSeatHandoverView;
         private bool hotSeatHandoverUnavailable;
         private bool playSettingsWarned;
+        private bool viewSettingsWarned;
 
         public IRuntimeUiService UiService
         {
@@ -173,6 +174,24 @@ namespace ConsoleCards.Presentation.UI
                 playSettingsWarned = true;
                 Debug.LogWarning(
                     "The Table menu has no Seat or Hot-seat rows: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
+            }
+        }
+
+        /// <summary>Binds the Table menu's view rows (doc 25, F3): Hands on table and Full feedback.</summary>
+        public void ShowViewSettings(
+            bool handsOnTableAvailable,
+            bool handsOnTable,
+            Action<bool> setHandsOnTable,
+            bool fullFeedback,
+            Action<bool> setFullFeedback)
+        {
+            EnsureSessionBarView();
+            if (!sessionBarView.BindViewSettings(handsOnTableAvailable, handsOnTable, setHandsOnTable, fullFeedback, setFullFeedback)
+                && !viewSettingsWarned)
+            {
+                viewSettingsWarned = true;
+                Debug.LogWarning(
+                    "The Table menu has no Hands on table or Feedback rows: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
             }
         }
 

@@ -131,6 +131,10 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal TabletopCameraPreset seatSwitchCameraView = TabletopCameraPreset.Mid;
         [Tooltip("Seconds the camera takes to travel to the new seat; the new hand slides in as it arrives.")]
         [SerializeField, Min(0.1f)] internal float seatSwitchCameraSeconds = 1.2f;
+        [Tooltip("Hands on table (doc 25, F3): your hand lies face up at your table edge instead of the screen tray. Also in the Table menu.")]
+        [SerializeField] internal bool handsOnTable;
+        [Tooltip("Full feedback (doc 25, F3): every banner, sound and camera nudge. Off is Minimal: the turn banner, messages and board markers.")]
+        [SerializeField] internal bool fullFeedback = true;
         [SerializeField] internal bool showDeveloperControls;
         [Tooltip("Prototype visuals hidden at bind time. After changing in Play mode, press Reset or restart the session.")]
         [SerializeField] internal PrototypeVisualHide prototypeVisualHide =
@@ -4276,6 +4280,12 @@ namespace ConsoleCards.Presentation.Prototype
                 NextScreenSeat,
                 hotSeatMode,
                 SetHotSeatMode);
+            runtimeUi.ShowViewSettings(
+                trapFloorTemplate != null && activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom,
+                handsOnTable,
+                SetHandsOnTable,
+                fullFeedback,
+                SetFullFeedback);
             RefreshUndoUi();
             RefreshTrapFloorStatusUi();
         }
@@ -4351,8 +4361,8 @@ namespace ConsoleCards.Presentation.Prototype
                     ? "ALL PLAYERS ELIMINATED"
                     : trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
                         ? turnColor.HasValue
-                            ? $"{FormatPlayerName(turnPlayerId).ToUpperInvariant()} ({PlayerColorName(turnSeatIndex)}) TURN"
-                            : $"{FormatPlayerName(turnPlayerId).ToUpperInvariant()} TURN"
+                            ? $"{FormatPlayerName(turnPlayerId).ToUpperInvariant()} ({PlayerColorName(turnSeatIndex)}) TURN{PlayerEffectChips(turnPlayerId)}"
+                            : $"{FormatPlayerName(turnPlayerId).ToUpperInvariant()} TURN{PlayerEffectChips(turnPlayerId)}"
                         : "FLOOR TURN";
                 string turnDetail = CurrentTrapFloorCollapseStatusText();
                 if (!trapFloorTurnState.IsCurrentFloorFailed
@@ -4549,14 +4559,17 @@ namespace ConsoleCards.Presentation.Prototype
                         true,
                         BeginTakeFloorPrize));
                 }
+                // F3: End Turn says when it will apply waiting Traps, and asks first.
+                int waiting = PendingEndTurnEffects(trapFloorTurnState.ActivePlayerId, null);
+                string applies = waiting > 0 ? $" (applies {waiting})" : string.Empty;
                 actions.Add(new PrototypePopupActionOption(
-                    "Skip Turn",
+                    "Skip Turn" + applies,
                     true,
-                    SkipTrapFloorTurn));
+                    () => RequestEndTurn(true)));
                 actions.Add(new PrototypePopupActionOption(
-                    "End Turn",
+                    "End Turn" + applies,
                     true,
-                    AdvanceTrapFloorTurn));
+                    () => RequestEndTurn(false)));
                 return actions;
             }
 
@@ -4719,6 +4732,97 @@ namespace ConsoleCards.Presentation.Prototype
             return false;
         }
 
+        // F3: before a turn ends, list what End Turn will apply (waiting Traps, a launch move) and ask.
+        private void RequestEndTurn(bool skipped)
+        {
+            if (trapFloorTurnState == null
+                || trapFloorTurnState.IsCurrentFloorFailed
+                || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn
+                || runtimeUi == null)
+            {
+                AdvanceTrapFloorTurn(skipped);
+                return;
+            }
+
+            PlayerId actor = trapFloorTurnState.ActivePlayerId;
+            List<string> lines = new List<string>(4);
+            if (PendingEndTurnEffects(actor, lines) == 0)
+            {
+                AdvanceTrapFloorTurn(skipped);
+                return;
+            }
+
+            string body = $"{(skipped ? "Skipping" : "Ending")} {PlayerLabel(actor)}'s turn applies:\n• "
+                + string.Join("\n• ", lines)
+                + "\n\nPlay a Reaction (Dodge, Shield) first if you want to stop it.";
+            Action close = () => runtimeUi?.CloseTabletopPopup();
+            runtimeUi.ShowContextMenu(
+                new Vector2((Screen.width * 0.5f) - 200f, Screen.height * 0.66f),
+                skipped ? "SKIP TURN?" : "END TURN?",
+                body,
+                new[]
+                {
+                    new PrototypePopupActionOption(
+                        skipped ? "Apply and Skip" : "Apply and End Turn",
+                        true,
+                        () =>
+                        {
+                            close();
+                            AdvanceTrapFloorTurn(skipped);
+                        }),
+                    new PrototypePopupActionOption("Not yet", true, close),
+                },
+                close,
+                _ => close());
+        }
+
+        // What End Turn would apply for this player now; fills lines when given. No game state changes.
+        private int PendingEndTurnEffects(PlayerId player, List<string> lines)
+        {
+            if (trapFloorAbilityResolutionState == null || player.IsEmpty)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            if (HasPendingLaunchMove(player))
+            {
+                count++;
+                lines?.Add("Your pawn moves onto the lit tile, and that tile flips.");
+            }
+
+            IReadOnlyList<TrapFloorTrapResolutionRecord> records = trapFloorAbilityResolutionState.TrapRecords;
+            for (int i = 0; i < records.Count; i++)
+            {
+                TrapFloorTrapResolutionRecord record = records[i];
+                if (!record.IsPending
+                    || record.AffectedPlayerId != player
+                    || !record.Content.HasSupportedAssistedTrapEffect)
+                {
+                    continue;
+                }
+
+                count++;
+                lines?.Add($"{record.Content.DisplayName}: {TrapEffectText(record.Content.TrapEffect)}");
+            }
+
+            return count;
+        }
+
+        private static string TrapEffectText(TrapFloorTrapEffectCategory effect)
+        {
+            switch (effect)
+            {
+                case TrapFloorTrapEffectCategory.EliminateForCurrentRound: return "you are ELIMINATED this round.";
+                case TrapFloorTrapEffectCategory.BlindNextRound: return "BLIND next round (no draw, random direction).";
+                case TrapFloorTrapEffectCategory.SlowNextRound: return "SLOW next round (less movement).";
+                case TrapFloorTrapEffectCategory.StickyNextRound: return "STUCK next round.";
+                case TrapFloorTrapEffectCategory.SpringLaunch: return "your pawn is launched across the board (off the edge, you fall).";
+                case TrapFloorTrapEffectCategory.CraneDrop: return "the Crane drops your pawn where the dice say (roll them first).";
+                default: return "applied.";
+            }
+        }
+
         private void AdvanceTrapFloorTurn()
         {
             AdvanceTrapFloorTurn(false);
@@ -4849,7 +4953,17 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             RememberSeatLeaving(localPlayerId);
+            return RebuildPresentationFor(next, target, announceTurn, "Seat switch");
+        }
 
+        // Rebuilds the whole Presentation for a template context (a seat, or new view settings) through the path
+        // Undo uses. Game state and the Undo history do not change.
+        private bool RebuildPresentationFor(
+            PrototypeTemplateContext next,
+            PlayerId failedFor,
+            bool announceTurn,
+            string operationName)
+        {
             PrototypeTemplateContext previousContext = prototypeTemplateContext;
             MatchState previousMatch = activeSession.CurrentMatch;
             PrototypeSessionUndoSnapshot current = CaptureUndoSnapshot();
@@ -4869,10 +4983,10 @@ namespace ConsoleCards.Presentation.Prototype
             catch (Exception exception)
             {
                 prototypeTemplateContext = previousContext;
-                handSeatSyncFailedFor = target;
-                RestorePresentationAfterFailedRebuild(previousMatch, current, "Seat switch");
-                Debug.LogError($"[Seat] Presentation rebuild failed: {exception}", this);
-                ShowMessage($"Could not switch seat: {exception.Message}");
+                if (!failedFor.IsEmpty) handSeatSyncFailedFor = failedFor;
+                RestorePresentationAfterFailedRebuild(previousMatch, current, operationName);
+                Debug.LogError($"[Seat] {operationName}: Presentation rebuild failed: {exception}", this);
+                ShowMessage($"{operationName} failed: {exception.Message}");
                 return false;
             }
             finally
@@ -4882,6 +4996,39 @@ namespace ConsoleCards.Presentation.Prototype
                 rebuildingFromUndo = false;
                 RefreshUndoUi();
             }
+        }
+
+        // Table menu: Hands on table (F3). Rebuilds the table view so the hand moves between tray and table.
+        private void SetHandsOnTable(bool on)
+        {
+            bool before = handsOnTable;
+            handsOnTable = on;
+            if (!IsInitialized || activeSession == null || prototypeTemplateContext?.TrapFloorTemplate == null) return;
+            if (seatSwitchPending || rebuildingFromUndo)
+            {
+                handsOnTable = before;
+                ShowMessage("The table is busy; try again in a moment.");
+                ShowActiveSessionUi();
+                return;
+            }
+
+            if (!RebuildPresentationFor(prototypeTemplateContext, PlayerId.Empty, false, "Hands on table"))
+            {
+                handsOnTable = before;
+                return;
+            }
+
+            ShowMessage(on
+                ? "Hands on table: your hand lies face up at your table edge."
+                : "Your hand is back on screen.");
+        }
+
+        private void SetFullFeedback(bool on)
+        {
+            fullFeedback = on;
+            ShowMessage(on
+                ? "Full feedback: banners, sounds and camera nudges."
+                : "Minimal feedback: the turn banner, messages and board markers.");
         }
 
         // Table menu Seat row: this screen plays the next seated player (not in hot-seat mode).
@@ -10173,16 +10320,23 @@ namespace ConsoleCards.Presentation.Prototype
             localHandVisual = CreateLocalHandVisual();
             handView = localHandVisual.GetView<HandView>();
             handView.ConfigurePresentation(presentationTransitions, localHandVisual.FeedbackRenderer);
-            if (handTrayRig == null)
+            if (handsOnTable && TryPlaceLocalHandOnTable())
             {
-                handTrayRig = HandTrayRig.Create(
-                    targetCamera,
-                    localHandVisual.TargetCollider.gameObject.layer,
-                    localHandVisual.FeedbackRenderer.sharedMaterial);
+                handTrayRig?.Deactivate(); // F3: the hand lies on its table zone; no screen tray
             }
+            else
+            {
+                if (handTrayRig == null)
+                {
+                    handTrayRig = HandTrayRig.Create(
+                        targetCamera,
+                        localHandVisual.TargetCollider.gameObject.layer,
+                        localHandVisual.FeedbackRenderer.sharedMaterial);
+                }
 
-            handTrayRig.Activate();
-            handView.ConfigureTray(handTrayRig);
+                handTrayRig.Activate();
+                handView.ConfigureTray(handTrayRig);
+            }
 
             for (int playerIndex = 0; playerIndex < trapFloorTemplate.Players.Count; playerIndex++)
             {
@@ -10243,6 +10397,22 @@ namespace ConsoleCards.Presentation.Prototype
             visual.ValidateReferences();
             ApplyFixedContainerVisualHide(visual, true);
             return visual;
+        }
+
+        // Hands on table (F3): the local hand plate sits on this seat's hand zone, turned to the seat.
+        private bool TryPlaceLocalHandOnTable()
+        {
+            if (localHandVisual == null
+                || matchState == null
+                || !matchState.TryGetContainerPlacement(handContainerId, out ContainerPlacementState zone))
+            {
+                return false;
+            }
+
+            localHandVisual.transform.SetPositionAndRotation(
+                ContainerViewBinding.PlacementWorldPosition(zone, coordinateConverter),
+                coordinateConverter.ToWorldRotation(zone.Pose));
+            return true;
         }
 
         private void BindContainerViews()
@@ -10346,7 +10516,18 @@ namespace ConsoleCards.Presentation.Prototype
                 ConfigureFixedContainer(instance.Visual, instance.View);
             }
 
-            ConfigureHandTrayDropTarget();
+            if (handView != null && !handView.IsTrayMode)
+            {
+                // Hands on table (F3): the table plate is the hand's drop target, as for any fixed container.
+                localHandVisual.SetBasePlateHidden(false);
+                localHandVisual.Label.gameObject.SetActive(false);
+                ConfigureFixedContainer(localHandVisual, handView);
+            }
+            else
+            {
+                ConfigureHandTrayDropTarget();
+            }
+
             foreach (StackRuntimeView stackRuntimeView in stackViewsByContainerId.Values)
             {
                 ConfigureStackDropTarget(stackRuntimeView);
@@ -12494,6 +12675,28 @@ namespace ConsoleCards.Presentation.Prototype
                 : keys;
         }
 
+        // F3: the effects on a player this round, as chips after their name on the turn strip.
+        private string PlayerEffectChips(PlayerId playerId)
+        {
+            if (trapFloorAbilityResolutionState == null || trapFloorTurnState == null || playerId.IsEmpty)
+            {
+                return string.Empty;
+            }
+
+            int round = trapFloorTurnState.CurrentRound;
+            string chips = string.Empty;
+            if (trapFloorAbilityResolutionState.TryGetBlindStatus(playerId, round, out _)) chips += "  · BLIND";
+            if (trapFloorAbilityResolutionState.TryGetSlowStatus(playerId, round, out TrapFloorSlowStatusState slow))
+            {
+                chips += slow.MovementModifier > 0 ? "  · OVERCHARGED" : "  · SLOW";
+            }
+
+            if (trapFloorAbilityResolutionState.TryGetStickyStatus(playerId, round, out _)) chips += "  · STUCK";
+            int pending = PendingEndTurnEffects(playerId, null);
+            if (pending > 0) chips += $"  · {pending} TRAP{(pending == 1 ? string.Empty : "S")} WAITING";
+            return chips;
+        }
+
         private string CurrentTrapFloorPlayerStatesText()
         {
             if (trapFloorTurnState == null) return string.Empty;
@@ -12974,7 +13177,10 @@ namespace ConsoleCards.Presentation.Prototype
         {
             if (!EnsureBoardFeedback()) return;
             BoardFeedbackSet set = boardFeedback.Set;
-            TabletopCameraController cameraController = cameraInputAdapter != null ? cameraInputAdapter.CameraController : null;
+            // Minimal feedback (F3) keeps the board markers but no camera nudges.
+            TabletopCameraController cameraController = fullFeedback && cameraInputAdapter != null
+                ? cameraInputAdapter.CameraController
+                : null;
             CardView tileView = null;
             bool hasTile = !entry.FloorCardId.IsEmpty && TryGetCardView(entry.FloorCardId, out tileView);
             Vector3 tile = hasTile ? tileView.transform.position : Vector3.zero;
@@ -13090,6 +13296,13 @@ namespace ConsoleCards.Presentation.Prototype
             if (kind != FeedbackEventKind.TurnStart)
             {
                 RecordHandoverLine(string.IsNullOrEmpty(subtitle) ? title : $"{title} — {subtitle}");
+            }
+
+            if (!fullFeedback && kind != FeedbackEventKind.TurnStart && kind != FeedbackEventKind.RoundStart)
+            {
+                runtimeUi.ShowFeedbackMessage(string.IsNullOrEmpty(subtitle) ? title : $"{title} — {subtitle}",
+                    FeedbackSeverity.Info); // Minimal: a message instead of a banner
+                return;
             }
 
             runtimeUi.ShowFeedbackBanner(new FeedbackBannerModel(kind, title, subtitle, accent));
