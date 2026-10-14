@@ -85,3 +85,7 @@ MonoBehaviour:
     prefab: {fileID: 8009978247689719891, guid: ce4098008b5278a4f8a1242663a4ff6d, type: 3}
     layer: 3
     retention: 0
+  - id: platform.activity-log
+    prefab: {fileID: 254628550277794369, guid: c351c87c35c08db459f195ed77866465, type: 3}
+    layer: 1
+    retention: 0
