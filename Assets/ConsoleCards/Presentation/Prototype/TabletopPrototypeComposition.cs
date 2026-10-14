@@ -135,6 +135,9 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal bool handsOnTable;
         [Tooltip("Full feedback (doc 25, F3): every banner, sound and camera nudge. Off is Minimal: the turn banner, messages and board markers.")]
         [SerializeField] internal bool fullFeedback = true;
+        [Tooltip("Pawn hop (doc 25, F4): seconds and height of the hop when End Turn moves a pawn for the player.")]
+        [SerializeField, Min(0.05f)] internal float pawnHopSeconds = 0.5f;
+        [SerializeField, Min(0f)] internal float pawnHopHeight = 0.35f;
         [SerializeField] internal bool showDeveloperControls;
         [Tooltip("Prototype visuals hidden at bind time. After changing in Play mode, press Reset or restart the session.")]
         [SerializeField] internal PrototypeVisualHide prototypeVisualHide =
@@ -263,13 +266,29 @@ namespace ConsoleCards.Presentation.Prototype
         private readonly List<Vector3> boardFeedbackTargets = new List<Vector3>(16);
         // Seats (H1b): the screen hand belongs to this screen's seat. Hot-seat mode (H2) passes the screen to the
         // player whose turn it is, behind a handover cover, and summarises what happened since they last had it.
-        private const int HandoverLogSize = 16;
+        // The shared log also feeds the "What happened" panel (F4): its latest ActivityLogLines lines.
+        private const int HandoverLogSize = 40;
+        private const int ActivityLogLines = 20;
         private const int HandoverSummaryLines = 6;
         private bool announceTurnAfterRebuild;
         private PlayerId handSeatSyncFailedFor;
         private bool hotSeatHandoverOpen;
         private PlayerId hotSeatHandoverFor;
         private readonly string[] handoverLog = new string[HandoverLogSize];
+        private readonly int[] handoverLogRound = new int[HandoverLogSize];
+        private readonly StringBuilder activityLogText = new StringBuilder(1024);
+        private long shownActivityLogCount = -1;
+        private bool activityLogUnavailable;
+        // F4: pawns moved by End Turn hop along their path (a visual offset only; the pawn is already there).
+        private struct PawnHop
+        {
+            public Transform Visual;
+            public Vector3 RestLocal;
+            public Vector3 StartWorld;
+            public float Started;
+        }
+
+        private readonly List<PawnHop> pawnHops = new List<PawnHop>(4);
         private long handoverLogCount;
         private readonly Dictionary<PlayerId, long> seatLeftAtLog = new Dictionary<PlayerId, long>();
         private readonly Dictionary<PlayerId, int> seatLeftHandCount = new Dictionary<PlayerId, int>();
@@ -644,6 +663,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void Shutdown(bool preserveTemplateContext)
         {
+            FinishPawnHops();
             if (!rebuildingFromUndo)
             {
                 // A new or reset table: forget who had the screen when (Undo and seat switches keep it).
@@ -653,6 +673,8 @@ namespace ConsoleCards.Presentation.Prototype
                 seatSwitchPending = false;
                 seatRevealAt = -1f;
                 handTrayRig?.SetCleared(false, true);
+                handoverLogCount = 0; // a new or reset table starts a new log
+                shownActivityLogCount = -1;
             }
 
             StopUndoTrackingCurrentMatch();
@@ -2254,6 +2276,11 @@ namespace ConsoleCards.Presentation.Prototype
                         || Time.unscaledTime >= seatSwitchDeadline))
                 {
                     CompleteSeatSwitch();
+                }
+
+                if (handoverLogCount != shownActivityLogCount)
+                {
+                    RefreshActivityLog();
                 }
 
                 if (seatRevealAt >= 0f && Time.unscaledTime >= seatRevealAt)
@@ -5284,7 +5311,32 @@ namespace ConsoleCards.Presentation.Prototype
         {
             if (string.IsNullOrEmpty(line)) return;
             handoverLog[handoverLogCount % HandoverLogSize] = line;
+            handoverLogRound[handoverLogCount % HandoverLogSize] = trapFloorTurnState != null ? trapFloorTurnState.CurrentRound : 0;
             handoverLogCount++;
+        }
+
+        // F4: the "What happened" text, newest first, with the round each line happened in. Built only when the
+        // log changes.
+        private void RefreshActivityLog()
+        {
+            shownActivityLogCount = handoverLogCount;
+            if (activityLogUnavailable || runtimeUi == null) return;
+            activityLogText.Clear();
+            long oldest = Math.Max(0L, handoverLogCount - Math.Min(ActivityLogLines, HandoverLogSize));
+            for (long i = handoverLogCount - 1; i >= oldest; i--)
+            {
+                int slot = (int)(i % HandoverLogSize);
+                if (activityLogText.Length > 0) activityLogText.Append('\n');
+                int round = handoverLogRound[slot];
+                if (round > 0) activityLogText.Append("<color=#e0531f><b>R").Append(round).Append("</b></color>  ");
+                activityLogText.Append(handoverLog[slot]);
+            }
+
+            if (activityLogText.Length == 0) activityLogText.Append("Nothing yet.");
+            if (!runtimeUi.ShowActivityLog(activityLogText.ToString()))
+            {
+                activityLogUnavailable = true;
+            }
         }
 
         private void FeedbackLine(string message, FeedbackSeverity severity)
@@ -5512,6 +5564,14 @@ namespace ConsoleCards.Presentation.Prototype
                 }
             }
 
+            // F4: remember where the pawn was seen, so it can hop from there to the tile.
+            Transform hopVisual = pawnView != null ? pawnView.transform.Find("VisualRoot") : null;
+            Vector3 hopStart = hopVisual != null
+                ? hopVisual.position
+                : pawnView != null ? pawnView.transform.position : Vector3.zero;
+            TabletopTransformSnapshot hopRootStart = pawnView != null
+                ? presentationTransitions.Capture(pawnView.transform)
+                : default;
             bool moved;
             if (pawn.BaseState.PhysicalState != null
                 && physicalAuthority != null
@@ -5549,7 +5609,81 @@ namespace ConsoleCards.Presentation.Prototype
             if (!moved) return false;
             pawnView?.ApplyAcceptedState();
             landingPawnTiles[pawn.BaseState.Id] = targetTile;
+            StartPawnHop(pawnView, hopVisual, hopStart, hopRootStart);
             return true;
+        }
+
+        // F4: a pawn moved for the player hops from where it was to where it now stands. A physical pawn hops its
+        // VisualRoot child only (the body is already placed); otherwise the whole pawn is animated by the
+        // Presentation transitions. Never changes game state.
+        private void StartPawnHop(
+            PawnView pawnView,
+            Transform visual,
+            Vector3 startWorld,
+            TabletopTransformSnapshot rootStart)
+        {
+            if (pawnView == null) return;
+            if (visual == null)
+            {
+                presentationTransitions?.AnimateFromCurrentResult(pawnView.transform, rootStart, pawnHopSeconds, pawnHopHeight);
+                return;
+            }
+
+            Vector3 restLocal = visual.localPosition;
+            for (int i = pawnHops.Count - 1; i >= 0; i--)
+            {
+                if (pawnHops[i].Visual == visual)
+                {
+                    restLocal = pawnHops[i].RestLocal; // a hop already running keeps the true rest place
+                    pawnHops.RemoveAt(i);
+                }
+            }
+
+            pawnHops.Add(new PawnHop
+            {
+                Visual = visual,
+                RestLocal = restLocal,
+                StartWorld = startWorld,
+                Started = Time.unscaledTime,
+            });
+        }
+
+        private void LateUpdate()
+        {
+            if (pawnHops.Count == 0) return;
+            float now = Time.unscaledTime;
+            for (int i = pawnHops.Count - 1; i >= 0; i--)
+            {
+                PawnHop hop = pawnHops[i];
+                if (hop.Visual == null)
+                {
+                    pawnHops.RemoveAt(i);
+                    continue;
+                }
+
+                float t = Mathf.Clamp01((now - hop.Started) / Mathf.Max(0.05f, pawnHopSeconds));
+                if (t >= 1f || hop.Visual.parent == null)
+                {
+                    hop.Visual.localPosition = hop.RestLocal;
+                    pawnHops.RemoveAt(i);
+                    continue;
+                }
+
+                Vector3 restWorld = hop.Visual.parent.TransformPoint(hop.RestLocal);
+                float eased = t * t * (3f - (2f * t));
+                hop.Visual.position = Vector3.Lerp(hop.StartWorld, restWorld, eased)
+                    + (Vector3.up * (pawnHopHeight * 4f * t * (1f - t)));
+            }
+        }
+
+        private void FinishPawnHops()
+        {
+            for (int i = 0; i < pawnHops.Count; i++)
+            {
+                if (pawnHops[i].Visual != null) pawnHops[i].Visual.localPosition = pawnHops[i].RestLocal;
+            }
+
+            pawnHops.Clear();
         }
 
         // Flips a face-down, usable target at once for the player (same Landing reveal as a hand move).

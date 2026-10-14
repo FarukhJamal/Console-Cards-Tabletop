@@ -38,6 +38,8 @@ namespace ConsoleCards.Presentation.UI
         private bool hotSeatHandoverUnavailable;
         private bool playSettingsWarned;
         private bool viewSettingsWarned;
+        private ActivityLogView activityLogView;
+        private bool activityLogUnavailable;
 
         public IRuntimeUiService UiService
         {
@@ -192,6 +194,32 @@ namespace ConsoleCards.Presentation.UI
                 viewSettingsWarned = true;
                 Debug.LogWarning(
                     "The Table menu has no Hands on table or Feedback rows: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
+            }
+        }
+
+        /// <summary>Shows the "What happened" log tab with this text (doc 25, F4). False when its prefab is missing.</summary>
+        public bool ShowActivityLog(string text)
+        {
+            if (activityLogUnavailable) return false;
+            try
+            {
+                EnsureService();
+                if (activityLogView == null || !activityLogView.IsAcquired)
+                {
+                    activityLogView = uiService.AcquireCached<ActivityLogView>(PrototypeUiPrefabIds.ActivityLog);
+                    activityLogView.Show();
+                }
+
+                activityLogView.SetText(text);
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                activityLogUnavailable = true;
+                Debug.LogWarning(
+                    "The What happened log is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs (Final UI). "
+                    + exception.Message);
+                return false;
             }
         }
 
@@ -605,6 +633,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(feedbackBannerView);
             ReleaseView(feedbackMessageStackView);
             ReleaseView(hotSeatHandoverView);
+            ReleaseView(activityLogView);
             CloseTabletopPopup();
         }
 

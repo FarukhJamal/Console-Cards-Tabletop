@@ -32,6 +32,7 @@ namespace ConsoleCards.Editor.UI
         public const string FeedbackBannerPath = Folder + "FeedbackBanner.prefab";
         public const string FeedbackMessagesPath = Folder + "FeedbackMessages.prefab";
         public const string HotSeatHandoverPath = Folder + "HotSeatHandover.prefab";
+        public const string ActivityLogPath = Folder + "ActivityLog.prefab";
         private const string FeedbackAudioPath = "Assets/ConsoleCards/Content/Audio/Feedback/";
         private const string SessionIconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
 
@@ -98,6 +99,7 @@ namespace ConsoleCards.Editor.UI
             Save<FeedbackBannerView>(FeedbackBannerPath, "FeedbackBanner", BuildFeedbackBanner, stretch: true);
             Save<FeedbackMessageStackView>(FeedbackMessagesPath, "FeedbackMessages", BuildFeedbackMessages, stretch: true);
             Save<HotSeatHandoverView>(HotSeatHandoverPath, "HotSeatHandover", BuildHotSeatHandover, stretch: true);
+            Save<ActivityLogView>(ActivityLogPath, "ActivityLog", BuildActivityLog, stretch: true);
 
             AssignCatalogEntry(PrototypeUiPrefabIds.PopupActionRow,
                 AssetDatabase.LoadAssetAtPath<PrototypePopupActionRowView>(ActionRowPath), UiLayer.Popup, UiRetention.Pooled);
@@ -133,6 +135,9 @@ namespace ConsoleCards.Editor.UI
                 UiRetention.CachedSingleInstance);
             AssignCatalogEntry(PrototypeUiPrefabIds.HotSeatHandover,
                 AssetDatabase.LoadAssetAtPath<HotSeatHandoverView>(HotSeatHandoverPath), UiLayer.Modal,
+                UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(PrototypeUiPrefabIds.ActivityLog,
+                AssetDatabase.LoadAssetAtPath<ActivityLogView>(ActivityLogPath), UiLayer.Hud,
                 UiRetention.CachedSingleInstance);
             AssetDatabase.SaveAssets();
             Debug.Log("[Gameplay UI] Created any missing Final UI gameplay prefabs and pointed the UI prefab catalog at them.");
@@ -256,6 +261,56 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("confirmLabel").objectReferenceValue = confirmLabel;
             so.FindProperty("audioSource").objectReferenceValue = audio;
             so.FindProperty("handoverClip").objectReferenceValue = AssetDatabase.LoadAssetAtPath<AudioClip>(FeedbackAudioPath + "TurnPing.wav");
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // "What happened" log (doc 25, F4): a tab at the bottom right, above the controls strip, that opens a
+        // scrolling list of the latest events (newest first). Only the tab and the open panel take clicks.
+        private static void BuildActivityLog(RectTransform root, ActivityLogView view)
+        {
+            Vector2 bottomRight = new Vector2(1f, 0f);
+            RectTransform tab = Rect("Tab", root, bottomRight, bottomRight, bottomRight,
+                new Vector2(-Margin, 104f), new Vector2(240f, 46f));
+            Image tabFill = Img(tab, "ButtonOutlined", Ink);
+            Button toggle = tab.gameObject.AddComponent<Button>();
+            toggle.targetGraphic = tabFill;
+            Text tabLabel = Label(Rect("Label", tab, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(-16f, 0f)), boldFont, 16, Cream, TextAnchor.MiddleCenter, "WHAT HAPPENED  (L)");
+
+            RectTransform panel = Rect("Panel", root, bottomRight, bottomRight, bottomRight,
+                new Vector2(-Margin, 160f), new Vector2(460f, 380f));
+            Backdrop(panel, ShadowOffset);
+            BlockClicks(panel);
+            RectTransform header = Rect("Header", panel, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0f, -5f), new Vector2(-10f, 50f));
+            Img(header, "TopRounded", Orange).raycastTarget = false;
+            Label(Rect("Title", header, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(6f, 0f),
+                new Vector2(-30f, 0f)), titleFont, 19, Cream, TextAnchor.MiddleLeft, "WHAT HAPPENED");
+            RectTransform viewport = Rect("Viewport", panel, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, Vector2.zero);
+            viewport.offsetMin = new Vector2(14f, 14f);
+            viewport.offsetMax = new Vector2(-14f, -62f);
+            viewport.gameObject.AddComponent<RectMask2D>();
+            Img(viewport, "Solid", new Color(0f, 0f, 0f, 0f));
+            RectTransform content = Rect("Content", viewport, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
+                Vector2.zero, Vector2.zero);
+            Column(content.gameObject, 2, 2, 2, 2, 0f);
+            Fit(content.gameObject, false, true);
+            Text body = Label(Child("Lines", content), bodyFont, 16, Ink, TextAnchor.UpperLeft, "Nothing yet.");
+            ScrollRect scroll = viewport.gameObject.AddComponent<ScrollRect>();
+            scroll.content = content;
+            scroll.horizontal = false;
+            scroll.vertical = true;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = 30f;
+            panel.gameObject.SetActive(false);
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("toggleButton").objectReferenceValue = toggle;
+            so.FindProperty("toggleLabel").objectReferenceValue = tabLabel;
+            so.FindProperty("panel").objectReferenceValue = panel.gameObject;
+            so.FindProperty("body").objectReferenceValue = body;
+            so.FindProperty("scroll").objectReferenceValue = scroll;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

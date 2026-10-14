@@ -1,6 +1,6 @@
 # 25 — Player Feedback
 
-Version 0.3 · Status: Approved plan (2026-10-13); F1–F3 implemented, F4 planned
+Version 0.3 · Status: Approved plan (2026-10-13); F1–F4 implemented
 
 ## Purpose
 
@@ -47,7 +47,7 @@ shown on screen and on the board with authored prefabs (Final UI, doc 26). Nothi
 | F1 | Feedback event model, Trap Floor adapter, banner, message stack, turn ping | Implemented |
 | F2 | Board markers: active pawn, waiting Trap, move target and arrow, flip and collapse effects, camera kick | Implemented |
 | F3 | End Turn warning, effect chips | Planned |
-| F4 | "What happened" log, pawn hop | Planned |
+| F4 | "What happened" log, pawn hop | Done |
 
 ## F1 record (2026-10-13)
 
@@ -95,3 +95,8 @@ shown on screen and on the board with authored prefabs (Final UI, doc 26). Nothi
 - **Feedback switch (Table menu, "Full feedback"):** on = every banner, sound and camera nudge; off = Minimal: only the turn and round banners (with the ping); other banners become messages, no camera kicks or glances. Board markers stay in both.
 - **Hands on table switch:** see doc 18 §15.11.
 - Run Console Cards > UI > Add Missing Table Menu Rows (Final UI) to add the two new rows to an existing SessionBar prefab.
+
+## F4 record (2026-10-14)
+
+- **"What happened" log:** `Final/UI/ActivityLog.prefab` (HUD layer, id `platform.activity-log`, made by Create Missing Gameplay UI Prefabs). A tab at the bottom right ("WHAT HAPPENED (L)") opens a scrolling list of the last 20 events, newest first, each tagged with its round. It shares the 40-line table log that the hot-seat handover summarises; a new or reset table starts a new log. The text is rebuilt only when the log changes.
+- **Pawn hop:** when End Turn moves a pawn for the player (Spring, Crane), the pawn hops from where it stood to the tile (0.5 s, 0.35 high; set on the composition). A physical pawn hops its VisualRoot child only, so the body and its collider are already placed; a pawn without VisualRoot is animated whole by the Presentation transitions. Game state never changes.
