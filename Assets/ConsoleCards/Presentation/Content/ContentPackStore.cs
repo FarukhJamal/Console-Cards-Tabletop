@@ -1,14 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using ConsoleCards.Definitions;
+using ConsoleCards.Presentation.Saving;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Content
 {
     /// <summary>
-    /// Where content lives on this computer (doc 24): one folder per game under the persistent data folder,
-    /// holding packs/&lt;pack&gt;/pack.json (A3), uploads/ with the player's own pictures (A4) and settings.json.
-    /// Plain files only; every path read from a manifest is kept inside its own folder.
+    /// One player profile's game saves (doc 24, doc 28): one folder per game under the profile's games/ folder
+    /// (<see cref="ProfileService.GamesFolder"/>), holding packs/&lt;pack&gt;/pack.json (A3), uploads/ with the player's
+    /// own pictures (A4), cards.json and decks.json with the player's own cards and decks (doc 27 L2-1) and
+    /// settings.json. Files are read and written through <see cref="SaveFiles"/>; every path read from a manifest is
+    /// kept inside its own folder.
     /// </summary>
     public sealed class ContentPackStore
     {
@@ -16,14 +20,19 @@ namespace ConsoleCards.Presentation.Content
         private const string PacksFolderName = "packs";
         private const string UploadsFolderName = "uploads";
 
+        /// <param name="rootFolder">The active profile's games folder (<see cref="ProfileService.GamesFolder"/>).</param>
         public ContentPackStore(string rootFolder)
         {
             RootFolder = rootFolder ?? throw new ArgumentNullException(nameof(rootFolder));
         }
 
-        /// <summary>The default store: &lt;persistent data&gt;/Content.</summary>
-        public static ContentPackStore CreateDefault() =>
-            new ContentPackStore(Path.Combine(UnityEngine.Application.persistentDataPath, "Content"));
+        /// <summary>The game saves of the active profile.</summary>
+        public static ContentPackStore ForProfile(ProfileService profiles)
+        {
+            if (profiles == null) throw new ArgumentNullException(nameof(profiles));
+            profiles.EnsureActive();
+            return new ContentPackStore(profiles.GamesFolder);
+        }
 
         public string RootFolder { get; }
 
@@ -32,6 +41,58 @@ namespace ConsoleCards.Presentation.Content
         public string PacksFolder(string gameId) => Path.Combine(GameFolder(gameId), PacksFolderName);
 
         public string UploadsFolder(string gameId) => Path.Combine(GameFolder(gameId), UploadsFolderName);
+
+        public string CardsPath(string gameId) => Path.Combine(GameFolder(gameId), PlayerCardsFile.FileName);
+
+        public string DecksPath(string gameId) => Path.Combine(GameFolder(gameId), PlayerDecksFile.FileName);
+
+        /// <summary>
+        /// The player's own cards for this game (doc 27 L2-1): new cards and changes to the game's cards. Empty when
+        /// there is no file yet, or when it is unreadable or made by a newer version (a warning says so; the file is
+        /// left as it is).
+        /// </summary>
+        public PlayerCardsFile LoadCards(string gameId)
+        {
+            string path = CardsPath(gameId);
+            PlayerCardsFile file = ReadJson(path, (PlayerCardsFile)null);
+            if (file != null && file.formatVersion > PlayerCardsFile.CurrentFormatVersion)
+            {
+                Debug.LogWarning($"[Content] {path} was made by a newer version (format {file.formatVersion}); it is not used.");
+                file = null;
+            }
+
+            return file != null ? file.Normalised() : new PlayerCardsFile { gameStableId = gameId ?? string.Empty };
+        }
+
+        public bool SaveCards(string gameId, PlayerCardsFile file)
+        {
+            if (file == null) throw new ArgumentNullException(nameof(file));
+            file.formatVersion = PlayerCardsFile.CurrentFormatVersion;
+            if (string.IsNullOrEmpty(file.gameStableId)) file.gameStableId = gameId ?? string.Empty;
+            return SaveFiles.WriteJson(CardsPath(gameId), file.Normalised(), "Content");
+        }
+
+        /// <summary>The player's decks for this game; empty as for <see cref="LoadCards"/>.</summary>
+        public PlayerDecksFile LoadDecks(string gameId)
+        {
+            string path = DecksPath(gameId);
+            PlayerDecksFile file = ReadJson(path, (PlayerDecksFile)null);
+            if (file != null && file.formatVersion > PlayerDecksFile.CurrentFormatVersion)
+            {
+                Debug.LogWarning($"[Content] {path} was made by a newer version (format {file.formatVersion}); it is not used.");
+                file = null;
+            }
+
+            return file != null ? file.Normalised() : new PlayerDecksFile { gameStableId = gameId ?? string.Empty };
+        }
+
+        public bool SaveDecks(string gameId, PlayerDecksFile file)
+        {
+            if (file == null) throw new ArgumentNullException(nameof(file));
+            file.formatVersion = PlayerDecksFile.CurrentFormatVersion;
+            if (string.IsNullOrEmpty(file.gameStableId)) file.gameStableId = gameId ?? string.Empty;
+            return SaveFiles.WriteJson(DecksPath(gameId), file.Normalised(), "Content");
+        }
 
         /// <summary>Every readable pack for this game, sorted by name. Broken packs are skipped with a warning.</summary>
         public List<ContentPackInfo> ListPacks(string gameId)
@@ -107,6 +168,9 @@ namespace ConsoleCards.Presentation.Content
             {
                 manifest.art = new List<ContentArtFile>();
             }
+
+            manifest.cards = (manifest.cards ?? new PlayerCardsFile()).Normalised();
+            manifest.decks = (manifest.decks ?? new PlayerDecksFile()).Normalised();
 
             error = string.Empty;
             return true;
@@ -262,34 +326,8 @@ namespace ConsoleCards.Presentation.Content
             }
         }
 
-        /// <summary>Lower case letters, digits, '.', '-' and '_' only; '/' becomes "__".</summary>
-        public static string SafeName(string value, string fallback)
-        {
-            if (string.IsNullOrWhiteSpace(value)) return fallback;
-            char[] buffer = new char[value.Length * 2];
-            int length = 0;
-            string lower = value.Trim().ToLowerInvariant();
-            for (int i = 0; i < lower.Length; i++)
-            {
-                char c = lower[i];
-                if (c == '/' || c == '\\')
-                {
-                    buffer[length++] = '_';
-                    buffer[length++] = '_';
-                }
-                else if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_')
-                {
-                    buffer[length++] = c;
-                }
-                else
-                {
-                    buffer[length++] = '-';
-                }
-            }
-
-            string result = new string(buffer, 0, length).Trim('.');
-            return result.Length == 0 ? fallback : result;
-        }
+        /// <summary>Lower case letters, digits, '.', '-' and '_' only; '/' becomes "__" (see <see cref="SaveFiles.SafeName"/>).</summary>
+        public static string SafeName(string value, string fallback) => SaveFiles.SafeName(value, fallback);
 
         private static bool TryResolveInside(string folder, string relative, out string path)
         {
@@ -317,32 +355,10 @@ namespace ConsoleCards.Presentation.Content
             }
         }
 
-        private static T ReadJson<T>(string path, T fallback) where T : class
-        {
-            try
-            {
-                if (!File.Exists(path)) return fallback;
-                T value = JsonUtility.FromJson<T>(File.ReadAllText(path));
-                return value ?? fallback;
-            }
-            catch (Exception exception)
-            {
-                Debug.LogWarning($"[Content] {path} could not be read: {exception.Message}");
-                return fallback;
-            }
-        }
+        // Saving goes through SaveFiles (doc 28): one safe way to read and write for every store.
+        private static T ReadJson<T>(string path, T fallback) where T : class =>
+            SaveFiles.ReadJson<T>(path, "Content") ?? fallback;
 
-        private static void WriteJson(string path, object value)
-        {
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(path));
-                File.WriteAllText(path, JsonUtility.ToJson(value, true));
-            }
-            catch (Exception exception)
-            {
-                Debug.LogWarning($"[Content] {path} could not be saved: {exception.Message}");
-            }
-        }
+        private static void WriteJson(string path, object value) => SaveFiles.WriteJson(path, value, "Content");
     }
 }

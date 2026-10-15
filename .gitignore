@@ -13,6 +13,8 @@
 /[Bb]uilds/
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
+# Player profiles (saves made while playing in Unity, doc 28)
+/[Pp]rofiles/
 *.log
 
 # By default unity supports Blender asset imports, *.blend1 blender files do not need to be commited to version control.

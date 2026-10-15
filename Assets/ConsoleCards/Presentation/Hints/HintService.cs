@@ -176,7 +176,7 @@ namespace ConsoleCards.Presentation.Hints
         public void ResetSeen() => seen.Clear();
     }
 
-    /// <summary>Which hints were shown or dismissed, kept on this computer in one small JSON file.</summary>
+    /// <summary>Which hints were shown or dismissed, kept in the player's profile in one small JSON file (doc 28).</summary>
     public sealed class HintSeenStore
     {
         [Serializable]
@@ -203,8 +203,13 @@ namespace ConsoleCards.Presentation.Hints
             Load();
         }
 
-        public static HintSeenStore CreateDefault() =>
-            new HintSeenStore(Path.Combine(UnityEngine.Application.persistentDataPath, "Hints", "seen.json"));
+        /// <summary>The active profile's hints file (<see cref="ConsoleCards.Presentation.Saving.ProfileService.HintsSeenFile"/>).</summary>
+        public static HintSeenStore ForProfile(ConsoleCards.Presentation.Saving.ProfileService profiles)
+        {
+            if (profiles == null) throw new ArgumentNullException(nameof(profiles));
+            profiles.EnsureActive();
+            return new HintSeenStore(profiles.HintsSeenFile);
+        }
 
         public bool CanShow(string id, int maxShows)
         {
@@ -243,37 +248,21 @@ namespace ConsoleCards.Presentation.Hints
 
         private void Load()
         {
-            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
-            try
+            FileData data = ConsoleCards.Presentation.Saving.SaveFiles.ReadJson<FileData>(path, "Hints");
+            if (data?.hints == null) return;
+            for (int i = 0; i < data.hints.Count; i++)
             {
-                FileData data = JsonUtility.FromJson<FileData>(File.ReadAllText(path));
-                if (data?.hints == null) return;
-                for (int i = 0; i < data.hints.Count; i++)
-                {
-                    Record record = data.hints[i];
-                    if (record != null && !string.IsNullOrEmpty(record.id)) records[record.id] = record;
-                }
-            }
-            catch (Exception exception)
-            {
-                Debug.LogWarning($"[Hints] Could not read {path}: {exception.Message}. Hints start fresh.");
+                Record record = data.hints[i];
+                if (record != null && !string.IsNullOrEmpty(record.id)) records[record.id] = record;
             }
         }
 
         private void Save()
         {
             if (string.IsNullOrEmpty(path)) return;
-            try
-            {
-                FileData data = new FileData();
-                foreach (Record record in records.Values) data.hints.Add(record);
-                Directory.CreateDirectory(Path.GetDirectoryName(path));
-                File.WriteAllText(path, JsonUtility.ToJson(data, true));
-            }
-            catch (Exception exception)
-            {
-                Debug.LogWarning($"[Hints] Could not save {path}: {exception.Message}.");
-            }
+            FileData data = new FileData();
+            foreach (Record record in records.Values) data.hints.Add(record);
+            ConsoleCards.Presentation.Saving.SaveFiles.WriteJson(path, data, "Hints");
         }
     }
 }

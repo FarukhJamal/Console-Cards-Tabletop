@@ -1,6 +1,6 @@
 # 24 — Content Packs
 
-Version 0.4 · Status: Approved direction, A1–A4 implemented
+Version 0.6 · Status: Approved direction, A1–A4 implemented; L2-1 (your cards, saved in the profile) written, to be checked
 
 ## Purpose
 
@@ -81,6 +81,7 @@ Stand-in art, to be replaced later under the same keys:
 | A2 | Art lookup service and texture cache keyed by art key | Implemented |
 | A3 | JSON pack format: import and export (version 1 carries art) | Implemented |
 | A4 | Player upload UI and art overlays, stored per game | Implemented |
+| L2-1 | Your cards: card data saved in the player profile (new cards, changes to default cards, decks); pack format 2 carries cards and decks (doc 27 List 2, doc 28) | Written, to be checked (not compiled yet) |
 
 ## Privacy
 
@@ -110,7 +111,7 @@ shared unless the player shares the pack.
 Card files (ScriptableObjects) ─┐
 Game pack folder  (pack.json) ──┼─► ContentArtService ─► ArtLibrary (3 layers) ─► table, popups, Card Art panel
 Your pictures     (uploads/) ───┘        │
-                                         └─ ContentPackStore (files on this computer)
+                                         └─ ContentPackStore (files in the player profile, doc 28)
 ```
 
 - **`Presentation/Art/ArtLibrary`** — the lookup and texture cache only (A2). Layers: PlayerUpload, GamePack,
@@ -118,11 +119,12 @@ Your pictures     (uploads/) ───┘        │
 - **`Presentation/Content/ContentArtService`** — the single entry point. For the active game it registers the
   built-in pictures, lists every replaceable picture (cards, avatars, floor backs; anything with an art key),
   activates a pack, and adds or removes your pictures. The table asks it for pictures by key and nothing else.
-- **`Presentation/Content/ContentPackStore`** — files only. Per game, under
-  `<persistent data>/Content/<game id>/`:
+- **`Presentation/Content/ContentPackStore`** — files only, through `SaveFiles` (doc 28). Per game, in the player's
+  profile under `Profiles/<profile>/games/<game id>/`:
   - `packs/<pack>/pack.json` and the pack's pictures (A3),
   - `uploads/uploads.json` and your pictures (A4),
-  - `settings.json` — the active pack.
+  - `settings.json` — the active pack,
+  - `cards.json` and `decks.json` — your cards and decks (L2-1).
   Paths read from a manifest must stay inside their own folder; pictures over 16 MB are refused.
 - **`Presentation/Content/PictureFilePicker`** — Unity's file panel in the Editor, the Windows file dialog in a
   Windows build; elsewhere the panel points to the packs folder.
@@ -137,7 +139,7 @@ Your pictures     (uploads/) ───┘        │
 - **Export:** Console Cards > Content > Export Built-in Art Pack… writes the selected (or first) game's built-in
   pictures as a pack (`<game>-built-in/`, files under `art/<key>`). It is a valid starting point: replace files,
   change `packId` and `displayName`.
-- **Import:** Console Cards > Content > Import Pack Folder… copies a pack into this computer's store; players can
+- **Import:** Console Cards > Content > Import Pack Folder… copies a pack into the last-used player profile; players can
   also drop a pack folder into the packs folder (Card art panel > Open packs folder) and press Reload.
 - **Use:** the Card art panel's < and > switch between Built-in and each pack; the choice is remembered per game.
   Pictures the pack lacks keep their built-in art.
@@ -149,3 +151,44 @@ Your pictures     (uploads/) ───┘        │
   once on every card with that key; **Reset** removes it and the pack or built-in picture returns.
 - Your pictures win over packs and built-in art, are kept per game, load when the game starts, and stay on this
   computer (see Privacy).
+
+## L2-1 record — your cards (2026-10-15, reworked the same day)
+
+The card data and where it is saved. The owner made one change: everything is saved in the player's profile and
+made in the game, not in the Editor (doc 28). The in-game card editor that writes this data is the next stage.
+
+- **Saved in the profile, per game** (doc 28): `Profiles/<profile>/games/<game id>/`:
+  - `cards.json` (`PlayerCardsFile`) holds two lists:
+    - **New cards:** `id` (made for you, a GUID, shown, never changes), `code` (an optional short code you
+      choose), `name`, `description`, `behavesLike`, `quantity`, `cost`, and the front and back pictures
+      (`frontArtKey`, `backArtKey`).
+    - **Changes to the game's cards:** the card's ID and, for each of name, description, quantity, cost, front
+      picture and back picture, a "changed" flag and the new value. Only flagged fields apply. **Reset** a card
+      means removing its change. The game's own card files are never changed.
+  - `decks.json` (`PlayerDecksFile`): your decks, each with an ID, a name, and cards (game cards or your own)
+    with counts. Games use them from L2-5.
+- **Pictures:** a picture you choose for a card is copied into your profile (`uploads/`) under the card's art key.
+  A new card's front key is `<game folder>/player/<card id>/front` (for Trap Floor
+  `trap-floor/player/<id>/front`). Without a picture, a new card shows the blank white base card on the front and
+  the back of the card it behaves like.
+- **Behaves like:** a new card copies everything that decides how it works from the card it names (kind, tags,
+  effect, Console behaviour, size, symbol), so the game applies that existing effect. Your card only changes its
+  words, copies, cost and pictures. It joins every card group its model card is in, so it can be drawn and (for
+  an Ability) bought in the Shop.
+- **Costs** use the card cost notation (for example `Up + A/B/X/Y`). An empty cost on a new card keeps the model
+  card's cost.
+- **Order at table start:** the active pack's cards come first, your own go on top (same ID: yours wins), and both
+  are applied to the game's cards. Then the rules card's house-rule settings (for example card costs) win over
+  both.
+- **Problems never stop play:** an unknown model card, a clashing ID or an unreadable cost is skipped (or the model
+  card's cost is kept), with a console warning.
+- **Decks listed:** the game's own card groups show as read-only preset decks, then your decks.
+- **Code:**
+  - `Runtime/Definitions/PlayerContent.cs`: the file formats.
+  - `Runtime/Definitions/GameContent.cs`: the game's cards as played here. It makes runtime cards with
+    `CardDefinition.CreateRuntime` and destroys them when the table unloads.
+  - `GameDefinition.ToData(rules, content)`.
+  - `ContentPackStore.LoadCards`/`SaveCards`/`LoadDecks`/`SaveDecks`.
+  - `ContentArtService.LoadPlayerCards`/`LoadPlayerDecks` (pack plus yours).
+- **Pack format 2:** `pack.json` gains `cards` and `decks`, in the same form as your files. Format 1 packs still
+  load; packs made by a newer version are refused.

@@ -17,6 +17,13 @@ namespace ConsoleCards.Definitions
         public IReadOnlyList<ControllerInput> AlsoAccepts => alsoAccepts;
         public int Count => count;
 
+        internal static InputRequirement FromData(InputRequirementData data)
+        {
+            InputRequirement requirement = new InputRequirement { input = data.Input, count = Math.Max(1, data.Count) };
+            for (int i = 1; i < data.Inputs.Count; i++) requirement.alsoAccepts.Add(data.Inputs[i]);
+            return requirement;
+        }
+
         internal InputRequirementData ToData()
         {
             List<ControllerInput> inputs = new List<ControllerInput>(1 + alsoAccepts.Count) { input };
@@ -31,6 +38,15 @@ namespace ConsoleCards.Definitions
         [SerializeField] private List<InputRequirement> requirements = new List<InputRequirement>();
 
         public IReadOnlyList<InputRequirement> Requirements => requirements;
+
+        /// <summary>A cost made at runtime from cost data (player cards, doc 27 L2-1).</summary>
+        internal static InputCostDefinition FromData(InputCostData data)
+        {
+            InputCostDefinition cost = new InputCostDefinition();
+            if (data == null) return cost;
+            for (int i = 0; i < data.Requirements.Count; i++) cost.requirements.Add(InputRequirement.FromData(data.Requirements[i]));
+            return cost;
+        }
 
         internal InputCostData ToData()
         {

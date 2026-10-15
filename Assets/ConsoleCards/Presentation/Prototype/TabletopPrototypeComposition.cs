@@ -32,6 +32,7 @@ using ConsoleCards.Presentation.Feedback;
 using ConsoleCards.Presentation.Hints;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
+using ConsoleCards.Presentation.Saving;
 using ConsoleCards.Presentation.Settings;
 using ConsoleCards.Presentation.UI;
 using ConsoleCards.Presentation.UI.Toolbox;
@@ -214,6 +215,11 @@ namespace ConsoleCards.Presentation.Prototype
         // Content (doc 24, A2–A4): every picture is looked up by art key through the content service
         // (your pictures, then the active pack, then built-in, then the asset's texture).
         private ContentArtService contentArt;
+        // The player profile in use (doc 28): every save (pictures, packs, cards, decks, rules, hints) goes in its folder.
+        private ProfileService profiles;
+        // This table's cards (doc 27 L2-1): the game's cards with the player's changes and new cards. Rebuilt when
+        // the Trap Floor templates are; its runtime cards are destroyed with it.
+        private GameContent trapFloorContent;
         private ContentArtPanelActions cardArtActions;
         private bool artRefreshing;
         private MaterialPropertyBlock cardSlotProperties; // created on first use: Unity forbids it in field initializers
@@ -2292,6 +2298,8 @@ namespace ConsoleCards.Presentation.Prototype
             boardFeedback = null;
             ReleaseCardArtMaterials();
             contentArt?.Dispose(); // destroys the pictures the content service loaded
+            trapFloorContent?.Destroy(); // destroys the cards made from the player's content
+            trapFloorContent = null;
             for (int i = 0; i < houseRuleSets.Count; i++)
             {
                 if (houseRuleSets[i] != null) Destroy(houseRuleSets[i]);
@@ -4378,7 +4386,22 @@ namespace ConsoleCards.Presentation.Prototype
             // game data the template uses.
             EnsureHouseRulesLoaded();
             RuleSetDefinition rules = ActiveRuleSet;
-            var gameDefinition = trapFloorGameDefinition.ToData(rules);
+            // Your cards (doc 27 L2-1) come first: changed default cards and new cards; house-rule costs win on top.
+            GameContent content = BuildTrapFloorContent();
+            GameDefinitionData gameDefinition;
+            try
+            {
+                gameDefinition = content.ToData(rules);
+            }
+            catch
+            {
+                content.Destroy();
+                throw;
+            }
+
+            GameContent previousContent = trapFloorContent;
+            trapFloorContent = content;
+            previousContent?.Destroy();
             if (gameDefinition.Modes.Count == 0)
                 throw new InvalidOperationException("Trap Floor requires at least one authored Mode.");
 
@@ -4554,7 +4577,7 @@ namespace ConsoleCards.Presentation.Prototype
             RuleSetDefinition defaults = trapFloorGameDefinition.DefaultRuleSet;
             try
             {
-                houseRulesStore = new HouseRulesStore(ContentPackStore.CreateDefault());
+                houseRulesStore = new HouseRulesStore(ContentPackStore.ForProfile(EnsureProfile()));
                 List<HouseRuleSetRecord> records = houseRulesStore.Load(trapFloorGameDefinition.StableId);
                 for (int i = 0; i < records.Count; i++)
                 {
@@ -4806,7 +4829,9 @@ namespace ConsoleCards.Presentation.Prototype
             RuleSetDefinition trial = RuleSetDefinition.CreateHouseRules(ActiveRuleSet, "rules-trial", "Trial", change);
             try
             {
-                var gameDefinition = trapFloorGameDefinition.ToData(trial);
+                var gameDefinition = trapFloorContent != null
+                    ? trapFloorContent.ToData(trial)
+                    : trapFloorGameDefinition.ToData(trial);
                 for (int i = 0; i < gameDefinition.Modes.Count; i++)
                 {
                     TrapFloorTemplateFactory.CreateStandardFourPlayer(
@@ -4949,7 +4974,7 @@ namespace ConsoleCards.Presentation.Prototype
         private void EnsureHints()
         {
             if (hintService != null) return;
-            hintService = new HintService(HintSeenStore.CreateDefault());
+            hintService = new HintService(HintSeenStore.ForProfile(EnsureProfile()));
             HintLibraryDefinition platform = Resources.Load<HintLibraryDefinition>(HintLibraryDefinition.PlatformResourcePath);
             if (platform != null) hintService.AddLibrary(platform);
             else if (!hintLibraryWarned)
@@ -14004,12 +14029,21 @@ namespace ConsoleCards.Presentation.Prototype
         private Texture2D AvatarArt(AvatarDefinition avatar) =>
             avatar == null ? null : Art(avatar.ArtworkReference, avatar.Artwork);
 
+        // The player profile (doc 28): the one used last, or a new "Player 1". Choosing another profile comes with the
+        // profile screen; until then the stores are made once for this profile.
+        private ProfileService EnsureProfile()
+        {
+            if (profiles == null) profiles = ProfileService.CreateDefault();
+            profiles.EnsureActive();
+            return profiles;
+        }
+
         // The content service for this table's game: built-in art, the active pack and your pictures (A2–A4).
         private void EnsureContentArt()
         {
             if (contentArt == null)
             {
-                contentArt = new ContentArtService(ContentPackStore.CreateDefault());
+                contentArt = new ContentArtService(ContentPackStore.ForProfile(EnsureProfile()));
                 contentArt.Library.Changed += HandleArtChanged;
                 contentArt.Library.TextureReleased += HandleArtTextureReleased;
             }
@@ -14271,6 +14305,7 @@ namespace ConsoleCards.Presentation.Prototype
             if (TryGetAuthoredCardDefinition(definitionId, out definition)) return true;
             definition = null;
             if (definitionId.IsEmpty) return false;
+            if (trapFloorContent != null && trapFloorContent.TryGetCard(definitionId, out definition)) return true;
             if (trapFloorGameDefinition != null && trapFloorGameDefinition.TryGetCard(definitionId, out definition)) return true;
             IReadOnlyList<ComponentCatalog> boxes = componentLibrary != null ? componentLibrary.GameBoxes : null;
             for (int i = 0; boxes != null && i < boxes.Count; i++)
@@ -14534,6 +14569,13 @@ namespace ConsoleCards.Presentation.Prototype
             out CardDefinition definition)
         {
             if (trapFloorTemplate != null
+                && trapFloorContent != null
+                && trapFloorContent.TryGetCard(definitionId, out definition))
+            {
+                return true;
+            }
+
+            if (trapFloorTemplate != null
                 && trapFloorGameDefinition != null
                 && trapFloorGameDefinition.TryGetCard(definitionId, out definition))
             {
@@ -14542,6 +14584,27 @@ namespace ConsoleCards.Presentation.Prototype
 
             definition = null;
             return false;
+        }
+
+        // The game's cards as played on this computer (doc 27 L2-1): the active pack's and your own card changes and
+        // new cards applied to the built-in cards. Problems are skipped with a console warning, never stopping play.
+        private GameContent BuildTrapFloorContent()
+        {
+            EnsureContentArt();
+            GameContent content = new GameContent(trapFloorGameDefinition, contentArt.LoadPlayerCards(), contentArt.LoadPlayerDecks());
+            for (int i = 0; i < content.Warnings.Count; i++)
+            {
+                Debug.LogWarning($"[Your cards] {content.Warnings[i]}", this);
+            }
+
+            if (content.ChangedCount > 0 || content.NewCards.Count > 0)
+            {
+                Debug.Log(
+                    $"[Your cards] {trapFloorGameDefinition.DisplayName}: {content.ChangedCount} changed, {content.NewCards.Count} new.",
+                    this);
+            }
+
+            return content;
         }
 
         private void HandleConsoleCardInteractionAccepted(IConsoleCardInteraction interaction)

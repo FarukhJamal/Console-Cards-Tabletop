@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.5 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.7 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -16,9 +16,9 @@ Version 1.5 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the 
 | H2 | Hint tags on rule lines; game tips made from the rules in play; Trap Floor rules tagged (doc 23 §10) | Done, approved by the owner |
 | H3 | Trap Floor hint helpers behind the rule tags: reach and why not (RULE reminders), prize, waiting Traps, collapse target as a board marker (doc 23 §10); a landing the rules do not allow does not flip, the warning points at the Undo button, Keep move in the turn menu | Done, approved by the owner |
 | Shop | The market returns as the Shop (owner, 2026-10-15): every Ability, bought on your turn as well as taking from the floor; Shop entry (icon and word) on the session bar; on/off rule with everyone's agreement, applied at once (doc 18 §15.4, doc 23 §5) | Done, approved by the owner |
-| G2d | Remove the retired Search and Careful Search code (doc 18 §15.4); the market stays as the Shop. Part 1: the table's Search code and texts. Part 2: search data in the reveal rules, the Undo record, the search cost settings, the old Buy service | Part 1 approved by the owner; part 2 written, to be checked (not compiled yet) |
+| G2d | Remove the retired Search and Careful Search code (doc 18 §15.4); the market stays as the Shop. Part 1: the table's Search code and texts. Part 2: search data in the reveal rules, the Undo record, the search cost settings, the old Buy service | Done, approved by the owner (parts 1 and 2) |
 | Pink material | Pink material when a card is placed on the Main slot | Parked by the owner (2026-10-15) |
-| Tests cleanup | The owner deleted `Assets/ConsoleCards/Tests`; the two `InternalsVisibleTo` lines (TabletopCameraController.cs, TabletopPointerProjector.cs) are removed | Written, to be checked (not compiled yet) |
+| Tests cleanup | The owner deleted `Assets/ConsoleCards/Tests`; the two `InternalsVisibleTo` lines (TabletopCameraController.cs, TabletopPointerProjector.cs) are removed | Done, approved by the owner |
 
 ## List 2 — player-made content (after List 1)
 
@@ -33,8 +33,8 @@ The owner's intent (2026-10-15), recorded as said:
   - build their own decks and use them in Trap Floor or any other game,
   - make a new game from the platform's components and save it as a template that can then be played.
 - **Card editor (owner, 2026-10-15).** A proper menu to add new cards (name, id, description, picture, which deck,
-  and so on) and to change the current default cards. Wanted both **in the game** and **in the Unity Editor**
-  (the Editor version for testing).
+  and so on) and to change the current default cards, **in the game** (the owner dropped the Unity Editor version
+  later the same day: everything is done in the game).
 - **Game selection menu.** The planned menu where a game is chosen and set up (rules, number of decks, …) is
   where this lives. Card art, packs and player content belong there, **not inside a running Trap Floor table**.
 
@@ -44,6 +44,32 @@ What already exists and is reused:
   player's computer, the file picker and the Card Art panel. Conceptually right, wrongly placed: the Card art
   entry is in the Trap Floor table's Table menu and the pack tools are Editor menus. List 2 moves the entry to the
   game selection menu and adds deck and game-template editing in the game.
+
+### The owner's direction for List 2 (2026-10-15)
+
+- The platform is what players buy. It comes with Trap Floor and our components and tools (dice, tokens, template
+  cards, game box, base box and so on). More games come as DLC or updates, each with its own cards, decks,
+  numbers and rules.
+- Players can change a game's cards and numbers, add new cards, build decks, write rules and make their own games.
+  Their cards always sit on our components and use our tools.
+- **Everything is done in the game**, on visual screens, not in the Unity Editor.
+- **Everything is saved in the player profile**, next to the game (doc 28): several named profiles, pick one.
+- Card IDs are made for the player and shown, with an optional short code. A new card has a front and a back
+  picture, an ID, a name, a description, a cost, a number of copies, and the game card it behaves like. Changing a
+  game card sets the values you want for those same fields, with Reset.
+
+### List 2 stages (owner's order, 2026-10-15)
+
+| Stage | What | Status |
+|---|---|---|
+| L2-1 | Card data: your new cards, changes to default cards and decks, applied at table start before house rules; pack format 2 carries cards and decks (doc 24) | Reworked: saved in the profile; Editor menus removed. Written, to be checked (not compiled yet) |
+| P1 | Save system: profiles next to the game, one save path, every save in the profile (doc 28) | Written, to be checked (not compiled yet) |
+| P2 | Profile screen in the game: pick, create, rename a profile | Next |
+| L2-2 | Card editor in the game, with a visual card preview (new cards and changes to default cards) | Planned |
+| L2-3 | Deck editor in the game | Planned |
+| L2-4 | Game selection menu (replaces New table…); Card art moves there | Planned |
+| L2-5 | Decks used by games (Trap Floor or the Empty Table) | Planned |
+| L2-6 | Rules and player-made games from our components | Planned |
 
 ### C3e — Game board v2 (owner, 2026-10-15)
 

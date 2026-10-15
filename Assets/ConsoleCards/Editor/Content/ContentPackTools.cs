@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using ConsoleCards.Definitions;
 using ConsoleCards.Presentation.Content;
+using ConsoleCards.Presentation.Saving;
 using UnityEditor;
 using UnityEngine;
 
@@ -9,7 +10,8 @@ namespace ConsoleCards.Editor.Content
 {
     /// <summary>
     /// Pack tools for authors (doc 24, A3): export a game's built-in art as a pack (a valid starting point for a
-    /// new pack), import a pack folder into this computer's content store, and open that store.
+    /// new pack), import a pack folder into the last-used player profile (doc 28), and open the profiles folder.
+    /// Players make their cards, decks and rules in the game, not here.
     /// </summary>
     public static class ContentPackTools
     {
@@ -64,10 +66,12 @@ namespace ConsoleCards.Editor.Content
                 return;
             }
 
-            ContentPackStore store = ContentPackStore.CreateDefault();
+            ProfileService profiles = ProfileService.CreateDefault();
+            ContentPackStore store = ContentPackStore.ForProfile(profiles);
             if (store.TryImportPackFolder(gameId, source, out string packId, out error))
             {
-                Debug.Log($"[Content] Imported pack '{packId}'. In Play mode, open Table > Card art and pick it.");
+                Debug.Log($"[Content] Imported pack '{packId}' into profile '{profiles.Active.displayName}'. "
+                    + "In Play mode, open Table > Card art and pick it.");
             }
             else
             {
@@ -75,10 +79,10 @@ namespace ConsoleCards.Editor.Content
             }
         }
 
-        [MenuItem("Console Cards/Content/Open Content Folder")]
-        public static void OpenContentFolder()
+        [MenuItem("Console Cards/Content/Open Profiles Folder")]
+        public static void OpenProfilesFolder()
         {
-            ContentPackStore store = ContentPackStore.CreateDefault();
+            ProfileStore store = ProfileStore.CreateDefault();
             Directory.CreateDirectory(store.RootFolder);
             EditorUtility.RevealInFinder(store.RootFolder);
         }

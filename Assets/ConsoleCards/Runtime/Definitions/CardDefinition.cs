@@ -76,6 +76,56 @@ namespace ConsoleCards.Definitions
             return false;
         }
 
+        /// <summary>
+        /// A card made at runtime from a model card (doc 27 List 2, L2-1): the blank base card with new words, count,
+        /// cost and pictures, keeping everything that decides how the card works (category, tags, effect, Console
+        /// behaviour, size, symbol) from <paramref name="model"/>. Pictures are found by art key; a picture texture is
+        /// kept only while its key is the model's own. Not saved as an asset; destroy it when the game unloads.
+        /// </summary>
+        public static CardDefinition CreateRuntime(
+            CardDefinition model,
+            string stableId,
+            string displayName,
+            string description,
+            int quantity,
+            InputCostDefinition cost,
+            string frontArtworkReference,
+            string backArtworkReference)
+        {
+            if (model == null) throw new ArgumentNullException(nameof(model));
+            if (string.IsNullOrWhiteSpace(stableId)) throw new ArgumentException("A card needs an ID.", nameof(stableId));
+            CardDefinition card = CreateInstance<CardDefinition>();
+            card.hideFlags = HideFlags.DontSave;
+            card.stableId = stableId;
+            card.name = string.IsNullOrWhiteSpace(displayName) ? model.name : displayName;
+            card.displayName = string.IsNullOrWhiteSpace(displayName) ? model.displayName : displayName;
+            card.category = model.category;
+            card.description = description ?? string.Empty;
+            card.frontArtworkReference = frontArtworkReference ?? string.Empty;
+            card.backArtworkReference = backArtworkReference ?? string.Empty;
+            card.frontArtwork = string.Equals(card.frontArtworkReference, model.frontArtworkReference, StringComparison.OrdinalIgnoreCase)
+                ? model.frontArtwork
+                : null;
+            card.backArtwork = string.Equals(card.backArtworkReference, model.backArtworkReference, StringComparison.OrdinalIgnoreCase)
+                ? model.backArtwork
+                : null;
+            card.quantity = Math.Max(0, quantity);
+            card.inputCost = cost ?? model.inputCost;
+            card.orientation = model.orientation;
+            card.defaultFace = model.defaultFace;
+            card.preferredConsolePlacement = model.preferredConsolePlacement;
+            card.consoleBehavior = model.consoleBehavior;
+            card.tags = new List<string>(model.tags);
+            if (cost != null && cost.Requirements.Count > 0) card.tags.Remove("cost-pending");
+            card.effectMetadata = model.effectMetadata;
+            card.objectiveMetadata = model.objectiveMetadata;
+            card.representsControllerInput = model.representsControllerInput;
+            card.representedControllerInput = model.representedControllerInput;
+            card.sizeClass = model.sizeClass;
+            card.consoleSymbol = model.consoleSymbol;
+            return card;
+        }
+
         public CardDefinitionData ToData()
         {
             return new CardDefinitionData(

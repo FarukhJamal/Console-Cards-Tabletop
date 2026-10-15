@@ -26,7 +26,7 @@ namespace ConsoleCards.Definitions
         public int DrawCount => drawCount;
         public bool AllowRepeats => allowRepeats;
 
-        internal GameContentSetData ToData()
+        internal GameContentSetData ToData(GameContent content = null)
         {
             List<string> cardIds = new List<string>(cards.Count);
             for (int i = 0; i < cards.Count; i++)
@@ -35,6 +35,7 @@ namespace ConsoleCards.Definitions
                 cardIds.Add(cards[i].StableId);
             }
 
+            content?.AddNewCardIdsFor(this, cardIds);
             return new GameContentSetData(stableId, displayName, cardIds, role, drawCount, allowRepeats);
         }
     }
@@ -125,9 +126,15 @@ namespace ConsoleCards.Definitions
         /// The game data with a rule set's settings applied (doc 23, R2a/R2b): the hand size, Keys needed per mode,
         /// win mode and floor mix come from the rules players see. Unreadable settings are skipped with a console warning.
         /// </summary>
-        public GameDefinitionData ToData(RuleSetDefinition ruleSet)
+        public GameDefinitionData ToData(RuleSetDefinition ruleSet) => ToData(ruleSet, null);
+
+        /// <summary>
+        /// As <see cref="ToData(RuleSetDefinition)"/>, with the player's cards (doc 27 L2-1) applied first: changed
+        /// default cards and new cards. The rule set's settings still win on top. Use <see cref="GameContent.ToData"/>.
+        /// </summary>
+        internal GameDefinitionData ToData(RuleSetDefinition ruleSet, GameContent content)
         {
-            GameDefinitionData data = ToData();
+            GameDefinitionData data = BuildData(content);
             if (ruleSet == null)
             {
                 return data;
@@ -143,8 +150,15 @@ namespace ConsoleCards.Definitions
             return applied;
         }
 
-        public GameDefinitionData ToData()
+        public GameDefinitionData ToData() => BuildData(null);
+
+        private GameDefinitionData BuildData(GameContent content)
         {
+            if (content != null && content.Definition != this)
+            {
+                throw new ArgumentException("The player content was built for another game.", nameof(content));
+            }
+
             if (playAreaDefinition == null) throw new InvalidOperationException("Game Definition requires a Play Area/Grid Definition.");
             if (consoleConfiguration == null) throw new InvalidOperationException("Game Definition requires a Console Configuration.");
 
@@ -155,15 +169,23 @@ namespace ConsoleCards.Definitions
             {
                 GameContentSet contentSet = contentSets[setIndex];
                 if (contentSet == null) throw new InvalidOperationException("Game content sets cannot contain null entries.");
-                contentSetData.Add(contentSet.ToData());
+                contentSetData.Add(contentSet.ToData(content));
                 for (int cardIndex = 0; cardIndex < contentSet.Cards.Count; cardIndex++)
                 {
                     CardDefinition card = contentSet.Cards[cardIndex];
                     if (card == null) throw new InvalidOperationException("Game content sets cannot contain null Cards.");
                     if (addedCardIds.Add(card.StableId))
                     {
-                        cardData.Add(card.ToData());
+                        cardData.Add(content != null ? content.Resolve(card).ToData() : card.ToData());
                     }
+                }
+            }
+
+            if (content != null)
+            {
+                for (int i = 0; i < content.NewCards.Count; i++)
+                {
+                    if (addedCardIds.Add(content.NewCards[i].StableId)) cardData.Add(content.NewCards[i].ToData());
                 }
             }
 

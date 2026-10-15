@@ -51,6 +51,8 @@ All code and type examples are illustrative unless explicitly labelled `Approved
 | `Docs/24_Content_Packs.md` | Game content packs: built-in art, art keys and lookup order, JSON packs, player-uploaded card art; stages A1–A4 |
 | `Docs/25_Player_Feedback.md` | Player feedback: events, banners, board markers, turn ping, camera kicks; stages F1–F4 |
 | `Docs/26_Final_UI.md` | Final UI prefabs: which prefab is which, builders never overwrite, no layout from code |
+| `Docs/27_Work_Lists.md` | The owner's work lists and the status of each stage |
+| `Docs/28_Player_Profiles_And_Saving.md` | Player profiles next to the game; where every save lives; the one save path (SaveFiles, ProfileService) |
 | `Docs/AUDIT_RESOLUTION_v1.1.md` | v1.0 audit correction record |
 | `CHANGELOG.md` | Pack history |
 | `README.md` | Repository entry point |

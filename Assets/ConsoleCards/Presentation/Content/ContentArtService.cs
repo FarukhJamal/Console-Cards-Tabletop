@@ -57,6 +57,28 @@ namespace ConsoleCards.Presentation.Content
             }
         }
 
+        /// <summary>The active pack, or null for built-in only.</summary>
+        public ContentPackInfo ActivePack => FindPack(ActivePackId);
+
+        /// <summary>
+        /// The cards to play with (doc 27 L2-1): the active pack's cards with the player's own on top (same ID: the
+        /// player's wins). Read from the profile each call; call it when a table starts, not every frame.
+        /// </summary>
+        public PlayerCardsFile LoadPlayerCards()
+        {
+            if (!HasGame) return new PlayerCardsFile();
+            ContentPackInfo pack = ActivePack;
+            return PlayerCardsFile.Merge(pack != null ? pack.Manifest.cards : null, Store.LoadCards(GameId));
+        }
+
+        /// <summary>The decks: the active pack's with the player's own on top, as <see cref="LoadPlayerCards"/>.</summary>
+        public PlayerDecksFile LoadPlayerDecks()
+        {
+            if (!HasGame) return new PlayerDecksFile();
+            ContentPackInfo pack = ActivePack;
+            return PlayerDecksFile.Merge(pack != null ? pack.Manifest.decks : null, Store.LoadDecks(GameId));
+        }
+
         /// <summary>
         /// Switches to a game: registers its built-in art, lists its pictures, and loads its uploads and active pack.
         /// Does nothing when the game is already in use.

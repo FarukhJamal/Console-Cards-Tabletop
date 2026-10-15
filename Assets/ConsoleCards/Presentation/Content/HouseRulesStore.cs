@@ -76,9 +76,9 @@ namespace ConsoleCards.Presentation.Content
     }
 
     /// <summary>
-    /// House-rule sets saved on this computer (doc 23, R3): one JSON file per set in
-    /// <c>&lt;persistentDataPath&gt;/Content/&lt;game&gt;/rules/</c>, next to the game's art packs. Plain files a player
-    /// can copy to share; they are read at start, never per frame.
+    /// House-rule sets saved in the player's profile (doc 23 R3, doc 28): one JSON file per set in
+    /// <c>Profiles/&lt;profile&gt;/games/&lt;game&gt;/rules/</c>, next to the game's packs. Plain files a player can copy to
+    /// share; they are read at start, never per frame.
     /// </summary>
     public sealed class HouseRulesStore
     {
@@ -103,7 +103,7 @@ namespace ConsoleCards.Presentation.Content
             {
                 try
                 {
-                    HouseRuleSetRecord record = JsonUtility.FromJson<HouseRuleSetRecord>(File.ReadAllText(files[i]));
+                    HouseRuleSetRecord record = ConsoleCards.Presentation.Saving.SaveFiles.ReadJson<HouseRuleSetRecord>(files[i], "Rules");
                     if (record == null || string.IsNullOrWhiteSpace(record.stableId) || record.formatVersion > HouseRuleSetRecord.CurrentFormatVersion)
                     {
                         Debug.LogWarning($"[Rules] Skipped {files[i]}: not a house-rule set this version can read.");
@@ -127,11 +127,8 @@ namespace ConsoleCards.Presentation.Content
             error = string.Empty;
             try
             {
-                string folder = RulesFolder(gameId);
-                Directory.CreateDirectory(folder);
-                string path = Path.Combine(folder, ContentPackStore.SafeName(record.stableId, "rules") + ".json");
-                File.WriteAllText(path, JsonUtility.ToJson(record, true));
-                return true;
+                string path = Path.Combine(RulesFolder(gameId), ContentPackStore.SafeName(record.stableId, "rules") + ".json");
+                return ConsoleCards.Presentation.Saving.SaveFiles.TryWriteJson(path, record, out error);
             }
             catch (Exception exception)
             {

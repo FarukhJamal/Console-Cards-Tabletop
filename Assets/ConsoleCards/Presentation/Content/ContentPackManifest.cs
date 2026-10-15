@@ -1,17 +1,20 @@
 using System;
 using System.Collections.Generic;
+using ConsoleCards.Definitions;
 
 namespace ConsoleCards.Presentation.Content
 {
     /// <summary>
     /// A game pack (doc 24, A3): a folder with this manifest as pack.json and its pictures beside it. Version 1
-    /// carries art: each entry puts one picture file under one art key. Serialised with Unity's JsonUtility.
+    /// carries art: each entry puts one picture file under one art key. Version 2 (doc 27 L2-1) adds cards: new
+    /// cards, changes to the game's cards and decks, in the same form as the player's own file. Version 1 packs
+    /// still load. Serialised with Unity's JsonUtility.
     /// </summary>
     [Serializable]
     public sealed class ContentPackManifest
     {
         public const string FileName = "pack.json";
-        public const int CurrentFormatVersion = 1;
+        public const int CurrentFormatVersion = 2;
 
         public int formatVersion = CurrentFormatVersion;
         public string packId = string.Empty;
@@ -20,6 +23,10 @@ namespace ConsoleCards.Presentation.Content
         public string author = string.Empty;
         public string description = string.Empty;
         public List<ContentArtFile> art = new List<ContentArtFile>();
+
+        /// <summary>Format 2: the pack's cards and decks. The player's own win over these by ID.</summary>
+        public PlayerCardsFile cards = new PlayerCardsFile();
+        public PlayerDecksFile decks = new PlayerDecksFile();
     }
 
     /// <summary>One picture: an art key and its file, relative to the pack (or uploads) folder.</summary>
