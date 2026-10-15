@@ -246,6 +246,24 @@ namespace ConsoleCards.Presentation.Prototype
         // Viewer settings from the Table menu (doc 23, R1); not table state, so Undo and Reset never change them.
         private bool rulesCardEnabled = true;
         private bool hintsEnabled = true;
+        // House rules (doc 23, R3): the rule set in play (null = the game's default), the sets saved on this
+        // computer, the set the current templates were built with, and the open proposal. Kept across Undo and Reset.
+        private RuleSetDefinition activeRuleSet;
+        private RuleSetDefinition templatesRuleSet;
+        private readonly List<RuleSetDefinition> houseRuleSets = new List<RuleSetDefinition>();
+        private readonly List<HouseRuleSetRecord> houseRuleRecords = new List<HouseRuleSetRecord>();
+        private HouseRulesStore houseRulesStore;
+        private bool houseRulesLoaded;
+        private RulesCardActions rulesCardActions;
+        private RuleProposalActions ruleProposalActions;
+        private bool ruleProposalOpen;
+        private bool ruleProposalAgreeing;
+        private string ruleProposalEntryId;
+        private int ruleProposalSetIndex = -1;
+        private string ruleProposalValue;
+        private string ruleProposalText;
+        private readonly List<PlayerId> ruleProposalVoters = new List<PlayerId>();
+        private readonly List<bool> ruleProposalAgreed = new List<bool>();
         private TrapFloorSessionState pendingRestoredTrapFloorState;
         private PendingControllerPurchaseState pendingRestoredControllerPurchaseState;
 
@@ -2317,6 +2335,12 @@ namespace ConsoleCards.Presentation.Prototype
             boardFeedback = null;
             ReleaseCardArtMaterials();
             contentArt?.Dispose(); // destroys the pictures the content service loaded
+            for (int i = 0; i < houseRuleSets.Count; i++)
+            {
+                if (houseRuleSets[i] != null) Destroy(houseRuleSets[i]);
+            }
+
+            houseRuleSets.Clear();
             if (handTrayRig != null)
             {
                 Destroy(handTrayRig.gameObject);
@@ -4394,8 +4418,11 @@ namespace ConsoleCards.Presentation.Prototype
                 authoritativeRandomValueSource = new SystemRandomValueSource();
             }
 
-            // Rules drive play (doc 23, R2a): the default rule set's settings feed the game data the template uses.
-            var gameDefinition = trapFloorGameDefinition.ToData(trapFloorGameDefinition.DefaultRuleSet);
+            // Rules drive play (doc 23, R2a): the rule set in play (the default or agreed house rules, R3) feeds the
+            // game data the template uses.
+            EnsureHouseRulesLoaded();
+            RuleSetDefinition rules = ActiveRuleSet;
+            var gameDefinition = trapFloorGameDefinition.ToData(rules);
             if (gameDefinition.Modes.Count == 0)
                 throw new InvalidOperationException("Trap Floor requires at least one authored Mode.");
 
@@ -4413,6 +4440,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             sessionTemplateCatalog = new GameTemplateCatalog(registrations);
+            templatesRuleSet = rules;
         }
 
         private void InitializeRuntimeUi()
@@ -4462,6 +4490,7 @@ namespace ConsoleCards.Presentation.Prototype
 
             // Session bar chip (UI-1): a game shows its name and mode ("Trap Floor — Easy"); Empty Table its name.
             bool isGameSession = activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom;
+            if (ruleProposalOpen) CloseRuleProposal(null); // a new table has new players
             string sessionTitle = "EMPTY TABLE";
             string sessionSubtitle = string.Empty;
             if (isGameSession)
@@ -4515,8 +4544,9 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshTrapFloorStatusUi();
         }
 
-        // The rules card for this table (doc 23, R1): the game's default rule set, filtered to the active mode.
-        // Empty Table has no rules. Shown only; nothing is enforced.
+        // The rules card for this table (doc 23, R1): the rule set in play, filtered to the active mode. Empty Table
+        // has no rules. R3: each rule can be proposed for change, saved sets can be picked, and a restart row shows
+        // when settings changed since the game was set up.
         private RulesCardModel BuildRulesCardModel()
         {
             if (activeSession == null
@@ -4527,7 +4557,404 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             string modeStableId = trapFloorTemplate != null ? trapFloorTemplate.ActiveMode.StableId : string.Empty;
-            return RulesCardModel.FromRuleSet(trapFloorGameDefinition.DefaultRuleSet, modeStableId);
+            RulesCardModel model = RulesCardModel.FromRuleSet(ActiveRuleSet, modeStableId);
+            if (model == null) return null;
+            if (rulesCardActions == null)
+            {
+                rulesCardActions = new RulesCardActions
+                {
+                    ProposeChange = OpenRuleProposal,
+                    CycleRuleSet = OpenRuleSetSwitch,
+                    Restart = RestartWithActiveRules,
+                };
+            }
+
+            string pending = templatesRuleSet != null && SettingsDiffer(templatesRuleSet, ActiveRuleSet)
+                ? "Changed settings start when the game restarts."
+                : string.Empty;
+            return model.WithActions(rulesCardActions, 1 + houseRuleSets.Count, pending);
+        }
+
+        // ---------- house rules (doc 23, R3) ----------
+
+        private RuleSetDefinition ActiveRuleSet =>
+            activeRuleSet != null ? activeRuleSet : trapFloorGameDefinition != null ? trapFloorGameDefinition.DefaultRuleSet : null;
+
+        // Index in the pick list: 0 is the default set, then the saved sets oldest first.
+        private int ActiveRuleSetIndex => activeRuleSet == null ? 0 : houseRuleSets.IndexOf(activeRuleSet) + 1;
+
+        private RuleSetDefinition RuleSetAt(int index) =>
+            index <= 0 || index > houseRuleSets.Count ? trapFloorGameDefinition.DefaultRuleSet : houseRuleSets[index - 1];
+
+        // Reads the saved house-rule sets once, at start. Sets made from other rules are skipped.
+        private void EnsureHouseRulesLoaded()
+        {
+            if (houseRulesLoaded || trapFloorGameDefinition == null || trapFloorGameDefinition.DefaultRuleSet == null) return;
+            houseRulesLoaded = true;
+            RuleSetDefinition defaults = trapFloorGameDefinition.DefaultRuleSet;
+            try
+            {
+                houseRulesStore = new HouseRulesStore(ContentPackStore.CreateDefault());
+                List<HouseRuleSetRecord> records = houseRulesStore.Load(trapFloorGameDefinition.StableId);
+                for (int i = 0; i < records.Count; i++)
+                {
+                    HouseRuleSetRecord record = records[i];
+                    if (!string.IsNullOrEmpty(record.basedOnStableId)
+                        && !string.Equals(record.basedOnStableId, defaults.StableId, StringComparison.Ordinal))
+                    {
+                        Debug.LogWarning($"[Rules] Skipped house rules '{record.displayName}': made from other rules ({record.basedOnStableId}).");
+                        continue;
+                    }
+
+                    houseRuleSets.Add(RuleSetDefinition.CreateHouseRules(defaults, record.stableId,
+                        string.IsNullOrWhiteSpace(record.displayName) ? "House rules" : record.displayName, record.ToChanges()));
+                    houseRuleRecords.Add(record);
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[Rules] Saved house rules could not be read: {exception.Message}");
+            }
+        }
+
+        // True when a setting the game reads has a different value in the two sets.
+        private static bool SettingsDiffer(RuleSetDefinition a, RuleSetDefinition b)
+        {
+            if (a == b || a == null || b == null) return false;
+            for (int s = 0; s < b.Sections.Count; s++)
+            {
+                RuleSection section = b.Sections[s];
+                if (section == null) continue;
+                for (int e = 0; e < section.Entries.Count; e++)
+                {
+                    RuleEntry entry = section.Entries[e];
+                    if (entry == null || !entry.HasSetting) continue;
+                    if (!a.TryGetEntry(entry.StableId, out RuleEntry other)
+                        || !string.Equals(other.Value, entry.Value, StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private void RefreshRulesCard()
+        {
+            runtimeUi?.ShowRulesCard(BuildRulesCardModel(), rulesCardEnabled);
+        }
+
+        private void OpenRuleProposal(string entryStableId)
+        {
+            RuleSetDefinition rules = ActiveRuleSet;
+            if (rules == null || !rules.TryGetEntry(entryStableId, out RuleEntry entry)) return;
+            ruleProposalEntryId = entryStableId;
+            ruleProposalSetIndex = -1;
+            ruleProposalValue = entry.Value;
+            ruleProposalText = entry.Text;
+            BeginRuleProposal();
+        }
+
+        private void OpenRuleSetSwitch(int direction)
+        {
+            int count = 1 + houseRuleSets.Count;
+            if (count < 2 || trapFloorGameDefinition == null) return;
+            ruleProposalEntryId = null;
+            ruleProposalSetIndex = (((ActiveRuleSetIndex + direction) % count) + count) % count;
+            BeginRuleProposal();
+        }
+
+        private void BeginRuleProposal()
+        {
+            if (runtimeUi == null || activeSession == null) return;
+            ruleProposalAgreeing = false;
+            ruleProposalVoters.Clear();
+            ruleProposalAgreed.Clear();
+            IReadOnlyList<PlayerId> players = activeSession.Request.ActivePlayerIds;
+            for (int i = 0; i < players.Count; i++)
+            {
+                ruleProposalVoters.Add(players[i]);
+                ruleProposalAgreed.Add(false);
+            }
+
+            if (ruleProposalActions == null)
+            {
+                ruleProposalActions = new RuleProposalActions
+                {
+                    Step = StepRuleProposal,
+                    TextChanged = TypeRuleProposal,
+                    Propose = ProposeRuleChange,
+                    Agree = AgreeRuleProposal,
+                    Reject = RejectRuleProposal,
+                };
+            }
+
+            ruleProposalOpen = ShowRuleProposalUi();
+        }
+
+        // How the proposed change is edited: numbers, on/off and listed choices step; other settings and
+        // text-only rules are typed.
+        private RuleProposalEditKind RuleProposalEditKindFor(RuleEntry entry)
+        {
+            if (entry == null) return RuleProposalEditKind.None;
+            switch (entry.SettingKind)
+            {
+                case RuleSettingKind.Number:
+                case RuleSettingKind.Toggle:
+                    return RuleProposalEditKind.Step;
+                case RuleSettingKind.Choice:
+                    return entry.Choices.Count > 0 ? RuleProposalEditKind.Step : RuleProposalEditKind.Text;
+                default:
+                    return RuleProposalEditKind.Text;
+            }
+        }
+
+        // Typed text edits the value of a setting, or the words of a text-only rule.
+        private static bool EditsRuleText(RuleEntry entry) => entry != null && !entry.HasSetting;
+
+        private bool ShowRuleProposalUi()
+        {
+            RuleProposalModel model = new RuleProposalModel { Agreeing = ruleProposalAgreeing };
+            if (ruleProposalEntryId == null)
+            {
+                model.Title = "SWITCH RULES";
+                model.CurrentText = $"In play: {ActiveRuleSet.DisplayName}";
+                model.PreviewText = $"Switch to: {RuleSetAt(ruleProposalSetIndex).DisplayName}";
+                model.EditKind = RuleProposalEditKind.None;
+            }
+            else
+            {
+                if (!ActiveRuleSet.TryGetEntry(ruleProposalEntryId, out RuleEntry entry)) return false;
+                RuleProposalEditKind kind = RuleProposalEditKindFor(entry);
+                model.CurrentText = entry.FormatText();
+                model.EditKind = kind;
+                model.ValueText = ruleProposalValue;
+                model.EditText = EditsRuleText(entry) ? ruleProposalText : ruleProposalValue;
+                model.PreviewText = entry.WithChange(ruleProposalText, ruleProposalValue).FormatText();
+            }
+
+            int agreed = 0;
+            RuleProposalVoter[] voters = new RuleProposalVoter[ruleProposalVoters.Count];
+            for (int i = 0; i < voters.Length; i++)
+            {
+                voters[i] = new RuleProposalVoter(PlayerLabel(ruleProposalVoters[i]), ruleProposalAgreed[i]);
+                if (ruleProposalAgreed[i]) agreed++;
+            }
+
+            model.Voters = voters;
+            model.Status = ruleProposalAgreeing
+                ? $"{agreed} of {voters.Length} agreed. Everyone must agree; one \"No\" keeps the rules."
+                : "Make the change, then propose it to the table.";
+            return runtimeUi.ShowRuleProposal(model, ruleProposalActions);
+        }
+
+        private void StepRuleProposal(int direction)
+        {
+            if (ruleProposalAgreeing || ruleProposalEntryId == null
+                || !ActiveRuleSet.TryGetEntry(ruleProposalEntryId, out RuleEntry entry)) return;
+            switch (entry.SettingKind)
+            {
+                case RuleSettingKind.Number:
+                    int number = int.TryParse(ruleProposalValue, out int parsed) ? parsed : 0;
+                    ruleProposalValue = Mathf.Max(0, number + direction).ToString();
+                    break;
+                case RuleSettingKind.Toggle:
+                    ruleProposalValue = FlipToggle(ruleProposalValue);
+                    break;
+                case RuleSettingKind.Choice:
+                    IReadOnlyList<string> choices = entry.Choices;
+                    if (choices.Count == 0) return;
+                    int at = -1;
+                    for (int i = 0; i < choices.Count; i++)
+                    {
+                        if (string.Equals(choices[i], ruleProposalValue, StringComparison.OrdinalIgnoreCase)) at = i;
+                    }
+
+                    ruleProposalValue = choices[(((at + direction) % choices.Count) + choices.Count) % choices.Count];
+                    break;
+                default:
+                    return;
+            }
+
+            ShowRuleProposalUi();
+        }
+
+        // On/off settings keep the words they were written with (true/false, on/off, yes/no).
+        private static string FlipToggle(string value)
+        {
+            string v = (value ?? string.Empty).Trim();
+            if (v.Equals("on", StringComparison.OrdinalIgnoreCase)) return "off";
+            if (v.Equals("off", StringComparison.OrdinalIgnoreCase)) return "on";
+            if (v.Equals("yes", StringComparison.OrdinalIgnoreCase)) return "no";
+            if (v.Equals("no", StringComparison.OrdinalIgnoreCase)) return "yes";
+            return v.Equals("true", StringComparison.OrdinalIgnoreCase) ? "false" : "true";
+        }
+
+        private void TypeRuleProposal(string typed)
+        {
+            if (ruleProposalAgreeing || ruleProposalEntryId == null
+                || !ActiveRuleSet.TryGetEntry(ruleProposalEntryId, out RuleEntry entry)) return;
+            if (EditsRuleText(entry)) ruleProposalText = typed ?? string.Empty;
+            else ruleProposalValue = typed ?? string.Empty; // trimmed when proposed, so spaces can be typed
+            ShowRuleProposalUi();
+        }
+
+        private void ProposeRuleChange()
+        {
+            if (ruleProposalAgreeing) return;
+            if (ruleProposalEntryId != null)
+            {
+                if (!ActiveRuleSet.TryGetEntry(ruleProposalEntryId, out RuleEntry entry)) return;
+                ruleProposalValue = (ruleProposalValue ?? string.Empty).Trim();
+                if (string.Equals(ruleProposalValue, entry.Value, StringComparison.Ordinal)
+                    && string.Equals(ruleProposalText, entry.Text, StringComparison.Ordinal))
+                {
+                    CloseRuleProposal("Nothing changed, so nothing was proposed.");
+                    return;
+                }
+
+                if (EditsRuleText(entry) && string.IsNullOrWhiteSpace(ruleProposalText))
+                {
+                    FeedbackLine("A rule cannot be empty.", FeedbackSeverity.Warning);
+                    return;
+                }
+
+                if (entry.HasSetting && !string.Equals(ruleProposalValue, entry.Value, StringComparison.Ordinal)
+                    && !RuleChangeCanSetUp(entry, out string problem))
+                {
+                    FeedbackLine($"This change would stop the game from setting up: {problem}", FeedbackSeverity.Warning);
+                    return;
+                }
+            }
+
+            ruleProposalAgreeing = true;
+            ShowRuleProposalUi();
+        }
+
+        // A changed setting is tried before it is proposed (for example floor counts must still fill the grid):
+        // the game is set up once, off the table, with the proposed value.
+        private bool RuleChangeCanSetUp(RuleEntry entry, out string problem)
+        {
+            problem = string.Empty;
+            Dictionary<string, RuleEntryChange> change = new Dictionary<string, RuleEntryChange>(StringComparer.Ordinal)
+            {
+                [entry.StableId] = new RuleEntryChange(null, ruleProposalValue),
+            };
+            RuleSetDefinition trial = RuleSetDefinition.CreateHouseRules(ActiveRuleSet, "rules-trial", "Trial", change);
+            try
+            {
+                var gameDefinition = trapFloorGameDefinition.ToData(trial);
+                for (int i = 0; i < gameDefinition.Modes.Count; i++)
+                {
+                    TrapFloorTemplateFactory.CreateStandardFourPlayer(
+                        new SystemRandomValueSource(), gameDefinition, gameDefinition.Modes[i].StableId, GetConsoleLayout());
+                }
+
+                return true;
+            }
+            catch (Exception exception)
+            {
+                problem = exception.Message;
+                return false;
+            }
+            finally
+            {
+                Destroy(trial);
+            }
+        }
+
+        private void AgreeRuleProposal(int voter)
+        {
+            if (!ruleProposalAgreeing || voter < 0 || voter >= ruleProposalAgreed.Count) return;
+            ruleProposalAgreed[voter] = true;
+            for (int i = 0; i < ruleProposalAgreed.Count; i++)
+            {
+                if (!ruleProposalAgreed[i])
+                {
+                    ShowRuleProposalUi();
+                    return;
+                }
+            }
+
+            CommitRuleProposal();
+        }
+
+        private void RejectRuleProposal()
+        {
+            CloseRuleProposal(ruleProposalAgreeing ? "Not everyone agreed. The rules stay as they are." : null);
+        }
+
+        private void CloseRuleProposal(string message)
+        {
+            ruleProposalOpen = false;
+            ruleProposalAgreeing = false;
+            runtimeUi?.CloseRuleProposal();
+            if (!string.IsNullOrEmpty(message) && runtimeUi != null) FeedbackLine(message, FeedbackSeverity.Info);
+        }
+
+        // Everyone agreed: switch sets, or save a new house-rule set with this change (based on the default rules,
+        // carrying the changes already in play) and put it in play. Text applies at once; settings at restart.
+        private void CommitRuleProposal()
+        {
+            RuleSetDefinition defaults = trapFloorGameDefinition.DefaultRuleSet;
+            if (ruleProposalEntryId == null)
+            {
+                activeRuleSet = ruleProposalSetIndex <= 0 ? null : houseRuleSets[ruleProposalSetIndex - 1];
+                FinishRuleCommit($"Everyone agreed: {ActiveRuleSet.DisplayName} is in play.");
+                return;
+            }
+
+            int activeIndex = ActiveRuleSetIndex;
+            Dictionary<string, RuleEntryChange> changes = activeIndex > 0
+                ? houseRuleRecords[activeIndex - 1].ToChanges()
+                : new Dictionary<string, RuleEntryChange>(StringComparer.Ordinal);
+            if (defaults.TryGetEntry(ruleProposalEntryId, out RuleEntry original))
+            {
+                string text = string.Equals(ruleProposalText, original.Text, StringComparison.Ordinal) ? null : ruleProposalText;
+                string value = !original.HasSetting || string.Equals(ruleProposalValue, original.Value, StringComparison.Ordinal)
+                    ? null
+                    : ruleProposalValue;
+                if (text == null && value == null) changes.Remove(ruleProposalEntryId);
+                else changes[ruleProposalEntryId] = new RuleEntryChange(text, value);
+            }
+
+            if (changes.Count == 0)
+            {
+                activeRuleSet = null;
+                FinishRuleCommit($"Everyone agreed: back to {defaults.DisplayName}.");
+                return;
+            }
+
+            string name = $"House rules {houseRuleSets.Count + 1}";
+            HouseRuleSetRecord record = HouseRuleSetRecord.FromChanges($"house-{Guid.NewGuid():N}", name, defaults, changes);
+            string saveNote = string.Empty;
+            string error = "no store";
+            if (houseRulesStore == null || !houseRulesStore.TrySave(trapFloorGameDefinition.StableId, record, out error))
+            {
+                saveNote = " It could not be saved on this computer, so it lasts until you close the game.";
+                Debug.LogWarning($"[Rules] House rules '{name}' were not saved: {error}");
+            }
+
+            RuleSetDefinition set = RuleSetDefinition.CreateHouseRules(defaults, record.stableId, name, changes);
+            houseRuleSets.Add(set);
+            houseRuleRecords.Add(record);
+            activeRuleSet = set;
+            FinishRuleCommit($"Everyone agreed: {name} is in play.{saveNote}");
+        }
+
+        private void FinishRuleCommit(string message)
+        {
+            bool restartNeeded = templatesRuleSet != null && SettingsDiffer(templatesRuleSet, ActiveRuleSet);
+            CloseRuleProposal(restartNeeded ? $"{message} Changed settings start when you restart." : message);
+            RefreshRulesCard();
+        }
+
+        // "Restart" on the rules card: load this game again with the rules in play (asks before replacing the table).
+        private void RestartWithActiveRules()
+        {
+            if (activeSession == null || activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom) return;
+            RequestTableReplacement(activeSession.Selection);
         }
 
         private void SetRulesCardEnabled(bool enabled)

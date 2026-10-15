@@ -13,6 +13,8 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Text numberLabel;
         [SerializeField] private Text textLabel;
         [SerializeField] private GameObject changedMark;
+        [Tooltip("Optional (doc 23, R3): proposes a change to this rule. Added by Create Missing Gameplay UI Prefabs.")]
+        [SerializeField] private Button changeButton;
 
         public void ValidateReferences()
         {
@@ -22,10 +24,25 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
-        public void Bind(RulesCardLine line)
+        public void Bind(RulesCardLine line) => Bind(line, null);
+
+        /// <summary>Shows the line; with <paramref name="proposeChange"/> its Change button proposes a change to it.</summary>
+        public void Bind(RulesCardLine line, Action<string> proposeChange)
         {
             RequireAcquired();
             ValidateReferences();
+            if (changeButton != null)
+            {
+                changeButton.onClick.RemoveAllListeners();
+                bool canChange = proposeChange != null && !string.IsNullOrEmpty(line.EntryStableId);
+                changeButton.gameObject.SetActive(canChange);
+                if (canChange)
+                {
+                    string entryId = line.EntryStableId;
+                    changeButton.onClick.AddListener(() => proposeChange(entryId));
+                }
+            }
+
             textLabel.text = line.Text;
             if (numberLabel != null)
             {
@@ -40,6 +57,12 @@ namespace ConsoleCards.Presentation.UI
 
         public override void Unbind()
         {
+            if (changeButton != null)
+            {
+                changeButton.onClick.RemoveAllListeners();
+                changeButton.gameObject.SetActive(false);
+            }
+
             if (textLabel != null)
             {
                 textLabel.text = string.Empty;

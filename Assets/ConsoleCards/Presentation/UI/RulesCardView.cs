@@ -18,6 +18,13 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private GameObject body;
         [SerializeField] private RectTransform linesRoot;
         [SerializeField] private ScrollRect scrollRect;
+        [Header("House rules (doc 23, R3; optional, added by Create Missing Gameplay UI Prefabs)")]
+        [SerializeField] private GameObject ruleSetRow;
+        [SerializeField] private Button previousSetButton;
+        [SerializeField] private Button nextSetButton;
+        [SerializeField] private GameObject pendingRow;
+        [SerializeField] private Text pendingLabel;
+        [SerializeField] private Button restartButton;
 
         private readonly List<RulesCardLineView> lineViews = new List<RulesCardLineView>();
         private IRuntimeUiService uiService;
@@ -56,11 +63,12 @@ namespace ConsoleCards.Presentation.UI
                 RulesCardLineView view = uiService.AcquirePooled<RulesCardLineView>(
                     line.Kind == RulesCardLineKind.Heading ? PrototypeUiPrefabIds.RulesHeading : PrototypeUiPrefabIds.RulesLine,
                     linesRoot);
-                view.Bind(line);
+                view.Bind(line, model.Actions?.ProposeChange);
                 view.Show();
                 lineViews.Add(view);
             }
 
+            BindHouseRules(model);
             collapseButton.onClick.AddListener(ToggleCollapsed);
             ApplyCollapsed();
             scrollRect.verticalNormalizedPosition = 1f;
@@ -73,6 +81,10 @@ namespace ConsoleCards.Presentation.UI
                 collapseButton.onClick.RemoveAllListeners();
             }
 
+            if (previousSetButton != null) previousSetButton.onClick.RemoveAllListeners();
+            if (nextSetButton != null) nextSetButton.onClick.RemoveAllListeners();
+            if (restartButton != null) restartButton.onClick.RemoveAllListeners();
+
             for (int i = lineViews.Count - 1; i >= 0; i--)
             {
                 if (lineViews[i] != null && uiService != null)
@@ -82,6 +94,24 @@ namespace ConsoleCards.Presentation.UI
             }
 
             lineViews.Clear();
+        }
+
+        // R3: pick another saved rule set (proposed to the table) and restart when settings changed.
+        private void BindHouseRules(RulesCardModel model)
+        {
+            RulesCardActions actions = model.Actions;
+            bool canCycle = actions?.CycleRuleSet != null && model.RuleSetCount > 1;
+            if (ruleSetRow != null) ruleSetRow.SetActive(canCycle);
+            if (canCycle && previousSetButton != null) previousSetButton.onClick.AddListener(() => actions.CycleRuleSet(-1));
+            if (canCycle && nextSetButton != null) nextSetButton.onClick.AddListener(() => actions.CycleRuleSet(1));
+            bool pending = !string.IsNullOrEmpty(model.PendingText);
+            if (pendingRow != null) pendingRow.SetActive(pending);
+            if (pendingLabel != null) pendingLabel.text = model.PendingText;
+            if (restartButton != null)
+            {
+                restartButton.gameObject.SetActive(pending && actions?.Restart != null);
+                if (pending && actions?.Restart != null) restartButton.onClick.AddListener(() => actions.Restart());
+            }
         }
 
         private void ToggleCollapsed()

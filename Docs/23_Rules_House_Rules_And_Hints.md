@@ -1,8 +1,8 @@
 # Console Cards — Rules, House Rules and Hints
 
 **Document ID:** 23_Rules_House_Rules_And_Hints
-**Version:** 0.6
-**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b and C1 implemented (Trap Floor G2a applies the revised turn); R3–R4 planned.
+**Version:** 0.7
+**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b, C1 and R3 implemented (Trap Floor G2a applies the revised turn); R4 planned.
 
 > **Contract note:** type names and field lists here are illustrative unless labelled **Approved Contract**. They describe the direction agreed with the owner, not fixed public APIs.
 
@@ -61,7 +61,7 @@ Each game supplies its own entries and setting keys. The platform only knows how
 | R1 | Rule set data model; Trap Floor default rules drafted from the code; rules card (left column, foldable, changed-line marks, house-rules badge); Table menu switches for Rules card, Hints and Help; developer wording replaced with player wording | Implemented |
 | R2a | Rule settings feed the game data before the template is built (`GameDefinition.ToData(ruleSet)` → `RuleSettingsApplication`): hand size, Keys needed per difficulty, win mode (Team / Survival, separate from difficulty). Default rule set rewritten for the revised Trap Floor (doc 18 §15) | Implemented |
 | R2b | Board mix and Avatars as data: floor groups (content sets with role `floor`, a draw count and optional repeats), floor count and placement settings, new card definitions (Spring ×4, Crane, Overcharged, Push), Action/Reaction text on every Ability, each seat's Avatar and its starting ability, a Setup section on the rules card | Implemented |
-| R3 | House rules: propose a change in game, every player agrees, the change is saved as a named set based on the current one, the card shows the difference, and saved sets can be picked in the start flow's Rules step | Planned |
+| R3 | House rules: propose a change from the rules card, every player agrees, the change is saved on this computer as a named set, the card shows the difference, and saved sets can be picked on the card (§8). The start flow's Rules step comes with the game selection menu (doc 27, List 2) | Implemented |
 | R4 | Hints engine built on the assistance layer: legal-move highlights and "why / why not" explanations for the active phase and rule set. Pings arrive with multiplayer (doc 10) as a separate social layer | Planned |
 
 ## 5. Setting keys (R2a–C1, approved contract)
@@ -93,7 +93,40 @@ Lit drop targets and status messages are always shown, because play depends on t
 
 **Whose turn (UX-1).** The turn strip shows a chip with the pawn icon in the turn player's colour (Player 1 blue, 2 red, 3 green, 4 yellow), and the turn text names the colour, for example "PLAYER 1 (BLUE) TURN". During the floor turn the chip shows the player who rolls. If another player's pawn is dropped on a face-down tile, a status message says whose pawn flips tiles. These are always shown, like status messages.
 
-## 7. Open questions
+## 7. Decided questions (owner, 2026-10-15)
 
-- R3 agreement: unanimous, majority, or the host decides? (Owner to choose before R3.)
-- Where saved rule sets live: per player profile, or shared with the table? (Depends on doc 11 persistence.)
+- **Agreement:** everyone agrees. Each player presses their own Agree button; one "No" (or closing the panel) keeps the rules.
+- **Where saved sets live:** on this computer, one file per set in the game's content folder (`Content/<game>/rules/<id>.json`, next to its art packs, doc 24). Shared tables (doc 10) can send the same file later.
+- **Where rules are changed:** from the rules card.
+- **What rules cover (owner, 2026-10-15):** how to play, dos and don'ts, card numbers and components used. Not where cards go on the Console or controller; players work that out.
+
+## 8. House rules (R3, implemented)
+
+**On the rules card.**
+
+- Each rule line has a **Change** button.
+- When saved sets exist, a **Rule set ‹ ›** row picks another set. Switching is proposed to the table like a change.
+- When the rules in play have different settings from the ones the game was set up with, a mustard row says so and offers **Restart**. Restart loads the game again with these rules, after the usual "Replace current table?" question.
+
+**Proposing a change (the Change a rule panel).**
+
+1. The panel shows the rule now and the proposed rule as it will read.
+2. Numbers step with − and + (never below 0). On/off settings flip, keeping their words (true/false, on/off, yes/no). Choice settings step through their listed choices (`RuleEntry.choices`). Other settings, and text-only rules, are typed in the text box.
+3. **Propose to the table.** Nothing changed: nothing is proposed. An empty text rule is refused. A changed setting is first tried by setting the game up once, off the table. If the setup fails (for example floor counts that no longer fill the grid), the reason is shown and nothing is proposed.
+4. Every player at the table presses their own **Agree** button. Once all have agreed:
+   - A new set "House rules N" is saved. It is based on the game's default rules and carries every change already in play plus this one. Changing a rule back to its default drops that change, and with no changes left the default set is back in play.
+   - The new set is in play at once. Text shows on the card immediately, with changed-line marks and the HOUSE RULES badge.
+   - Settings (hand size, Keys, floor counts, costs, and so on) take effect when the game restarts.
+5. If the file cannot be written, the set still lasts until the game is closed, and a message says so.
+
+**Saved file.** `HouseRuleSetRecord`, format 1: stable ID, name, game, the set it is based on, creation time, and the changed entries (entry ID, plus new text and/or value). Files are read once at start. A file that cannot be read, or one made from other rules, is skipped with a console warning.
+
+**Pieces.**
+
+- `RuleSetDefinition.CreateHouseRules` (a runtime copy that is never an asset) and `RuleEntry.WithChange`.
+- `HouseRulesStore`.
+- `RulesCardModel.WithActions` with `RulesCardActions`.
+- `RuleProposalPanelView` (Final UI prefab `RuleProposalPanel`, catalog ID `platform.rule-proposal-panel`, modal layer).
+- The Change button and the rule-set and restart rows. Create Missing Gameplay UI Prefabs adds these to the existing rules prefabs and changes nothing else.
+
+The rule set in play is a table setting kept by the game, not table state: Undo and Reset do not change it.

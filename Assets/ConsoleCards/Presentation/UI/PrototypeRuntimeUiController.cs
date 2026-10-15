@@ -41,6 +41,7 @@ namespace ConsoleCards.Presentation.UI
         private ActivityLogView activityLogView;
         private bool activityLogUnavailable;
         private ContentArtPanelView contentArtPanelView;
+        private RuleProposalPanelView ruleProposalPanelView;
         private bool cardArtWarned;
 
         public IRuntimeUiService UiService
@@ -243,6 +244,42 @@ namespace ConsoleCards.Presentation.UI
 
         public bool IsContentArtPanelOpen => IsVisible(contentArtPanelView);
 
+        /// <summary>Shows or refreshes the house-rule proposal (doc 23, R3). False when its prefab is missing.</summary>
+        public bool ShowRuleProposal(RuleProposalModel model, RuleProposalActions actions)
+        {
+            try
+            {
+                EnsureService();
+                if (ruleProposalPanelView == null || !ruleProposalPanelView.IsAcquired)
+                {
+                    ReleaseView(tabletopPopupView);
+                    popupLayer.SetActive(false);
+                    componentToolboxView?.CloseToolbox();
+                    ruleProposalPanelView = uiService.AcquireCached<RuleProposalPanelView>(PrototypeUiPrefabIds.RuleProposalPanel);
+                }
+
+                modalLayer.SetActive(true);
+                ruleProposalPanelView.Bind(model, actions);
+                ruleProposalPanelView.Show();
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                Debug.LogWarning(
+                    "The rule proposal panel is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs (Final UI). "
+                    + exception.Message);
+                return false;
+            }
+        }
+
+        public bool IsRuleProposalOpen => IsVisible(ruleProposalPanelView);
+
+        public void CloseRuleProposal()
+        {
+            ReleaseView(ruleProposalPanelView);
+            SetModalLayerOffUnlessHandover();
+        }
+
         public void CloseContentArtPanel()
         {
             ReleaseView(contentArtPanelView);
@@ -334,7 +371,8 @@ namespace ConsoleCards.Presentation.UI
         // Closing another modal never hides the hot-seat handover cover that may share the Modal layer.
         private void SetModalLayerOffUnlessHandover()
         {
-            if (modalLayer != null && !IsVisible(hotSeatHandoverView) && !IsVisible(contentArtPanelView))
+            if (modalLayer != null && !IsVisible(hotSeatHandoverView) && !IsVisible(contentArtPanelView)
+                && !IsVisible(ruleProposalPanelView))
             {
                 modalLayer.SetActive(false);
             }
@@ -693,6 +731,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(hotSeatHandoverView);
             ReleaseView(activityLogView);
             ReleaseView(contentArtPanelView);
+            ReleaseView(ruleProposalPanelView);
             CloseTabletopPopup();
         }
 

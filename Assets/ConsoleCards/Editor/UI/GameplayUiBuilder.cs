@@ -35,6 +35,7 @@ namespace ConsoleCards.Editor.UI
         public const string ActivityLogPath = Folder + "ActivityLog.prefab";
         public const string ContentArtPanelPath = Folder + "CardArtPanel.prefab";
         public const string ContentArtRowPath = Folder + "CardArtRow.prefab";
+        public const string RuleProposalPanelPath = Folder + "RuleProposalPanel.prefab";
         private const string FeedbackAudioPath = "Assets/ConsoleCards/Content/Audio/Feedback/";
         private const string SessionIconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
 
@@ -104,6 +105,8 @@ namespace ConsoleCards.Editor.UI
             Save<ActivityLogView>(ActivityLogPath, "ActivityLog", BuildActivityLog, stretch: true);
             Save<ContentArtRowView>(ContentArtRowPath, "CardArtRow", BuildContentArtRow, stretch: false);
             Save<ContentArtPanelView>(ContentArtPanelPath, "CardArtPanel", BuildContentArtPanel, stretch: true);
+            Save<RuleProposalPanelView>(RuleProposalPanelPath, "RuleProposalPanel", BuildRuleProposalPanel, stretch: true);
+            AddMissingRuleControls();
 
             AssignCatalogEntry(PrototypeUiPrefabIds.PopupActionRow,
                 AssetDatabase.LoadAssetAtPath<PrototypePopupActionRowView>(ActionRowPath), UiLayer.Popup, UiRetention.Pooled);
@@ -149,6 +152,9 @@ namespace ConsoleCards.Editor.UI
             AssignCatalogEntry(PrototypeUiPrefabIds.ContentArtRow,
                 AssetDatabase.LoadAssetAtPath<ContentArtRowView>(ContentArtRowPath), UiLayer.Modal,
                 UiRetention.Pooled);
+            AssignCatalogEntry(PrototypeUiPrefabIds.RuleProposalPanel,
+                AssetDatabase.LoadAssetAtPath<RuleProposalPanelView>(RuleProposalPanelPath), UiLayer.Modal,
+                UiRetention.CachedSingleInstance);
             AssetDatabase.SaveAssets();
             Debug.Log("[Gameplay UI] Created any missing Final UI gameplay prefabs and pointed the UI prefab catalog at them.");
         }
@@ -392,6 +398,177 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("chooseButton").objectReferenceValue = choose;
             so.FindProperty("resetButton").objectReferenceValue = reset;
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // ---------- house rules (doc 23, R3) ----------
+
+        // Centred modal: the rule now, the proposed change (a - value + stepper or a text box) and, once proposed,
+        // one Agree button per player. "No" or Cancel keeps the rule.
+        private static void BuildRuleProposalPanel(RectTransform root, RuleProposalPanelView view)
+        {
+            Button overlay = DismissOverlay(root);
+            Vector2 centre = new Vector2(0.5f, 0.5f);
+            RectTransform panel = ColumnCard(root, "RuleProposalPanel", centre, centre, 660f);
+            BlockClicks(panel);
+            Text title = CardHeader(panel, "CHANGE A RULE", 22, 58f);
+            RectTransform body = Body(panel, 22, 10f);
+            Label(Child("NowTitle", body), boldFont, 15, Muted, TextAnchor.MiddleLeft, "THE RULE NOW");
+            Text current = Label(Child("Current", body), bodyFont, 17, Ink, TextAnchor.UpperLeft, "The rule as it is.");
+            Label(Child("NewTitle", body), boldFont, 15, Muted, TextAnchor.MiddleLeft, "PROPOSED");
+            Text value = Stepper(body, out Button decrement, out Button increment);
+            LayoutElement valueLayout = value.GetComponent<LayoutElement>();
+            if (valueLayout != null)
+            {
+                valueLayout.minWidth = 260f;
+                valueLayout.preferredWidth = 260f;
+            }
+
+            value.resizeTextForBestFit = true;
+            value.resizeTextMinSize = 14;
+            value.resizeTextMaxSize = 32;
+            GameObject stepRow = body.Find("Stepper").gameObject;
+            InputField input = TextInput(body, "TextInput", 112f, "Type the new rule or value...");
+            Text preview = Label(Child("Preview", body), bodyFont, 17, Ink, TextAnchor.UpperLeft, "The rule as proposed.");
+
+            RectTransform agree = Child("AgreeRow", body);
+            Column(agree.gameObject, 0, 0, 4, 0, 8f);
+            Label(Child("AgreeTitle", agree), boldFont, 15, Muted, TextAnchor.MiddleLeft, "EVERY PLAYER AGREES WITH THEIR OWN BUTTON");
+            Button[] agreeButtons = new Button[4];
+            Text[] agreeLabels = new Text[4];
+            for (int rowIndex = 0; rowIndex < 2; rowIndex++)
+            {
+                RectTransform row = ButtonRow(agree, TextAnchor.MiddleLeft);
+                row.name = $"Voters{rowIndex + 1}";
+                for (int column = 0; column < 2; column++)
+                {
+                    int i = (rowIndex * 2) + column;
+                    agreeButtons[i] = GoButton(row, $"AgreeButton{i + 1}", $"Player {i + 1}: agree", 290f, out agreeLabels[i]);
+                    SetDisabledTint(agreeButtons[i]);
+                }
+            }
+
+            Text status = Label(Child("Status", body), bodyFont, 15, Muted, TextAnchor.MiddleLeft, string.Empty);
+            RectTransform buttons = ButtonRow(body);
+            Button reject = PlainButton(buttons, "RejectButton", "Cancel", 230f, out Text rejectLabel);
+            Button propose = GoButton(buttons, "ProposeButton", "Propose to the table", 270f, out _);
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("dismissOverlayButton").objectReferenceValue = overlay;
+            so.FindProperty("titleLabel").objectReferenceValue = title;
+            so.FindProperty("currentLabel").objectReferenceValue = current;
+            so.FindProperty("stepRow").objectReferenceValue = stepRow;
+            so.FindProperty("decrementButton").objectReferenceValue = decrement;
+            so.FindProperty("incrementButton").objectReferenceValue = increment;
+            so.FindProperty("valueLabel").objectReferenceValue = value;
+            so.FindProperty("textInput").objectReferenceValue = input;
+            so.FindProperty("previewLabel").objectReferenceValue = preview;
+            so.FindProperty("agreeRow").objectReferenceValue = agree.gameObject;
+            AssignArray(so.FindProperty("agreeButtons"), agreeButtons);
+            AssignArray(so.FindProperty("agreeLabels"), agreeLabels);
+            so.FindProperty("statusLabel").objectReferenceValue = status;
+            so.FindProperty("proposeButton").objectReferenceValue = propose;
+            so.FindProperty("rejectButton").objectReferenceValue = reject;
+            so.FindProperty("rejectLabel").objectReferenceValue = rejectLabel;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static InputField TextInput(Transform parent, string name, float height, string placeholderText)
+        {
+            RectTransform rect = Child(name, parent);
+            Image fill = Img(rect, "ButtonOutlined", Cream);
+            Size(rect.gameObject, -1f, height);
+            InputField input = rect.gameObject.AddComponent<InputField>();
+            input.targetGraphic = fill;
+            Text text = Label(Rect("Text", rect, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(-24f, -16f)), bodyFont, 17, Ink, TextAnchor.UpperLeft, string.Empty);
+            text.supportRichText = false;
+            Text placeholder = Label(Rect("Placeholder", rect, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(-24f, -16f)), bodyFont, 17, Muted, TextAnchor.UpperLeft, placeholderText);
+            placeholder.fontStyle = FontStyle.Italic;
+            input.textComponent = text;
+            input.placeholder = placeholder;
+            input.lineType = InputField.LineType.MultiLineNewline;
+            return input;
+        }
+
+        // Adds the R3 controls to rules prefabs made before R3 (a Change button on each rule line; the rule-set row
+        // and the restart row on the card). Only missing controls are added; nothing existing is changed.
+        private static void AddMissingRuleControls()
+        {
+            if (File.Exists(RulesLinePath))
+            {
+                GameObject root = PrefabUtility.LoadPrefabContents(RulesLinePath);
+                try
+                {
+                    SerializedObject so = new SerializedObject(root.GetComponent<RulesCardLineView>());
+                    SerializedProperty change = so.FindProperty("changeButton");
+                    if (change != null && change.objectReferenceValue == null)
+                    {
+                        Button button = TextButton(root.transform, "ChangeButton", "Change", boldFont, 13, Cream, Ink, 78f, 28f, out _);
+                        button.gameObject.SetActive(false);
+                        change.objectReferenceValue = button;
+                        so.ApplyModifiedPropertiesWithoutUndo();
+                        PrefabUtility.SaveAsPrefabAsset(root, RulesLinePath);
+                        Debug.Log("[Gameplay UI] Added the Change button to the rules line.");
+                    }
+                }
+                finally
+                {
+                    PrefabUtility.UnloadPrefabContents(root);
+                }
+            }
+
+            if (File.Exists(RulesCardPath))
+            {
+                GameObject root = PrefabUtility.LoadPrefabContents(RulesCardPath);
+                try
+                {
+                    SerializedObject so = new SerializedObject(root.GetComponent<RulesCardView>());
+                    Transform card = root.transform.Find("Card");
+                    Transform cardBody = card != null ? card.Find("Body") : null;
+                    if (so.FindProperty("ruleSetRow") != null && so.FindProperty("ruleSetRow").objectReferenceValue == null
+                        && card != null && cardBody != null)
+                    {
+                        int bodyIndex = cardBody.GetSiblingIndex();
+                        RectTransform setRow = Child("RuleSetRow", card);
+                        Img(setRow, "Solid", CreamDark).raycastTarget = false;
+                        Row(setRow.gameObject, 16, 16, 6, 6, 10f, TextAnchor.MiddleLeft);
+                        Size(setRow.gameObject, -1f, 48f);
+                        Text setTitle = Label(Child("Title", setRow), boldFont, 15, Muted, TextAnchor.MiddleLeft, "RULE SET");
+                        Size(setTitle.gameObject, 90f, 36f, 90f);
+                        Button previous = TextButton(setRow, "PreviousSetButton", "<", boldFont, 18, Cream, Ink, 44f, 36f, out _);
+                        Button next = TextButton(setRow, "NextSetButton", ">", boldFont, 18, Cream, Ink, 44f, 36f, out _);
+                        Label(Child("Hint", setRow), bodyFont, 13, Muted, TextAnchor.MiddleLeft, "Switching asks the table.");
+                        setRow.SetSiblingIndex(bodyIndex);
+                        setRow.gameObject.SetActive(false);
+
+                        RectTransform pending = Child("PendingRow", card);
+                        Img(pending, "Solid", Mustard).raycastTarget = false;
+                        Row(pending.gameObject, 16, 12, 6, 6, 10f, TextAnchor.MiddleLeft);
+                        Size(pending.gameObject, -1f, 58f);
+                        Text pendingText = Label(Child("Text", pending), bodyFont, 14, Ink, TextAnchor.MiddleLeft,
+                            "Changed settings start when the game restarts.");
+                        pendingText.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+                        Button restart = TextButton(pending, "RestartButton", "Restart", boldFont, 15, Go, Cream, 110f, 42f, out _);
+                        pending.SetSiblingIndex(bodyIndex + 1);
+                        pending.gameObject.SetActive(false);
+
+                        so.FindProperty("ruleSetRow").objectReferenceValue = setRow.gameObject;
+                        so.FindProperty("previousSetButton").objectReferenceValue = previous;
+                        so.FindProperty("nextSetButton").objectReferenceValue = next;
+                        so.FindProperty("pendingRow").objectReferenceValue = pending.gameObject;
+                        so.FindProperty("pendingLabel").objectReferenceValue = pendingText;
+                        so.FindProperty("restartButton").objectReferenceValue = restart;
+                        so.ApplyModifiedPropertiesWithoutUndo();
+                        PrefabUtility.SaveAsPrefabAsset(root, RulesCardPath);
+                        Debug.Log("[Gameplay UI] Added the rule-set and restart rows to the rules card.");
+                    }
+                }
+                finally
+                {
+                    PrefabUtility.UnloadPrefabContents(root);
+                }
+            }
         }
 
         private static void BuildFeedbackMessages(RectTransform root, FeedbackMessageStackView view)
@@ -1091,6 +1268,7 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("textLabel").objectReferenceValue = text;
             so.FindProperty("changedMark").objectReferenceValue = mark.gameObject;
             so.ApplyModifiedPropertiesWithoutUndo();
+            // The R3 Change button is added by AddMissingRuleControls, for new and older prefabs alike.
         }
     }
 }

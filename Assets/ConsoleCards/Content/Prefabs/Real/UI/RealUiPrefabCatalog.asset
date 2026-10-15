@@ -97,3 +97,7 @@ MonoBehaviour:
     prefab: {fileID: 7337523810126391881, guid: db5a58ad8327dc3428f42ce2428d12ae, type: 3}
     layer: 3
     retention: 1
+  - id: platform.rule-proposal-panel
+    prefab: {fileID: 652218735244796239, guid: e2fe76a8906e28b42aa8bf76b2e95fee, type: 3}
+    layer: 3
+    retention: 0
