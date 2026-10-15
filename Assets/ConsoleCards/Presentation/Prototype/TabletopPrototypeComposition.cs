@@ -4516,6 +4516,7 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorGameDefinition != null && activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom
                     ? (Action)OpenCardArtPanel
                     : null);
+            RefreshCardEditorEntry(); // L2-2: the game's cards and yours, on every table
             RefreshProfileEntry(); // doc 28, P2: who is playing, on every table
             runtimeUi.ShowViewSettings(
                 trapFloorTemplate != null && activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom,

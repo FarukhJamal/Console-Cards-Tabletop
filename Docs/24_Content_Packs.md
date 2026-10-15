@@ -82,6 +82,7 @@ Stand-in art, to be replaced later under the same keys:
 | A3 | JSON pack format: import and export (version 1 carries art) | Implemented |
 | A4 | Player upload UI and art overlays, stored per game | Implemented |
 | L2-1 | Your cards: card data saved in the player profile (new cards, changes to default cards, decks); pack format 2 carries cards and decks (doc 27 List 2, doc 28) | Written, to be checked (not compiled yet) |
+| L2-2 | Card editor in the game (Table > Card editor…) | Written, to be checked (not compiled yet) |
 
 ## Privacy
 
@@ -192,3 +193,35 @@ made in the game, not in the Editor (doc 28). The in-game card editor that write
   - `ContentArtService.LoadPlayerCards`/`LoadPlayerDecks` (pack plus yours).
 - **Pack format 2:** `pack.json` gains `cards` and `decks`, in the same form as your files. Format 1 packs still
   load; packs made by a newer version are refused.
+
+## L2-2 record — the card editor (2026-10-16)
+
+- **Where:** Table menu > **Card editor…**, on every table. It edits the game's cards (Trap Floor for now) and your
+  own, and saves them in your profile (`cards.json`, doc 28).
+- **The list:** every game card (controller input cards are left out), then your cards, each with a thumbnail and
+  "Game card" / "Changed" / "Your card", the kind and the number of copies. **+ New card** starts a new card.
+- **The preview** follows what you type before anything is saved:
+  - the front and back pictures on the white base card (with the name on it while there is no front picture),
+  - the name, the cost and the description.
+- **The fields:**
+  - ID (shown) and short code (your cards only; up to 8 letters, digits or '-', unique).
+  - Name, description and cost (card cost notation, checked on Save).
+  - Copies (0–20; 0 keeps the card out of play).
+  - Works like (your cards: pick any game card with < >).
+  - Front and back pictures: choose a picture, or clear it.
+- **A game card:** Save keeps only what differs from the game's card, as a change. **Reset to the game's card**
+  removes the change and its pictures.
+- **Your card:** Save writes it, **Undo edits** goes back to the saved card, and **Delete card** removes it (and
+  its pictures, and the card from your decks).
+- **Pictures:** a chosen picture is copied into your profile under the card's own key (`<game>/player/<card id>/front`
+  or `/back`) and shows at once in the editor. Pictures no longer used by the saved card are removed on Save,
+  Reset, Delete or leaving an unsaved new card.
+- **When it applies:** saved cards are used from the next table you start (Table > New table…). A cost set as a
+  house rule on the rules card still wins over the cost here.
+- **Code:**
+  - `CardEditorPanelView` and `CardEditorRowView` (Final UI prefabs `CardEditorPanel`, `CardEditorRow`).
+  - `TabletopPrototypeComposition.CardEditor.cs`.
+  - `PrototypeRuntimeUiController.ShowCardEditor` and `ShowCardEditorEntry`.
+  - `SessionBarView.BindCardEditor`.
+  - `GameContent.ArtFolderOf`.
+

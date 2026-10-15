@@ -114,5 +114,7 @@ namespace ConsoleCards.Presentation.UI
         public const string HintStrip = "platform.hint-strip";
         public const string ProfilePanel = "platform.profile-panel";
         public const string ProfileRow = "platform.profile-row";
+        public const string CardEditorPanel = "platform.card-editor-panel";
+        public const string CardEditorRow = "platform.card-editor-row";
     }
 }

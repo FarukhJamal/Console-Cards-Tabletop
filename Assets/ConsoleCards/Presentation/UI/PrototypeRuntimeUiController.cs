@@ -43,6 +43,8 @@ namespace ConsoleCards.Presentation.UI
         private ContentArtPanelView contentArtPanelView;
         private RuleProposalPanelView ruleProposalPanelView;
         private ProfilePanelView profilePanelView;
+        private CardEditorPanelView cardEditorPanelView;
+        private bool cardEditorEntryWarned;
         private bool profileEntryWarned;
         private HintStripView hintStripView;
         private bool hintStripWarned;
@@ -228,6 +230,56 @@ namespace ConsoleCards.Presentation.UI
                 Debug.LogWarning(
                     "The Table menu has no Card art row: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
             }
+        }
+
+        /// <summary>Binds the Table menu's "Card editor…" row (L2-2); null hides it.</summary>
+        public void ShowCardEditorEntry(Action openCardEditor)
+        {
+            EnsureSessionBarView();
+            if (!sessionBarView.BindCardEditor(openCardEditor) && openCardEditor != null && !cardEditorEntryWarned)
+            {
+                cardEditorEntryWarned = true;
+                Debug.LogWarning(
+                    "The Table menu has no Card editor row: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
+            }
+        }
+
+        /// <summary>Shows or refreshes the card editor (L2-2). False when its prefab is missing.</summary>
+        public bool ShowCardEditor(CardEditorModel model, CardEditorActions actions)
+        {
+            try
+            {
+                EnsureService();
+                if (cardEditorPanelView == null || !cardEditorPanelView.IsAcquired)
+                {
+                    ReleaseView(tabletopPopupView);
+                    popupLayer.SetActive(false);
+                    ReleaseModalViews();
+                    componentToolboxView?.CloseToolbox();
+                    cardEditorPanelView = uiService.AcquireCached<CardEditorPanelView>(PrototypeUiPrefabIds.CardEditorPanel);
+                    cardEditorPanelView.Initialize(uiService);
+                }
+
+                modalLayer.SetActive(true);
+                cardEditorPanelView.Bind(model, actions);
+                cardEditorPanelView.Show();
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                Debug.LogWarning(
+                    "The card editor is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs (Final UI). "
+                    + exception.Message);
+                return false;
+            }
+        }
+
+        public bool IsCardEditorOpen => IsVisible(cardEditorPanelView);
+
+        public void CloseCardEditor()
+        {
+            ReleaseView(cardEditorPanelView);
+            SetModalLayerOffUnlessHandover();
         }
 
         /// <summary>Binds the Table menu's "Profile: name…" row (doc 28, P2); null hides it.</summary>
@@ -488,7 +540,7 @@ namespace ConsoleCards.Presentation.UI
         private void SetModalLayerOffUnlessHandover()
         {
             if (modalLayer != null && !IsVisible(hotSeatHandoverView) && !IsVisible(contentArtPanelView)
-                && !IsVisible(ruleProposalPanelView) && !IsVisible(profilePanelView))
+                && !IsVisible(ruleProposalPanelView) && !IsVisible(profilePanelView) && !IsVisible(cardEditorPanelView))
             {
                 modalLayer.SetActive(false);
             }
@@ -851,6 +903,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(contentArtPanelView);
             ReleaseView(ruleProposalPanelView);
             ReleaseView(profilePanelView);
+            ReleaseView(cardEditorPanelView);
             ReleaseView(hintStripView);
             CloseTabletopPopup();
         }
@@ -980,6 +1033,7 @@ namespace ConsoleCards.Presentation.UI
         {
             ReleaseView(contentArtPanelView);
             ReleaseView(profilePanelView);
+            ReleaseView(cardEditorPanelView);
             ReleaseView(quantityPopupView);
             ReleaseView(cardInspectPopupView);
             ReleaseView(actionAbilityPurchasePopupView);

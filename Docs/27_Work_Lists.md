@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.8 · 2026-10-16 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.9 · 2026-10-16 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -64,9 +64,9 @@ What already exists and is reused:
 |---|---|---|
 | L2-1 | Card data: your new cards, changes to default cards and decks, applied at table start before house rules; pack format 2 carries cards and decks (doc 24) | Reworked: saved in the profile; Editor menus removed. Written, to be checked (not compiled yet) |
 | P1 | Save system: profiles next to the game, one save path, every save in the profile (doc 28) | Written, to be checked (not compiled yet) |
-| P2 | Profile screen in the game: pick, create, rename a profile; Table menu "Profile: name…"; asked at start when there are several profiles; switching starts a fresh table (doc 28) | Written, to be checked (not compiled yet) |
-| L2-2 | Card editor in the game, with a visual card preview (new cards and changes to default cards) | Next |
-| L2-3 | Deck editor in the game | Planned |
+| P2 | Profile screen in the game: pick, create, rename a profile; Table menu "Profile: name…"; asked at start when there are several profiles; switching starts a fresh table (doc 28) | Done, approved by the owner |
+| L2-2 | Card editor in the game (Table > Card editor…): every game card and your own, live preview, new cards that work like a game card, changes to game cards with Reset, pictures copied into the profile (doc 24, L2-2 record) | Written, to be checked (not compiled yet) |
+| L2-3 | Deck editor in the game | Next |
 | L2-4 | Game selection menu (replaces New table…); Card art moves there | Planned |
 | L2-5 | Decks used by games (Trap Floor or the Empty Table) | Planned |
 | L2-6 | Rules and player-made games from our components | Planned |

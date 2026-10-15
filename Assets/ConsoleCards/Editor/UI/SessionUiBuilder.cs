@@ -259,7 +259,7 @@ namespace ConsoleCards.Editor.UI
         }
 
         /// <summary>
-        /// Adds the play and view rows (Seat, Hot-seat, Hands on table, Feedback, Card art, Profile; doc 18 §15.11, doc 25 F3,
+        /// Adds the play and view rows (Seat, Hot-seat, Hands on table, Feedback, Card art, Card editor, Profile; doc 18 §15.11, doc 25 F3,
         /// doc 28) and
         /// the Shop entry on the bar (doc 18 §15.4) to an existing SessionBar prefab when they are missing. Rows that already exist and everything else in the
         /// prefab are kept as they are.
@@ -350,12 +350,23 @@ namespace ConsoleCards.Editor.UI
                 added++;
             }
 
-            // The Profile row (doc 28, P2) goes right under Card art.
-            if (so.FindProperty("profileButton").objectReferenceValue == null)
+            // The Card editor row (L2-2) goes right under Card art.
+            if (so.FindProperty("cardEditorButton").objectReferenceValue == null)
             {
                 Component cardArtRow = so.FindProperty("cardArtButton").objectReferenceValue as Component;
+                Button cardEditor = MenuRow(menu, "CardEditorRow", "Card editor…", false);
+                cardEditor.transform.SetSiblingIndex(AfterRow(menu, cardArtRow, menu.childCount - 1));
+                so.FindProperty("cardEditorButton").objectReferenceValue = cardEditor;
+                added++;
+            }
+
+            // The Profile row (doc 28, P2) goes under Card editor (or Card art).
+            if (so.FindProperty("profileButton").objectReferenceValue == null)
+            {
+                Component above = so.FindProperty("cardEditorButton").objectReferenceValue as Component;
+                if (above == null) above = so.FindProperty("cardArtButton").objectReferenceValue as Component;
                 Button profile = MenuRow(menu, "ProfileRow", "Profile: Player 1…", false);
-                profile.transform.SetSiblingIndex(AfterRow(menu, cardArtRow, menu.childCount - 1));
+                profile.transform.SetSiblingIndex(AfterRow(menu, above, menu.childCount - 1));
                 so.FindProperty("profileButton").objectReferenceValue = profile;
                 so.FindProperty("profileLabel").objectReferenceValue = profile.transform.Find("Label").GetComponent<Text>();
                 added++;

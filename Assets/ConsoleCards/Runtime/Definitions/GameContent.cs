@@ -185,7 +185,7 @@ namespace ConsoleCards.Definitions
 
         private void AddNewCards(Dictionary<string, CardDefinition> builtIn)
         {
-            string artFolder = ArtFolder();
+            string artFolder = ArtFolderOf(definition);
             for (int i = 0; i < PlayerCards.cards.Count; i++)
             {
                 PlayerCardRecord record = PlayerCards.cards[i];
@@ -305,9 +305,10 @@ namespace ConsoleCards.Definitions
             return true;
         }
 
-        // The first part of the game's own art keys (doc 24), for example "trap-floor".
-        private string ArtFolder()
+        /// <summary>The first part of the game's own art keys (doc 24), for example "trap-floor".</summary>
+        public static string ArtFolderOf(GameDefinition definition)
         {
+            if (definition == null) return "game";
             for (int s = 0; s < definition.ContentSets.Count; s++)
             {
                 GameContentSet set = definition.ContentSets[s];
