@@ -111,6 +111,16 @@ namespace ConsoleCards.Presentation.Prototype
         private readonly HashSet<TabletopObjectId> neutralizedFloorCardIds =
             new HashSet<TabletopObjectId>();
 
+        // Scratch lists for colouring each material slot of a renderer (no allocation per call).
+        private static readonly List<Material> slotMaterials = new List<Material>(4);
+        private static MaterialPropertyBlock colourBlock;
+
+        /// <summary>
+        /// Puts a tile's own colours back (the game re-applies its art tint). Without it the colours captured at
+        /// registration are restored.
+        /// </summary>
+        public Action<TabletopObjectId> Restore { get; set; }
+
         /// <summary>True while Ability destinations are shown.</summary>
         public bool HasCurrent => currentTargetIds.Count > 0;
 
@@ -134,11 +144,34 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 if (currentTargetIds.Contains(floorCardId)
                     || !renderers.TryGetValue(floorCardId, out TargetRenderer[] targets)) continue;
-                RestoreBaseline(targets);
+                RestoreTile(floorCardId, targets);
                 if (neutralizedFloorCardIds.Contains(floorCardId)) ApplyColor(targets, NeutralizedColor);
             }
 
             reachFloorCardIds.Clear();
+        }
+
+        /// <summary>
+        /// Registers a tile's plain plates (tinted as a whole) and the renderers of the supplied card model (tinted per
+        /// material slot, as its face and back slots carry their own tints).
+        /// </summary>
+        public void Register(TabletopObjectId floorCardId, Renderer[] floorRenderers, IReadOnlyList<Renderer> modelRenderers)
+        {
+            Register(floorCardId, floorRenderers);
+            if (modelRenderers == null || modelRenderers.Count == 0) return;
+            TargetRenderer[] plates = renderers[floorCardId];
+            TargetRenderer[] all = new TargetRenderer[plates.Length + modelRenderers.Count];
+            Array.Copy(plates, all, plates.Length);
+            for (int i = 0; i < modelRenderers.Count; i++)
+            {
+                Renderer renderer = modelRenderers[i]
+                    ?? throw new ArgumentException("Ability model renderers cannot contain null.", nameof(modelRenderers));
+                MaterialPropertyBlock baseline = new MaterialPropertyBlock();
+                renderer.GetPropertyBlock(baseline);
+                all[plates.Length + i] = new TargetRenderer(renderer, baseline, true);
+            }
+
+            renderers[floorCardId] = all;
         }
 
         public void Register(TabletopObjectId floorCardId, params Renderer[] floorRenderers)
@@ -189,7 +222,7 @@ namespace ConsoleCards.Presentation.Prototype
                     && !reachFloorCardIds.Contains(floorCardId)
                     && renderers.TryGetValue(floorCardId, out TargetRenderer[] targets))
                 {
-                    RestoreBaseline(targets);
+                    RestoreTile(floorCardId, targets);
                 }
             }
 
@@ -213,8 +246,12 @@ namespace ConsoleCards.Presentation.Prototype
 
         public void Clear()
         {
+            // The table is being taken down: put the captured colours back without asking the game.
+            Action<TabletopObjectId> restore = Restore;
+            Restore = null;
             ClearReach();
             ClearCurrent();
+            Restore = restore;
             foreach (TabletopObjectId floorCardId in neutralizedFloorCardIds)
             {
                 if (renderers.TryGetValue(floorCardId, out TargetRenderer[] targets))
@@ -233,7 +270,7 @@ namespace ConsoleCards.Presentation.Prototype
                     continue;
                 }
 
-                RestoreBaseline(targets);
+                RestoreTile(currentTargetIds[i], targets);
                 if (reachFloorCardIds.Contains(currentTargetIds[i]))
                     ApplyColor(targets, ReachColor);
                 else if (neutralizedFloorCardIds.Contains(currentTargetIds[i]))
@@ -242,18 +279,48 @@ namespace ConsoleCards.Presentation.Prototype
             currentTargetIds.Clear();
         }
 
+        // Tints the whole renderer and each of its material slots: the supplied card model tints its face and back
+        // slots separately, and a slot's own tint would otherwise hide the guidance colour.
         private static void ApplyColor(TargetRenderer[] targets, Color color)
         {
+            if (colourBlock == null) colourBlock = new MaterialPropertyBlock();
             for (int rendererIndex = 0; rendererIndex < targets.Length; rendererIndex++)
             {
                 TargetRenderer target = targets[rendererIndex];
                 if (target.Renderer == null) continue;
-                MaterialPropertyBlock highlighted = new MaterialPropertyBlock();
-                target.Renderer.GetPropertyBlock(highlighted);
-                highlighted.SetColor(BaseColorProperty, color);
-                highlighted.SetColor(ColorProperty, color);
-                target.Renderer.SetPropertyBlock(highlighted);
+                if (!target.PerSlot)
+                {
+                    target.Renderer.GetPropertyBlock(colourBlock);
+                    colourBlock.SetColor(BaseColorProperty, color);
+                    colourBlock.SetColor(ColorProperty, color);
+                    target.Renderer.SetPropertyBlock(colourBlock);
+                    colourBlock.Clear();
+                    continue;
+                }
+
+                target.Renderer.GetSharedMaterials(slotMaterials);
+                for (int slot = 0; slot < slotMaterials.Count; slot++)
+                {
+                    target.Renderer.GetPropertyBlock(colourBlock, slot);
+                    colourBlock.SetColor(BaseColorProperty, color);
+                    colourBlock.SetColor(ColorProperty, color);
+                    target.Renderer.SetPropertyBlock(colourBlock, slot);
+                    colourBlock.Clear();
+                }
             }
+
+            slotMaterials.Clear();
+        }
+
+        private void RestoreTile(TabletopObjectId floorCardId, TargetRenderer[] targets)
+        {
+            if (Restore != null)
+            {
+                Restore(floorCardId);
+                return;
+            }
+
+            RestoreBaseline(targets);
         }
 
         private static void RestoreBaseline(TargetRenderer[] targets)
@@ -261,21 +328,33 @@ namespace ConsoleCards.Presentation.Prototype
             for (int rendererIndex = 0; rendererIndex < targets.Length; rendererIndex++)
             {
                 TargetRenderer target = targets[rendererIndex];
-                if (target.Renderer != null)
+                if (target.Renderer == null) continue;
+                if (!target.PerSlot)
+                {
                     target.Renderer.SetPropertyBlock(target.Baseline);
+                    continue;
+                }
+
+                // Model slots: drop the guidance colour; the game re-tints them on its next refresh.
+                target.Renderer.GetSharedMaterials(slotMaterials);
+                for (int slot = 0; slot < slotMaterials.Count; slot++) target.Renderer.SetPropertyBlock(null, slot);
             }
+
+            slotMaterials.Clear();
         }
 
         private sealed class TargetRenderer
         {
-            public TargetRenderer(Renderer renderer, MaterialPropertyBlock baseline)
+            public TargetRenderer(Renderer renderer, MaterialPropertyBlock baseline, bool perSlot = false)
             {
                 Renderer = renderer;
                 Baseline = baseline;
+                PerSlot = perSlot;
             }
 
             public Renderer Renderer { get; }
             public MaterialPropertyBlock Baseline { get; }
+            public bool PerSlot { get; }
         }
     }
 }

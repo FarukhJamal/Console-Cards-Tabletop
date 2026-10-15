@@ -311,6 +311,7 @@ namespace ConsoleCards.Presentation.Prototype
         // R4 hints (doc 23 §9): the tiles in reach light while the active player holds their pawn; a move further
         // than the rules allow is explained, with "Undo move" in the turn menu. Nothing is blocked.
         private bool reachHintShown;
+        private bool reachHintHeld;
         private int moveTurnRound = -1;
         private PlayerId moveTurnPlayer;
         private TrapFloorCoordinate? moveStartTile;
@@ -9120,15 +9121,44 @@ namespace ConsoleCards.Presentation.Prototype
                 return false;
             }
 
+            if (interactionStateMachine != null
+                && interactionStateMachine.Phase == TabletopInteractionPhase.DraggingObject
+                && interactionStateMachine.ActiveObjectId == player.PawnId)
+            {
+                return true;
+            }
+
             for (int i = 0; i < pawnViews.Count; i++)
             {
                 PawnView view = pawnViews[i];
                 if (view == null || !view.IsBound || view.ObjectId != player.PawnId) continue;
                 if (view.PhysicalObject != null && view.PhysicalObject.IsHeld) return true;
-                return interactionStateMachine != null
-                    && interactionStateMachine.Phase == TabletopInteractionPhase.DraggingObject
-                    && moveCoordinator != null
-                    && ReferenceEquals(moveCoordinator.ActiveView, view);
+            }
+
+            return false;
+        }
+
+        // Any pawn held or dragged (for the hint's console note when it is not the active player's).
+        private bool IsAnyPawnHeld(out TabletopObjectId pawnId)
+        {
+            pawnId = TabletopObjectId.Empty;
+            if (interactionStateMachine != null
+                && interactionStateMachine.Phase == TabletopInteractionPhase.DraggingObject
+                && matchState != null
+                && matchState.Pawns.ContainsKey(interactionStateMachine.ActiveObjectId))
+            {
+                pawnId = interactionStateMachine.ActiveObjectId;
+                return true;
+            }
+
+            for (int i = 0; i < pawnViews.Count; i++)
+            {
+                PawnView view = pawnViews[i];
+                if (view != null && view.IsBound && view.PhysicalObject != null && view.PhysicalObject.IsHeld)
+                {
+                    pawnId = view.ObjectId;
+                    return true;
+                }
             }
 
             return false;
@@ -9136,10 +9166,19 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void UpdateReachHint()
         {
-            bool show = hintsEnabled
+            TabletopObjectId heldPawnId = TabletopObjectId.Empty;
+            bool anyHeld = trapFloorTemplate != null && IsAnyPawnHeld(out heldPawnId);
+            bool show = anyHeld
+                && hintsEnabled
                 && abilityTargetPresenter != null
                 && !abilityTargetPresenter.HasCurrent
                 && IsActivePawnHeld();
+            if (anyHeld != reachHintHeld)
+            {
+                reachHintHeld = anyHeld;
+                if (anyHeld && !show) LogReachSkipped(heldPawnId);
+            }
+
             if (show == reachHintShown) return;
             reachHintShown = show;
             if (!show)
@@ -9149,11 +9188,27 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             EnsureMoveTurn();
-            if (guidedMoveThisTurn || !TryGetActivePawnTile(out _, out TrapFloorCoordinate current)) return;
+            if (guidedMoveThisTurn)
+            {
+                Debug.Log("[Hints] No reach lights: this turn already used an Ability or Trap move.", this);
+                return;
+            }
+
+            if (!TryGetActivePawnTile(out _, out TrapFloorCoordinate current))
+            {
+                Debug.Log("[Hints] No reach lights: the active pawn is not over a floor tile.", this);
+                return;
+            }
+
             TrapFloorBlindMovementDirection? onlyDirection = null;
             if (TryGetActiveBlindStatus(out TrapFloorBlindStatusState blind))
             {
-                if (!blind.IsDirectionResolved) return; // the status card asks for the Blind roll first
+                if (!blind.IsDirectionResolved)
+                {
+                    Debug.Log("[Hints] No reach lights: roll the Blind direction first.", this);
+                    return;
+                }
+
                 onlyDirection = blind.MovementDirection;
             }
 
@@ -9173,6 +9228,21 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             abilityTargetPresenter.ShowReach(reachTileIds);
+            Debug.Log($"[Hints] Reach: {reachTileIds.Count} tiles lit from ({start.X},{start.Y}), up to {allowance}.", this);
+        }
+
+        // Console note (once per pick-up) for why a held pawn shows no reach.
+        private void LogReachSkipped(TabletopObjectId heldPawnId)
+        {
+            string reason;
+            if (!hintsEnabled) reason = "Hints are off in the Table menu";
+            else if (abilityTargetPresenter == null) reason = "no Trap Floor floor is set up";
+            else if (abilityTargetPresenter.HasCurrent) reason = "an Ability or Trap destination is shown";
+            else if (trapFloorTurnState == null || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
+                reason = "it is not a player turn";
+            else if (trapFloorTurnState.IsCurrentFloorFailed) reason = "this round failed";
+            else reason = $"this pawn is not the turn player's ({FormatPlayerName(trapFloorTurnState.ActivePlayerId)})";
+            Debug.Log($"[Hints] No reach lights: {reason}.", this);
         }
 
         // Tiles the active player may move this turn: the rules' "move.tiles" (default 3), plus Overcharged or
@@ -10732,7 +10802,10 @@ namespace ConsoleCards.Presentation.Prototype
                 authoritativeRandomValueSource,
                 floorfallState);
             floorfallTargetPresenter = new TrapFloorFloorfallTargetPresenter();
-            abilityTargetPresenter = new TrapFloorAbilityTargetPresenter();
+            abilityTargetPresenter = new TrapFloorAbilityTargetPresenter
+            {
+                Restore = RestoreFloorTileColours, // guidance colours come off by re-applying the tile's own tint
+            };
             reachHintShown = false;
         }
 
@@ -13822,8 +13895,8 @@ namespace ConsoleCards.Presentation.Prototype
                     createdVisualReferences.FaceUpRenderer);
                 abilityTargetPresenter.Register(
                     card.BaseState.Id,
-                    createdVisualReferences.FaceUpRenderer,
-                    createdVisualReferences.FaceDownRenderer);
+                    new[] { createdVisualReferences.FaceUpRenderer, createdVisualReferences.FaceDownRenderer },
+                    createdVisualReferences.SuppliedModelRenderers);
             }
 
             else if (CardSizeClassOf(card) == CardSizeClass.Large)
@@ -15643,6 +15716,12 @@ namespace ConsoleCards.Presentation.Prototype
                 : "FLOOR";
             ConfigureCardVisuals(visualReferences, card, label);
             visualReferences.SetCardContentVisible(ShouldShowCardContent(card));
+        }
+
+        private void RestoreFloorTileColours(TabletopObjectId floorCardId)
+        {
+            if (matchState == null || trapFloorTemplate == null) return;
+            RefreshTrapFloorFloorCardPresentation(floorCardId);
         }
 
         private int CurrentFloorCardCount()
