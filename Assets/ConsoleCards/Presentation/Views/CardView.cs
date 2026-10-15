@@ -11,6 +11,7 @@ namespace ConsoleCards.Presentation.Views
         [SerializeField] private GameObject faceDownVisualRoot;
 
         private CardInstanceState cardState;
+        private bool holdFaceDown;
 
         public CardInstanceState CardState => cardState;
 
@@ -19,6 +20,12 @@ namespace ConsoleCards.Presentation.Views
         public GameObject FaceDownVisualRoot => faceDownVisualRoot;
 
         public bool IsFacePresentationConfigured => faceUpVisualRoot != null && faceDownVisualRoot != null;
+
+        /// <summary>
+        /// True while the card is shown face down although its Runtime State is face up (Presentation only), for
+        /// example a landed Trap Floor tile whose reveal already happened but which cannot turn with a pawn on it.
+        /// </summary>
+        public bool HoldsFaceDown => holdFaceDown;
 
         public CardFace? DisplayedFace
         {
@@ -81,6 +88,16 @@ namespace ConsoleCards.Presentation.Views
             }
         }
 
+        /// <summary>Shows the card face down regardless of its state (true) or its accepted face again (false).</summary>
+        public void SetHoldFaceDown(bool hold)
+        {
+            holdFaceDown = hold;
+            if (IsBound && cardState != null && IsFacePresentationConfigured)
+            {
+                ApplyAcceptedFacePresentation();
+            }
+        }
+
         public void ApplyAcceptedFacePresentation()
         {
             if (!IsBound)
@@ -100,6 +117,7 @@ namespace ConsoleCards.Presentation.Views
 
             CardFace face = cardState.Face;
             ValidateSupportedFace(face);
+            if (holdFaceDown) face = CardFace.FaceDown;
 
             faceUpVisualRoot.SetActive(face == CardFace.FaceUp);
             faceDownVisualRoot.SetActive(face == CardFace.FaceDown);
@@ -108,6 +126,7 @@ namespace ConsoleCards.Presentation.Views
         protected override void OnUnbound()
         {
             cardState = null;
+            holdFaceDown = false;
         }
 
         protected override void OnAcceptedStateApplied()

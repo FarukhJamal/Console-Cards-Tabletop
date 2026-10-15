@@ -611,6 +611,7 @@ namespace ConsoleCards.Presentation.Prototype
                 BuildToolboxRuntime();
                 BuildFloorfallRuntime();
                 BindObjectViews();
+                HoldWaitingLandingTileView();
                 BuildContainerViews();
                 BindContainerViews();
                 ProjectUnprojectedPlacedComponents();
@@ -9027,24 +9028,38 @@ namespace ConsoleCards.Presentation.Prototype
                     : (TrapFloorCoordinate?)null;
             }
 
-            // After Undo, Redo or a seat switch: the active pawn still on a tile it landed on keeps that tile waiting.
+            // After Undo, Redo or a seat switch: a landed tile already triggered but still under a pawn keeps
+            // waiting to turn over; its new view is held face down again. A tile Undo turned back is no longer waiting.
+            TabletopObjectId waitingId = waitingLandingFloorCardId;
             waitingLandingFloorCardId = TabletopObjectId.Empty;
             waitingLandingActor = PlayerId.Empty;
-            if (trapFloorTurnState != null
+            if (!waitingId.IsEmpty
+                && trapFloorTurnState != null
                 && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
-                && TryGetTrapFloorPlayerSetup(trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition active)
-                && TryReadPawnTile(active.PawnId, out TrapFloorCoordinate activeTile)
-                && IsHiddenUsableTile(activeTile)
-                && trapFloorTemplate.TryGetFloorCardId(activeTile, out TabletopObjectId waitingId)
-                && landedFloorCards.Contains(waitingId))
+                && landedFloorCards.Contains(waitingId)
+                && trapFloorTemplate.TryGetFloorCardState(matchState, waitingId, out TrapFloorFloorCardState waitingCard)
+                && waitingCard.IsRevealed
+                && (trapFloorCollapseState == null || !trapFloorCollapseState.IsCollapsed(waitingId))
+                && IsAnyPawnOnFloorCard(waitingId))
             {
                 waitingLandingFloorCardId = waitingId;
                 waitingLandingActor = trapFloorTurnState.ActivePlayerId;
+                if (TryGetCardView(waitingId, out CardView waitingView)) waitingView.SetHoldFaceDown(true);
+            }
+        }
+
+        // A landed tile still under a pawn shows face down on its (re)bound view until it turns over.
+        private void HoldWaitingLandingTileView()
+        {
+            if (!waitingLandingFloorCardId.IsEmpty && TryGetCardView(waitingLandingFloorCardId, out CardView view))
+            {
+                view.SetHoldFaceDown(true);
             }
         }
 
         private void RevealFloorCardView(CardView floorCardView)
         {
+            floorCardView.SetHoldFaceDown(false);
             floorCardView.ApplyAcceptedState();
             BeginCardFlipTurn(floorCardView); // the same turn-over as any card flip
         }
@@ -9064,31 +9079,30 @@ namespace ConsoleCards.Presentation.Prototype
             return false;
         }
 
-        // Turns the waiting tile over through the landing reveal, for the player who landed on it. At the end of a
-        // turn a pawn still on it hops up while it turns (the automatic flip); otherwise it runs once no pawn is on it.
+        // Physical part of a landing (owner, 2026-10-15): the tile, already triggered when the pawn landed, turns
+        // over on the table once no pawn is on it. At the end of a turn a pawn still on it hops up while it turns
+        // (the automatic flip).
         private void RevealWaitingLandingTile(bool turnEnds)
         {
-            if (waitingLandingFloorCardId.IsEmpty
-                || trapFloorTemplate == null
-                || trapFloorRevealFloorUseCase == null
-                || matchState == null)
+            if (waitingLandingFloorCardId.IsEmpty || trapFloorTemplate == null || matchState == null)
             {
                 return;
             }
 
             TabletopObjectId floorCardId = waitingLandingFloorCardId;
-            PlayerId actor = waitingLandingActor;
             if (!turnEnds && IsAnyPawnOnFloorCard(floorCardId)) return;
             waitingLandingFloorCardId = TabletopObjectId.Empty;
             waitingLandingActor = PlayerId.Empty;
-            if (!trapFloorTemplate.TryGetFloorCardState(matchState, floorCardId, out TrapFloorFloorCardState floorCard)
-                || floorCard.IsRevealed
-                || (trapFloorCollapseState != null && trapFloorCollapseState.IsCollapsed(floorCardId)))
-            {
-                return;
-            }
-
+            if (!TryGetCardView(floorCardId, out CardView floorCardView) || !floorCardView.HoldsFaceDown) return;
             if (turnEnds) HopPawnsOffFloorCard(floorCardId);
+            RevealFloorCardView(floorCardView);
+        }
+
+        // Trigger part of a landing: the reveal runs at once for the player who landed (the "YOU LANDED ON" popup,
+        // effects and messages), while the tile on the table stays face down until the pawn is off it.
+        private void TriggerLandedTile(TabletopObjectId floorCardId, PlayerId actor)
+        {
+            if (trapFloorRevealFloorUseCase == null) return;
             TrapFloorRevealFloorResult result = trapFloorRevealFloorUseCase.Execute(
                 matchState,
                 new TrapFloorRevealFloorCommand(
@@ -9102,16 +9116,28 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
+            bool waits = IsAnyPawnOnFloorCard(floorCardId);
             if (TryGetCardView(floorCardId, out CardView floorCardView))
-                RevealFloorCardView(floorCardView);
+            {
+                if (waits) floorCardView.SetHoldFaceDown(true); // the card is revealed; the tile turns later
+                else RevealFloorCardView(floorCardView);
+            }
+
+            if (waits)
+            {
+                waitingLandingFloorCardId = floorCardId;
+                waitingLandingActor = actor;
+            }
+
             RefreshCardContentVisibility();
             selectionPresenter?.Refresh();
             activeFloorRevealActivity = result.RevealedActivity;
             ShowFocusedSearchReveal(result);
             RefreshTrapFloorStatusUi();
             ShowMessage(
-                $"{FormatPlayerShortName(result.RevealedActivity.ActorPlayerId)}'s tile turned over: "
-                + $"{result.FloorCard.Content.DisplayName}.");
+                $"{FormatPlayerShortName(result.RevealedActivity.ActorPlayerId)} landed on "
+                + $"{result.FloorCard.Content.DisplayName}."
+                + (waits ? " The tile turns over when the pawn moves off it, or when the turn ends." : string.Empty));
         }
 
         // The pawn on a tile turning at the end of a turn lifts and lands again in place (Presentation only).
@@ -9247,13 +9273,10 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            // The tile waits: it turns over once the pawn is off it (aside or ahead), or when the turn ends.
+            // The landing triggers now (popup and effects); the tile on the table turns once the pawn is off it
+            // (aside or ahead), or when the turn ends.
             landedFloorCards.Add(floorCardId);
-            waitingLandingFloorCardId = floorCardId;
-            waitingLandingActor = trapFloorTurnState.ActivePlayerId;
-            ShowMessage(
-                $"{FormatPlayerShortName(trapFloorTurnState.ActivePlayerId)} landed on a face-down tile. "
-                + "It turns over when the pawn moves off it, or when the turn ends.");
+            TriggerLandedTile(floorCardId, trapFloorTurnState.ActivePlayerId);
         }
 
         private void OpenActionAbilityPurchase()
