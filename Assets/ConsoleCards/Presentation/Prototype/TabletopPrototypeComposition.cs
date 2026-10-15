@@ -308,6 +308,17 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorFloorfallService floorfallService;
         private TrapFloorFloorfallTargetPresenter floorfallTargetPresenter;
         private TrapFloorAbilityTargetPresenter abilityTargetPresenter;
+        // R4 hints (doc 23 §9): the tiles in reach light while the active player holds their pawn; a move further
+        // than the rules allow is explained, with "Undo move" in the turn menu. Nothing is blocked.
+        private bool reachHintShown;
+        private int moveTurnRound = -1;
+        private PlayerId moveTurnPlayer;
+        private TrapFloorCoordinate? moveStartTile;
+        private bool guidedMoveThisTurn;
+        private int tooFarStateIndex = -1;
+        private readonly List<TabletopObjectId> reachTileIds = new List<TabletopObjectId>();
+        private readonly Queue<TrapFloorCoordinate> reachQueue = new Queue<TrapFloorCoordinate>();
+        private int[,] reachSteps;
         private TrapFloorFloormasterLifecycleState floormasterLifecycleState;
         private TrapFloorFloormasterLifecycleService floormasterLifecycleService;
         private TrapFloorRoundState trapFloorRoundState;
@@ -1571,6 +1582,16 @@ namespace ConsoleCards.Presentation.Prototype
 
             if ((acceptance.Kind == AuthoritativeActionKind.MoveObject
                     || acceptance.Kind == AuthoritativeActionKind.PhysicalObjectSettled)
+                && abilityTargetPresenter != null
+                && abilityTargetPresenter.HasCurrent)
+            {
+                // R4: a move made while an Ability or a Trap shows where to go is not a regular move.
+                EnsureMoveTurn();
+                guidedMoveThisTurn = true;
+            }
+
+            if ((acceptance.Kind == AuthoritativeActionKind.MoveObject
+                    || acceptance.Kind == AuthoritativeActionKind.PhysicalObjectSettled)
                 && trapFloorAbilityResolutionService != null
                 && trapFloorAbilityResolutionService.ClearMovementAssistanceIfPawnMoved(matchState))
             {
@@ -2391,6 +2412,7 @@ namespace ConsoleCards.Presentation.Prototype
             HandleConsoleFlipShortcut();
             physicalAuthority?.Tick();
             CompletePendingLandingFlip();
+            UpdateReachHint();
             RefreshBoardCardBacksIfRoundChanged();
             CompletePhysicalFloorfallIfSettled();
             CompletePhysicalFloorCollapseIfSettled();
@@ -5212,6 +5234,15 @@ namespace ConsoleCards.Presentation.Prototype
                         true,
                         BeginTakeFloorPrize));
                 }
+                // R4: after a move further than the rules allow, offer to take it back (nothing is blocked).
+                if (IsTooFarMoveUndoable())
+                {
+                    actions.Add(new PrototypePopupActionOption(
+                        "Undo move (too far)",
+                        true,
+                        UndoTooFarMove));
+                }
+
                 // F3: End Turn says when it will apply waiting Traps, and asks first.
                 int waiting = PendingEndTurnEffects(trapFloorTurnState.ActivePlayerId, null);
                 string applies = waiting > 0 ? $" (applies {waiting})" : string.Empty;
@@ -5281,8 +5312,10 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             int handLimit = trapFloorTemplate.GameDefinition.ControllerConfiguration.MaximumHandSize;
+            int moveTiles = MoveAllowance(out _);
             string standardGuidance =
-                $"Draw up to {handLimit} if needed\nMove your pawn onto a tile to flip it, take a prize you stand on, then End Turn";
+                $"Draw up to {handLimit} if needed\nMove up to {moveTiles} tile{(moveTiles == 1 ? string.Empty : "s")} "
+                + "(they light while you hold your pawn); landing flips a tile. Take a prize you stand on, then End Turn";
             bool isBlind = TryGetActiveBlindStatus(out TrapFloorBlindStatusState blindStatus);
             bool isSlow = TryGetActiveSlowStatus(out TrapFloorSlowStatusState slowStatus);
             bool isSticky = TryGetActiveStickyStatus(out _);
@@ -9048,6 +9081,256 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
+        // ---------- R4 hints: reach and "why" (doc 23 §9) ----------
+
+        // Each player turn starts its own move count (the round and the active player name the turn).
+        private void EnsureMoveTurn()
+        {
+            if (trapFloorTurnState == null) return;
+            if (moveTurnRound == trapFloorTurnState.CurrentRound && moveTurnPlayer == trapFloorTurnState.ActivePlayerId) return;
+            moveTurnRound = trapFloorTurnState.CurrentRound;
+            moveTurnPlayer = trapFloorTurnState.ActivePlayerId;
+            moveStartTile = null;
+            guidedMoveThisTurn = false;
+            tooFarStateIndex = -1;
+        }
+
+        private bool TryGetActivePawnTile(out TabletopObjectId pawnId, out TrapFloorCoordinate tile)
+        {
+            pawnId = TabletopObjectId.Empty;
+            tile = default;
+            return trapFloorTemplate != null
+                && trapFloorTurnState != null
+                && !trapFloorTurnState.IsCurrentFloorFailed
+                && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                && TryGetTrapFloorPlayerSetup(trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition player)
+                && (pawnId = player.PawnId) != TabletopObjectId.Empty
+                && TryReadPawnTile(pawnId, out tile);
+        }
+
+        // True while the active player holds their own pawn (dragged or lifted). Polled each frame; no allocation.
+        private bool IsActivePawnHeld()
+        {
+            if (trapFloorTemplate == null
+                || trapFloorTurnState == null
+                || trapFloorTurnState.IsCurrentFloorFailed
+                || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn
+                || !TryGetTrapFloorPlayerSetup(trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition player))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < pawnViews.Count; i++)
+            {
+                PawnView view = pawnViews[i];
+                if (view == null || !view.IsBound || view.ObjectId != player.PawnId) continue;
+                if (view.PhysicalObject != null && view.PhysicalObject.IsHeld) return true;
+                return interactionStateMachine != null
+                    && interactionStateMachine.Phase == TabletopInteractionPhase.DraggingObject
+                    && moveCoordinator != null
+                    && ReferenceEquals(moveCoordinator.ActiveView, view);
+            }
+
+            return false;
+        }
+
+        private void UpdateReachHint()
+        {
+            bool show = hintsEnabled
+                && abilityTargetPresenter != null
+                && !abilityTargetPresenter.HasCurrent
+                && IsActivePawnHeld();
+            if (show == reachHintShown) return;
+            reachHintShown = show;
+            if (!show)
+            {
+                abilityTargetPresenter?.ClearReach();
+                return;
+            }
+
+            EnsureMoveTurn();
+            if (guidedMoveThisTurn || !TryGetActivePawnTile(out _, out TrapFloorCoordinate current)) return;
+            TrapFloorBlindMovementDirection? onlyDirection = null;
+            if (TryGetActiveBlindStatus(out TrapFloorBlindStatusState blind))
+            {
+                if (!blind.IsDirectionResolved) return; // the status card asks for the Blind roll first
+                onlyDirection = blind.MovementDirection;
+            }
+
+            TrapFloorCoordinate start = moveStartTile ?? current;
+            int allowance = MoveAllowance(out _);
+            ComputeMoveSteps(start, onlyDirection);
+            reachTileIds.Clear();
+            for (int x = TrapFloorCoordinate.MinimumAxisValue; x <= trapFloorTemplate.GridColumns; x++)
+            {
+                for (int y = TrapFloorCoordinate.MinimumAxisValue; y <= trapFloorTemplate.GridRows; y++)
+                {
+                    int steps = reachSteps[x, y];
+                    if (steps <= 0 || steps > allowance) continue;
+                    if (trapFloorTemplate.TryGetFloorCardId(new TrapFloorCoordinate(x, y), out TabletopObjectId id))
+                        reachTileIds.Add(id);
+                }
+            }
+
+            abilityTargetPresenter.ShowReach(reachTileIds);
+        }
+
+        // Tiles the active player may move this turn: the rules' "move.tiles" (default 3), plus Overcharged or
+        // minus Slow; Stuck allows none. <paramref name="why"/> names the changes, empty when there are none.
+        private int MoveAllowance(out string why)
+        {
+            int tiles = 3;
+            if (trapFloorTemplate.GameDefinition.TryGetRuleSetting(
+                    RuleSettingKeys.MoveTiles, trapFloorTemplate.ActiveMode.StableId, out string raw)
+                && int.TryParse(raw, out int parsed)
+                && parsed >= 0)
+            {
+                tiles = parsed;
+            }
+
+            why = string.Empty;
+            if (TryGetActiveStickyStatus(out _))
+            {
+                why = "STUCK";
+                return 0;
+            }
+
+            if (TryGetActiveSlowStatus(out TrapFloorSlowStatusState slow) && slow.MovementModifier != 0)
+            {
+                why = $"{tiles}, {(slow.MovementModifier > 0 ? "OVERCHARGED" : "SLOW")} {FormatSignedModifier(slow.MovementModifier)}";
+                tiles += slow.MovementModifier;
+            }
+
+            return Mathf.Max(0, tiles);
+        }
+
+        // Fewest orthogonal steps from the start to every tile without crossing a hole (-1: no way there). With a
+        // Blind direction only the straight line that way counts. Fills reachSteps; reuses its arrays.
+        private void ComputeMoveSteps(TrapFloorCoordinate start, TrapFloorBlindMovementDirection? onlyDirection)
+        {
+            int columns = trapFloorTemplate.GridColumns;
+            int rows = trapFloorTemplate.GridRows;
+            if (reachSteps == null || reachSteps.GetLength(0) != columns + 1 || reachSteps.GetLength(1) != rows + 1)
+                reachSteps = new int[columns + 1, rows + 1];
+            for (int x = 0; x <= columns; x++)
+            {
+                for (int y = 0; y <= rows; y++) reachSteps[x, y] = -1;
+            }
+
+            if (start.X < 1 || start.Y < 1 || start.X > columns || start.Y > rows) return;
+            reachSteps[start.X, start.Y] = 0;
+            if (onlyDirection.HasValue)
+            {
+                int dx = 0, dy = 0;
+                switch (onlyDirection.Value)
+                {
+                    case TrapFloorBlindMovementDirection.Up: dy = 1; break;
+                    case TrapFloorBlindMovementDirection.Down: dy = -1; break;
+                    case TrapFloorBlindMovementDirection.Left: dx = -1; break;
+                    default: dx = 1; break;
+                }
+
+                int x = start.X + dx, y = start.Y + dy, step = 1;
+                while (IsWalkableTile(x, y))
+                {
+                    reachSteps[x, y] = step++;
+                    x += dx;
+                    y += dy;
+                }
+
+                return;
+            }
+
+            reachQueue.Clear();
+            reachQueue.Enqueue(start);
+            while (reachQueue.Count > 0)
+            {
+                TrapFloorCoordinate at = reachQueue.Dequeue();
+                int next = reachSteps[at.X, at.Y] + 1;
+                VisitStep(at.X + 1, at.Y, next);
+                VisitStep(at.X - 1, at.Y, next);
+                VisitStep(at.X, at.Y + 1, next);
+                VisitStep(at.X, at.Y - 1, next);
+            }
+        }
+
+        private void VisitStep(int x, int y, int steps)
+        {
+            if (!IsWalkableTile(x, y) || reachSteps[x, y] >= 0) return;
+            reachSteps[x, y] = steps;
+            reachQueue.Enqueue(new TrapFloorCoordinate(x, y));
+        }
+
+        // On the grid and not a hole.
+        private bool IsWalkableTile(int x, int y)
+        {
+            return x >= TrapFloorCoordinate.MinimumAxisValue
+                && y >= TrapFloorCoordinate.MinimumAxisValue
+                && x <= trapFloorTemplate.GridColumns
+                && y <= trapFloorTemplate.GridRows
+                && trapFloorTemplate.TryGetFloorCardId(new TrapFloorCoordinate(x, y), out TabletopObjectId id)
+                && (trapFloorCollapseState == null || !trapFloorCollapseState.IsCollapsed(id));
+        }
+
+        // After the active pawn changes tile: explain a move the rules do not allow (never blocked). The count runs
+        // from where the pawn stood when the turn started, so moving 2 then 2 is a 4-tile move.
+        private void CheckMoveReach(TrapFloorCoordinate? from, TrapFloorCoordinate to)
+        {
+            EnsureMoveTurn();
+            if (!moveStartTile.HasValue)
+            {
+                if (!from.HasValue) return; // the pawn came from off the grid: nothing to count from
+                moveStartTile = from;
+            }
+
+            tooFarStateIndex = -1;
+            if (guidedMoveThisTurn || !hintsEnabled || !IsWalkableTile(to.X, to.Y)) return;
+            TrapFloorBlindMovementDirection? onlyDirection = null;
+            string problem = null;
+            if (TryGetActiveBlindStatus(out TrapFloorBlindStatusState blind))
+            {
+                if (!blind.IsDirectionResolved) problem = "BLIND: roll the Blind direction before moving.";
+                else onlyDirection = blind.MovementDirection;
+            }
+
+            int allowance = MoveAllowance(out string why);
+            if (problem == null)
+            {
+                ComputeMoveSteps(moveStartTile.Value, onlyDirection);
+                int steps = reachSteps[to.X, to.Y];
+                if (allowance == 0 && why == "STUCK")
+                    problem = "STUCK: this turn you stay where you are.";
+                else if (steps < 0)
+                    problem = onlyDirection.HasValue
+                        ? $"BLIND: this turn you move {onlyDirection.Value.ToString().ToLowerInvariant()} only."
+                        : "There is no way there without crossing a hole.";
+                else if (steps > allowance)
+                    problem = $"That is {steps} tiles from where the turn started; the rules allow {allowance}"
+                        + (string.IsNullOrEmpty(why) ? "." : $" ({why}).");
+            }
+
+            if (problem == null) return;
+            tooFarStateIndex = undoHistory.CurrentStateIndex;
+            FeedbackLine($"{problem} Nothing is blocked: keep it if the table agrees, or choose Undo move.",
+                FeedbackSeverity.Warning);
+            RefreshTrapFloorStatusUi();
+        }
+
+        // "Undo move" is offered only while the move is still the latest step in the history.
+        private bool IsTooFarMoveUndoable()
+        {
+            return tooFarStateIndex >= 0
+                && moveTurnRound == trapFloorTurnState.CurrentRound
+                && moveTurnPlayer == trapFloorTurnState.ActivePlayerId
+                && undoHistory.CurrentStateIndex == tooFarStateIndex;
+        }
+
+        private void UndoTooFarMove()
+        {
+            tooFarStateIndex = -1;
+            UndoLatestAction();
+        }
+
         // A landed tile still under a pawn shows face down on its (re)bound view until it turns over.
         private void HoldWaitingLandingTileView()
         {
@@ -9223,6 +9506,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             TrapFloorCoordinate? landedTile = null;
+            TrapFloorCoordinate? landedFrom = null;
             bool otherPawnOnHiddenTile = false;
             for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
             {
@@ -9236,6 +9520,7 @@ namespace ConsoleCards.Presentation.Prototype
                     if (pawnId == activePawnId)
                     {
                         landedTile = tile;
+                        landedFrom = previous;
                     }
                     else if (!activePawnId.IsEmpty && IsHiddenUsableTile(tile.Value))
                     {
@@ -9245,6 +9530,8 @@ namespace ConsoleCards.Presentation.Prototype
 
                 landingPawnTiles[pawnId] = tile;
             }
+
+            if (landedTile.HasValue) CheckMoveReach(landedFrom, landedTile.Value);
 
             // The tile waiting from an earlier landing turns once no pawn stands on it.
             if (!waitingLandingFloorCardId.IsEmpty)
@@ -10446,6 +10733,7 @@ namespace ConsoleCards.Presentation.Prototype
                 floorfallState);
             floorfallTargetPresenter = new TrapFloorFloorfallTargetPresenter();
             abilityTargetPresenter = new TrapFloorAbilityTargetPresenter();
+            reachHintShown = false;
         }
 
         private void BuildFloormasterLifecycleRuntime()

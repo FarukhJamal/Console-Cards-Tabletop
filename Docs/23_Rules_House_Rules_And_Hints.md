@@ -1,8 +1,8 @@
 # Console Cards — Rules, House Rules and Hints
 
 **Document ID:** 23_Rules_House_Rules_And_Hints
-**Version:** 0.7
-**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b, C1 and R3 implemented (Trap Floor G2a applies the revised turn); R4 planned.
+**Version:** 0.8
+**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b, C1, R3 and R4 implemented (Trap Floor G2a applies the revised turn). Pings wait for multiplayer.
 
 > **Contract note:** type names and field lists here are illustrative unless labelled **Approved Contract**. They describe the direction agreed with the owner, not fixed public APIs.
 
@@ -62,7 +62,7 @@ Each game supplies its own entries and setting keys. The platform only knows how
 | R2a | Rule settings feed the game data before the template is built (`GameDefinition.ToData(ruleSet)` → `RuleSettingsApplication`): hand size, Keys needed per difficulty, win mode (Team / Survival, separate from difficulty). Default rule set rewritten for the revised Trap Floor (doc 18 §15) | Implemented |
 | R2b | Board mix and Avatars as data: floor groups (content sets with role `floor`, a draw count and optional repeats), floor count and placement settings, new card definitions (Spring ×4, Crane, Overcharged, Push), Action/Reaction text on every Ability, each seat's Avatar and its starting ability, a Setup section on the rules card | Implemented |
 | R3 | House rules: propose a change from the rules card, every player agrees, the change is saved on this computer as a named set, the card shows the difference, and saved sets can be picked on the card (§8). The start flow's Rules step comes with the game selection menu (doc 27, List 2) | Implemented |
-| R4 | Hints engine built on the assistance layer: legal-move highlights and "why / why not" explanations for the active phase and rule set. Pings arrive with multiplayer (doc 10) as a separate social layer | Planned |
+| R4 | Hints for moving (§9): the tiles in reach light while the active player holds their pawn, a longer move is explained with "Undo move" offered, and the turn help names the move count. Pings arrive with multiplayer (doc 10) as a separate social layer | Implemented (pings later) |
 
 ## 5. Setting keys (R2a–C1, approved contract)
 
@@ -73,6 +73,7 @@ Each game supplies its own entries and setting keys. The platform only knows how
 | `game.win-mode` | Choice: Team / Survival | all modes or per mode | `Mode.Behavior` |
 | `floor.count.<content set ID>` | Number | all modes or per mode | How many cards the setup draws from that floor group (R2b). Passed through as `GameDefinitionData.RuleSettings` |
 | `floor.placement` | Choice: random / pattern | all modes or per mode | Placement method (R2b). Passed through; until G2 every floor is placed at random |
+| `move.tiles` | Number | all modes or per mode | How many tiles a player may move on their turn (R4, default 3). Passed through; the hints read it |
 | `card.cost.<card stable ID>` | Text, in card cost notation | game | That card's input cost (C1). Replaces the authored cost in the game data, so the purchase popup, payment check and inspect text all use it. Empty means no cost yet |
 
 **Card cost notation (C1).** Parts are joined with `+`. A part lists one or more inputs separated by `/`, and any one of them pays it. `x2` after a part repeats it. Examples: `Up + A/B/X/Y` (an Up card and one of A, B, X or Y), `Left/Right + A/B/X/Y`, `A + B + X + Y`, `Right x2 + A`. Input names are Up, Down, Left, Right, A, B, X and Y, in any letter case. A cost that cannot be read is skipped with a warning and the card keeps its authored cost. Card assets store the same thing: each requirement has an input, optional `alsoAccepts` inputs and a count.
@@ -130,3 +131,23 @@ Lit drop targets and status messages are always shown, because play depends on t
 - The Change button and the rule-set and restart rows. Create Missing Gameplay UI Prefabs adds these to the existing rules prefabs and changes nothing else.
 
 The rule set in play is a table setting kept by the game, not table state: Undo and Reset do not change it.
+
+## 9. Hints for moving (R4, implemented)
+
+Owner choices (2026-10-15): reach lights only while dragging your own pawn; a longer move is explained and Undo is offered; the move count is a rule setting.
+
+**How far.** The Trap Floor rule "Move up to {value} tiles" now carries the setting `move.tiles` (default 3), so a house rule can change it. For the active player this turn:
+
+- Overcharged adds 1, Slow takes 1 away (never below 0);
+- Stuck allows no move;
+- Blind allows only the straight line in the rolled direction (before the roll, nothing lights and the status card asks for the roll).
+
+Steps are counted orthogonally from where the pawn stood when the turn started, never across a hole, so moving 2 and then 2 more counts as 4.
+
+**Reach lights.** While the active player holds their own pawn, the tiles they can still reach this turn light green. Ability and Trap destinations (cyan) take priority, and no reach shows while one is shown. The lights go when the pawn is put down.
+
+**Why not.** When the active pawn lands further than allowed, across a hole, off a Blind line, or while Stuck, a warning says why. For example: "That is 4 tiles from where the turn started; the rules allow 2 (3, SLOW -1)." The turn menu offers **Undo move (too far)** while that move is still the latest step. The move itself is kept: nothing is blocked. Moves made while an Ability or Trap shows where to go (Rush, Dodge, Spring, Crane) are not counted as regular moves for the rest of that turn.
+
+**Turn help.** The status card's help line says "Move up to N tiles" with the count for this turn.
+
+All of these hints follow the Hints switch in the Table menu.

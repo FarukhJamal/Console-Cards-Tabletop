@@ -91,19 +91,55 @@ namespace ConsoleCards.Presentation.Prototype
         }
     }
 
-    /// <summary>Projects temporary, non-enforcing Ability destination guidance onto Floor Cards.</summary>
+    /// <summary>
+    /// Projects temporary, non-enforcing guidance onto Floor Cards: Ability destinations (cyan), neutralized Traps
+    /// and, while the active player holds their pawn, the tiles in reach (R4 hints). Ability destinations win over
+    /// the reach, and the reach over neutralized Traps.
+    /// </summary>
     internal sealed class TrapFloorAbilityTargetPresenter
     {
         private static readonly int BaseColorProperty = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorProperty = Shader.PropertyToID("_Color");
         private static readonly Color TargetColor = new Color(0.14f, 0.86f, 0.92f, 1f);
         private static readonly Color NeutralizedColor = new Color(0.32f, 0.58f, 0.48f, 1f);
+        private static readonly Color ReachColor = new Color(0.62f, 0.9f, 0.38f, 1f);
+        private readonly HashSet<TabletopObjectId> reachFloorCardIds = new HashSet<TabletopObjectId>();
 
         private readonly Dictionary<TabletopObjectId, TargetRenderer[]> renderers =
             new Dictionary<TabletopObjectId, TargetRenderer[]>();
         private readonly List<TabletopObjectId> currentTargetIds = new List<TabletopObjectId>();
         private readonly HashSet<TabletopObjectId> neutralizedFloorCardIds =
             new HashSet<TabletopObjectId>();
+
+        /// <summary>True while Ability destinations are shown.</summary>
+        public bool HasCurrent => currentTargetIds.Count > 0;
+
+        /// <summary>Lights the tiles in reach (R4 hints); replaces any reach shown before.</summary>
+        public void ShowReach(IReadOnlyList<TabletopObjectId> floorCardIds)
+        {
+            if (floorCardIds == null) throw new ArgumentNullException(nameof(floorCardIds));
+            ClearReach();
+            for (int i = 0; i < floorCardIds.Count; i++)
+            {
+                TabletopObjectId floorCardId = floorCardIds[i];
+                if (floorCardId.IsEmpty || !renderers.TryGetValue(floorCardId, out TargetRenderer[] targets)) continue;
+                reachFloorCardIds.Add(floorCardId);
+                if (!currentTargetIds.Contains(floorCardId)) ApplyColor(targets, ReachColor);
+            }
+        }
+
+        public void ClearReach()
+        {
+            foreach (TabletopObjectId floorCardId in reachFloorCardIds)
+            {
+                if (currentTargetIds.Contains(floorCardId)
+                    || !renderers.TryGetValue(floorCardId, out TargetRenderer[] targets)) continue;
+                RestoreBaseline(targets);
+                if (neutralizedFloorCardIds.Contains(floorCardId)) ApplyColor(targets, NeutralizedColor);
+            }
+
+            reachFloorCardIds.Clear();
+        }
 
         public void Register(TabletopObjectId floorCardId, params Renderer[] floorRenderers)
         {
@@ -150,6 +186,7 @@ namespace ConsoleCards.Presentation.Prototype
             foreach (TabletopObjectId floorCardId in neutralizedFloorCardIds)
             {
                 if (!currentTargetIds.Contains(floorCardId)
+                    && !reachFloorCardIds.Contains(floorCardId)
                     && renderers.TryGetValue(floorCardId, out TargetRenderer[] targets))
                 {
                     RestoreBaseline(targets);
@@ -166,6 +203,7 @@ namespace ConsoleCards.Presentation.Prototype
             foreach (TabletopObjectId floorCardId in neutralizedFloorCardIds)
             {
                 if (!currentTargetIds.Contains(floorCardId)
+                    && !reachFloorCardIds.Contains(floorCardId)
                     && renderers.TryGetValue(floorCardId, out TargetRenderer[] targets))
                 {
                     ApplyColor(targets, NeutralizedColor);
@@ -175,6 +213,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         public void Clear()
         {
+            ClearReach();
             ClearCurrent();
             foreach (TabletopObjectId floorCardId in neutralizedFloorCardIds)
             {
@@ -195,7 +234,9 @@ namespace ConsoleCards.Presentation.Prototype
                 }
 
                 RestoreBaseline(targets);
-                if (neutralizedFloorCardIds.Contains(currentTargetIds[i]))
+                if (reachFloorCardIds.Contains(currentTargetIds[i]))
+                    ApplyColor(targets, ReachColor);
+                else if (neutralizedFloorCardIds.Contains(currentTargetIds[i]))
                     ApplyColor(targets, NeutralizedColor);
             }
             currentTargetIds.Clear();

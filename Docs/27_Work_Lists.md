@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 0.8 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 0.9 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -10,8 +10,8 @@ Version 0.8 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the 
 | C3d | Double-sided Console mat: 12 symbol slots + Main on the front (Square ×3 top, Diamond ×3 bottom, Star left, Cross right, Circle/Triangle/Plus/Minus corners), controller mapping on the back (A/B/X/Y take cards, D-pad takes dice set to a number), magnetic snapping by symbol, flip with the card-reveal animation (cards too), Duplicate (doc 22 §14); fix 2026-10-15: corner size for the seat check, all slots are Trap Floor item slots, landed tiles turn once no pawn is on them (doc 18 §15.2), Scene view layout editor | Done, approved by the owner (Console Workbench added) |
 | C3e | Game board v2 (owner, 2026-10-15), see below; owner choices: snap points, boards snap edges and move singly, grid changed from the right-click menu, Trap Floor's board becomes a mat (doc 22 §15) | Done, approved by the owner |
 | Rules content | The rules card covers how to play, dos and don'ts, card numbers and components used, not where cards go on the Console or controller (owner, 2026-10-15) | Recorded in doc 23 §7; applies to rules content and R4 hints |
-| R3 | House rules in game: propose a change from the rules card, everyone agrees, it is saved on this computer as a named rule set and shown on the card; saved sets are picked on the card; changed settings start at restart (doc 23 §8) | Written, to be checked (run Create Missing Gameplay UI Prefabs first) |
-| R4 | Hints: highlight legal moves and explain why a move is or is not allowed (doc 23) | To do |
+| R3 | House rules in game: propose a change from the rules card, everyone agrees, it is saved on this computer as a named rule set and shown on the card; saved sets are picked on the card; changed settings start at restart (doc 23 §8) | Done, approved by the owner |
+| R4 | Hints: reach lights while holding your pawn, a too-far move is explained with Undo move offered, the move count is the rule setting `move.tiles` (doc 23 §9); landing triggers at once and the tile turns once the pawn is off (doc 18 §15.2) | Written, to be checked |
 | G2d | Remove the retired Search, Careful Search and Buy Ability code (doc 18) | To do |
 | Pink material | Pink material when a card is placed on the Main slot | Waiting for a screenshot |
 | Tests cleanup | After the owner deletes `Assets/ConsoleCards/Tests`, remove the two `InternalsVisibleTo` lines (TabletopCameraController.cs:8, TabletopPointerProjector.cs:8) | Waiting for the owner |

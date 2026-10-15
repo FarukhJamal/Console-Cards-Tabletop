@@ -73,10 +73,10 @@ MonoBehaviour:
       displayValue: ''
       modeStableIds: []
     - stableId: tf-turn-move
-      text: 'Move up to 3 tiles (no diagonals), or play an Action ability instead of moving.'
-      settingKind: 0
-      settingKey: 
-      value: ''
+      text: 'Move up to {value} tiles (no diagonals), or play an Action ability instead of moving.'
+      settingKind: 1
+      settingKey: move.tiles
+      value: '3'
       displayValue: ''
       modeStableIds: []
     - stableId: tf-turn-flip

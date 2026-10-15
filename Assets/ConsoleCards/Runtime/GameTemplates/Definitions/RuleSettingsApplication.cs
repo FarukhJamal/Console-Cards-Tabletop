@@ -31,6 +31,12 @@ namespace ConsoleCards.GameTemplates.Definitions
         /// </summary>
         public const string CardCostPrefix = "card.cost.";
 
+        /// <summary>
+        /// Number: how many tiles a player may move on their turn (doc 23, R4). Passed through; hints read it to
+        /// light the tiles in reach and to explain a longer move. Nothing is blocked.
+        /// </summary>
+        public const string MoveTiles = "move.tiles";
+
         public const string FloorPlacementRandom = "random";
         public const string FloorPlacementPattern = "pattern";
     }
@@ -140,6 +146,13 @@ namespace ConsoleCards.GameTemplates.Definitions
                         Warn(warnings, setting, $"the game has no content set '{contentSetId}'");
                     }
                     else if (TryReadCount(setting, warnings, out _))
+                    {
+                        passedThrough.Add(setting);
+                    }
+                }
+                else if (string.Equals(setting.Key, RuleSettingKeys.MoveTiles, StringComparison.Ordinal))
+                {
+                    if (TryReadCount(setting, warnings, out _))
                     {
                         passedThrough.Add(setting);
                     }
