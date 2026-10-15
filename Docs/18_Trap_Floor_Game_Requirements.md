@@ -1,7 +1,7 @@
 # Console Cards - Trap Floor Game Requirements
 
 **Document ID:** 18_Trap_Floor_Game_Requirements
-**Version:** 1.16
+**Version:** 1.18
 **Status:** Approved with Open Decisions
 **Authoritative source:** User-approved Console Cards System & Games direction supplied 2026-09-21, superseding conflicting historical Trap Floor direction
 **Purpose:** Define the current approved minimum Game-specific direction for Trap Floor while keeping provisional design values open and preserving manual tabletop play.
@@ -230,9 +230,9 @@ The card's own text states exactly what it does (for example, *"Push a player wh
 - **Taking a prize.** On a face-up Ability or Friend under the active player's pawn, the turn menu offers *Take …*. An Ability's cost is paid with the C1 payment step (choose cards, place them in the Console, Confirm Payment); a Friend, or an Ability with no cost set yet, is free.
 - **Where it goes.** A copy of the card goes to the player's Hand, or to the Action stack beside the Console when the Hand already holds the hand limit.
 - **The tile becomes a hole** (shown as HOLE, counted as collapsed). The player who took it is safe and walks off next turn; a reward never eliminates.
-- Search and Careful Search are gone from the menus. Their code stays unused until G2d. (Buy Ability returned as the Shop.)
+- Search and Careful Search are gone from the menus. (Buy Ability returned as the Shop.) **G2d part 1 (2026-10-15):** their game code is removed from the table (the Search Hand picker, payment, tile choice, Cancel Search, the SEARCH turn help and the old Search words in the Blind/Stuck help and the hidden-tile text). **Part 2 (2026-10-15, after the Tests folder was deleted):** the reveal rules keep only the free landing reveal (search kinds Normal and Careful, their payment check and the Careful "harmless Trap" are gone); the pending-search record is no longer kept in Undo; the search cost settings are gone from the game data (`assistanceConfiguration`); the old Buy-into-Action-stack service and the table's public `PurchaseActionOrAbility` are gone (buying is the Shop). The activity kinds SearchedFloor and CarefullySearchedFloor are gone; the other kinds keep their numbers.
 
-**The Shop (owner, 2026-10-15; written, waiting for the owner's check):**
+**The Shop (owner, 2026-10-15; implemented, approved by the owner):**
 
 - **Apart from taking from the floor,** players can buy Abilities from the Shop. Every Ability of the game is listed (Actions first, then Reactions, by name), each with its picture, words, kind and cost.
 - **When:** on your own turn, at any time; buying does not replace moving. Off-turn the Shop can be opened to look; Buy waits for your turn.

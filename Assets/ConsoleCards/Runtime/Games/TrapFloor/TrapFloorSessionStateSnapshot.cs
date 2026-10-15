@@ -38,19 +38,13 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly TrapFloorBlindStatusState[] blindStatuses;
         private readonly TrapFloorSlowStatusState[] slowStatuses;
         private readonly TrapFloorStickyStatusState[] stickyStatuses;
-        private readonly bool searchAssistanceActive;
-        private readonly PlayerId searchPlayerId;
-        private readonly TrapFloorSearchKind searchKind;
-        private readonly TabletopObjectId[] searchPaymentCardIds;
-        private readonly TabletopObjectId[] insertedSearchPaymentCardIds;
 
         private TrapFloorSessionStateSnapshot(
             TrapFloorActivityFeedState activity,
             TrapFloorObjectiveState objective,
             TrapFloorCollapseState collapse,
             TrapFloorTurnState turn,
-            TrapFloorAbilityResolutionState abilityResolution,
-            TrapFloorPendingSearchState pendingSearch)
+            TrapFloorAbilityResolutionState abilityResolution)
         {
             MatchId = activity.MatchId;
             activityEntries = Copy(activity.Entries);
@@ -83,11 +77,6 @@ namespace ConsoleCards.Games.TrapFloor
             blindStatuses = abilityResolution.CopyBlindStatuses();
             slowStatuses = abilityResolution.CopySlowStatuses();
             stickyStatuses = abilityResolution.CopyStickyStatuses();
-            searchAssistanceActive = pendingSearch.IsActive;
-            searchPlayerId = pendingSearch.PlayerId;
-            searchKind = pendingSearch.SearchKind;
-            searchPaymentCardIds = pendingSearch.CopySelectedCardIds();
-            insertedSearchPaymentCardIds = pendingSearch.CopyInsertedCardIds();
         }
 
         public MatchId MatchId { get; }
@@ -97,28 +86,24 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorObjectiveState objective,
             TrapFloorCollapseState collapse,
             TrapFloorTurnState turn,
-            TrapFloorAbilityResolutionState abilityResolution,
-            TrapFloorPendingSearchState pendingSearch)
+            TrapFloorAbilityResolutionState abilityResolution)
         {
             if (activity == null) throw new ArgumentNullException(nameof(activity));
             if (objective == null) throw new ArgumentNullException(nameof(objective));
             if (collapse == null) throw new ArgumentNullException(nameof(collapse));
             if (turn == null) throw new ArgumentNullException(nameof(turn));
             if (abilityResolution == null) throw new ArgumentNullException(nameof(abilityResolution));
-            if (pendingSearch == null) throw new ArgumentNullException(nameof(pendingSearch));
             if (activity.MatchId != objective.MatchId
                 || activity.MatchId != collapse.MatchId
                 || activity.MatchId != turn.MatchId
-                || activity.MatchId != abilityResolution.MatchId
-                || activity.MatchId != pendingSearch.MatchId)
+                || activity.MatchId != abilityResolution.MatchId)
                 throw new ArgumentException("Trap Floor snapshot state must belong to one Match.");
             return new TrapFloorSessionStateSnapshot(
                 activity,
                 objective,
                 collapse,
                 turn,
-                abilityResolution,
-                pendingSearch);
+                abilityResolution);
         }
 
         public TrapFloorSessionState Restore()
@@ -162,20 +147,12 @@ namespace ConsoleCards.Games.TrapFloor
                 blindStatuses,
                 slowStatuses,
                 stickyStatuses);
-            TrapFloorPendingSearchState pendingSearch = new TrapFloorPendingSearchState(MatchId);
-            pendingSearch.Restore(
-                searchAssistanceActive,
-                searchPlayerId,
-                searchKind,
-                searchPaymentCardIds,
-                insertedSearchPaymentCardIds);
             return new TrapFloorSessionState(
                 activity,
                 objective,
                 collapse,
                 turn,
-                abilityResolution,
-                pendingSearch);
+                abilityResolution);
         }
 
         private static T[] Copy<T>(IReadOnlyList<T> source)
@@ -193,15 +170,13 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorObjectiveState objective,
             TrapFloorCollapseState collapse,
             TrapFloorTurnState turn,
-            TrapFloorAbilityResolutionState abilityResolution,
-            TrapFloorPendingSearchState pendingSearch)
+            TrapFloorAbilityResolutionState abilityResolution)
         {
             Activity = activity;
             Objective = objective;
             Collapse = collapse;
             Turn = turn;
             AbilityResolution = abilityResolution;
-            PendingSearch = pendingSearch;
         }
 
         public TrapFloorActivityFeedState Activity { get; }
@@ -209,6 +184,5 @@ namespace ConsoleCards.Games.TrapFloor
         public TrapFloorCollapseState Collapse { get; }
         public TrapFloorTurnState Turn { get; }
         public TrapFloorAbilityResolutionState AbilityResolution { get; }
-        public TrapFloorPendingSearchState PendingSearch { get; }
     }
 }

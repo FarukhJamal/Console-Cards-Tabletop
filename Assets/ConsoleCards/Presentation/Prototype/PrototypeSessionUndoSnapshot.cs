@@ -30,7 +30,6 @@ namespace ConsoleCards.Presentation.Prototype
             TrapFloorCollapseState collapse,
             TrapFloorTurnState turn,
             TrapFloorAbilityResolutionState abilityResolution,
-            TrapFloorPendingSearchState pendingSearch,
             PendingControllerPurchaseState pendingControllerPurchase)
         {
             TrapFloorSessionStateSnapshot trapFloor = null;
@@ -38,23 +37,20 @@ namespace ConsoleCards.Presentation.Prototype
                 || objective != null
                 || collapse != null
                 || turn != null
-                || abilityResolution != null
-                || pendingSearch != null)
+                || abilityResolution != null)
             {
                 if (activity == null
                     || objective == null
                     || collapse == null
                     || turn == null
-                    || abilityResolution == null
-                    || pendingSearch == null)
+                    || abilityResolution == null)
                     throw new InvalidOperationException("Trap Floor Undo capture requires its complete Match-scoped state.");
                 trapFloor = TrapFloorSessionStateSnapshot.Capture(
                     activity,
                     objective,
                     collapse,
                     turn,
-                    abilityResolution,
-                    pendingSearch);
+                    abilityResolution);
             }
 
             PendingControllerPurchaseStateSnapshot purchase = pendingControllerPurchase == null

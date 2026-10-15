@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.3 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.5 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -15,10 +15,10 @@ Version 1.3 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the 
 | H1 | Hint system (doc 23 §10): hint data, service, hint strip, Tips switch, platform tips; reach as markers; movement in one straight line, 2 tiles, the Athlete 3 (doc 18 §15.2) | Done, approved by the owner |
 | H2 | Hint tags on rule lines; game tips made from the rules in play; Trap Floor rules tagged (doc 23 §10) | Done, approved by the owner |
 | H3 | Trap Floor hint helpers behind the rule tags: reach and why not (RULE reminders), prize, waiting Traps, collapse target as a board marker (doc 23 §10); a landing the rules do not allow does not flip, the warning points at the Undo button, Keep move in the turn menu | Done, approved by the owner |
-| Shop | The market returns as the Shop (owner, 2026-10-15): every Ability, bought on your turn as well as taking from the floor; Shop entry (icon and word) on the session bar; on/off rule with everyone's agreement, applied at once (doc 18 §15.4, doc 23 §5) | Written, to be checked (not compiled yet) |
-| G2d | Remove the retired Search and Careful Search code (doc 18); the market stays as the Shop | To do |
-| Pink material | Pink material when a card is placed on the Main slot | Waiting for a screenshot |
-| Tests cleanup | After the owner deletes `Assets/ConsoleCards/Tests`, remove the two `InternalsVisibleTo` lines (TabletopCameraController.cs:8, TabletopPointerProjector.cs:8) | Waiting for the owner |
+| Shop | The market returns as the Shop (owner, 2026-10-15): every Ability, bought on your turn as well as taking from the floor; Shop entry (icon and word) on the session bar; on/off rule with everyone's agreement, applied at once (doc 18 §15.4, doc 23 §5) | Done, approved by the owner |
+| G2d | Remove the retired Search and Careful Search code (doc 18 §15.4); the market stays as the Shop. Part 1: the table's Search code and texts. Part 2: search data in the reveal rules, the Undo record, the search cost settings, the old Buy service | Part 1 approved by the owner; part 2 written, to be checked (not compiled yet) |
+| Pink material | Pink material when a card is placed on the Main slot | Parked by the owner (2026-10-15) |
+| Tests cleanup | The owner deleted `Assets/ConsoleCards/Tests`; the two `InternalsVisibleTo` lines (TabletopCameraController.cs, TabletopPointerProjector.cs) are removed | Written, to be checked (not compiled yet) |
 
 ## List 2 — player-made content (after List 1)
 

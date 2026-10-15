@@ -1,11 +1,8 @@
 using System;
-using System.Runtime.CompilerServices;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Presentation.Coordinates;
 using UnityEngine;
 using UnityCamera = UnityEngine.Camera;
-
-[assembly: InternalsVisibleTo("ConsoleCards.Tests.PlayMode")]
 
 namespace ConsoleCards.Presentation.Camera
 {
