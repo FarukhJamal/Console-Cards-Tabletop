@@ -4,11 +4,39 @@ using System.Collections.ObjectModel;
 
 namespace ConsoleCards.GameTemplates.Definitions
 {
-    /// <summary>What a Console layout slot holds. Cube entries are layout data only until Stage (d).</summary>
+    /// <summary>
+    /// What a Console layout slot holds. Cube entries are layout data only until Stage (d). Die entries are
+    /// spots where one die rests (the D-pad arrows on the mat's back, doc 22 §14); they are not containers.
+    /// </summary>
     public enum ConsoleLayoutSlotKind
     {
         Card = 0,
-        Cube = 1
+        Cube = 1,
+        Die = 2
+    }
+
+    /// <summary>Which side of the double-sided Console mat a slot is on (doc 22 §14).</summary>
+    public enum ConsoleMatSide
+    {
+        Front = 0,
+        Back = 1
+    }
+
+    /// <summary>
+    /// A symbol printed on the Console mat beside a slot (doc 22 §14). A card with a symbol fits only a slot with
+    /// the same symbol, and is pulled into it like a magnet; a card or slot with None has no such rule.
+    /// </summary>
+    public enum ConsoleSymbol
+    {
+        None = 0,
+        Square = 1,
+        Circle = 2,
+        Star = 3,
+        Cross = 4,
+        Diamond = 5,
+        Triangle = 6,
+        Plus = 7,
+        Minus = 8
     }
 
     /// <summary>
@@ -43,7 +71,9 @@ namespace ConsoleCards.GameTemplates.Definitions
             float footprintDepth,
             int defaultCapacity,
             bool marker,
-            ConsoleSlotOrientation defaultOrientation)
+            ConsoleSlotOrientation defaultOrientation,
+            ConsoleMatSide side = ConsoleMatSide.Front,
+            ConsoleSymbol symbol = ConsoleSymbol.None)
         {
             if (ordinal < 1 || ordinal > MaximumOrdinal) throw new ArgumentOutOfRangeException(nameof(ordinal));
             if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("Console layout slot key is required.", nameof(key));
@@ -55,7 +85,9 @@ namespace ConsoleCards.GameTemplates.Definitions
             if (defaultCapacity < 0) throw new ArgumentOutOfRangeException(nameof(defaultCapacity));
             if (!Enum.IsDefined(typeof(ConsoleSlotOrientation), defaultOrientation)) throw new ArgumentOutOfRangeException(nameof(defaultOrientation));
             if ((kind == ConsoleLayoutSlotKind.Card) == (defaultOrientation == ConsoleSlotOrientation.None))
-                throw new ArgumentException("Card slots need a Portrait or Landscape default orientation; Cube slots use None.", nameof(defaultOrientation));
+                throw new ArgumentException("Card slots need a Portrait or Landscape default orientation; Cube and Die slots use None.", nameof(defaultOrientation));
+            if (!Enum.IsDefined(typeof(ConsoleMatSide), side)) throw new ArgumentOutOfRangeException(nameof(side));
+            if (!Enum.IsDefined(typeof(ConsoleSymbol), symbol)) throw new ArgumentOutOfRangeException(nameof(symbol));
 
             Ordinal = ordinal;
             Key = key;
@@ -68,6 +100,8 @@ namespace ConsoleCards.GameTemplates.Definitions
             DefaultCapacity = defaultCapacity;
             Marker = marker;
             DefaultOrientation = defaultOrientation;
+            Side = side;
+            Symbol = symbol;
         }
 
         public int Ordinal { get; }
@@ -81,6 +115,10 @@ namespace ConsoleCards.GameTemplates.Definitions
         public int DefaultCapacity { get; }
         public bool Marker { get; }
         public ConsoleSlotOrientation DefaultOrientation { get; }
+        /// <summary>The mat side this slot is on. Only the side facing up can be used.</summary>
+        public ConsoleMatSide Side { get; }
+        /// <summary>The symbol printed beside the slot; None has no symbol rule.</summary>
+        public ConsoleSymbol Symbol { get; }
 
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
@@ -139,12 +177,18 @@ namespace ConsoleCards.GameTemplates.Definitions
             this.slots = new ReadOnlyCollection<ConsoleLayoutSlotData>(ordered);
             cardSlots = new ReadOnlyCollection<ConsoleLayoutSlotData>(cards);
             cardSlotCapacities = new ReadOnlyCollection<int>(capacities);
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                if (ordered[i].Side == ConsoleMatSide.Back) HasBackSide = true;
+            }
         }
 
         public string StableId { get; }
         public float MatWidth { get; }
         public float MatDepth { get; }
         public float CubePieceSize { get; }
+        /// <summary>True when any slot is on the mat's back, so the mat can be flipped to use it.</summary>
+        public bool HasBackSide { get; }
 
         /// <summary>Every slot, Card and Cube, in ordinal order.</summary>
         public IReadOnlyList<ConsoleLayoutSlotData> Slots => slots;

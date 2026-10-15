@@ -56,7 +56,8 @@ namespace ConsoleCards.Application.UseCases
             AuthoritativeActionKind actionKind = AuthoritativeActionKind.CreateComponent,
             int deckCardCount = 0,
             ContainerArrivalFace containerArrivalFace = ContainerArrivalFace.Unchanged,
-            IReadOnlyList<ObjectDefinitionId> cardDefinitionIds = null)
+            IReadOnlyList<ObjectDefinitionId> cardDefinitionIds = null,
+            bool consoleShowsBack = false)
         {
             if (!IsFinite(initialPose.Position.X)
                 || !IsFinite(initialPose.Position.Y)
@@ -74,6 +75,7 @@ namespace ConsoleCards.Application.UseCases
             DeckCardCount = deckCardCount;
             ContainerArrivalFace = containerArrivalFace;
             CardDefinitionIds = cardDefinitionIds;
+            ConsoleShowsBack = consoleShowsBack;
         }
 
         public CommandContext Context { get; }
@@ -95,6 +97,8 @@ namespace ConsoleCards.Application.UseCases
         /// generic Toolbox card.
         /// </summary>
         public IReadOnlyList<ObjectDefinitionId> CardDefinitionIds { get; }
+        /// <summary>Console only: the new mat lies back side up (doc 22 §14, Duplicate with the other side up).</summary>
+        public bool ConsoleShowsBack { get; }
 
         private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
@@ -375,6 +379,7 @@ namespace ConsoleCards.Application.UseCases
                 }
 
                 ConsoleState console = ConsoleState.CreateUnowned(slotContainerIds);
+                console.SetShowsBack(request.ConsoleShowsBack);
                 matchState.AddPlacedConsole(
                     new PlacedConsoleState(consoleId, request.InitialPose, console, surfaceHeight),
                     slots);

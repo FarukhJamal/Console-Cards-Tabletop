@@ -27,6 +27,7 @@ namespace ConsoleCards.Core.Domain.Match
         TrapFloorAttemptEscape = 19,
         TrapFloorCollapse = 20,
         PurchaseActionOrAbility = 21,
+        FlipConsole = 22,
     }
 
     public enum AuthoritativeActionRecordMode

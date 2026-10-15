@@ -22,6 +22,9 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly RaycastHit[] hitBuffer;
         public PhysicalTabletopSurfaces PhysicalSurfaces { get; set; }
 
+        /// <summary>Optional Console symbol magnet (doc 22 §14). Null keeps plain nearest-target resolution.</summary>
+        public ICardDropMagnet Magnet { get; set; }
+
         public CardDropTargetResolver(
             UnityCamera targetCamera,
             TabletopPointerProjector pointerProjector,
@@ -90,6 +93,7 @@ namespace ConsoleCards.Presentation.Interaction
                 Array.Sort(hitBuffer, 0, hitCount, RaycastHitDistanceComparer.Instance);
             }
 
+            ContainerId directContainerId = ContainerId.Empty;
             for (int i = 0; i < hitCount; i++)
             {
                 if (!TryGetValidContainerTarget(
@@ -100,7 +104,25 @@ namespace ConsoleCards.Presentation.Interaction
                     continue;
                 }
 
-                target = CardDropTarget.ForContainer(containerId);
+                directContainerId = containerId;
+                break;
+            }
+
+            ICardDropMagnet magnet = Magnet;
+            if (magnet != null && magnet.IsActive)
+            {
+                bool hasPoint = TryGetPointerCoordinate(screenPosition, out TableCoordinate point);
+                if (magnet.TryAdjust(directContainerId, hasPoint, point, out ContainerId adjustedContainerId))
+                {
+                    directContainerId = adjustedContainerId == excludedContainerId
+                        ? ContainerId.Empty
+                        : adjustedContainerId;
+                }
+            }
+
+            if (!directContainerId.IsEmpty)
+            {
+                target = CardDropTarget.ForContainer(directContainerId);
                 return true;
             }
 
@@ -122,6 +144,23 @@ namespace ConsoleCards.Presentation.Interaction
 
             target = CardDropTarget.None();
             return false;
+        }
+
+        private bool TryGetPointerCoordinate(Vector2 screenPosition, out TableCoordinate coordinate)
+        {
+            if (PhysicalSurfaces != null)
+            {
+                if (PhysicalSurfaces.TryPointer(screenPosition, out RaycastHit surface))
+                {
+                    coordinate = PhysicalSurfaces.Coordinate(surface.point);
+                    return true;
+                }
+
+                coordinate = default;
+                return false;
+            }
+
+            return PointerProjector.TryProjectScreenPoint(screenPosition, out coordinate);
         }
 
         private static bool TryGetValidContainerTarget(

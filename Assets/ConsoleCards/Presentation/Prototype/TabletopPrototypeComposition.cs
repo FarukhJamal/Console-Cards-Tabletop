@@ -57,7 +57,7 @@ namespace ConsoleCards.Presentation.Prototype
         CardFaceLabels = 128
     }
 
-    public sealed class TabletopPrototypeComposition : MonoBehaviour, IContainedCardDragFeedback
+    public sealed class TabletopPrototypeComposition : MonoBehaviour, IContainedCardDragFeedback, ICardDropMagnet
     {
         // Console Slot anchors must sit at their layout positions (console-local x/z) within this tolerance.
         private const float ConsoleLayoutAnchorTolerance = 0.0005f;
@@ -121,6 +121,12 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] internal float returnDuration = 0.1f;
         [SerializeField] internal float handReflowDuration = 0.14f;
         [SerializeField] internal float magneticDistance = 0.8f;
+        [Tooltip("Console mat (doc 22 §14): how far a card with a symbol is pulled into a slot with the same symbol.")]
+        [SerializeField, Min(0f)] internal float consoleSymbolMagnetDistance = 1.1f;
+        [Tooltip("Console mat: how far under the mat the cards of the side facing down rest, out of sight.")]
+        [SerializeField, Min(0.01f)] internal float consoleHiddenCardDepth = 0.6f;
+        [Tooltip("Console mat: how close to a D-pad arrow a die must come to rest to be set on it.")]
+        [SerializeField, Min(0.05f)] internal float consoleDieSpotRadius = 0.45f;
         [SerializeField] internal float feedbackDuration = 0.18f;
         [SerializeField] internal float shuffleCompression = 0.06f;
         [SerializeField] internal float floorCardVisualScale = 0.62f;
@@ -413,6 +419,14 @@ namespace ConsoleCards.Presentation.Prototype
         private PrototypeFixedContainerVisual localHandVisual;
         private ConsoleView consoleView;
         private ConsoleLayoutData consoleLayout;
+        // C3d (doc 22 §14): slots on a Console side facing down, the turn-over of flipped cards, dice on D-pad
+        // arrows, and each card definition's Console symbol.
+        private readonly HashSet<ContainerId> hiddenConsoleSlotIds = new HashSet<ContainerId>();
+        private readonly Dictionary<TabletopObjectId, string> diceOnConsoleSpots = new Dictionary<TabletopObjectId, string>();
+        private readonly Dictionary<ObjectDefinitionId, ConsoleSymbol> consoleSymbolsByDefinition =
+            new Dictionary<ObjectDefinitionId, ConsoleSymbol>();
+        private CardFlipTurnPresenter cardFlipTurns;
+        private bool consoleDieCheckPending;
         private readonly List<ConsoleSlotView> consoleSlotViews = new List<ConsoleSlotView>();
 
         public bool IsInitialized { get; private set; }
@@ -1522,6 +1536,12 @@ namespace ConsoleCards.Presentation.Prototype
                 landingCheckPending = true;
             }
 
+            if (acceptance.Kind == AuthoritativeActionKind.MoveObject
+                || acceptance.Kind == AuthoritativeActionKind.PhysicalObjectSettled)
+            {
+                consoleDieCheckPending = true; // C3d: a die may have come to rest on a Console D-pad arrow
+            }
+
             if (undoBatchActive)
             {
                 undoBatchLastAcceptance = acceptance;
@@ -1643,6 +1663,7 @@ namespace ConsoleCards.Presentation.Prototype
                 case AuthoritativeActionKind.TrapFloorAttemptEscape: return $"{actor} attempted Escape";
                 case AuthoritativeActionKind.TrapFloorCollapse: return $"{actor} collapsed a Floor";
                 case AuthoritativeActionKind.PurchaseActionOrAbility: return $"{actor} purchased an Action/Ability Card";
+                case AuthoritativeActionKind.FlipConsole: return $"{actor} turned a Console over";
                 default:
                     return trapFloorTurnState == null
                         ? $"{actor} performed a table action"
@@ -2310,12 +2331,14 @@ namespace ConsoleCards.Presentation.Prototype
             if (HandleRedoShortcut()) return;
             if (HandleUndoShortcut()) return;
             HandleHandTrayShortcut();
+            HandleConsoleFlipShortcut();
             physicalAuthority?.Tick();
             CompletePendingLandingFlip();
             RefreshBoardCardBacksIfRoundChanged();
             CompletePhysicalFloorfallIfSettled();
             CompletePhysicalFloorCollapseIfSettled();
             CompletePhysicalBlindDirectionIfSettled();
+            CompleteConsoleDieSnaps();
             presentationTransitions?.Tick(Time.unscaledDeltaTime);
             RefreshHandInteractionPresentation();
             RefreshHandTrayDropTarget();
@@ -3775,6 +3798,7 @@ namespace ConsoleCards.Presentation.Prototype
                 ConfigureConsoleSlot(instance.SlotViews[i]);
             }
 
+            ApplyConsoleSide(instance);
             return instance.Root.transform;
         }
 
@@ -5784,6 +5808,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void LateUpdate()
         {
+            cardFlipTurns?.Tick(Time.unscaledTime);
             if (pawnHops.Count == 0) return;
             float now = Time.unscaledTime;
             for (int i = pawnHops.Count - 1; i >= 0; i--)
@@ -6173,6 +6198,12 @@ namespace ConsoleCards.Presentation.Prototype
                 || target.Kind != CardDropTargetKind.Container
                 || !matchState.Containers.TryGetValue(target.ContainerId, out ContainerState container))
             {
+                // C3d: the mat itself, between its slots, opens the Console menu too.
+                if (TryFindConsoleUnderPointer(screenPosition, out RuntimeConsoleInstance pointedConsole))
+                {
+                    OpenConsoleContextMenu(screenPosition, pointedConsole.SlotViews[0].ContainerId);
+                }
+
                 return;
             }
 
@@ -8100,6 +8131,7 @@ namespace ConsoleCards.Presentation.Prototype
                     true,
                     () => BeginDuplicatePlacement(targetDieId)),
             };
+            AddDieNumberActions(actions, targetDieView);
             AddDeleteActionIfRuntime(
                 actions,
                 TabletopComponentTarget.ForObject(targetDieId));
@@ -8165,6 +8197,17 @@ namespace ConsoleCards.Presentation.Prototype
                 "Move",
                 true,
                 () => BeginConsoleMove(targetSlotContainerId)));
+            if (ConsoleMatHasBackSide())
+            {
+                actions.Add(new PrototypePopupActionOption(
+                    "Flip (F)",
+                    true,
+                    () => FlipConsoleFromSlot(targetSlotContainerId)));
+                actions.Add(new PrototypePopupActionOption(
+                    "Duplicate (other side up)",
+                    true,
+                    () => BeginConsoleDuplicate(targetSlotContainerId)));
+            }
             if (!targetConsoleId.IsEmpty)
             {
                 AddDeleteActionIfRuntime(
@@ -10796,6 +10839,768 @@ namespace ConsoleCards.Presentation.Prototype
             targetConsole.Bind(runtimeConsole, targetConsole.LayoutAnchor, orderedSlots);
         }
 
+        // ---- C3d: the double-sided Console mat (doc 22 §14) ----
+        // The side facing up is Runtime State (ConsoleState.ShowsBack). Slots on the side facing down keep their
+        // cards under the mat, out of sight, and cannot be used; slots on the side facing up work as before.
+
+        private static ConsoleState ResolveConsoleState(RuntimeConsoleInstance instance)
+        {
+            return instance != null && instance.View != null && instance.View.IsBound
+                ? instance.View.ConsoleState
+                : null;
+        }
+
+        private bool ConsoleMatHasBackSide()
+        {
+            return catalogConsolePrefab != null
+                && runtimeConsoleInstances.Count > 0
+                && GetConsoleLayout().HasBackSide;
+        }
+
+        private void ApplyAllConsoleSides()
+        {
+            for (int i = 0; i < runtimeConsoleInstances.Count; i++)
+            {
+                ApplyConsoleSide(runtimeConsoleInstances[i]);
+            }
+        }
+
+        // Shows the side facing up: its slots take cards, the other side's cards rest out of sight under the mat.
+        private void ApplyConsoleSide(RuntimeConsoleInstance instance)
+        {
+            ConsoleState console = ResolveConsoleState(instance);
+            if (console == null)
+            {
+                return;
+            }
+
+            ConsoleLayoutData layout = GetConsoleLayout();
+            bool back = console.ShowsBack;
+            for (int i = 0; i < instance.SlotViews.Length && i < layout.CardSlots.Count; i++)
+            {
+                ConsoleSlotView slotView = instance.SlotViews[i];
+                if (slotView == null || !slotView.IsBound)
+                {
+                    continue;
+                }
+
+                bool hidden = (layout.CardSlots[i].Side == ConsoleMatSide.Back) != back;
+                slotView.SetSideHidden(hidden ? consoleHiddenCardDepth : 0f);
+                PrototypeConsoleSlotVisual slotVisual = i < instance.SlotVisuals.Length ? instance.SlotVisuals[i] : null;
+                if (slotVisual != null)
+                {
+                    slotVisual.TargetCollider.enabled = !hidden;
+                    slotVisual.DropTarget.enabled = !hidden;
+                    slotVisual.SetEmptyStateHidden(hidden || HidesPrototypeVisual(PrototypeVisualHide.EmptySlotPlate));
+                    if (hidden)
+                    {
+                        slotVisual.ClearFeedback();
+                    }
+                }
+
+                if (hidden)
+                {
+                    hiddenConsoleSlotIds.Add(slotView.ContainerId);
+                }
+                else
+                {
+                    hiddenConsoleSlotIds.Remove(slotView.ContainerId);
+                }
+            }
+
+            ConsoleMatFaces faces = instance.View.GetComponent<ConsoleMatFaces>();
+            if (faces != null && !faces.IsTurning)
+            {
+                faces.SetSideImmediate(back);
+            }
+        }
+
+        // Before a Console's presentation is released: a running turn ends and its slots leave the hidden set.
+        private void ForgetConsoleSide(RuntimeConsoleInstance instance)
+        {
+            if (instance == null)
+            {
+                return;
+            }
+
+            ConsoleMatFaces faces = instance.View != null ? instance.View.GetComponent<ConsoleMatFaces>() : null;
+            faces?.CompleteTurn();
+            for (int i = 0; i < instance.SlotViews.Length; i++)
+            {
+                if (instance.SlotViews[i] != null && instance.SlotViews[i].IsBound)
+                {
+                    hiddenConsoleSlotIds.Remove(instance.SlotViews[i].ContainerId);
+                }
+            }
+        }
+
+        // Cards under a mat's side facing down cannot be picked, although their colliders are still there.
+        private bool IsUnderConsoleMat(TabletopObjectView view)
+        {
+            return hiddenConsoleSlotIds.Count > 0
+                && view is CardView card
+                && card.BoundState != null
+                && hiddenConsoleSlotIds.Contains(card.BoundState.ContainerId);
+        }
+
+        private RuntimeConsoleInstance FindConsoleInstanceBySlot(ContainerId slotContainerId)
+        {
+            for (int i = 0; i < runtimeConsoleInstances.Count; i++)
+            {
+                RuntimeConsoleInstance instance = runtimeConsoleInstances[i];
+                for (int s = 0; s < instance.SlotViews.Length; s++)
+                {
+                    ConsoleSlotView slotView = instance.SlotViews[s];
+                    if (slotView != null && slotView.IsBound && slotView.ContainerId == slotContainerId)
+                    {
+                        return instance;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        // The Console whose mat (plus a small margin) is under the pointer, whichever side faces up.
+        private bool TryFindConsoleUnderPointer(Vector2 screenPosition, out RuntimeConsoleInstance found)
+        {
+            found = null;
+            if (pointerProjector == null
+                || coordinateConverter == null
+                || catalogConsolePrefab == null
+                || runtimeConsoleInstances.Count == 0
+                || !pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate))
+            {
+                return false;
+            }
+
+            Vector3 world = coordinateConverter.ToWorldPosition(new TabletopPose(coordinate, 0f, 0, 0));
+            ConsoleLayoutData layout = GetConsoleLayout();
+            float halfWidth = (layout.MatWidth * 0.5f) + 0.2f;
+            float halfDepth = (layout.MatDepth * 0.5f) + 0.2f;
+            for (int i = 0; i < runtimeConsoleInstances.Count; i++)
+            {
+                RuntimeConsoleInstance instance = runtimeConsoleInstances[i];
+                if (instance.Root == null
+                    || !instance.Root.activeInHierarchy
+                    || instance.SlotViews.Length == 0
+                    || ResolveConsoleState(instance) == null)
+                {
+                    continue;
+                }
+
+                Vector3 local = instance.View.transform.InverseTransformPoint(world);
+                if (Mathf.Abs(local.x) <= halfWidth && Mathf.Abs(local.z) <= halfDepth)
+                {
+                    found = instance;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // F turns the Console under the pointer over, unless a card is selected (then F turns that card).
+        private void HandleConsoleFlipShortcut()
+        {
+            Keyboard keyboard = Keyboard.current;
+            Mouse mouse = Mouse.current;
+            if (!IsInitialized
+                || keyboard == null
+                || mouse == null
+                || !keyboard.fKey.wasPressedThisFrame
+                || keyboard.leftCtrlKey.isPressed
+                || keyboard.rightCtrlKey.isPressed
+                || (interactionRouter != null && interactionRouter.HasActiveInteraction)
+                || (selectionState != null && selectionState.HasSelection && selectionState.SelectedView is CardView)
+                || !ConsoleMatHasBackSide()
+                || !TryFindConsoleUnderPointer(mouse.position.ReadValue(), out RuntimeConsoleInstance instance))
+            {
+                return;
+            }
+
+            FlipConsoleFromSlot(instance.SlotViews[0].ContainerId);
+        }
+
+        private void FlipConsoleFromSlot(ContainerId slotContainerId)
+        {
+            RuntimeConsoleInstance instance = FindConsoleInstanceBySlot(slotContainerId);
+            ConsoleState console = ResolveConsoleState(instance);
+            if (console == null || !ConsoleMatHasBackSide())
+            {
+                ShowMessage("Flip rejected: Console unavailable.");
+                CloseContextMenu();
+                return;
+            }
+
+            ConsoleMatFaces faces = instance.View.GetComponent<ConsoleMatFaces>();
+            faces?.CompleteTurn();
+            bool toBack = !console.ShowsBack;
+            CommandResult result = new FlipConsoleUseCase().Execute(
+                matchState,
+                new FlipConsoleCommand(CreateCommandContext(), slotContainerId, toBack));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Flip rejected: {result.Status}.");
+                return;
+            }
+
+            CloseContextMenu();
+            ShowMessage(toBack ? "Console turned over: controller side up." : "Console turned over: symbol side up.");
+            if (faces == null || faces.TurnPivot == null)
+            {
+                ApplyConsoleSide(instance);
+                return;
+            }
+
+            faces.BeginTurn(
+                toBack,
+                () => OnConsoleTurnMidpoint(instance, faces),
+                () => OnConsoleTurnLanded(instance));
+            AddConsoleSideRiders(instance, faces, !toBack, false);
+        }
+
+        // The mat stands on edge: the side facing up changes, so its cards come up with it.
+        private void OnConsoleTurnMidpoint(RuntimeConsoleInstance instance, ConsoleMatFaces faces)
+        {
+            ConsoleState console = ResolveConsoleState(instance);
+            if (console == null)
+            {
+                return;
+            }
+
+            ApplyConsoleSide(instance);
+            AddConsoleSideRiders(instance, faces, console.ShowsBack, true);
+        }
+
+        private void OnConsoleTurnLanded(RuntimeConsoleInstance instance)
+        {
+            if (ResolveConsoleState(instance) == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < instance.SlotViews.Length; i++)
+            {
+                if (instance.SlotViews[i] != null && instance.SlotViews[i].IsBound)
+                {
+                    instance.SlotViews[i].ApplyAcceptedLayout();
+                }
+            }
+
+            ApplyConsoleSide(instance);
+            FlashFlipAt(instance.View.transform.position);
+        }
+
+        // Cards in the slots of one side turn with the mat: the outgoing side up to the midpoint, the incoming
+        // side from it.
+        private void AddConsoleSideRiders(RuntimeConsoleInstance instance, ConsoleMatFaces faces, bool backSide, bool incoming)
+        {
+            ConsoleLayoutData layout = GetConsoleLayout();
+            for (int i = 0; i < instance.SlotViews.Length && i < layout.CardSlots.Count; i++)
+            {
+                ConsoleSlotView slotView = instance.SlotViews[i];
+                if (slotView == null
+                    || !slotView.IsBound
+                    || (layout.CardSlots[i].Side == ConsoleMatSide.Back) != backSide)
+                {
+                    continue;
+                }
+
+                IReadOnlyList<TabletopObjectId> cardIds = slotView.ContainerState.ObjectIds;
+                for (int c = 0; c < cardIds.Count; c++)
+                {
+                    if (!TryGetCardView(cardIds[c], out CardView cardView))
+                    {
+                        continue;
+                    }
+
+                    if (incoming)
+                    {
+                        faces.AddIncomingRider(cardView.transform);
+                    }
+                    else
+                    {
+                        faces.AddRider(cardView.transform);
+                    }
+                }
+            }
+        }
+
+        // The same landing flash as a Trap Floor reveal, where board feedback is available.
+        private void FlashFlipAt(Vector3 position)
+        {
+            if (!playerFeedback || !EnsureBoardFeedback())
+            {
+                return;
+            }
+
+            boardFeedback.Flash(position, new Color(0.34f, 0.94f, 0.86f, 1f));
+        }
+
+        private void BeginCardFlipTurn(CardView card)
+        {
+            if (cardFlipTurns == null)
+            {
+                cardFlipTurns = new CardFlipTurnPresenter
+                {
+                    Landed = FlashFlipAt,
+                };
+            }
+
+            cardFlipTurns.Begin(card, Time.unscaledTime);
+        }
+
+        // Duplicate places a second Console with the other side up, where the player puts it.
+        private void BeginConsoleDuplicate(ContainerId slotContainerId)
+        {
+            EnsureInitialized();
+            RuntimeConsoleInstance instance = FindConsoleInstanceBySlot(slotContainerId);
+            ConsoleState console = ResolveConsoleState(instance);
+            if (console == null
+                || componentPlacementController == null
+                || !TryResolveConsolePlacement(slotContainerId, out TabletopPose sourcePose, out _, out _))
+            {
+                ShowMessage("Duplicate rejected: Console unavailable.");
+                CloseContextMenu();
+                return;
+            }
+
+            bool otherSideUp = !console.ShowsBack;
+            componentPlacementController.Cancel();
+            GameObject previewRoot = CreateToolboxPlacementPreview(TabletopComponentKind.Console, 0);
+            ConsoleMatFaces previewFaces = previewRoot.GetComponentInChildren<ConsoleMatFaces>(true);
+            previewFaces?.SetSideImmediate(otherSideUp);
+            CloseContextMenu();
+            componentPlacementController.BeginCustomComponentPlacement(
+                TabletopComponentKind.Console,
+                previewRoot,
+                sourcePose.RotationDegrees,
+                0,
+                toolboxSpawnSequence * ToolboxPhysicalOrderStride,
+                pose => CommitConsoleDuplicate(pose, otherSideUp));
+            ShowPlacementHint(otherSideUp ? "Duplicate Console (controller side up)" : "Duplicate Console (symbol side up)");
+        }
+
+        private bool CommitConsoleDuplicate(TabletopPose requestedPose, bool showsBack)
+        {
+            CreateTabletopComponentResult result = componentCreationUseCase.Execute(
+                matchState,
+                activeSession.Request.ActivePlayerIds,
+                new CreateTabletopComponentRequest(
+                    CreateCommandContext(),
+                    TabletopComponentKind.Console,
+                    requestedPose,
+                    actionKind: AuthoritativeActionKind.DuplicateComponent,
+                    consoleShowsBack: showsBack));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Duplicate rejected: {result.Error}.");
+                return false;
+            }
+
+            toolboxSpawnSequence++;
+            ProjectCreatedToolboxComponent(result);
+            ShowMessage(showsBack
+                ? "Duplicated the Console with the controller side up."
+                : "Duplicated the Console with the symbol side up.");
+            return true;
+        }
+
+        // ---- Symbol magnet (ICardDropMagnet) ----
+
+        bool ICardDropMagnet.IsActive => IsInitialized
+            && catalogConsolePrefab != null
+            && runtimeConsoleInstances.Count > 0
+            && TryGetDraggedCard(out CardView card)
+            && CardConsoleSymbol(card) != ConsoleSymbol.None;
+
+        bool ICardDropMagnet.TryAdjust(
+            ContainerId directContainerId,
+            bool hasPoint,
+            TableCoordinate point,
+            out ContainerId adjustedContainerId)
+        {
+            adjustedContainerId = directContainerId;
+            if (catalogConsolePrefab == null
+                || runtimeConsoleInstances.Count == 0
+                || !TryGetDraggedCard(out CardView card))
+            {
+                return false;
+            }
+
+            ConsoleSymbol symbol = CardConsoleSymbol(card);
+            if (symbol == ConsoleSymbol.None)
+            {
+                return false;
+            }
+
+            bool directIsSlot = TryGetConsoleSlotSymbol(directContainerId, out ConsoleSymbol directSymbol);
+            if (!directContainerId.IsEmpty && !directIsSlot)
+            {
+                return false; // a Deck, Stack, pile or Hand under the pointer keeps the card
+            }
+
+            if (directIsSlot && (directSymbol == ConsoleSymbol.None || directSymbol == symbol))
+            {
+                return false;
+            }
+
+            ContainerId nearest = hasPoint ? FindNearestSymbolSlot(symbol, point) : ContainerId.Empty;
+            adjustedContainerId = nearest; // Empty: a slot with another symbol refuses the card; it stays on the table
+            return directIsSlot || !nearest.IsEmpty;
+        }
+
+        private bool TryGetDraggedCard(out CardView card)
+        {
+            card = previewSession != null && previewSession.IsActive ? previewSession.ActiveView as CardView : null;
+            if (card != null)
+            {
+                return true;
+            }
+
+            for (int i = 0; i < cardViews.Count; i++)
+            {
+                CardView candidate = cardViews[i];
+                if (candidate != null && candidate.PhysicalObject != null && candidate.PhysicalObject.IsHeld)
+                {
+                    card = candidate;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private ConsoleSymbol CardConsoleSymbol(CardView card)
+        {
+            if (card == null || card.CardState == null)
+            {
+                return ConsoleSymbol.None;
+            }
+
+            ObjectDefinitionId definitionId = card.CardState.BaseState.DefinitionId;
+            if (!consoleSymbolsByDefinition.TryGetValue(definitionId, out ConsoleSymbol symbol))
+            {
+                symbol = TryGetCardLook(definitionId, out CardDefinition definition)
+                    ? definition.ConsoleSymbol
+                    : ConsoleSymbol.None;
+                consoleSymbolsByDefinition[definitionId] = symbol;
+            }
+
+            return symbol;
+        }
+
+        private bool TryGetConsoleSlotSymbol(ContainerId slotContainerId, out ConsoleSymbol symbol)
+        {
+            symbol = ConsoleSymbol.None;
+            if (slotContainerId.IsEmpty)
+            {
+                return false;
+            }
+
+            ConsoleLayoutData layout = GetConsoleLayout();
+            for (int i = 0; i < runtimeConsoleInstances.Count; i++)
+            {
+                ConsoleSlotView[] slotViews = runtimeConsoleInstances[i].SlotViews;
+                for (int s = 0; s < slotViews.Length && s < layout.CardSlots.Count; s++)
+                {
+                    if (slotViews[s] != null && slotViews[s].IsBound && slotViews[s].ContainerId == slotContainerId)
+                    {
+                        symbol = layout.CardSlots[s].Symbol;
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private ContainerId FindNearestSymbolSlot(ConsoleSymbol symbol, TableCoordinate point)
+        {
+            ConsoleLayoutData layout = GetConsoleLayout();
+            ContainerId nearest = ContainerId.Empty;
+            double nearestDistance = consoleSymbolMagnetDistance;
+            for (int i = 0; i < runtimeConsoleInstances.Count; i++)
+            {
+                ConsoleSlotView[] slotViews = runtimeConsoleInstances[i].SlotViews;
+                for (int s = 0; s < slotViews.Length && s < layout.CardSlots.Count; s++)
+                {
+                    ConsoleSlotView slotView = slotViews[s];
+                    if (slotView == null
+                        || !slotView.IsBound
+                        || slotView.IsSideHidden
+                        || layout.CardSlots[s].Symbol != symbol
+                        || slotView.ContainerState.IsFull
+                        || slotView.LayoutAnchor == null)
+                    {
+                        continue;
+                    }
+
+                    TableCoordinate centre = coordinateConverter.ToTableCoordinate(slotView.LayoutAnchor.position);
+                    double dx = centre.X - point.X;
+                    double dy = centre.Y - point.Y;
+                    double distance = Math.Sqrt((dx * dx) + (dy * dy));
+                    if (distance < nearestDistance)
+                    {
+                        nearestDistance = distance;
+                        nearest = slotView.ContainerId;
+                    }
+                }
+            }
+
+            return nearest;
+        }
+
+        // ---- Dice on the D-pad (back side) ----
+
+        // A die that comes to rest on a D-pad arrow of a Console showing its back is set on the arrow's centre,
+        // and the number picker opens. One die at a time; a die already on its arrow is left alone.
+        private void CompleteConsoleDieSnaps()
+        {
+            if (!consoleDieCheckPending || !IsInitialized || matchState == null)
+            {
+                return;
+            }
+
+            consoleDieCheckPending = false;
+            if (!ConsoleMatHasBackSide())
+            {
+                return;
+            }
+
+            for (int d = 0; d < dieViews.Count; d++)
+            {
+                DieView dieView = dieViews[d];
+                if (dieView == null || !dieView.IsBound || dieView.DieState == null)
+                {
+                    continue;
+                }
+
+                TabletopObjectId dieId = dieView.ObjectId;
+                if (!TryFindDieSpot(dieView, out RuntimeConsoleInstance instance, out ConsoleLayoutSlotData spot, out Vector3 spotWorld, out _))
+                {
+                    diceOnConsoleSpots.Remove(dieId);
+                    continue;
+                }
+
+                TabletopObjectState state = dieView.DieState.BaseState;
+                if (state.PhysicalState == null
+                    || state.PhysicalState.Mode != PhysicalObjectMode.Sleeping
+                    || (dieView.PhysicalObject != null && dieView.PhysicalObject.IsHeld))
+                {
+                    continue;
+                }
+
+                if (diceOnConsoleSpots.TryGetValue(dieId, out string spotKey) && spotKey == spot.Key)
+                {
+                    continue; // already set on this arrow
+                }
+
+                if (!TryPlaceDieOnSpot(dieView, instance, spotWorld, null))
+                {
+                    continue;
+                }
+
+                diceOnConsoleSpots[dieId] = spot.Key;
+                OpenDieNumberPicker(dieView);
+                return;
+            }
+        }
+
+        private bool TryFindDieSpot(
+            DieView dieView,
+            out RuntimeConsoleInstance foundInstance,
+            out ConsoleLayoutSlotData foundSpot,
+            out Vector3 foundWorld,
+            out float foundDistance)
+        {
+            foundInstance = null;
+            foundSpot = null;
+            foundWorld = Vector3.zero;
+            foundDistance = float.MaxValue;
+            if (dieView == null || !dieView.IsBound || !dieView.BoundState.ContainerId.IsEmpty)
+            {
+                return false;
+            }
+
+            Vector3 diePosition = dieView.PhysicalObject != null && dieView.PhysicalObject.Body != null
+                ? dieView.PhysicalObject.Body.position
+                : dieView.transform.position;
+            ConsoleLayoutData layout = GetConsoleLayout();
+            for (int i = 0; i < runtimeConsoleInstances.Count; i++)
+            {
+                RuntimeConsoleInstance instance = runtimeConsoleInstances[i];
+                ConsoleState console = ResolveConsoleState(instance);
+                if (console == null || instance.Root == null || !instance.Root.activeInHierarchy)
+                {
+                    continue;
+                }
+
+                for (int s = 0; s < layout.Slots.Count; s++)
+                {
+                    ConsoleLayoutSlotData slot = layout.Slots[s];
+                    if (slot.Kind != ConsoleLayoutSlotKind.Die
+                        || (slot.Side == ConsoleMatSide.Back) != console.ShowsBack)
+                    {
+                        continue;
+                    }
+
+                    Vector3 world = instance.View.transform.TransformPoint(new Vector3(slot.X, 0f, slot.Z));
+                    float dx = world.x - diePosition.x;
+                    float dz = world.z - diePosition.z;
+                    float distance = Mathf.Sqrt((dx * dx) + (dz * dz));
+                    if (distance <= consoleDieSpotRadius && distance < foundDistance)
+                    {
+                        foundInstance = instance;
+                        foundSpot = slot;
+                        foundWorld = world;
+                        foundDistance = distance;
+                    }
+                }
+            }
+
+            return foundInstance != null;
+        }
+
+        // Puts the die on the spot's centre through physical authority. value null keeps the die's own turn;
+        // a value turns that number up. The die then settles and the number is read from how it lies.
+        private bool TryPlaceDieOnSpot(DieView dieView, RuntimeConsoleInstance instance, Vector3 spotWorld, int? value)
+        {
+            TabletopObjectState state = dieView.DieState.BaseState;
+            if (physicalAuthority == null
+                || dieView.PhysicalObject == null
+                || dieView.PhysicalObject.IsHeld
+                || state.IsUserLocked
+                || activeSession == null)
+            {
+                return false;
+            }
+
+            TabletopPose spotPose = new TabletopPose(coordinateConverter.ToTableCoordinate(spotWorld), 0f, 0, 0);
+            if (!physicalAuthority.Surfaces.TryResolveAuthoredLooseObject(
+                    spotPose,
+                    localPlayerId,
+                    dieView.PhysicalObject.PhysicalCollider,
+                    false,
+                    out PhysicalObjectState placed))
+            {
+                return false;
+            }
+
+            Quaternion rotation;
+            if (value.HasValue)
+            {
+                if (!dieView.TryGetValueRotation(value.Value, instance.View.transform.eulerAngles.y, out rotation))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                rotation = dieView.PhysicalObject.Body != null ? dieView.PhysicalObject.Body.rotation : dieView.transform.rotation;
+            }
+
+            placed = placed.WithRotation(new PhysicalRotation(rotation.x, rotation.y, rotation.z, rotation.w));
+            CommandResult result = new CommitPhysicalObjectUseCase().Execute(
+                matchState,
+                activeSession.Request.ActivePlayerIds,
+                new CommitPhysicalObjectCommand(
+                    CreateCommandContext(),
+                    state.Id,
+                    placed,
+                    state.PhysicalRevision,
+                    null,
+                    AuthoritativeActionRecordMode.Transaction));
+            if (!result.Succeeded)
+            {
+                return false;
+            }
+
+            dieView.ApplyAcceptedState();
+            return true;
+        }
+
+        private void OpenDieNumberPicker(DieView dieView)
+        {
+            UnityCamera camera = hitResolver != null ? hitResolver.TargetCamera : null;
+            if (camera == null || runtimeUi == null)
+            {
+                return;
+            }
+
+            Vector3 screen = camera.WorldToScreenPoint(dieView.transform.position);
+            selectionState.Select(dieView);
+            selectionPresenter.Refresh();
+            OpenContextMenu(
+                PrototypeContextMenuMode.Die,
+                new Vector2(screen.x, screen.y),
+                TabletopObjectId.Empty,
+                ContainerId.Empty,
+                dieView.ObjectId);
+        }
+
+        // The number picker: one row per face, shown in the Die menu while the die is on a D-pad arrow.
+        private void AddDieNumberActions(List<PrototypePopupActionOption> actions, DieView dieView)
+        {
+            if (dieView == null
+                || dieView.DieState == null
+                || !ConsoleMatHasBackSide()
+                || !TryFindDieSpot(dieView, out _, out ConsoleLayoutSlotData spot, out _, out _))
+            {
+                return;
+            }
+
+            TabletopObjectId dieId = dieView.ObjectId;
+            int faces = Math.Min(dieView.DieState.SideCount, 20);
+            for (int value = 1; value <= faces; value++)
+            {
+                int chosen = value;
+                actions.Add(new PrototypePopupActionOption(
+                    $"Show {chosen} ({DescribeDieSpot(spot)})",
+                    chosen != dieView.DieState.CurrentValue,
+                    () => SetConsoleDieNumber(dieId, chosen)));
+            }
+        }
+
+        private void SetConsoleDieNumber(TabletopObjectId dieId, int value)
+        {
+            if (contextMenuMode != PrototypeContextMenuMode.Die || contextMenuDieId != dieId)
+            {
+                return;
+            }
+
+            if (!TryGetDieView(dieId, out DieView dieView)
+                || !TryFindDieSpot(dieView, out RuntimeConsoleInstance instance, out ConsoleLayoutSlotData spot, out Vector3 spotWorld, out _))
+            {
+                ShowMessage("Number not set: the die is not on a D-pad arrow.");
+                CloseContextMenu();
+                return;
+            }
+
+            if (!TryPlaceDieOnSpot(dieView, instance, spotWorld, value))
+            {
+                ShowMessage("Number not set: the die is held, locked or unavailable.");
+                return;
+            }
+
+            diceOnConsoleSpots[dieId] = spot.Key;
+            CloseContextMenu();
+            ShowMessage($"The die on the {DescribeDieSpot(spot)} now shows {value}.");
+        }
+
+        private static string DescribeDieSpot(ConsoleLayoutSlotData spot)
+        {
+            switch (spot.Key)
+            {
+                case "PadUp": return "Up arrow";
+                case "PadLeft": return "Left arrow";
+                case "PadRight": return "Right arrow";
+                case "PadDown": return "Down arrow";
+                default: return spot.Key;
+            }
+        }
+
         private void ConfigureDropTargets()
         {
             for (int i = 0; i < runtimeDeckInstances.Count; i++)
@@ -10825,6 +11630,8 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 ConfigureConsoleSlot(consoleSlotViews[i]);
             }
+
+            ApplyAllConsoleSides();
 
             for (int i = 0; i < runtimeTokenContainerInstances.Count; i++)
             {
@@ -10904,6 +11711,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             selectionState = new TabletopSelectionState();
             hitResolver = new TabletopObjectHitResolver(targetCamera, interactionLayerMask, maximumHitDistance);
+            hitResolver.IsHidden = IsUnderConsoleMat;
             pointerProjector = new TabletopPointerProjector(
                 targetCamera,
                 coordinateConverter,
@@ -10925,6 +11733,7 @@ namespace ConsoleCards.Presentation.Prototype
                 maximumHitDistance,
                 QueryTriggerInteraction.Collide);
             dropTargetResolver.PhysicalSurfaces = physicalSurfaceQuery;
+            dropTargetResolver.Magnet = this;
             tokenDropTargetResolver = new TokenDropTargetResolver(
                 targetCamera,
                 interactionLayerMask,
@@ -11022,6 +11831,8 @@ namespace ConsoleCards.Presentation.Prototype
                 selectionState,
                 lockService,
                 new FlipCardUseCase());
+            cardFlipTurns?.CompleteAll();
+            flipCoordinator.Flipped = BeginCardFlipTurn;
             inputRoutingPolicy = new TabletopInteractionInputRoutingPolicy(selectionState, moveCoordinator);
             interactionRouter = new TabletopInteractionRouter(
                 hitResolver,
@@ -14137,6 +14948,7 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 int lastIndex = runtimeConsoleInstances.Count - 1;
                 RuntimeConsoleInstance instance = runtimeConsoleInstances[lastIndex];
+                ForgetConsoleSide(instance);
                 GameObject root = instance.Root;
                 DisableRuntimeInteraction(root);
                 if (instance.View != null && instance.View.IsBound)
@@ -14185,6 +14997,7 @@ namespace ConsoleCards.Presentation.Prototype
                     continue;
                 }
 
+                ForgetConsoleSide(instance);
                 GameObject root = instance.Root;
                 DisableRuntimeInteraction(root);
                 if (instance.View != null && instance.View.IsBound)

@@ -19,6 +19,10 @@ namespace ConsoleCards.Definitions
         [SerializeField, Min(0)] private int defaultCapacity;
         [SerializeField] private bool marker;
         [SerializeField] private ConsoleSlotOrientation defaultOrientation;
+        [Tooltip("The mat side this slot is on (doc 22 §14). Only the side facing up can be used.")]
+        [SerializeField] private ConsoleMatSide side;
+        [Tooltip("The symbol printed beside the slot. A card with a symbol fits only a slot with the same symbol.")]
+        [SerializeField] private ConsoleSymbol symbol;
 
         internal ConsoleLayoutSlotData ToData()
         {
@@ -33,7 +37,9 @@ namespace ConsoleCards.Definitions
                 footprintDepth,
                 defaultCapacity,
                 marker,
-                defaultOrientation);
+                defaultOrientation,
+                side,
+                symbol);
         }
     }
 

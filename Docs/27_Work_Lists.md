@@ -1,14 +1,14 @@
 # 27 — Work Lists
 
-Version 0.3 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 0.4 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
 | Item | What | Status |
 |---|---|---|
-| C3c | Game board from the catalog; Controller and Trap Floor box tiles place real cards (doc 22 §13) | Done, being checked |
-| C3d | Double-sided Console mat: 12 symbol slots + Main on the front (Square ×3 top, Diamond ×3 bottom, Star left, Cross right, Circle/Triangle/Plus/Minus corners), controller mapping on the back (A/B/X/Y take cards, D-pad takes dice set to a number), magnetic snapping by symbol, flip with the card-reveal animation (cards too), Duplicate | Next |
-| C3e | Game board v2 (owner, 2026-10-15), see below | To do |
+| C3c | Game board from the catalog; Controller and Trap Floor box tiles place real cards (doc 22 §13) | Done, confirmed by the owner |
+| C3d | Double-sided Console mat: 12 symbol slots + Main on the front (Square ×3 top, Diamond ×3 bottom, Star left, Cross right, Circle/Triangle/Plus/Minus corners), controller mapping on the back (A/B/X/Y take cards, D-pad takes dice set to a number), magnetic snapping by symbol, flip with the card-reveal animation (cards too), Duplicate (doc 22 §14) | Written, to be checked (run Make Console Mat Double-Sided first) |
+| C3e | Game board v2 (owner, 2026-10-15), see below | Next |
 | R3 | House rules in game: propose a change, players agree, it is saved as a named rule set and shown on the rules card (doc 23). Needs the owner's choice: unanimous, majority or host decides | To do |
 | R4 | Hints: highlight legal moves and explain why a move is or is not allowed (doc 23) | To do |
 | G2d | Remove the retired Search, Careful Search and Buy Ability code (doc 18) | To do |

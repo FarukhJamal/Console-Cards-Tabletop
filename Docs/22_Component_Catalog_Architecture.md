@@ -1,8 +1,8 @@
 # Console Cards - Component Catalog Architecture
 
 **Document ID:** 22_Component_Catalog_Architecture
-**Version:** 0.4
-**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8); C3a written 2026-10-09 (every spawn from the catalogs, §9); C3b-1 written 2026-10-09 (local Console, Hand, Avatar card and pawn from the catalogs, §10); H-E written 2026-10-09 (Empty Table hand and its switch, §11); C3b-2 written 2026-10-09 (scene-owned pieces removed, §12). C3c written 2026-10-15 (game board from the catalog, box tiles place real cards, §13); C3d (double-sided Console mat) next; each needs its own approved plan. Binding rule: doc 21 principle 18.
+**Version:** 0.5
+**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8); C3a written 2026-10-09 (every spawn from the catalogs, §9); C3b-1 written 2026-10-09 (local Console, Hand, Avatar card and pawn from the catalogs, §10); H-E written 2026-10-09 (Empty Table hand and its switch, §11); C3b-2 written 2026-10-09 (scene-owned pieces removed, §12). C3c written 2026-10-15 (game board from the catalog, box tiles place real cards, §13); C3d written 2026-10-15 (double-sided Console mat, §14). Binding rule: doc 21 principle 18.
 **Source:** Owner decisions 2026-10-08 and the product material (box set, controller box and game box images).
 **Purpose:** Define how every component and its definitions are registered, so the table, the Toolbox and the UI resolve the same component from one place.
 
@@ -71,7 +71,7 @@
 - **H-E (written):** an Empty Table hand, on by default, with a Toolbox footer switch (§11).
 - **C3b-2 (written, §12):** the unused scene pieces (scene Console, Hand, loose card, pawn and token, the first-prototype deck, stacks A and B and discard pile), their fields and dead code removed; the tests for the removed pieces removed and the rest updated (owner choice A).
 - **C3c (written, §13):** game board prefab from the catalog; Controller and Game boxes filled, and their tiles place real cards. The separate mapping board is dropped: the controller mapping is the Console mat's back side (C3d).
-- **C3d (planned):** the double-sided Console mat (12 symbol slots + Main on the front, controller mapping on the back), symbol snapping, flip and duplicate (§14 when written).
+- **C3d (written, §14):** the double-sided Console mat (12 symbol slots + Main on the front, controller mapping on the back), symbol snapping, flip and duplicate, the card turn-over.
 
 ## 6. Open items
 
@@ -147,3 +147,46 @@
 - **Real cards look right on any table:** name, art and size come from the card's game found in this table's game or
   any Game box, so box tiles work on an Empty Table too. Game rules still use only the running game's cards.
 - **Avatar size:** done in A1 (Large size class, `largeCardVisualScale`); no separate Avatar card prefab.
+
+## 14. Double-sided Console mat (C3d, 2026-10-15)
+
+- **Setup (once, before Play):** `Console Cards > Console > Make Console Mat Double-Sided`. It adds only what is
+  missing: the new layout entries and edge symbols in `StandardConsoleLayout`, one slot and one anchor per new card
+  slot on `Real/ConsoleMat` (instances of the existing slot prefab), and a stand-in mat: `MatFaces` with the front and
+  back pictures (`Content/Art/Console/ConsoleMatFront.png`, `ConsoleMatBack.png`, materials in
+  `Content/Materials/Console/`) and a `ConsoleMatFaces` component. The old mat model is kept but no longer drawn (its
+  colliders still hold pieces up); the owner replaces it with the new model later. Until the tool runs, the Console
+  works as before and offers no Flip.
+- **Layout data:** each slot has a `side` (Front, Back) and a `symbol` (None, Square, Circle, Star, Cross, Diamond,
+  Triangle, Plus, Minus); a new slot kind `Die` marks a spot for one die (not a container). New entries, appended
+  (ordinals after the existing 72): `CornerTL` Circle, `CornerTR` Triangle, `CornerBL` Plus, `CornerBR` Minus (front
+  card slots); `BtnB`, `BtnA`, `BtnY`, `BtnX` (back card slots, beside their buttons: B above, A left, Y right, X
+  below); `PadUp`, `PadLeft`, `PadRight`, `PadDown` (back die spots on the D-pad arrows). Existing slots get their
+  symbols: `TopL/C/R` Square, `BotL/C/R` Diamond, `RailL` Star, `RailR` Cross. Positions were measured from the
+  pictures; the asset is the place to adjust them.
+- **Every Console has every slot:** 17 card slots (Main, 12 front symbol slots, 4 back button slots). Trap Floor keeps
+  its Main and 8 side slots for its rules; the 8 extra slots (corners and buttons) follow them on every seat Console and
+  no Trap Floor rule uses them.
+- **Side facing up (Runtime):** `ConsoleState.ShowsBack`, kept by Undo, Redo and seat switches; `FlipConsoleUseCase`
+  (action `FlipConsole`) turns a mat over. Cards stay in their slots: the side facing down keeps its cards out of
+  sight under the mat, and its slots take no drops and cannot be picked from.
+- **Flip:** right-click the Console (a slot or the mat between slots) → Flip, or F with the pointer over the mat
+  (when no card is selected; with a card selected F turns the card). The mat lifts, turns over its long axis and lands;
+  the cards of the outgoing side ride down with it and those of the incoming side ride up. The landing flash is the
+  Trap Floor reveal flash.
+- **Duplicate (other side up):** in the same menu; places a second Console, where the player puts it, with the other
+  side facing up, in one command (one Undo step).
+- **Symbols and magnet (Presentation):** `CardDefinition.consoleSymbol` (default None). While a card with a symbol is
+  dragged, a front slot with the same symbol within `consoleSymbolMagnetDistance` (1.1) pulls it in; a slot with a
+  different symbol refuses it (the card lands on the table). A card or slot without a symbol has no such rule. Decks,
+  stacks, piles and hands keep a card dropped on them.
+- **Dice on the D-pad:** a die that comes to rest within `consoleDieSpotRadius` (0.45) of an arrow on a mat showing its
+  back is set on the arrow's centre and its menu opens with "Show 1 … Show n". The choice turns the die so that number
+  is up (through physical authority; one Undo step). The same rows are in the die's right-click menu while it is on an
+  arrow.
+- **Card turn-over:** every card flip (F or the card menu) now lifts the card and turns it over, the old face turning
+  away and the new face turning down; then the reveal flash. Only the face visuals move. Trap Floor's floor reveal is
+  unchanged (see the open point below).
+- **Open points:** Trap Floor's floor-card reveal could use the same turn-over; the symbol rule is applied by the drop
+  (Presentation), not by the Runtime transfer; Trap Floor's own placements (for example a prize to a side slot) ignore
+  symbols (all cards have None today).

@@ -48,6 +48,17 @@ namespace ConsoleCards.Core.Domain.Consoles
 
         public IReadOnlyList<ContainerId> SlotContainerIds => readOnlySlotContainerIds;
 
+        /// <summary>
+        /// True when the double-sided mat lies back side up (doc 22 §14). Slots keep their cards either way;
+        /// which slots can be used follows from the side facing up.
+        /// </summary>
+        public bool ShowsBack { get; private set; }
+
+        public void SetShowsBack(bool showsBack)
+        {
+            ShowsBack = showsBack;
+        }
+
         public bool ContainsSlot(ContainerId containerId)
         {
             return slotContainerIds.Contains(containerId);

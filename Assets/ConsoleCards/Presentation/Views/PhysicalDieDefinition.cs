@@ -39,6 +39,25 @@ namespace ConsoleCards.Presentation.Views
             return best >= 0.9f && best - next >= 0.08f;
         }
 
+        /// <summary>
+        /// The rotation that shows <paramref name="value"/> as TryRead reads it, turned to the given yaw (doc 22 §14,
+        /// a die set to a number on the Console D-pad). False when no face has that value.
+        /// </summary>
+        public bool TryGetValueRotation(int value, float yawDegrees, out Quaternion rotation)
+        {
+            rotation = Quaternion.identity;
+            if (faces == null) return false;
+            foreach (PhysicalDieFace face in faces)
+            {
+                if (face == null || face.value != value) continue;
+                Vector3 axis = face.outwardNormal.normalized * (readOppositeSupportingFace ? -1f : 1f);
+                rotation = Quaternion.AngleAxis(yawDegrees, Vector3.up) * Quaternion.FromToRotation(axis, Vector3.up);
+                return true;
+            }
+
+            return false;
+        }
+
         public void Build(Transform root, MeshFilter prototypeBodyMesh)
         {
             if (faces == null || faces.Length != sideCount) throw new InvalidOperationException("Die face count mismatch.");

@@ -50,6 +50,12 @@ namespace ConsoleCards.Presentation.Interaction
         /// </summary>
         public HandView HandPicker { get; set; }
 
+        /// <summary>
+        /// Optional: objects that cannot be picked although they have colliders, such as cards under a Console
+        /// mat's side facing down (doc 22 §14). Set once; not allocated per query.
+        /// </summary>
+        public Func<TabletopObjectView, bool> IsHidden { get; set; }
+
         public bool TryResolve(Vector2 screenPosition, out TabletopObjectView view)
         {
             ValidateFinite(screenPosition);
@@ -83,7 +89,8 @@ namespace ConsoleCards.Presentation.Interaction
                 if (resolvedView == null
                     || !resolvedView.isActiveAndEnabled
                     || !resolvedView.IsBound
-                    || !IsPickableObjectView(resolvedView))
+                    || !IsPickableObjectView(resolvedView)
+                    || (IsHidden != null && IsHidden(resolvedView)))
                 {
                     continue;
                 }

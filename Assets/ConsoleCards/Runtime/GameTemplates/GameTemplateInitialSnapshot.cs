@@ -435,19 +435,23 @@ namespace ConsoleCards.GameTemplates
                 SurfaceHeight = state.SurfaceHeight;
                 SlotContainerIds = new ReadOnlyCollection<ContainerId>(
                     new List<ContainerId>(state.Console.SlotContainerIds));
+                ShowsBack = state.Console.ShowsBack;
             }
 
             public ConsoleId Id { get; }
             public TabletopPose Pose { get; }
             public float? SurfaceHeight { get; }
             public IReadOnlyList<ContainerId> SlotContainerIds { get; }
+            public bool ShowsBack { get; }
 
             public PlacedConsoleState Restore()
             {
+                ConsoleState console = ConsoleState.CreateUnowned(SlotContainerIds);
+                console.SetShowsBack(ShowsBack);
                 return new PlacedConsoleState(
                     Id,
                     Pose,
-                    ConsoleState.CreateUnowned(SlotContainerIds),
+                    console,
                     SurfaceHeight);
             }
         }
@@ -463,6 +467,7 @@ namespace ConsoleCards.GameTemplates
                 HandContainerId = seat.HandContainerId;
                 SlotContainerIds = new ReadOnlyCollection<ContainerId>(
                     new List<ContainerId>(seat.Console.SlotContainerIds));
+                ConsoleShowsBack = seat.Console.ShowsBack;
                 OccupantPlayerId = seat.OccupantPlayerId;
                 Status = seat.Status;
             }
@@ -473,16 +478,19 @@ namespace ConsoleCards.GameTemplates
             public float? ConsoleSurfaceHeight { get; }
             public ContainerId HandContainerId { get; }
             public IReadOnlyList<ContainerId> SlotContainerIds { get; }
+            public bool ConsoleShowsBack { get; }
             public PlayerId OccupantPlayerId { get; }
             public SeatStatus Status { get; }
 
             public SeatState Restore()
             {
+                ConsoleState console = new ConsoleState(Id, SlotContainerIds);
+                console.SetShowsBack(ConsoleShowsBack);
                 return new SeatState(
                     Id,
                     TablePose,
                     HandContainerId,
-                    new ConsoleState(Id, SlotContainerIds),
+                    console,
                     OccupantPlayerId,
                     Status,
                     ConsolePose,

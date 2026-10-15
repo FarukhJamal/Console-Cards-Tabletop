@@ -102,6 +102,8 @@ namespace ConsoleCards.Games.TrapFloor
                 throw new ArgumentException("Trap Floor Console requires exactly one authored Main Slot.", nameof(gameDefinition));
             PlayerLayoutDefinition playerLayout = PlayerLayoutPresets.StandardFourPlayer;
             float? mainSlotYawOffset = ResolveMainSlotYawOffset(consoleLayout);
+            IReadOnlyList<int> extraConsoleSlotCapacities =
+                ResolveExtraConsoleSlotCapacities(consoleLayout, sideSlots.PhysicalSlotCount);
             ConsoleAdjacentPlacement adjacentPlacement = new ConsoleAdjacentPlacement(
                 consoleLayout,
                 ConsoleAdjacentPlacementSettings.Standard);
@@ -152,7 +154,8 @@ namespace ConsoleCards.Games.TrapFloor
                     labels,
                     players,
                     mainSlotYawOffset,
-                    seatPieces);
+                    seatPieces,
+                    extraConsoleSlotCapacities);
             }
 
             TabletopObjectId floorfallXAxisDieId = new TabletopObjectId(CreateGuid(60, 1));
@@ -554,6 +557,20 @@ namespace ConsoleCards.Games.TrapFloor
             return mainSlot.DefaultOrientation == ConsoleSlotOrientation.Landscape ? 90f : 0f;
         }
 
+        // Doc 22 §14: the layout can have more Card slots than Trap Floor's Main and Side slots (the mat's corner
+        // slots and the back's A/B/X/Y). Every Console has every slot, so those follow the Side slots in layout
+        // order. Trap Floor's rules never use them; players may. Without a layout there are none.
+        private static IReadOnlyList<int> ResolveExtraConsoleSlotCapacities(ConsoleLayoutData consoleLayout, int sideSlotCount)
+        {
+            if (consoleLayout == null) return Array.Empty<int>();
+            int used = 1 + sideSlotCount;
+            int extraCount = consoleLayout.CardSlots.Count - used;
+            if (extraCount <= 0) return Array.Empty<int>();
+            int[] capacities = new int[extraCount];
+            for (int i = 0; i < extraCount; i++) capacities[i] = consoleLayout.CardSlotCapacities[used + i];
+            return capacities;
+        }
+
         private static ConsoleSlotDefinitionData ResolveConsoleSlot(
             ConsoleConfigurationData configuration,
             string role,
@@ -669,7 +686,8 @@ namespace ConsoleCards.Games.TrapFloor
             IDictionary<TabletopObjectId, string> labels,
             ICollection<TrapFloorPlayerSetupDefinition> players,
             float? mainSlotYawOffset,
-            TrapFloorSeatPieces seatPieces)
+            TrapFloorSeatPieces seatPieces,
+            IReadOnlyList<int> extraConsoleSlotCapacities)
         {
             int playerNumber = seatIndex + 1;
             int idBase = seatIndex * 20;
@@ -682,8 +700,13 @@ namespace ConsoleCards.Games.TrapFloor
             ContainerId controllerDeckId = new ContainerId(CreateGuid(41, idBase + 19));
             ContainerId actionAbilityAreaId = new ContainerId(CreateGuid(41, idBase + 18));
 
-            List<ContainerId> consoleSlotIds = new List<ContainerId>(1 + sideSlotIds.Length) { mainSlotId };
+            ContainerId[] extraSlotIds = new ContainerId[extraConsoleSlotCapacities.Count];
+            for (int i = 0; i < extraSlotIds.Length; i++)
+                extraSlotIds[i] = new ContainerId(CreateGuid(48, (seatIndex * 32) + i + 1));
+
+            List<ContainerId> consoleSlotIds = new List<ContainerId>(1 + sideSlotIds.Length + extraSlotIds.Length) { mainSlotId };
             consoleSlotIds.AddRange(sideSlotIds);
+            consoleSlotIds.AddRange(extraSlotIds);
             seats.Add(new GameTemplateSeatDefinition(
                 seatId,
                 seatIndex,
@@ -716,6 +739,16 @@ namespace ConsoleCards.Games.TrapFloor
                     seatId,
                     ObjectVisibility.Public,
                     sideSlot.MaximumCardsPerSlot));
+            }
+
+            for (int i = 0; i < extraSlotIds.Length; i++)
+            {
+                containers.Add(CreateContainer(
+                    extraSlotIds[i],
+                    ContainerKind.ConsoleSlot,
+                    seatId,
+                    ObjectVisibility.Public,
+                    extraConsoleSlotCapacities[i]));
             }
 
             containers.Add(new GameTemplateContainerDefinition(
@@ -758,6 +791,11 @@ namespace ConsoleCards.Games.TrapFloor
             for (int i = 0; i < sideSlotIds.Length; i++)
             {
                 memberships.Add(new GameTemplateContainerMembership(sideSlotIds[i], Array.Empty<TabletopObjectId>()));
+            }
+
+            for (int i = 0; i < extraSlotIds.Length; i++)
+            {
+                memberships.Add(new GameTemplateContainerMembership(extraSlotIds[i], Array.Empty<TabletopObjectId>()));
             }
 
             for (int i = 0; i < avatar.StartingAbilities.Count; i++)

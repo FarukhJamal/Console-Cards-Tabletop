@@ -38,6 +38,9 @@ namespace ConsoleCards.Definitions
         [SerializeField] private ControllerInput representedControllerInput;
         [Tooltip("Large draws the card at hero/avatar size. Most cards are Standard.")]
         [SerializeField] private CardSizeClass sizeClass;
+        [Tooltip("Console mat symbol (doc 22 §14). A card with a symbol fits only a Console slot with the same symbol "
+            + "and is pulled into it like a magnet. None fits any slot.")]
+        [SerializeField] private ConsoleSymbol consoleSymbol;
 
         public string StableId => stableId;
         public string DisplayName => displayName;
@@ -57,6 +60,7 @@ namespace ConsoleCards.Definitions
         public string EffectMetadata => effectMetadata;
         public string ObjectiveMetadata => objectiveMetadata;
         public CardSizeClass SizeClass => sizeClass;
+        public ConsoleSymbol ConsoleSymbol => consoleSymbol;
         public ControllerInput? RepresentedControllerInput =>
             representsControllerInput ? representedControllerInput : (ControllerInput?)null;
 

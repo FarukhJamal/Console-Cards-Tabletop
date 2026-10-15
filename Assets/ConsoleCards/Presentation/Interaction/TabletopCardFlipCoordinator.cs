@@ -54,6 +54,12 @@ namespace ConsoleCards.Presentation.Interaction
 
         public FlipCardUseCase FlipUseCase => flipUseCase;
 
+        /// <summary>
+        /// Called after a card is accepted turned over, so Presentation can play the turn-over (doc 22 §14).
+        /// Set once; never changes Runtime State.
+        /// </summary>
+        public Action<CardView> Flipped { get; set; }
+
         public FlipInteractionResult FlipSelected()
         {
             bool hadStoredSelectedView = !ReferenceEquals(selectionState.SelectedView, null);
@@ -121,6 +127,10 @@ namespace ConsoleCards.Presentation.Interaction
                 if (cardView != null && cardView.IsBound)
                 {
                     cardView.ApplyAcceptedState();
+                    if (flipResult.Succeeded)
+                    {
+                        Flipped?.Invoke(cardView);
+                    }
                 }
 
                 return FlipInteractionResult.FromFlipResult(flipResult);

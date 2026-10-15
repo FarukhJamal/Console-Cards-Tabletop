@@ -22,6 +22,7 @@ namespace ConsoleCards.Presentation.Views.Containers
         private bool isBound;
         private Transform orientationReference;
         private float orientationOffsetDegrees;
+        private float hiddenDepth;
 
         public bool IsBound => isBound;
 
@@ -43,6 +44,28 @@ namespace ConsoleCards.Presentation.Views.Containers
 
             orientationReference = consoleRoot;
             orientationOffsetDegrees = offsetDegrees;
+        }
+
+        /// <summary>
+        /// True while the slot is on the Console mat side facing down (doc 22 §14). Its cards stay in the slot
+        /// and rest under the mat, out of sight, until the mat is turned over again.
+        /// </summary>
+        public bool IsSideHidden => hiddenDepth > 0f;
+
+        /// <summary>Hides the slot's cards under the mat by this depth (0 shows them). Presentation-only.</summary>
+        public void SetSideHidden(float depth)
+        {
+            ContainerViewBinding.ValidateFiniteNonNegative(depth, nameof(depth));
+            if (Mathf.Approximately(hiddenDepth, depth))
+            {
+                return;
+            }
+
+            hiddenDepth = depth;
+            if (isBound)
+            {
+                ApplyAcceptedLayout();
+            }
         }
 
         public ContainerId ContainerId => isBound ? containerState.Id : ContainerId.Empty;
@@ -144,6 +167,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             converter = null;
             suppliedCardViews.Clear();
             VisibleCardCount = 0;
+            hiddenDepth = 0f;
             isBound = false;
         }
 
@@ -166,7 +190,7 @@ namespace ConsoleCards.Presentation.Views.Containers
                         anchorCoordinate,
                         slotRotation ?? currentPose.RotationDegrees,
                         currentPose),
-                    anchorWorldUpOffset + (i * physicalStep)));
+                    anchorWorldUpOffset + (i * physicalStep) - hiddenDepth));
             }
 
             return plan;

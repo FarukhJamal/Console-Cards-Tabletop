@@ -23,6 +23,13 @@ namespace ConsoleCards.Presentation.Views
             return physicalDefinition != null && physicalDefinition.TryRead(orientation, out value);
         }
 
+        /// <summary>The body rotation that shows <paramref name="value"/> at the given yaw (doc 22 §14).</summary>
+        public bool TryGetValueRotation(int value, float yawDegrees, out Quaternion rotation)
+        {
+            rotation = Quaternion.identity;
+            return physicalDefinition != null && physicalDefinition.TryGetValueRotation(value, yawDegrees, out rotation);
+        }
+
         public void ConfigurePhysicalShape(int sideCount)
         {
             if (physicalBodyMesh == null || physicalDefinition != null) return;
