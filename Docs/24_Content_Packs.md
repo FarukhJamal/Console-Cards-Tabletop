@@ -196,19 +196,30 @@ made in the game, not in the Editor (doc 28). The in-game card editor that write
 
 ## L2-2 record — the card editor (2026-10-16)
 
-- **Where:** Table menu > **Card editor…**, on every table. It edits the game's cards (Trap Floor for now) and your
-  own, and saves them in your profile (`cards.json`, doc 28).
-- **The list:** every game card (controller input cards are left out), then your cards, each with a thumbnail and
-  "Game card" / "Changed" / "Your card", the kind and the number of copies. **+ New card** starts a new card.
+- **Where:** Table menu > **Card editor…**, on every table. It saves in your profile (`cards.json` and
+  `decks.json` per game, doc 28).
+- **Game picker (owner, 2026-10-16):** **<** and **>** choose the game. The list holds every game the platform has:
+  this table's game, then each game box in the component library (DLC games arrive as more game boxes).
+  Everything below belongs to the chosen game, and pictures come from that game's own saves.
+- **The game's deck (owner, 2026-10-16):** a game's deck is its whole set of cards, for example "TRAP FLOOR DECK ·
+  48 CARDS". It is every card with its copies; the total follows your edits and says how many cards are yours. How
+  the board is set up (for example how many floor Traps are drawn) stays in the rules.
+- **The list:** every card in the game's deck (controller input cards are part of the controller and are left out),
+  then your cards, each with a thumbnail, "Game card" / "Changed" / "Your card", the kind and the number of copies.
+  **+ New card** adds a card to the chosen game.
 - **The preview** follows what you type before anything is saved:
   - the front and back pictures on the white base card (with the name on it while there is no front picture),
   - the name, the cost and the description.
 - **The fields:**
   - ID (shown) and short code (your cards only; up to 8 letters, digits or '-', unique).
   - Name, description and cost (card cost notation, checked on Save).
-  - Copies (0–20; 0 keeps the card out of play).
-  - Works like (your cards: pick any game card with < >).
+  - Works like (your cards: pick any card of the same game with < >; in play it does what that card does).
   - Front and back pictures: choose a picture, or clear it.
+  - **In decks** (owner, 2026-10-16): tick the decks the card is in, with copies in each (0–20):
+    - the game's deck first (its copies in play; 0 takes it out of play),
+    - then each of your decks for this game, with its size.
+    - **+ New deck** adds a deck of yours with this card ticked in it. Renaming and deleting decks, and opening a
+      deck to see all its cards, come with the deck editor.
 - **A game card:** Save keeps only what differs from the game's card, as a change. **Reset to the game's card**
   removes the change and its pictures.
 - **Your card:** Save writes it, **Undo edits** goes back to the saved card, and **Delete card** removes it (and
@@ -219,7 +230,8 @@ made in the game, not in the Editor (doc 28). The in-game card editor that write
 - **When it applies:** saved cards are used from the next table you start (Table > New table…). A cost set as a
   house rule on the rules card still wins over the cost here.
 - **Code:**
-  - `CardEditorPanelView` and `CardEditorRowView` (Final UI prefabs `CardEditorPanel`, `CardEditorRow`).
+  - `CardEditorPanelView`, `CardEditorRowView` and `CardEditorDeckRowView` (Final UI prefabs `CardEditorPanel`,
+    `CardEditorRow`, `CardEditorDeckRow`).
   - `TabletopPrototypeComposition.CardEditor.cs`.
   - `PrototypeRuntimeUiController.ShowCardEditor` and `ShowCardEditorEntry`.
   - `SessionBarView.BindCardEditor`.

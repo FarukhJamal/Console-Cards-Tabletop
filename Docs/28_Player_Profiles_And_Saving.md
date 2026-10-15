@@ -86,7 +86,8 @@ Rules for new saving code:
     - **New profile** makes a profile with that name and plays as it.
     - **Rename this profile** changes the active profile's name; its folder stays the same.
     - Names are 1–32 letters, and two profiles cannot share a name.
-  - **Open profiles folder.**
+  - No folder button: players do not need the files (owner, 2026-10-16). *Console Cards > Content > Open Profiles
+    Folder* opens the folder for us.
 - **Switching profile (Play as or New profile) starts the table again from the start.** Every store (pictures,
   packs, cards, decks, rules, hints) then reads the new profile. What is on the table is not kept; the profile's
   own saves are.

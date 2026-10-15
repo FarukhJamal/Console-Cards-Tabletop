@@ -2300,6 +2300,7 @@ namespace ConsoleCards.Presentation.Prototype
             boardFeedback = null;
             ReleaseCardArtMaterials();
             contentArt?.Dispose(); // destroys the pictures the content service loaded
+            DisposeCardEditor(); // and those the card editor loaded for another game
             trapFloorContent?.Destroy(); // destroys the cards made from the player's content
             trapFloorContent = null;
             for (int i = 0; i < houseRuleSets.Count; i++)

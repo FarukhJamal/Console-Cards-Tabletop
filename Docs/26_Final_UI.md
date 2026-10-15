@@ -21,8 +21,8 @@ nothing else.
 | AbilityPurchase | The Shop: every Ability with its kind, cost and picture; Buy, or "Not for sale" without a price (header and list titles set from code) |
 | FocusedCardSelection, FocusedCardOption | Payment and "YOU LANDED ON" popup and its cards |
 | GameTemplateRow | Game list row |
-| CardEditorPanel, CardEditorRow | Card editor (L2-2): the card list with + New card; the preview (front and back on the white base card, and the card's words); the fields (code, name, description, cost, copies, works like, pictures); Delete, Reset, Save |
-| ProfilePanel, ProfileRow | Player profile panel (doc 28): who is playing, every profile with Play as, a name box with New profile and Rename this profile, and Open profiles folder |
+| CardEditorPanel, CardEditorRow, CardEditorDeckRow | Card editor (L2-2): the game picker and the game's deck size; the card list with + New card; the preview (front and back on the white base card, and the card's words); the fields (code, name, description, cost, works like, pictures) and "In decks" (tick, name and size, − copies +; + New deck); Delete, Reset, Save |
+| ProfilePanel, ProfileRow | Player profile panel (doc 28): who is playing, every profile with Play as, a name box with New profile and Rename this profile (no folder button in play; Console Cards > Content > Open Profiles Folder is for us) |
 
 ## Rules
 
@@ -37,4 +37,4 @@ nothing else.
 - **Canvas.** The UI root scales from 1920 × 1080, matching width and height equally (0.5).
 - The older copies in `Real/UI/` are no longer used and can be deleted.
 - **Adding to existing prefabs.** *Console Cards > UI > Add Missing Table Menu Rows (Final UI)* also adds the Shop entry to an existing SessionBar (before the Table button; icon `Content/UI/Session/Icons/IconShop.png`). *Create Missing Gameplay UI Prefabs (Final UI)* wires the Shop title labels in an existing AbilityPurchase. Nothing else in those prefabs changes.
-- **Profile and card editor (2026-10-16).** *Add Missing Table Menu Rows* adds the "Card editor…" and "Profile: name…" rows under Card art in an existing SessionBar. *Create Missing Gameplay UI Prefabs* makes ProfilePanel, ProfileRow, CardEditorPanel and CardEditorRow when they are missing.
+- **Profile and card editor (2026-10-16).** *Add Missing Table Menu Rows* adds the "Card editor…" and "Profile: name…" rows under Card art in an existing SessionBar. *Create Missing Gameplay UI Prefabs* makes ProfilePanel, ProfileRow, CardEditorPanel, CardEditorRow and CardEditorDeckRow when they are missing. A CardEditorPanel made before the game picker and "In decks" (first L2-2 build) must be deleted and made again.

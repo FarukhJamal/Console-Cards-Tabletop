@@ -64,7 +64,6 @@ namespace ConsoleCards.Presentation.Prototype
                     PlayAs = PlayAsProfile,
                     Create = CreateProfile,
                     Rename = RenameProfile,
-                    OpenFolder = OpenProfilesFolder,
                     Close = () => runtimeUi?.CloseProfilePanel(),
                 };
             }
@@ -111,21 +110,6 @@ namespace ConsoleCards.Presentation.Prototype
 
             RefreshProfileEntry();
             ShowProfilePanel($"This profile is now called {profiles.Active.displayName}.", true);
-        }
-
-        private void OpenProfilesFolder()
-        {
-            string folder = EnsureProfile().Store.RootFolder;
-            try
-            {
-                System.IO.Directory.CreateDirectory(folder);
-                UnityEngine.Application.OpenURL(new Uri(folder).AbsoluteUri);
-                ShowProfilePanel($"Profiles folder: {folder}", false);
-            }
-            catch (Exception exception)
-            {
-                ShowProfilePanel($"Could not open {folder}: {exception.Message}", false);
-            }
         }
 
         // Every store reads the profile when it starts, so the table starts again for the new profile: the scene is

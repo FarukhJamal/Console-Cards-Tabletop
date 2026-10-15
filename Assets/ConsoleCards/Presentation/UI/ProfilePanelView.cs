@@ -62,6 +62,7 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private InputField nameInput;
         [SerializeField] private Button createButton;
         [SerializeField] private Button renameButton;
+        [Tooltip("Optional. Shown only when the game offers it (not in play; the profiles folder is a Unity menu).")]
         [SerializeField] private Button openFolderButton;
         [SerializeField] private Text statusLabel;
 
@@ -78,7 +79,7 @@ namespace ConsoleCards.Presentation.UI
         {
             if (dismissOverlayButton == null || closeButton == null || activeNameLabel == null || rowsRoot == null
                 || scroll == null || nameInput == null || createButton == null || renameButton == null
-                || openFolderButton == null || statusLabel == null || uiService == null)
+                || statusLabel == null || uiService == null)
             {
                 throw new InvalidOperationException("ProfilePanelView requires its authored references.");
             }
@@ -95,7 +96,11 @@ namespace ConsoleCards.Presentation.UI
             closeButton.onClick.AddListener(HandleClose);
             createButton.onClick.AddListener(HandleCreate);
             renameButton.onClick.AddListener(HandleRename);
-            openFolderButton.onClick.AddListener(HandleOpenFolder);
+            if (openFolderButton != null)
+            {
+                openFolderButton.gameObject.SetActive(actions.OpenFolder != null);
+                openFolderButton.onClick.AddListener(HandleOpenFolder);
+            }
 
             activeNameLabel.text = model.ActiveName;
             statusLabel.text = model.Status;

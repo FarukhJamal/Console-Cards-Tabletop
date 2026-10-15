@@ -116,5 +116,6 @@ namespace ConsoleCards.Presentation.UI
         public const string ProfileRow = "platform.profile-row";
         public const string CardEditorPanel = "platform.card-editor-panel";
         public const string CardEditorRow = "platform.card-editor-row";
+        public const string CardEditorDeckRow = "platform.card-editor-deck-row";
     }
 }

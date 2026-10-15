@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates.Definitions;
 using ConsoleCards.Presentation.Art;
+using ConsoleCards.Presentation.Catalog;
 using ConsoleCards.Presentation.Content;
 using ConsoleCards.Presentation.UI;
 using UnityEngine;
@@ -10,10 +11,12 @@ using UnityEngine;
 namespace ConsoleCards.Presentation.Prototype
 {
     /// <summary>
-    /// The card editor (doc 27 List 2, L2-2): Table menu > Card editor… lists the game's cards and the player's own,
-    /// and edits one at a time with a live preview. A game card's edits are saved as a change (Reset brings the
-    /// game's card back); a new card works like a game card the player picks. Everything is saved in the player's
-    /// profile (doc 28) when the player presses Save, and used from the next table that starts.
+    /// The card editor (doc 27 List 2, L2-2): Table menu > Card editor…. Pick a game (every game in the library);
+    /// its deck lists every card with its copies and the total, then the player's own cards. One card is edited at a
+    /// time with a live preview, and the decks it is in (the game's deck and the player's decks) with copies in each.
+    /// A game card's edits are saved as a change (Reset brings the game's card back); a new card works like a card of
+    /// the same game. Everything is saved in the player's profile (doc 28) when the player presses Save, and used
+    /// from the next table that starts.
     /// </summary>
     public sealed partial class TabletopPrototypeComposition
     {
@@ -21,6 +24,8 @@ namespace ConsoleCards.Presentation.Prototype
         private const int CardEditorMaximumCodeLength = 8;
         private const string CardEditorHint =
             "Saved cards are used from the next table you start. A cost set as a house rule on the rules card wins over the cost here.";
+        // The deck ID the "In decks" list uses for the game's own deck (the card's copies in the game).
+        private const string GameDeckId = "game";
 
         // The card being edited. Nothing here is saved until Save.
         private sealed class CardEditorDraft
@@ -37,45 +42,113 @@ namespace ConsoleCards.Presentation.Prototype
             // The art keys in use. Empty front on a new card: no picture (the blank base card).
             public string FrontKey = string.Empty;
             public string BackKey = string.Empty;
+            // Copies in each of the player's decks, by deck ID (0 or missing: not in that deck).
+            public readonly Dictionary<string, int> DeckCopies = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         }
 
+        private readonly List<GameDefinition> editorGames = new List<GameDefinition>();
         private readonly List<CardDefinition> editorGameCards = new List<CardDefinition>();
+        private GameDefinition editorGame;
+        // Pictures for a game other than this table's (the table's own art service is used for the table's game).
+        private ContentArtService editorOtherArt;
         private PlayerCardsFile editorCards;
+        private PlayerDecksFile editorDecks;
         private CardEditorDraft editorDraft;
         private CardEditorActions cardEditorActions;
         private string editorArtFolder = string.Empty;
 
+        // On every table: the editor picks among all games, whatever is on the table.
         private void RefreshCardEditorEntry()
         {
-            runtimeUi?.ShowCardEditorEntry(trapFloorGameDefinition != null ? (Action)OpenCardEditor : null);
+            runtimeUi?.ShowCardEditorEntry(OpenCardEditor);
         }
+
+        private ContentArtService EditorArt => editorOtherArt ?? contentArt;
 
         private void OpenCardEditor()
         {
             EnsureContentArt();
-            if (!contentArt.HasGame)
+            CollectEditorGames();
+            if (editorGames.Count == 0)
             {
-                ShowMessage("There are no game cards to edit here.");
+                ShowMessage("There are no games with cards to edit.");
                 return;
             }
 
-            editorCards = contentArt.Store.LoadCards(contentArt.GameId);
-            editorArtFolder = GameContent.ArtFolderOf(trapFloorGameDefinition);
+            GameDefinition start = editorGame != null && editorGames.Contains(editorGame) ? editorGame : editorGames[0];
+            ContentArtService previous = UseEditorGame(start);
+            ShowCardEditor(string.Empty);
+            previous?.Dispose();
+        }
+
+        // Every game the platform has: this table's game, then each game box in the component library (DLC games
+        // arrive as more game boxes).
+        private void CollectEditorGames()
+        {
+            editorGames.Clear();
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (trapFloorGameDefinition != null && seen.Add(trapFloorGameDefinition.StableId ?? string.Empty))
+            {
+                editorGames.Add(trapFloorGameDefinition);
+            }
+
+            IReadOnlyList<ComponentCatalog> boxes = componentLibrary != null ? componentLibrary.GameBoxes : null;
+            for (int i = 0; boxes != null && i < boxes.Count; i++)
+            {
+                GameDefinition game = boxes[i] != null ? boxes[i].Game : null;
+                if (game != null && seen.Add(game.StableId ?? string.Empty)) editorGames.Add(game);
+            }
+        }
+
+        // Loads one game's cards and decks from the profile. Returns the picture service no longer needed (dispose it
+        // once the panel shows the new game).
+        private ContentArtService UseEditorGame(GameDefinition game)
+        {
+            ContentArtService previous = editorOtherArt;
+            editorOtherArt = null;
+            if (!ReferenceEquals(game, trapFloorGameDefinition))
+            {
+                editorOtherArt = new ContentArtService(ContentPackStore.ForProfile(EnsureProfile()));
+                editorOtherArt.UseGame(game);
+            }
+
+            editorGame = game;
+            editorCards = EditorArt.Store.LoadCards(EditorArt.GameId);
+            editorDecks = EditorArt.Store.LoadDecks(EditorArt.GameId);
+            editorArtFolder = GameContent.ArtFolderOf(game);
             editorGameCards.Clear();
             HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (int s = 0; s < trapFloorGameDefinition.ContentSets.Count; s++)
+            for (int s = 0; s < game.ContentSets.Count; s++)
             {
-                GameContentSet set = trapFloorGameDefinition.ContentSets[s];
+                GameContentSet set = game.ContentSets[s];
                 for (int c = 0; set != null && c < set.Cards.Count; c++)
                 {
                     CardDefinition card = set.Cards[c];
-                    // Controller input cards are part of the controller, not cards to change.
+                    // Controller input cards are part of the controller, not of the game's deck.
                     if (card != null && card.RepresentedControllerInput == null && seen.Add(card.StableId)) editorGameCards.Add(card);
                 }
             }
 
             editorDraft = editorGameCards.Count > 0 ? DraftForGameCard(editorGameCards[0]) : null;
-            ShowCardEditor(string.Empty);
+            return previous;
+        }
+
+        private void CycleEditorGame(int step, CardEditorTyped typed)
+        {
+            if (editorGames.Count < 2) return;
+            DropUnsavedNewCard();
+            int index = Math.Max(0, editorGames.IndexOf(editorGame));
+            GameDefinition next = editorGames[((index + step) % editorGames.Count + editorGames.Count) % editorGames.Count];
+            ContentArtService previous = UseEditorGame(next);
+            ShowCardEditor($"Now editing {next.DisplayName}'s cards.");
+            previous?.Dispose();
+        }
+
+        // The table is going away: the picture service made for another game goes with it.
+        private void DisposeCardEditor()
+        {
+            editorOtherArt?.Dispose();
+            editorOtherArt = null;
         }
 
         private void ShowCardEditor(string status)
@@ -85,10 +158,13 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 cardEditorActions = new CardEditorActions
                 {
+                    CycleGame = CycleEditorGame,
                     Select = SelectEditorCard,
                     NewCard = NewEditorCard,
-                    ChangeCopies = ChangeEditorCopies,
                     CycleWorksLike = CycleEditorWorksLike,
+                    ToggleDeck = ToggleEditorDeck,
+                    ChangeDeckCopies = ChangeEditorDeckCopies,
+                    NewDeck = NewEditorDeck,
                     ChoosePicture = ChooseEditorPicture,
                     ClearPicture = ClearEditorPicture,
                     Save = SaveEditorCard,
@@ -98,9 +174,13 @@ namespace ConsoleCards.Presentation.Prototype
                 };
             }
 
+            string gameName = editorGame.DisplayName ?? string.Empty;
             CardEditorModel model = new CardEditorModel
             {
-                Title = $"CARD EDITOR · {(trapFloorGameDefinition.DisplayName ?? string.Empty).ToUpperInvariant()}",
+                Title = "CARD EDITOR",
+                GameName = gameName,
+                CanChangeGame = editorGames.Count > 1,
+                DeckSummary = EditorDeckSummary(gameName),
                 Rows = BuildEditorRows(),
                 Status = string.IsNullOrEmpty(status) ? CardEditorHint : status,
             };
@@ -118,7 +198,6 @@ namespace ConsoleCards.Presentation.Prototype
                 model.CodeEditable = draft.IsNew;
                 model.Name = draft.Name;
                 model.Description = draft.Description;
-                model.Copies = draft.Copies;
                 model.Cost = draft.Cost;
                 model.WorksLike = model0 == null
                     ? "?"
@@ -132,6 +211,7 @@ namespace ConsoleCards.Presentation.Prototype
                 model.CanReset = true;
                 model.ResetText = draft.IsNew ? "Undo edits" : "Reset to the game's card";
                 model.CanDelete = draft.IsNew;
+                model.Decks = BuildEditorDeckRows(draft, gameName);
             }
 
             if (!runtimeUi.ShowCardEditor(model, cardEditorActions))
@@ -218,12 +298,54 @@ namespace ConsoleCards.Presentation.Prototype
             ShowCardEditor("A new card. Give it a name, pick the card it works like and its pictures, then Save.");
         }
 
-        private void ChangeEditorCopies(int step, CardEditorTyped typed)
+        // In a deck or not: the tick puts one copy in, or takes every copy out.
+        private void ToggleEditorDeck(string deckId, CardEditorTyped typed)
         {
             if (editorDraft == null) return;
             ApplyTyped(typed);
-            editorDraft.Copies = Mathf.Clamp(editorDraft.Copies + step, 0, CardEditorMaximumCopies);
-            ShowCardEditor(editorDraft.Copies == 0 ? "With 0 copies the card is not used in play." : string.Empty);
+            SetDraftDeckCopies(deckId, DraftDeckCopies(deckId) > 0 ? 0 : 1);
+        }
+
+        private void ChangeEditorDeckCopies(string deckId, int step, CardEditorTyped typed)
+        {
+            if (editorDraft == null) return;
+            ApplyTyped(typed);
+            SetDraftDeckCopies(deckId, DraftDeckCopies(deckId) + step);
+        }
+
+        private void SetDraftDeckCopies(string deckId, int copies)
+        {
+            copies = Mathf.Clamp(copies, 0, CardEditorMaximumCopies);
+            if (deckId == GameDeckId)
+            {
+                editorDraft.Copies = copies;
+                ShowCardEditor(copies == 0 ? "Out of the game's deck: the card is not used in play." : string.Empty);
+                return;
+            }
+
+            editorDraft.DeckCopies[deckId] = copies;
+            ShowCardEditor(string.Empty);
+        }
+
+        private int DraftDeckCopies(string deckId) =>
+            deckId == GameDeckId
+                ? editorDraft.Copies
+                : editorDraft.DeckCopies.TryGetValue(deckId, out int copies) ? copies : 0;
+
+        // A new deck of yours for this game; the card being edited is ticked into it (Save keeps it there).
+        private void NewEditorDeck(CardEditorTyped typed)
+        {
+            if (editorDraft == null) return;
+            ApplyTyped(typed);
+            PlayerDeckRecord deck = new PlayerDeckRecord
+            {
+                id = PlayerCardsFile.NewCardId(),
+                name = $"My deck {editorDecks.decks.Count + 1}",
+            };
+            editorDecks.decks.Add(deck);
+            EditorArt.Store.SaveDecks(EditorArt.GameId, editorDecks);
+            editorDraft.DeckCopies[deck.id] = 1;
+            ShowCardEditor($"Added {deck.name} with this card ticked in it. Save keeps the card there; decks are renamed in the deck editor.");
         }
 
         private void CycleEditorWorksLike(int step, CardEditorTyped typed)
@@ -258,7 +380,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             string key = PlayerContent.DefaultArtKey(editorArtFolder, editorDraft.Id, front);
-            if (!contentArt.SetUpload(key, path, out string message))
+            if (!EditorArt.SetUpload(key, path, out string message))
             {
                 ShowCardEditor(message);
                 return;
@@ -317,11 +439,13 @@ namespace ConsoleCards.Presentation.Prototype
 
             if (draft.IsNew) SaveNewCardRecord(draft);
             else SaveGameCardChange(draft);
-            if (!contentArt.Store.SaveCards(contentArt.GameId, editorCards))
+            if (!EditorArt.Store.SaveCards(EditorArt.GameId, editorCards))
             {
                 ShowCardEditor("Your cards could not be saved; the console says why.");
                 return;
             }
+
+            SaveDraftDecks(draft);
 
             draft.IsSaved = true;
             RemoveUnusedEditorPictures(draft.Id);
@@ -338,7 +462,7 @@ namespace ConsoleCards.Presentation.Prototype
                 if (change != null)
                 {
                     editorCards.changes.Remove(change);
-                    contentArt.Store.SaveCards(contentArt.GameId, editorCards);
+                    EditorArt.Store.SaveCards(EditorArt.GameId, editorCards);
                 }
 
                 RemoveUnusedEditorPictures(draft.Id);
@@ -372,7 +496,7 @@ namespace ConsoleCards.Presentation.Prototype
             if (record != null)
             {
                 editorCards.cards.Remove(record);
-                contentArt.Store.SaveCards(contentArt.GameId, editorCards);
+                EditorArt.Store.SaveCards(EditorArt.GameId, editorCards);
                 RemoveFromDecks(draft.Id);
             }
 
@@ -387,6 +511,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             DropUnsavedNewCard();
             runtimeUi?.CloseCardEditor();
+            DisposeCardEditor();
         }
 
         // ---------- saving ----------
@@ -494,15 +619,117 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void RemoveFromDecks(string cardId)
         {
-            PlayerDecksFile decks = contentArt.Store.LoadDecks(contentArt.GameId);
             bool changed = false;
-            for (int d = 0; d < decks.decks.Count; d++)
+            for (int d = 0; d < editorDecks.decks.Count; d++)
             {
-                if (decks.decks[d] == null) continue;
-                changed |= decks.decks[d].cards.RemoveAll(entry => entry != null && entry.cardId == cardId) > 0;
+                if (editorDecks.decks[d] == null) continue;
+                changed |= editorDecks.decks[d].cards.RemoveAll(entry => entry != null && entry.cardId == cardId) > 0;
             }
 
-            if (changed) contentArt.Store.SaveDecks(contentArt.GameId, decks);
+            if (changed) EditorArt.Store.SaveDecks(EditorArt.GameId, editorDecks);
+        }
+
+        // The card's copies in each of your decks, as the draft says.
+        private void SaveDraftDecks(CardEditorDraft draft)
+        {
+            bool changed = false;
+            for (int d = 0; d < editorDecks.decks.Count; d++)
+            {
+                PlayerDeckRecord deck = editorDecks.decks[d];
+                if (deck == null) continue;
+                int saved = SavedDeckCopies(deck, draft.Id);
+                int wanted = draft.DeckCopies.TryGetValue(deck.id, out int copies) ? copies : 0;
+                if (saved == wanted) continue;
+                deck.cards.RemoveAll(entry => entry != null && string.Equals(entry.cardId, draft.Id, StringComparison.OrdinalIgnoreCase));
+                if (wanted > 0) deck.cards.Add(new PlayerDeckEntry { cardId = draft.Id, count = wanted });
+                changed = true;
+            }
+
+            if (changed) EditorArt.Store.SaveDecks(EditorArt.GameId, editorDecks);
+        }
+
+        private static int SavedDeckCopies(PlayerDeckRecord deck, string cardId)
+        {
+            int copies = 0;
+            for (int i = 0; i < deck.cards.Count; i++)
+            {
+                PlayerDeckEntry entry = deck.cards[i];
+                if (entry != null && string.Equals(entry.cardId, cardId, StringComparison.OrdinalIgnoreCase)) copies += entry.count;
+            }
+
+            return copies;
+        }
+
+        // ---------- the game's deck and the "In decks" list ----------
+
+        // "TRAP FLOOR DECK · 48 CARDS": every card's copies in the game, as edited now (yours included).
+        private string EditorDeckSummary(string gameName)
+        {
+            int total = 0;
+            int yours = 0;
+            for (int i = 0; i < editorGameCards.Count; i++)
+            {
+                CardDefinition card = editorGameCards[i];
+                if (editorDraft != null && !editorDraft.IsNew && editorDraft.Id == card.StableId)
+                {
+                    total += editorDraft.Copies;
+                    continue;
+                }
+
+                CardChangeRecord change = FindEditorChange(card.StableId);
+                total += change != null && change.changeQuantity ? change.quantity : card.Quantity;
+            }
+
+            for (int i = 0; i < editorCards.cards.Count; i++)
+            {
+                PlayerCardRecord record = editorCards.cards[i];
+                if (record == null) continue;
+                int copies = editorDraft != null && editorDraft.IsNew && editorDraft.Id == record.id ? editorDraft.Copies : record.quantity;
+                total += copies;
+                yours += copies;
+            }
+
+            if (editorDraft != null && editorDraft.IsNew && !editorDraft.IsSaved)
+            {
+                total += editorDraft.Copies;
+                yours += editorDraft.Copies;
+            }
+
+            string own = yours > 0 ? $" ({yours} of yours)" : string.Empty;
+            return $"{gameName.ToUpperInvariant()} DECK · {total} CARD{(total == 1 ? string.Empty : "S")}{own}";
+        }
+
+        private List<CardEditorDeckRowModel> BuildEditorDeckRows(CardEditorDraft draft, string gameName)
+        {
+            List<CardEditorDeckRowModel> rows = new List<CardEditorDeckRowModel>(1 + editorDecks.decks.Count)
+            {
+                new CardEditorDeckRowModel(GameDeckId, $"{gameName} deck", "The game's own deck: copies in play", draft.Copies),
+            };
+            for (int d = 0; d < editorDecks.decks.Count; d++)
+            {
+                PlayerDeckRecord deck = editorDecks.decks[d];
+                if (deck == null || string.IsNullOrWhiteSpace(deck.id)) continue;
+                int copies = draft.DeckCopies.TryGetValue(deck.id, out int value) ? value : 0;
+                int size = 0;
+                for (int i = 0; i < deck.cards.Count; i++) size += deck.cards[i] != null ? deck.cards[i].count : 0;
+                size += copies - SavedDeckCopies(deck, draft.Id);
+                rows.Add(new CardEditorDeckRowModel(deck.id, string.IsNullOrWhiteSpace(deck.name) ? "My deck" : deck.name,
+                    $"Your deck · {size} card{(size == 1 ? string.Empty : "s")}", copies));
+            }
+
+            return rows;
+        }
+
+        private void FillDeckCopies(CardEditorDraft draft)
+        {
+            draft.DeckCopies.Clear();
+            for (int d = 0; editorDecks != null && d < editorDecks.decks.Count; d++)
+            {
+                PlayerDeckRecord deck = editorDecks.decks[d];
+                if (deck == null || string.IsNullOrWhiteSpace(deck.id)) continue;
+                int copies = SavedDeckCopies(deck, draft.Id);
+                if (copies > 0) draft.DeckCopies[deck.id] = copies;
+            }
         }
 
         // A card's own pictures (its player art keys) that its saved card no longer uses are removed.
@@ -523,7 +750,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void RemoveEditorPicture(string key)
         {
-            if (contentArt.HasUpload(key)) contentArt.RemoveUpload(key, out _);
+            if (EditorArt.HasUpload(key)) EditorArt.RemoveUpload(key, out _);
         }
 
         private void DropUnsavedNewCard()
@@ -539,7 +766,7 @@ namespace ConsoleCards.Presentation.Prototype
         private CardEditorDraft DraftForGameCard(CardDefinition card)
         {
             CardChangeRecord change = FindEditorChange(card.StableId);
-            return new CardEditorDraft
+            CardEditorDraft draft = new CardEditorDraft
             {
                 IsNew = false,
                 IsSaved = true,
@@ -552,12 +779,14 @@ namespace ConsoleCards.Presentation.Prototype
                 FrontKey = change != null && change.changeFrontArt ? change.frontArtKey : card.FrontArtworkReference ?? string.Empty,
                 BackKey = change != null && change.changeBackArt ? change.backArtKey : card.BackArtworkReference ?? string.Empty,
             };
+            FillDeckCopies(draft);
+            return draft;
         }
 
         private CardEditorDraft DraftForRecord(PlayerCardRecord record)
         {
             CardDefinition model = FindEditorGameCard(record.behavesLike);
-            return new CardEditorDraft
+            CardEditorDraft draft = new CardEditorDraft
             {
                 IsNew = true,
                 IsSaved = true,
@@ -573,6 +802,8 @@ namespace ConsoleCards.Presentation.Prototype
                     ? model?.BackArtworkReference ?? string.Empty
                     : record.backArtKey,
             };
+            FillDeckCopies(draft);
+            return draft;
         }
 
         // A saved new card shows the picture under its own key (the same key the game uses for it, doc 24 L2-1).
@@ -580,7 +811,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             if (!string.IsNullOrWhiteSpace(record.frontArtKey)) return record.frontArtKey;
             string key = PlayerContent.DefaultArtKey(editorArtFolder, record.id, true);
-            return contentArt.HasUpload(key) ? key : string.Empty;
+            return EditorArt.HasUpload(key) ? key : string.Empty;
         }
 
         private void ApplyTyped(CardEditorTyped typed)
@@ -604,7 +835,7 @@ namespace ConsoleCards.Presentation.Prototype
                     : (SameArtKey(key, model.BackArtworkReference) ? model.BackArtwork : null);
             }
 
-            return Art(key, own);
+            return EditorArt.Resolve(key, own);
         }
 
         private CardDefinition FindEditorGameCard(string cardId)
