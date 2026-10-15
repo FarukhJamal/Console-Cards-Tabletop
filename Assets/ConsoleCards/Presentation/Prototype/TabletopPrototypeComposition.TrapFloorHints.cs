@@ -51,7 +51,7 @@ namespace ConsoleCards.Presentation.Prototype
     /// <list type="bullet">
     /// <item>trapfloor.reach (rule "Move up to N tiles"): reach markers while holding your pawn, and a RULE
     /// reminder while it is over a tile the rules do not allow. A landing the rules do not allow is a rule check
-    /// (warning, no flip, Undo move or Keep move), not a hint.</item>
+    /// (warning pointing at the Undo button, no flip, Keep move in the turn menu), not a hint.</item>
     /// <item>trapfloor.prize (rule "Standing on an Ability or Friend?"): you stand on a prize you may take.</item>
     /// <item>trapfloor.traps-waiting (rule "Reaction abilities"): a Trap waits until End Turn.</item>
     /// <item>trapfloor.collapse (the floor-turn rules): the tile the floor dice point at, marked.</item>
@@ -61,7 +61,8 @@ namespace ConsoleCards.Presentation.Prototype
     {
         // R4 hints (doc 23 §9), behind the hint helper "trapfloor.reach" since H3: the tiles in reach light while
         // the active player holds their pawn, with a RULE reminder over a tile the rules do not allow. A landing the
-        // rules do not allow does not flip its tile; a warning offers Undo move or Keep move. Nothing is blocked.
+        // rules do not allow does not flip its tile; a warning points at the Undo button and the turn menu offers
+        // Keep move. Nothing is blocked.
         private bool reachHintShown;
         private bool reachHintHeld;
         private int moveTurnRound = -1;
@@ -355,7 +356,7 @@ namespace ConsoleCards.Presentation.Prototype
         // After the active pawn lands on another tile (owner, 2026-10-15, H3): a rule check, not a hint, so it runs
         // with hints off too. The count runs from where the pawn stood when the turn started (moving 2 then 2 is a
         // 4-tile move). Returns why the rules do not allow the move, or null; a move not allowed does not flip its
-        // tile, and the turn menu offers Undo move or Keep move (nothing is blocked).
+        // tile; the Undo button takes it back or the turn menu's Keep move keeps it (nothing is blocked).
         private string CheckActivePawnMove(TrapFloorCoordinate? from, TrapFloorCoordinate to)
         {
             EnsureMoveTurn();
@@ -510,20 +511,13 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshTrapFloorStatusUi();
         }
 
-        // "Undo move" is offered only while the move is still the latest step in the history.
+        // "Keep move" is offered only while the move is still the latest step in the history.
         private bool IsTooFarMoveUndoable()
         {
             return tooFarStateIndex >= 0
                 && moveTurnRound == trapFloorTurnState.CurrentRound
                 && moveTurnPlayer == trapFloorTurnState.ActivePlayerId
                 && undoHistory.CurrentStateIndex == tooFarStateIndex;
-        }
-
-        private void UndoTooFarMove()
-        {
-            tooFarStateIndex = -1;
-            notAllowedLandingFloorCardId = TabletopObjectId.Empty;
-            UndoLatestAction();
         }
 
         // ---------- H3: Trap Floor hint helpers (doc 23 §10) ----------

@@ -5355,13 +5355,10 @@ namespace ConsoleCards.Presentation.Prototype
                         true,
                         BeginTakeFloorPrize));
                 }
-                // R4: after a move further than the rules allow, offer to take it back (nothing is blocked).
+                // After a move the rules do not allow: the Undo button takes it back (owner, 2026-10-15: no Undo
+                // entry here); the table may keep it instead (nothing is blocked).
                 if (IsTooFarMoveUndoable())
                 {
-                    actions.Add(new PrototypePopupActionOption(
-                        "Undo move (not allowed)",
-                        true,
-                        UndoTooFarMove));
                     actions.Add(new PrototypePopupActionOption(
                         notAllowedLandingFloorCardId.IsEmpty ? "Keep move" : "Keep move (flip the tile)",
                         true,
@@ -9410,7 +9407,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             // Owner, 2026-10-15 (H3): a landing the rules do not allow is a rule check, hints on or off. It does
-            // not flip its tile; a warning says why and the turn menu offers Undo move or Keep move.
+            // not flip its tile; a warning says why and points at the Undo button; the turn menu offers Keep move.
             string moveProblem = null;
             if (landedTile.HasValue)
             {
@@ -9418,8 +9415,8 @@ namespace ConsoleCards.Presentation.Prototype
                 if (moveProblem != null)
                 {
                     FeedbackLine(
-                        $"Move not allowed: {moveProblem} The tile does not flip. Choose Undo move in the turn menu, "
-                        + "or Keep move if the table agrees.",
+                        $"Move not allowed: {moveProblem} The tile does not flip. Press the Undo button to take the "
+                        + "move back, or choose Keep move in the turn menu if the table agrees.",
                         FeedbackSeverity.Warning);
                     RefreshTrapFloorStatusUi();
                 }
