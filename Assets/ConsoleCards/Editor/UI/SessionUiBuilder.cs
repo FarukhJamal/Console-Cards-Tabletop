@@ -215,6 +215,7 @@ namespace ConsoleCards.Editor.UI
                 SwitchRowHeight, out Button hintsButton, out Image hintsFill, out RectTransform hintsKnob, out Text hintsWord,
                 out Text hintsHint);
             AddPlayRows(menu, view, -1);
+            AddTipsRow(menu, view, hintsRow.GetSiblingIndex() + 1);
             Separator(menu, "Rule3", TabIdle, MenuRowRule);
             Button helpButton = MenuRow(menu, "HelpRow", "Help", true);
             menu.gameObject.SetActive(false);
@@ -283,6 +284,8 @@ namespace ConsoleCards.Editor.UI
                 Transform before = menu.Find("Rule3");
                 int index = before != null ? before.GetSiblingIndex() : menu.childCount;
                 int added = AddPlayRows(menu, view, index);
+                Transform hintsRow = menu.Find("HintsRow");
+                added += AddTipsRow(menu, view, hintsRow != null ? hintsRow.GetSiblingIndex() + 1 : -1);
                 if (added == 0)
                 {
                     Debug.Log($"[Session UI] {PrefabPath} already has every Table menu row.");
@@ -341,6 +344,17 @@ namespace ConsoleCards.Editor.UI
                 added++;
             }
 
+            so.ApplyModifiedPropertiesWithoutUndo();
+            return added;
+        }
+
+        // The Tips switch (doc 23 §10) goes right under the Hints switch it belongs to.
+        private static int AddTipsRow(RectTransform menu, SessionBarView view, int siblingIndex)
+        {
+            SerializedObject so = new SerializedObject(view);
+            int added = 0;
+            AddSwitchIfMissing(menu, so, "tipsSwitch", "TipsRow", "Tips", "Teach the table and the game",
+                "Off; only reminders show", siblingIndex < 0 ? menu.childCount : siblingIndex, ref added);
             so.ApplyModifiedPropertiesWithoutUndo();
             return added;
         }

@@ -1,0 +1,95 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: PlatformHints
+  m_EditorClassIdentifier: ConsoleCards.Definitions:ConsoleCards.Definitions:HintLibraryDefinition
+  entries:
+  - stableId: platform.table-empty
+    trigger: table.ready
+    context: empty
+    text: Open + TOOLBOX to put pieces on the table. The Base Box holds the platform's
+      pieces (Console mats, cards, dice, boards, pawns); a Game Box holds one game's
+      own pieces.
+    kind: 0
+    priority: 10
+    maxShows: 2
+  - stableId: platform.table-game
+    trigger: table.ready
+    context: game
+    text: The rules card on the left says how to play. Press Change on a rule to
+      propose a house rule; every player agrees with their own button.
+    kind: 0
+    priority: 10
+    maxShows: 2
+  - stableId: platform.place-console
+    trigger: toolbox.placing
+    context: Console
+    text: A Console mat has two sides. Right-click it to flip it to the controller
+      side or to Duplicate it. A card snaps to the slot with the same symbol.
+    kind: 0
+    priority: 5
+    maxShows: 2
+  - stableId: platform.place-board
+    trigger: toolbox.placing
+    context: GameBoard
+    text: Drop a board against another and their edges join. Right-click a board
+      to change its grid or the size of its spaces; cards snap to the spaces.
+    kind: 0
+    priority: 5
+    maxShows: 2
+  - stableId: platform.place-die
+    trigger: toolbox.placing
+    context: Die
+    text: Drag a die and let go to roll it. Right-click a die to set it to a number;
+      on a Console's D-pad arrow it snaps in place.
+    kind: 0
+    priority: 5
+    maxShows: 2
+  - stableId: platform.place-deck
+    trigger: toolbox.placing
+    context: Deck
+    text: Right-click a deck for its menu, for example Draw to Hand or Shuffle.
+    kind: 0
+    priority: 5
+    maxShows: 2
+  - stableId: platform.drag-card
+    trigger: drag.card
+    context: 
+    text: Drop a card near a slot, pile or board space and it snaps in. F flips a
+      card; the wheel turns it.
+    kind: 0
+    priority: 3
+    maxShows: 2
+  - stableId: platform.undo
+    trigger: undo.available
+    context: 
+    text: 'Every step can be undone: Ctrl+Z undoes and Ctrl+Y redoes, or use the
+      arrows on the top bar.'
+    kind: 0
+    priority: 2
+    maxShows: 2
+  - stableId: platform.draw
+    trigger: action.DrawCards
+    context: 
+    text: Drawn cards go to your Hand at the bottom of the screen. H shows or hides
+      it.
+    kind: 0
+    priority: 2
+    maxShows: 2
+  - stableId: platform.flip-console
+    trigger: action.FlipConsole
+    context: 
+    text: 'The back of the Console maps the controller: A, B, X and Y take cards,
+      and a die on a D-pad arrow can be set to a number.'
+    kind: 0
+    priority: 2
+    maxShows: 2

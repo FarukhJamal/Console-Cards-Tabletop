@@ -29,6 +29,7 @@ using ConsoleCards.Presentation.Content;
 using ConsoleCards.Presentation.Catalog;
 using ConsoleCards.Presentation.Coordinates;
 using ConsoleCards.Presentation.Feedback;
+using ConsoleCards.Presentation.Hints;
 using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
 using ConsoleCards.Presentation.Settings;
@@ -246,6 +247,14 @@ namespace ConsoleCards.Presentation.Prototype
         // Viewer settings from the Table menu (doc 23, R1); not table state, so Undo and Reset never change them.
         private bool rulesCardEnabled = true;
         private bool hintsEnabled = true;
+        // Hints (doc 23 §10): the service, the Tips switch (Learning) and the hint in the strip. Viewer settings.
+        private HintService hintService;
+        private bool tipsEnabled = true;
+        private HintEntry shownHint;
+        private bool hintLibraryWarned;
+        private bool hintCardDragSeen;
+        private bool hintPawnDragSeen;
+        private static string[] actionHintTriggers;
         // House rules (doc 23, R3): the rule set in play (null = the game's default), the sets saved on this
         // computer, the set the current templates were built with, and the open proposal. Kept across Undo and Reset.
         private RuleSetDefinition activeRuleSet;
@@ -318,7 +327,8 @@ namespace ConsoleCards.Presentation.Prototype
         private bool guidedMoveThisTurn;
         private int tooFarStateIndex = -1;
         private readonly List<TabletopObjectId> reachTileIds = new List<TabletopObjectId>();
-        private readonly Queue<TrapFloorCoordinate> reachQueue = new Queue<TrapFloorCoordinate>();
+        private readonly List<Vector3> reachPositions = new List<Vector3>();
+        private static readonly Color ReachMarkerColour = new Color(0.55f, 0.95f, 0.4f, 0.9f);
         private int[,] reachSteps;
         private TrapFloorFloormasterLifecycleState floormasterLifecycleState;
         private TrapFloorFloormasterLifecycleService floormasterLifecycleService;
@@ -1583,8 +1593,7 @@ namespace ConsoleCards.Presentation.Prototype
 
             if ((acceptance.Kind == AuthoritativeActionKind.MoveObject
                     || acceptance.Kind == AuthoritativeActionKind.PhysicalObjectSettled)
-                && abilityTargetPresenter != null
-                && abilityTargetPresenter.HasCurrent)
+                && IsGuidedMoveShown())
             {
                 // R4: a move made while an Ability or a Trap shows where to go is not a regular move.
                 EnsureMoveTurn();
@@ -1643,6 +1652,8 @@ namespace ConsoleCards.Presentation.Prototype
                         this);
                     undoTransactionInProgress = false;
                     RefreshUndoUi();
+                    RaiseHint(ActionHintTrigger(acceptance.Kind));
+                    RaiseHint(HintTriggers.UndoAvailable);
                     break;
                 case AuthoritativeActionRecordMode.CancelTransaction:
                     undoTransactionInProgress = false;
@@ -2414,6 +2425,7 @@ namespace ConsoleCards.Presentation.Prototype
             physicalAuthority?.Tick();
             CompletePendingLandingFlip();
             UpdateReachHint();
+            UpdateHintTriggers();
             RefreshBoardCardBacksIfRoundChanged();
             CompletePhysicalFloorfallIfSettled();
             CompletePhysicalFloorCollapseIfSettled();
@@ -2755,6 +2767,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             EnsureInitialized();
             CloseContextMenu();
+            RaiseHint(HintTriggers.ToolboxPlacing, entry.Kind.ToString());
             toolboxPlacementIcon = entry.Icon;
             if (TryCollectRealCards(entry, value, out List<ObjectDefinitionId> realCards))
             {
@@ -4548,6 +4561,7 @@ namespace ConsoleCards.Presentation.Prototype
                 SetRulesCardEnabled,
                 hintsEnabled,
                 SetHintsEnabled);
+            runtimeUi.ShowTipsSetting(tipsEnabled, SetTipsEnabled);
             runtimeUi.ShowPlaySettings(
                 trapFloorTemplate != null && activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom,
                 $"Seat: {PlayerLabel(localPlayerId)}",
@@ -4566,6 +4580,7 @@ namespace ConsoleCards.Presentation.Prototype
                 SetFullFeedback);
             RefreshUndoUi();
             RefreshTrapFloorStatusUi();
+            RaiseHint(HintTriggers.TableReady, isGameSession ? "game" : "empty");
         }
 
         // The rules card for this table (doc 23, R1): the rule set in play, filtered to the active mode. Empty Table
@@ -4992,10 +5007,102 @@ namespace ConsoleCards.Presentation.Prototype
         {
             hintsEnabled = enabled;
             runtimeUi?.SetHintsVisible(enabled);
+            ApplyHintLevel();
             RefreshTrapFloorStatusUi();
         }
 
         private string HintText(string text) => hintsEnabled ? text : string.Empty;
+
+        // ---------- hints (doc 23 §10) ----------
+
+        private void SetTipsEnabled(bool enabled)
+        {
+            tipsEnabled = enabled;
+            ApplyHintLevel();
+        }
+
+        private void EnsureHints()
+        {
+            if (hintService != null) return;
+            hintService = new HintService(HintSeenStore.CreateDefault());
+            HintLibraryDefinition platform = Resources.Load<HintLibraryDefinition>(HintLibraryDefinition.PlatformResourcePath);
+            if (platform != null) hintService.AddLibrary(platform);
+            else if (!hintLibraryWarned)
+            {
+                hintLibraryWarned = true;
+                Debug.LogWarning("Platform hints are missing: run Console Cards > Hints > Create Missing Platform Hints.");
+            }
+
+            ApplyHintLevel();
+        }
+
+        // Hints off: nothing. Hints on, Tips off: reminders only. Both on: tips too.
+        private void ApplyHintLevel()
+        {
+            if (hintService == null) return;
+            hintService.Level = !hintsEnabled ? HintLevel.Off : tipsEnabled ? HintLevel.Learning : HintLevel.Reminders;
+            if (shownHint != null
+                && (hintService.Level == HintLevel.Off
+                    || (shownHint.Kind == HintKind.Tip && hintService.Level != HintLevel.Learning)))
+            {
+                HideShownHint();
+            }
+        }
+
+        // An event happened at the table: show the best hint for it, unless a more important one is showing.
+        private void RaiseHint(string trigger, string context = "")
+        {
+            if (runtimeUi == null || !IsInitialized || rebuildingFromUndo) return;
+            EnsureHints();
+            if (!hintService.TryFind(trigger, context, out HintEntry hint) || hint == shownHint) return;
+            if (shownHint != null && runtimeUi.IsHintShown && shownHint.Priority >= hint.Priority) return;
+            if (!runtimeUi.ShowHint(hint.Kind == HintKind.Tip ? "TIP" : "RULE", hint.Text, DismissShownHint, HideShownHint))
+                return;
+            shownHint = hint;
+            hintService.MarkShown(hint);
+        }
+
+        // "Got it": never again on this computer.
+        private void DismissShownHint()
+        {
+            hintService?.MarkDismissed(shownHint);
+            HideShownHint();
+        }
+
+        private void HideShownHint()
+        {
+            shownHint = null;
+            runtimeUi?.HideHint();
+        }
+
+        // Every accepted table step is a hint event ("action." + its kind); the names are made once.
+        private static string ActionHintTrigger(AuthoritativeActionKind kind)
+        {
+            if (actionHintTriggers == null)
+            {
+                Array values = Enum.GetValues(typeof(AuthoritativeActionKind));
+                int max = 0;
+                foreach (object value in values) max = Mathf.Max(max, Convert.ToInt32(value));
+                actionHintTriggers = new string[max + 1];
+                foreach (object value in values)
+                    actionHintTriggers[Convert.ToInt32(value)] = HintTriggers.ActionPrefix + value;
+            }
+
+            int index = (int)kind;
+            return index >= 0 && index < actionHintTriggers.Length ? actionHintTriggers[index] : string.Empty;
+        }
+
+        // Drag events, checked each frame without allocating; each raises its hint when a drag starts.
+        private void UpdateHintTriggers()
+        {
+            if (!hintsEnabled || runtimeUi == null) return;
+            bool cardDrag = IsCardDragActive();
+            if (cardDrag && !hintCardDragSeen) RaiseHint(HintTriggers.CardDragged);
+            hintCardDragSeen = cardDrag;
+            bool pawnDrag = IsAnyPawnHeld(out _);
+            if (pawnDrag && !hintPawnDragSeen) RaiseHint(HintTriggers.PawnDragged, IsActivePawnHeld() ? "own" : "other");
+            hintPawnDragSeen = pawnDrag;
+        }
 
         private void HandleUndoButtonPressed()
         {
@@ -5316,7 +5423,8 @@ namespace ConsoleCards.Presentation.Prototype
             int moveTiles = MoveAllowance(out _);
             string standardGuidance =
                 $"Draw up to {handLimit} if needed\nMove up to {moveTiles} tile{(moveTiles == 1 ? string.Empty : "s")} "
-                + "(they light while you hold your pawn); landing flips a tile. Take a prize you stand on, then End Turn";
+                + "in one straight line (they light while you hold your pawn); landing flips a tile. "
+                + "Take a prize you stand on, then End Turn";
             bool isBlind = TryGetActiveBlindStatus(out TrapFloorBlindStatusState blindStatus);
             bool isSlow = TryGetActiveSlowStatus(out TrapFloorSlowStatusState slowStatus);
             bool isSticky = TryGetActiveStickyStatus(out _);
@@ -9084,6 +9192,12 @@ namespace ConsoleCards.Presentation.Prototype
 
         // ---------- R4 hints: reach and "why" (doc 23 §9) ----------
 
+        // A move destination from an Ability or a Trap (Rush, Dodge, Spring, Crane) is being shown.
+        private bool IsGuidedMoveShown() =>
+            trapFloorAbilityResolutionState != null
+            && (trapFloorAbilityResolutionState.ActiveRushAssistance != null
+                || trapFloorAbilityResolutionState.ActiveDodgeAssistance != null);
+
         // Each player turn starts its own move count (the round and the active player name the turn).
         private void EnsureMoveTurn()
         {
@@ -9170,8 +9284,7 @@ namespace ConsoleCards.Presentation.Prototype
             bool anyHeld = trapFloorTemplate != null && IsAnyPawnHeld(out heldPawnId);
             bool show = anyHeld
                 && hintsEnabled
-                && abilityTargetPresenter != null
-                && !abilityTargetPresenter.HasCurrent
+                && !IsGuidedMoveShown()
                 && IsActivePawnHeld();
             if (anyHeld != reachHintHeld)
             {
@@ -9183,7 +9296,7 @@ namespace ConsoleCards.Presentation.Prototype
             reachHintShown = show;
             if (!show)
             {
-                abilityTargetPresenter?.ClearReach();
+                boardFeedback?.HideReach();
                 return;
             }
 
@@ -9227,8 +9340,13 @@ namespace ConsoleCards.Presentation.Prototype
                 }
             }
 
-            abilityTargetPresenter.ShowReach(reachTileIds);
-            Debug.Log($"[Hints] Reach: {reachTileIds.Count} tiles lit from ({start.X},{start.Y}), up to {allowance}.", this);
+            reachPositions.Clear();
+            for (int i = 0; i < reachTileIds.Count; i++)
+            {
+                if (TryGetCardView(reachTileIds[i], out CardView tileView)) reachPositions.Add(tileView.transform.position);
+            }
+
+            if (EnsureBoardFeedback()) boardFeedback.ShowReach(reachPositions, ReachMarkerColour);
         }
 
         // Console note (once per pick-up) for why a held pawn shows no reach.
@@ -9236,8 +9354,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             string reason;
             if (!hintsEnabled) reason = "Hints are off in the Table menu";
-            else if (abilityTargetPresenter == null) reason = "no Trap Floor floor is set up";
-            else if (abilityTargetPresenter.HasCurrent) reason = "an Ability or Trap destination is shown";
+            else if (IsGuidedMoveShown()) reason = "an Ability or Trap destination is shown";
             else if (trapFloorTurnState == null || trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
                 reason = "it is not a player turn";
             else if (trapFloorTurnState.IsCurrentFloorFailed) reason = "this round failed";
@@ -9245,17 +9362,44 @@ namespace ConsoleCards.Presentation.Prototype
             Debug.Log($"[Hints] No reach lights: {reason}.", this);
         }
 
-        // Tiles the active player may move this turn: the rules' "move.tiles" (default 3), plus Overcharged or
+        // The stable ID of the active player's Avatar (the card in their Main slot at setup); empty if unknown.
+        private string ActiveAvatarStableId()
+        {
+            if (trapFloorTurnState == null
+                || matchState == null
+                || !TryGetTrapFloorPlayerSetup(trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition player)
+                || !matchState.Cards.TryGetValue(player.AvatarCardId, out CardInstanceState avatarCard)
+                || !TryGetAvatarLook(avatarCard.BaseState.DefinitionId, out AvatarDefinition avatar))
+            {
+                return string.Empty;
+            }
+
+            return avatar.StableId;
+        }
+
+        // Tiles the active player may move this turn: the rules' "move.tiles" (default 2) or their Avatar's own
+        // count (move.tiles.avatar.<id>, the Athlete), plus Overcharged or
         // minus Slow; Stuck allows none. <paramref name="why"/> names the changes, empty when there are none.
         private int MoveAllowance(out string why)
         {
-            int tiles = 3;
-            if (trapFloorTemplate.GameDefinition.TryGetRuleSetting(
-                    RuleSettingKeys.MoveTiles, trapFloorTemplate.ActiveMode.StableId, out string raw)
+            int tiles = 2;
+            string modeId = trapFloorTemplate.ActiveMode.StableId;
+            if (trapFloorTemplate.GameDefinition.TryGetRuleSetting(RuleSettingKeys.MoveTiles, modeId, out string raw)
                 && int.TryParse(raw, out int parsed)
                 && parsed >= 0)
             {
                 tiles = parsed;
+            }
+
+            // An Avatar with its own count (the Athlete) uses it instead.
+            string avatarId = ActiveAvatarStableId();
+            if (!string.IsNullOrEmpty(avatarId)
+                && trapFloorTemplate.GameDefinition.TryGetRuleSetting(
+                    RuleSettingKeys.MoveTilesAvatarPrefix + avatarId, modeId, out string avatarRaw)
+                && int.TryParse(avatarRaw, out int avatarTiles)
+                && avatarTiles >= 0)
+            {
+                tiles = avatarTiles;
             }
 
             why = string.Empty;
@@ -9274,8 +9418,8 @@ namespace ConsoleCards.Presentation.Prototype
             return Mathf.Max(0, tiles);
         }
 
-        // Fewest orthogonal steps from the start to every tile without crossing a hole (-1: no way there). With a
-        // Blind direction only the straight line that way counts. Fills reachSteps; reuses its arrays.
+        // Steps from the start along each straight line (up, down, left, right) until a hole or the edge (-1: not
+        // reachable in one straight line). With a Blind direction only that line counts. Fills reachSteps; reuses it.
         private void ComputeMoveSteps(TrapFloorCoordinate start, TrapFloorBlindMovementDirection? onlyDirection)
         {
             int columns = trapFloorTemplate.GridColumns;
@@ -9289,17 +9433,12 @@ namespace ConsoleCards.Presentation.Prototype
 
             if (start.X < 1 || start.Y < 1 || start.X > columns || start.Y > rows) return;
             reachSteps[start.X, start.Y] = 0;
-            if (onlyDirection.HasValue)
+            for (int d = 0; d < 4; d++)
             {
-                int dx = 0, dy = 0;
-                switch (onlyDirection.Value)
-                {
-                    case TrapFloorBlindMovementDirection.Up: dy = 1; break;
-                    case TrapFloorBlindMovementDirection.Down: dy = -1; break;
-                    case TrapFloorBlindMovementDirection.Left: dx = -1; break;
-                    default: dx = 1; break;
-                }
-
+                TrapFloorBlindMovementDirection direction = (TrapFloorBlindMovementDirection)d;
+                if (onlyDirection.HasValue && onlyDirection.Value != direction) continue;
+                int dx = direction == TrapFloorBlindMovementDirection.Right ? 1 : direction == TrapFloorBlindMovementDirection.Left ? -1 : 0;
+                int dy = direction == TrapFloorBlindMovementDirection.Up ? 1 : direction == TrapFloorBlindMovementDirection.Down ? -1 : 0;
                 int x = start.X + dx, y = start.Y + dy, step = 1;
                 while (IsWalkableTile(x, y))
                 {
@@ -9307,28 +9446,7 @@ namespace ConsoleCards.Presentation.Prototype
                     x += dx;
                     y += dy;
                 }
-
-                return;
             }
-
-            reachQueue.Clear();
-            reachQueue.Enqueue(start);
-            while (reachQueue.Count > 0)
-            {
-                TrapFloorCoordinate at = reachQueue.Dequeue();
-                int next = reachSteps[at.X, at.Y] + 1;
-                VisitStep(at.X + 1, at.Y, next);
-                VisitStep(at.X - 1, at.Y, next);
-                VisitStep(at.X, at.Y + 1, next);
-                VisitStep(at.X, at.Y - 1, next);
-            }
-        }
-
-        private void VisitStep(int x, int y, int steps)
-        {
-            if (!IsWalkableTile(x, y) || reachSteps[x, y] >= 0) return;
-            reachSteps[x, y] = steps;
-            reachQueue.Enqueue(new TrapFloorCoordinate(x, y));
         }
 
         // On the grid and not a hole.
@@ -9373,7 +9491,9 @@ namespace ConsoleCards.Presentation.Prototype
                 else if (steps < 0)
                     problem = onlyDirection.HasValue
                         ? $"BLIND: this turn you move {onlyDirection.Value.ToString().ToLowerInvariant()} only."
-                        : "There is no way there without crossing a hole.";
+                        : to.X == moveStartTile.Value.X || to.Y == moveStartTile.Value.Y
+                            ? "A hole is in the way; moves cannot cross holes."
+                            : "Moves go in one straight line (up, down, left or right), with no turning.";
                 else if (steps > allowance)
                     problem = $"That is {steps} tiles from where the turn started; the rules allow {allowance}"
                         + (string.IsNullOrEmpty(why) ? "." : $" ({why}).");
@@ -10802,11 +10922,9 @@ namespace ConsoleCards.Presentation.Prototype
                 authoritativeRandomValueSource,
                 floorfallState);
             floorfallTargetPresenter = new TrapFloorFloorfallTargetPresenter();
-            abilityTargetPresenter = new TrapFloorAbilityTargetPresenter
-            {
-                Restore = RestoreFloorTileColours, // guidance colours come off by re-applying the tile's own tint
-            };
+            abilityTargetPresenter = new TrapFloorAbilityTargetPresenter();
             reachHintShown = false;
+            boardFeedback?.HideReach();
         }
 
         private void BuildFloormasterLifecycleRuntime()
@@ -13895,8 +14013,8 @@ namespace ConsoleCards.Presentation.Prototype
                     createdVisualReferences.FaceUpRenderer);
                 abilityTargetPresenter.Register(
                     card.BaseState.Id,
-                    new[] { createdVisualReferences.FaceUpRenderer, createdVisualReferences.FaceDownRenderer },
-                    createdVisualReferences.SuppliedModelRenderers);
+                    createdVisualReferences.FaceUpRenderer,
+                    createdVisualReferences.FaceDownRenderer);
             }
 
             else if (CardSizeClassOf(card) == CardSizeClass.Large)
@@ -15716,12 +15834,6 @@ namespace ConsoleCards.Presentation.Prototype
                 : "FLOOR";
             ConfigureCardVisuals(visualReferences, card, label);
             visualReferences.SetCardContentVisible(ShouldShowCardContent(card));
-        }
-
-        private void RestoreFloorTileColours(TabletopObjectId floorCardId)
-        {
-            if (matchState == null || trapFloorTemplate == null) return;
-            RefreshTrapFloorFloorCardPresentation(floorCardId);
         }
 
         private int CurrentFloorCardCount()

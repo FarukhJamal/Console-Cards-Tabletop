@@ -18,6 +18,7 @@ MonoBehaviour:
   flipFlash: {fileID: 5487600413670388041, guid: 62690c65b6aba1a4393e76e8d55f0c20, type: 3}
   collapseBurst: {fileID: 5715543963897390691, guid: 6f25baf7752f13a41be81c8e2a8132ea, type: 3}
   moveArrow: {fileID: 7236128192900376613, guid: cb10e1e51b0802c4a9b171fd0e5e7578, type: 3}
+  reachTile: {fileID: 38101117697629613, guid: a8cd28d9cebb51d4e9da287ab4ec4eb6, type: 3}
   tileMarkerLift: 0.03
   trapWarningLift: 0.9
   trapKick: 0.06

@@ -1,7 +1,7 @@
 # Console Cards - Trap Floor Game Requirements
 
 **Document ID:** 18_Trap_Floor_Game_Requirements
-**Version:** 1.14
+**Version:** 1.15
 **Status:** Approved with Open Decisions
 **Authoritative source:** User-approved Console Cards System & Games direction supplied 2026-09-21, superseding conflicting historical Trap Floor direction
 **Purpose:** Define the current approved minimum Game-specific direction for Trap Floor while keeping provisional design values open and preserving manual tabletop play.
@@ -47,7 +47,7 @@ The exact authored Seat mappings for two and three Players remain unresolved und
 - Each Floor Card occupies a stable X/Y grid coordinate.
 - Players may share the same Floor tile.
 - Movement is orthogonal only.
-- Normal movement remains flexible and player-judged, generally no more than three tiles. The exact movement value and any Avatar-specific variation remain provisional.
+- Normal movement remains flexible and player-judged, generally no more than three tiles. The exact movement value and any Avatar-specific variation remain provisional. *(Superseded by §15.2, owner 2026-10-15: 2 tiles in one straight line, the Athlete 3.)*
 - **Search** means flipping/revealing the Floor Card being interacted with.
 - A revealed Floor Card may expose a Key, Trap, or other effect according to the current card set.
 - Search does not itself collapse a Floor Card.
@@ -200,6 +200,7 @@ Sources: *Trap Floor — Playtest Feedback & Proposed Changes* and *Trap Floor: 
 ### 15.2 Turn and Search
 
 - On your turn you draw Controller Cards up to the hand limit (§9), then either **move** or play an **Action** Ability in place of moving.
+- **Moving (owner, 2026-10-15).** Up to **2 tiles in one straight line**: up, down, left or right, never diagonally and never turning. The **Athlete** moves up to **3**. Both numbers are rule settings (`move.tiles` and `move.tiles.avatar.<Avatar ID>`, doc 23 §5), so house rules can change them. Moves never cross a hole. Nothing is blocked: the hints light the tiles in reach and explain a longer move (doc 23 §9).
 - **Search is free.** Moving onto a face-down Floor Card flips it and it takes effect. The paid Search action is retired. *(Supersedes the A/B/X/Y Search cost.)*
 - ~~**Safe Search is an Ability**~~ Removed for now (§15.9 follow-up): Check covers making a Trap harmless.
 

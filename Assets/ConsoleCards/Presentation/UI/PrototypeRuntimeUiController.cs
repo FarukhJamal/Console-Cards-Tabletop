@@ -42,6 +42,9 @@ namespace ConsoleCards.Presentation.UI
         private bool activityLogUnavailable;
         private ContentArtPanelView contentArtPanelView;
         private RuleProposalPanelView ruleProposalPanelView;
+        private HintStripView hintStripView;
+        private bool hintStripWarned;
+        private bool tipsSettingWarned;
         private bool cardArtWarned;
 
         public IRuntimeUiService UiService
@@ -183,6 +186,18 @@ namespace ConsoleCards.Presentation.UI
         }
 
         /// <summary>Binds the Table menu's view rows (doc 25, F3): Hands on table and Full feedback.</summary>
+        /// <summary>Binds the Table menu's Tips switch (doc 23 §10); warns once when the prefab lacks the row.</summary>
+        public void ShowTipsSetting(bool tipsOn, Action<bool> setTips)
+        {
+            EnsureSessionBarView();
+            if (!sessionBarView.BindTips(tipsOn, setTips) && !tipsSettingWarned)
+            {
+                tipsSettingWarned = true;
+                Debug.LogWarning(
+                    "The Table menu has no Tips switch: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
+            }
+        }
+
         public void ShowViewSettings(
             bool handsOnTableAvailable,
             bool handsOnTable,
@@ -273,6 +288,42 @@ namespace ConsoleCards.Presentation.UI
         }
 
         public bool IsRuleProposalOpen => IsVisible(ruleProposalPanelView);
+
+        /// <summary>Shows one hint in the hint strip (doc 23 §10). False when its prefab is missing (warned once).</summary>
+        public bool ShowHint(string kind, string text, Action gotIt, Action later)
+        {
+            try
+            {
+                EnsureService();
+                if (hintStripView == null || !hintStripView.IsAcquired)
+                {
+                    hintStripView = uiService.AcquireCached<HintStripView>(PrototypeUiPrefabIds.HintStrip);
+                }
+
+                hintStripView.Bind(kind, text, gotIt, later);
+                hintStripView.Show();
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                if (!hintStripWarned)
+                {
+                    hintStripWarned = true;
+                    Debug.LogWarning(
+                        "The hint strip is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs (Final UI). "
+                        + exception.Message);
+                }
+
+                return false;
+            }
+        }
+
+        public bool IsHintShown => IsVisible(hintStripView);
+
+        public void HideHint()
+        {
+            ReleaseView(hintStripView);
+        }
 
         public void CloseRuleProposal()
         {
@@ -732,6 +783,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(activityLogView);
             ReleaseView(contentArtPanelView);
             ReleaseView(ruleProposalPanelView);
+            ReleaseView(hintStripView);
             CloseTabletopPopup();
         }
 

@@ -36,6 +36,7 @@ namespace ConsoleCards.Editor.UI
         public const string ContentArtPanelPath = Folder + "CardArtPanel.prefab";
         public const string ContentArtRowPath = Folder + "CardArtRow.prefab";
         public const string RuleProposalPanelPath = Folder + "RuleProposalPanel.prefab";
+        public const string HintStripPath = Folder + "HintStrip.prefab";
         private const string FeedbackAudioPath = "Assets/ConsoleCards/Content/Audio/Feedback/";
         private const string SessionIconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
 
@@ -106,6 +107,7 @@ namespace ConsoleCards.Editor.UI
             Save<ContentArtRowView>(ContentArtRowPath, "CardArtRow", BuildContentArtRow, stretch: false);
             Save<ContentArtPanelView>(ContentArtPanelPath, "CardArtPanel", BuildContentArtPanel, stretch: true);
             Save<RuleProposalPanelView>(RuleProposalPanelPath, "RuleProposalPanel", BuildRuleProposalPanel, stretch: true);
+            Save<HintStripView>(HintStripPath, "HintStrip", BuildHintStrip, stretch: true);
             AddMissingRuleControls();
 
             AssignCatalogEntry(PrototypeUiPrefabIds.PopupActionRow,
@@ -152,6 +154,9 @@ namespace ConsoleCards.Editor.UI
             AssignCatalogEntry(PrototypeUiPrefabIds.ContentArtRow,
                 AssetDatabase.LoadAssetAtPath<ContentArtRowView>(ContentArtRowPath), UiLayer.Modal,
                 UiRetention.Pooled);
+            AssignCatalogEntry(PrototypeUiPrefabIds.HintStrip,
+                AssetDatabase.LoadAssetAtPath<HintStripView>(HintStripPath), UiLayer.Hud,
+                UiRetention.CachedSingleInstance);
             AssignCatalogEntry(PrototypeUiPrefabIds.RuleProposalPanel,
                 AssetDatabase.LoadAssetAtPath<RuleProposalPanelView>(RuleProposalPanelPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
@@ -397,6 +402,42 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("sourceLabel").objectReferenceValue = source;
             so.FindProperty("chooseButton").objectReferenceValue = choose;
             so.FindProperty("resetButton").objectReferenceValue = reset;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // ---------- hints (doc 23 §10) ----------
+
+        // A cream card at the top centre, under the session bar: a mustard TIP badge, the hint and two buttons.
+        private static void BuildHintStrip(RectTransform root, HintStripView view)
+        {
+            RectTransform card = Rect("Card", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0f, -112f), new Vector2(820f, 96f));
+            Backdrop(card, ShadowOffset);
+            Row(card.gameObject, 14, 14, 10, 10, 14f, TextAnchor.MiddleLeft);
+            card.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = false;
+
+            RectTransform badge = Child("Badge", card);
+            Img(badge, "ButtonOutlined", Mustard).raycastTarget = false;
+            Size(badge.gameObject, 70f, 40f, 70f);
+            Text kind = Label(Rect("Label", badge, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero),
+                titleFont, 15, Ink, TextAnchor.MiddleCenter, "TIP");
+
+            Text text = Label(Child("Text", card), bodyFont, 16, Ink, TextAnchor.MiddleLeft, "A hint about the table.");
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = 12;
+            text.resizeTextMaxSize = 16;
+            LayoutElement textLayout = text.gameObject.AddComponent<LayoutElement>();
+            textLayout.flexibleWidth = 1f;
+            textLayout.minHeight = 72f;
+
+            Button later = TextButton(card, "LaterButton", "Later", boldFont, 15, Cream, Ink, 88f, 42f, out _);
+            Button gotIt = TextButton(card, "GotItButton", "Got it", boldFont, 15, Go, Cream, 96f, 42f, out _);
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("kindLabel").objectReferenceValue = kind;
+            so.FindProperty("textLabel").objectReferenceValue = text;
+            so.FindProperty("gotItButton").objectReferenceValue = gotIt;
+            so.FindProperty("laterButton").objectReferenceValue = later;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

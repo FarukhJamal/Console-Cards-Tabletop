@@ -73,9 +73,16 @@ MonoBehaviour:
       displayValue: ''
       modeStableIds: []
     - stableId: tf-turn-move
-      text: 'Move up to {value} tiles (no diagonals), or play an Action ability instead of moving.'
+      text: 'Move up to {value} tiles in one straight line: up, down, left or right. No diagonals and no turning. Or play an Action ability instead of moving.'
       settingKind: 1
       settingKey: move.tiles
+      value: '2'
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-turn-move-athlete
+      text: 'The Athlete moves up to {value} tiles instead.'
+      settingKind: 1
+      settingKey: move.tiles.avatar.54460014-4f4f-4000-8000-001400000006
       value: '3'
       displayValue: ''
       modeStableIds: []

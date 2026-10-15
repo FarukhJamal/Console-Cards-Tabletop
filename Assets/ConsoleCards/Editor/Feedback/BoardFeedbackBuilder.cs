@@ -65,6 +65,13 @@ namespace ConsoleCards.Editor.Feedback
                 return SetMarker(m, pulseSpeed: 0f, pulseScale: 0f, bobHeight: 0f, spin: 0f, grow: 2.6f);
             });
             BoardFeedbackArrow arrow = ArrowPrefab(dash, head);
+            // Hints (doc 23): a soft glow with an outline on each tile in reach.
+            BoardFeedbackMarker reachTile = MarkerPrefab("ReachTile", false, 0.6f, m =>
+            {
+                Flat("Glow", m.transform, glow, new Vector2(0.66f, 0.9f), 0f);
+                Flat("Outline", m.transform, outline, new Vector2(0.72f, 0.98f), 0.004f);
+                return SetMarker(m, pulseSpeed: 2.5f, pulseScale: 0.025f, bobHeight: 0f, spin: 0f);
+            });
 
             if (!File.Exists(SetPath))
             {
@@ -77,11 +84,26 @@ namespace ConsoleCards.Editor.Feedback
                 so.FindProperty("flipFlash").objectReferenceValue = flipFlash;
                 so.FindProperty("collapseBurst").objectReferenceValue = collapseBurst;
                 so.FindProperty("moveArrow").objectReferenceValue = arrow;
+                so.FindProperty("reachTile").objectReferenceValue = reachTile;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
             else
             {
-                Debug.Log($"[Board Feedback] Kept {SetPath} (already exists).");
+                // Fill only what the existing set is missing (the reach marker came later); keep the rest.
+                BoardFeedbackSet existingSet = AssetDatabase.LoadAssetAtPath<BoardFeedbackSet>(SetPath);
+                SerializedObject so = existingSet != null ? new SerializedObject(existingSet) : null;
+                SerializedProperty reachProperty = so?.FindProperty("reachTile");
+                if (reachProperty != null && reachProperty.objectReferenceValue == null)
+                {
+                    reachProperty.objectReferenceValue = reachTile;
+                    so.ApplyModifiedPropertiesWithoutUndo();
+                    EditorUtility.SetDirty(existingSet);
+                    Debug.Log($"[Board Feedback] Added the reach marker to {SetPath}.");
+                }
+                else
+                {
+                    Debug.Log($"[Board Feedback] Kept {SetPath} (already exists).");
+                }
             }
 
             AssetDatabase.SaveAssets();

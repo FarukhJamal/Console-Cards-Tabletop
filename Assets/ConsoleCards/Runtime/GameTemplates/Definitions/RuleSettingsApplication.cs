@@ -37,6 +37,12 @@ namespace ConsoleCards.GameTemplates.Definitions
         /// </summary>
         public const string MoveTiles = "move.tiles";
 
+        /// <summary>
+        /// Number, prefix: "move.tiles.avatar." + an Avatar's stable ID gives that Avatar its own move count in
+        /// place of <see cref="MoveTiles"/> (for example the Athlete). Passed through.
+        /// </summary>
+        public const string MoveTilesAvatarPrefix = "move.tiles.avatar.";
+
         public const string FloorPlacementRandom = "random";
         public const string FloorPlacementPattern = "pattern";
     }
@@ -144,6 +150,18 @@ namespace ConsoleCards.GameTemplates.Definitions
                     if (!data.TryGetContentSet(contentSetId, out _))
                     {
                         Warn(warnings, setting, $"the game has no content set '{contentSetId}'");
+                    }
+                    else if (TryReadCount(setting, warnings, out _))
+                    {
+                        passedThrough.Add(setting);
+                    }
+                }
+                else if (setting.Key.StartsWith(RuleSettingKeys.MoveTilesAvatarPrefix, StringComparison.Ordinal))
+                {
+                    string avatarId = setting.Key.Substring(RuleSettingKeys.MoveTilesAvatarPrefix.Length);
+                    if (!HasAvatar(data, avatarId))
+                    {
+                        Warn(warnings, setting, $"the game has no Avatar '{avatarId}'");
                     }
                     else if (TryReadCount(setting, warnings, out _))
                     {
@@ -283,6 +301,20 @@ namespace ConsoleCards.GameTemplates.Definitions
                 behavior,
                 mode.Metadata,
                 keyObjective);
+        }
+
+        private static bool HasAvatar(GameDefinitionData data, string avatarId)
+        {
+            for (int i = 0; i < data.Avatars.Count; i++)
+            {
+                if (data.Avatars[i] != null
+                    && string.Equals(data.Avatars[i].StableId, avatarId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool TryReadCount(RuleSettingValue setting, ICollection<string> warnings, out int count)

@@ -101,3 +101,7 @@ MonoBehaviour:
     prefab: {fileID: 652218735244796239, guid: e2fe76a8906e28b42aa8bf76b2e95fee, type: 3}
     layer: 3
     retention: 0
+  - id: platform.hint-strip
+    prefab: {fileID: 7854292110026622655, guid: dc97e1497626c854ca1a04bf199ed0e2, type: 3}
+    layer: 1
+    retention: 0

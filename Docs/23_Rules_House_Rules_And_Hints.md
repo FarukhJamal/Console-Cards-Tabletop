@@ -1,8 +1,8 @@
 # Console Cards — Rules, House Rules and Hints
 
 **Document ID:** 23_Rules_House_Rules_And_Hints
-**Version:** 0.8
-**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b, C1, R3 and R4 implemented (Trap Floor G2a applies the revised turn). Pings wait for multiplayer.
+**Version:** 0.9
+**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b, C1, R3 and R4 implemented (Trap Floor G2a applies the revised turn); hint system H1 implemented, H2–H3 planned (§10). Pings wait for multiplayer.
 
 > **Contract note:** type names and field lists here are illustrative unless labelled **Approved Contract**. They describe the direction agreed with the owner, not fixed public APIs.
 
@@ -73,7 +73,8 @@ Each game supplies its own entries and setting keys. The platform only knows how
 | `game.win-mode` | Choice: Team / Survival | all modes or per mode | `Mode.Behavior` |
 | `floor.count.<content set ID>` | Number | all modes or per mode | How many cards the setup draws from that floor group (R2b). Passed through as `GameDefinitionData.RuleSettings` |
 | `floor.placement` | Choice: random / pattern | all modes or per mode | Placement method (R2b). Passed through; until G2 every floor is placed at random |
-| `move.tiles` | Number | all modes or per mode | How many tiles a player may move on their turn (R4, default 3). Passed through; the hints read it |
+| `move.tiles` | Number | all modes or per mode | How many tiles a player may move on their turn, in one straight line (R4; Trap Floor default 2). Passed through; the hints read it |
+| `move.tiles.avatar.<Avatar stable ID>` | Number | all modes or per mode | That Avatar's own move count in place of `move.tiles` (Trap Floor: the Athlete, 3). An Avatar the game does not have is skipped with a warning |
 | `card.cost.<card stable ID>` | Text, in card cost notation | game | That card's input cost (C1). Replaces the authored cost in the game data, so the purchase popup, payment check and inspect text all use it. Empty means no cost yet |
 
 **Card cost notation (C1).** Parts are joined with `+`. A part lists one or more inputs separated by `/`, and any one of them pays it. `x2` after a part repeats it. Examples: `Up + A/B/X/Y` (an Up card and one of A, B, X or Y), `Left/Right + A/B/X/Y`, `A + B + X + Y`, `Right x2 + A`. Input names are Up, Down, Left, Right, A, B, X and Y, in any letter case. A cost that cannot be read is skipped with a warning and the card keeps its authored cost. Card assets store the same thing: each requirement has an input, optional `alsoAccepts` inputs and a count.
@@ -136,18 +137,43 @@ The rule set in play is a table setting kept by the game, not table state: Undo 
 
 Owner choices (2026-10-15): reach lights only while dragging your own pawn; a longer move is explained and Undo is offered; the move count is a rule setting.
 
-**How far.** The Trap Floor rule "Move up to {value} tiles" now carries the setting `move.tiles` (default 3), so a house rule can change it. For the active player this turn:
+**How far (owner, 2026-10-15).** The Trap Floor rule "Move up to {value} tiles in one straight line" carries `move.tiles` (default **2**), and "The Athlete moves up to {value} tiles instead" carries `move.tiles.avatar.<Athlete ID>` (**3**); house rules can change both. For the active player this turn:
 
 - Overcharged adds 1, Slow takes 1 away (never below 0);
 - Stuck allows no move;
 - Blind allows only the straight line in the rolled direction (before the roll, nothing lights and the status card asks for the roll).
 
-Steps are counted orthogonally from where the pawn stood when the turn started, never across a hole, so moving 2 and then 2 more counts as 4.
+A move goes in **one straight line** (up, down, left or right, no turning) from where the pawn stood when the turn started, never across a hole. So from a corner with 2 tiles, 2 tiles along the row and 2 along the column light (4 tiles), and moving 1 and then 1 more along the same line is still a 2-tile move.
 
-**Reach lights.** While the active player holds their own pawn, the tiles they can still reach this turn light green. Ability and Trap destinations (cyan) take priority, and no reach shows while one is shown. The lights go when the pawn is put down.
+**Reach markers.** While the active player holds their own pawn, a glowing marker (soft fill and outline, the board feedback prefab `ReachTile`, its own material) lies on each tile they can still reach this turn; the tile's art is never recoloured. No reach shows while an Ability or Trap destination is shown (those have their own markers). The markers go when the pawn is put down.
 
-**Why not.** When the active pawn lands further than allowed, across a hole, off a Blind line, or while Stuck, a warning says why. For example: "That is 4 tiles from where the turn started; the rules allow 2 (3, SLOW -1)." The turn menu offers **Undo move (too far)** while that move is still the latest step. The move itself is kept: nothing is blocked. Moves made while an Ability or Trap shows where to go (Rush, Dodge, Spring, Crane) are not counted as regular moves for the rest of that turn.
+**Why not.** When the active pawn lands further than allowed, off its straight line, across a hole, off a Blind line, or while Stuck, a warning says why. For example: "That is 3 tiles from where the turn started; the rules allow 1 (2, SLOW -1)." The turn menu offers **Undo move (too far)** while that move is still the latest step. The move itself is kept: nothing is blocked. Moves made while an Ability or Trap shows where to go (Rush, Dodge, Spring, Crane) are not counted as regular moves for the rest of that turn.
 
 **Turn help.** The status card's help line says "Move up to N tiles" with the count for this turn.
 
 All of these hints follow the Hints switch in the Table menu.
+
+## 10. How hints work (owner, 2026-10-15)
+
+Two kinds of hint, built in three layers. **Rules say what, a game's code says when and where, the platform shows it.**
+
+**Layer A: platform hints (the whole Console Cards system).** Tips about the table itself: the Toolbox, the Game Box and Base Box, Console mats and their flip and snapping, boards, dice, decks, the Hand, Undo. Each hint is data (`HintEntry`): an ID, the event that shows it, an optional context, its words, tip or reminder, a priority and how often it may show. The platform's set is the asset `Resources/PlatformHints` (`HintLibraryDefinition`), made by **Console Cards > Hints > Create Missing Platform Hints**; edit, add or remove hints freely.
+
+**Layer B: game hints, made from the rules (H2).** Each rule line may carry a hint tag: the event it applies on, what to point at, and its text, which is the rule's own words with its current value, so a house rule changes the hint too. Player-made games (doc 27, List 2) get hints by tagging their rules, with no code.
+
+**Layer C: game helpers (H3).** Hints a tag cannot express are worked out by a small piece of the game's code, named by the rule's tag and reading its numbers from the rules. Trap Floor's reach and "why not" (§9) are the first.
+
+**Events.** The platform's events (`HintTriggers`): `table.ready` (context `empty` or `game`), `toolbox.placing` (context: the catalog kind, such as Console, GameBoard, Die, Deck), `drag.card`, `drag.pawn` (context `own` or `other`), `undo.available`, and every accepted table step as `action.<kind>` (for example `action.FlipConsole`, `action.DrawCards`), so new actions are events without new code.
+
+**Levels (Table menu).** **Hints** off: nothing. Hints on and **Tips** off: reminders only (why a move is not allowed, turn help, reach). Both on: tips too (Learning). These are viewer settings, not table state.
+
+**The hint strip.** One hint at a time, under the session bar: a TIP or RULE badge, the words, **Later** (hide it now; it may show once more) and **Got it** (never again). A hint does not push aside one of the same or higher priority. Which hints were shown or dismissed is kept on this computer (`<persistentDataPath>/Hints/seen.json`).
+
+**Stages.**
+
+| Stage | Content | Status |
+|---|---|---|
+| H1 | Hint data, the hint service and its seen record, the hint strip (Final UI prefab `HintStrip`, catalog `platform.hint-strip`, HUD), the Tips switch, the platform events and the starting platform tips; reach shown with markers; Trap Floor movement fixed to straight lines (2, the Athlete 3) | Implemented |
+| H2 | Hint tags on rule lines and the game's hint library built from the rules; Trap Floor rules tagged | Planned |
+| H3 | Trap Floor helpers behind the tags: reach and "why not" (moved from §9), prizes, waiting Traps | Planned |
+

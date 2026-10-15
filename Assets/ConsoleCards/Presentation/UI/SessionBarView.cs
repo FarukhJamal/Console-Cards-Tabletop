@@ -51,6 +51,8 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private ToolboxSwitch rulesSwitch = new ToolboxSwitch();
         [SerializeField] private ToolboxSwitch hintsSwitch = new ToolboxSwitch();
         [SerializeField] private Button helpButton;
+        [Tooltip("Optional (doc 23 §10): tips about the table and the game. Added by Add Missing Table Menu Rows.")]
+        [SerializeField] private ToolboxSwitch tipsSwitch = new ToolboxSwitch();
 
         [Header("Play (doc 18 §15.11; optional, added by Add Missing Table Menu Rows)")]
         [SerializeField] private Button seatButton;
@@ -73,6 +75,8 @@ namespace ConsoleCards.Presentation.UI
         private Action openHelp;
         private bool rulesOn;
         private bool hintsOn;
+        private Action<bool> setTips;
+        private bool tipsOn;
         private Action nextSeat;
         private Action<bool> setHotSeat;
         private bool hotSeatOn;
@@ -252,6 +256,23 @@ namespace ConsoleCards.Presentation.UI
             return true;
         }
 
+        /// <summary>
+        /// Binds the optional Tips switch (doc 23 §10): on, the hint strip teaches the table and the game; off, only
+        /// reminders show. The row shows only while Hints are on. False when the prefab lacks the row.
+        /// </summary>
+        public bool BindTips(bool tipsEnabled, Action<bool> setTipsAction)
+        {
+            RequireAcquired();
+            if (tipsSwitch == null || !tipsSwitch.IsComplete) return false;
+            Clear(tipsSwitch.Button);
+            setTips = setTipsAction;
+            tipsOn = tipsEnabled;
+            tipsSwitch.Row.SetActive(setTips != null && hintsOn);
+            tipsSwitch.Show(tipsOn);
+            tipsSwitch.Button.onClick.AddListener(FlipTips);
+            return true;
+        }
+
         /// <summary>Binds the optional "Card art…" row (doc 24, A3/A4); null hides it. False when the prefab lacks it.</summary>
         public bool BindCardArt(Action openCardArtAction)
         {
@@ -338,6 +359,7 @@ namespace ConsoleCards.Presentation.UI
             redo = null;
             setRules = null;
             setHints = null;
+            setTips = null;
             nextSeat = null;
             setHotSeat = null;
             setHandsOnTable = null;
@@ -421,7 +443,16 @@ namespace ConsoleCards.Presentation.UI
 
             hintsOn = !hintsOn;
             hintsSwitch.Show(hintsOn);
+            if (tipsSwitch != null && tipsSwitch.IsComplete) tipsSwitch.Row.SetActive(setTips != null && hintsOn);
             setHints(hintsOn);
+        }
+
+        private void FlipTips()
+        {
+            if (setTips == null) return;
+            tipsOn = !tipsOn;
+            tipsSwitch.Show(tipsOn);
+            setTips(tipsOn);
         }
 
         private void HandleNextSeat()
@@ -563,6 +594,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(clearTableButton);
             Clear(rulesSwitch?.Button);
             Clear(hintsSwitch?.Button);
+            Clear(tipsSwitch?.Button);
             Clear(helpButton);
             Clear(seatButton);
             Clear(hotSeatSwitch?.Button);

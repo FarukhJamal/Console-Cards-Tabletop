@@ -13,6 +13,7 @@ namespace ConsoleCards.Presentation.Feedback
         private const int MoveTargetPool = 16;
         private const int FlashPool = 6;
         private const int BurstPool = 3;
+        private const int ReachPool = 16;
 
         private readonly BoardFeedbackSet set;
         private readonly BoardFeedbackMarker ring;
@@ -20,6 +21,7 @@ namespace ConsoleCards.Presentation.Feedback
         private readonly BoardFeedbackMarker[] targets;
         private readonly BoardFeedbackMarker[] flashes;
         private readonly BoardFeedbackMarker[] bursts;
+        private readonly BoardFeedbackMarker[] reach;
         private readonly BoardFeedbackArrow arrow;
         private readonly List<GameObject> owned = new List<GameObject>();
         private int nextFlash;
@@ -33,6 +35,7 @@ namespace ConsoleCards.Presentation.Feedback
             targets = MakePool(set.MoveTarget, parent, MoveTargetPool);
             flashes = MakePool(set.FlipFlash, parent, FlashPool);
             bursts = MakePool(set.CollapseBurst, parent, BurstPool);
+            reach = MakePool(set.ReachTile, parent, ReachPool);
             if (set.MoveArrow != null)
             {
                 arrow = Object.Instantiate(set.MoveArrow, parent, false);
@@ -67,6 +70,20 @@ namespace ConsoleCards.Presentation.Feedback
             if (arrow == null) return;
             if (showArrow && positions.Count == 1) arrow.Show(arrowFrom, positions[0], colour);
             else arrow.Hide();
+        }
+
+        /// <summary>
+        /// The tiles in reach (hints). Shown on request, not every frame, and kept apart from the other markers:
+        /// <see cref="HideAll"/> leaves them; <see cref="HideReach"/> takes them away.
+        /// </summary>
+        public void ShowReach(List<Vector3> positions, Color colour)
+        {
+            ShowPool(reach, positions, Vector3.up * set.TileMarkerLift, colour);
+        }
+
+        public void HideReach()
+        {
+            HideRange(reach, 0);
         }
 
         public void Flash(Vector3 position, Color colour)
