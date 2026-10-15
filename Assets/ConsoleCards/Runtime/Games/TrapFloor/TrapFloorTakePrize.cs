@@ -208,7 +208,7 @@ namespace ConsoleCards.Games.TrapFloor
             if (paymentError != TrapFloorTakePrizeError.None)
                 return Failure(CommandResultStatus.Rejected, paymentError);
 
-            if (!TryResolveDestination(matchState, player, out ContainerState destination, out bool placedInHand))
+            if (!TryResolveDestination(template, matchState, player, out ContainerState destination, out bool placedInHand))
                 return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.DestinationMissing);
             if (matchState.Revision == long.MaxValue)
                 return Failure(CommandResultStatus.Conflict, TrapFloorTakePrizeError.RevisionOverflow);
@@ -289,7 +289,9 @@ namespace ConsoleCards.Games.TrapFloor
         }
 
         // The Hand, unless it already holds the game's hand limit; then the Action stack beside the Console.
-        private bool TryResolveDestination(
+        // Shared with the Shop (doc 18 §15.4), so a bought card goes where a taken one does.
+        internal static bool TryResolveDestination(
+            TrapFloorTemplateDefinition template,
             MatchState matchState,
             TrapFloorPlayerSetupDefinition player,
             out ContainerState destination,
@@ -330,7 +332,7 @@ namespace ConsoleCards.Games.TrapFloor
             return false;
         }
 
-        private static bool IsCardInPlayerSideSlot(
+        internal static bool IsCardInPlayerSideSlot(
             MatchState matchState,
             TrapFloorPlayerSetupDefinition player,
             CardInstanceState card)

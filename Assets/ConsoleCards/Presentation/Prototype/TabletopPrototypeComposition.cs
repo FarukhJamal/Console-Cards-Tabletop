@@ -296,6 +296,10 @@ namespace ConsoleCards.Presentation.Prototype
         private TrapFloorTurnState trapFloorTurnState;
         private TrapFloorTurnService trapFloorTurnService;
         private TrapFloorTakePrizeUseCase trapFloorTakePrizeUseCase;
+        // The Shop (doc 18 §15.4, owner 2026-10-15): every Ability for sale on your turn, open while the rule
+        // "shop.enabled" is on. The source says whether the Hand picker pays for a Shop card or a floor prize.
+        private TrapFloorBuyFromShopUseCase trapFloorShopUseCase;
+        private PendingPurchaseSource pendingPurchaseSource;
         // G2a landing flips: the tile each pawn stood on when last checked, and whether an accepted move is
         // waiting to be checked. Checked once per accepted move, never per frame.
         private readonly Dictionary<TabletopObjectId, TrapFloorCoordinate?> landingPawnTiles =
@@ -4568,6 +4572,7 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshUndoUi();
             RefreshTrapFloorStatusUi();
             RefreshGameHints();
+            RefreshShopEntry();
             RaiseHint(HintTriggers.TableReady, isGameSession ? "game" : "empty");
         }
 
@@ -4656,6 +4661,8 @@ namespace ConsoleCards.Presentation.Prototype
                 {
                     RuleEntry entry = section.Entries[e];
                     if (entry == null || !entry.HasSetting) continue;
+                    // Settings read live (the Shop) apply at once and need no restart.
+                    if (string.Equals(entry.SettingKey, RuleSettingKeys.ShopEnabled, StringComparison.Ordinal)) continue;
                     if (!a.TryGetEntry(entry.StableId, out RuleEntry other)
                         || !string.Equals(other.Value, entry.Value, StringComparison.Ordinal))
                     {
@@ -4973,6 +4980,7 @@ namespace ConsoleCards.Presentation.Prototype
         private void FinishRuleCommit(string message)
         {
             RefreshGameHints(); // tips follow the rules in play
+            RefreshShopEntry(); // the Shop opens or closes at once (owner, 2026-10-15)
             bool restartNeeded = templatesRuleSet != null && SettingsDiffer(templatesRuleSet, ActiveRuleSet);
             CloseRuleProposal(restartNeeded ? $"{message} Changed settings start when you restart." : message);
             RefreshRulesCard();
@@ -5430,7 +5438,7 @@ namespace ConsoleCards.Presentation.Prototype
                 string abilityName = FindPurchaseDisplayName(
                     pendingControllerPurchaseState.PurchasedCardDefinitionStableId)
                     .ToUpperInvariant();
-                return $"TAKE {abilityName} — Place the chosen cards in your Console";
+                return $"{PaymentVerb(pendingControllerPurchaseState)} {abilityName} — Place the chosen cards in your Console";
             }
 
             int handLimit = trapFloorTemplate.GameDefinition.ControllerConfiguration.MaximumHandSize;
@@ -9085,6 +9093,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             pendingPurchaseDefinitionStableId = cardDefinitionStableId;
+            pendingPurchaseSource = PendingPurchaseSource.Table;
             List<PrototypeFocusedCardOptionModel> cards =
                 new List<PrototypeFocusedCardOptionModel>(options.Count);
             for (int i = 0; i < options.Count; i++)
@@ -9468,16 +9477,71 @@ namespace ConsoleCards.Presentation.Prototype
             TriggerLandedTile(floorCardId, trapFloorTurnState.ActivePlayerId);
         }
 
+        // ---------- the Shop (doc 18 §15.4) ----------
+
+        // Open while the rule in play says so (shop.enabled, a Toggle); read live, so a change applies at once.
+        private bool IsShopOpen()
+        {
+            RuleSetDefinition rules = ActiveRuleSet;
+            if (rules == null
+                || trapFloorTemplate == null
+                || activeSession == null
+                || activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom)
+            {
+                return false;
+            }
+
+            string modeStableId = trapFloorTemplate.ActiveMode.StableId;
+            for (int s = 0; s < rules.Sections.Count; s++)
+            {
+                RuleSection section = rules.Sections[s];
+                if (section == null) continue;
+                for (int e = 0; e < section.Entries.Count; e++)
+                {
+                    RuleEntry entry = section.Entries[e];
+                    if (entry != null
+                        && string.Equals(entry.SettingKey, RuleSettingKeys.ShopEnabled, StringComparison.Ordinal)
+                        && entry.AppliesToMode(modeStableId))
+                    {
+                        return RuleSettingKeys.IsToggleOn(entry.Value);
+                    }
+                }
+            }
+
+            return false; // no Shop rule: no Shop
+        }
+
+        // The Shop entry on the session bar: the shop icon and the word Shop, shown while the Shop is open.
+        private void RefreshShopEntry()
+        {
+            if (runtimeUi == null) return;
+            runtimeUi.ShowShopEntry(IsShopOpen() ? (Action)OpenActionAbilityPurchase : null);
+        }
+
+        private bool IsShopBuyingTurn() =>
+            trapFloorTurnState != null
+            && !trapFloorTurnState.IsCurrentFloorFailed
+            && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn;
+
         private void OpenActionAbilityPurchase()
         {
             CloseContextMenu();
+            if (!IsShopOpen())
+            {
+                ShowMessage("The Shop is closed in the rules in play.");
+                return;
+            }
+
             if (pendingControllerPurchaseState != null
                 && pendingControllerPurchaseState.IsActive)
             {
-                ShowMessage("Complete or cancel the current purchase first.");
+                ShowMessage("Finish or cancel the current payment first.");
                 return;
             }
-            ShowActionAbilityPurchase(string.Empty);
+
+            ShowActionAbilityPurchase(IsShopBuyingTurn()
+                ? $"{FormatPlayerName(trapFloorTurnState.ActivePlayerId)} is buying."
+                : "You can look; buying is on a player's own turn.");
         }
 
         private void ShowActionAbilityPurchase(string statusMessage)
@@ -9491,7 +9555,9 @@ namespace ConsoleCards.Presentation.Prototype
                 BuildActionAbilityPurchaseOptions(),
                 TryPurchaseActionAbilityFromPopup,
                 runtimeUi.CloseActionAbilityPurchase,
-                statusMessage);
+                statusMessage,
+                "SHOP",
+                "ABILITIES");
         }
 
         private void TryPurchaseActionAbilityFromPopup(string cardDefinitionStableId)
@@ -9500,7 +9566,20 @@ namespace ConsoleCards.Presentation.Prototype
                 && pendingControllerPurchaseState.IsActive)
             {
                 runtimeUi?.SetActionAbilityPurchaseStatus(
-                    "Complete or cancel the current purchase first.");
+                    "Finish or cancel the current payment first.");
+                return;
+            }
+
+            if (!IsShopBuyingTurn())
+            {
+                runtimeUi?.SetActionAbilityPurchaseStatus("Buying is on a player's own turn.");
+                return;
+            }
+
+            if (!trapFloorTemplate.GameDefinition.TryGetCard(cardDefinitionStableId, out CardDefinitionData shopCard)
+                || !TrapFloorShop.IsForSale(shopCard))
+            {
+                runtimeUi?.SetActionAbilityPurchaseStatus("Not for sale until the rules give it a price.");
                 return;
             }
 
@@ -9511,11 +9590,12 @@ namespace ConsoleCards.Presentation.Prototype
                     out string missing))
             {
                 runtimeUi?.SetActionAbilityPurchaseStatus(
-                    "Purchase unavailable because its authored input cost is invalid.");
+                    "This price could not be read.");
                 return;
             }
 
             pendingPurchaseDefinitionStableId = cardDefinitionStableId;
+            pendingPurchaseSource = PendingPurchaseSource.Shop;
             List<PrototypeFocusedCardOptionModel> cards =
                 new List<PrototypeFocusedCardOptionModel>(options.Count);
             for (int i = 0; i < options.Count; i++)
@@ -9531,11 +9611,11 @@ namespace ConsoleCards.Presentation.Prototype
 
             int requiredCardCount = purchasedDefinition.InputCost.CardCount;
             string status = string.IsNullOrEmpty(missing)
-                ? "Select the exact Controller Card instances for this purchase."
+                ? "Pick the cards that pay the cost."
                 : $"Missing: {missing}";
             runtimeUi.ShowFocusedCardSelection(new PrototypeFocusedCardSelectionModel(
                 $"BUY {purchasedDefinition.DisplayName.ToUpperInvariant()} — HAND",
-                $"Choose {FormatPurchaseInputCost(purchasedDefinition.InputCost)} from the active Player's Hand.",
+                $"Choose {FormatPurchaseInputCost(purchasedDefinition.InputCost)} from your Hand.",
                 status,
                 "Confirm Cards",
                 cards,
@@ -9639,13 +9719,13 @@ namespace ConsoleCards.Presentation.Prototype
 
             string definitionId = pendingPurchaseDefinitionStableId;
             PlayerId playerId = trapFloorTurnState.ActivePlayerId;
-            pendingControllerPurchaseState.Begin(playerId, definitionId, selectedCardIds);
+            pendingControllerPurchaseState.Begin(playerId, definitionId, selectedCardIds, pendingPurchaseSource);
             pendingPurchaseDefinitionStableId = string.Empty;
             runtimeUi?.CloseFocusedCardSelection();
             ReplaceCurrentUndoStateForPurchaseAssistance();
             RefreshTrapFloorStatusUi();
             ShowMessage(
-                $"TAKE {FindPurchaseDisplayName(definitionId).ToUpperInvariant()} — "
+                $"{PaymentVerb(pendingControllerPurchaseState)} {FindPurchaseDisplayName(definitionId).ToUpperInvariant()} — "
                 + "Place the chosen cards in your Console, then Confirm Payment");
         }
 
@@ -9665,6 +9745,15 @@ namespace ConsoleCards.Presentation.Prototype
                 || pendingControllerPurchaseState.PlayerId != trapFloorTurnState.ActivePlayerId)
             {
                 ShowMessage("Place the chosen cards in your Console first.");
+                return;
+            }
+
+            if (pendingControllerPurchaseState.Source == PendingPurchaseSource.Shop)
+            {
+                CompleteShopPurchase(
+                    pendingControllerPurchaseState.PurchasedCardDefinitionStableId,
+                    pendingControllerPurchaseState.SelectedCardIds);
+                RefreshTrapFloorStatusUi();
                 return;
             }
 
@@ -9709,37 +9798,51 @@ namespace ConsoleCards.Presentation.Prototype
                 : "ABILITY";
         }
 
+        // The Shop's list (doc 18 §15.4): every Ability of the game, Actions first, then Reactions. One without a
+        // price is listed but not for sale. Affordability is for the player whose turn it is.
         private List<PrototypeActionAbilityPurchaseOption> BuildActionAbilityPurchaseOptions()
         {
             List<PrototypeActionAbilityPurchaseOption> options =
                 new List<PrototypeActionAbilityPurchaseOption>();
             GameDefinitionData gameDefinition = trapFloorTemplate.GameDefinition;
-            TrapFloorPlayerSetupDefinition player = GetAssistedTrapFloorPlayerSetup();
-            ContainerState hand = matchState.GetContainer(player.HandContainerId);
-            ControllerInputCostEvaluator evaluator = new ControllerInputCostEvaluator();
-
-            for (int i = 0; i < gameDefinition.Cards.Count; i++)
+            ContainerState hand = null;
+            if (IsShopBuyingTurn())
             {
-                CardDefinitionData definition = gameDefinition.Cards[i];
-                if (definition.Quantity < 1
-                    || definition.RepresentedControllerInput.HasValue
-                    || definition.InputCost == null
-                    || definition.InputCost.IsEmpty)
-                {
-                    continue;
-                }
+                TrapFloorPlayerSetupDefinition player = GetAssistedTrapFloorPlayerSetup();
+                hand = matchState.GetContainer(player.HandContainerId);
+            }
 
-                string cost = FormatPurchaseInputCost(definition.InputCost);
-                ControllerInputCostEvaluation evaluation = evaluator.Evaluate(
-                    matchState,
-                    hand,
-                    definition.InputCost,
-                    gameDefinition);
-                string affordability = evaluation.CanPay
-                    ? "Can afford"
-                    : evaluation.Error == ControllerInputCostEvaluationError.InsufficientInput
-                        ? $"Cannot afford. Need: {cost}"
-                        : $"Unavailable: {evaluation.Error}";
+            ControllerInputCostEvaluator evaluator = new ControllerInputCostEvaluator();
+            List<CardDefinitionData> catalog = TrapFloorShop.Catalog(gameDefinition);
+            for (int i = 0; i < catalog.Count; i++)
+            {
+                CardDefinitionData definition = catalog[i];
+                bool forSale = TrapFloorShop.IsForSale(definition);
+                string cost = forSale ? FormatPurchaseInputCost(definition.InputCost) : "not set yet";
+                bool canPay = false;
+                string affordability;
+                if (!forSale)
+                {
+                    affordability = "Not for sale until the rules give it a price.";
+                }
+                else if (hand == null)
+                {
+                    affordability = "Buying is on a player's own turn.";
+                }
+                else
+                {
+                    ControllerInputCostEvaluation evaluation = evaluator.Evaluate(
+                        matchState,
+                        hand,
+                        definition.InputCost,
+                        gameDefinition);
+                    canPay = evaluation.CanPay;
+                    affordability = evaluation.CanPay
+                        ? "Your Hand can pay this."
+                        : evaluation.Error == ControllerInputCostEvaluationError.InsufficientInput
+                            ? $"Your Hand cannot pay {cost} yet."
+                            : $"Unavailable: {evaluation.Error}";
+                }
                 Texture artwork = null;
                 if (Guid.TryParse(definition.StableId, out Guid definitionGuid)
                     && TryGetAuthoredCardDefinition(
@@ -9754,8 +9857,10 @@ namespace ConsoleCards.Presentation.Prototype
                     definition.Description,
                     cost,
                     artwork,
-                    evaluation.CanPay,
-                    affordability));
+                    canPay,
+                    affordability,
+                    forSale,
+                    TrapFloorShop.IsAction(definition) ? "Action" : TrapFloorShop.IsReaction(definition) ? "Reaction" : string.Empty));
             }
 
             return options;
@@ -9764,6 +9869,57 @@ namespace ConsoleCards.Presentation.Prototype
         private static string FormatPurchaseInputCost(InputCostData cost)
         {
             return InputCostNotation.Format(cost);
+        }
+
+        private static string PaymentVerb(PendingControllerPurchaseState state) =>
+            state != null && state.Source == PendingPurchaseSource.Shop ? "BUY" : "TAKE";
+
+        // Confirm Payment for a Shop card: the card goes to the Hand, or beside the Console when the Hand is full.
+        private void CompleteShopPurchase(string cardDefinitionStableId, IReadOnlyList<TabletopObjectId> paymentCardIds)
+        {
+            if (trapFloorShopUseCase == null || trapFloorTurnState == null)
+            {
+                ShowMessage("The Shop is unavailable.");
+                return;
+            }
+
+            TrapFloorBuyFromShopResult result = trapFloorShopUseCase.Execute(
+                matchState,
+                new TrapFloorBuyFromShopCommand(
+                    CreateCommandContext(trapFloorTurnState.ActivePlayerId),
+                    cardDefinitionStableId,
+                    TabletopObjectId.New(),
+                    paymentCardIds));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Shop purchase rejected: {result.Error}.");
+                return;
+            }
+
+            pendingControllerPurchaseState.Clear();
+            pendingPurchaseDefinitionStableId = string.Empty;
+            ReplaceCurrentUndoStateForPurchaseAssistance();
+
+            string name = result.Card.DisplayName;
+            labelsByCardId[result.GrantedCardId] = name;
+            CardView boughtView = CreateCardView(
+                matchState.Cards[result.GrantedCardId],
+                name,
+                out TabletopSelectionVisual selectionVisual);
+            cardViews.Add(boughtView);
+            cardSelectionVisuals.Add(selectionVisual);
+            physicalAuthority?.Register(boughtView);
+            RefreshContainerCardViewSources();
+            ApplyLayout(result.DestinationContainerId);
+            RefreshSelectionPresenterAfterRuntimeProjection();
+            presentationTransitions.Appear(boughtView.transform, settleDuration);
+            if (TryGetTrapFloorPlayerSetup(trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition buyer))
+            {
+                string buyerName = HandOwnerName(buyer.HandContainerId);
+                ShowMessage(result.PlacedInHand
+                    ? $"Bought {name} from the Shop into {buyerName}'s hand."
+                    : $"Bought {name} from the Shop. {buyerName}'s hand is full, so it is beside their Console.");
+            }
         }
 
         private bool IsAssistedTrapFloorConsoleSlot(ContainerId slotContainerId)
@@ -10619,6 +10775,7 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorTemplate,
                 trapFloorCollapseState,
                 trapFloorTurnState);
+            trapFloorShopUseCase = new TrapFloorBuyFromShopUseCase(trapFloorTemplate, trapFloorTurnState);
             ConsoleCardInteractionAccepted -= HandleTrapFloorConsoleCardInteractionAccepted;
             ConsoleCardInteractionAccepted += HandleTrapFloorConsoleCardInteractionAccepted;
             activeFloorRevealActivity = null;

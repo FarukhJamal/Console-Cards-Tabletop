@@ -1,7 +1,7 @@
 # Console Cards - Trap Floor Game Requirements
 
 **Document ID:** 18_Trap_Floor_Game_Requirements
-**Version:** 1.15
+**Version:** 1.16
 **Status:** Approved with Open Decisions
 **Authoritative source:** User-approved Console Cards System & Games direction supplied 2026-09-21, superseding conflicting historical Trap Floor direction
 **Purpose:** Define the current approved minimum Game-specific direction for Trap Floor while keeping provisional design values open and preserving manual tabletop play.
@@ -213,9 +213,9 @@ Every Ability Card is one of two kinds, printed on the card:
 
 The card's own text states exactly what it does (for example, *"Push a player who shares your tile 2 tiles horizontally"*). Edge cases (grid edges, collapsed tiles) are handled by the card text and by players at the table.
 
-### 15.4 Abilities on the Floor (market retired)
+### 15.4 Abilities on the Floor, and the Shop
 
-- Ability Cards are part of the Floor Cards. The separate purchase market (Buy Ability) is retired for now.
+- Ability Cards are part of the Floor Cards. ~~The separate purchase market (Buy Ability) is retired for now.~~ The market is back as the **Shop** (owner, 2026-10-15), see below.
 - A player who flips an Ability Card may **take it into their hand by paying its cost**, and **plays it later by paying the same cost again**.
 - A player may decline. The card stays face up, and the next player who lands on it may take it on the same terms.
 - Costs remain all-or-nothing and are not shared (§9).
@@ -230,7 +230,17 @@ The card's own text states exactly what it does (for example, *"Push a player wh
 - **Taking a prize.** On a face-up Ability or Friend under the active player's pawn, the turn menu offers *Take …*. An Ability's cost is paid with the C1 payment step (choose cards, place them in the Console, Confirm Payment); a Friend, or an Ability with no cost set yet, is free.
 - **Where it goes.** A copy of the card goes to the player's Hand, or to the Action stack beside the Console when the Hand already holds the hand limit.
 - **The tile becomes a hole** (shown as HOLE, counted as collapsed). The player who took it is safe and walks off next turn; a reward never eliminates.
-- Search, Careful Search and Buy Ability are gone from the menus. Their code stays unused until G2d.
+- Search and Careful Search are gone from the menus. Their code stays unused until G2d. (Buy Ability returned as the Shop.)
+
+**The Shop (owner, 2026-10-15; written, waiting for the owner's check):**
+
+- **Apart from taking from the floor,** players can buy Abilities from the Shop. Every Ability of the game is listed (Actions first, then Reactions, by name), each with its picture, words, kind and cost.
+- **When:** on your own turn, at any time; buying does not replace moving. Off-turn the Shop can be opened to look; Buy waits for your turn.
+- **Paying:** the same as taking a floor Ability: pick the cards from your Hand, place them in your Console, then **Confirm Payment** in the turn menu (Cancel Payment keeps the cards where they are). The bought card goes to your Hand, or beside your Console when your Hand is full.
+- **No price yet:** an Ability without a cost (for example Disarm and Push today) is listed with "Price not set yet" and is not for sale until the rules give it one (`card.cost.<card ID>`).
+- **Opening it:** the **Shop** entry on the session bar (the shop icon and the word Shop, between Redo and Table, in the bar's style). It is shown only in Trap Floor while the Shop is on. There is no Shop line in the turn menu.
+- **On or off:** the rule "Shop: on" (setting `shop.enabled`, doc 23 §5) can be changed from the rules card with everyone's agreement (house rules, doc 23 §8). The change applies **at once**: the Shop entry appears or goes without a restart.
+- **Code:** `TrapFloorShop`, `TrapFloorBuyFromShopUseCase` (`Runtime/Games/TrapFloor/TrapFloorShop.cs`); the pending payment records whether it is for the Shop or a floor prize (`PendingPurchaseSource`).
 
 ### 15.5 Traps
 

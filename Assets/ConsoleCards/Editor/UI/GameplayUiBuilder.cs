@@ -109,6 +109,7 @@ namespace ConsoleCards.Editor.UI
             Save<RuleProposalPanelView>(RuleProposalPanelPath, "RuleProposalPanel", BuildRuleProposalPanel, stretch: true);
             Save<HintStripView>(HintStripPath, "HintStrip", BuildHintStrip, stretch: true);
             AddMissingRuleControls();
+            AddMissingShopLabels();
 
             AssignCatalogEntry(PrototypeUiPrefabIds.PopupActionRow,
                 AssetDatabase.LoadAssetAtPath<PrototypePopupActionRowView>(ActionRowPath), UiLayer.Popup, UiRetention.Pooled);
@@ -1079,7 +1080,7 @@ namespace ConsoleCards.Editor.UI
             Button overlay = DismissOverlay(root);
             Vector2 centre = new Vector2(0.5f, 0.5f);
             RectTransform panel = ColumnCard(root, "PurchasePanel", centre, centre, 1080f);
-            CardHeader(panel, "BUY ABILITY", 21, 58f);
+            Text shopTitle = CardHeader(panel, "SHOP", 21, 58f);
             Button close = HeaderCloseButton(panel);
             RectTransform body = Child("Body", panel);
             Row(body.gameObject, 24, 24, 22, 24, 26f, TextAnchor.UpperLeft);
@@ -1087,7 +1088,7 @@ namespace ConsoleCards.Editor.UI
             RectTransform list = Child("List", body);
             Column(list.gameObject, 0, 0, 0, 0, 8f);
             Size(list.gameObject, 340f, -1f, 340f);
-            Label(Child("ListTitle", list), titleFont, 15, Muted, TextAnchor.MiddleLeft, "ABILITIES");
+            Text listTitle = Label(Child("ListTitle", list), titleFont, 15, Muted, TextAnchor.MiddleLeft, "ABILITIES");
             ScrollList(list, "CatalogScroll", 470f, out ScrollRect catalogScroll, out RectTransform catalogRows);
 
             RectTransform detail = Child("Detail", body);
@@ -1126,7 +1127,40 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("buyButton").objectReferenceValue = buy;
             so.FindProperty("buyButtonLabel").objectReferenceValue = buyLabel;
             so.FindProperty("closeButton").objectReferenceValue = close;
+            so.FindProperty("titleLabel").objectReferenceValue = shopTitle;
+            so.FindProperty("listTitleLabel").objectReferenceValue = listTitle;
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // The Shop (doc 18 §15.4) names its header and list from code; an older AbilityPurchase prefab only gets
+        // those two labels wired (nothing else in it changes).
+        private static void AddMissingShopLabels()
+        {
+            if (!File.Exists(AbilityPurchasePath)) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(AbilityPurchasePath);
+            try
+            {
+                PrototypeActionAbilityPurchasePopupView view = root.GetComponent<PrototypeActionAbilityPurchasePopupView>();
+                SerializedObject so = view != null ? new SerializedObject(view) : null;
+                SerializedProperty title = so?.FindProperty("titleLabel");
+                SerializedProperty listTitle = so?.FindProperty("listTitleLabel");
+                if (title == null || listTitle == null
+                    || (title.objectReferenceValue != null && listTitle.objectReferenceValue != null))
+                    return;
+                Transform header = root.transform.Find("PurchasePanel/Header/Title");
+                Transform list = root.transform.Find("PurchasePanel/Body/List/ListTitle");
+                if (title.objectReferenceValue == null && header != null)
+                    title.objectReferenceValue = header.GetComponent<Text>();
+                if (listTitle.objectReferenceValue == null && list != null)
+                    listTitle.objectReferenceValue = list.GetComponent<Text>();
+                so.ApplyModifiedPropertiesWithoutUndo();
+                PrefabUtility.SaveAsPrefabAsset(root, AbilityPurchasePath);
+                Debug.Log("[Gameplay UI] Wired the Shop title labels in the ability purchase panel.");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
         }
 
         // ---------- choose cards / reveal a card ----------

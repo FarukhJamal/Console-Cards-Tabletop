@@ -1500,6 +1500,8 @@ MonoBehaviour:
   buyButton: {fileID: 2504494040260258956}
   buyButtonLabel: {fileID: 6806560280035609636}
   closeButton: {fileID: 6472592711032935697}
+  titleLabel: {fileID: 1473812955161179820}
+  listTitleLabel: {fileID: 571525641207527893}
 --- !u!1 &5802506672377087614
 GameObject:
   m_ObjectHideFlags: 0

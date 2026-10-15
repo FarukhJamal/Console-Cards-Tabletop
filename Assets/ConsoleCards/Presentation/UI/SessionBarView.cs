@@ -62,6 +62,10 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private ToolboxSwitch fullFeedbackSwitch = new ToolboxSwitch();
         [SerializeField] private Button cardArtButton;
 
+        [Header("Shop (doc 18 §15.4; optional, added by Add Missing Table Menu Rows)")]
+        [Tooltip("The Shop entry on the bar: the shop icon and the word Shop, between Redo and Table.")]
+        [SerializeField] private Button shopButton;
+
         private Action undo;
         private Action redo;
         private Action newTable;
@@ -85,6 +89,7 @@ namespace ConsoleCards.Presentation.UI
         private bool handsOnTableOn;
         private bool fullFeedbackOn;
         private Action openCardArt;
+        private Action openShop;
 
         public bool IsMenuOpen => menu != null && menu.gameObject.activeSelf;
 
@@ -289,6 +294,31 @@ namespace ConsoleCards.Presentation.UI
             return true;
         }
 
+        /// <summary>
+        /// Binds the optional Shop entry on the bar (doc 18 §15.4): shown while <paramref name="openShopAction"/> is
+        /// set (a game whose Shop is open), hidden for null. False when the prefab lacks it.
+        /// </summary>
+        public bool BindShop(Action openShopAction)
+        {
+            RequireAcquired();
+            if (shopButton == null)
+            {
+                return false;
+            }
+
+            Clear(shopButton);
+            openShop = openShopAction;
+            bool show = openShop != null;
+            if (shopButton.gameObject.activeSelf != show)
+            {
+                shopButton.gameObject.SetActive(show);
+                LayoutRebuilder.MarkLayoutForRebuild(bar);
+            }
+
+            shopButton.onClick.AddListener(HandleShop);
+            return true;
+        }
+
         public void SetUndoState(bool enabled, string label)
         {
             undoLabel = string.IsNullOrWhiteSpace(label) ? "Undo" : label;
@@ -365,6 +395,7 @@ namespace ConsoleCards.Presentation.UI
             setHandsOnTable = null;
             setFullFeedback = null;
             openCardArt = null;
+            openShop = null;
             openHelp = null;
             newTable = null;
             resetTable = null;
@@ -509,6 +540,13 @@ namespace ConsoleCards.Presentation.UI
             setFullFeedback(fullFeedbackOn);
         }
 
+        private void HandleShop()
+        {
+            Action action = openShop;
+            CloseMenu();
+            action?.Invoke();
+        }
+
         private void HandleCardArt()
         {
             Action action = openCardArt;
@@ -601,6 +639,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(handsOnTableSwitch?.Button);
             Clear(fullFeedbackSwitch?.Button);
             Clear(cardArtButton);
+            Clear(shopButton);
         }
 
         private static void Clear(Button button)

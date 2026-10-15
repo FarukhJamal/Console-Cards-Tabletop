@@ -43,8 +43,33 @@ namespace ConsoleCards.GameTemplates.Definitions
         /// </summary>
         public const string MoveTilesAvatarPrefix = "move.tiles.avatar.";
 
+        /// <summary>
+        /// Toggle: whether the game's Shop is open (Trap Floor, doc 18 §15.4). Passed through. Unlike the other
+        /// settings it applies at once when the table agrees to a change, not at restart.
+        /// </summary>
+        public const string ShopEnabled = "shop.enabled";
+
         public const string FloorPlacementRandom = "random";
         public const string FloorPlacementPattern = "pattern";
+
+        /// <summary>True for an on/off value that means on (on, true, yes); false for anything else.</summary>
+        public static bool IsToggleOn(string value)
+        {
+            string v = (value ?? string.Empty).Trim();
+            return v.Equals("on", StringComparison.OrdinalIgnoreCase)
+                || v.Equals("true", StringComparison.OrdinalIgnoreCase)
+                || v.Equals("yes", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>True when the value is a recognised on/off word.</summary>
+        public static bool IsToggleValue(string value)
+        {
+            string v = (value ?? string.Empty).Trim();
+            return IsToggleOn(v)
+                || v.Equals("off", StringComparison.OrdinalIgnoreCase)
+                || v.Equals("false", StringComparison.OrdinalIgnoreCase)
+                || v.Equals("no", StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     /// <summary>One typed setting taken from a rule set: its key, raw value and the modes it applies to.</summary>
@@ -190,6 +215,11 @@ namespace ConsoleCards.GameTemplates.Definitions
                     {
                         Warn(warnings, setting, "expected random or pattern");
                     }
+                }
+                else if (string.Equals(setting.Key, RuleSettingKeys.ShopEnabled, StringComparison.Ordinal))
+                {
+                    if (RuleSettingKeys.IsToggleValue(setting.Value)) passedThrough.Add(setting);
+                    else Warn(warnings, setting, "expected on or off");
                 }
                 else if (!string.Equals(setting.Key, RuleSettingKeys.KeysNeeded, StringComparison.Ordinal)
                     && !string.Equals(setting.Key, RuleSettingKeys.WinMode, StringComparison.Ordinal))

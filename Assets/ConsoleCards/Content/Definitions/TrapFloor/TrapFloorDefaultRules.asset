@@ -184,6 +184,21 @@ MonoBehaviour:
       value: ''
       displayValue: ''
       modeStableIds: []
+  - heading: 'Shop'
+    numbered: 0
+    entries:
+    - stableId: tf-shop
+      text: 'Shop: {value}. On your turn you may buy any Ability from the Shop (the SHOP icon at the top) by paying its cost. It goes to your Hand, or beside your Console when your Hand is full. An Ability without a price yet is not for sale. Turning the Shop on or off asks the table and applies at once.'
+      settingKind: 2
+      settingKey: shop.enabled
+      value: 'on'
+      displayValue: ''
+      hintTrigger: turn.start
+      hintContext: player
+      hintPriority: 2
+      hintText: 
+      hintHelper: 
+      modeStableIds: []
   - heading: 'Ability costs'
     numbered: 0
     entries:

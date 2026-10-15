@@ -46,6 +46,7 @@ namespace ConsoleCards.Presentation.UI
         private bool hintStripWarned;
         private bool tipsSettingWarned;
         private bool cardArtWarned;
+        private bool shopEntryWarned;
 
         public IRuntimeUiService UiService
         {
@@ -224,6 +225,18 @@ namespace ConsoleCards.Presentation.UI
                 cardArtWarned = true;
                 Debug.LogWarning(
                     "The Table menu has no Card art row: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
+            }
+        }
+
+        /// <summary>Binds the Shop entry on the session bar (doc 18 §15.4); null hides it.</summary>
+        public void ShowShopEntry(Action openShop)
+        {
+            EnsureSessionBarView();
+            if (!sessionBarView.BindShop(openShop) && openShop != null && !shopEntryWarned)
+            {
+                shopEntryWarned = true;
+                Debug.LogWarning(
+                    "The session bar has no Shop entry: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
             }
         }
 
@@ -643,7 +656,9 @@ namespace ConsoleCards.Presentation.UI
             IReadOnlyList<PrototypeActionAbilityPurchaseOption> options,
             Action<string> purchase,
             Action dismiss,
-            string statusMessage = "")
+            string statusMessage = "",
+            string title = null,
+            string listTitle = null)
         {
             ReleaseView(tabletopPopupView);
             popupLayer.SetActive(false);
@@ -651,7 +666,7 @@ namespace ConsoleCards.Presentation.UI
             EnsureActionAbilityPurchasePopupView();
             componentToolboxView?.CloseToolbox();
             modalLayer.SetActive(true);
-            actionAbilityPurchasePopupView.Bind(options, purchase, dismiss, statusMessage);
+            actionAbilityPurchasePopupView.Bind(options, purchase, dismiss, statusMessage, title, listTitle);
             actionAbilityPurchasePopupView.Show();
         }
 

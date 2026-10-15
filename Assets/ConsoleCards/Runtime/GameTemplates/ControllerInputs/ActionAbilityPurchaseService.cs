@@ -486,6 +486,16 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
     }
 
     /// <summary>
+    /// What a pending payment pays for: a card from the game's Shop (the purchase catalog), or a card taken from
+    /// the table (Trap Floor: a prize on the floor). Decides what Confirm Payment does.
+    /// </summary>
+    public enum PendingPurchaseSource
+    {
+        Shop = 0,
+        Table = 1,
+    }
+
+    /// <summary>
     /// Match-scoped assistance for a physical Controller-card purchase payment. Card movement
     /// remains owned by the normal authoritative transfer path; this state records only the
     /// exact selected instances and which of them are currently in the purchaser's Console.
@@ -506,6 +516,7 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
         public bool IsActive { get; private set; }
         public PlayerId PlayerId { get; private set; }
         public string PurchasedCardDefinitionStableId { get; private set; } = string.Empty;
+        public PendingPurchaseSource Source { get; private set; }
         public IReadOnlyList<TabletopObjectId> SelectedCardIds => selectedCardIds.AsReadOnly();
         public bool IsPaymentComplete => IsActive
             && selectedCardIds.Count > 0
@@ -516,7 +527,8 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
         public void Begin(
             PlayerId playerId,
             string purchasedCardDefinitionStableId,
-            IEnumerable<TabletopObjectId> paymentCardIds)
+            IEnumerable<TabletopObjectId> paymentCardIds,
+            PendingPurchaseSource source = PendingPurchaseSource.Shop)
         {
             if (playerId.IsEmpty)
                 throw new ArgumentException("Pending purchase Player ID cannot be empty.", nameof(playerId));
@@ -546,6 +558,7 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
             insertedCardIds.Clear();
             PlayerId = playerId;
             PurchasedCardDefinitionStableId = purchasedCardDefinitionStableId;
+            Source = source;
             IsActive = true;
         }
 
@@ -591,6 +604,7 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
             insertedCardIds.Clear();
             PlayerId = ConsoleCards.Core.Identifiers.PlayerId.Empty;
             PurchasedCardDefinitionStableId = string.Empty;
+            Source = PendingPurchaseSource.Shop;
             IsActive = false;
         }
 
@@ -609,11 +623,12 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
             PlayerId playerId,
             string purchasedCardDefinitionStableId,
             IEnumerable<TabletopObjectId> paymentCardIds,
-            IEnumerable<TabletopObjectId> insertedPaymentCardIds)
+            IEnumerable<TabletopObjectId> insertedPaymentCardIds,
+            PendingPurchaseSource source = PendingPurchaseSource.Shop)
         {
             Clear();
             if (!isActive) return;
-            Begin(playerId, purchasedCardDefinitionStableId, paymentCardIds);
+            Begin(playerId, purchasedCardDefinitionStableId, paymentCardIds, source);
             if (insertedPaymentCardIds == null) return;
             foreach (TabletopObjectId cardId in insertedPaymentCardIds)
             {
@@ -649,9 +664,11 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
         private readonly string purchasedCardDefinitionStableId;
         private readonly TabletopObjectId[] selectedCardIds;
         private readonly TabletopObjectId[] insertedCardIds;
+        private readonly PendingPurchaseSource source;
 
         private PendingControllerPurchaseStateSnapshot(PendingControllerPurchaseState state)
         {
+            source = state.Source;
             MatchId = state.MatchId;
             isActive = state.IsActive;
             playerId = state.PlayerId;
@@ -677,7 +694,8 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
                 playerId,
                 purchasedCardDefinitionStableId,
                 selectedCardIds,
-                insertedCardIds);
+                insertedCardIds,
+                source);
             return state;
         }
     }

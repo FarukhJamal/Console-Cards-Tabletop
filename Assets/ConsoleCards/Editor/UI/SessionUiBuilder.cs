@@ -163,6 +163,9 @@ namespace ConsoleCards.Editor.UI
             Button redoButton = IconButton(bar, "RedoButton", "IconRedo.png", "Redo", out Image redoIcon,
                 out SessionBarHoverTarget redoHover, out GameObject redoTip, out Text redoTipLabel);
 
+            // Shop entry (doc 18 §15.4): shop icon and word, shown only while a game's Shop is open.
+            Button shopButton = ShopEntry(bar);
+
             // Table button: menu icon and word.
             RectTransform table = Rect("TableButton", bar, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
             Image tableFill = Img(table, "ButtonOutlined", Cream);
@@ -235,6 +238,7 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("redoIcon").objectReferenceValue = redoIcon;
             so.FindProperty("redoHover").objectReferenceValue = redoHover;
             so.FindProperty("tableButton").objectReferenceValue = tableButton;
+            so.FindProperty("shopButton").objectReferenceValue = shopButton;
             so.FindProperty("iconColor").colorValue = Ink;
             so.FindProperty("disabledIconAlpha").floatValue = 0.3f;
             so.FindProperty("undoTip").objectReferenceValue = undoTip;
@@ -255,8 +259,8 @@ namespace ConsoleCards.Editor.UI
         }
 
         /// <summary>
-        /// Adds the play and view rows (Seat, Hot-seat, Hands on table, Feedback, Card art; doc 18 §15.11, doc 25 F3) to an
-        /// existing SessionBar prefab when they are missing. Rows that already exist and everything else in the
+        /// Adds the play and view rows (Seat, Hot-seat, Hands on table, Feedback, Card art; doc 18 §15.11, doc 25 F3) and
+        /// the Shop entry on the bar (doc 18 §15.4) to an existing SessionBar prefab when they are missing. Rows that already exist and everything else in the
         /// prefab are kept as they are.
         /// </summary>
         [MenuItem("Console Cards/UI/Add Missing Table Menu Rows (Final UI)")]
@@ -286,6 +290,7 @@ namespace ConsoleCards.Editor.UI
                 int added = AddPlayRows(menu, view, index);
                 Transform hintsRow = menu.Find("HintsRow");
                 added += AddTipsRow(menu, view, hintsRow != null ? hintsRow.GetSiblingIndex() + 1 : -1);
+                added += AddShopEntry(view);
                 if (added == 0)
                 {
                     Debug.Log($"[Session UI] {PrefabPath} already has every Table menu row.");
@@ -293,7 +298,7 @@ namespace ConsoleCards.Editor.UI
                 }
 
                 PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
-                Debug.Log($"[Session UI] Added {added} Table menu row(s) to {PrefabPath}.");
+                Debug.Log($"[Session UI] Added {added} missing item(s) (Table menu rows, Shop entry) to {PrefabPath}.");
             }
             finally
             {
@@ -346,6 +351,46 @@ namespace ConsoleCards.Editor.UI
 
             so.ApplyModifiedPropertiesWithoutUndo();
             return added;
+        }
+
+        // The Shop entry (doc 18 §15.4) goes on the bar just before the Table button. Returns 1 when added.
+        private static int AddShopEntry(SessionBarView view)
+        {
+            SerializedObject so = new SerializedObject(view);
+            SerializedProperty shop = so.FindProperty("shopButton");
+            RectTransform bar = so.FindProperty("bar").objectReferenceValue as RectTransform;
+            if (shop == null || shop.objectReferenceValue != null || bar == null) return 0;
+            Button shopButton = ShopEntry(bar);
+            Transform table = bar.Find("TableButton");
+            if (table != null) shopButton.transform.SetSiblingIndex(table.GetSiblingIndex());
+            shop.objectReferenceValue = shopButton;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            return 1;
+        }
+
+        // Cream pill with the shop icon and the word Shop, like the Table button; hidden until a Shop is open.
+        private static Button ShopEntry(RectTransform bar)
+        {
+            RectTransform shop = Rect("ShopButton", bar, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            Image fill = Img(shop, "ButtonOutlined", Cream);
+            Button button = shop.gameObject.AddComponent<Button>();
+            button.targetGraphic = fill;
+            HorizontalLayoutGroup layout = shop.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(16, 20, 0, 0);
+            layout.spacing = 10f;
+            layout.childAlignment = TextAnchor.MiddleLeft;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+            Size(shop.gameObject, -1f, ButtonSize, -1f);
+            RectTransform icon = Rect("Icon", shop, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+            Img(icon, null, Ink, IconPath + "IconShop.png").raycastTarget = false;
+            Size(icon.gameObject, 28f, 26f, 28f);
+            FitLabel(Rect("Label", shop, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero),
+                boldFont, 19, Ink, "Shop");
+            shop.gameObject.SetActive(false);
+            return button;
         }
 
         // The Tips switch (doc 23 §10) goes right under the Hints switch it belongs to.
@@ -442,7 +487,7 @@ namespace ConsoleCards.Editor.UI
 
         private static void PrepareArt()
         {
-            foreach (string name in new[] { "Undo", "Redo", "Menu" })
+            foreach (string name in new[] { "Undo", "Redo", "Menu", "Shop" })
             {
                 ConfigureTexture(IconPath + "Icon" + name + ".png", Vector4.zero);
             }

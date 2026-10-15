@@ -2,7 +2,7 @@
 
 **Document ID:** 23_Rules_House_Rules_And_Hints
 **Version:** 0.11
-**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b, C1, R3 and R4 implemented (Trap Floor G2a applies the revised turn); hint system H1 and H2 implemented and approved, H3 written and waiting for the owner's check (§10). Pings wait for multiplayer.
+**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b, C1, R3 and R4 implemented (Trap Floor G2a applies the revised turn); hint system H1, H2 and H3 implemented and approved (§10). Pings wait for multiplayer.
 
 > **Contract note:** type names and field lists here are illustrative unless labelled **Approved Contract**. They describe the direction agreed with the owner, not fixed public APIs.
 
@@ -76,6 +76,7 @@ Each game supplies its own entries and setting keys. The platform only knows how
 | `move.tiles` | Number | all modes or per mode | How many tiles a player may move on their turn, in one straight line (R4; Trap Floor default 2). Passed through; the hints read it |
 | `move.tiles.avatar.<Avatar stable ID>` | Number | all modes or per mode | That Avatar's own move count in place of `move.tiles` (Trap Floor: the Athlete, 3). An Avatar the game does not have is skipped with a warning |
 | `card.cost.<card stable ID>` | Text, in card cost notation | game | That card's input cost (C1). Replaces the authored cost in the game data, so the purchase popup, payment check and inspect text all use it. Empty means no cost yet |
+| `shop.enabled` | Toggle: on / off | all modes or per mode | Whether the game's Shop is open (Trap Floor, doc 18 §15.4; default on). Passed through. **Applies at once** when the table agrees to a change (the game reads the rule set in play), so it never asks for a restart |
 
 **Card cost notation (C1).** Parts are joined with `+`. A part lists one or more inputs separated by `/`, and any one of them pays it. `x2` after a part repeats it. Examples: `Up + A/B/X/Y` (an Up card and one of A, B, X or Y), `Left/Right + A/B/X/Y`, `A + B + X + Y`, `Right x2 + A`. Input names are Up, Down, Left, Right, A, B, X and Y, in any letter case. A cost that cannot be read is skipped with a warning and the card keeps its authored cost. Card assets store the same thing: each requirement has an input, optional `alsoAccepts` inputs and a count.
 
@@ -187,7 +188,7 @@ When a table loads, and whenever a house-rule set comes into play, the rules in 
 | Knocked out? You come back next round | `game.activity` | PlayerEliminated | 6 | |
 | Roll 2d6 to place the Exit | `game.activity` | ClaimedKey | 4 | |
 
-**Layer C: game helpers (H3, written).** Hints a tag cannot express are worked out by a small piece of the game's code, named by a rule's `hintHelper` and reading its numbers from the rules. A helper (`IGameHintHelper`) has a name, is ticked once a frame to show or hide its board markers (no allocation), and is asked about every table event; it answers with a hint, usually a RULE reminder. The hint service runs a helper **only while a rule in play names it**: take the tag off the rule and the helper stops and its markers go. A name with no helper is reported once in the Console. Helpers explain and mark; they never block anything.
+**Layer C: game helpers (H3, implemented).** Hints a tag cannot express are worked out by a small piece of the game's code, named by a rule's `hintHelper` and reading its numbers from the rules. A helper (`IGameHintHelper`) has a name, is ticked once a frame to show or hide its board markers (no allocation), and is asked about every table event; it answers with a hint, usually a RULE reminder. The hint service runs a helper **only while a rule in play names it**: take the tag off the rule and the helper stops and its markers go. A name with no helper is reported once in the Console. Helpers explain and mark; they never block anything.
 
 Trap Floor's helpers (code: `TabletopPrototypeComposition.TrapFloorHints.cs`):
 
@@ -226,5 +227,5 @@ Helper reminders show every time the situation comes up (no limit); **Got it** o
 |---|---|---|
 | H1 | Hint data, the hint service and its seen record, the hint strip (Final UI prefab `HintStrip`, catalog `platform.hint-strip`, HUD), the Tips switch, the platform events and the starting platform tips; reach shown with markers; Trap Floor movement fixed to straight lines (2, the Athlete 3) | Implemented |
 | H2 | Hint tags on rule lines and game tips built from the rules in play; context lists; game events; Trap Floor rules tagged | Implemented, approved by the owner |
-| H3 | Game helpers (`IGameHintHelper`) run by the hint service while a rule names them; Trap Floor's reach moved behind `trapfloor.reach` with a RULE reminder while holding over a tile not allowed; a landing not allowed does not flip (warning pointing at the Undo button, Keep move in the turn menu); prize, Traps-waiting and collapse-target helpers; the collapse target as a board marker; event `pawn.moved` | Written, waiting for the owner's check (not compiled yet) |
+| H3 | Game helpers (`IGameHintHelper`) run by the hint service while a rule names them; Trap Floor's reach moved behind `trapfloor.reach` with a RULE reminder while holding over a tile not allowed; a landing not allowed does not flip (warning pointing at the Undo button, Keep move in the turn menu); prize, Traps-waiting and collapse-target helpers; the collapse target as a board marker; event `pawn.moved` | Implemented, approved by the owner |
 

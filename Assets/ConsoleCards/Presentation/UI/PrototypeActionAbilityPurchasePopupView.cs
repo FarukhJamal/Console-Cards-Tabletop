@@ -16,7 +16,9 @@ namespace ConsoleCards.Presentation.UI
             string inputCost,
             Texture artwork,
             bool canAfford,
-            string affordabilityMessage)
+            string affordabilityMessage,
+            bool forSale = true,
+            string kind = "")
         {
             if (string.IsNullOrWhiteSpace(cardDefinitionStableId))
                 throw new ArgumentException("A purchase option requires a Card Definition ID.", nameof(cardDefinitionStableId));
@@ -30,6 +32,8 @@ namespace ConsoleCards.Presentation.UI
             Artwork = artwork;
             CanAfford = canAfford;
             AffordabilityMessage = affordabilityMessage ?? string.Empty;
+            ForSale = forSale;
+            Kind = kind ?? string.Empty;
         }
 
         public string CardDefinitionStableId { get; }
@@ -45,6 +49,12 @@ namespace ConsoleCards.Presentation.UI
         public bool CanAfford { get; }
 
         public string AffordabilityMessage { get; }
+
+        /// <summary>False for a card listed without a price yet: shown, but Buy is off.</summary>
+        public bool ForSale { get; }
+
+        /// <summary>A short kind word shown with the name (for example Action or Reaction); may be empty.</summary>
+        public string Kind { get; }
     }
 
     /// <summary>
@@ -66,6 +76,9 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button buyButton;
         [SerializeField] private Text buyButtonLabel;
         [SerializeField] private Button closeButton;
+        [Header("Optional (added by Create Missing Gameplay UI Prefabs)")]
+        [SerializeField] private Text titleLabel;
+        [SerializeField] private Text listTitleLabel;
 
         private readonly List<PrototypePopupActionRowView> catalogRows =
             new List<PrototypePopupActionRowView>();
@@ -106,7 +119,9 @@ namespace ConsoleCards.Presentation.UI
             IReadOnlyList<PrototypeActionAbilityPurchaseOption> purchaseOptions,
             Action<string> purchaseSelected,
             Action dismissPopup,
-            string statusMessage = "")
+            string statusMessage = "",
+            string title = null,
+            string listTitle = null)
         {
             RequireAcquired();
             if (purchaseOptions == null) throw new ArgumentNullException(nameof(purchaseOptions));
@@ -120,6 +135,8 @@ namespace ConsoleCards.Presentation.UI
             BindButton(closeButton, dismissPopup);
             BindButton(buyButton, BuySelected);
             buyButtonLabel.text = "Buy";
+            if (titleLabel != null && !string.IsNullOrEmpty(title)) titleLabel.text = title;
+            if (listTitleLabel != null && !string.IsNullOrEmpty(listTitle)) listTitleLabel.text = listTitle;
             BuildCatalogRows();
             statusLabel.text = statusMessage ?? string.Empty;
             panel.SetActive(true);
@@ -130,7 +147,7 @@ namespace ConsoleCards.Presentation.UI
             }
             else
             {
-                ClearSelection("No authored Cards with a non-empty input cost are available.");
+                ClearSelection("There is nothing to buy here.");
             }
 
             catalogScrollRect.verticalNormalizedPosition = 1f;
@@ -189,7 +206,7 @@ namespace ConsoleCards.Presentation.UI
                         PrototypeUiPrefabIds.PopupActionRow,
                         catalogRowsRoot);
                 row.Bind(new PrototypePopupActionOption(
-                    option.DisplayName,
+                    RowLabel(option),
                     true,
                     () => Select(option)));
                 row.Show();
@@ -204,16 +221,25 @@ namespace ConsoleCards.Presentation.UI
             artworkImage.texture = option.Artwork;
             artworkImage.gameObject.SetActive(option.Artwork != null);
             descriptionLabel.text = option.Description;
-            inputCostLabel.text = $"Cost: {option.InputCost}";
+            inputCostLabel.text = option.ForSale ? $"Cost: {option.InputCost}" : "Price not set yet";
             affordabilityLabel.text = option.AffordabilityMessage;
-            // Affordability is informative; the authoritative service remains the final validator.
-            buyButton.interactable = true;
+            // Affordability is informative; the authoritative service remains the final validator. A card without a
+            // price is shown but cannot be bought.
+            buyButton.interactable = option.ForSale;
+            buyButtonLabel.text = option.ForSale ? "Buy" : "Not for sale";
+        }
+
+        // "Rush · Action", with "not for sale" for a card without a price.
+        private static string RowLabel(PrototypeActionAbilityPurchaseOption option)
+        {
+            string label = string.IsNullOrEmpty(option.Kind) ? option.DisplayName : $"{option.DisplayName} · {option.Kind}";
+            return option.ForSale ? label : $"{label} (not for sale)";
         }
 
         private void ClearSelection(string message)
         {
             selectedOption = null;
-            cardNameLabel.text = "No Purchasable Cards";
+            cardNameLabel.text = "Nothing to buy";
             artworkImage.texture = null;
             artworkImage.gameObject.SetActive(false);
             descriptionLabel.text = message ?? string.Empty;
