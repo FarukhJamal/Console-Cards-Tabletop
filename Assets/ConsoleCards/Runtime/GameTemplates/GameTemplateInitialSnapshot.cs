@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Boards;
 using ConsoleCards.Core.Domain.Consoles;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Dice;
@@ -24,6 +25,8 @@ namespace ConsoleCards.GameTemplates
         private readonly ReadOnlyCollection<ContainerSnapshot> containers;
         private readonly ReadOnlyCollection<ContainerPlacementSnapshot> containerPlacements;
         private readonly ReadOnlyCollection<PlacedConsoleSnapshot> placedConsoles;
+        // Game board mats (doc 22 §15): copied after construction; empty for a template baseline.
+        private IReadOnlyList<PlacedBoardSnapshot> placedBoards = Array.Empty<PlacedBoardSnapshot>();
         private readonly ReadOnlyCollection<SeatSnapshot> seats;
         private readonly ReadOnlyCollection<PlayAreaSnapshot> playAreas;
         private readonly ReadOnlyCollection<TabletopObjectId> templateObjectIds;
@@ -153,7 +156,13 @@ namespace ConsoleCards.GameTemplates
             foreach (ContainerId containerId in matchState.Containers.Keys)
                 if (matchState.IsTemplateContainer(containerId)) protectedContainers.Add(containerId);
 
-            return new GameTemplateInitialSnapshot(
+            List<PlacedBoardSnapshot> boardSnapshots = new List<PlacedBoardSnapshot>(matchState.PlacedBoards.Count);
+            foreach (PlacedBoardState board in matchState.PlacedBoards.Values)
+            {
+                boardSnapshots.Add(new PlacedBoardSnapshot(board));
+            }
+
+            GameTemplateInitialSnapshot snapshot = new GameTemplateInitialSnapshot(
                 matchState.Id,
                 matchState.GameTemplateId,
                 matchState.Revision,
@@ -166,6 +175,8 @@ namespace ConsoleCards.GameTemplates
                 protectedObjects,
                 protectedContainers,
                 matchState.CopyPhysicalCommandHistory());
+            snapshot.placedBoards = boardSnapshots.AsReadOnly();
+            return snapshot;
         }
 
         public MatchState Restore()
@@ -283,6 +294,11 @@ namespace ConsoleCards.GameTemplates
                 }
 
                 restored.AddPlacedConsole(consoleSnapshot.Restore(), slots);
+            }
+
+            for (int i = 0; i < placedBoards.Count; i++)
+            {
+                restored.AddPlacedBoard(placedBoards[i].Restore());
             }
 
             for (int containerIndex = 0; containerIndex < containers.Count; containerIndex++)
@@ -424,6 +440,24 @@ namespace ConsoleCards.GameTemplates
             public float? SurfaceHeight { get; }
             public float? ExtentWidth { get; }
             public float? ExtentDepth { get; }
+        }
+
+        private sealed class PlacedBoardSnapshot
+        {
+            public PlacedBoardSnapshot(PlacedBoardState state)
+            {
+                Id = state.Id;
+                Pose = state.Pose;
+                SurfaceHeight = state.SurfaceHeight;
+                Grid = state.Grid;
+            }
+
+            public BoardId Id { get; }
+            public TabletopPose Pose { get; }
+            public float? SurfaceHeight { get; }
+            public BoardGrid Grid { get; }
+
+            public PlacedBoardState Restore() => new PlacedBoardState(Id, Pose, Grid, SurfaceHeight);
         }
 
         private sealed class PlacedConsoleSnapshot

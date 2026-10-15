@@ -23,6 +23,7 @@ namespace ConsoleCards.Application.UseCases
         Die,
         Console,
         DiscardPile,
+        GameBoard,
     }
 
     public enum CreateTabletopComponentError

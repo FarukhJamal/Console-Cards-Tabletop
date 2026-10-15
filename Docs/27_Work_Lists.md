@@ -1,14 +1,14 @@
 # 27 — Work Lists
 
-Version 0.5 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 0.7 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
 | Item | What | Status |
 |---|---|---|
 | C3c | Game board from the catalog; Controller and Trap Floor box tiles place real cards (doc 22 §13) | Done, confirmed by the owner |
-| C3d | Double-sided Console mat: 12 symbol slots + Main on the front (Square ×3 top, Diamond ×3 bottom, Star left, Cross right, Circle/Triangle/Plus/Minus corners), controller mapping on the back (A/B/X/Y take cards, D-pad takes dice set to a number), magnetic snapping by symbol, flip with the card-reveal animation (cards too), Duplicate (doc 22 §14); fix 2026-10-15: corner size for the seat check, all slots are Trap Floor item slots, landed tiles turn once no pawn is on them (doc 18 §15.2), Scene view layout editor | Written, to be checked (run Make Console Mat Double-Sided again) |
-| C3e | Game board v2 (owner, 2026-10-15), see below | Next |
+| C3d | Double-sided Console mat: 12 symbol slots + Main on the front (Square ×3 top, Diamond ×3 bottom, Star left, Cross right, Circle/Triangle/Plus/Minus corners), controller mapping on the back (A/B/X/Y take cards, D-pad takes dice set to a number), magnetic snapping by symbol, flip with the card-reveal animation (cards too), Duplicate (doc 22 §14); fix 2026-10-15: corner size for the seat check, all slots are Trap Floor item slots, landed tiles turn once no pawn is on them (doc 18 §15.2), Scene view layout editor | Done, approved by the owner (Console Workbench added) |
+| C3e | Game board v2 (owner, 2026-10-15), see below; owner choices: snap points, boards snap edges and move singly, grid changed from the right-click menu, Trap Floor's board becomes a mat (doc 22 §15) | Written, to be checked (run Create Missing Board Mat first) |
 | Rules content | The rules card covers how to play, dos and don'ts, card numbers and components used, not where cards go on the Console or controller (owner, 2026-10-15) | Noted for R3/R4 |
 | R3 | House rules in game: propose a change, players agree, it is saved as a named rule set and shown on the rules card (doc 23). Needs the owner's choice: unanimous, majority or host decides | To do |
 | R4 | Hints: highlight legal moves and explain why a move is or is not allowed (doc 23) | To do |

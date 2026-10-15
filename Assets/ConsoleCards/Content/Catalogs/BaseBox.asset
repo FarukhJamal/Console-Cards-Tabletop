@@ -127,3 +127,12 @@ MonoBehaviour:
     showInToolbox: 0
     toolboxOrder: 100
     definitions: []
+  - id: 97685388-cfe5-40b0-bdae-b77222c71c6d
+    displayName: Board Mat
+    description: A board with card spaces; boards join edge to edge
+    kind: 9
+    prefab: {fileID: 4615547011873143665, guid: 8a1a0a4fcd8dc134b9824be36a1464b8, type: 3}
+    icon: {fileID: 21300000, guid: 88538237e7ef7f44f81e7f49aaaf3652, type: 3}
+    showInToolbox: 1
+    toolboxOrder: 9
+    definitions: []

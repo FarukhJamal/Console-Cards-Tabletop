@@ -28,6 +28,8 @@ namespace ConsoleCards.Core.Domain.Match
         TrapFloorCollapse = 20,
         PurchaseActionOrAbility = 21,
         FlipConsole = 22,
+        MoveBoard = 23,
+        ResizeBoardGrid = 24,
     }
 
     public enum AuthoritativeActionRecordMode

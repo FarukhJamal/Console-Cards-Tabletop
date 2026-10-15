@@ -7,6 +7,7 @@ using ConsoleCards.Application.Results;
 using ConsoleCards.Application.UseCases;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Boards;
 using ConsoleCards.Core.Domain.Cards;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Consoles;
@@ -86,6 +87,22 @@ namespace ConsoleCards.Presentation.Prototype
         [Tooltip("Only imported renderers using this Board material remain visible; showcase Table/lighting geometry stays disabled.")]
         [SerializeField] private Material gameBoardVisualMaterial;
         private GameBoardView adoptedGameBoard;
+        // C3e (doc 22 §15): the Board Mat prefab, the placed boards' views, Trap Floor's board drawn as a mat and its
+        // grid setting, and cards already set on a space.
+        private const float CardSpaceWidth = 1.1f;
+        private const float CardSpaceDepth = 1.5f;
+        private const float CardSpaceGap = 0.1f;
+        private const float SmallSpaceWidth = 0.72f;
+        private const float SmallSpaceDepth = 1f;
+        private const float BoardSnapTolerance = 0.04f;
+        private readonly GameBoardUseCases boardUseCases = new GameBoardUseCases();
+        private readonly Dictionary<BoardId, GameBoardMatView> boardViews = new Dictionary<BoardId, GameBoardMatView>();
+        private readonly Dictionary<TabletopObjectId, Vector3> cardsSetOnBoardSpaces = new Dictionary<TabletopObjectId, Vector3>();
+        private GameBoardMatView boardMatPrefab;
+        private GameBoardMatView templateBoardMat;
+        private BoardGrid? templateBoardGrid;
+        private bool boardSnapCheckPending;
+        private Vector2 boardMenuScreenPosition;
         [SerializeField] private PhysicalInteractionConfig physicalInteraction = new PhysicalInteractionConfig();
         private PhysicalTabletopSurfaces physicalSurfaceQuery;
         private LocalPhysicalObjectAuthority physicalAuthority;
@@ -127,6 +144,8 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField, Min(0.01f)] internal float consoleHiddenCardDepth = 0.6f;
         [Tooltip("Console mat: how close to a D-pad arrow a die must come to rest to be set on it.")]
         [SerializeField, Min(0.05f)] internal float consoleDieSpotRadius = 0.45f;
+        [Tooltip("Game board (doc 22 §15): how close a board must come to another's edge to join it.")]
+        [SerializeField, Min(0f)] internal float boardJoinDistance = 0.8f;
         [SerializeField] internal float feedbackDuration = 0.18f;
         [SerializeField] internal float shuffleCompression = 0.06f;
         [SerializeField] internal float floorCardVisualScale = 0.62f;
@@ -707,6 +726,7 @@ namespace ConsoleCards.Presentation.Prototype
                 handoverLogCount = 0; // a new or reset table starts a new log
                 shownActivityLogCount = -1;
                 landedFloorCards.Clear();
+                templateBoardGrid = null; // a new table draws the game's board with its own grid
                 waitingLandingFloorCardId = TabletopObjectId.Empty;
                 waitingLandingActor = PlayerId.Empty;
             }
@@ -827,6 +847,7 @@ namespace ConsoleCards.Presentation.Prototype
             ReleaseRuntimeDeckInstances();
             ReleaseRuntimeDiscardPileInstances();
             ReleaseRuntimeConsoleInstances();
+            ReleaseBoardViews();
             ReleaseRuntimeTokenContainerInstances();
             ClearOfficialPawnPresentation();
             ReleaseRuntimeObjectInstances(runtimePawnInstances, pawnViews, pawnSelectionVisuals);
@@ -1548,6 +1569,7 @@ namespace ConsoleCards.Presentation.Prototype
                 || acceptance.Kind == AuthoritativeActionKind.PhysicalObjectSettled)
             {
                 consoleDieCheckPending = true; // C3d: a die may have come to rest on a Console D-pad arrow
+                boardSnapCheckPending = true; // C3e: a card may have come to rest on a board space
             }
 
             if (undoBatchActive)
@@ -1672,6 +1694,8 @@ namespace ConsoleCards.Presentation.Prototype
                 case AuthoritativeActionKind.TrapFloorCollapse: return $"{actor} collapsed a Floor";
                 case AuthoritativeActionKind.PurchaseActionOrAbility: return $"{actor} purchased an Action/Ability Card";
                 case AuthoritativeActionKind.FlipConsole: return $"{actor} turned a Console over";
+                case AuthoritativeActionKind.MoveBoard: return $"{actor} moved a Board";
+                case AuthoritativeActionKind.ResizeBoardGrid: return $"{actor} changed a Board's grid";
                 default:
                     return trapFloorTurnState == null
                         ? $"{actor} performed a table action"
@@ -2347,6 +2371,7 @@ namespace ConsoleCards.Presentation.Prototype
             CompletePhysicalFloorCollapseIfSettled();
             CompletePhysicalBlindDirectionIfSettled();
             CompleteConsoleDieSnaps();
+            CompleteBoardCardSnaps();
             presentationTransitions?.Tick(Time.unscaledDeltaTime);
             RefreshHandInteractionPresentation();
             RefreshHandTrayDropTarget();
@@ -2722,6 +2747,12 @@ namespace ConsoleCards.Presentation.Prototype
                     break;
                 case ComponentCatalogKind.Die:
                     BeginToolboxPlacement(TabletopComponentKind.Die, value);
+                    break;
+                case ComponentCatalogKind.GameBoard when entry.Prefab != null && entry.Prefab.GetComponent<GameBoardMatView>() != null:
+                    BeginBoardPlacement(
+                        BoardGrid.Standard,
+                        false,
+                        localSeatLayout != null ? localSeatLayout.PlayerZonePose.RotationDegrees : 0f);
                     break;
                 default:
                     toolboxPlacementIcon = null;
@@ -3843,6 +3874,7 @@ namespace ConsoleCards.Presentation.Prototype
         // Discard Pile, template or not, so nothing the Match still holds disappears from the table.
         private void ProjectUnprojectedPlacedComponents()
         {
+            ProjectPlacedBoards();
             List<ContainerId> containerIds = new List<ContainerId>(matchState.ContainerPlacements.Keys);
             for (int i = 0; i < containerIds.Count; i++)
             {
@@ -6216,6 +6248,10 @@ namespace ConsoleCards.Presentation.Prototype
                 if (TryFindConsoleUnderPointer(screenPosition, out RuntimeConsoleInstance pointedConsole))
                 {
                     OpenConsoleContextMenu(screenPosition, pointedConsole.SlotViews[0].ContainerId);
+                }
+                else if (TryFindBoardUnderPointer(screenPosition, out BoardId pointedBoard, out _))
+                {
+                    OpenBoardContextMenu(screenPosition, pointedBoard); // C3e
                 }
 
                 return;
@@ -9612,6 +9648,7 @@ namespace ConsoleCards.Presentation.Prototype
             catalogConsolePrefab = ResolveCatalogEntry(ComponentCatalogKind.Console).GetPrefabComponent<ConsoleView>();
             catalogHandPrefab = ResolveCatalogEntry(ComponentCatalogKind.Hand)
                 .GetPrefabComponent<PrototypeFixedContainerVisual>();
+            boardMatPrefab = FindBoardMatPrefab(componentLibrary); // C3e; null until the Board Mat is made
         }
 
         private ComponentCatalogEntry ResolveCatalogEntry(ComponentCatalogKind kind)
@@ -10411,6 +10448,7 @@ namespace ConsoleCards.Presentation.Prototype
                 - centerOffset;
 
             PrepareGameBoardVisual(boardCollider);
+            ApplyTemplateBoardMat(boardCollider); // C3e: drawn as a board mat when the Board Mat exists
         }
 
         // C3c: the Base Box's Game Board entry replaces the scene board (which is switched off). Without the
@@ -10418,8 +10456,21 @@ namespace ConsoleCards.Presentation.Prototype
         private void AdoptCatalogGameBoard()
         {
             if (adoptedGameBoard != null || componentLibrary == null || componentLibrary.BaseBox == null) return;
-            if (!componentLibrary.BaseBox.TryGetFirst(ComponentCatalogKind.GameBoard, out ComponentCatalogEntry entry)
-                || entry.Prefab == null)
+            ComponentCatalogEntry entry = null;
+            IReadOnlyList<ComponentCatalogEntry> baseEntries = componentLibrary.BaseBox.Entries;
+            for (int i = 0; i < baseEntries.Count && entry == null; i++)
+            {
+                // The C3c board model entry (GameBoardView); the C3e Board Mat entry is used separately.
+                if (baseEntries[i] != null
+                    && baseEntries[i].Kind == ComponentCatalogKind.GameBoard
+                    && baseEntries[i].Prefab != null
+                    && baseEntries[i].Prefab.GetComponent<GameBoardView>() != null)
+                {
+                    entry = baseEntries[i];
+                }
+            }
+
+            if (entry == null)
             {
                 return;
             }
@@ -10457,9 +10508,14 @@ namespace ConsoleCards.Presentation.Prototype
             gameBoardPhysicalSurface.enabled = active;
             gameBoardPhysicalSurface.gameObject.SetActive(active);
 
-            if (active && gameBoardVisualRoot != null)
+            if (active && gameBoardVisualRoot != null && templateBoardMat == null)
             {
                 gameBoardVisualRoot.gameObject.SetActive(true);
+            }
+
+            if (templateBoardMat != null)
+            {
+                templateBoardMat.gameObject.SetActive(active); // C3e: the board mat stands in for the board model
             }
         }
 
@@ -10955,6 +11011,531 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             targetConsole.Bind(runtimeConsole, targetConsole.LayoutAnchor, orderedSlots);
+        }
+
+        // ---- C3e: game board v2 (doc 22 §15) ----
+        // Board mats are placed components (PlacedBoardState) with a grid of card spaces. Cards on a board stay loose
+        // table cards: a card that comes to rest on a space is set on its centre (the magnetic grid). Boards join
+        // edge to edge when placed or moved next to another. Trap Floor's own board is drawn as a mat too; its grid
+        // can be resized as a table setting (kept by Undo, Redo and seat switches) without moving the floor tiles.
+
+        private static GameBoardMatView FindBoardMatPrefab(ComponentLibrary library)
+        {
+            if (library == null) return null;
+            IReadOnlyList<ComponentCatalog> catalogs = library.Catalogs;
+            for (int c = 0; c < catalogs.Count; c++)
+            {
+                IReadOnlyList<ComponentCatalogEntry> entries = catalogs[c].Entries;
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    ComponentCatalogEntry entry = entries[i];
+                    if (entry == null || entry.Kind != ComponentCatalogKind.GameBoard || entry.Prefab == null) continue;
+                    GameBoardMatView view = entry.Prefab.GetComponent<GameBoardMatView>();
+                    if (view != null && view.IsComplete) return view;
+                }
+            }
+
+            return null;
+        }
+
+        private GameBoardMatView CreateBoardMatInstance(string name, BoardGrid grid)
+        {
+            GameBoardMatView view = Instantiate(boardMatPrefab);
+            PrepareRuntimeRoot(view.gameObject, name);
+            view.Apply(grid);
+            return view;
+        }
+
+        private void ProjectPlacedBoards()
+        {
+            if (boardMatPrefab == null || matchState == null) return;
+            foreach (PlacedBoardState board in matchState.PlacedBoards.Values)
+            {
+                if (boardViews.ContainsKey(board.Id)) continue;
+                GameBoardMatView view = CreateBoardMatInstance("Board", board.Grid);
+                ApplyConsolePose(view.transform, board.Pose, board.SurfaceHeight);
+                boardViews.Add(board.Id, view);
+            }
+        }
+
+        private void ReleaseBoardViews()
+        {
+            foreach (GameBoardMatView view in boardViews.Values)
+            {
+                if (view != null) DestroyRuntimeOwnedGameObject(view.gameObject);
+            }
+
+            boardViews.Clear();
+            if (templateBoardMat != null) DestroyRuntimeOwnedGameObject(templateBoardMat.gameObject);
+            templateBoardMat = null;
+            cardsSetOnBoardSpaces.Clear();
+        }
+
+        // Trap Floor's board drawn as a v2 mat over its play area: the spaces are the floor grid's cells.
+        private void ApplyTemplateBoardMat(BoxCollider boardCollider)
+        {
+            if (boardMatPrefab == null || trapFloorTemplate == null) return;
+            GridDefinitionData floor = trapFloorTemplate.GameDefinition.Grid;
+            BoardGrid grid = templateBoardGrid ?? new BoardGrid(
+                floor.Columns,
+                floor.Rows,
+                (float)floor.CellWidth,
+                (float)floor.CellHeight,
+                (float)Math.Max(floor.HorizontalSpacing, 0d),
+                BoardGrid.Standard.Frame);
+            if (templateBoardMat == null) templateBoardMat = CreateBoardMatInstance("Trap Floor Board Mat", grid);
+            else templateBoardMat.Apply(grid);
+            templateBoardMat.SetSurfaceEnabled(false); // the board's own surface holds the floor tiles
+            Transform board = boardCollider.transform;
+            Vector3 top = board.TransformPoint(boardCollider.center + (Vector3.up * (boardCollider.size.y * 0.5f)));
+            templateBoardMat.transform.SetPositionAndRotation(top - (Vector3.up * templateBoardMat.Thickness), board.rotation);
+            if (gameBoardVisualRoot != null) gameBoardVisualRoot.gameObject.SetActive(false);
+        }
+
+        private bool TryFindBoardUnderPointer(Vector2 screenPosition, out BoardId boardId, out GameBoardMatView view)
+        {
+            boardId = BoardId.Empty;
+            view = null;
+            if (pointerProjector == null
+                || coordinateConverter == null
+                || !pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate))
+            {
+                return false;
+            }
+
+            Vector3 world = coordinateConverter.ToWorldPosition(new TabletopPose(coordinate, 0f, 0, 0));
+            foreach (KeyValuePair<BoardId, GameBoardMatView> pair in boardViews)
+            {
+                if (pair.Value != null && pair.Value.gameObject.activeInHierarchy && pair.Value.Contains(world))
+                {
+                    boardId = pair.Key;
+                    view = pair.Value;
+                    return true;
+                }
+            }
+
+            if (templateBoardMat != null && templateBoardMat.gameObject.activeInHierarchy && templateBoardMat.Contains(world))
+            {
+                view = templateBoardMat;
+                return true;
+            }
+
+            return false;
+        }
+
+        // ---- Placing, moving and joining ----
+
+        private GameObject CreateBoardPlacementPreview(BoardGrid grid)
+        {
+            GameBoardMatView preview = Instantiate(boardMatPrefab);
+            preview.Apply(grid);
+            GameObject root = preview.gameObject;
+            PrepareRuntimeRoot(root, "Board Placement Preview");
+            DisablePlacementPreviewInteraction(root);
+            TintPlacementPreview(root);
+            return root;
+        }
+
+        private void BeginBoardPlacement(BoardGrid grid, bool duplicate, float rotationDegrees)
+        {
+            EnsureInitialized();
+            if (componentPlacementController == null || boardMatPrefab == null)
+            {
+                ShowMessage("Board placement is not available: run Console Cards > Board > Create Missing Board Mat.");
+                return;
+            }
+
+            CloseContextMenu();
+            GameObject previewRoot = CreateBoardPlacementPreview(grid);
+            componentPlacementController.BeginCustomComponentPlacement(
+                TabletopComponentKind.GameBoard,
+                previewRoot,
+                rotationDegrees,
+                0,
+                0,
+                pose => CommitBoardCreate(pose, grid, duplicate));
+            componentPlacementController.AdjustPose = pose => JoinBoardPose(pose, grid, BoardId.Empty);
+            ShowPlacementHint(duplicate ? "Duplicate Board" : "Board Mat");
+        }
+
+        private bool CommitBoardCreate(TabletopPose pose, BoardGrid grid, bool duplicate)
+        {
+            CommandResult result = boardUseCases.Create(
+                matchState,
+                CreateCommandContext(),
+                pose,
+                grid,
+                null,
+                duplicate,
+                out BoardId boardId);
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Board rejected: {result.Status}.");
+                return false;
+            }
+
+            ProjectPlacedBoards();
+            if (boardViews.TryGetValue(boardId, out GameBoardMatView view))
+            {
+                presentationTransitions.Appear(view.transform, settleDuration);
+            }
+
+            Physics.SyncTransforms();
+            ShowMessage($"Board placed: {grid.Columns} x {grid.Rows} spaces. Right-click it to change the grid.");
+            return true;
+        }
+
+        private void BeginBoardMove(BoardId boardId)
+        {
+            EnsureInitialized();
+            if (componentPlacementController == null
+                || !matchState.PlacedBoards.TryGetValue(boardId, out PlacedBoardState board))
+            {
+                ShowMessage("Board move rejected: board unavailable.");
+                return;
+            }
+
+            CloseContextMenu();
+            componentPlacementController.Cancel();
+            GameObject previewRoot = CreateBoardPlacementPreview(board.Grid);
+            BoardGrid grid = board.Grid;
+            componentPlacementController.BeginContainerMove(
+                previewRoot,
+                board.Pose,
+                requested => CommitBoardMove(boardId, requested));
+            componentPlacementController.AdjustPose = pose => JoinBoardPose(pose, grid, boardId);
+            ShowPlacementHint("Move Board");
+        }
+
+        private bool CommitBoardMove(BoardId boardId, TabletopPose pose)
+        {
+            CommandResult result = boardUseCases.Move(matchState, CreateCommandContext(), boardId, pose, null);
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Board move rejected: {result.Status}.");
+                return false;
+            }
+
+            if (boardViews.TryGetValue(boardId, out GameBoardMatView view))
+            {
+                ApplyConsolePose(view.transform, matchState.PlacedBoards[boardId].Pose, null);
+            }
+
+            Physics.SyncTransforms();
+            ShowMessage("Board moved. Cards on it stay where they are.");
+            return true;
+        }
+
+        // Joins a board to the nearest edge of another board within reach: same turn, edges touching, the two
+        // lined up at the centre or at one end. Otherwise the pose is kept.
+        private TabletopPose JoinBoardPose(TabletopPose pose, BoardGrid grid, BoardId movingId)
+        {
+            double bestError = boardJoinDistance;
+            TabletopPose best = pose;
+            foreach (PlacedBoardState other in matchState.PlacedBoards.Values)
+            {
+                if (other.Id == movingId) continue;
+                TryJoin(pose, grid, other.Pose, other.Grid, ref bestError, ref best);
+            }
+
+            if (templateBoardMat != null && templateBoardMat.HasGrid && matchState.PlayAreas.ContainsKey(centralPlayAreaId))
+            {
+                TabletopPose boardPose = new TabletopPose(matchState.GetPlayArea(centralPlayAreaId).Bounds.Center, 0f, 0, 0);
+                TryJoin(pose, grid, boardPose, templateBoardMat.Grid, ref bestError, ref best);
+            }
+
+            return best;
+        }
+
+        private static void TryJoin(
+            TabletopPose pose,
+            BoardGrid grid,
+            TabletopPose otherPose,
+            BoardGrid otherGrid,
+            ref double bestError,
+            ref TabletopPose best)
+        {
+            float turn = Mathf.DeltaAngle(otherPose.RotationDegrees, pose.RotationDegrees);
+            if (Mathf.Abs(turn) > 12f && Mathf.Abs(Mathf.Abs(turn) - 180f) > 12f) return;
+            float yaw = Mathf.Abs(turn) <= 12f ? otherPose.RotationDegrees : otherPose.RotationDegrees + 180f;
+            double radians = otherPose.RotationDegrees * (Math.PI / 180d);
+            double cos = Math.Cos(radians);
+            double sin = Math.Sin(radians);
+            double dx = pose.Position.X - otherPose.Position.X;
+            double dy = pose.Position.Y - otherPose.Position.Y;
+            double localX = (cos * dx) - (sin * dy);
+            double localZ = (sin * dx) + (cos * dy);
+            double alongX = (otherGrid.Width + grid.Width) * 0.5d;
+            double alongZ = (otherGrid.Depth + grid.Depth) * 0.5d;
+            double shiftX = (otherGrid.Width - grid.Width) * 0.5d;
+            double shiftZ = (otherGrid.Depth - grid.Depth) * 0.5d;
+            for (int side = 0; side < 4; side++)
+            {
+                for (int line = -1; line <= 1; line++)
+                {
+                    double targetX;
+                    double targetZ;
+                    if (side < 2)
+                    {
+                        targetX = side == 0 ? alongX : -alongX;
+                        targetZ = line * shiftZ;
+                    }
+                    else
+                    {
+                        targetZ = side == 2 ? alongZ : -alongZ;
+                        targetX = line * shiftX;
+                    }
+
+                    double ex = localX - targetX;
+                    double ez = localZ - targetZ;
+                    double error = Math.Sqrt((ex * ex) + (ez * ez));
+                    if (error >= bestError) continue;
+                    bestError = error;
+                    best = new TabletopPose(
+                        new TableCoordinate(
+                            otherPose.Position.X + (cos * targetX) + (sin * targetZ),
+                            otherPose.Position.Y - (sin * targetX) + (cos * targetZ)),
+                        yaw,
+                        pose.Layer,
+                        pose.LocalOrder);
+                }
+            }
+        }
+
+        // ---- The board menu (right-click a board) ----
+
+        private void OpenBoardContextMenu(Vector2 screenPosition, BoardId boardId)
+        {
+            CloseContextMenu();
+            boardMenuScreenPosition = screenPosition;
+            ShowBoardContextMenu(boardId);
+        }
+
+        private void ShowBoardContextMenu(BoardId boardId)
+        {
+            if (runtimeUi == null || !TryGetBoardGrid(boardId, out BoardGrid grid)) return;
+            bool placed = !boardId.IsEmpty;
+            bool cardSpaces = grid.SpaceWidth >= CardSpaceWidth - 0.01f;
+            List<PrototypePopupActionOption> actions = new List<PrototypePopupActionOption>();
+            if (placed)
+            {
+                actions.Add(new PrototypePopupActionOption("Move", true, () => BeginBoardMove(boardId)));
+            }
+
+            actions.Add(new PrototypePopupActionOption("Columns +", grid.Columns < BoardGrid.MaximumColumns,
+                () => ResizeBoard(boardId, grid.WithSize(grid.Columns + 1, grid.Rows))));
+            actions.Add(new PrototypePopupActionOption("Columns -", grid.Columns > 1,
+                () => ResizeBoard(boardId, grid.WithSize(grid.Columns - 1, grid.Rows))));
+            actions.Add(new PrototypePopupActionOption("Rows +", grid.Rows < BoardGrid.MaximumRows,
+                () => ResizeBoard(boardId, grid.WithSize(grid.Columns, grid.Rows + 1))));
+            actions.Add(new PrototypePopupActionOption("Rows -", grid.Rows > 1,
+                () => ResizeBoard(boardId, grid.WithSize(grid.Columns, grid.Rows - 1))));
+            actions.Add(new PrototypePopupActionOption(
+                cardSpaces ? "Spaces: small tiles" : "Spaces: card size",
+                true,
+                () => ResizeBoard(boardId, cardSpaces
+                    ? grid.WithSpace(SmallSpaceWidth, SmallSpaceDepth, 0f)
+                    : grid.WithSpace(CardSpaceWidth, CardSpaceDepth, CardSpaceGap))));
+            if (placed)
+            {
+                actions.Add(new PrototypePopupActionOption("Duplicate", true, () =>
+                    BeginBoardPlacement(grid, true, matchState.PlacedBoards[boardId].Pose.RotationDegrees)));
+                actions.Add(new PrototypePopupActionOption("Delete", true, () => DeleteBoard(boardId)));
+            }
+
+            runtimeUi.ShowContextMenu(
+                boardMenuScreenPosition,
+                placed ? "BOARD" : "GAME BOARD",
+                $"{grid.Columns} x {grid.Rows} spaces ({(cardSpaces ? "card size" : "small tiles")})."
+                    + (placed ? " Cards on it stay where they are." : " The floor tiles do not move."),
+                actions,
+                CloseContextMenu,
+                DismissPopupFromSecondary);
+        }
+
+        private bool TryGetBoardGrid(BoardId boardId, out BoardGrid grid)
+        {
+            if (!boardId.IsEmpty && matchState.PlacedBoards.TryGetValue(boardId, out PlacedBoardState board))
+            {
+                grid = board.Grid;
+                return true;
+            }
+
+            if (boardId.IsEmpty && templateBoardMat != null && templateBoardMat.HasGrid)
+            {
+                grid = templateBoardMat.Grid;
+                return true;
+            }
+
+            grid = default;
+            return false;
+        }
+
+        private void ResizeBoard(BoardId boardId, BoardGrid grid)
+        {
+            if (boardId.IsEmpty)
+            {
+                templateBoardGrid = grid; // a table setting for the game's own board
+                templateBoardMat?.Apply(grid);
+                templateBoardMat?.SetSurfaceEnabled(false);
+            }
+            else
+            {
+                CommandResult result = boardUseCases.SetGrid(matchState, CreateCommandContext(), boardId, grid);
+                if (!result.Succeeded)
+                {
+                    ShowMessage($"Grid change rejected: {result.Status}.");
+                    return;
+                }
+
+                if (boardViews.TryGetValue(boardId, out GameBoardMatView view))
+                {
+                    view.Apply(grid);
+                    ApplyConsolePose(view.transform, matchState.PlacedBoards[boardId].Pose, null);
+                }
+
+                Physics.SyncTransforms();
+            }
+
+            ShowBoardContextMenu(boardId); // stays open for the next + or −
+        }
+
+        private void DeleteBoard(BoardId boardId)
+        {
+            CommandResult result = boardUseCases.Delete(matchState, CreateCommandContext(), boardId);
+            CloseContextMenu();
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Delete rejected: {result.Status}.");
+                return;
+            }
+
+            if (boardViews.TryGetValue(boardId, out GameBoardMatView view))
+            {
+                if (view != null) DestroyRuntimeOwnedGameObject(view.gameObject);
+                boardViews.Remove(boardId);
+            }
+
+            Physics.SyncTransforms();
+            ShowMessage("Board removed. Cards that were on it stay on the table.");
+        }
+
+        // ---- The magnetic grid ----
+
+        // A loose card that comes to rest on a board space is set on the space's centre, turned square to the board.
+        private void CompleteBoardCardSnaps()
+        {
+            if (!boardSnapCheckPending || !IsInitialized || matchState == null) return;
+            boardSnapCheckPending = false;
+            if (boardViews.Count == 0 && templateBoardMat == null) return;
+            for (int i = 0; i < cardViews.Count; i++)
+            {
+                CardView card = cardViews[i];
+                if (card == null || !card.IsBound || card.BoundState == null) continue;
+                TabletopObjectState state = card.BoundState;
+                if (!state.ContainerId.IsEmpty || state.IsUserLocked) continue;
+                if (trapFloorTemplate != null && trapFloorTemplate.IsFloorCard(state.Id)) continue; // floor tiles never move
+                if (card.PhysicalObject != null
+                    && (card.PhysicalObject.IsHeld
+                        || state.PhysicalState == null
+                        || state.PhysicalState.Mode != PhysicalObjectMode.Sleeping))
+                {
+                    continue;
+                }
+
+                Vector3 position = card.PhysicalObject != null && card.PhysicalObject.Body != null
+                    ? card.PhysicalObject.Body.position
+                    : card.transform.position;
+                if (!TryFindBoardSpace(position, out GameBoardMatView board, out Vector3 centre)) continue;
+                float dx = centre.x - position.x;
+                float dz = centre.z - position.z;
+                if ((dx * dx) + (dz * dz) <= BoardSnapTolerance * BoardSnapTolerance) continue;
+                if (cardsSetOnBoardSpaces.TryGetValue(state.Id, out Vector3 last)
+                    && (last - centre).sqrMagnitude < 0.0001f)
+                {
+                    continue; // already set here once; it settled a little off, leave it
+                }
+
+                if (SetCardOnSpace(card, board, centre)) cardsSetOnBoardSpaces[state.Id] = centre;
+            }
+        }
+
+        private bool TryFindBoardSpace(Vector3 position, out GameBoardMatView board, out Vector3 centre)
+        {
+            foreach (GameBoardMatView view in boardViews.Values)
+            {
+                if (view != null && view.gameObject.activeInHierarchy && view.TryNearestSpace(position, out centre))
+                {
+                    board = view;
+                    return true;
+                }
+            }
+
+            if (templateBoardMat != null && templateBoardMat.gameObject.activeInHierarchy
+                && templateBoardMat.TryNearestSpace(position, out centre))
+            {
+                board = templateBoardMat;
+                return true;
+            }
+
+            board = null;
+            centre = Vector3.zero;
+            return false;
+        }
+
+        private bool SetCardOnSpace(CardView card, GameBoardMatView board, Vector3 centre)
+        {
+            TabletopObjectState state = card.BoundState;
+            TableCoordinate coordinate = coordinateConverter.ToTableCoordinate(centre);
+            if (card.PhysicalObject == null)
+            {
+                float yaw = state.Pose.RotationDegrees;
+                float boardYaw = board.transform.eulerAngles.y;
+                float square = boardYaw + (Mathf.Round(Mathf.DeltaAngle(boardYaw, yaw) / 90f) * 90f);
+                return new MoveObjectUseCase().Execute(
+                    matchState,
+                    new MoveObjectCommand(
+                        CreateCommandContext(),
+                        state.Id,
+                        new TabletopPose(coordinate, square, state.Pose.Layer, state.Pose.LocalOrder))).Succeeded
+                    && ApplyAcceptedCard(card);
+            }
+
+            if (physicalAuthority == null || activeSession == null) return false;
+            if (!physicalAuthority.Surfaces.TryResolveAuthoredLooseObject(
+                    new TabletopPose(coordinate, 0f, 0, 0),
+                    localPlayerId,
+                    card.PhysicalObject.PhysicalCollider,
+                    false,
+                    out PhysicalObjectState placed))
+            {
+                return false;
+            }
+
+            Quaternion current = card.PhysicalObject.Body != null ? card.PhysicalObject.Body.rotation : card.transform.rotation;
+            Vector3 forward = Vector3.ProjectOnPlane(current * Vector3.forward, Vector3.up);
+            Vector3 boardForward = Vector3.ProjectOnPlane(board.transform.forward, Vector3.up);
+            float angle = forward.sqrMagnitude > 0.0001f ? Vector3.SignedAngle(boardForward, forward, Vector3.up) : 0f;
+            float correction = (Mathf.Round(angle / 90f) * 90f) - angle;
+            Quaternion squared = Quaternion.AngleAxis(correction, Vector3.up) * current;
+            placed = placed.WithRotation(new PhysicalRotation(squared.x, squared.y, squared.z, squared.w));
+            CommandResult result = new CommitPhysicalObjectUseCase().Execute(
+                matchState,
+                activeSession.Request.ActivePlayerIds,
+                new CommitPhysicalObjectCommand(
+                    CreateCommandContext(),
+                    state.Id,
+                    placed,
+                    state.PhysicalRevision,
+                    null,
+                    AuthoritativeActionRecordMode.None));
+            return result.Succeeded && ApplyAcceptedCard(card);
+        }
+
+        private static bool ApplyAcceptedCard(CardView card)
+        {
+            card.ApplyAcceptedState();
+            return true;
         }
 
         // ---- C3d: the double-sided Console mat (doc 22 §14) ----

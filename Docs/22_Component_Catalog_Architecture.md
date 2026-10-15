@@ -1,8 +1,8 @@
 # Console Cards - Component Catalog Architecture
 
 **Document ID:** 22_Component_Catalog_Architecture
-**Version:** 0.5
-**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8); C3a written 2026-10-09 (every spawn from the catalogs, §9); C3b-1 written 2026-10-09 (local Console, Hand, Avatar card and pawn from the catalogs, §10); H-E written 2026-10-09 (Empty Table hand and its switch, §11); C3b-2 written 2026-10-09 (scene-owned pieces removed, §12). C3c written 2026-10-15 (game board from the catalog, box tiles place real cards, §13); C3d written 2026-10-15 (double-sided Console mat, §14). Binding rule: doc 21 principle 18.
+**Version:** 0.6
+**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8); C3a written 2026-10-09 (every spawn from the catalogs, §9); C3b-1 written 2026-10-09 (local Console, Hand, Avatar card and pawn from the catalogs, §10); H-E written 2026-10-09 (Empty Table hand and its switch, §11); C3b-2 written 2026-10-09 (scene-owned pieces removed, §12). C3c written 2026-10-15 (game board from the catalog, box tiles place real cards, §13); C3d written 2026-10-15 (double-sided Console mat, §14); C3e written 2026-10-15 (game board v2, §15). Binding rule: doc 21 principle 18.
 **Source:** Owner decisions 2026-10-08 and the product material (box set, controller box and game box images).
 **Purpose:** Define how every component and its definitions are registered, so the table, the Toolbox and the UI resolve the same component from one place.
 
@@ -72,6 +72,7 @@
 - **C3b-2 (written, §12):** the unused scene pieces (scene Console, Hand, loose card, pawn and token, the first-prototype deck, stacks A and B and discard pile), their fields and dead code removed; the tests for the removed pieces removed and the rest updated (owner choice A).
 - **C3c (written, §13):** game board prefab from the catalog; Controller and Game boxes filled, and their tiles place real cards. The separate mapping board is dropped: the controller mapping is the Console mat's back side (C3d).
 - **C3d (written, §14):** the double-sided Console mat (12 symbol slots + Main on the front, controller mapping on the back), symbol snapping, flip and duplicate, the card turn-over.
+- **C3e (written, §15):** game board v2: board mats with a resizable grid of card spaces, a magnetic grid, boards joining edge to edge; Trap Floor's board drawn as a mat.
 
 ## 6. Open items
 
@@ -199,3 +200,27 @@
 - **Open points:** the symbol rule is applied by the drop
   (Presentation), not by the Runtime transfer; Trap Floor's own placements (for example a prize to a side slot) ignore
   symbols (all cards have None today).
+
+## 15. Game board v2 (C3e, 2026-10-15)
+
+- **Owner's idea:** the board is the "screen", each player's Console mat and controller below it, like a console game.
+  A board is an orange-framed mat with a grid of card spaces (10 × 5 in the reference); several mats join edge to edge
+  for a bigger board; the grid can be changed in the virtual table only (the physical mat stays the same). Marked
+  areas (deck, hand, discard) are not decided and not built.
+- **Setup (once):** `Console Cards > Board > Create Missing Board Mat` makes `Content/Prefabs/Final/World/BoardMat.prefab`
+  (frame, surface collider, one space template; materials in `Content/Materials/Board/`) and a Base Box entry "Board Mat"
+  (kind GameBoard, in the Toolbox). Nothing existing is overwritten; the C3c "Game Board" entry (the board model) stays.
+- **Runtime:** `PlacedBoardState` (a `BoardId`, a pose and a `BoardGrid`: columns, rows, space size, gap, frame) in
+  `MatchState.PlacedBoards`, kept by Undo, Redo and seat switches. `GameBoardUseCases`: place, move (`MoveBoard`), change
+  the grid (`ResizeBoardGrid`) and remove, one command each. Cards on a board stay loose table cards.
+- **Toolbox:** the Board Mat tile places a 10 × 5 board of card-size spaces (1.1 × 1.5, gap 0.1).
+- **Joining:** while a board is placed or moved, it joins the nearest edge of another board within
+  `boardJoinDistance` (0.8): same turn, edges touching, lined up at the centre or at either end. Each board still moves
+  on its own; moving a board leaves the cards on it where they are.
+- **Right-click a board:** Move, Columns + / -, Rows + / -, Spaces: card size / small tiles (0.72 × 1.0, Trap Floor's
+  tile), Duplicate, Delete. The menu stays open for the next change.
+- **Magnetic grid:** a loose card that comes to rest on a space is set on the space's centre, turned square to the board
+  (its face is kept). Locked cards and Trap Floor's floor tiles are never moved.
+- **Trap Floor's board:** drawn as a mat over its play area, its spaces being the floor grid (6 × 6 tiles of 0.72 × 1.0),
+  in the same place and size. Right-click its frame for the grid options; the change is a table setting (kept by Undo,
+  Redo and seat switches, reset by a new table) and never moves the floor tiles.

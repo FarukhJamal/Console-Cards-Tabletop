@@ -61,6 +61,12 @@ namespace ConsoleCards.Presentation.Interaction
 
         public float RotationDegrees => rotationDegrees;
 
+        /// <summary>
+        /// Optional, for the current placement only: turns the pointer pose into the pose the piece will take, such
+        /// as a game board joining the edge of another (doc 22 §15). Cleared when the placement ends.
+        /// </summary>
+        public Func<TabletopPose, TabletopPose> AdjustPose { get; set; }
+
         public void Begin(
             TabletopComponentKind requestedKind,
             int requestedDieSideCount,
@@ -142,7 +148,8 @@ namespace ConsoleCards.Presentation.Interaction
             containerPlacement = requestedKind == TabletopComponentKind.Deck
                 || requestedKind == TabletopComponentKind.Stack
                 || requestedKind == TabletopComponentKind.DiscardPile
-                || requestedKind == TabletopComponentKind.Console;
+                || requestedKind == TabletopComponentKind.Console
+                || requestedKind == TabletopComponentKind.GameBoard;
             physicalPlacement = requestedKind == TabletopComponentKind.Card || requestedKind == TabletopComponentKind.Pawn
                 || requestedKind == TabletopComponentKind.Token || requestedKind == TabletopComponentKind.Die;
             dieSideCount = requestedDieSideCount;
@@ -265,6 +272,11 @@ namespace ConsoleCards.Presentation.Interaction
                 rotationDegrees,
                 layer,
                 localOrder);
+            if (AdjustPose != null)
+            {
+                previewPose = AdjustPose(previewPose);
+            }
+
             Vector3 worldPosition = coordinateConverter.ToWorldPosition(previewPose);
             if (containerPlacement && PhysicalSurfaces != null)
             {
@@ -292,6 +304,7 @@ namespace ConsoleCards.Presentation.Interaction
 
         private void CompletePreview(bool committed)
         {
+            AdjustPose = null;
             Action<bool> placementEnded = activePlacementEnded;
             if (previewRoot != null)
             {

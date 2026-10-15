@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using ConsoleCards.Core.Domain.Consoles;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Dice;
+using ConsoleCards.Core.Domain.Boards;
 using ConsoleCards.Core.Domain.PlayAreas;
 using ConsoleCards.Core.Domain.Seats;
 using ConsoleCards.Core.Identifiers;
@@ -33,6 +34,7 @@ namespace ConsoleCards.Core.Domain.Match
         private readonly Dictionary<ContainerId, ContainerPlacementState> containerPlacements;
         private readonly Dictionary<SeatId, SeatState> seats;
         private readonly Dictionary<ConsoleId, PlacedConsoleState> placedConsoles;
+        private readonly Dictionary<BoardId, PlacedBoardState> placedBoards;
         private readonly Dictionary<PlayAreaId, PlayAreaState> playAreas;
         private readonly HashSet<TabletopObjectId> templateObjectIds;
         private readonly HashSet<ContainerId> templateContainerIds;
@@ -44,6 +46,7 @@ namespace ConsoleCards.Core.Domain.Match
         private readonly ReadOnlyDictionary<ContainerId, ContainerPlacementState> readOnlyContainerPlacements;
         private readonly ReadOnlyDictionary<SeatId, SeatState> readOnlySeats;
         private readonly ReadOnlyDictionary<ConsoleId, PlacedConsoleState> readOnlyPlacedConsoles;
+        private readonly ReadOnlyDictionary<BoardId, PlacedBoardState> readOnlyPlacedBoards;
         private readonly ReadOnlyDictionary<PlayAreaId, PlayAreaState> readOnlyPlayAreas;
 
         public MatchState(
@@ -177,6 +180,7 @@ namespace ConsoleCards.Core.Domain.Match
             this.containerPlacements = CopyContainerPlacements(containerPlacements);
             this.seats = CopySeats(seats);
             placedConsoles = new Dictionary<ConsoleId, PlacedConsoleState>();
+            placedBoards = new Dictionary<BoardId, PlacedBoardState>();
             this.playAreas = CopyPlayAreas(playAreas);
             templateObjectIds = new HashSet<TabletopObjectId>();
             templateContainerIds = new HashSet<ContainerId>();
@@ -201,6 +205,7 @@ namespace ConsoleCards.Core.Domain.Match
             readOnlyContainerPlacements = new ReadOnlyDictionary<ContainerId, ContainerPlacementState>(this.containerPlacements);
             readOnlySeats = new ReadOnlyDictionary<SeatId, SeatState>(this.seats);
             readOnlyPlacedConsoles = new ReadOnlyDictionary<ConsoleId, PlacedConsoleState>(placedConsoles);
+            readOnlyPlacedBoards = new ReadOnlyDictionary<BoardId, PlacedBoardState>(placedBoards);
             readOnlyPlayAreas = new ReadOnlyDictionary<PlayAreaId, PlayAreaState>(this.playAreas);
         }
 
@@ -227,6 +232,27 @@ namespace ConsoleCards.Core.Domain.Match
         public IReadOnlyDictionary<SeatId, SeatState> Seats => readOnlySeats;
 
         public IReadOnlyDictionary<ConsoleId, PlacedConsoleState> PlacedConsoles => readOnlyPlacedConsoles;
+
+        /// <summary>Game board mats placed on the table (doc 22 §15). Cards on them stay loose.</summary>
+        public IReadOnlyDictionary<BoardId, PlacedBoardState> PlacedBoards => readOnlyPlacedBoards;
+
+        public void AddPlacedBoard(PlacedBoardState board)
+        {
+            if (board == null) throw new ArgumentNullException(nameof(board));
+            if (placedBoards.ContainsKey(board.Id)) throw new ArgumentException("Board ID already exists in the Match.", nameof(board));
+            placedBoards.Add(board.Id, board);
+        }
+
+        public PlacedBoardState RemovePlacedBoard(BoardId boardId)
+        {
+            if (!placedBoards.TryGetValue(boardId, out PlacedBoardState board))
+            {
+                throw new KeyNotFoundException("Placed Board was not found.");
+            }
+
+            placedBoards.Remove(boardId);
+            return board;
+        }
 
         public IReadOnlyDictionary<PlayAreaId, PlayAreaState> PlayAreas => readOnlyPlayAreas;
 
