@@ -167,6 +167,10 @@
 - **Every Console has every slot:** 17 card slots (Main, 12 front symbol slots, 4 back button slots). In Trap Floor
   every slot but Main is an item slot (owner, 2026-10-15): the rules say how to play, the dos and don'ts, card counts and
   components, not where on the Console a card goes. Nothing is blocked when a mat is flipped in any game.
+- **Console Workbench (window):** `Console Cards > Console > Console Workbench`. The real Console prefab from above
+  with test cards (standard, Avatar size) and dice: Flip, move and resize slots and their colliders, add card slots or
+  die spots, drop test pieces to see where they snap (same symbol and magnet rules, die spot radius), run checks
+  (overlapping colliders, Trap Floor's four-seat spacing, prefab matches layout), compare sizes, and apply to the prefab.
 - **Layout editor (Scene view):** open `Real/ConsoleMat` and select its root. The slots of the chosen side (Front side /
   Back side) are drawn on the mat; drag a slot's centre square to move it and its corner dot to resize it; the dashed
   outline is where a card lies. Changes go to the layout asset, and with "Move prefab slots too" the prefab's slots,
