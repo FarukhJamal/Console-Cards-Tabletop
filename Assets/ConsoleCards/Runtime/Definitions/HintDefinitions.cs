@@ -41,6 +41,15 @@ namespace ConsoleCards.Definitions
         /// <summary>A pawn is picked up and dragged. Context: "own" (the turn player's pawn) or "other".</summary>
         public const string PawnDragged = "drag.pawn";
 
+        /// <summary>A turn starts. Context: "player" (a player's turn) or "floor" (the game's own turn).</summary>
+        public const string TurnStart = "turn.start";
+
+        /// <summary>A hidden piece was revealed. Context: what it is (for Trap Floor: Trap, Friend, Key, Ability…).</summary>
+        public const string ContentRevealed = "content.revealed";
+
+        /// <summary>Something happened in the game. Context: the game's activity (for example PlayerEliminated).</summary>
+        public const string GameActivity = "game.activity";
+
         /// <summary>The first step that can be undone was recorded.</summary>
         public const string UndoAvailable = "undo.available";
 
@@ -49,7 +58,7 @@ namespace ConsoleCards.Definitions
 
         public static readonly string[] Platform =
         {
-            TableReady, ToolboxPlacing, CardDragged, PawnDragged, UndoAvailable,
+            TableReady, ToolboxPlacing, CardDragged, PawnDragged, UndoAvailable, TurnStart, ContentRevealed, GameActivity,
         };
     }
 
@@ -60,7 +69,7 @@ namespace ConsoleCards.Definitions
         [SerializeField] private string stableId;
         [Tooltip("The event that shows it, for example table.ready, toolbox.placing or action.FlipConsole.")]
         [SerializeField] private string trigger;
-        [Tooltip("Optional: only when the event has this context (for example Console). Empty: any context.")]
+        [Tooltip("Optional: only when the event has one of these contexts, comma-separated (for example Ability,Friend). Empty: any.")]
         [SerializeField] private string context;
         [SerializeField, TextArea(2, 5)] private string text;
         [SerializeField] private HintKind kind;
@@ -94,8 +103,30 @@ namespace ConsoleCards.Definitions
 
         public bool Matches(string eventTrigger, string eventContext)
         {
-            return string.Equals(Trigger, eventTrigger, StringComparison.Ordinal)
-                && (string.IsNullOrEmpty(Context) || string.Equals(Context, eventContext, StringComparison.OrdinalIgnoreCase));
+            if (!string.Equals(Trigger, eventTrigger, StringComparison.Ordinal)) return false;
+            string contexts = Context;
+            if (string.IsNullOrWhiteSpace(contexts)) return true;
+            if (string.IsNullOrEmpty(eventContext)) return false;
+            // A comma-separated list matches any one of its names (no allocation).
+            int start = 0;
+            while (start <= contexts.Length)
+            {
+                int comma = contexts.IndexOf(',', start);
+                int end = comma < 0 ? contexts.Length : comma;
+                int from = start, to = end;
+                while (from < to && char.IsWhiteSpace(contexts[from])) from++;
+                while (to > from && char.IsWhiteSpace(contexts[to - 1])) to--;
+                if (to - from == eventContext.Length
+                    && string.Compare(contexts, from, eventContext, 0, eventContext.Length, StringComparison.OrdinalIgnoreCase) == 0)
+                {
+                    return true;
+                }
+
+                if (comma < 0) break;
+                start = comma + 1;
+            }
+
+            return false;
         }
     }
 

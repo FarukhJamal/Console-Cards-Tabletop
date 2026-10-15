@@ -14,6 +14,7 @@ namespace ConsoleCards.Presentation.Hints
     public sealed class HintService
     {
         private readonly List<HintLibraryDefinition> libraries = new List<HintLibraryDefinition>();
+        private readonly List<HintEntry> gameHints = new List<HintEntry>();
         private readonly HintSeenStore seen;
 
         public HintService(HintSeenStore seenStore)
@@ -28,32 +29,44 @@ namespace ConsoleCards.Presentation.Hints
             if (library != null && !libraries.Contains(library)) libraries.Add(library);
         }
 
+        /// <summary>The current game's hints, made from its rules (H2); replaces the previous game's.</summary>
+        public void SetGameHints(IReadOnlyList<HintEntry> hints)
+        {
+            gameHints.Clear();
+            if (hints == null) return;
+            for (int i = 0; i < hints.Count; i++)
+            {
+                if (hints[i] != null) gameHints.Add(hints[i]);
+            }
+        }
+
         /// <summary>The best hint for an event, or false when none may show. Nothing is recorded until it shows.</summary>
         public bool TryFind(string trigger, string context, out HintEntry hint)
         {
             hint = null;
             if (Level == HintLevel.Off || string.IsNullOrEmpty(trigger)) return false;
-            for (int l = 0; l < libraries.Count; l++)
-            {
-                IReadOnlyList<HintEntry> entries = libraries[l].Entries;
-                for (int i = 0; i < entries.Count; i++)
-                {
-                    HintEntry entry = entries[i];
-                    if (entry == null
-                        || string.IsNullOrEmpty(entry.StableId)
-                        || !entry.Matches(trigger, context)
-                        || (entry.Kind == HintKind.Tip && Level != HintLevel.Learning)
-                        || !seen.CanShow(entry.StableId, entry.MaxShows)
-                        || (hint != null && entry.Priority <= hint.Priority))
-                    {
-                        continue;
-                    }
-
-                    hint = entry;
-                }
-            }
-
+            for (int l = 0; l < libraries.Count; l++) Consider(libraries[l].Entries, trigger, context, ref hint);
+            Consider(gameHints, trigger, context, ref hint);
             return hint != null;
+        }
+
+        private void Consider(IReadOnlyList<HintEntry> entries, string trigger, string context, ref HintEntry best)
+        {
+            for (int i = 0; i < entries.Count; i++)
+            {
+                HintEntry entry = entries[i];
+                if (entry == null
+                    || string.IsNullOrEmpty(entry.StableId)
+                    || !entry.Matches(trigger, context)
+                    || (entry.Kind == HintKind.Tip && Level != HintLevel.Learning)
+                    || !seen.CanShow(entry.StableId, entry.MaxShows)
+                    || (best != null && entry.Priority <= best.Priority))
+                {
+                    continue;
+                }
+
+                best = entry;
+            }
         }
 
         public void MarkShown(HintEntry hint)

@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.0 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.1 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -12,8 +12,8 @@ Version 1.0 · 2026-10-15 · Owner's order: finish List 1, then List 2 (and the 
 | Rules content | The rules card covers how to play, dos and don'ts, card numbers and components used, not where cards go on the Console or controller (owner, 2026-10-15) | Recorded in doc 23 §7; applies to rules content and R4 hints |
 | R3 | House rules in game: propose a change from the rules card, everyone agrees, it is saved on this computer as a named rule set and shown on the card; saved sets are picked on the card; changed settings start at restart (doc 23 §8) | Done, approved by the owner |
 | R4 | Hints: reach while holding your pawn, a too-far move is explained with Undo move offered, the move count is a rule setting (doc 23 §9); landing triggers at once and the tile turns once the pawn is off (doc 18 §15.2) | Landing approved; reach reworked in H1 |
-| H1 | Hint system (doc 23 §10): hint data, service, hint strip, Tips switch, platform tips; reach as markers; movement in one straight line, 2 tiles, the Athlete 3 (doc 18 §15.2) | Written, to be checked |
-| H2 | Hint tags on rule lines; game hints made from the rules | To do |
+| H1 | Hint system (doc 23 §10): hint data, service, hint strip, Tips switch, platform tips; reach as markers; movement in one straight line, 2 tiles, the Athlete 3 (doc 18 §15.2) | Done, approved by the owner |
+| H2 | Hint tags on rule lines; game tips made from the rules in play; Trap Floor rules tagged (doc 23 §10) | Written, to be checked |
 | H3 | Trap Floor hint helpers (reach, why not, prizes, waiting Traps) | To do |
 | G2d | Remove the retired Search, Careful Search and Buy Ability code (doc 18) | To do |
 | Pink material | Pink material when a card is placed on the Main slot | Waiting for a screenshot |

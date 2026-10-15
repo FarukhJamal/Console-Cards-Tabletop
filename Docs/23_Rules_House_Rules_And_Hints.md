@@ -1,8 +1,8 @@
 # Console Cards — Rules, House Rules and Hints
 
 **Document ID:** 23_Rules_House_Rules_And_Hints
-**Version:** 0.9
-**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b, C1, R3 and R4 implemented (Trap Floor G2a applies the revised turn); hint system H1 implemented, H2–H3 planned (§10). Pings wait for multiplayer.
+**Version:** 0.10
+**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b, C1, R3 and R4 implemented (Trap Floor G2a applies the revised turn); hint system H1 and H2 implemented, H3 planned (§10). Pings wait for multiplayer.
 
 > **Contract note:** type names and field lists here are illustrative unless labelled **Approved Contract**. They describe the direction agreed with the owner, not fixed public APIs.
 
@@ -159,11 +159,45 @@ Two kinds of hint, built in three layers. **Rules say what, a game's code says w
 
 **Layer A: platform hints (the whole Console Cards system).** Tips about the table itself: the Toolbox, the Game Box and Base Box, Console mats and their flip and snapping, boards, dice, decks, the Hand, Undo. Each hint is data (`HintEntry`): an ID, the event that shows it, an optional context, its words, tip or reminder, a priority and how often it may show. The platform's set is the asset `Resources/PlatformHints` (`HintLibraryDefinition`), made by **Console Cards > Hints > Create Missing Platform Hints**; edit, add or remove hints freely.
 
-**Layer B: game hints, made from the rules (H2).** Each rule line may carry a hint tag: the event it applies on, what to point at, and its text, which is the rule's own words with its current value, so a house rule changes the hint too. Player-made games (doc 27, List 2) get hints by tagging their rules, with no code.
+**Layer B: game hints, made from the rules (H2, implemented).** Each rule line may carry a hint tag (the "Hint" fields on a rule entry):
+
+- **hintTrigger:** the event it shows on;
+- **hintContext:** optional; one name or a comma-separated list, for example `Ability,Friend`;
+- **hintPriority:** default 4;
+- **hintText:** optional; empty uses the rule's own words with its current value in bold, so a house rule changes the hint too;
+- **hintHelper:** optional, for H3.
+
+When a table loads, and whenever a house-rule set comes into play, the rules in play are turned into tips (`RuleHints`). A tip keeps the rule's ID (`rule.<game>.<rule>`), so "Got it" holds across house-rule sets, and it may show twice. Player-made games (doc 27, List 2) get hints by tagging their rules, with no code.
+
+**Trap Floor's tagged rules (H2):**
+
+| Rule | Event | Context | Priority |
+|---|---|---|---|
+| Draw up to {value} | `turn.start` | player | 4 |
+| Action abilities instead of moving | `turn.start` | player | 3 |
+| Move up to {value} tiles in a straight line (helper `trapfloor.reach`) | `drag.pawn` | own | 6 |
+| Land on a face-down tile and it flips | `content.revealed` | any | 2 |
+| Standing on an Ability or Friend? You may take it | `content.revealed` | Ability, Friend | 6 |
+| Reaction abilities when a Trap hits you | `content.revealed` | Trap | 6 |
+| A Trap that moves you flips the next tile | `content.revealed` | Trap | 3 |
+| After every turn the floor rolls and a tile collapses | `turn.start` | floor | 6 |
+| Knocked out? You come back next round | `game.activity` | PlayerEliminated | 6 |
+| Roll 2d6 to place the Exit | `game.activity` | ClaimedKey | 4 |
 
 **Layer C: game helpers (H3).** Hints a tag cannot express are worked out by a small piece of the game's code, named by the rule's tag and reading its numbers from the rules. Trap Floor's reach and "why not" (§9) are the first.
 
-**Events.** The platform's events (`HintTriggers`): `table.ready` (context `empty` or `game`), `toolbox.placing` (context: the catalog kind, such as Console, GameBoard, Die, Deck), `drag.card`, `drag.pawn` (context `own` or `other`), `undo.available`, and every accepted table step as `action.<kind>` (for example `action.FlipConsole`, `action.DrawCards`), so new actions are events without new code.
+**Events.** The platform's events (`HintTriggers`):
+
+- `table.ready` (context `empty` or `game`);
+- `toolbox.placing` (context: the catalog kind, such as Console, GameBoard, Die, Deck);
+- `drag.card`;
+- `drag.pawn` (context `own` or `other`);
+- `undo.available`;
+- every accepted table step as `action.<kind>` (for example `action.FlipConsole`, `action.DrawCards`), so new actions are events without new code;
+- game events every game can raise:
+  - `turn.start` (context `player` or `floor`);
+  - `content.revealed` (context: what was revealed, such as Trap, Friend, Key or Ability);
+  - `game.activity` (context: the game's activity, such as PlayerEliminated or ClaimedKey).
 
 **Levels (Table menu).** **Hints** off: nothing. Hints on and **Tips** off: reminders only (why a move is not allowed, turn help, reach). Both on: tips too (Learning). These are viewer settings, not table state.
 
@@ -174,6 +208,6 @@ Two kinds of hint, built in three layers. **Rules say what, a game's code says w
 | Stage | Content | Status |
 |---|---|---|
 | H1 | Hint data, the hint service and its seen record, the hint strip (Final UI prefab `HintStrip`, catalog `platform.hint-strip`, HUD), the Tips switch, the platform events and the starting platform tips; reach shown with markers; Trap Floor movement fixed to straight lines (2, the Athlete 3) | Implemented |
-| H2 | Hint tags on rule lines and the game's hint library built from the rules; Trap Floor rules tagged | Planned |
+| H2 | Hint tags on rule lines and game tips built from the rules in play; context lists; game events; Trap Floor rules tagged | Implemented |
 | H3 | Trap Floor helpers behind the tags: reach and "why not" (moved from §9), prizes, waiting Traps | Planned |
 

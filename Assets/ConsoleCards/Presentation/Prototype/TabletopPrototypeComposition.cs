@@ -4580,6 +4580,7 @@ namespace ConsoleCards.Presentation.Prototype
                 SetFullFeedback);
             RefreshUndoUi();
             RefreshTrapFloorStatusUi();
+            RefreshGameHints();
             RaiseHint(HintTriggers.TableReady, isGameSession ? "game" : "empty");
         }
 
@@ -4984,6 +4985,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private void FinishRuleCommit(string message)
         {
+            RefreshGameHints(); // tips follow the rules in play
             bool restartNeeded = templatesRuleSet != null && SettingsDiffer(templatesRuleSet, ActiveRuleSet);
             CloseRuleProposal(restartNeeded ? $"{message} Changed settings start when you restart." : message);
             RefreshRulesCard();
@@ -5060,6 +5062,21 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             shownHint = hint;
             hintService.MarkShown(hint);
+        }
+
+        // The game's tips come from its rules in play (H2); Empty Table has none.
+        private void RefreshGameHints()
+        {
+            EnsureHints();
+            bool isGame = activeSession != null
+                && activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom
+                && trapFloorGameDefinition != null;
+            hintService.SetGameHints(isGame
+                ? RuleHints.Collect(
+                    ActiveRuleSet,
+                    trapFloorTemplate != null ? trapFloorTemplate.ActiveMode.StableId : string.Empty,
+                    trapFloorGameDefinition.StableId)
+                : null);
         }
 
         // "Got it": never again on this computer.
@@ -16083,6 +16100,7 @@ namespace ConsoleCards.Presentation.Prototype
         private void AnnounceTurn()
         {
             if (trapFloorTurnState.IsCurrentFloorFailed) return;
+            RaiseHint(HintTriggers.TurnStart, trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn ? "player" : "floor");
             if (trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn)
             {
                 PlayerId active = trapFloorTurnState.ActivePlayerId;
@@ -16115,6 +16133,9 @@ namespace ConsoleCards.Presentation.Prototype
             Color colour = FeedbackColour(actor);
             string name = entry.ContentName ?? string.Empty;
             BoardFeedbackAt(entry, colour);
+            RaiseHint(HintTriggers.GameActivity, entry.Kind.ToString());
+            if (entry.Kind == TrapFloorActivityKind.RevealedFloorContent)
+                RaiseHint(HintTriggers.ContentRevealed, entry.ContentCategory.ToString());
             switch (entry.Kind)
             {
                 case TrapFloorActivityKind.RevealedFloorContent:

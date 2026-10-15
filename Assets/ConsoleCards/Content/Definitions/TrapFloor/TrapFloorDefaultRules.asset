@@ -71,6 +71,11 @@ MonoBehaviour:
       settingKey: controller.hand-size
       value: '10'
       displayValue: ''
+      hintTrigger: turn.start
+      hintContext: player
+      hintPriority: 4
+      hintText: 
+      hintHelper: 
       modeStableIds: []
     - stableId: tf-turn-move
       text: 'Move up to {value} tiles in one straight line: up, down, left or right. No diagonals and no turning. Or play an Action ability instead of moving.'
@@ -78,6 +83,11 @@ MonoBehaviour:
       settingKey: move.tiles
       value: '2'
       displayValue: ''
+      hintTrigger: drag.pawn
+      hintContext: own
+      hintPriority: 6
+      hintText: 
+      hintHelper: trapfloor.reach
       modeStableIds: []
     - stableId: tf-turn-move-athlete
       text: 'The Athlete moves up to {value} tiles instead.'
@@ -92,6 +102,11 @@ MonoBehaviour:
       settingKey: 
       value: ''
       displayValue: ''
+      hintTrigger: content.revealed
+      hintContext: 
+      hintPriority: 2
+      hintText: 
+      hintHelper: 
       modeStableIds: []
     - stableId: tf-turn-take
       text: 'Standing on a face-up Ability or Friend? You may take it: pay the Ability''s cost (a Friend is free). It goes to your Hand, or beside your Console if your Hand is full, and the tile becomes a hole. You are safe there and walk off next turn. Skip it and the next player to land there may take it.'
@@ -99,6 +114,11 @@ MonoBehaviour:
       settingKey: 
       value: ''
       displayValue: ''
+      hintTrigger: content.revealed
+      hintContext: Ability,Friend
+      hintPriority: 6
+      hintText: 
+      hintHelper: 
       modeStableIds: []
   - heading: 'Floor turn'
     numbered: 1
@@ -109,6 +129,11 @@ MonoBehaviour:
       settingKey: 
       value: ''
       displayValue: ''
+      hintTrigger: turn.start
+      hintContext: floor
+      hintPriority: 6
+      hintText: 
+      hintHelper: 
       modeStableIds:
       - trap-floor-mode-easy
       - trap-floor-mode-hard
@@ -129,6 +154,11 @@ MonoBehaviour:
       settingKey: 
       value: ''
       displayValue: ''
+      hintTrigger: turn.start
+      hintContext: player
+      hintPriority: 3
+      hintText: 
+      hintHelper: 
       modeStableIds: []
     - stableId: tf-ability-reaction
       text: 'Reaction abilities are played when a Trap hits you.'
@@ -136,6 +166,11 @@ MonoBehaviour:
       settingKey: 
       value: ''
       displayValue: ''
+      hintTrigger: content.revealed
+      hintContext: Trap
+      hintPriority: 6
+      hintText: 
+      hintHelper: 
       modeStableIds: []
     - stableId: tf-ability-cost
       text: 'Each card shows its cost. Pay it in full to take the card and again to play it; players never share a payment.'
@@ -212,6 +247,11 @@ MonoBehaviour:
       settingKey: 
       value: ''
       displayValue: ''
+      hintTrigger: content.revealed
+      hintContext: Trap
+      hintPriority: 3
+      hintText: 
+      hintHelper: 
       modeStableIds: []
     - stableId: tf-trap-spring
       text: 'Spring arrows follow the board as Player 1 sees it: up is toward the far side. Crane uses the two dice, first for the column, second for the row.'
@@ -233,6 +273,11 @@ MonoBehaviour:
       settingKey: 
       value: ''
       displayValue: ''
+      hintTrigger: game.activity
+      hintContext: PlayerEliminated
+      hintPriority: 6
+      hintText: 
+      hintHelper: 
       modeStableIds: []
   - heading: 'Goal'
     numbered: 0
@@ -274,6 +319,11 @@ MonoBehaviour:
       settingKey: 
       value: ''
       displayValue: ''
+      hintTrigger: game.activity
+      hintContext: ClaimedKey
+      hintPriority: 4
+      hintText: 
+      hintHelper: 
       modeStableIds: []
     - stableId: tf-goal-secret-exit
       text: 'Secret Exit: one player wins at once if they meet the Key requirement.'

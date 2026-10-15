@@ -35,6 +35,17 @@ namespace ConsoleCards.Definitions
         [SerializeField] private List<string> modeStableIds = new List<string>();
         [Tooltip("Choice settings: the values players can pick from when they propose a change (doc 23, R3).")]
         [SerializeField] private List<string> choices = new List<string>();
+        [Header("Hint (doc 23 §10, optional)")]
+        [Tooltip("The event that shows this rule as a tip, for example turn.start, drag.pawn or content.revealed. Empty: no hint.")]
+        [SerializeField] private string hintTrigger;
+        [Tooltip("Optional: only for these contexts, comma-separated (for example Ability,Friend). Empty: any.")]
+        [SerializeField] private string hintContext;
+        [Tooltip("Higher shows first when several hints match the same event.")]
+        [SerializeField] private int hintPriority = 4;
+        [Tooltip("Optional words for the tip. Empty: the rule itself, with its current value.")]
+        [SerializeField, TextArea(1, 4)] private string hintText;
+        [Tooltip("Optional (H3): the game helper that works out what to point at, for example trapfloor.reach.")]
+        [SerializeField] private string hintHelper;
 
         public string StableId => stableId;
         public string Text => text ?? string.Empty;
@@ -45,6 +56,14 @@ namespace ConsoleCards.Definitions
         public IReadOnlyList<string> ModeStableIds => modeStableIds;
         public IReadOnlyList<string> Choices => choices ?? (IReadOnlyList<string>)Array.Empty<string>();
         public bool HasSetting => settingKind != RuleSettingKind.None;
+        public bool HasHint => !string.IsNullOrWhiteSpace(hintTrigger);
+        public string HintTrigger => hintTrigger?.Trim() ?? string.Empty;
+        public string HintContext => hintContext?.Trim() ?? string.Empty;
+        public int HintPriority => hintPriority;
+        public string HintHelper => hintHelper?.Trim() ?? string.Empty;
+
+        /// <summary>The tip's words: its own text, or the rule with its current value in bold.</summary>
+        public string HintText => string.IsNullOrWhiteSpace(hintText) ? FormatText("<b>{0}</b>") : hintText;
 
         public bool AppliesToMode(string modeStableId)
         {
@@ -81,6 +100,11 @@ namespace ConsoleCards.Definitions
                 displayValue = valueChanged ? string.Empty : displayValue,
                 modeStableIds = new List<string>(modeStableIds ?? new List<string>()),
                 choices = new List<string>(choices ?? new List<string>()),
+                hintTrigger = hintTrigger,
+                hintContext = hintContext,
+                hintPriority = hintPriority,
+                hintText = hintText,
+                hintHelper = hintHelper,
             };
         }
 
