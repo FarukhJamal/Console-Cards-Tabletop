@@ -28,6 +28,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 2
+    side: 0
+    symbol: 0
   - ordinal: 2
     key: TopL
     kind: 0
@@ -39,6 +41,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 1
+    side: 0
+    symbol: 1
   - ordinal: 3
     key: TopC
     kind: 0
@@ -50,6 +54,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 1
+    side: 0
+    symbol: 1
   - ordinal: 4
     key: TopR
     kind: 0
@@ -61,6 +67,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 1
+    side: 0
+    symbol: 1
   - ordinal: 5
     key: RailL
     kind: 0
@@ -72,6 +80,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 1
+    side: 0
+    symbol: 3
   - ordinal: 6
     key: RailR
     kind: 0
@@ -83,6 +93,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 1
+    side: 0
+    symbol: 4
   - ordinal: 7
     key: BotL
     kind: 0
@@ -94,6 +106,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 1
+    side: 0
+    symbol: 5
   - ordinal: 8
     key: BotC
     kind: 0
@@ -105,6 +119,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 1
+    side: 0
+    symbol: 5
   - ordinal: 9
     key: BotR
     kind: 0
@@ -116,6 +132,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 1
+    side: 0
+    symbol: 5
   - ordinal: 10
     key: T01
     kind: 1
@@ -127,6 +145,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 11
     key: T02
     kind: 1
@@ -138,6 +158,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 12
     key: T03
     kind: 1
@@ -149,6 +171,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 13
     key: T04
     kind: 1
@@ -160,6 +184,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 14
     key: T05
     kind: 1
@@ -171,6 +197,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 1
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 15
     key: T06
     kind: 1
@@ -182,6 +210,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 16
     key: T07
     kind: 1
@@ -193,6 +223,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 17
     key: T08
     kind: 1
@@ -204,6 +236,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 18
     key: T09
     kind: 1
@@ -215,6 +249,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 19
     key: T10
     kind: 1
@@ -226,6 +262,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 1
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 20
     key: T11
     kind: 1
@@ -237,6 +275,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 21
     key: T12
     kind: 1
@@ -248,6 +288,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 22
     key: T13
     kind: 1
@@ -259,6 +301,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 23
     key: T14
     kind: 1
@@ -270,6 +314,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 24
     key: T15
     kind: 1
@@ -281,6 +327,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 1
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 25
     key: T16
     kind: 1
@@ -292,6 +340,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 26
     key: T17
     kind: 1
@@ -303,6 +353,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 27
     key: T18
     kind: 1
@@ -314,6 +366,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 28
     key: T19
     kind: 1
@@ -325,6 +379,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 29
     key: T20
     kind: 1
@@ -336,6 +392,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 1
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 30
     key: R1
     kind: 1
@@ -347,6 +405,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 31
     key: R2
     kind: 1
@@ -358,6 +418,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 32
     key: R3
     kind: 1
@@ -369,6 +431,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 33
     key: R4
     kind: 1
@@ -380,6 +444,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 1
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 34
     key: R5
     kind: 1
@@ -391,6 +457,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 35
     key: R6
     kind: 1
@@ -402,6 +470,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 36
     key: R7
     kind: 1
@@ -413,6 +483,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 37
     key: B01
     kind: 1
@@ -424,6 +496,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 38
     key: B02
     kind: 1
@@ -435,6 +509,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 39
     key: B03
     kind: 1
@@ -446,6 +522,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 40
     key: B04
     kind: 1
@@ -457,6 +535,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 41
     key: B05
     kind: 1
@@ -468,6 +548,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 1
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 42
     key: B06
     kind: 1
@@ -479,6 +561,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 43
     key: B07
     kind: 1
@@ -490,6 +574,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 44
     key: B08
     kind: 1
@@ -501,6 +587,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 45
     key: B09
     kind: 1
@@ -512,6 +600,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 46
     key: B10
     kind: 1
@@ -523,6 +613,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 1
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 47
     key: B11
     kind: 1
@@ -534,6 +626,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 48
     key: B12
     kind: 1
@@ -545,6 +639,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 49
     key: B13
     kind: 1
@@ -556,6 +652,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 50
     key: B14
     kind: 1
@@ -567,6 +665,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 51
     key: B15
     kind: 1
@@ -578,6 +678,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 1
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 52
     key: B16
     kind: 1
@@ -589,6 +691,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 53
     key: B17
     kind: 1
@@ -600,6 +704,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 54
     key: B18
     kind: 1
@@ -611,6 +717,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 55
     key: B19
     kind: 1
@@ -622,6 +730,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 56
     key: B20
     kind: 1
@@ -633,6 +743,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 1
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 57
     key: L1
     kind: 1
@@ -644,6 +756,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 58
     key: L2
     kind: 1
@@ -655,6 +769,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 59
     key: L3
     kind: 1
@@ -666,6 +782,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 60
     key: L4
     kind: 1
@@ -677,6 +795,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 1
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 61
     key: L5
     kind: 1
@@ -688,6 +808,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 62
     key: L6
     kind: 1
@@ -699,6 +821,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 63
     key: L7
     kind: 1
@@ -710,6 +834,8 @@ MonoBehaviour:
     defaultCapacity: 1
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 64
     key: G11
     kind: 1
@@ -721,6 +847,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 65
     key: G12
     kind: 1
@@ -732,6 +860,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 66
     key: G13
     kind: 1
@@ -743,6 +873,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 67
     key: G21
     kind: 1
@@ -754,6 +886,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 68
     key: G22
     kind: 1
@@ -765,6 +899,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 69
     key: G23
     kind: 1
@@ -776,6 +912,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 70
     key: G31
     kind: 1
@@ -787,6 +925,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 71
     key: G32
     kind: 1
@@ -798,6 +938,8 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
   - ordinal: 72
     key: G33
     kind: 1
@@ -809,3 +951,161 @@ MonoBehaviour:
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 0
+    side: 0
+    symbol: 0
+  - ordinal: 73
+    key: CornerTL
+    kind: 0
+    group: Corners
+    x: -3.05
+    z: 1.85
+    footprintWidth: 1.2
+    footprintDepth: 1.2
+    defaultCapacity: 0
+    marker: 0
+    defaultOrientation: 1
+    side: 0
+    symbol: 2
+  - ordinal: 74
+    key: CornerTR
+    kind: 0
+    group: Corners
+    x: 3.05
+    z: 1.85
+    footprintWidth: 1.2
+    footprintDepth: 1.2
+    defaultCapacity: 0
+    marker: 0
+    defaultOrientation: 1
+    side: 0
+    symbol: 6
+  - ordinal: 75
+    key: CornerBL
+    kind: 0
+    group: Corners
+    x: -3.05
+    z: -1.85
+    footprintWidth: 1.2
+    footprintDepth: 1.2
+    defaultCapacity: 0
+    marker: 0
+    defaultOrientation: 1
+    side: 0
+    symbol: 7
+  - ordinal: 76
+    key: CornerBR
+    kind: 0
+    group: Corners
+    x: 3.05
+    z: -1.85
+    footprintWidth: 1.2
+    footprintDepth: 1.2
+    defaultCapacity: 0
+    marker: 0
+    defaultOrientation: 1
+    side: 0
+    symbol: 8
+  - ordinal: 77
+    key: BtnB
+    kind: 0
+    group: Buttons
+    x: 1.605
+    z: 1.473
+    footprintWidth: 1.4
+    footprintDepth: 1.4
+    defaultCapacity: 0
+    marker: 0
+    defaultOrientation: 1
+    side: 1
+    symbol: 0
+  - ordinal: 78
+    key: BtnA
+    kind: 0
+    group: Buttons
+    x: 0.327
+    z: 0
+    footprintWidth: 1.4
+    footprintDepth: 1.4
+    defaultCapacity: 0
+    marker: 0
+    defaultOrientation: 1
+    side: 1
+    symbol: 0
+  - ordinal: 79
+    key: BtnY
+    kind: 0
+    group: Buttons
+    x: 2.883
+    z: 0
+    footprintWidth: 1.4
+    footprintDepth: 1.4
+    defaultCapacity: 0
+    marker: 0
+    defaultOrientation: 1
+    side: 1
+    symbol: 0
+  - ordinal: 80
+    key: BtnX
+    kind: 0
+    group: Buttons
+    x: 1.605
+    z: -1.459
+    footprintWidth: 1.4
+    footprintDepth: 1.4
+    defaultCapacity: 0
+    marker: 0
+    defaultOrientation: 1
+    side: 1
+    symbol: 0
+  - ordinal: 81
+    key: PadUp
+    kind: 2
+    group: DPad
+    x: -1.611
+    z: 0.628
+    footprintWidth: 0.6
+    footprintDepth: 0.6
+    defaultCapacity: 0
+    marker: 0
+    defaultOrientation: 0
+    side: 1
+    symbol: 0
+  - ordinal: 82
+    key: PadLeft
+    kind: 2
+    group: DPad
+    x: -2.235
+    z: 0
+    footprintWidth: 0.6
+    footprintDepth: 0.6
+    defaultCapacity: 0
+    marker: 0
+    defaultOrientation: 0
+    side: 1
+    symbol: 0
+  - ordinal: 83
+    key: PadRight
+    kind: 2
+    group: DPad
+    x: -0.99
+    z: 0
+    footprintWidth: 0.6
+    footprintDepth: 0.6
+    defaultCapacity: 0
+    marker: 0
+    defaultOrientation: 0
+    side: 1
+    symbol: 0
+  - ordinal: 84
+    key: PadDown
+    kind: 2
+    group: DPad
+    x: -1.611
+    z: -0.664
+    footprintWidth: 0.6
+    footprintDepth: 0.6
+    defaultCapacity: 0
+    marker: 0
+    defaultOrientation: 0
+    side: 1
+    symbol: 0
