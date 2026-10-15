@@ -2281,6 +2281,8 @@ namespace ConsoleCards.Presentation.Prototype
                     throw new InvalidOperationException(
                         gameTemplatesPanelError ?? "Empty Table startup failed.");
                 }
+
+                OfferProfileChoiceAtStart(); // doc 28, P2: with several profiles, ask who is playing
             }
             catch (Exception exception)
             {
@@ -4514,6 +4516,7 @@ namespace ConsoleCards.Presentation.Prototype
                 trapFloorGameDefinition != null && activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom
                     ? (Action)OpenCardArtPanel
                     : null);
+            RefreshProfileEntry(); // doc 28, P2: who is playing, on every table
             runtimeUi.ShowViewSettings(
                 trapFloorTemplate != null && activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom,
                 handsOnTable,
@@ -14117,7 +14120,7 @@ namespace ConsoleCards.Presentation.Prototype
                 text = entries.Count == 0
                     ? "No pictures have art keys yet: run Console Cards > Content > Fill Missing Art Keys."
                     : PictureFilePicker.IsAvailable
-                        ? "Choose a picture for any card. Your pictures stay on this computer."
+                        ? "Choose a picture for any card. Your pictures are saved in your profile."
                         : $"Choosing pictures is not available here. Packs go in {contentArt.Store.PacksFolder(contentArt.GameId)}.";
             }
 

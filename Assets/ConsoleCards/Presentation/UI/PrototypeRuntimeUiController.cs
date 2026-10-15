@@ -42,6 +42,8 @@ namespace ConsoleCards.Presentation.UI
         private bool activityLogUnavailable;
         private ContentArtPanelView contentArtPanelView;
         private RuleProposalPanelView ruleProposalPanelView;
+        private ProfilePanelView profilePanelView;
+        private bool profileEntryWarned;
         private HintStripView hintStripView;
         private bool hintStripWarned;
         private bool tipsSettingWarned;
@@ -226,6 +228,56 @@ namespace ConsoleCards.Presentation.UI
                 Debug.LogWarning(
                     "The Table menu has no Card art row: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
             }
+        }
+
+        /// <summary>Binds the Table menu's "Profile: name…" row (doc 28, P2); null hides it.</summary>
+        public void ShowProfileEntry(string profileName, Action openProfiles)
+        {
+            EnsureSessionBarView();
+            if (!sessionBarView.BindProfile(profileName, openProfiles) && openProfiles != null && !profileEntryWarned)
+            {
+                profileEntryWarned = true;
+                Debug.LogWarning(
+                    "The Table menu has no Profile row: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
+            }
+        }
+
+        /// <summary>Shows or refreshes the profile panel (doc 28, P2). False when its prefab is missing.</summary>
+        public bool ShowProfilePanel(ProfilePanelModel model, ProfilePanelActions actions, bool clearName)
+        {
+            try
+            {
+                EnsureService();
+                if (profilePanelView == null || !profilePanelView.IsAcquired)
+                {
+                    ReleaseView(tabletopPopupView);
+                    popupLayer.SetActive(false);
+                    ReleaseModalViews();
+                    componentToolboxView?.CloseToolbox();
+                    profilePanelView = uiService.AcquireCached<ProfilePanelView>(PrototypeUiPrefabIds.ProfilePanel);
+                    profilePanelView.Initialize(uiService);
+                }
+
+                modalLayer.SetActive(true);
+                profilePanelView.Bind(model, actions, clearName);
+                profilePanelView.Show();
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                Debug.LogWarning(
+                    "The profile panel is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs (Final UI). "
+                    + exception.Message);
+                return false;
+            }
+        }
+
+        public bool IsProfilePanelOpen => IsVisible(profilePanelView);
+
+        public void CloseProfilePanel()
+        {
+            ReleaseView(profilePanelView);
+            SetModalLayerOffUnlessHandover();
         }
 
         /// <summary>Binds the Shop entry on the session bar (doc 18 §15.4); null hides it.</summary>
@@ -436,7 +488,7 @@ namespace ConsoleCards.Presentation.UI
         private void SetModalLayerOffUnlessHandover()
         {
             if (modalLayer != null && !IsVisible(hotSeatHandoverView) && !IsVisible(contentArtPanelView)
-                && !IsVisible(ruleProposalPanelView))
+                && !IsVisible(ruleProposalPanelView) && !IsVisible(profilePanelView))
             {
                 modalLayer.SetActive(false);
             }
@@ -798,6 +850,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(activityLogView);
             ReleaseView(contentArtPanelView);
             ReleaseView(ruleProposalPanelView);
+            ReleaseView(profilePanelView);
             ReleaseView(hintStripView);
             CloseTabletopPopup();
         }
@@ -926,6 +979,7 @@ namespace ConsoleCards.Presentation.UI
         private void ReleaseModalViews()
         {
             ReleaseView(contentArtPanelView);
+            ReleaseView(profilePanelView);
             ReleaseView(quantityPopupView);
             ReleaseView(cardInspectPopupView);
             ReleaseView(actionAbilityPurchasePopupView);

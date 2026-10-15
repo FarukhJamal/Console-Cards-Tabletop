@@ -105,3 +105,11 @@ MonoBehaviour:
     prefab: {fileID: 7854292110026622655, guid: dc97e1497626c854ca1a04bf199ed0e2, type: 3}
     layer: 1
     retention: 0
+  - id: platform.profile-panel
+    prefab: {fileID: 7768008161598378609, guid: 3466275a82aeb2e4bb50f8def73f93b7, type: 3}
+    layer: 3
+    retention: 0
+  - id: platform.profile-row
+    prefab: {fileID: 7767898620544433748, guid: 51a31d854e7dbe448a7bf42d601ca698, type: 3}
+    layer: 3
+    retention: 1

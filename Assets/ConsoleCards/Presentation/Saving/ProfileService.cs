@@ -112,6 +112,18 @@ namespace ConsoleCards.Presentation.Saving
             return profile;
         }
 
+        /// <summary>Renames the active profile (its folder and ID stay the same). False with a reason.</summary>
+        public bool RenameActive(string displayName, out string error)
+        {
+            ProfileInfo profile = RequireActive();
+            if (!Store.TryCleanName(displayName, profile.id, out string name, out error)) return false;
+            string previous = profile.displayName;
+            profile.displayName = name;
+            if (Store.Save(profile, out error)) return true;
+            profile.displayName = previous;
+            return false;
+        }
+
         private void SetActive(ProfileInfo profile, bool raise)
         {
             profile.lastUsedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);

@@ -1,6 +1,6 @@
 # 28 — Player Profiles and Saving
 
-Version 0.1 · 2026-10-15 · Status: Owner's direction recorded; stage P1 (save system) written, to be checked
+Version 0.2 · 2026-10-16 · Status: Owner's direction recorded; P1 (save system) and P2 (profile panel) written, to be checked
 
 ## The owner's direction (2026-10-15)
 
@@ -70,5 +70,31 @@ Rules for new saving code:
 | Stage | Scope | Status |
 |---|---|---|
 | P1 | Save system: profiles next to the game, one save path (`SaveFiles`), the profile service, every existing save (pictures, packs, house rules, hints) moved into the profile, cards and decks files per game | Written, to be checked (not compiled yet) |
-| P2 | Profile screen in the game: pick a profile, make a new one, rename; the table's saves switch with it | Next |
+| P2 | Profile panel in the game (see below) | Written, to be checked (not compiled yet) |
 | Later | Match saves (doc 11) go in the profile too: `games/<game id>/saves/` | Planned |
+
+## P2 record — the profile panel (2026-10-16)
+
+- **Where:** Table menu > **Profile: name…** (under Card art), on every table, Empty Table included.
+- **At game start:** when there is more than one profile, the panel opens by itself and asks who is playing.
+  Closing it keeps the profile used last. It is asked once per run of the game.
+- **The panel shows:**
+  - **PLAYING AS:** the active profile.
+  - **Profiles:** every profile on this computer, with when it was last played. The others have a **Play as**
+    button; the active one shows PLAYING NOW.
+  - **Name box:**
+    - **New profile** makes a profile with that name and plays as it.
+    - **Rename this profile** changes the active profile's name; its folder stays the same.
+    - Names are 1–32 letters, and two profiles cannot share a name.
+  - **Open profiles folder.**
+- **Switching profile (Play as or New profile) starts the table again from the start.** Every store (pictures,
+  packs, cards, decks, rules, hints) then reads the new profile. What is on the table is not kept; the profile's
+  own saves are.
+- **Code:**
+  - `ProfilePanelView` and `ProfileRowView` (Final UI prefabs `ProfilePanel`, `ProfileRow`).
+  - `PrototypeRuntimeUiController.ShowProfilePanel` and `ShowProfileEntry`.
+  - `SessionBarView.BindProfile`.
+  - `TabletopPrototypeComposition.Profiles.cs`.
+  - `ProfileService.RenameActive` and `ProfileStore.TryCleanName`.
+- **Unity steps:** run *Console Cards > UI > Create Missing Gameplay UI Prefabs (Final UI)* (makes ProfilePanel and
+  ProfileRow), then *Add Missing Table Menu Rows (Final UI)* (adds the Profile row).

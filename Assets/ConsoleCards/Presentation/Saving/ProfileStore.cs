@@ -78,22 +78,44 @@ namespace ConsoleCards.Presentation.Saving
             return null;
         }
 
-        /// <summary>A new profile with its folder. Null with a reason when the name is not usable or saving fails.</summary>
-        public ProfileInfo Create(string displayName, out string error)
+        /// <summary>
+        /// A usable profile name: trimmed, 1 to <see cref="ProfileInfo.MaximumNameLength"/> letters, and not the name of
+        /// another profile (<paramref name="exceptProfileId"/> is the profile being renamed).
+        /// </summary>
+        public bool TryCleanName(string displayName, string exceptProfileId, out string name, out string error)
         {
-            string name = (displayName ?? string.Empty).Trim();
+            name = (displayName ?? string.Empty).Trim();
+            error = string.Empty;
             if (name.Length == 0)
             {
-                error = "a profile needs a name";
-                return null;
+                error = "Type a name first.";
+                return false;
             }
 
             if (name.Length > ProfileInfo.MaximumNameLength)
             {
-                error = $"a profile name has at most {ProfileInfo.MaximumNameLength} letters";
-                return null;
+                error = $"A profile name has at most {ProfileInfo.MaximumNameLength} letters.";
+                return false;
             }
 
+            List<ProfileInfo> profiles = List();
+            for (int i = 0; i < profiles.Count; i++)
+            {
+                if (string.Equals(profiles[i].displayName, name, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(profiles[i].id, exceptProfileId, StringComparison.OrdinalIgnoreCase))
+                {
+                    error = $"There is already a profile called {profiles[i].displayName}.";
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>A new profile with its folder. Null with a reason when the name is not usable or saving fails.</summary>
+        public ProfileInfo Create(string displayName, out string error)
+        {
+            if (!TryCleanName(displayName, null, out string name, out error)) return null;
             string now = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
             ProfileInfo profile = new ProfileInfo
             {

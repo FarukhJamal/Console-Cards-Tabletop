@@ -112,5 +112,7 @@ namespace ConsoleCards.Presentation.UI
         public const string ContentArtRow = "platform.content-art-row";
         public const string RuleProposalPanel = "platform.rule-proposal-panel";
         public const string HintStrip = "platform.hint-strip";
+        public const string ProfilePanel = "platform.profile-panel";
+        public const string ProfileRow = "platform.profile-row";
     }
 }

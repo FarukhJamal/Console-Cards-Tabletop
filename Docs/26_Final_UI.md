@@ -1,6 +1,6 @@
 # 26 — Final UI
 
-Version 0.2 · Status: Implemented (UI-F, 2026-10-13); Shop entry and Shop panel added 2026-10-15
+Version 0.3 · Status: Implemented (UI-F, 2026-10-13); Shop entry and Shop panel added 2026-10-15; profile panel and Profile row added 2026-10-16
 
 ## What it is
 
@@ -10,7 +10,7 @@ nothing else.
 
 | Prefab | Shows |
 |---|---|
-| SessionBar | Top-left game button, undo/redo, the Shop entry (shop icon and the word Shop; Trap Floor while the Shop is on) and the Table menu |
+| SessionBar | Top-left game button, undo/redo, the Shop entry (shop icon and the word Shop; Trap Floor while the Shop is on) and the Table menu (with "Profile: name…" under Card art) |
 | ComponentToolbox | + TOOLBOX button and panel |
 | RulesCard, RulesHeading, RulesLine | Rules card (left column) and its rows |
 | TrapFloorHud | Turn strip (top centre) and Trap Floor status card (top right) |
@@ -21,6 +21,7 @@ nothing else.
 | AbilityPurchase | The Shop: every Ability with its kind, cost and picture; Buy, or "Not for sale" without a price (header and list titles set from code) |
 | FocusedCardSelection, FocusedCardOption | Payment and "YOU LANDED ON" popup and its cards |
 | GameTemplateRow | Game list row |
+| ProfilePanel, ProfileRow | Player profile panel (doc 28): who is playing, every profile with Play as, a name box with New profile and Rename this profile, and Open profiles folder |
 
 ## Rules
 
@@ -35,3 +36,4 @@ nothing else.
 - **Canvas.** The UI root scales from 1920 × 1080, matching width and height equally (0.5).
 - The older copies in `Real/UI/` are no longer used and can be deleted.
 - **Adding to existing prefabs.** *Console Cards > UI > Add Missing Table Menu Rows (Final UI)* also adds the Shop entry to an existing SessionBar (before the Table button; icon `Content/UI/Session/Icons/IconShop.png`). *Create Missing Gameplay UI Prefabs (Final UI)* wires the Shop title labels in an existing AbilityPurchase. Nothing else in those prefabs changes.
+- **Profile (2026-10-16).** *Add Missing Table Menu Rows* adds the "Profile: name…" row under Card art in an existing SessionBar. *Create Missing Gameplay UI Prefabs* makes ProfilePanel and ProfileRow when they are missing.

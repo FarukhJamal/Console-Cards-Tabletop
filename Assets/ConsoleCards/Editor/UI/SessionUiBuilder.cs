@@ -259,7 +259,8 @@ namespace ConsoleCards.Editor.UI
         }
 
         /// <summary>
-        /// Adds the play and view rows (Seat, Hot-seat, Hands on table, Feedback, Card art; doc 18 §15.11, doc 25 F3) and
+        /// Adds the play and view rows (Seat, Hot-seat, Hands on table, Feedback, Card art, Profile; doc 18 §15.11, doc 25 F3,
+        /// doc 28) and
         /// the Shop entry on the bar (doc 18 §15.4) to an existing SessionBar prefab when they are missing. Rows that already exist and everything else in the
         /// prefab are kept as they are.
         /// </summary>
@@ -346,6 +347,17 @@ namespace ConsoleCards.Editor.UI
                 Button cardArt = MenuRow(menu, "CardArtRow", "Card art…", false);
                 cardArt.transform.SetSiblingIndex(next);
                 so.FindProperty("cardArtButton").objectReferenceValue = cardArt;
+                added++;
+            }
+
+            // The Profile row (doc 28, P2) goes right under Card art.
+            if (so.FindProperty("profileButton").objectReferenceValue == null)
+            {
+                Component cardArtRow = so.FindProperty("cardArtButton").objectReferenceValue as Component;
+                Button profile = MenuRow(menu, "ProfileRow", "Profile: Player 1…", false);
+                profile.transform.SetSiblingIndex(AfterRow(menu, cardArtRow, menu.childCount - 1));
+                so.FindProperty("profileButton").objectReferenceValue = profile;
+                so.FindProperty("profileLabel").objectReferenceValue = profile.transform.Find("Label").GetComponent<Text>();
                 added++;
             }
 

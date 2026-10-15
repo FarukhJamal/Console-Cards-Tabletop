@@ -62,6 +62,11 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private ToolboxSwitch fullFeedbackSwitch = new ToolboxSwitch();
         [SerializeField] private Button cardArtButton;
 
+        [Header("Profile (doc 28; optional, added by Add Missing Table Menu Rows)")]
+        [Tooltip("The Table menu row \"Profile: name…\" that opens the profile panel.")]
+        [SerializeField] private Button profileButton;
+        [SerializeField] private Text profileLabel;
+
         [Header("Shop (doc 18 §15.4; optional, added by Add Missing Table Menu Rows)")]
         [Tooltip("The Shop entry on the bar: the shop icon and the word Shop, between Redo and Table.")]
         [SerializeField] private Button shopButton;
@@ -89,6 +94,7 @@ namespace ConsoleCards.Presentation.UI
         private bool handsOnTableOn;
         private bool fullFeedbackOn;
         private Action openCardArt;
+        private Action openProfile;
         private Action openShop;
 
         public bool IsMenuOpen => menu != null && menu.gameObject.activeSelf;
@@ -295,6 +301,25 @@ namespace ConsoleCards.Presentation.UI
         }
 
         /// <summary>
+        /// Binds the optional "Profile: name…" row (doc 28, P2); null hides it. False when the prefab lacks it.
+        /// </summary>
+        public bool BindProfile(string profileName, Action openProfileAction)
+        {
+            RequireAcquired();
+            if (profileButton == null)
+            {
+                return false;
+            }
+
+            Clear(profileButton);
+            openProfile = openProfileAction;
+            if (profileLabel != null) profileLabel.text = $"Profile: {profileName}…";
+            profileButton.gameObject.SetActive(openProfile != null);
+            profileButton.onClick.AddListener(HandleProfile);
+            return true;
+        }
+
+        /// <summary>
         /// Binds the optional Shop entry on the bar (doc 18 §15.4): shown while <paramref name="openShopAction"/> is
         /// set (a game whose Shop is open), hidden for null. False when the prefab lacks it.
         /// </summary>
@@ -395,6 +420,7 @@ namespace ConsoleCards.Presentation.UI
             setHandsOnTable = null;
             setFullFeedback = null;
             openCardArt = null;
+            openProfile = null;
             openShop = null;
             openHelp = null;
             newTable = null;
@@ -554,6 +580,13 @@ namespace ConsoleCards.Presentation.UI
             action?.Invoke();
         }
 
+        private void HandleProfile()
+        {
+            Action action = openProfile;
+            CloseMenu();
+            action?.Invoke();
+        }
+
         private void HandleHelp()
         {
             CloseMenu();
@@ -639,6 +672,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(handsOnTableSwitch?.Button);
             Clear(fullFeedbackSwitch?.Button);
             Clear(cardArtButton);
+            Clear(profileButton);
             Clear(shopButton);
         }
 

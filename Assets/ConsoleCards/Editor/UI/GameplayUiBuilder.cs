@@ -37,6 +37,8 @@ namespace ConsoleCards.Editor.UI
         public const string ContentArtRowPath = Folder + "CardArtRow.prefab";
         public const string RuleProposalPanelPath = Folder + "RuleProposalPanel.prefab";
         public const string HintStripPath = Folder + "HintStrip.prefab";
+        public const string ProfilePanelPath = Folder + "ProfilePanel.prefab";
+        public const string ProfileRowPath = Folder + "ProfileRow.prefab";
         private const string FeedbackAudioPath = "Assets/ConsoleCards/Content/Audio/Feedback/";
         private const string SessionIconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
 
@@ -108,6 +110,8 @@ namespace ConsoleCards.Editor.UI
             Save<ContentArtPanelView>(ContentArtPanelPath, "CardArtPanel", BuildContentArtPanel, stretch: true);
             Save<RuleProposalPanelView>(RuleProposalPanelPath, "RuleProposalPanel", BuildRuleProposalPanel, stretch: true);
             Save<HintStripView>(HintStripPath, "HintStrip", BuildHintStrip, stretch: true);
+            Save<ProfileRowView>(ProfileRowPath, "ProfileRow", BuildProfileRow, stretch: false);
+            Save<ProfilePanelView>(ProfilePanelPath, "ProfilePanel", BuildProfilePanel, stretch: true);
             AddMissingRuleControls();
             AddMissingShopLabels();
 
@@ -161,6 +165,12 @@ namespace ConsoleCards.Editor.UI
             AssignCatalogEntry(PrototypeUiPrefabIds.RuleProposalPanel,
                 AssetDatabase.LoadAssetAtPath<RuleProposalPanelView>(RuleProposalPanelPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(PrototypeUiPrefabIds.ProfilePanel,
+                AssetDatabase.LoadAssetAtPath<ProfilePanelView>(ProfilePanelPath), UiLayer.Modal,
+                UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(PrototypeUiPrefabIds.ProfileRow,
+                AssetDatabase.LoadAssetAtPath<ProfileRowView>(ProfileRowPath), UiLayer.Modal,
+                UiRetention.Pooled);
             AssetDatabase.SaveAssets();
             Debug.Log("[Gameplay UI] Created any missing Final UI gameplay prefabs and pointed the UI prefab catalog at them.");
         }
@@ -361,7 +371,7 @@ namespace ConsoleCards.Editor.UI
             Label(Child("PicturesTitle", body), boldFont, 16, Muted, TextAnchor.MiddleLeft, "PICTURES");
             ScrollList(body, "PicturesViewport", 430f, out ScrollRect scroll, out RectTransform rows);
             Text status = Label(Child("Status", body), bodyFont, 15, Muted, TextAnchor.MiddleLeft,
-                "Pictures you choose stay on this computer.");
+                "Pictures you choose are saved in your profile.");
 
             SerializedObject so = new SerializedObject(view);
             so.FindProperty("dismissOverlayButton").objectReferenceValue = overlay;
@@ -403,6 +413,79 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("sourceLabel").objectReferenceValue = source;
             so.FindProperty("chooseButton").objectReferenceValue = choose;
             so.FindProperty("resetButton").objectReferenceValue = reset;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // ---------- player profiles (doc 28, P2) ----------
+
+        // Centred modal: who is playing, every profile with Play as, and a name box to make a new profile or rename
+        // this one. Switching profile starts a fresh table (the status line says so).
+        private static void BuildProfilePanel(RectTransform root, ProfilePanelView view)
+        {
+            Button overlay = DismissOverlay(root);
+            Vector2 centre = new Vector2(0.5f, 0.5f);
+            RectTransform panel = ColumnCard(root, "ProfilePanel", centre, centre, 700f);
+            BlockClicks(panel);
+            CardHeader(panel, "PLAYER PROFILE", 22, 58f);
+            Button close = HeaderCloseButton(panel);
+            RectTransform body = Body(panel, 20, 10f);
+            Label(Child("PlayingTitle", body), boldFont, 16, Muted, TextAnchor.MiddleLeft, "PLAYING AS");
+            Text active = Label(Child("ActiveName", body), titleFont, 26, Ink, TextAnchor.MiddleLeft, "Player 1");
+            Label(Child("ProfilesTitle", body), boldFont, 16, Muted, TextAnchor.MiddleLeft, "PROFILES ON THIS COMPUTER");
+            ScrollList(body, "ProfilesViewport", 300f, out ScrollRect scroll, out RectTransform rows);
+            Label(Child("NameTitle", body), boldFont, 16, Muted, TextAnchor.MiddleLeft, "NAME");
+            InputField nameInput = TextInput(body, "NameInput", 52f, "Type a profile name...");
+            nameInput.lineType = InputField.LineType.SingleLine;
+            nameInput.characterLimit = 32;
+            nameInput.textComponent.alignment = TextAnchor.MiddleLeft;
+            ((Text)nameInput.placeholder).alignment = TextAnchor.MiddleLeft;
+            RectTransform nameButtons = ButtonRow(body, TextAnchor.MiddleLeft);
+            Button create = GoButton(nameButtons, "CreateButton", "New profile", 220f, out _);
+            Button rename = PlainButton(nameButtons, "RenameButton", "Rename this profile", 250f, out _);
+            Text status = Label(Child("Status", body), bodyFont, 15, Muted, TextAnchor.MiddleLeft,
+                "Everything you make is saved in your profile.");
+            RectTransform folderRow = ButtonRow(body, TextAnchor.MiddleLeft);
+            Button openFolder = PlainButton(folderRow, "OpenFolderButton", "Open profiles folder", 250f, out _);
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("dismissOverlayButton").objectReferenceValue = overlay;
+            so.FindProperty("closeButton").objectReferenceValue = close;
+            so.FindProperty("activeNameLabel").objectReferenceValue = active;
+            so.FindProperty("rowsRoot").objectReferenceValue = rows;
+            so.FindProperty("scroll").objectReferenceValue = scroll;
+            so.FindProperty("nameInput").objectReferenceValue = nameInput;
+            so.FindProperty("createButton").objectReferenceValue = create;
+            so.FindProperty("renameButton").objectReferenceValue = rename;
+            so.FindProperty("openFolderButton").objectReferenceValue = openFolder;
+            so.FindProperty("statusLabel").objectReferenceValue = status;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // One profile: name and when it was last played, then Play as (or a PLAYING NOW mark for the active one).
+        private static void BuildProfileRow(RectTransform root, ProfileRowView view)
+        {
+            root.sizeDelta = new Vector2(620f, 72f);
+            Img(root, "ButtonOutlined", Cream).raycastTarget = false;
+            Row(root.gameObject, 16, 12, 8, 8, 12f, TextAnchor.MiddleLeft);
+            Size(root.gameObject, -1f, 72f);
+            RectTransform words = Child("Words", root);
+            Column(words.gameObject, 0, 0, 2, 2, 2f, TextAnchor.MiddleLeft);
+            LayoutElement wordsLayout = Size(words.gameObject, 300f, 60f, 200f);
+            wordsLayout.flexibleWidth = 1f;
+            Text name = Label(Child("Name", words), boldFont, 19, Ink, TextAnchor.MiddleLeft, "Player 1");
+            Text detail = Label(Child("Detail", words), bodyFont, 15, Muted, TextAnchor.MiddleLeft, "Last played today");
+            RectTransform mark = Child("ActiveMark", root);
+            Img(mark, "ButtonOutlined", Mustard).raycastTarget = false;
+            Size(mark.gameObject, 150f, 42f, 150f);
+            Label(Rect("Label", mark, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero),
+                titleFont, 14, Ink, TextAnchor.MiddleCenter, "PLAYING NOW");
+            Button playAs = GoButton(root, "PlayAsButton", "Play as", 150f, out _);
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("nameLabel").objectReferenceValue = name;
+            so.FindProperty("detailLabel").objectReferenceValue = detail;
+            so.FindProperty("playAsButton").objectReferenceValue = playAs;
+            so.FindProperty("activeMark").objectReferenceValue = mark.gameObject;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
