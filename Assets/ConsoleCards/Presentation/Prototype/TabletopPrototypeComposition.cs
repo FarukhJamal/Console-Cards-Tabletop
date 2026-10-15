@@ -85,6 +85,7 @@ namespace ConsoleCards.Presentation.Prototype
         [SerializeField] private Transform gameBoardVisualRoot;
         [Tooltip("Only imported renderers using this Board material remain visible; showcase Table/lighting geometry stays disabled.")]
         [SerializeField] private Material gameBoardVisualMaterial;
+        private GameBoardView adoptedGameBoard;
         [SerializeField] private PhysicalInteractionConfig physicalInteraction = new PhysicalInteractionConfig();
         private PhysicalTabletopSurfaces physicalSurfaceQuery;
         private LocalPhysicalObjectAuthority physicalAuthority;
@@ -2238,6 +2239,7 @@ namespace ConsoleCards.Presentation.Prototype
             try
             {
                 InitializeRuntimeUi();
+                AdoptCatalogGameBoard(); // C3c: the board comes from the catalog when it has one
                 EnsureContentArt(); // your pictures and the active pack load before the first table
                 PrepareTemplateCatalog();
                 if (!TryReplaceTable(TabletopSessionSelection.EmptyCustom))
@@ -2650,6 +2652,12 @@ namespace ConsoleCards.Presentation.Prototype
             EnsureInitialized();
             CloseContextMenu();
             toolboxPlacementIcon = entry.Icon;
+            if (TryCollectRealCards(entry, value, out List<ObjectDefinitionId> realCards))
+            {
+                BeginRealCardsPlacement(entry.DisplayName, realCards); // C3c: box tiles place real cards
+                return;
+            }
+
             switch (entry.Kind)
             {
                 case ComponentCatalogKind.Card:
@@ -2689,6 +2697,115 @@ namespace ConsoleCards.Presentation.Prototype
                     ShowMessage($"{entry.DisplayName} cannot be placed from the Toolbox yet.");
                     break;
             }
+        }
+
+        // C3c: an entry naming real cards (role "Card"): a Card entry places that card (2 or more: a deck of
+        // copies); any other entry places a deck of all its cards, each as often as its quantity.
+        private static bool TryCollectRealCards(ComponentCatalogEntry entry, int value, out List<ObjectDefinitionId> cards)
+        {
+            cards = null;
+            List<ObjectDefinitionId> kinds = new List<ObjectDefinitionId>();
+            List<int> counts = new List<int>();
+            IReadOnlyList<ComponentDefinitionLink> links = entry.Definitions;
+            for (int i = 0; links != null && i < links.Count; i++)
+            {
+                ComponentDefinitionLink link = links[i];
+                if (link == null || link.Role != ComponentDefinitionLink.CardRole) continue;
+                if (link.Definition is CardDefinition card && card.TryGetObjectDefinitionId(out ObjectDefinitionId cardId))
+                {
+                    kinds.Add(cardId);
+                    counts.Add(Math.Max(1, card.Quantity));
+                }
+                else if (link.Definition is AvatarDefinition avatar && Guid.TryParse(avatar.StableId, out Guid avatarGuid))
+                {
+                    kinds.Add(new ObjectDefinitionId(avatarGuid));
+                    counts.Add(1);
+                }
+            }
+
+            if (kinds.Count == 0) return false;
+            cards = new List<ObjectDefinitionId>();
+            if (entry.Kind == ComponentCatalogKind.Card)
+            {
+                for (int i = 0; i < Math.Max(1, value); i++) cards.Add(kinds[0]);
+            }
+            else
+            {
+                for (int i = 0; i < kinds.Count; i++)
+                {
+                    for (int c = 0; c < counts[i]; c++) cards.Add(kinds[i]);
+                }
+            }
+
+            int maximum = CreateTabletopComponentUseCase.MaximumDeckCardCount;
+            if (cards.Count > maximum)
+            {
+                Debug.LogWarning($"[Toolbox] {entry.DisplayName} has {cards.Count} cards; a deck holds {maximum}.");
+                cards.RemoveRange(maximum, cards.Count - maximum);
+            }
+
+            return true;
+        }
+
+        private void BeginRealCardsPlacement(string subject, List<ObjectDefinitionId> cards)
+        {
+            bool single = cards.Count == 1;
+            GameObject previewRoot = single
+                ? CreateCardBatchPlacementPreview(1)
+                : CreateDeckOfCardsPlacementPreview(cards.Count);
+            float rotation = localSeatLayout != null
+                ? localSeatLayout.PlayerZonePose.RotationDegrees
+                : 0f;
+            componentPlacementController.BeginCustomComponentPlacement(
+                single ? TabletopComponentKind.Card : TabletopComponentKind.Deck,
+                previewRoot,
+                rotation,
+                0,
+                toolboxSpawnSequence * ToolboxPhysicalOrderStride,
+                pose => CommitRealCardsPlacement(subject, cards, pose));
+            ShowPlacementHint(single ? subject : $"{subject} ({cards.Count} cards)");
+        }
+
+        // One command: the real card, or the Deck with its real face-down cards, so one Undo removes it.
+        private bool CommitRealCardsPlacement(string subject, List<ObjectDefinitionId> cards, TabletopPose requestedPose)
+        {
+            bool single = cards.Count == 1;
+            CreateTabletopComponentResult result = componentCreationUseCase.Execute(
+                matchState,
+                activeSession.Request.ActivePlayerIds,
+                new CreateTabletopComponentRequest(
+                    CreateCommandContext(),
+                    single ? TabletopComponentKind.Card : TabletopComponentKind.Deck,
+                    requestedPose,
+                    0,
+                    CardFace.FaceUp,
+                    AuthoritativeActionKind.CreateComponent,
+                    single ? 0 : cards.Count,
+                    ContainerArrivalFace.Unchanged,
+                    cards));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Add {subject} rejected: {result.Error}.");
+                return false;
+            }
+
+            toolboxSpawnSequence++;
+            for (int i = 0; i < result.CardIds.Count; i++)
+            {
+                CardInstanceState created = matchState.Cards[result.CardIds[i]];
+                CardView view = CreateCardView(created, ResolveCardLabel(created), out TabletopSelectionVisual selectionVisual);
+                cardViews.Add(view);
+                cardSelectionVisuals.Add(selectionVisual);
+            }
+
+            RefreshContainerCardViewSources();
+            ProjectCreatedToolboxComponent(result);
+            RefreshContainerCardViewSources();
+            RefreshSelectionPresenterAfterRuntimeProjection();
+            RefreshCardContentVisibility();
+            Physics.SyncTransforms();
+            ShowMessage(single ? $"Added {subject}." : $"Added {subject}: {cards.Count} cards.");
+            return true;
         }
 
         private void BeginDeckOfCardsPlacement(int quantity)
@@ -3537,7 +3654,7 @@ namespace ConsoleCards.Presentation.Prototype
                 case TabletopComponentKind.Card:
                 {
                     CardInstanceState card = matchState.Cards[result.ObjectId];
-                    CardView view = CreateCardView(card, "CARD", out TabletopSelectionVisual selectionVisual);
+                    CardView view = CreateCardView(card, ResolveCardLabel(card), out TabletopSelectionVisual selectionVisual);
                     cardViews.Add(view);
                     cardSelectionVisuals.Add(selectionVisual);
                     RefreshContainerCardViewSources();
@@ -10135,6 +10252,35 @@ namespace ConsoleCards.Presentation.Prototype
             PrepareGameBoardVisual(boardCollider);
         }
 
+        // C3c: the Base Box's Game Board entry replaces the scene board (which is switched off). Without the
+        // entry the scene board stays in use.
+        private void AdoptCatalogGameBoard()
+        {
+            if (adoptedGameBoard != null || componentLibrary == null || componentLibrary.BaseBox == null) return;
+            if (!componentLibrary.BaseBox.TryGetFirst(ComponentCatalogKind.GameBoard, out ComponentCatalogEntry entry)
+                || entry.Prefab == null)
+            {
+                return;
+            }
+
+            GameBoardView prefab = entry.Prefab.GetComponent<GameBoardView>();
+            if (prefab == null || !prefab.IsComplete)
+            {
+                Debug.LogWarning("[Board] The Game Board entry's prefab has no complete GameBoardView; the scene board stays.", this);
+                return;
+            }
+
+            Transform parent = gameBoardPhysicalSurface != null ? gameBoardPhysicalSurface.transform.parent : null;
+            GameBoardView instance = Instantiate(prefab, parent, false);
+            instance.name = entry.Prefab.name;
+            instance.gameObject.SetActive(false);
+            if (gameBoardPhysicalSurface != null) gameBoardPhysicalSurface.gameObject.SetActive(false);
+            gameBoardPhysicalSurface = instance.Surface;
+            gameBoardVisualRoot = instance.VisualRoot;
+            if (instance.VisualMaterial != null) gameBoardVisualMaterial = instance.VisualMaterial;
+            adoptedGameBoard = instance;
+        }
+
         private void SetGameBoardActive(bool active)
         {
             if (gameBoardPhysicalSurface == null)
@@ -10405,21 +10551,11 @@ namespace ConsoleCards.Presentation.Prototype
         {
             TabletopObjectId id = card.BaseState.Id;
             if (labelsByCardId.TryGetValue(id, out string label)) return label;
-            label = "Card";
-            Guid definition = card.BaseState.DefinitionId.Value;
-            IReadOnlyList<CardDefinitionData> cards = trapFloorTemplate?.GameDefinition?.Cards;
-            if (cards != null)
-            {
-                for (int i = 0; i < cards.Count; i++)
-                {
-                    if (Guid.TryParse(cards[i].StableId, out Guid stableId) && stableId == definition)
-                    {
-                        label = cards[i].DisplayName;
-                        break;
-                    }
-                }
-            }
-
+            label = TryGetCardLook(card.BaseState.DefinitionId, out CardDefinition definition)
+                ? definition.DisplayName
+                : TryGetAvatarLook(card.BaseState.DefinitionId, out AvatarDefinition avatar)
+                    ? avatar.DisplayName
+                    : "CARD";
             labelsByCardId[id] = label;
             return label;
         }
@@ -11835,14 +11971,16 @@ namespace ConsoleCards.Presentation.Prototype
             Color backColor = new Color(0.10f, 0.19f, 0.42f);
             Texture2D frontArtwork = null;
             Texture2D backArtwork = null;
-            if (TryGetAuthoredCardDefinition(card.BaseState.DefinitionId, out CardDefinition authoredDefinition))
+            // C3c: real cards look right on any table (a box tile on an Empty Table), not only in their game.
+            if (TryGetCardLook(card.BaseState.DefinitionId, out CardDefinition authoredDefinition))
             {
                 frontLabel = authoredDefinition.DisplayName;
                 frontArtwork = FrontArt(authoredDefinition);
                 backArtwork = BackArt(authoredDefinition);
             }
-            else if (TryGetAuthoredAvatar(card.BaseState.DefinitionId, out AvatarDefinition avatarDefinition))
+            else if (TryGetAvatarLook(card.BaseState.DefinitionId, out AvatarDefinition avatarDefinition))
             {
+                frontLabel = avatarDefinition.DisplayName;
                 frontArtwork = AvatarArt(avatarDefinition);
             }
             if (isFloorCard
@@ -12246,14 +12384,66 @@ namespace ConsoleCards.Presentation.Prototype
 
         private CardSizeClass CardSizeClassOf(CardInstanceState card)
         {
-            if (TryGetAuthoredCardDefinition(card.BaseState.DefinitionId, out CardDefinition definition))
+            if (TryGetCardLook(card.BaseState.DefinitionId, out CardDefinition definition))
             {
                 return definition.SizeClass;
             }
 
-            return TryGetAuthoredAvatar(card.BaseState.DefinitionId, out AvatarDefinition avatar)
+            return TryGetAvatarLook(card.BaseState.DefinitionId, out AvatarDefinition avatar)
                 ? avatar.CardSize
                 : CardSizeClass.Standard;
+        }
+
+        // How a card looks (name, art, size): its game's card definition, found in this table's game or in any
+        // game box of the library. Presentation only; game rules keep using TryGetAuthoredCardDefinition.
+        private bool TryGetCardLook(ObjectDefinitionId definitionId, out CardDefinition definition)
+        {
+            if (TryGetAuthoredCardDefinition(definitionId, out definition)) return true;
+            definition = null;
+            if (definitionId.IsEmpty) return false;
+            if (trapFloorGameDefinition != null && trapFloorGameDefinition.TryGetCard(definitionId, out definition)) return true;
+            IReadOnlyList<ComponentCatalog> boxes = componentLibrary != null ? componentLibrary.GameBoxes : null;
+            for (int i = 0; boxes != null && i < boxes.Count; i++)
+            {
+                GameDefinition game = boxes[i] != null ? boxes[i].Game : null;
+                if (game != null && game.TryGetCard(definitionId, out definition)) return true;
+            }
+
+            definition = null;
+            return false;
+        }
+
+        private bool TryGetAvatarLook(ObjectDefinitionId definitionId, out AvatarDefinition avatar)
+        {
+            if (TryGetAuthoredAvatar(definitionId, out avatar)) return true;
+            if (definitionId.IsEmpty) return false;
+            if (FindAvatar(trapFloorGameDefinition, definitionId, out avatar)) return true;
+            IReadOnlyList<ComponentCatalog> boxes = componentLibrary != null ? componentLibrary.GameBoxes : null;
+            for (int i = 0; boxes != null && i < boxes.Count; i++)
+            {
+                if (boxes[i] != null && FindAvatar(boxes[i].Game, definitionId, out avatar)) return true;
+            }
+
+            avatar = null;
+            return false;
+        }
+
+        private static bool FindAvatar(GameDefinition game, ObjectDefinitionId definitionId, out AvatarDefinition avatar)
+        {
+            avatar = null;
+            IReadOnlyList<AvatarDefinition> avatars = game != null ? game.Avatars : null;
+            for (int i = 0; avatars != null && i < avatars.Count; i++)
+            {
+                if (avatars[i] != null
+                    && Guid.TryParse(avatars[i].StableId, out Guid avatarGuid)
+                    && new ObjectDefinitionId(avatarGuid) == definitionId)
+                {
+                    avatar = avatars[i];
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static Color TrapFloorContentColor(TrapFloorFloorContentCategory category)

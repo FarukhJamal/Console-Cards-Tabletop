@@ -118,3 +118,12 @@ MonoBehaviour:
     showInToolbox: 0
     toolboxOrder: 8
     definitions: []
+  - id: e774b961-2e92-4c4a-bddb-0720ada53a0b
+    displayName: Game Board
+    description: The game's board
+    kind: 9
+    prefab: {fileID: 5656593755136628711, guid: 3c7c52756bbe517489f53d9435cb5b9f, type: 3}
+    icon: {fileID: 21300000, guid: 88538237e7ef7f44f81e7f49aaaf3652, type: 3}
+    showInToolbox: 0
+    toolboxOrder: 100
+    definitions: []

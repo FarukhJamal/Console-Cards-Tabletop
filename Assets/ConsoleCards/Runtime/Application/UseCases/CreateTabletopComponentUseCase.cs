@@ -55,7 +55,8 @@ namespace ConsoleCards.Application.UseCases
             CardFace initialCardFace = CardFace.FaceUp,
             AuthoritativeActionKind actionKind = AuthoritativeActionKind.CreateComponent,
             int deckCardCount = 0,
-            ContainerArrivalFace containerArrivalFace = ContainerArrivalFace.Unchanged)
+            ContainerArrivalFace containerArrivalFace = ContainerArrivalFace.Unchanged,
+            IReadOnlyList<ObjectDefinitionId> cardDefinitionIds = null)
         {
             if (!IsFinite(initialPose.Position.X)
                 || !IsFinite(initialPose.Position.Y)
@@ -72,6 +73,7 @@ namespace ConsoleCards.Application.UseCases
             ActionKind = actionKind;
             DeckCardCount = deckCardCount;
             ContainerArrivalFace = containerArrivalFace;
+            CardDefinitionIds = cardDefinitionIds;
         }
 
         public CommandContext Context { get; }
@@ -87,6 +89,12 @@ namespace ConsoleCards.Application.UseCases
         /// (doc 22, C2b). Unchanged keeps the Card's face.
         /// </summary>
         public ContainerArrivalFace ContainerArrivalFace { get; }
+        /// <summary>
+        /// Real cards from a catalog box (doc 22, C3c): a Card takes the one definition given; a Deck's cards take
+        /// these definitions in order (one per card, so the count equals <see cref="DeckCardCount"/>). Null: the
+        /// generic Toolbox card.
+        /// </summary>
+        public IReadOnlyList<ObjectDefinitionId> CardDefinitionIds { get; }
 
         private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
@@ -303,7 +311,9 @@ namespace ConsoleCards.Application.UseCases
                         cards.Add(new CardInstanceState(
                             new TabletopObjectState(
                                 deckCardIds[i],
-                                ToolboxComponentDefinitions.Card,
+                                request.CardDefinitionIds != null
+                                    ? request.CardDefinitionIds[i]
+                                    : ToolboxComponentDefinitions.Card,
                                 TabletopObjectKind.Card,
                                 request.InitialPose,
                                 containerId,
@@ -402,7 +412,9 @@ namespace ConsoleCards.Application.UseCases
             TabletopObjectKind objectKind = ToObjectKind(request.ComponentKind);
             TabletopObjectState baseState = new TabletopObjectState(
                 objectId,
-                DefinitionIdFor(request.ComponentKind),
+                request.ComponentKind == TabletopComponentKind.Card && request.CardDefinitionIds != null
+                    ? request.CardDefinitionIds[0]
+                    : DefinitionIdFor(request.ComponentKind),
                 objectKind,
                 initialPose,
                 ContainerId.Empty,
@@ -512,6 +524,27 @@ namespace ConsoleCards.Application.UseCases
                 return CreateTabletopComponentResult.Failure(
                     CommandResultStatus.Invalid,
                     CreateTabletopComponentError.DeckCardCountInvalid);
+            }
+
+            if (request.CardDefinitionIds != null)
+            {
+                bool shapeValid = request.ComponentKind == TabletopComponentKind.Card
+                    ? request.CardDefinitionIds.Count == 1
+                    : request.ComponentKind == TabletopComponentKind.Deck
+                        && request.CardDefinitionIds.Count == request.DeckCardCount
+                        && request.DeckCardCount > 0;
+                bool idsValid = true;
+                for (int i = 0; shapeValid && i < request.CardDefinitionIds.Count; i++)
+                {
+                    if (request.CardDefinitionIds[i].IsEmpty) idsValid = false;
+                }
+
+                if (!shapeValid || !idsValid)
+                {
+                    return CreateTabletopComponentResult.Failure(
+                        CommandResultStatus.Invalid,
+                        CreateTabletopComponentError.DeckCardCountInvalid);
+                }
             }
 
             bool pileKind = request.ComponentKind == TabletopComponentKind.Deck

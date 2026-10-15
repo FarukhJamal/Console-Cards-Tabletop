@@ -1,7 +1,7 @@
 {
   "name": "ConsoleCards.Editor",
   "rootNamespace": "ConsoleCards.Editor",
-  "references": ["ConsoleCards.Presentation", "ConsoleCards.Definitions"],
+  "references": ["ConsoleCards.Presentation", "ConsoleCards.Definitions", "ConsoleCards.Core", "ConsoleCards.GameTemplates"],
   "includePlatforms": ["Editor"],
   "autoReferenced": true
 }

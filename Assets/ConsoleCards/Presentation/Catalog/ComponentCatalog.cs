@@ -43,6 +43,8 @@ namespace ConsoleCards.Presentation.Catalog
         public const string BayStyleRole = "BayStyle";
         public const string ShapeRole = "Shape";
         public const string GameRole = "Game";
+        /// <summary>A real card (CardDefinition or AvatarDefinition) a box tile places (doc 22, C3c).</summary>
+        public const string CardRole = "Card";
 
         [SerializeField] private string role;
         [SerializeField] private ScriptableObject definition;

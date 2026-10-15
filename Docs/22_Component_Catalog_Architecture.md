@@ -1,8 +1,8 @@
 # Console Cards - Component Catalog Architecture
 
 **Document ID:** 22_Component_Catalog_Architecture
-**Version:** 0.3
-**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8); C3a written 2026-10-09 (every spawn from the catalogs, §9); C3b-1 written 2026-10-09 (local Console, Hand, Avatar card and pawn from the catalogs, §10); H-E written 2026-10-09 (Empty Table hand and its switch, §11); C3b-2 written 2026-10-09 (scene-owned pieces removed, §12). C3c pending; each needs its own approved plan. Binding rule: doc 21 principle 18.
+**Version:** 0.4
+**Status:** Stages C1, C1b and C2a written 2026-10-08 (catalog types, component library, Base Box catalog, pile prefabs, authored Toolbox); C2b written 2026-10-09 (Discard Pile as a full component, §8); C3a written 2026-10-09 (every spawn from the catalogs, §9); C3b-1 written 2026-10-09 (local Console, Hand, Avatar card and pawn from the catalogs, §10); H-E written 2026-10-09 (Empty Table hand and its switch, §11); C3b-2 written 2026-10-09 (scene-owned pieces removed, §12). C3c written 2026-10-15 (game board from the catalog, box tiles place real cards, §13); C3d (double-sided Console mat) next; each needs its own approved plan. Binding rule: doc 21 principle 18.
 **Source:** Owner decisions 2026-10-08 and the product material (box set, controller box and game box images).
 **Purpose:** Define how every component and its definitions are registered, so the table, the Toolbox and the UI resolve the same component from one place.
 
@@ -70,7 +70,8 @@
 - **C3b-1 (written):** the local Console and Hand, the local Avatar card and pawn become catalog spawns (§10).
 - **H-E (written):** an Empty Table hand, on by default, with a Toolbox footer switch (§11).
 - **C3b-2 (written, §12):** the unused scene pieces (scene Console, Hand, loose card, pawn and token, the first-prototype deck, stacks A and B and discard pile), their fields and dead code removed; the tests for the removed pieces removed and the rest updated (owner choice A).
-- **C3c:** game board and mapping board prefabs; Controller and Trap Floor boxes filled, and their tiles place real game pieces (§6).
+- **C3c (written, §13):** game board prefab from the catalog; Controller and Game boxes filled, and their tiles place real cards. The separate mapping board is dropped: the controller mapping is the Console mat's back side (C3d).
+- **C3d (planned):** the double-sided Console mat (12 symbol slots + Main on the front, controller mapping on the back), symbol snapping, flip and duplicate (§14 when written).
 
 ## 6. Open items
 
@@ -126,3 +127,23 @@
 - **Scene:** the nine first-prototype prefab instances are gone (loose card, pawn and token; deck, stacks A and B, discard pile; Hand; Console), with their composition fields (`cardView`, `pawnView`, `tokenView`, their selection visuals and highlight roots, `sceneDeckVisual`, `sceneStackAVisual`, `sceneStackBVisual`, `sceneDiscardPileVisual`, `sceneHandVisual`, `sceneConsoleView`, `sceneConsoleSlotViews`, `sceneConsoleSlotVisuals`). The empty `TabletopObjects` and `Containers` roots stay.
 - **Composition:** the first-prototype deck, discard and stack A/B paths are removed (their IDs were always empty in Trap Floor and Empty Table), with the old developer-panel Shuffle / Draw 1 / Draw 3 / Merge buttons and the public `ShuffleDeck()`, `DrawOne`, `DrawThree`, `DrawCards(int)`, `MergeStackAOntoStackB/BOntoA`, `DeckView`, `DiscardPileView`, `DeckContainerId`, `DiscardContainerId`, `StackAContainerId`, `StackBContainerId`. Trap Floor's Floormaster deck and discard refresh through `ApplyLayout` of their template containers. The coin area takes its plate material from the catalog Hand prefab. The Trap Floor status line shows the hand count in place of the old deck/discard counts.
 - **Tests (owner choice A):** `TabletopPrototypeCompositionTests` and `TabletopM3PrototypeSceneTests` are removed: every case built or loaded the first-prototype composition. `TabletopPrototypeSceneStructureTests` now expects no scene-owned pieces and drops its prefab-instance case. The other tests are unchanged.
+
+## 13. Game board and real-card box tiles (C3c, 2026-10-15)
+
+- **Game Board entry:** `Console Cards > Toolbox > Create Game Board Prefab from Scene` saves the scene board, exactly as
+  authored, as `Content/Prefabs/Final/World/GameBoard.prefab` (with a `GameBoardView` naming its surface, visual and
+  board material) and adds a Base Box entry "Game Board" (kind GameBoard, not in the Toolbox). At start the composition
+  uses that prefab and switches the scene board off; without the entry the scene board stays in use. An existing
+  prefab is never overwritten.
+- **Real cards from the Toolbox:** a catalog entry can link real cards with the role `Card` (a `CardDefinition` or an
+  `AvatarDefinition`). A Card entry places that card (2 or more: a Deck of copies); any other entry places a Deck of all
+  its cards, each as often as its quantity (at most 100). Runtime: `CreateTabletopComponentRequest.CardDefinitionIds`
+  gives the created cards their definitions in the same one command (one Undo step; kept by Undo, Redo and seat
+  switches).
+- **Boxes filled:** `Console Cards > Toolbox > Fill Controller and Game Boxes` adds, without changing existing entries:
+  the Controller box's **Controller Deck** (every card that stands for a controller input: 6 each of Up, Down, Left,
+  Right, A, B, X, Y = 48), one deck tile per content set of each Game box's game (Trap Floor: Abilities, Floor Traps,
+  Floor Friends, Floor Keys, Floor Exits, Floor Abilities), and an **Avatars** tile; then it syncs the Toolbox tiles.
+- **Real cards look right on any table:** name, art and size come from the card's game found in this table's game or
+  any Game box, so box tiles work on an Empty Table too. Game rules still use only the running game's cards.
+- **Avatar size:** done in A1 (Large size class, `largeCardVisualScale`); no separate Avatar card prefab.
