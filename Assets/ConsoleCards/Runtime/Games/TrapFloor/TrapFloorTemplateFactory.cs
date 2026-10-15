@@ -557,9 +557,10 @@ namespace ConsoleCards.Games.TrapFloor
             return mainSlot.DefaultOrientation == ConsoleSlotOrientation.Landscape ? 90f : 0f;
         }
 
-        // Doc 22 §14: the layout can have more Card slots than Trap Floor's Main and Side slots (the mat's corner
-        // slots and the back's A/B/X/Y). Every Console has every slot, so those follow the Side slots in layout
-        // order. Trap Floor's rules never use them; players may. Without a layout there are none.
+        // Doc 22 §14: the layout can have more Card slots than Trap Floor's authored Main and Side slots (the mat's
+        // corner slots and the back's A/B/X/Y). Every Console has every slot, so those follow the Side slots in
+        // layout order. The rules do not say where on the Console a card goes (owner, 2026-10-15): every slot but
+        // Main is an item slot. Without a layout there are none.
         private static IReadOnlyList<int> ResolveExtraConsoleSlotCapacities(ConsoleLayoutData consoleLayout, int sideSlotCount)
         {
             if (consoleLayout == null) return Array.Empty<int>();
@@ -569,6 +570,14 @@ namespace ConsoleCards.Games.TrapFloor
             int[] capacities = new int[extraCount];
             for (int i = 0; i < extraCount; i++) capacities[i] = consoleLayout.CardSlotCapacities[used + i];
             return capacities;
+        }
+
+        private static List<ContainerId> ConcatSlotIds(ContainerId[] first, ContainerId[] second)
+        {
+            List<ContainerId> ids = new List<ContainerId>(first.Length + second.Length);
+            ids.AddRange(first);
+            ids.AddRange(second);
+            return ids;
         }
 
         private static ConsoleSlotDefinitionData ResolveConsoleSlot(
@@ -842,7 +851,7 @@ namespace ConsoleCards.Games.TrapFloor
                 seatId,
                 handId,
                 mainSlotId,
-                sideSlotIds,
+                ConcatSlotIds(sideSlotIds, extraSlotIds),
                 controllerDeckId,
                 actionAbilityAreaId,
                 avatarId,

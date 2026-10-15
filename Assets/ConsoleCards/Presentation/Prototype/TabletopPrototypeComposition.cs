@@ -255,6 +255,11 @@ namespace ConsoleCards.Presentation.Prototype
         private readonly Dictionary<TabletopObjectId, TrapFloorCoordinate?> landingPawnTiles =
             new Dictionary<TabletopObjectId, TrapFloorCoordinate?>();
         private bool landingCheckPending;
+        // Owner, 2026-10-15: a tile the active pawn lands on turns over only once no pawn stands on it (the pawn
+        // moves aside or ahead), or when the turn ends. Its card still counts for the player who landed.
+        private readonly HashSet<TabletopObjectId> landedFloorCards = new HashSet<TabletopObjectId>();
+        private TabletopObjectId waitingLandingFloorCardId;
+        private PlayerId waitingLandingActor;
         private TrapFloorAbilityResolutionState trapFloorAbilityResolutionState;
         private TrapFloorAbilityResolutionService trapFloorAbilityResolutionService;
         private TrapFloorPendingSearchState trapFloorPendingSearchState;
@@ -701,6 +706,9 @@ namespace ConsoleCards.Presentation.Prototype
                 handTrayRig?.SetCleared(false, true);
                 handoverLogCount = 0; // a new or reset table starts a new log
                 shownActivityLogCount = -1;
+                landedFloorCards.Clear();
+                waitingLandingFloorCardId = TabletopObjectId.Empty;
+                waitingLandingActor = PlayerId.Empty;
             }
 
             StopUndoTrackingCurrentMatch();
@@ -4929,6 +4937,7 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
+            RevealWaitingLandingTile(true); // the tile under the pawn turns over first, then the turn ends
             PlayerId actor = trapFloorTurnState.ActivePlayerId;
             List<string> lines = new List<string>(4);
             if (PendingEndTurnEffects(actor, lines) == 0)
@@ -5038,6 +5047,11 @@ namespace ConsoleCards.Presentation.Prototype
             BeginUndoBatch();
             try
             {
+                if (trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn)
+                {
+                    RevealWaitingLandingTile(true); // a tile still waiting turns over before the turn passes
+                }
+
                 // A Trap left waiting is applied before the turn passes (G2c); only a Reaction prevents it.
                 if (!trapFloorTurnState.IsCurrentFloorFailed
                     && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
@@ -5866,7 +5880,7 @@ namespace ConsoleCards.Presentation.Prototype
                     Array.Empty<TabletopObjectId>()));
             if (!result.Succeeded) return false;
             if (TryGetCardView(floorCardId, out CardView floorCardView))
-                floorCardView.ApplyAcceptedState();
+                RevealFloorCardView(floorCardView);
             RefreshCardContentVisibility();
             activeFloorRevealActivity = result.RevealedActivity;
             flippedName = result.FloorCard.Content.DisplayName;
@@ -7328,7 +7342,7 @@ namespace ConsoleCards.Presentation.Prototype
             trapFloorPendingSearchState.Clear();
             ReplaceCurrentUndoStateForSearchAssistance();
             if (TryGetCardView(floorCardId, out CardView floorCardView))
-                floorCardView.ApplyAcceptedState();
+                RevealFloorCardView(floorCardView);
             RefreshCardContentVisibility();
             selectionPresenter?.Refresh();
             activeFloorRevealActivity = result.RevealedActivity;
@@ -8549,6 +8563,120 @@ namespace ConsoleCards.Presentation.Prototype
                     ? tile
                     : (TrapFloorCoordinate?)null;
             }
+
+            // After Undo, Redo or a seat switch: the active pawn still on a tile it landed on keeps that tile waiting.
+            waitingLandingFloorCardId = TabletopObjectId.Empty;
+            waitingLandingActor = PlayerId.Empty;
+            if (trapFloorTurnState != null
+                && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                && TryGetTrapFloorPlayerSetup(trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition active)
+                && TryReadPawnTile(active.PawnId, out TrapFloorCoordinate activeTile)
+                && IsHiddenUsableTile(activeTile)
+                && trapFloorTemplate.TryGetFloorCardId(activeTile, out TabletopObjectId waitingId)
+                && landedFloorCards.Contains(waitingId))
+            {
+                waitingLandingFloorCardId = waitingId;
+                waitingLandingActor = trapFloorTurnState.ActivePlayerId;
+            }
+        }
+
+        private void RevealFloorCardView(CardView floorCardView)
+        {
+            floorCardView.ApplyAcceptedState();
+            BeginCardFlipTurn(floorCardView); // the same turn-over as any card flip
+        }
+
+        private bool IsAnyPawnOnFloorCard(TabletopObjectId floorCardId)
+        {
+            for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+            {
+                if (TryReadPawnTile(trapFloorTemplate.Players[i].PawnId, out TrapFloorCoordinate tile)
+                    && trapFloorTemplate.TryGetFloorCardId(tile, out TabletopObjectId id)
+                    && id == floorCardId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Turns the waiting tile over through the landing reveal, for the player who landed on it. At the end of a
+        // turn a pawn still on it hops up while it turns (the automatic flip); otherwise it runs once no pawn is on it.
+        private void RevealWaitingLandingTile(bool turnEnds)
+        {
+            if (waitingLandingFloorCardId.IsEmpty
+                || trapFloorTemplate == null
+                || trapFloorRevealFloorUseCase == null
+                || matchState == null)
+            {
+                return;
+            }
+
+            TabletopObjectId floorCardId = waitingLandingFloorCardId;
+            PlayerId actor = waitingLandingActor;
+            if (!turnEnds && IsAnyPawnOnFloorCard(floorCardId)) return;
+            waitingLandingFloorCardId = TabletopObjectId.Empty;
+            waitingLandingActor = PlayerId.Empty;
+            if (!trapFloorTemplate.TryGetFloorCardState(matchState, floorCardId, out TrapFloorFloorCardState floorCard)
+                || floorCard.IsRevealed
+                || (trapFloorCollapseState != null && trapFloorCollapseState.IsCollapsed(floorCardId)))
+            {
+                return;
+            }
+
+            if (turnEnds) HopPawnsOffFloorCard(floorCardId);
+            TrapFloorRevealFloorResult result = trapFloorRevealFloorUseCase.Execute(
+                matchState,
+                new TrapFloorRevealFloorCommand(
+                    CreateCommandContext(actor),
+                    floorCardId,
+                    TrapFloorSearchKind.Landing,
+                    Array.Empty<TabletopObjectId>()));
+            if (!result.Succeeded)
+            {
+                ShowMessage($"Landing flip rejected: {result.Error}.");
+                return;
+            }
+
+            if (TryGetCardView(floorCardId, out CardView floorCardView))
+                RevealFloorCardView(floorCardView);
+            RefreshCardContentVisibility();
+            selectionPresenter?.Refresh();
+            activeFloorRevealActivity = result.RevealedActivity;
+            ShowFocusedSearchReveal(result);
+            RefreshTrapFloorStatusUi();
+            ShowMessage(
+                $"{FormatPlayerShortName(result.RevealedActivity.ActorPlayerId)}'s tile turned over: "
+                + $"{result.FloorCard.Content.DisplayName}.");
+        }
+
+        // The pawn on a tile turning at the end of a turn lifts and lands again in place (Presentation only).
+        private void HopPawnsOffFloorCard(TabletopObjectId floorCardId)
+        {
+            for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+            {
+                TabletopObjectId pawnId = trapFloorTemplate.Players[i].PawnId;
+                if (!TryReadPawnTile(pawnId, out TrapFloorCoordinate tile)
+                    || !trapFloorTemplate.TryGetFloorCardId(tile, out TabletopObjectId id)
+                    || id != floorCardId)
+                {
+                    continue;
+                }
+
+                for (int v = 0; v < pawnViews.Count; v++)
+                {
+                    PawnView pawnView = pawnViews[v];
+                    if (pawnView == null || !pawnView.IsBound || pawnView.ObjectId != pawnId) continue;
+                    Transform hopVisual = pawnView.transform.Find("VisualRoot");
+                    StartPawnHop(
+                        pawnView,
+                        hopVisual,
+                        hopVisual != null ? hopVisual.position : pawnView.transform.position,
+                        presentationTransitions.Capture(pawnView.transform));
+                    break;
+                }
+            }
         }
 
         private bool IsHiddenUsableTile(TrapFloorCoordinate tile)
@@ -8629,6 +8757,12 @@ namespace ConsoleCards.Presentation.Prototype
                 landingPawnTiles[pawnId] = tile;
             }
 
+            // The tile waiting from an earlier landing turns once no pawn stands on it.
+            if (!waitingLandingFloorCardId.IsEmpty)
+            {
+                RevealWaitingLandingTile(false);
+            }
+
             if (!landedTile.HasValue && otherPawnOnHiddenTile)
             {
                 // UX-1 hint: moving another player's pawn never flips; say whose pawn does.
@@ -8650,29 +8784,13 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
-            TrapFloorRevealFloorResult result = trapFloorRevealFloorUseCase.Execute(
-                matchState,
-                new TrapFloorRevealFloorCommand(
-                    CreateCommandContext(trapFloorTurnState.ActivePlayerId),
-                    floorCardId,
-                    TrapFloorSearchKind.Landing,
-                    Array.Empty<TabletopObjectId>()));
-            if (!result.Succeeded)
-            {
-                ShowMessage($"Landing flip rejected: {result.Error}.");
-                return;
-            }
-
-            if (TryGetCardView(floorCardId, out CardView floorCardView))
-                floorCardView.ApplyAcceptedState();
-            RefreshCardContentVisibility();
-            selectionPresenter?.Refresh();
-            activeFloorRevealActivity = result.RevealedActivity;
-            ShowFocusedSearchReveal(result);
-            RefreshTrapFloorStatusUi();
+            // The tile waits: it turns over once the pawn is off it (aside or ahead), or when the turn ends.
+            landedFloorCards.Add(floorCardId);
+            waitingLandingFloorCardId = floorCardId;
+            waitingLandingActor = trapFloorTurnState.ActivePlayerId;
             ShowMessage(
-                $"{FormatPlayerShortName(result.RevealedActivity.ActorPlayerId)} landed on "
-                + $"{result.FloorCard.Content.DisplayName}.");
+                $"{FormatPlayerShortName(trapFloorTurnState.ActivePlayerId)} landed on a face-down tile. "
+                + "It turns over when the pawn moves off it, or when the turn ends.");
         }
 
         private void OpenActionAbilityPurchase()

@@ -159,14 +159,19 @@
   works as before and offers no Flip.
 - **Layout data:** each slot has a `side` (Front, Back) and a `symbol` (None, Square, Circle, Star, Cross, Diamond,
   Triangle, Plus, Minus); a new slot kind `Die` marks a spot for one die (not a container). New entries, appended
-  (ordinals after the existing 72): `CornerTL` Circle, `CornerTR` Triangle, `CornerBL` Plus, `CornerBR` Minus (front
+  (ordinals after the existing 72; corners are 1.0 × 1.0 so neighbouring seats' corners stay apart): `CornerTL` Circle, `CornerTR` Triangle, `CornerBL` Plus, `CornerBR` Minus (front
   card slots); `BtnB`, `BtnA`, `BtnY`, `BtnX` (back card slots, beside their buttons: B above, A left, Y right, X
   below); `PadUp`, `PadLeft`, `PadRight`, `PadDown` (back die spots on the D-pad arrows). Existing slots get their
   symbols: `TopL/C/R` Square, `BotL/C/R` Diamond, `RailL` Star, `RailR` Cross. Positions were measured from the
   pictures; the asset is the place to adjust them.
-- **Every Console has every slot:** 17 card slots (Main, 12 front symbol slots, 4 back button slots). Trap Floor keeps
-  its Main and 8 side slots for its rules; the 8 extra slots (corners and buttons) follow them on every seat Console and
-  no Trap Floor rule uses them.
+- **Every Console has every slot:** 17 card slots (Main, 12 front symbol slots, 4 back button slots). In Trap Floor
+  every slot but Main is an item slot (owner, 2026-10-15): the rules say how to play, the dos and don'ts, card counts and
+  components, not where on the Console a card goes. Nothing is blocked when a mat is flipped in any game.
+- **Layout editor (Scene view):** open `Real/ConsoleMat` and select its root. The slots of the chosen side (Front side /
+  Back side) are drawn on the mat; drag a slot's centre square to move it and its corner dot to resize it; the dashed
+  outline is where a card lies. Changes go to the layout asset, and with "Move prefab slots too" the prefab's slots,
+  anchors, colliders and feedback plates follow (also "Apply layout to this Console"). The menu tool runs the same
+  sync.
 - **Side facing up (Runtime):** `ConsoleState.ShowsBack`, kept by Undo, Redo and seat switches; `FlipConsoleUseCase`
   (action `FlipConsole`) turns a mat over. Cards stay in their slots: the side facing down keeps its cards out of
   sight under the mat, and its slots take no drops and cannot be picked from.
@@ -185,8 +190,8 @@
   is up (through physical authority; one Undo step). The same rows are in the die's right-click menu while it is on an
   arrow.
 - **Card turn-over:** every card flip (F or the card menu) now lifts the card and turns it over, the old face turning
-  away and the new face turning down; then the reveal flash. Only the face visuals move. Trap Floor's floor reveal is
-  unchanged (see the open point below).
-- **Open points:** Trap Floor's floor-card reveal could use the same turn-over; the symbol rule is applied by the drop
+  away and the new face turning down; then the reveal flash. Only the face visuals move. Trap Floor's floor tiles turn the
+  same way, once no pawn is on them (doc 18 §15.2).
+- **Open points:** the symbol rule is applied by the drop
   (Presentation), not by the Runtime transfer; Trap Floor's own placements (for example a prize to a side slot) ignore
   symbols (all cards have None today).

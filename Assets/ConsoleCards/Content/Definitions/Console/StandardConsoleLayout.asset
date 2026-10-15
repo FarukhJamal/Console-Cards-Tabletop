@@ -959,8 +959,8 @@ MonoBehaviour:
     group: Corners
     x: -3.05
     z: 1.85
-    footprintWidth: 1.2
-    footprintDepth: 1.2
+    footprintWidth: 1
+    footprintDepth: 1
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 1
@@ -972,8 +972,8 @@ MonoBehaviour:
     group: Corners
     x: 3.05
     z: 1.85
-    footprintWidth: 1.2
-    footprintDepth: 1.2
+    footprintWidth: 1
+    footprintDepth: 1
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 1
@@ -985,8 +985,8 @@ MonoBehaviour:
     group: Corners
     x: -3.05
     z: -1.85
-    footprintWidth: 1.2
-    footprintDepth: 1.2
+    footprintWidth: 1
+    footprintDepth: 1
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 1
@@ -998,8 +998,8 @@ MonoBehaviour:
     group: Corners
     x: 3.05
     z: -1.85
-    footprintWidth: 1.2
-    footprintDepth: 1.2
+    footprintWidth: 1
+    footprintDepth: 1
     defaultCapacity: 0
     marker: 0
     defaultOrientation: 1

@@ -24,16 +24,21 @@ namespace ConsoleCards.Editor.ConsoleMat
         public const string BackMaterialPath = "Assets/ConsoleCards/Content/Materials/Console/ConsoleMatBack.mat";
 
         private const string FacesName = "MatFaces";
+
+        // 1.0 keeps the corner slots of neighbouring seats in a four-seat ring apart (Trap Floor's seat check needs
+        // 0.15). The first version used 1.2; such entries are corrected once.
+        private const float CornerSize = 1.0f;
+        private const float FirstCornerSize = 1.2f;
         private const float FaceGap = 0.002f;
 
         // Positions are console-local (origin at the mat centre, +x right, +z toward the top of the picture),
         // measured from the front and back pictures. Back slots are given as seen with the back facing up.
         private static readonly SlotEntry[] RequiredEntries =
         {
-            new SlotEntry("CornerTL", ConsoleLayoutSlotKind.Card, "Corners", -3.05f, 1.85f, 1.2f, 1.2f, ConsoleMatSide.Front, ConsoleSymbol.Circle),
-            new SlotEntry("CornerTR", ConsoleLayoutSlotKind.Card, "Corners", 3.05f, 1.85f, 1.2f, 1.2f, ConsoleMatSide.Front, ConsoleSymbol.Triangle),
-            new SlotEntry("CornerBL", ConsoleLayoutSlotKind.Card, "Corners", -3.05f, -1.85f, 1.2f, 1.2f, ConsoleMatSide.Front, ConsoleSymbol.Plus),
-            new SlotEntry("CornerBR", ConsoleLayoutSlotKind.Card, "Corners", 3.05f, -1.85f, 1.2f, 1.2f, ConsoleMatSide.Front, ConsoleSymbol.Minus),
+            new SlotEntry("CornerTL", ConsoleLayoutSlotKind.Card, "Corners", -3.05f, 1.85f, CornerSize, CornerSize, ConsoleMatSide.Front, ConsoleSymbol.Circle),
+            new SlotEntry("CornerTR", ConsoleLayoutSlotKind.Card, "Corners", 3.05f, 1.85f, CornerSize, CornerSize, ConsoleMatSide.Front, ConsoleSymbol.Triangle),
+            new SlotEntry("CornerBL", ConsoleLayoutSlotKind.Card, "Corners", -3.05f, -1.85f, CornerSize, CornerSize, ConsoleMatSide.Front, ConsoleSymbol.Plus),
+            new SlotEntry("CornerBR", ConsoleLayoutSlotKind.Card, "Corners", 3.05f, -1.85f, CornerSize, CornerSize, ConsoleMatSide.Front, ConsoleSymbol.Minus),
             new SlotEntry("BtnB", ConsoleLayoutSlotKind.Card, "Buttons", 1.605f, 1.473f, 1.4f, 1.4f, ConsoleMatSide.Back, ConsoleSymbol.None),
             new SlotEntry("BtnA", ConsoleLayoutSlotKind.Card, "Buttons", 0.327f, 0f, 1.4f, 1.4f, ConsoleMatSide.Back, ConsoleSymbol.None),
             new SlotEntry("BtnY", ConsoleLayoutSlotKind.Card, "Buttons", 2.883f, 0f, 1.4f, 1.4f, ConsoleMatSide.Back, ConsoleSymbol.None),
@@ -70,6 +75,7 @@ namespace ConsoleCards.Editor.ConsoleMat
 
             ConsoleLayoutDefinition layout = binding.Layout;
             int addedEntries = AddMissingLayoutEntries(layout, out int symbolsSet);
+            int correctedCorners = CorrectCornerSizes(layout);
             ConsoleLayoutData layoutData = layout.ToData();
 
             Material front = EnsureMaterial(FrontMaterialPath, FrontTexturePath);
@@ -78,11 +84,13 @@ namespace ConsoleCards.Editor.ConsoleMat
             GameObject root = PrefabUtility.LoadPrefabContents(PrefabPath);
             int addedSlots;
             bool addedFaces;
+            int syncedSlots;
             try
             {
                 addedSlots = AddMissingSlots(root, layoutData);
+                syncedSlots = SyncSlotsToLayout(root, layoutData, false);
                 addedFaces = AddFaces(root, layoutData, front, back);
-                if (addedSlots > 0 || addedFaces)
+                if (addedSlots > 0 || syncedSlots > 0 || addedFaces)
                 {
                     PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
                 }
@@ -94,7 +102,7 @@ namespace ConsoleCards.Editor.ConsoleMat
 
             AssetDatabase.SaveAssets();
             Debug.Log($"[Console] Double-sided mat: {addedEntries} layout entries added, {symbolsSet} edge symbols set, "
-                + $"{addedSlots} slots added to the prefab, {(addedFaces ? "front and back pictures added" : "mat pictures already there")}."
+                + $"{correctedCorners} corner sizes corrected, {addedSlots} slots added and {syncedSlots} moved to match the layout, {(addedFaces ? "front and back pictures added" : "mat pictures already there")}."
                 + (front == null || back == null ? " The front or back picture is missing; the mat shows without it." : string.Empty));
         }
 
@@ -150,6 +158,77 @@ namespace ConsoleCards.Editor.ConsoleMat
             }
 
             return added;
+        }
+
+        private static int CorrectCornerSizes(ConsoleLayoutDefinition layout)
+        {
+            SerializedObject so = new SerializedObject(layout);
+            SerializedProperty slots = so.FindProperty("slots");
+            int corrected = 0;
+            for (int i = 0; i < slots.arraySize; i++)
+            {
+                SerializedProperty slot = slots.GetArrayElementAtIndex(i);
+                if (!slot.FindPropertyRelative("key").stringValue.StartsWith("Corner")) continue;
+                SerializedProperty width = slot.FindPropertyRelative("footprintWidth");
+                SerializedProperty depth = slot.FindPropertyRelative("footprintDepth");
+                if (!Mathf.Approximately(width.floatValue, FirstCornerSize) || !Mathf.Approximately(depth.floatValue, FirstCornerSize)) continue;
+                width.floatValue = CornerSize;
+                depth.floatValue = CornerSize;
+                corrected++;
+            }
+
+            if (corrected > 0)
+            {
+                so.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(layout);
+            }
+
+            return corrected;
+        }
+
+        /// <summary>
+        /// Puts every Console slot and its anchor where the layout says, with the layout's footprint (collider and
+        /// feedback plates). The layout asset is the one source; the prefab follows it. Returns how many slots
+        /// changed. With recordUndo, the change can be undone in the Editor (used by the Scene view editor).
+        /// </summary>
+        public static int SyncSlotsToLayout(GameObject root, ConsoleLayoutData layout, bool recordUndo)
+        {
+            ConsoleView view = root.GetComponent<ConsoleView>();
+            if (view == null) return 0;
+            List<ConsoleSlotView> slotViews = new List<ConsoleSlotView>(root.GetComponentsInChildren<ConsoleSlotView>(true));
+            slotViews.Sort((a, b) => a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
+            IReadOnlyList<ConsoleLayoutSlotData> cardSlots = layout.CardSlots;
+            IReadOnlyList<Transform> anchors = view.SlotAnchors;
+            int changed = 0;
+            for (int i = 0; i < slotViews.Count && i < cardSlots.Count; i++)
+            {
+                ConsoleLayoutSlotData data = cardSlots[i];
+                Transform slot = slotViews[i].transform;
+                Vector3 slotPosition = new Vector3(data.X, slot.localPosition.y, data.Z);
+                BoxCollider collider = slot.GetComponent<BoxCollider>();
+                bool slotMoved = (slot.localPosition - slotPosition).sqrMagnitude > 0.000001f;
+                bool resized = collider != null
+                    && (Mathf.Abs(collider.size.x - data.FootprintWidth) > 0.0005f || Mathf.Abs(collider.size.z - data.FootprintDepth) > 0.0005f);
+                Transform anchor = i < anchors.Count ? anchors[i] : null;
+                Vector3 anchorPosition = anchor != null ? new Vector3(data.X, anchor.localPosition.y, data.Z) : Vector3.zero;
+                bool anchorMoved = anchor != null && (anchor.localPosition - anchorPosition).sqrMagnitude > 0.000001f;
+                if (!slotMoved && !resized && !anchorMoved) continue;
+
+                if (recordUndo)
+                {
+                    Undo.RecordObject(slot, "Move Console slot");
+                    if (collider != null) Undo.RecordObject(collider, "Resize Console slot");
+                    if (anchor != null) Undo.RecordObject(anchor, "Move Console slot");
+                    foreach (Transform child in slot) Undo.RecordObject(child, "Resize Console slot");
+                }
+
+                slot.localPosition = slotPosition;
+                if (anchor != null) anchor.localPosition = anchorPosition;
+                ShapeSlot(slot, data);
+                changed++;
+            }
+
+            return changed;
         }
 
         // One slot (a Console Slot prefab instance, like the existing ones) and one anchor per layout Card slot.

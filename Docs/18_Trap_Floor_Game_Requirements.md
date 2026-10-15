@@ -1,7 +1,7 @@
 # Console Cards - Trap Floor Game Requirements
 
 **Document ID:** 18_Trap_Floor_Game_Requirements
-**Version:** 1.12
+**Version:** 1.13
 **Status:** Approved with Open Decisions
 **Authoritative source:** User-approved Console Cards System & Games direction supplied 2026-09-21, superseding conflicting historical Trap Floor direction
 **Purpose:** Define the current approved minimum Game-specific direction for Trap Floor while keeping provisional design values open and preserving manual tabletop play.
@@ -221,7 +221,8 @@ The card's own text states exactly what it does (for example, *"Push a player wh
 
 **Implementation (G2a, 2026-10-12):**
 
-- **Flip on landing.** When the active player's pawn is dropped on a face-down tile, the tile flips for free through the reveal rules ("Landing" reveal, no payment). Undo reverses the pawn move and the flip together. Only the active player's own pawn changing tile triggers it.
+- **Flip on landing.** When the active player's pawn is dropped on a face-down tile, the tile flips for free through the reveal rules ("Landing" reveal, no payment). Only the active player's own pawn changing tile triggers it.
+- **The tile turns once no pawn is on it (owner, 2026-10-15).** A real card cannot be turned with a pawn on it, so the landed tile waits: it turns over when the pawn is moved off it (aside or ahead onto the next tile) and no other pawn stands on it, or automatically when the turn ends (the pawn hops up while the tile turns, then any end-of-turn warning shows). Its card still counts for the player who landed, as if the pawn had stayed. The tile turns over with the same lift-and-turn as every card flip. Undo reverses the move and the turn together; a tile still waiting after an Undo keeps waiting.
 - **Taking a prize.** On a face-up Ability or Friend under the active player's pawn, the turn menu offers *Take …*. An Ability's cost is paid with the C1 payment step (choose cards, place them in the Console, Confirm Payment); a Friend, or an Ability with no cost set yet, is free.
 - **Where it goes.** A copy of the card goes to the player's Hand, or to the Action stack beside the Console when the Hand already holds the hand limit.
 - **The tile becomes a hole** (shown as HOLE, counted as collapsed). The player who took it is safe and walks off next turn; a reward never eliminates.
