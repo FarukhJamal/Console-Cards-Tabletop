@@ -20,6 +20,8 @@ namespace ConsoleCards.Presentation.Feedback
         [SerializeField] private BoardFeedbackArrow moveArrow;
         [Tooltip("Tiles in reach while the turn player holds their pawn (doc 23, hints). Empty: the move-target marker is used.")]
         [SerializeField] private BoardFeedbackMarker reachTile;
+        [Tooltip("The tile the floor dice point at (the Floorfall collapse target, doc 23 H3). Empty: the move-target marker is used.")]
+        [SerializeField] private BoardFeedbackMarker collapseTarget;
         [Header("Placement")]
         [SerializeField] private float tileMarkerLift = 0.03f;
         [SerializeField] private float trapWarningLift = 0.9f;
@@ -37,6 +39,7 @@ namespace ConsoleCards.Presentation.Feedback
         public BoardFeedbackMarker CollapseBurst => collapseBurst;
         public BoardFeedbackArrow MoveArrow => moveArrow;
         public BoardFeedbackMarker ReachTile => reachTile != null ? reachTile : moveTarget;
+        public BoardFeedbackMarker CollapseTarget => collapseTarget != null ? collapseTarget : moveTarget;
         public float TileMarkerLift => tileMarkerLift;
         public float TrapWarningLift => trapWarningLift;
         public float TrapKick => trapKick;

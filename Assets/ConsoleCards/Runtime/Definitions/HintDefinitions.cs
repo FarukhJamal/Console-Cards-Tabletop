@@ -41,6 +41,9 @@ namespace ConsoleCards.Definitions
         /// <summary>A pawn is picked up and dragged. Context: "own" (the turn player's pawn) or "other".</summary>
         public const string PawnDragged = "drag.pawn";
 
+        /// <summary>A pawn was put down on another space. Context: "own" (the turn player's pawn) or "other".</summary>
+        public const string PawnMoved = "pawn.moved";
+
         /// <summary>A turn starts. Context: "player" (a player's turn) or "floor" (the game's own turn).</summary>
         public const string TurnStart = "turn.start";
 
@@ -58,7 +61,8 @@ namespace ConsoleCards.Definitions
 
         public static readonly string[] Platform =
         {
-            TableReady, ToolboxPlacing, CardDragged, PawnDragged, UndoAvailable, TurnStart, ContentRevealed, GameActivity,
+            TableReady, ToolboxPlacing, CardDragged, PawnDragged, PawnMoved, UndoAvailable, TurnStart, ContentRevealed,
+            GameActivity,
         };
     }
 

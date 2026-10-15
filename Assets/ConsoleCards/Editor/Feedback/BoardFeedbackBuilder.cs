@@ -72,6 +72,13 @@ namespace ConsoleCards.Editor.Feedback
                 Flat("Outline", m.transform, outline, new Vector2(0.72f, 0.98f), 0.004f);
                 return SetMarker(m, pulseSpeed: 2.5f, pulseScale: 0.025f, bobHeight: 0f, spin: 0f);
             });
+            // Hints (doc 23, H3): the tile the floor dice point at, a strong glow with an outline.
+            BoardFeedbackMarker collapseTarget = MarkerPrefab("CollapseTarget", false, 0.6f, m =>
+            {
+                Flat("Glow", m.transform, glow, new Vector2(0.8f, 1.05f), 0f);
+                Flat("Outline", m.transform, outline, new Vector2(0.74f, 1f), 0.004f);
+                return SetMarker(m, pulseSpeed: 6f, pulseScale: 0.06f, bobHeight: 0f, spin: 0f);
+            });
 
             if (!File.Exists(SetPath))
             {
@@ -85,20 +92,20 @@ namespace ConsoleCards.Editor.Feedback
                 so.FindProperty("collapseBurst").objectReferenceValue = collapseBurst;
                 so.FindProperty("moveArrow").objectReferenceValue = arrow;
                 so.FindProperty("reachTile").objectReferenceValue = reachTile;
+                so.FindProperty("collapseTarget").objectReferenceValue = collapseTarget;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
             else
             {
-                // Fill only what the existing set is missing (the reach marker came later); keep the rest.
+                // Fill only what the existing set is missing (the reach and collapse-target markers came later);
+                // keep the rest.
                 BoardFeedbackSet existingSet = AssetDatabase.LoadAssetAtPath<BoardFeedbackSet>(SetPath);
                 SerializedObject so = existingSet != null ? new SerializedObject(existingSet) : null;
-                SerializedProperty reachProperty = so?.FindProperty("reachTile");
-                if (reachProperty != null && reachProperty.objectReferenceValue == null)
+                bool added = FillMissing(so, "reachTile", reachTile) | FillMissing(so, "collapseTarget", collapseTarget);
+                if (added)
                 {
-                    reachProperty.objectReferenceValue = reachTile;
                     so.ApplyModifiedPropertiesWithoutUndo();
                     EditorUtility.SetDirty(existingSet);
-                    Debug.Log($"[Board Feedback] Added the reach marker to {SetPath}.");
                 }
                 else
                 {
@@ -108,6 +115,16 @@ namespace ConsoleCards.Editor.Feedback
 
             AssetDatabase.SaveAssets();
             Debug.Log("[Board Feedback] Created any missing board feedback prefabs, materials and the feedback set.");
+        }
+
+        // Sets an empty marker field on the existing set; a field already set is kept.
+        private static bool FillMissing(SerializedObject so, string field, Object marker)
+        {
+            SerializedProperty property = so?.FindProperty(field);
+            if (property == null || property.objectReferenceValue != null) return false;
+            property.objectReferenceValue = marker;
+            Debug.Log($"[Board Feedback] Added the {field} marker to {SetPath}.");
+            return true;
         }
 
         private static void ConfigureTexture(string file, TextureWrapMode wrap)

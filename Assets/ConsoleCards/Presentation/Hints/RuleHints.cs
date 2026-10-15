@@ -37,5 +37,29 @@ namespace ConsoleCards.Presentation.Hints
 
             return hints;
         }
+
+        /// <summary>
+        /// The hint helpers the rules in play name (H3), each once. A rule may name a helper with or without a
+        /// hint trigger of its own.
+        /// </summary>
+        public static List<string> CollectHelpers(RuleSetDefinition rules, string modeStableId)
+        {
+            List<string> helperIds = new List<string>();
+            if (rules == null) return helperIds;
+            for (int s = 0; s < rules.Sections.Count; s++)
+            {
+                RuleSection section = rules.Sections[s];
+                if (section == null) continue;
+                for (int e = 0; e < section.Entries.Count; e++)
+                {
+                    RuleEntry entry = section.Entries[e];
+                    if (entry == null || !entry.AppliesToMode(modeStableId)) continue;
+                    string helper = entry.HintHelper;
+                    if (helper.Length > 0 && !helperIds.Contains(helper)) helperIds.Add(helper);
+                }
+            }
+
+            return helperIds;
+        }
     }
 }

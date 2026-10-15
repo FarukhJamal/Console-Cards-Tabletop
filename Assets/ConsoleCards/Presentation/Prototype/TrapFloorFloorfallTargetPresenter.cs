@@ -1,93 +1,50 @@
 using System;
 using System.Collections.Generic;
 using ConsoleCards.Core.Identifiers;
+using ConsoleCards.Presentation.Feedback;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Prototype
 {
     /// <summary>
-    /// Projects Floorfall target state through a renderer property override independent of selection.
+    /// Shows the Floorfall collapse target (the tile the floor dice point at) with a board feedback marker
+    /// (doc 23 H3). The tile's art is never recoloured: the trading-card model hides a tinted card colour.
     /// </summary>
     internal sealed class TrapFloorFloorfallTargetPresenter
     {
-        private static readonly int BaseColorProperty = Shader.PropertyToID("_BaseColor");
-        private static readonly int ColorProperty = Shader.PropertyToID("_Color");
-        private static readonly Color TargetColor = new Color(1f, 0.22f, 0.06f, 1f);
+        public static readonly Color TargetColor = new Color(1f, 0.42f, 0.1f, 0.95f);
 
-        private readonly Dictionary<TabletopObjectId, TargetRenderer> renderers =
-            new Dictionary<TabletopObjectId, TargetRenderer>();
+        private BoardFeedbackPresenter shownOn;
 
-        private TabletopObjectId currentTargetId;
+        public TabletopObjectId CurrentTargetId { get; private set; }
 
-        public void Register(TabletopObjectId floorCardId, Renderer renderer)
+        public bool IsShowing => shownOn != null;
+
+        /// <summary>Marks the target tile at its table position; replaces the previous target.</summary>
+        public void Show(TabletopObjectId floorCardId, Vector3 tilePosition, BoardFeedbackPresenter feedback)
         {
             if (floorCardId.IsEmpty)
             {
                 throw new ArgumentException("Floor Card ID cannot be empty.", nameof(floorCardId));
             }
 
-            if (renderer == null)
+            if (feedback == null)
             {
-                throw new ArgumentNullException(nameof(renderer));
+                Clear(); // board feedback is off (its set is missing); the Console already says so
+                return;
             }
 
-            if (renderers.ContainsKey(floorCardId))
-            {
-                throw new InvalidOperationException("A Floor Card target renderer is already registered.");
-            }
-
-            MaterialPropertyBlock baseline = new MaterialPropertyBlock();
-            renderer.GetPropertyBlock(baseline);
-            renderers.Add(floorCardId, new TargetRenderer(renderer, baseline));
-        }
-
-        public void Show(TabletopObjectId floorCardId)
-        {
-            ClearCurrent();
-
-            if (!renderers.TryGetValue(floorCardId, out TargetRenderer target)
-                || target.Renderer == null)
-            {
-                throw new InvalidOperationException("Floorfall target has no active Floor Card renderer.");
-            }
-
-            MaterialPropertyBlock highlighted = new MaterialPropertyBlock();
-            target.Renderer.GetPropertyBlock(highlighted);
-            highlighted.SetColor(BaseColorProperty, TargetColor);
-            highlighted.SetColor(ColorProperty, TargetColor);
-            target.Renderer.SetPropertyBlock(highlighted);
-            currentTargetId = floorCardId;
+            if (shownOn != null && shownOn != feedback) shownOn.HideCollapseTarget();
+            feedback.ShowCollapseTarget(tilePosition, TargetColor);
+            shownOn = feedback;
+            CurrentTargetId = floorCardId;
         }
 
         public void Clear()
         {
-            ClearCurrent();
-            renderers.Clear();
-        }
-
-        private void ClearCurrent()
-        {
-            if (!currentTargetId.IsEmpty
-                && renderers.TryGetValue(currentTargetId, out TargetRenderer current)
-                && current.Renderer != null)
-            {
-                current.Renderer.SetPropertyBlock(current.Baseline);
-            }
-
-            currentTargetId = TabletopObjectId.Empty;
-        }
-
-        private sealed class TargetRenderer
-        {
-            public TargetRenderer(Renderer renderer, MaterialPropertyBlock baseline)
-            {
-                Renderer = renderer;
-                Baseline = baseline;
-            }
-
-            public Renderer Renderer { get; }
-
-            public MaterialPropertyBlock Baseline { get; }
+            shownOn?.HideCollapseTarget();
+            shownOn = null;
+            CurrentTargetId = TabletopObjectId.Empty;
         }
     }
 

@@ -1,8 +1,8 @@
 # Console Cards — Rules, House Rules and Hints
 
 **Document ID:** 23_Rules_House_Rules_And_Hints
-**Version:** 0.10
-**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b, C1, R3 and R4 implemented (Trap Floor G2a applies the revised turn); hint system H1 and H2 implemented, H3 planned (§10). Pings wait for multiplayer.
+**Version:** 0.11
+**Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b, C1, R3 and R4 implemented (Trap Floor G2a applies the revised turn); hint system H1 and H2 implemented and approved, H3 written and waiting for the owner's check (§10). Pings wait for multiplayer.
 
 > **Contract note:** type names and field lists here are illustrative unless labelled **Approved Contract**. They describe the direction agreed with the owner, not fixed public APIs.
 
@@ -133,7 +133,7 @@ Lit drop targets and status messages are always shown, because play depends on t
 
 The rule set in play is a table setting kept by the game, not table state: Undo and Reset do not change it.
 
-## 9. Hints for moving (R4, implemented)
+## 9. Hints for moving (R4, implemented; since H3 run by the helper `trapfloor.reach`, §10)
 
 Owner choices (2026-10-15): reach lights only while dragging your own pawn; a longer move is explained and Undo is offered; the move count is a rule setting.
 
@@ -147,7 +147,9 @@ A move goes in **one straight line** (up, down, left or right, no turning) from 
 
 **Reach markers.** While the active player holds their own pawn, a glowing marker (soft fill and outline, the board feedback prefab `ReachTile`, its own material) lies on each tile they can still reach this turn; the tile's art is never recoloured. No reach shows while an Ability or Trap destination is shown (those have their own markers). The markers go when the pawn is put down.
 
-**Why not.** When the active pawn lands further than allowed, off its straight line, across a hole, off a Blind line, or while Stuck, a warning says why. For example: "That is 3 tiles from where the turn started; the rules allow 1 (2, SLOW -1)." The turn menu offers **Undo move (too far)** while that move is still the latest step. The move itself is kept: nothing is blocked. Moves made while an Ability or Trap shows where to go (Rush, Dodge, Spring, Crane) are not counted as regular moves for the rest of that turn.
+**While holding (H3).** While the active player holds their pawn over a tile the rules do not allow (too far, off the straight line, across a hole or onto one, off a Blind line, while Stuck, or before the Blind roll), a **RULE reminder** in the hint strip says why, for example "Not allowed here: That is 3 tiles from where the turn started; the rules allow 2. Put the pawn on a lit tile." It changes as the pawn moves over other tiles and goes when the pawn is over a lit tile or put down. It follows the Hints switch; **Got it** only closes it.
+
+**Landing where the rules do not allow (owner, 2026-10-15).** This is a rule check, not a hint, so it runs with hints off too. The landed tile **does not flip** (no Trap, no prize). A warning says why and what to do: "Move not allowed: … The tile does not flip. Choose Undo move in the turn menu, or Keep move if the table agrees." The turn menu offers **Undo move (not allowed)** and **Keep move** (**Keep move (flip the tile)** when the tile is face down; keeping it flips the tile as a normal landing) while that move is still the latest step. Nothing is blocked: the pawn stays where it was put until the table chooses. Moves made while an Ability or Trap shows where to go (Rush, Dodge, Spring, Crane) are not counted as regular moves for the rest of that turn.
 
 **Turn help.** The status card's help line says "Move up to N tiles" with the count for this turn.
 
@@ -165,26 +167,40 @@ Two kinds of hint, built in three layers. **Rules say what, a game's code says w
 - **hintContext:** optional; one name or a comma-separated list, for example `Ability,Friend`;
 - **hintPriority:** default 4;
 - **hintText:** optional; empty uses the rule's own words with its current value in bold, so a house rule changes the hint too;
-- **hintHelper:** optional, for H3.
+- **hintHelper:** optional; names a game helper (layer C), with or without a trigger of its own.
 
 When a table loads, and whenever a house-rule set comes into play, the rules in play are turned into tips (`RuleHints`). A tip keeps the rule's ID (`rule.<game>.<rule>`), so "Got it" holds across house-rule sets, and it may show twice. Player-made games (doc 27, List 2) get hints by tagging their rules, with no code.
 
-**Trap Floor's tagged rules (H2):**
+**Trap Floor's tagged rules (H2; helpers H3):**
 
-| Rule | Event | Context | Priority |
-|---|---|---|---|
-| Draw up to {value} | `turn.start` | player | 4 |
-| Action abilities instead of moving | `turn.start` | player | 3 |
-| Move up to {value} tiles in a straight line (helper `trapfloor.reach`) | `drag.pawn` | own | 6 |
-| Land on a face-down tile and it flips | `content.revealed` | any | 2 |
-| Standing on an Ability or Friend? You may take it | `content.revealed` | Ability, Friend | 6 |
-| Reaction abilities when a Trap hits you | `content.revealed` | Trap | 6 |
-| A Trap that moves you flips the next tile | `content.revealed` | Trap | 3 |
-| After every turn the floor rolls and a tile collapses | `turn.start` | floor | 6 |
-| Knocked out? You come back next round | `game.activity` | PlayerEliminated | 6 |
-| Roll 2d6 to place the Exit | `game.activity` | ClaimedKey | 4 |
+| Rule | Event | Context | Priority | Helper |
+|---|---|---|---|---|
+| Draw up to {value} | `turn.start` | player | 4 | |
+| Action abilities instead of moving | `turn.start` | player | 3 | |
+| Move up to {value} tiles in a straight line | `drag.pawn` | own | 6 | `trapfloor.reach` |
+| Land on a face-down tile and it flips | `content.revealed` | any | 2 | |
+| Standing on an Ability or Friend? You may take it | `content.revealed` | Ability, Friend | 6 | `trapfloor.prize` |
+| Reaction abilities when a Trap hits you | `content.revealed` | Trap | 6 | `trapfloor.traps-waiting` |
+| A Trap that moves you flips the next tile | `content.revealed` | Trap | 3 | |
+| After every turn the floor rolls and a tile collapses (Easy, Hard) | `turn.start` | floor | 6 | `trapfloor.collapse` |
+| Turns go player, floor, player, floor (Impossible) | none | | | `trapfloor.collapse` |
+| Knocked out? You come back next round | `game.activity` | PlayerEliminated | 6 | |
+| Roll 2d6 to place the Exit | `game.activity` | ClaimedKey | 4 | |
 
-**Layer C: game helpers (H3).** Hints a tag cannot express are worked out by a small piece of the game's code, named by the rule's tag and reading its numbers from the rules. Trap Floor's reach and "why not" (§9) are the first.
+**Layer C: game helpers (H3, written).** Hints a tag cannot express are worked out by a small piece of the game's code, named by a rule's `hintHelper` and reading its numbers from the rules. A helper (`IGameHintHelper`) has a name, is ticked once a frame to show or hide its board markers (no allocation), and is asked about every table event; it answers with a hint, usually a RULE reminder. The hint service runs a helper **only while a rule in play names it**: take the tag off the rule and the helper stops and its markers go. A name with no helper is reported once in the Console. Helpers explain and mark; they never block anything.
+
+Trap Floor's helpers (code: `TabletopPrototypeComposition.TrapFloorHints.cs`):
+
+| Helper | Shows | When |
+|---|---|---|
+| `trapfloor.reach` | Reach markers (§9) while you hold your pawn, and a RULE reminder (priority 8, every time) while it is over a tile the rules do not allow. The landing check itself (no flip, warning, Undo move or Keep move) is a rule check in the game code, not a hint (§9) | Holding your pawn |
+| `trapfloor.prize` | "You are standing on Dodge. Choose Take Dodge (…) in the turn menu, or leave it: the next player to land here may take it." | `pawn.moved` (own) onto a face-up prize; `content.revealed` Ability or Friend |
+| `trapfloor.traps-waiting` | What waits until End Turn (for example "Spring: your pawn is launched…") and "Play a Reaction (Dodge, Shield) first if you want to stop it." | `content.revealed` Trap, when something is waiting |
+| `trapfloor.collapse` | The tile the floor dice point at, marked with the board feedback marker `CollapseTarget` (orange glow and outline) until the next player turn; once it collapses, a RULE reminder: "… is a hole now (marked). Moves cannot cross holes." | Floor turn, after the roll; `game.activity` CollapsedFloor |
+
+Helper reminders show every time the situation comes up (no limit); **Got it** only closes them, and turning Hints off stops them. The prize, Traps-waiting and collapse reminders have priority 5, so a rule's own tip (priority 6, shown twice at most) comes first while learning.
+
+**Collapse target fix (H3).** The old orange Floorfall highlight tinted the tile card's colour, which the trading-card model hides. It is now the board feedback marker `CollapseTarget` (Final World prefab and set field `collapseTarget`, added by **Console Cards > Feedback > Create Missing Board Feedback Prefabs (Final World)**, which only adds what is missing). Without it, the move-target marker is used.
 
 **Events.** The platform's events (`HintTriggers`):
 
@@ -192,6 +208,7 @@ When a table loads, and whenever a house-rule set comes into play, the rules in 
 - `toolbox.placing` (context: the catalog kind, such as Console, GameBoard, Die, Deck);
 - `drag.card`;
 - `drag.pawn` (context `own` or `other`);
+- `pawn.moved` (H3): a pawn was put down on another tile (context `own` or `other`);
 - `undo.available`;
 - every accepted table step as `action.<kind>` (for example `action.FlipConsole`, `action.DrawCards`), so new actions are events without new code;
 - game events every game can raise:
@@ -208,6 +225,6 @@ When a table loads, and whenever a house-rule set comes into play, the rules in 
 | Stage | Content | Status |
 |---|---|---|
 | H1 | Hint data, the hint service and its seen record, the hint strip (Final UI prefab `HintStrip`, catalog `platform.hint-strip`, HUD), the Tips switch, the platform events and the starting platform tips; reach shown with markers; Trap Floor movement fixed to straight lines (2, the Athlete 3) | Implemented |
-| H2 | Hint tags on rule lines and game tips built from the rules in play; context lists; game events; Trap Floor rules tagged | Implemented |
-| H3 | Trap Floor helpers behind the tags: reach and "why not" (moved from §9), prizes, waiting Traps | Planned |
+| H2 | Hint tags on rule lines and game tips built from the rules in play; context lists; game events; Trap Floor rules tagged | Implemented, approved by the owner |
+| H3 | Game helpers (`IGameHintHelper`) run by the hint service while a rule names them; Trap Floor's reach moved behind `trapfloor.reach` with a RULE reminder while holding over a tile not allowed; a landing not allowed does not flip (warning, Undo move or Keep move); prize, Traps-waiting and collapse-target helpers; the collapse target as a board marker; event `pawn.moved` | Written, waiting for the owner's check (not compiled yet) |
 

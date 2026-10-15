@@ -22,6 +22,7 @@ namespace ConsoleCards.Presentation.Feedback
         private readonly BoardFeedbackMarker[] flashes;
         private readonly BoardFeedbackMarker[] bursts;
         private readonly BoardFeedbackMarker[] reach;
+        private readonly BoardFeedbackMarker collapseTarget;
         private readonly BoardFeedbackArrow arrow;
         private readonly List<GameObject> owned = new List<GameObject>();
         private int nextFlash;
@@ -36,6 +37,7 @@ namespace ConsoleCards.Presentation.Feedback
             flashes = MakePool(set.FlipFlash, parent, FlashPool);
             bursts = MakePool(set.CollapseBurst, parent, BurstPool);
             reach = MakePool(set.ReachTile, parent, ReachPool);
+            collapseTarget = Make(set.CollapseTarget, parent);
             if (set.MoveArrow != null)
             {
                 arrow = Object.Instantiate(set.MoveArrow, parent, false);
@@ -84,6 +86,20 @@ namespace ConsoleCards.Presentation.Feedback
         public void HideReach()
         {
             HideRange(reach, 0);
+        }
+
+        /// <summary>
+        /// The tile the floor dice point at (the collapse target). Like reach, kept apart from the other markers:
+        /// <see cref="HideAll"/> leaves it; <see cref="HideCollapseTarget"/> takes it away.
+        /// </summary>
+        public void ShowCollapseTarget(Vector3 position, Color colour)
+        {
+            collapseTarget?.Show(position + (Vector3.up * set.TileMarkerLift), colour);
+        }
+
+        public void HideCollapseTarget()
+        {
+            collapseTarget?.Hide();
         }
 
         public void Flash(Vector3 position, Color colour)

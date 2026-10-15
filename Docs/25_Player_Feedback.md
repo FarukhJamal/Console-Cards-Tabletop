@@ -68,7 +68,8 @@ shown on screen and on the board with authored prefabs (Final UI, doc 26). Nothi
 ## F2 record (2026-10-13)
 
 - **Prefabs** (Final World, created by Console Cards > Feedback > Create Missing Board Feedback Prefabs):
-  `ActivePawnRing`, `TrapWarning`, `MoveTarget`, `FlipFlash`, `CollapseBurst`, `MoveArrow`; materials in
+  `ActivePawnRing`, `TrapWarning`, `MoveTarget`, `FlipFlash`, `CollapseBurst`, `MoveArrow`, and for hints
+  `ReachTile` (doc 23 §9) and `CollapseTarget` (the tile the floor dice point at, doc 23 §10, H3); materials in
   `Content/Materials/Feedback/`, pictures in `Content/Art/Feedback/`. The set
   `Content/Resources/BoardFeedbackSet.asset` names the prefabs, their heights and the camera-kick strengths.
   The builder never overwrites; all of these are yours to edit.

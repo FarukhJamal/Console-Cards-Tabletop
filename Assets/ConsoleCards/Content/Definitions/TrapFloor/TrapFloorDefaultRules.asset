@@ -118,7 +118,7 @@ MonoBehaviour:
       hintContext: Ability,Friend
       hintPriority: 6
       hintText: 
-      hintHelper: 
+      hintHelper: trapfloor.prize
       modeStableIds: []
   - heading: 'Floor turn'
     numbered: 1
@@ -133,7 +133,7 @@ MonoBehaviour:
       hintContext: floor
       hintPriority: 6
       hintText: 
-      hintHelper: 
+      hintHelper: trapfloor.collapse
       modeStableIds:
       - trap-floor-mode-easy
       - trap-floor-mode-hard
@@ -143,6 +143,11 @@ MonoBehaviour:
       settingKey: 
       value: ''
       displayValue: ''
+      hintTrigger: 
+      hintContext: 
+      hintPriority: 4
+      hintText: 
+      hintHelper: trapfloor.collapse
       modeStableIds:
       - trap-floor-mode-impossible
   - heading: 'Abilities'
@@ -170,7 +175,7 @@ MonoBehaviour:
       hintContext: Trap
       hintPriority: 6
       hintText: 
-      hintHelper: 
+      hintHelper: trapfloor.traps-waiting
       modeStableIds: []
     - stableId: tf-ability-cost
       text: 'Each card shows its cost. Pay it in full to take the card and again to play it; players never share a payment.'
