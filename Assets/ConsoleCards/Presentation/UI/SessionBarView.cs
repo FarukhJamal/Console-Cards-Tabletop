@@ -65,6 +65,9 @@ namespace ConsoleCards.Presentation.UI
         [Header("Card editor (L2-2; optional, added by Add Missing Table Menu Rows)")]
         [SerializeField] private Button cardEditorButton;
 
+        [Header("Deck editor (L2-3; optional, added by Add Missing Table Menu Rows)")]
+        [SerializeField] private Button deckEditorButton;
+
         [Header("Profile (doc 28; optional, added by Add Missing Table Menu Rows)")]
         [Tooltip("The Table menu row \"Profile: name…\" that opens the profile panel.")]
         [SerializeField] private Button profileButton;
@@ -99,6 +102,7 @@ namespace ConsoleCards.Presentation.UI
         private Action openCardArt;
         private Action openProfile;
         private Action openCardEditor;
+        private Action openDeckEditor;
         private Action openShop;
 
         public bool IsMenuOpen => menu != null && menu.gameObject.activeSelf;
@@ -320,6 +324,22 @@ namespace ConsoleCards.Presentation.UI
             return true;
         }
 
+        /// <summary>Binds the optional "Deck editor…" row (L2-3); null hides it. False when the prefab lacks it.</summary>
+        public bool BindDeckEditor(Action openDeckEditorAction)
+        {
+            RequireAcquired();
+            if (deckEditorButton == null)
+            {
+                return false;
+            }
+
+            Clear(deckEditorButton);
+            openDeckEditor = openDeckEditorAction;
+            deckEditorButton.gameObject.SetActive(openDeckEditor != null);
+            deckEditorButton.onClick.AddListener(HandleDeckEditor);
+            return true;
+        }
+
         /// <summary>
         /// Binds the optional "Profile: name…" row (doc 28, P2); null hides it. False when the prefab lacks it.
         /// </summary>
@@ -442,6 +462,7 @@ namespace ConsoleCards.Presentation.UI
             openCardArt = null;
             openProfile = null;
             openCardEditor = null;
+            openDeckEditor = null;
             openShop = null;
             openHelp = null;
             newTable = null;
@@ -608,6 +629,13 @@ namespace ConsoleCards.Presentation.UI
             action?.Invoke();
         }
 
+        private void HandleDeckEditor()
+        {
+            Action action = openDeckEditor;
+            CloseMenu();
+            action?.Invoke();
+        }
+
         private void HandleProfile()
         {
             Action action = openProfile;
@@ -702,6 +730,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(cardArtButton);
             Clear(profileButton);
             Clear(cardEditorButton);
+            Clear(deckEditorButton);
             Clear(shopButton);
         }
 

@@ -42,6 +42,8 @@ namespace ConsoleCards.Editor.UI
         public const string CardEditorPanelPath = Folder + "CardEditorPanel.prefab";
         public const string CardEditorRowPath = Folder + "CardEditorRow.prefab";
         public const string CardEditorDeckRowPath = Folder + "CardEditorDeckRow.prefab";
+        public const string DeckEditorPanelPath = Folder + "DeckEditorPanel.prefab";
+        public const string DeckEditorCardRowPath = Folder + "DeckEditorCardRow.prefab";
         private const string FeedbackAudioPath = "Assets/ConsoleCards/Content/Audio/Feedback/";
         private const string SessionIconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
 
@@ -117,6 +119,8 @@ namespace ConsoleCards.Editor.UI
             Save<ProfilePanelView>(ProfilePanelPath, "ProfilePanel", BuildProfilePanel, stretch: true);
             Save<CardEditorRowView>(CardEditorRowPath, "CardEditorRow", BuildCardEditorRow, stretch: false);
             Save<CardEditorDeckRowView>(CardEditorDeckRowPath, "CardEditorDeckRow", BuildCardEditorDeckRow, stretch: false);
+            Save<DeckEditorCardRowView>(DeckEditorCardRowPath, "DeckEditorCardRow", BuildDeckEditorCardRow, stretch: false);
+            Save<DeckEditorPanelView>(DeckEditorPanelPath, "DeckEditorPanel", BuildDeckEditorPanel, stretch: true);
             Save<CardEditorPanelView>(CardEditorPanelPath, "CardEditorPanel", BuildCardEditorPanel, stretch: true);
             AddMissingRuleControls();
             AddMissingShopLabels();
@@ -185,6 +189,12 @@ namespace ConsoleCards.Editor.UI
                 UiRetention.Pooled);
             AssignCatalogEntry(PrototypeUiPrefabIds.CardEditorDeckRow,
                 AssetDatabase.LoadAssetAtPath<CardEditorDeckRowView>(CardEditorDeckRowPath), UiLayer.Modal,
+                UiRetention.Pooled);
+            AssignCatalogEntry(PrototypeUiPrefabIds.DeckEditorPanel,
+                AssetDatabase.LoadAssetAtPath<DeckEditorPanelView>(DeckEditorPanelPath), UiLayer.Modal,
+                UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(PrototypeUiPrefabIds.DeckEditorCardRow,
+                AssetDatabase.LoadAssetAtPath<DeckEditorCardRowView>(DeckEditorCardRowPath), UiLayer.Modal,
                 UiRetention.Pooled);
             AssetDatabase.SaveAssets();
             Debug.Log("[Gameplay UI] Created any missing Final UI gameplay prefabs and pointed the UI prefab catalog at them.");
@@ -721,6 +731,137 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("detailLabel").objectReferenceValue = detail;
             so.FindProperty("normalColor").colorValue = Cream;
             so.FindProperty("selectedColor").colorValue = Selected;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // ---------- deck editor (doc 27 List 2, L2-3) ----------
+
+        // Centred modal: the game picker; then the decks (the game's deck, then yours) with a name box and New, Copy,
+        // Rename and Delete; and the selected deck's cards with copies, all cards or only this deck's. Status, Undo
+        // changes and Save below.
+        private static void BuildDeckEditorPanel(RectTransform root, DeckEditorPanelView view)
+        {
+            Button overlay = DismissOverlay(root);
+            Vector2 centre = new Vector2(0.5f, 0.5f);
+            RectTransform panel = ColumnCard(root, "DeckEditorPanel", centre, centre, 1240f);
+            BlockClicks(panel);
+            Text title = CardHeader(panel, "DECK EDITOR", 22, 58f);
+            Button close = HeaderCloseButton(panel);
+            RectTransform body = Body(panel, 20, 10f);
+
+            RectTransform gameRow = ButtonRow(body, TextAnchor.MiddleLeft);
+            gameRow.name = "GameRow";
+            FitLabel(Child("GameTitle", gameRow), boldFont, 16, Muted, "GAME");
+            Button previousGame = PlainButton(gameRow, "PreviousGameButton", "<", 52f, out _);
+            RectTransform gameLabelRect = Child("GameName", gameRow);
+            Text game = Label(gameLabelRect, titleFont, 20, Ink, TextAnchor.MiddleCenter, "Trap Floor");
+            game.resizeTextForBestFit = true;
+            game.resizeTextMinSize = 12;
+            game.resizeTextMaxSize = 20;
+            Size(gameLabelRect.gameObject, 300f, 52f, 300f);
+            Button nextGame = PlainButton(gameRow, "NextGameButton", ">", 52f, out _);
+
+            RectTransform columns = Child("Columns", body);
+            Row(columns.gameObject, 0, 0, 0, 0, 20f, TextAnchor.UpperLeft);
+            Size(columns.gameObject, -1f, 660f);
+
+            // The decks.
+            RectTransform deckColumn = Child("DeckColumn", columns);
+            Column(deckColumn.gameObject, 0, 0, 0, 0, 8f);
+            Size(deckColumn.gameObject, 420f, 660f, 420f);
+            Label(Child("DecksTitle", deckColumn), boldFont, 16, Muted, TextAnchor.MiddleLeft, "DECKS");
+            ScrollList(deckColumn, "DecksViewport", 400f, out ScrollRect deckScroll, out RectTransform deckRows);
+            FieldTitle(deckColumn, "NameTitle", "DECK NAME");
+            InputField deckName = SingleLineInput(deckColumn, "DeckNameInput", "Name your deck", 32);
+            RectTransform deckButtons = ButtonRow(deckColumn, TextAnchor.MiddleLeft);
+            deckButtons.name = "DeckButtons";
+            Button newDeck = GoButton(deckButtons, "NewDeckButton", "+ New deck", 190f, out _);
+            Button copyDeck = PlainButton(deckButtons, "CopyDeckButton", "Copy deck", 190f, out _);
+            RectTransform deckButtons2 = ButtonRow(deckColumn, TextAnchor.MiddleLeft);
+            deckButtons2.name = "DeckButtons2";
+            Button rename = PlainButton(deckButtons2, "RenameDeckButton", "Rename", 190f, out _);
+            Button delete = PlainButton(deckButtons2, "DeleteDeckButton", "Delete deck", 190f, out _);
+
+            // The selected deck's cards.
+            RectTransform cardColumn = Child("CardColumn", columns);
+            Column(cardColumn.gameObject, 0, 0, 0, 0, 8f);
+            Size(cardColumn.gameObject, 740f, 660f, 600f).flexibleWidth = 1f;
+            RectTransform summaryRow = ButtonRow(cardColumn, TextAnchor.MiddleLeft);
+            summaryRow.name = "SummaryRow";
+            RectTransform summaryRect = Child("Summary", summaryRow);
+            Text summary = Label(summaryRect, titleFont, 18, Ink, TextAnchor.MiddleLeft, "TRAP FLOOR DECK · 48 CARDS");
+            summary.resizeTextForBestFit = true;
+            summary.resizeTextMinSize = 12;
+            summary.resizeTextMaxSize = 18;
+            Size(summaryRect.gameObject, 440f, 52f, 300f).flexibleWidth = 1f;
+            Button filter = PlainButton(summaryRow, "FilterButton", "Show: all cards", 260f, out Text filterLabel);
+            ScrollList(cardColumn, "CardsViewport", 590f, out ScrollRect cardScroll, out RectTransform cardRows);
+
+            Text status = Label(Child("Status", body), bodyFont, 15, Muted, TextAnchor.MiddleLeft,
+                "Pick a deck to see its cards; changes are kept when you press Save.");
+            RectTransform footer = ButtonRow(body);
+            footer.name = "Footer";
+            Button undo = PlainButton(footer, "UndoButton", "Undo changes", 220f, out _);
+            Button save = GoButton(footer, "SaveButton", "Save", 180f, out _);
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("dismissOverlayButton").objectReferenceValue = overlay;
+            so.FindProperty("closeButton").objectReferenceValue = close;
+            so.FindProperty("titleLabel").objectReferenceValue = title;
+            so.FindProperty("previousGameButton").objectReferenceValue = previousGame;
+            so.FindProperty("nextGameButton").objectReferenceValue = nextGame;
+            so.FindProperty("gameLabel").objectReferenceValue = game;
+            so.FindProperty("deckRowsRoot").objectReferenceValue = deckRows;
+            so.FindProperty("deckScroll").objectReferenceValue = deckScroll;
+            so.FindProperty("deckNameInput").objectReferenceValue = deckName;
+            so.FindProperty("newDeckButton").objectReferenceValue = newDeck;
+            so.FindProperty("copyDeckButton").objectReferenceValue = copyDeck;
+            so.FindProperty("renameDeckButton").objectReferenceValue = rename;
+            so.FindProperty("deleteDeckButton").objectReferenceValue = delete;
+            so.FindProperty("summaryLabel").objectReferenceValue = summary;
+            so.FindProperty("filterButton").objectReferenceValue = filter;
+            so.FindProperty("filterLabel").objectReferenceValue = filterLabel;
+            so.FindProperty("cardRowsRoot").objectReferenceValue = cardRows;
+            so.FindProperty("cardScroll").objectReferenceValue = cardScroll;
+            so.FindProperty("statusLabel").objectReferenceValue = status;
+            so.FindProperty("undoButton").objectReferenceValue = undo;
+            so.FindProperty("saveButton").objectReferenceValue = save;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // One card in a deck: picture, name and kind, then − copies +. Pale yellow while the card is in the deck.
+        private static void BuildDeckEditorCardRow(RectTransform root, DeckEditorCardRowView view)
+        {
+            root.sizeDelta = new Vector2(700f, 72f);
+            Image fill = Img(root, "ButtonOutlined", Color.white);
+            fill.raycastTarget = false;
+            Row(root.gameObject, 8, 10, 6, 6, 10f, TextAnchor.MiddleLeft);
+            Size(root.gameObject, -1f, 72f);
+            RectTransform thumbRect = Child("Thumbnail", root);
+            RawImage thumbnail = thumbRect.gameObject.AddComponent<RawImage>();
+            thumbnail.raycastTarget = false;
+            Size(thumbRect.gameObject, 43f, 60f, 43f);
+            RectTransform words = Child("Words", root);
+            Column(words.gameObject, 0, 0, 2, 2, 2f, TextAnchor.MiddleLeft);
+            Size(words.gameObject, 420f, 60f, 200f).flexibleWidth = 1f;
+            Text name = Label(Child("Name", words), boldFont, 17, Ink, TextAnchor.MiddleLeft, "Fall");
+            Text detail = Label(Child("Detail", words), bodyFont, 14, Muted, TextAnchor.MiddleLeft, "Game card · Trap");
+            Button fewer = TextButton(root, "DecrementButton", "-", boldFont, 22, Cream, Ink, 44f, 44f, out _);
+            RectTransform copiesRect = Child("Copies", root);
+            Text copies = Label(copiesRect, titleFont, 20, Ink, TextAnchor.MiddleCenter, "1");
+            Size(copiesRect.gameObject, 48f, 44f, 48f);
+            Button more = TextButton(root, "IncrementButton", "+", boldFont, 22, Cream, Ink, 44f, 44f, out _);
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("fill").objectReferenceValue = fill;
+            so.FindProperty("thumbnail").objectReferenceValue = thumbnail;
+            so.FindProperty("nameLabel").objectReferenceValue = name;
+            so.FindProperty("detailLabel").objectReferenceValue = detail;
+            so.FindProperty("decrementButton").objectReferenceValue = fewer;
+            so.FindProperty("incrementButton").objectReferenceValue = more;
+            so.FindProperty("copiesLabel").objectReferenceValue = copies;
+            so.FindProperty("inDeckColor").colorValue = Selected;
+            so.FindProperty("outOfDeckColor").colorValue = Cream;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

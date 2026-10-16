@@ -125,3 +125,11 @@ MonoBehaviour:
     prefab: {fileID: 383339595222857012, guid: a7bb597113cc7504493c785dd19ae979, type: 3}
     layer: 3
     retention: 1
+  - id: platform.deck-editor-panel
+    prefab: {fileID: 5510419056781249358, guid: 60ba61d7cd3ede246a4ccbe90c307511, type: 3}
+    layer: 3
+    retention: 0
+  - id: platform.deck-editor-card-row
+    prefab: {fileID: 6740071548307343147, guid: e21967b5632fa9a4f9e56a26f6467ac7, type: 3}
+    layer: 3
+    retention: 1

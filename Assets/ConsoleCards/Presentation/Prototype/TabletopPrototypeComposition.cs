@@ -4518,6 +4518,7 @@ namespace ConsoleCards.Presentation.Prototype
                     ? (Action)OpenCardArtPanel
                     : null);
             RefreshCardEditorEntry(); // L2-2: the game's cards and yours, on every table
+            RefreshDeckEditorEntry(); // L2-3: the game's deck and yours, on every table
             RefreshProfileEntry(); // doc 28, P2: who is playing, on every table
             runtimeUi.ShowViewSettings(
                 trapFloorTemplate != null && activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom,

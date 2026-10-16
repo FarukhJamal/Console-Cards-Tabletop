@@ -259,7 +259,7 @@ namespace ConsoleCards.Editor.UI
         }
 
         /// <summary>
-        /// Adds the play and view rows (Seat, Hot-seat, Hands on table, Feedback, Card art, Card editor, Profile; doc 18 §15.11, doc 25 F3,
+        /// Adds the play and view rows (Seat, Hot-seat, Hands on table, Feedback, Card art, Card editor, Deck editor, Profile; doc 18 §15.11, doc 25 F3,
         /// doc 28) and
         /// the Shop entry on the bar (doc 18 §15.4) to an existing SessionBar prefab when they are missing. Rows that already exist and everything else in the
         /// prefab are kept as they are.
@@ -360,10 +360,21 @@ namespace ConsoleCards.Editor.UI
                 added++;
             }
 
-            // The Profile row (doc 28, P2) goes under Card editor (or Card art).
+            // The Deck editor row (L2-3) goes right under Card editor.
+            if (so.FindProperty("deckEditorButton").objectReferenceValue == null)
+            {
+                Component cardEditorRow = so.FindProperty("cardEditorButton").objectReferenceValue as Component;
+                Button deckEditor = MenuRow(menu, "DeckEditorRow", "Deck editor…", false);
+                deckEditor.transform.SetSiblingIndex(AfterRow(menu, cardEditorRow, menu.childCount - 1));
+                so.FindProperty("deckEditorButton").objectReferenceValue = deckEditor;
+                added++;
+            }
+
+            // The Profile row (doc 28, P2) goes under Deck editor (or Card editor, or Card art).
             if (so.FindProperty("profileButton").objectReferenceValue == null)
             {
-                Component above = so.FindProperty("cardEditorButton").objectReferenceValue as Component;
+                Component above = so.FindProperty("deckEditorButton").objectReferenceValue as Component;
+                if (above == null) above = so.FindProperty("cardEditorButton").objectReferenceValue as Component;
                 if (above == null) above = so.FindProperty("cardArtButton").objectReferenceValue as Component;
                 Button profile = MenuRow(menu, "ProfileRow", "Profile: Player 1…", false);
                 profile.transform.SetSiblingIndex(AfterRow(menu, above, menu.childCount - 1));

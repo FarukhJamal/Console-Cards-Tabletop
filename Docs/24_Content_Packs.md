@@ -82,7 +82,8 @@ Stand-in art, to be replaced later under the same keys:
 | A3 | JSON pack format: import and export (version 1 carries art) | Implemented |
 | A4 | Player upload UI and art overlays, stored per game | Implemented |
 | L2-1 | Your cards: card data saved in the player profile (new cards, changes to default cards, decks); pack format 2 carries cards and decks (doc 27 List 2, doc 28) | Written, to be checked (not compiled yet) |
-| L2-2 | Card editor in the game (Table > Card editor…) | Written, to be checked (not compiled yet) |
+| L2-2 | Card editor in the game (Table > Card editor…) | Done, approved by the owner |
+| L2-3 | Deck editor in the game (Table > Deck editor…) | Written, to be checked (not compiled yet) |
 
 ## Privacy
 
@@ -236,4 +237,33 @@ made in the game, not in the Editor (doc 28). The in-game card editor that write
   - `PrototypeRuntimeUiController.ShowCardEditor` and `ShowCardEditorEntry`.
   - `SessionBarView.BindCardEditor`.
   - `GameContent.ArtFolderOf`.
+
+## L2-3 record — the deck editor (2026-10-16)
+
+- **Where:** Table menu > **Deck editor…** (under Card editor), on every table.
+- **Game:** **<** and **>** choose the game, from the same list as the card editor. Changing games asks you to save or
+  undo first.
+- **Decks (left):**
+  - The game's own deck comes first: every card with its copies in play, for example "Trap Floor deck · 48 cards".
+  - Then your decks for that game, each with its size and the picture of its first card.
+  - Under the list: the deck name box, **+ New deck**, **Copy deck** (any deck, the game's included, becomes a new
+    deck of yours), **Rename** and **Delete deck**. The game's deck cannot be renamed or deleted.
+- **Cards (right):**
+  - The selected deck's name, size and how many different cards it has.
+  - Every card of the game (the game's cards, then yours) with its picture, name and kind, and **−** copies **+**
+    (0–20). A card in the deck is shown pale yellow.
+  - **Show: all cards / this deck only** switches the list.
+- **The game's deck copies** are the same numbers as the card editor's "In decks" game deck: a game card's copies are
+  saved as a change to that card (back at the game's own number, the change is removed); your card's copies are its
+  number of copies.
+- **Saving:** nothing is written until **Save** (`cards.json` and `decks.json` in your profile). **Undo changes**
+  goes back to what was saved. Close with unsaved changes warns first; a second Close drops them.
+- **When it applies:** the game's deck copies are used from the next table you start. Your own decks are used by
+  games from L2-5.
+- **Code:**
+  - `DeckEditorPanelView` and `DeckEditorCardRowView` (Final UI prefabs `DeckEditorPanel`, `DeckEditorCardRow`); the
+    deck list reuses `CardEditorRow`.
+  - `TabletopPrototypeComposition.DeckEditor.cs` (shares the card editor's game list, picture service and files).
+  - `PrototypeRuntimeUiController.ShowDeckEditor` and `ShowDeckEditorEntry`.
+  - `SessionBarView.BindDeckEditor`.
 
