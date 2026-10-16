@@ -29,7 +29,8 @@ namespace ConsoleCards.Presentation.TableSurface
         /// underside sub-mesh 1; otherwise everything is one sub-mesh (for the collider).
         /// <paramref name="textureSize"/> is the world size one texture repeat covers.
         /// </summary>
-        public void BuildTop(TableOutline outline, float thickness, Vector2 textureSize, Mesh mesh, bool twoMaterials)
+        public void BuildTop(TableOutline outline, float thickness, Vector2 textureSize, Mesh mesh, bool twoMaterials,
+            bool centreFan = false)
         {
             Begin();
             int count = outline.Count;
@@ -45,7 +46,7 @@ namespace ConsoleCards.Presentation.TableSurface
             }
 
             List<int> top = playingAreaTriangles;
-            Fill(outline);
+            Fill(outline, centreFan);
             for (int i = 0; i + 2 < fill.Count; i += 3)
             {
                 AddTriangle(top, centre + 1 + fill[i], centre + 1 + fill[i + 2], centre + 1 + fill[i + 1]);
@@ -194,11 +195,25 @@ namespace ConsoleCards.Presentation.TableSurface
         }
 
         // Triangles filling the outline, as outline indices, counter-clockwise seen from above (math orientation).
-        // Convex: a fan from point 0. Otherwise ear clipping, fine for the few corners a star has.
-        private void Fill(TableOutline outline)
+        // Index −1 is the centre. With centreFan: a fan from the centre, cheap enough for every frame of the shape
+        // change (T3; every table shape can be seen whole from its centre). Convex: a fan from point 0. Otherwise
+        // ear clipping, fine for the few corners a star has.
+        private void Fill(TableOutline outline, bool centreFan)
         {
             fill.Clear();
             int count = outline.Count;
+            if (centreFan)
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    fill.Add(-1);
+                    fill.Add(i);
+                    fill.Add((i + 1) % count);
+                }
+
+                return;
+            }
+
             if (outline.IsConvex)
             {
                 for (int i = 1; i + 1 < count; i++)

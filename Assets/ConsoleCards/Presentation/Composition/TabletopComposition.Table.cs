@@ -139,22 +139,17 @@ namespace ConsoleCards.Presentation.Composition
             if (!FindClassicTable()) return TableEdgeText();
             TableSpec candidate = tableSpec.Copy();
             candidate.edge = TableSpec.NextEdge(tableSpec.edge);
-            if (IsBuiltShape(candidate.shape) && !TableHolds(candidate, out string why))
+            string note = string.Empty;
+            if (IsBuiltShape(candidate.shape) && !TryChangeTable(candidate, out note))
             {
-                ShowMessage(why);
-                return TableEdgeText();
-            }
-
-            if (IsBuiltShape(candidate.shape) && !ShowTable(candidate, out string error))
-            {
-                ShowMessage($"The edge was not changed: {error}.");
+                ShowMessage(note);
                 return TableEdgeText();
             }
 
             tableSpec = candidate;
             SaveFiles.WriteJson(TableSpecPath, tableSpec, TableArea);
             ShowMessage(IsBuiltShape(tableSpec.shape)
-                ? $"Edge: {TableSpec.EdgeLabel(tableSpec.edge)}."
+                ? $"Edge: {TableSpec.EdgeLabel(tableSpec.edge)}.{note}"
                 : $"Edge: {TableSpec.EdgeLabel(tableSpec.edge)}. It shows on the built tables (Rectangle, Square, Round, Oval, Star).");
             return TableEdgeText();
         }
@@ -165,25 +160,21 @@ namespace ConsoleCards.Presentation.Composition
             if (!FindClassicTable()) return TableShapeText();
             TableSpec candidate = NextTableSpec();
             TableShape shape = candidate.shape;
-            if (IsBuiltShape(shape) && !TableHolds(candidate, out string why))
+            TableSpec previous = tableSpec;
+            if (!TryChangeTable(candidate, out string note))
             {
-                ShowMessage(why);
-                return TableShapeText();
-            }
-
-            if (!ShowTable(candidate, out string error))
-            {
-                ShowMessage($"The table was not changed: {error}.");
+                ShowMessage(note);
                 return TableShapeText();
             }
 
             tableSpec = candidate;
+            GrowFrom(previous, candidate);
             SaveFiles.WriteJson(TableSpecPath, tableSpec, TableArea);
-            ShowMessage(shape == TableShape.Classic
+            ShowMessage((shape == TableShape.Classic
                 ? "Classic table."
                 : shape == TableShape.Model
                     ? $"{TableShapeName(candidate)} table.{ModelFitNote()}"
-                    : $"{TableSpec.Label(shape)} table. Sizes come with the Table tools.");
+                    : $"{TableSpec.Label(shape)} table. Change its size in Table tools.") + note);
             return TableShapeText();
         }
 

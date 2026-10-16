@@ -133,6 +133,7 @@ namespace ConsoleCards.Editor.UI
             AddMissingDeckPicker();
             AddMissingDeleteGameButton();
             AddMissingGameSaveSteps();
+            AddMissingTableHandles();
 
             AssignCatalogEntry(UiPrefabIds.PopupActionRow,
                 AssetDatabase.LoadAssetAtPath<PopupActionRowView>(ActionRowPath), UiLayer.Popup, UiRetention.Pooled);
@@ -589,7 +590,51 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("resetButton").objectReferenceValue = reset;
             so.FindProperty("cancelButton").objectReferenceValue = cancel;
             so.FindProperty("doneButton").objectReferenceValue = done;
+            AddTableHandles(root, so);
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // The size handles (T3): six mustard dots on a full-screen layer under the panel card (so the card stays on
+        // top). The layer itself takes no clicks; only the dots do.
+        private static void AddTableHandles(RectTransform root, SerializedObject so)
+        {
+            RectTransform layer = Rect("Handles", root, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+                Vector2.zero);
+            layer.SetAsFirstSibling();
+            TableHandleView[] handles = new TableHandleView[TablePanelModel.HandleCount];
+            for (int i = 0; i < handles.Length; i++)
+            {
+                RectTransform dot = Rect($"Handle{i + 1}", layer, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(34f, 34f));
+                Img(dot, "ButtonOutlined", Mustard);
+                handles[i] = dot.gameObject.AddComponent<TableHandleView>();
+                dot.gameObject.SetActive(false);
+            }
+
+            so.FindProperty("handlesRoot").objectReferenceValue = layer;
+            AssignArray(so.FindProperty("handles"), handles);
+        }
+
+        // Adds the size handles to a Table panel made before they existed. Nothing else in the prefab changes.
+        private static void AddMissingTableHandles()
+        {
+            if (!File.Exists(TablePanelPath)) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(TablePanelPath);
+            try
+            {
+                TablePanelView view = root.GetComponent<TablePanelView>();
+                if (view == null) return;
+                SerializedObject so = new SerializedObject(view);
+                if (so.FindProperty("handlesRoot").objectReferenceValue != null) return;
+                AddTableHandles(root.GetComponent<RectTransform>(), so);
+                so.ApplyModifiedPropertiesWithoutUndo();
+                PrefabUtility.SaveAsPrefabAsset(root, TablePanelPath);
+                Debug.Log($"[Gameplay UI] Added the size handles to {TablePanelPath}.");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
         }
 
         // Title, then < choice > on one line.

@@ -46,6 +46,21 @@ namespace ConsoleCards.Presentation.TableSurface
         private readonly List<BoxCollider> edgeBoxes = new List<BoxCollider>(128);
         private int edgeLayer;
 
+        // The shape change (T3): the old outline, the in-between one, and what the last build used.
+        private const int MorphPoints = 128;
+        private readonly TableOutline morphFrom = new TableOutline();
+        private readonly TableOutline morphShape = new TableOutline(MorphPoints);
+        private readonly TableOutline previewOutline = new TableOutline(256);
+        private bool morphing;
+        private float morphElapsed;
+        private float morphSeconds;
+        private float builtThickness;
+        private Vector2 builtTextureSize;
+        private float builtEdgeHeight;
+        private float builtEdgeWidth;
+        private bool builtGlow;
+        private bool builtSpikes;
+
         private GameObject top;
         private GameObject edge;
         private MeshFilter topFilter;
@@ -185,12 +200,95 @@ namespace ConsoleCards.Presentation.TableSurface
             surface.ConfigureTemplateOrigin(true, frame.Frame, frame.LocalUnitsPerTableUnit);
             if (!surface.enabled) surface.enabled = true;
             Spec = clean;
+            morphing = false;
+            builtThickness = thickness;
+            builtTextureSize = textureSize;
+            builtEdgeHeight = edgeHeight;
+            builtEdgeWidth = edgeWidth;
+            builtGlow = hasGlow;
+            builtSpikes = hasSpikes;
             return true;
+        }
+
+        /// <summary>
+        /// Shows the change from <paramref name="previous"/> (a shape, or a rectangle standing for a table model) to
+        /// the table just built, over <paramref name="seconds"/>. Only the look moves: the collider, the surface and
+        /// the edge colliders are already the new table's. One light rebuild per frame, no garbage (B5).
+        /// </summary>
+        public void MorphFrom(TableSpec previous, float worldPerUnit, float seconds)
+        {
+            if (Spec == null || previous == null || seconds <= 0f || !morphFrom.Build(previous, worldPerUnit, VisualSpacing))
+            {
+                return;
+            }
+
+            morphElapsed = 0f;
+            morphSeconds = seconds;
+            morphing = true;
+            glow.SetActive(false);
+            spikes.SetActive(false);
+            DrawMorph(0f);
+        }
+
+        private void Update()
+        {
+            if (!morphing) return;
+            morphElapsed += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(morphElapsed / morphSeconds);
+            if (t < 1f)
+            {
+                DrawMorph(t * t * (3f - (2f * t)));
+                return;
+            }
+
+            // The end: the finished table's own look, and its glow or spikes back on.
+            morphing = false;
+            builder.BuildTop(outline, builtThickness, builtTextureSize, topMesh, true);
+            if (edge.activeSelf)
+            {
+                builder.BuildEdge(outline, Spec.edge, builtEdgeHeight, builtEdgeWidth, builtThickness, builtTextureSize.x, edgeMesh);
+            }
+
+            glow.SetActive(builtGlow);
+            spikes.SetActive(builtSpikes);
+        }
+
+        private void DrawMorph(float t)
+        {
+            if (!morphShape.BuildBlend(morphFrom, outline, t, MorphPoints)) return;
+            builder.BuildTop(morphShape, builtThickness, builtTextureSize, topMesh, true, true);
+            if (edge.activeSelf)
+            {
+                builder.BuildEdge(morphShape, Spec.edge, builtEdgeHeight, builtEdgeWidth, builtThickness, builtTextureSize.x, edgeMesh);
+            }
+        }
+
+        /// <summary>
+        /// Shows how the table would look at <paramref name="spec"/> while a size handle is dragged (T3): the look
+        /// only — the collider stays, so nothing on the table moves until the drag ends and the table is built.
+        /// The glow and spikes come back with that build.
+        /// </summary>
+        public void Preview(TableSpec spec, float worldPerUnit)
+        {
+            if (Spec == null || spec == null) return;
+            TableSpec clean = spec.Copy();
+            clean.Clamp();
+            if (!previewOutline.Build(clean, worldPerUnit, VisualSpacing)) return;
+            morphing = false;
+            builder.BuildTop(previewOutline, builtThickness, builtTextureSize, topMesh, true, true);
+            if (edge.activeSelf)
+            {
+                builder.BuildEdge(previewOutline, Spec.edge, builtEdgeHeight, builtEdgeWidth, builtThickness, builtTextureSize.x, edgeMesh);
+            }
+
+            glow.SetActive(false);
+            spikes.SetActive(false);
         }
 
         /// <summary>Turns the table off: it stops drawing and stops being a placement surface.</summary>
         public void Hide()
         {
+            morphing = false;
             if (gameObject.activeSelf) gameObject.SetActive(false);
         }
 

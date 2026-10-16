@@ -9,6 +9,8 @@ namespace ConsoleCards.Presentation.UI
     /// Table mode (doc 30, B3; T3): shape buttons, sizes with − / + and number boxes, the edge, Undo and Redo, and
     /// Cancel or Done. A side panel, so the table stays in view while it changes. An authored Final UI prefab
     /// (Create Missing Gameplay UI Prefabs); nothing is built at runtime. Esc cancels, like the Cancel button.
+    /// Size handles (optional, added to older prefabs by the same menu) sit over the table's edge and follow the
+    /// camera; dragging one resizes the table.
     /// </summary>
     public sealed class TablePanelView : ReusableUiView
     {
@@ -35,7 +37,20 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button cancelButton;
         [SerializeField] private Button doneButton;
 
+        [Header("Size handles (T3; optional, added by Create Missing Gameplay UI Prefabs)")]
+        [SerializeField] private RectTransform handlesRoot;
+        [Tooltip("Six handles: +X side, −X side, +Z side, −Z side, corner or radius, star inner corner.")]
+        [SerializeField] private TableHandleView[] handles = Array.Empty<TableHandleView>();
+
         private TablePanelActions actions;
+        private TablePanelModel shown;
+        private Canvas canvas;
+        private Action<int> beginHandle;
+        private Action<int, Vector2> dragHandle;
+        private Action<int> endHandle;
+
+        /// <summary>True when the prefab has the size handles.</summary>
+        public bool HasHandles => handlesRoot != null && handles != null && handles.Length == TablePanelModel.HandleCount;
 
         public void ValidateReferences()
         {
@@ -98,12 +113,58 @@ namespace ConsoleCards.Presentation.UI
             resetButton.onClick.AddListener(() => actions?.Reset?.Invoke());
             cancelButton.onClick.AddListener(HandleCancel);
             doneButton.onClick.AddListener(() => actions?.Done?.Invoke());
+
+            shown = model;
+            if (!HasHandles) return;
+            if (beginHandle == null)
+            {
+                beginHandle = i => actions?.BeginHandle?.Invoke(i);
+                dragHandle = (i, screen) => actions?.DragHandle?.Invoke(i, screen);
+                endHandle = i => actions?.EndHandle?.Invoke(i);
+            }
+
+            for (int i = 0; i < handles.Length; i++)
+            {
+                if (handles[i] == null) continue;
+                handles[i].Bind(i, beginHandle, dragHandle, endHandle);
+                handles[i].gameObject.SetActive(model.HandleShown[i]);
+            }
+
+            PlaceHandles();
+        }
+
+        private void LateUpdate() => PlaceHandles();
+
+        // Keeps each handle over its point of the table as the camera moves. No allocation.
+        private void PlaceHandles()
+        {
+            if (shown == null || !HasHandles || shown.Camera == null) return;
+            if (canvas == null) canvas = handlesRoot.GetComponentInParent<Canvas>();
+            UnityEngine.Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            for (int i = 0; i < handles.Length; i++)
+            {
+                TableHandleView handle = handles[i];
+                if (handle == null || !shown.HandleShown[i]) continue;
+                Vector3 screen = shown.Camera.WorldToScreenPoint(shown.HandleWorld[i]);
+                bool visible = screen.z > 0f;
+                if (handle.gameObject.activeSelf != visible) handle.gameObject.SetActive(visible);
+                if (visible && RectTransformUtility.ScreenPointToLocalPointInRectangle(handlesRoot, screen, uiCamera, out Vector2 local))
+                {
+                    handle.Rect.localPosition = local;
+                }
+            }
         }
 
         public override void Unbind()
         {
             RemoveListeners();
+            for (int i = 0; handles != null && i < handles.Length; i++)
+            {
+                if (handles[i] != null) handles[i].Unbind();
+            }
+
             actions = null;
+            shown = null;
         }
 
         // Esc leaves Table mode without keeping the changes (doc 30, B3). Reads a key state: no allocation.
@@ -167,6 +228,7 @@ namespace ConsoleCards.Presentation.UI
     {
         public const int ShapeCount = 6;
         public const int FieldCount = 7;
+        public const int HandleCount = 6;
 
         /// <summary>The chosen shape button (Classic, Rectangle, Square, Round, Oval, Star), or −1 for a model.</summary>
         public int SelectedShape;
@@ -179,6 +241,11 @@ namespace ConsoleCards.Presentation.UI
         public bool CanUndo;
         public bool CanRedo;
         public string Status = string.Empty;
+
+        /// <summary>The camera the table is seen through, for placing the handles.</summary>
+        public UnityEngine.Camera Camera;
+        public readonly bool[] HandleShown = new bool[HandleCount];
+        public readonly Vector3[] HandleWorld = new Vector3[HandleCount];
     }
 
     /// <summary>The Table mode panel's actions, supplied by the game.</summary>
@@ -196,5 +263,10 @@ namespace ConsoleCards.Presentation.UI
         public Action Reset;
         public Action Cancel;
         public Action Done;
+
+        /// <summary>A size handle (its index) starts being dragged, moves to a screen point, and is let go.</summary>
+        public Action<int> BeginHandle;
+        public Action<int, Vector2> DragHandle;
+        public Action<int> EndHandle;
     }
 }

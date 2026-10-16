@@ -68,6 +68,28 @@ namespace ConsoleCards.Presentation.TableSurface
             return IsUsable();
         }
 
+        /// <summary>
+        /// The in-between outline of a shape change (T3): <paramref name="count"/> points at even angles round the
+        /// centre, each <paramref name="t"/> of the way from the first outline's edge to the second's (0 = first,
+        /// 1 = second). Both outlines must be seen whole from the centre, as every table shape is.
+        /// </summary>
+        public bool BuildBlend(TableOutline from, TableOutline to, float t, int count)
+        {
+            points.Clear();
+            if (from == null || to == null || from.Count < 3 || to.Count < 3) return false;
+            count = Mathf.Clamp(count, 8, pointCap);
+            t = Mathf.Clamp01(t);
+            for (int i = 0; i < count; i++)
+            {
+                float angle = 2f * Mathf.PI * i / count;
+                Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                points.Add(direction * Mathf.Lerp(from.DistanceToEdge(direction), to.DistanceToEdge(direction), t));
+            }
+
+            HalfSize = Vector2.Lerp(from.HalfSize, to.HalfSize, t);
+            return IsUsable();
+        }
+
         /// <summary>True when the flat point lies on the table (edge included).</summary>
         public bool Contains(Vector2 point)
         {

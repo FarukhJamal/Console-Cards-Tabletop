@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.9 · 2026-10-17 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.10 · 2026-10-17 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -846,7 +846,7 @@ T1b was approved by the owner on 2026-10-17 ("Approved next Start").
 - Nothing is built per frame.
 
 
-### B10. T3 record: Table mode (written 2026-10-17, to be checked)
+### B10. T3 record: Table mode (written 2026-10-17; T3a approved; complete T3 to be checked)
 
 T2 was approved by the owner on 2026-10-17 ("Approved start next").
 
@@ -869,26 +869,50 @@ right, with no dimming, so the table stays in view. The camera turns to the top 
 
 Every change shows on the table at once.
 
-**Nothing falls off, and games still fit.** A built table never shrinks past a piece standing on it. The
-pieces counted are cards, dice, pawns, tokens, decks, discard piles, stacks, consoles, pile bays and game boards:
+**Nothing falls off, and games still fit** (owner, 2026-10-17: move the pieces in):
 
-- A piece stops the change when it is on the table now and would be off it, or less than half its width from the
-  edge.
-- The screen hand and pieces already off the table are ignored.
-- While a game is on the table (anything but the Empty Table), the table cannot get smaller than the classic
-  playing area, so the game's layout always fits.
-- The status line says why a change stopped.
-- The same check applies to the Table menu's Shape and Edge rows.
-- **Owner's choice still open (B2):** stop at pieces (built), or move pieces inside instead.
+- **Pieces are moved in.** When the table gets smaller, any piece that would end up off it, or less than half its
+  width from the new edge, is moved in along the line to the centre until it stands a little inside.
+  - This covers cards, dice, pawns, tokens, decks, discard piles and stacks.
+  - Physical pieces rest on the new top and keep their turn.
+  - The moves are one Undo step of the game, and the status line says how many moved.
+- **Fixed pieces stop the change.** Consoles, game boards and pile bays belong to the game's layout, so they are
+  not moved; the table stops at them and says so. So do another player's own piles.
+- **Ignored:** pieces already off the table, and the screen hand.
+- **Games always fit.** While a game is on the table, the table never gets smaller than the classic playing area.
+- **Everywhere:** the same rules apply to the Shape and Edge rows, the handles, Undo and Redo, and Cancel.
+  Classic and the table models count as their playing-area rectangle.
 
-**Moved to T3b (proposed):**
+**Size handles (T3b, done):** mustard dots on the table's edge that follow the camera.
 
-- Drag handles on the table itself, and the morph animation between shapes.
-- Picture cards for the shapes (these come with the V4 menus).
-- Seats spread along the outline.
+| Shape | Handles |
+|---|---|
+| Rectangle | four side handles |
+| Square | a corner handle |
+| Round | a radius handle |
+| Oval | width and depth handles |
+| Star | the tip (size) and an inner corner (inner size) |
 
-All of these are safe to leave for now, because a game's room is always kept and the camera has no table-shaped
-limits today (its zoom range already covers the largest default table).
+- Sizes snap to 0.5 (0.05 for the inner size); hold Alt for free sizes. The size shows on the status line.
+- While dragging, only the look changes: the collider stays, so nothing moves or falls.
+- On release, the table is built, pieces are moved in, and it is one Undo step. If something fixed is in the way,
+  the table goes back.
+- The handles are part of the Table panel prefab. Create Missing Gameplay UI Prefabs adds them to a panel made
+  before they existed.
+
+**The shape change (T3b, done).** A new built shape grows out of the old one in 0.4 s. Its outline is blended at
+128 even angles round the centre, with one light rebuild per frame (top and edge only) and no garbage. The
+collider is the new one from the start. Classic and models appear at once.
+
+**Not in T3 (with the reason):**
+
+- **Seats spread along the outline.**
+  - Seats come from each game's template (its hand zones, consoles and board), made for the classic playing
+    area.
+  - Every table keeps that area while a game is on it, so today's seats stay correct on every shape.
+  - Moving seats onto the outline means games saying where their seats may go. That is the cartridge contract,
+    so it is proposed with CART-1.
+- **Picture cards for the shapes** come with the V4 menus.
 
 **Code:**
 
@@ -899,7 +923,10 @@ limits today (its zoom range already covers the largest default table).
 - `TableUiController`: `ShowTablePanel`, `CloseTablePanel`, `ShowTableToolsEntry`.
 - `SessionBarView.BindTableTools`; `SessionUiBuilder`: the Table tools row.
 - `TableOutline.DistanceToOutline`.
-- `TabletopComposition.Table.cs`: the tools row, and the hold check on the menu rows.
+- `TabletopComposition.Table.cs`: the tools row; the menu rows use the same keep-the-pieces change.
+- T3b and the move-in rule: `TableHandleView` (new), the handles in `TablePanelView` and the panel builder,
+  `GeneratedTable.MorphFrom` and `Preview`, `TableOutline.BuildBlend`, and a centre-fan option in
+  `TableMeshBuilder.BuildTop`.
 
 ---
 
