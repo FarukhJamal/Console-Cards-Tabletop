@@ -126,6 +126,7 @@ namespace ConsoleCards.Editor.UI
             Save<CardEditorPanelView>(CardEditorPanelPath, "CardEditorPanel", BuildCardEditorPanel, stretch: true);
             AddMissingRuleControls();
             AddMissingShopLabels();
+            AddMissingDeckPicker();
 
             AssignCatalogEntry(PrototypeUiPrefabIds.PopupActionRow,
                 AssetDatabase.LoadAssetAtPath<PrototypePopupActionRowView>(ActionRowPath), UiLayer.Popup, UiRetention.Pooled);
@@ -832,6 +833,46 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("startButton").objectReferenceValue = start;
             so.FindProperty("startLabel").objectReferenceValue = startLabel;
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // L2-5: < and > around the game selection menu's deck line, to choose the deck to play with. Added to a
+        // GameSelectPanel that lacks them (new ones too); the deck line moves between the two buttons, nothing else
+        // in the prefab changes.
+        private static void AddMissingDeckPicker()
+        {
+            if (!File.Exists(GameSelectPanelPath)) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(GameSelectPanelPath);
+            try
+            {
+                GameSelectPanelView view = root.GetComponent<GameSelectPanelView>();
+                if (view == null) return;
+                SerializedObject so = new SerializedObject(view);
+                if (so.FindProperty("previousDeckButton").objectReferenceValue != null) return;
+                Text deck = so.FindProperty("deckLabel").objectReferenceValue as Text;
+                if (deck == null || deck.transform.parent == null) return;
+                Transform parent = deck.transform.parent;
+                int index = deck.transform.GetSiblingIndex();
+                RectTransform row = ButtonRow(parent, TextAnchor.MiddleLeft);
+                row.name = "DeckRow";
+                row.SetSiblingIndex(index);
+                Button previous = PlainButton(row, "PreviousDeckButton", "<", 52f, out _);
+                deck.transform.SetParent(row, false);
+                deck.alignment = TextAnchor.MiddleLeft;
+                deck.resizeTextForBestFit = true;
+                deck.resizeTextMinSize = 11;
+                deck.resizeTextMaxSize = 16;
+                Size(deck.gameObject, 340f, 52f, 200f);
+                Button next = PlainButton(row, "NextDeckButton", ">", 52f, out _);
+                so.FindProperty("previousDeckButton").objectReferenceValue = previous;
+                so.FindProperty("nextDeckButton").objectReferenceValue = next;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                PrefabUtility.SaveAsPrefabAsset(root, GameSelectPanelPath);
+                Debug.Log($"[Gameplay UI] Added the deck choice (< >) to {GameSelectPanelPath}.");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
         }
 
         // ---------- deck editor (doc 27 List 2, L2-3) ----------

@@ -46,13 +46,17 @@ namespace ConsoleCards.Presentation.Content
         public List<ContentArtFile> pictures = new List<ContentArtFile>();
     }
 
-    /// <summary>Per-game content choices on this computer: which pack is active (empty: built-in only).</summary>
+    /// <summary>
+    /// Per-game choices in the player's profile: which pack is active (empty: built-in only) and which of the
+    /// player's decks the game plays with (empty: the game's own deck; doc 27 L2-5).
+    /// </summary>
     [Serializable]
     public sealed class ContentSettings
     {
         public const string FileName = "settings.json";
 
         public string activePackId = string.Empty;
+        public string playDeckId = string.Empty;
     }
 
     /// <summary>A pack found in the store, ready to list and activate.</summary>

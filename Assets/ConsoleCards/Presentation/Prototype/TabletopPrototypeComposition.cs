@@ -4379,7 +4379,24 @@ namespace ConsoleCards.Presentation.Prototype
             }
         }
 
+        // With a deck of yours chosen (L2-5) that cannot set up the game, the game's own deck is used instead: a
+        // choice never stops play.
         private void RegisterFreshTrapFloorTemplates()
+        {
+            try
+            {
+                RegisterTrapFloorTemplates(true);
+            }
+            catch (Exception exception) when (!string.IsNullOrEmpty(ChosenTrapFloorDeckId()))
+            {
+                string message = $"Your deck cannot set up Trap Floor ({exception.Message}); the game's own deck is used.";
+                Debug.LogWarning("[Your decks] " + message, this);
+                ShowMessage(message);
+                RegisterTrapFloorTemplates(false);
+            }
+        }
+
+        private void RegisterTrapFloorTemplates(bool useChosenDeck)
         {
             RequireReference(trapFloorGameDefinition, nameof(trapFloorGameDefinition));
             if (authoritativeRandomValueSource == null)
@@ -4392,7 +4409,7 @@ namespace ConsoleCards.Presentation.Prototype
             EnsureHouseRulesLoaded();
             RuleSetDefinition rules = ActiveRuleSet;
             // Your cards (doc 27 L2-1) come first: changed default cards and new cards; house-rule costs win on top.
-            GameContent content = BuildTrapFloorContent();
+            GameContent content = BuildTrapFloorContent(useChosenDeck);
             GameDefinitionData gameDefinition;
             try
             {
@@ -6621,6 +6638,7 @@ namespace ConsoleCards.Presentation.Prototype
                 gameTemplatesPanelError = null;
                 gameTemplatesPanelVisible = false;
                 ShowActiveSessionUi();
+                OnTableReplaced(selection); // L2-5: a deck of yours chosen for an Empty Table is placed now
                 return true;
             }
             catch (Exception exception)
@@ -14594,10 +14612,11 @@ namespace ConsoleCards.Presentation.Prototype
 
         // The game's cards as played on this computer (doc 27 L2-1): the active pack's and your own card changes and
         // new cards applied to the built-in cards. Problems are skipped with a console warning, never stopping play.
-        private GameContent BuildTrapFloorContent()
+        private GameContent BuildTrapFloorContent(bool useChosenDeck)
         {
             EnsureContentArt();
-            GameContent content = new GameContent(trapFloorGameDefinition, contentArt.LoadPlayerCards(), contentArt.LoadPlayerDecks());
+            GameContent content = new GameContent(trapFloorGameDefinition, contentArt.LoadPlayerCards(), contentArt.LoadPlayerDecks(),
+                useChosenDeck ? ChosenTrapFloorDeckId() : null);
             for (int i = 0; i < content.Warnings.Count; i++)
             {
                 Debug.LogWarning($"[Your cards] {content.Warnings[i]}", this);
@@ -14606,7 +14625,8 @@ namespace ConsoleCards.Presentation.Prototype
             if (content.ChangedCount > 0 || content.NewCards.Count > 0)
             {
                 Debug.Log(
-                    $"[Your cards] {trapFloorGameDefinition.DisplayName}: {content.ChangedCount} changed, {content.NewCards.Count} new.",
+                    $"[Your cards] {trapFloorGameDefinition.DisplayName}: {content.ChangedCount} changed, {content.NewCards.Count} new"
+                    + (content.PlayDeckName.Length > 0 ? $", playing with your deck '{content.PlayDeckName}'." : "."),
                     this);
             }
 

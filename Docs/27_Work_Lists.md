@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.12 · 2026-10-16 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.13 · 2026-10-16 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -67,9 +67,9 @@ What already exists and is reused:
 | P2 | Profile screen in the game: pick, create, rename a profile; Table menu "Profile: name…"; asked at start when there are several profiles; switching starts a fresh table (doc 28) | Done, approved by the owner |
 | L2-2 | Card editor in the game (Table > Card editor…): pick the game; the game's deck (every card with copies, and the total); your own cards; live preview; new cards that work like a card of the game; changes to game cards with Reset; "In decks" ticks with copies in each (the game's deck and yours); pictures copied into the profile (doc 24, L2-2 record). First build looked good to the owner; game picker, game deck and In decks added 2026-10-16 | Done, approved by the owner |
 | L2-3 | Deck editor in the game (Table > Deck editor…): pick the game; the game's deck and your decks; new, copy, rename, delete; every card's copies in the selected deck; Save / Undo changes (doc 24, L2-3 record) | Done, approved by the owner |
-| L2-4 | Game selection menu (New table…): every game with picture, players, mode, rules and deck; Playing as; Make it yours (card art, card editor, deck editor, moved off the Table menu); Start (doc 24, L2-4 record) | Written, to be checked (not compiled yet) |
-| L2-5 | Decks used by games (Trap Floor or the Empty Table) | Next |
-| L2-6 | Rules and player-made games from our components | Planned |
+| L2-4 | Game selection menu (New table…): every game with picture, players, mode, rules and deck; Playing as; Make it yours (card art, card editor, deck editor, moved off the Table menu); Start (doc 24, L2-4 record) | Done, approved by the owner |
+| L2-5 | Decks used by games: choose the deck to play with in the game selection menu; Trap Floor plays with your deck (setup tried first); an Empty Table starts with your deck to place (doc 24, L2-5 record) | Written, to be checked (not compiled yet) |
+| L2-6 | Rules and player-made games from our components | Next |
 
 ### C3e — Game board v2 (owner, 2026-10-15)
 

@@ -84,7 +84,8 @@ Stand-in art, to be replaced later under the same keys:
 | L2-1 | Your cards: card data saved in the player profile (new cards, changes to default cards, decks); pack format 2 carries cards and decks (doc 27 List 2, doc 28) | Written, to be checked (not compiled yet) |
 | L2-2 | Card editor in the game (Table > Card editor…) | Done, approved by the owner |
 | L2-3 | Deck editor in the game (Table > Deck editor…) | Done, approved by the owner |
-| L2-4 | Game selection menu (New table…): card art, card editor and deck editor move there | Written, to be checked (not compiled yet) |
+| L2-4 | Game selection menu (New table…): card art, card editor and deck editor move there | Done, approved by the owner |
+| L2-5 | Decks used by games: choose the deck to play with in the game selection menu | Written, to be checked (not compiled yet) |
 
 ## Privacy
 
@@ -293,4 +294,31 @@ made in the game, not in the Editor (doc 28). The in-game card editor that write
   - `GameSelectPanelView` (Final UI prefab `GameSelectPanel`; the game rows reuse `CardEditorRow`).
   - `TabletopPrototypeComposition.GameSelect.cs`.
   - `PrototypeRuntimeUiController.ShowGameSelect` and `CloseGameSelect`.
+
+## L2-5 record — playing with your decks (2026-10-16)
+
+- **Where:** the game selection menu's **Deck** line now has **<** and **>** to choose the deck to play with.
+- **A game (Trap Floor):**
+  - The choices are the game's own deck, then each of your decks for that game.
+  - The choice is remembered per game in your profile (`games/<game>/settings.json`, `playDeckId`).
+  - Playing with your deck: every card's copies in play become its copies in that deck. A card not in the deck is
+    not used. Controller input cards belong to the controller and are not touched.
+  - The board is still set up by the rules: each floor group draws its number of cards from the deck's cards of
+    that kind. **Start** first tries the setup off the table; if the deck cannot set it up (for example too few
+    Traps for the floor), the menu says why and nothing changes.
+  - If a saved deck stops working later (cards removed), the game's own deck is used, with a message; a choice
+    never stops play.
+- **The Empty Table:**
+  - The choices are "No deck", then every deck of yours from every game (with the game's name).
+  - After **Start**, the chosen deck comes to your hand to place on the table, like a deck from the Toolbox, with
+    each card as often as its copies. A table deck holds up to the platform's maximum; a bigger deck is cut, with a
+    message.
+  - Cards look right when they are Trap Floor's (game or yours) or a game box's own cards.
+- **Code:**
+  - `GameContent` takes the deck to play with (`playDeckId`; `PlayDeckName`).
+  - `ContentSettings.playDeckId`; `ContentArtService` keeps it when the pack changes.
+  - `TabletopPrototypeComposition.GameSelect.cs`: the deck choices, the setup trial, and placing an Empty Table's
+    deck (`OnTableReplaced`).
+  - `RegisterFreshTrapFloorTemplates` falls back to the game's deck.
+  - `GameSelectPanelView`: the deck **<** **>** (added to an existing prefab by Create Missing Gameplay UI Prefabs).
 

@@ -52,8 +52,13 @@ namespace ConsoleCards.Definitions
         private readonly List<GameDeckInfo> decks = new List<GameDeckInfo>();
         private readonly List<string> warnings = new List<string>();
 
-        public GameContent(GameDefinition definition, PlayerCardsFile cards, PlayerDecksFile decks)
+        /// <param name="playDeckId">
+        /// One of the player's decks to play with (doc 27 L2-5): each card's copies in play become its copies in that
+        /// deck, and a card not in the deck is not used. Empty: the game's own deck.
+        /// </param>
+        public GameContent(GameDefinition definition, PlayerCardsFile cards, PlayerDecksFile decks, string playDeckId = null)
         {
+            PlayDeckId = playDeckId ?? string.Empty;
             this.definition = definition != null ? definition : throw new ArgumentNullException(nameof(definition));
             PlayerCards = (cards ?? new PlayerCardsFile()).Normalised();
             PlayerDecks = (decks ?? new PlayerDecksFile()).Normalised();
@@ -62,6 +67,12 @@ namespace ConsoleCards.Definitions
 
         public GameDefinition Definition => definition;
         public PlayerCardsFile PlayerCards { get; }
+
+        /// <summary>The player's deck this game plays with; empty for the game's own deck.</summary>
+        public string PlayDeckId { get; }
+
+        /// <summary>The name of the deck played with, or empty for the game's own deck (or a deck that was not found).</summary>
+        public string PlayDeckName { get; private set; } = string.Empty;
         public PlayerDecksFile PlayerDecks { get; }
 
         /// <summary>Every card of the game as played here: built-in (changed or not), then the player's new cards.</summary>
@@ -150,11 +161,67 @@ namespace ConsoleCards.Definitions
             }
 
             ApplyChanges(builtIn);
-            for (int i = 0; i < builtInOrder.Count; i++) allCards.Add(Resolve(builtInOrder[i]));
             AddNewCards(builtIn);
+            ApplyPlayDeck(builtInOrder);
+            for (int i = 0; i < builtInOrder.Count; i++) allCards.Add(Resolve(builtInOrder[i]));
             allCards.AddRange(newCards);
             BuildDecks();
         }
+
+        // Playing with one of the player's decks: every card's copies become its copies in that deck (0 when absent).
+        // Controller input cards belong to the controller and keep theirs.
+        private void ApplyPlayDeck(List<CardDefinition> builtInOrder)
+        {
+            if (string.IsNullOrWhiteSpace(PlayDeckId)) return;
+            PlayerDeckRecord deck = null;
+            for (int d = 0; d < PlayerDecks.decks.Count; d++)
+            {
+                if (PlayerDecks.decks[d] != null && string.Equals(PlayerDecks.decks[d].id, PlayDeckId, StringComparison.OrdinalIgnoreCase))
+                {
+                    deck = PlayerDecks.decks[d];
+                }
+            }
+
+            if (deck == null)
+            {
+                warnings.Add($"The deck chosen to play with ({PlayDeckId}) was not found; the game's own deck is used.");
+                return;
+            }
+
+            PlayDeckName = string.IsNullOrWhiteSpace(deck.name) ? "My deck" : deck.name;
+            Dictionary<string, int> copies = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < deck.cards.Count; i++)
+            {
+                PlayerDeckEntry entry = deck.cards[i];
+                if (entry == null || string.IsNullOrWhiteSpace(entry.cardId) || entry.count <= 0) continue;
+                copies.TryGetValue(entry.cardId, out int count);
+                copies[entry.cardId] = count + entry.count;
+            }
+
+            for (int i = 0; i < builtInOrder.Count; i++)
+            {
+                CardDefinition current = Resolve(builtInOrder[i]);
+                if (current.RepresentedControllerInput != null) continue;
+                copies.TryGetValue(current.StableId, out int wanted);
+                if (current.Quantity == wanted) continue;
+                CardDefinition counted = WithQuantity(current, wanted);
+                if (changedCards.TryGetValue(current.StableId, out CardDefinition old)) DestroyRuntime(old);
+                changedCards[current.StableId] = counted;
+            }
+
+            for (int i = 0; i < newCards.Count; i++)
+            {
+                copies.TryGetValue(newCards[i].StableId, out int wanted);
+                if (newCards[i].Quantity == wanted) continue;
+                CardDefinition counted = WithQuantity(newCards[i], wanted);
+                DestroyRuntime(newCards[i]);
+                newCards[i] = counted;
+            }
+        }
+
+        private static CardDefinition WithQuantity(CardDefinition card, int quantity) =>
+            CardDefinition.CreateRuntime(card, card.StableId, card.DisplayName, card.Description, quantity, null,
+                card.FrontArtworkReference, card.BackArtworkReference);
 
         private void ApplyChanges(Dictionary<string, CardDefinition> builtIn)
         {

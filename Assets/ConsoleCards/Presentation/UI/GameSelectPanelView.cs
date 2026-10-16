@@ -18,6 +18,7 @@ namespace ConsoleCards.Presentation.UI
         public bool CanChangeMode;
         public string Rules = string.Empty;
         public string Deck = string.Empty;
+        public bool CanChangeDeck;
         public string ProfileName = string.Empty;
         public bool CanOpenCardArt;
         public bool CanEditCards;
@@ -32,6 +33,7 @@ namespace ConsoleCards.Presentation.UI
     {
         public Action<string> SelectGame;
         public Action<int> CycleMode;
+        public Action<int> CycleDeck;
         public Action OpenProfile;
         public Action OpenCardArt;
         public Action OpenCardEditor;
@@ -43,8 +45,9 @@ namespace ConsoleCards.Presentation.UI
     /// <summary>
     /// Game selection menu (doc 27 List 2, L2-4): Table menu > New table… opens it. Every game (the Empty Table, Trap
     /// Floor, and each game box in the library), the chosen game's picture, players, mode, rules in play and deck,
-    /// who is playing, and the places to make the game yours (card art, card editor, deck editor). Start replaces the
-    /// table. An authored Final UI prefab; the game list uses the card editor's row prefab.
+    /// who is playing, and the places to make the game yours (card art, card editor, deck editor). The deck line's
+    /// &lt; &gt; choose the deck to play with (L2-5). Start replaces the table. An authored Final UI prefab; the game list
+    /// uses the card editor's row prefab.
     /// </summary>
     public sealed class GameSelectPanelView : ReusableUiView
     {
@@ -66,6 +69,9 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Text modeLabel;
         [SerializeField] private Text rulesLabel;
         [SerializeField] private Text deckLabel;
+        [Tooltip("Choose the deck to play with (L2-5). Added by Create Missing Gameplay UI Prefabs.")]
+        [SerializeField] private Button previousDeckButton;
+        [SerializeField] private Button nextDeckButton;
 
         [Header("Who and make it yours")]
         [SerializeField] private Text profileLabel;
@@ -120,6 +126,8 @@ namespace ConsoleCards.Presentation.UI
             nextModeButton.interactable = model.CanChangeMode;
             rulesLabel.text = model.Rules;
             deckLabel.text = model.Deck;
+            if (previousDeckButton != null) previousDeckButton.interactable = model.CanChangeDeck;
+            if (nextDeckButton != null) nextDeckButton.interactable = model.CanChangeDeck;
             profileLabel.text = model.ProfileName;
             cardArtButton.interactable = model.CanOpenCardArt;
             cardEditorButton.interactable = model.CanEditCards;
@@ -132,6 +140,8 @@ namespace ConsoleCards.Presentation.UI
             closeButton.onClick.AddListener(HandleClose);
             previousModeButton.onClick.AddListener(HandlePreviousMode);
             nextModeButton.onClick.AddListener(HandleNextMode);
+            if (previousDeckButton != null) previousDeckButton.onClick.AddListener(HandlePreviousDeck);
+            if (nextDeckButton != null) nextDeckButton.onClick.AddListener(HandleNextDeck);
             profileButton.onClick.AddListener(HandleProfile);
             cardArtButton.onClick.AddListener(HandleCardArt);
             cardEditorButton.onClick.AddListener(HandleCardEditor);
@@ -177,6 +187,8 @@ namespace ConsoleCards.Presentation.UI
             Clear(closeButton);
             Clear(previousModeButton);
             Clear(nextModeButton);
+            Clear(previousDeckButton);
+            Clear(nextDeckButton);
             Clear(profileButton);
             Clear(cardArtButton);
             Clear(cardEditorButton);
@@ -193,6 +205,8 @@ namespace ConsoleCards.Presentation.UI
         private void HandleSelectGame(string id) => actions?.SelectGame?.Invoke(id);
         private void HandlePreviousMode() => actions?.CycleMode?.Invoke(-1);
         private void HandleNextMode() => actions?.CycleMode?.Invoke(1);
+        private void HandlePreviousDeck() => actions?.CycleDeck?.Invoke(-1);
+        private void HandleNextDeck() => actions?.CycleDeck?.Invoke(1);
         private void HandleProfile() => actions?.OpenProfile?.Invoke();
         private void HandleCardArt() => actions?.OpenCardArt?.Invoke();
         private void HandleCardEditor() => actions?.OpenCardEditor?.Invoke();

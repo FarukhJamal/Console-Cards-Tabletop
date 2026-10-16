@@ -190,7 +190,10 @@ namespace ConsoleCards.Presentation.Content
 
             if (game != null)
             {
-                Store.SaveSettings(GameId, new ContentSettings { activePackId = ActivePackId });
+                // Only the pack changes; other choices in the file (the deck to play with) are kept.
+                ContentSettings settings = Store.LoadSettings(GameId);
+                settings.activePackId = ActivePackId;
+                Store.SaveSettings(GameId, settings);
             }
 
             return pack != null || string.IsNullOrEmpty(packId);
