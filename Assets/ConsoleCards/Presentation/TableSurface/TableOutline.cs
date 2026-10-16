@@ -96,6 +96,30 @@ namespace ConsoleCards.Presentation.TableSurface
             return best;
         }
 
+        /// <summary>
+        /// How far the edge is from the centre in <paramref name="direction"/> (flat, need not be unit length).
+        /// 0 when there is no outline.
+        /// </summary>
+        public float DistanceToEdge(Vector2 direction)
+        {
+            if (points.Count < 3 || direction.sqrMagnitude < 1e-12f) return 0f;
+            Vector2 d = direction.normalized;
+            float best = float.PositiveInfinity;
+            for (int i = 0, j = points.Count - 1; i < points.Count; j = i++)
+            {
+                Vector2 a = points[j];
+                Vector2 e = points[i] - a;
+                float denominator = (d.x * e.y) - (d.y * e.x);
+                if (Mathf.Abs(denominator) < 1e-9f) continue;
+                // Solve t·d = a + s·e for t (along the ray) and s (along the side).
+                float t = ((a.x * e.y) - (a.y * e.x)) / denominator;
+                float s = ((a.x * d.y) - (a.y * d.x)) / denominator;
+                if (t > 0f && s >= 0f && s <= 1f && t < best) best = t;
+            }
+
+            return float.IsPositiveInfinity(best) ? 0f : best;
+        }
+
         /// <summary>The outward direction at point <paramref name="index"/> (average of its two sides).</summary>
         public Vector2 Normal(int index)
         {

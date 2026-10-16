@@ -150,6 +150,9 @@ namespace ConsoleCards.Presentation.TableSurface
             if (gameObject.activeSelf) gameObject.SetActive(false);
         }
 
+        /// <summary>How far the edge is from the table's centre in a flat direction of the table's own space.</summary>
+        public float EdgeDistance(Vector2 localDirection) => Spec == null ? 0f : outline.DistanceToEdge(localDirection);
+
         /// <summary>True when the world point lies over the playing area (height ignored).</summary>
         public bool Contains(Vector3 world)
         {

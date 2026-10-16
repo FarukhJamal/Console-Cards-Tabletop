@@ -11,6 +11,9 @@ namespace ConsoleCards.Presentation.TableSurface
         Square = 2,
         Round = 3,
         Oval = 4,
+
+        /// <summary>A table model (doc 30, B8; T1b), named by <see cref="TableSpec.modelId"/>.</summary>
+        Model = 5,
     }
 
     /// <summary>What runs around the table's edge (doc 30, B2). More edges come in T2.</summary>
@@ -38,6 +41,9 @@ namespace ConsoleCards.Presentation.TableSurface
 
         public int version = CurrentVersion;
         public TableShape shape = TableShape.Classic;
+
+        // For TableShape.Model: the TableModel's id (T1b). Empty for every other shape.
+        public string modelId = string.Empty;
 
         // Across (left to right) and deep (front to back), in table units. Round uses width as its diameter.
         public float width;
@@ -84,6 +90,7 @@ namespace ConsoleCards.Presentation.TableSurface
         {
             if (!Enum.IsDefined(typeof(TableShape), shape)) shape = TableShape.Classic;
             if (!Enum.IsDefined(typeof(TableEdge), edge)) edge = TableEdge.Lip;
+            if (shape != TableShape.Model || modelId == null) modelId = string.Empty;
             width = Range(width, MinimumSize, MaximumSize);
             depth = Range(depth, MinimumSize, MaximumSize);
             if (shape == TableShape.Square || shape == TableShape.Round) depth = width;
@@ -110,6 +117,7 @@ namespace ConsoleCards.Presentation.TableSurface
             TableShape.Square => "Square",
             TableShape.Round => "Round",
             TableShape.Oval => "Oval",
+            TableShape.Model => "Model",
             _ => "Classic",
         };
 

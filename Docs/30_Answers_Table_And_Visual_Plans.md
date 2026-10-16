@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.5 · 2026-10-17 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.7 · 2026-10-17 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -653,6 +653,140 @@ welded to one size. A kit never breaks.
 - its felt as the playing-area texture.
 
 The Classic shape then becomes "Rectangle with the classic kit", and the single model is no longer needed.
+
+
+### B8. Swappable table models: any model, in three parts (owner, 2026-10-17; approved)
+
+**What the owner wants.** The table's model can be changed at any time. A client can bring their own table model
+(or several), and the game takes it without code changes. Every model is made of three separate parts:
+
+- the **lower frame** (base);
+- the **sides** (rim);
+- the **playing area** (the middle).
+
+**Two kinds of table, one system:**
+
+| Kind | Where its parts come from | Shapes and sizes |
+|---|---|---|
+| **Built table** (T1, done) | The code builds the playing area and sides; the lower frame comes from the kit (legs or pedestal, B7). | Any shape and any size |
+| **Model table** (new) | All three parts come from the client's model. | The model's own shape. Size depends on its resize mode (below). |
+
+Both kinds register the same way. The rest of the game does not care which kind is on the table: placement,
+games, seats and the camera all ask the table for its playing area.
+
+**How a table model must be made (the contract):**
+
+1. **One prefab, three child objects:**
+
+   | Part | What it is | Must be |
+   |---|---|---|
+   | `PlayingArea` | The flat surface pieces land on | Flat and facing up. UVs 0–1 across the area, so any texture fits or repeats. Its own material. |
+   | `Sides` | Everything around the playing area: rim, rails, decoration | Its own material. It must not rise into the playing area. |
+   | `LowerFrame` | Legs, frame, pedestal: everything below the top | Its own material. Decoration only (no gameplay). |
+
+   Each part can have children, but each part has exactly one material slot. That slot is what the player's
+   texture tools change.
+2. **Pivot and axes.**
+   - The prefab root sits at the **centre of the playing area, at its top surface** (height 0).
+   - Y is up and Z is forward; the front (the first seat's side) is −Z.
+   - Rotation 0 and scale 1 on every object.
+3. **Size.**
+   - The playing area is measured from its mesh; nothing needs to be typed.
+   - It must be at least as big as the largest game layout it should hold (today about 25 × 17 units, the
+     classic area). A check warns when it is smaller.
+4. **Colliders.**
+   - `PlayingArea`: the game makes the surface collider from its mesh. Alternatively, a simpler collider mesh can
+     be given as a child named `PlayingArea_Collider`.
+   - `Sides`: optional simple colliders (boxes) so pieces bump the rim.
+   - `LowerFrame`: none needed.
+5. **Optional markers** (empty objects, children of the root):
+   - `Seat_1` … `Seat_8`: where seats go. Without them, seats are spread along the playing area's outline.
+   - `CameraLimit`: a box for how far the camera may go.
+6. **Budget.**
+   - About 20,000 triangles for the whole model.
+   - 3 materials (one per part); textures up to 2048 px with mipmaps.
+
+**Resize modes** (chosen per model, on its `TableModel` component):
+
+| Mode | How it resizes | What the model needs |
+|---|---|---|
+| Fixed | It does not; the model's own size. | Nothing extra. Simplest; works for any shape. |
+| Uniform | Scales evenly within a minimum and maximum. | Nothing extra. Rims and legs grow too. |
+| Stretch (rectangles and squares) | Corners stay, straight parts stretch, like a picture frame. Legs stay at the corners. | `Sides` split into 4 corner pieces and 4 straight pieces (`Corner_FL`, `Edge_Front`, …). `LowerFrame` legs as separate objects. |
+
+Any other shape (round, oval, star) at any size uses the built table with the kit.
+
+**In the game:**
+
+- **Registering a model.** A table model is added like any other component in the catalog (doc 22), as a
+  "Table model" entry. Packs (doc 24) can carry table models, so a client's tables ship as a pack.
+- **Choosing a model.** The player picks it in Table mode under **Shape** (T3), next to the built shapes.
+- **Changing textures.** Changing the playing area, sides or frame texture works on model tables too (T4),
+  because each part has its own material slot.
+- **Checking a model.** An editor menu, **Console Cards > Table > Check Table Model**, checks a prefab against
+  this contract (parts, pivot, flat top, scale, UVs, budget) and says in plain words what to fix.
+- **The classic table.** TCGTable2 becomes the first model table, once it is split into the three parts.
+
+**Proposed stage:** T1b "Model tables". It covers the `TableModel` component, the check menu, model tables in
+the Table menu cycle, and TCGTable2 split as the first one. Approved by the owner (2026-10-17), right after T1 and before T2.
+The classic model is BaseTable2.fbx (one mesh, one material); it is split by an editor tool in Unity, with no
+Blender needed (no Blender connection is available to Claude here).
+
+
+**T1b record (written 2026-10-17, to be checked):**
+
+- **Splitting a model.** Console Cards > Table > **Split Table Model…** opens a small window:
+  1. Drag a table from the Hierarchy and give it a name. The tool:
+     - takes the playing area from the surface object (as on the classic table), or else from the largest flat
+       area facing up;
+     - puts everything from the top down to "Sides reach below top" (default: 12 % of the height) into Sides,
+       and the rest into LowerFrame.
+  2. It saves three mesh files and a prefab in `Content/Tables/<name>/`, with the root at the centre of the
+     playing area at its top, and adds the prefab to `Content/Resources/TableModels.asset`.
+  3. The model file is never changed. Splitting again keeps the same files.
+  4. Texture coordinates and materials are copied as they are, so the classic table looks exactly as before.
+- **Checking a model.** Console Cards > Table > **Check Table Model** checks the selected prefab against the
+  contract above:
+  - problems stop the model working;
+  - notes are advice;
+  - a passing model can be added to the Table menu.
+- **In the game.** The Table menu row goes Classic → Rectangle → Square → Round → Oval → each table model →
+  Classic.
+  - A model is placed with its root where the classic playing area is, and its playing area becomes the placement
+    surface and layout origin. The collider gets its mesh before the surface turns on.
+  - A note warns when its playing area is smaller than the classic one.
+  - The choice is saved in the profile like the shapes.
+  - **The base table** (owner, 2026-10-17). Every table starts from one table model, the base table:
+    - **Classic** shows all three of its parts.
+    - **Rectangle, Square, Round and Oval** are built on it. They replace its playing area and sides, keep its
+      lower frame (legs), use its playing-area material, and reach down to the top of its legs.
+    - **Other models** (after Oval) replace it completely.
+    - **Where the base table comes from:**
+      - The base table is the table model in the scene. **Console Cards > Table > Use Table Model As Scene
+        Table** puts one there, using the model selected in the Project window or else the `classic` model.
+        It goes where the current playing area is, with the same layout units. The game board surface moves to
+        it. The old table is switched off, not deleted, and Undo puts everything back.
+      - Until the scene is set up, the game places the `classic` model where the old TCGTable2 is at start and
+        turns the old table off for good.
+    - **Swapping in a client's model** later: split it, select it, run Use Table Model As Scene Table.
+    - **Legs stay attached** (owner, 2026-10-17). Split Table Model now keeps each leg whole as its own piece
+      (`LowerFrame/Leg_1…`, origin at the centre of the leg's top). A leg is a separate, narrow piece of the model
+      that reaches below the sides.
+      - Legs are found below the sides, where the cut separates them from the frame they hang from.
+      - On a built shape, each leg is fitted to the new top:
+        - it moves in towards the centre until it stands inside the new edge with a little room;
+        - its top goes halfway into the new top, and it stretches so its foot stays on the floor, so it always
+          looks attached and its cut end is hidden.
+      - The rest of the lower frame (rails between legs, if any) is hidden. Classic puts the legs back as they were.
+      - Splitting again updates the same prefab in place, so the scene's table keeps its surface and collider.
+- **Code:**
+  - New: `TableModel` (component and `TableResizeMode`) and `TableModelLibrary` in `Presentation/TableSurface/`;
+    `TableModelSplitter`, `SplitTableModelWindow`, `TableModelChecker` and `TableSceneSetup` in `Editor/Tables/`.
+  - Changed: `TableSpec` (shape `Model` and `modelId`) and `TabletopComposition.Table.cs`.
+- **Not yet:**
+  - Resize modes are stored but not used. Every model shows at its own size until the Table tools (T3).
+  - Seat and camera markers come with T3.
+  - Built shapes get kit legs later (B7).
 
 ---
 
