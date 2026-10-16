@@ -35,6 +35,9 @@ namespace ConsoleCards.Presentation.Interaction
         internal PhysicalTabletopSurfaces PhysicalSurfaces { get; set; }
         private bool physicalPlacement;
         private bool containerPlacement;
+        // Keep placing (doc 29, L2-6b): the placement stays on after each placed piece until Esc or right-click.
+        private bool keepPlacing;
+        private Func<int> nextLocalOrder;
         internal int PhysicalQuantity { get; set; } = 1;
 
         public TabletopComponentPlacementController(
@@ -66,6 +69,18 @@ namespace ConsoleCards.Presentation.Interaction
         /// as a game board joining the edge of another (doc 22 §15). Cleared when the placement ends.
         /// </summary>
         public Func<TabletopPose, TabletopPose> AdjustPose { get; set; }
+
+        /// <summary>
+        /// For the current placement only: after each placed piece the placement stays on, so the same piece can be
+        /// placed again and again; Esc or right-click ends it. <paramref name="localOrder"/>, when given, supplies
+        /// the next piece's order on the table.
+        /// </summary>
+        public void KeepPlacing(Func<int> localOrder = null)
+        {
+            if (!IsActive) return;
+            keepPlacing = true;
+            nextLocalOrder = localOrder;
+        }
 
         public void Begin(
             TabletopComponentKind requestedKind,
@@ -110,7 +125,8 @@ namespace ConsoleCards.Presentation.Interaction
             float requestedRotationDegrees,
             int requestedLayer,
             int requestedLocalOrder,
-            Func<TabletopPose, bool> commitPlacement)
+            Func<TabletopPose, bool> commitPlacement,
+            Action<bool> placementEnded = null)
         {
             BeginInternal(
                 requestedKind,
@@ -119,7 +135,8 @@ namespace ConsoleCards.Presentation.Interaction
                 requestedRotationDegrees,
                 requestedLayer,
                 requestedLocalOrder,
-                commitPlacement ?? throw new ArgumentNullException(nameof(commitPlacement)));
+                commitPlacement ?? throw new ArgumentNullException(nameof(commitPlacement)),
+                placementEnded);
         }
 
         private void BeginInternal(
@@ -216,7 +233,14 @@ namespace ConsoleCards.Presentation.Interaction
                 && activeCommitPlacement != null
                 && activeCommitPlacement(previewPose))
             {
-                CompletePreview(true);
+                if (keepPlacing && previewRoot != null)
+                {
+                    if (nextLocalOrder != null) localOrder = nextLocalOrder();
+                }
+                else
+                {
+                    CompletePreview(true);
+                }
             }
 
             return true;
@@ -305,6 +329,8 @@ namespace ConsoleCards.Presentation.Interaction
         private void CompletePreview(bool committed)
         {
             AdjustPose = null;
+            keepPlacing = false;
+            nextLocalOrder = null;
             Action<bool> placementEnded = activePlacementEnded;
             if (previewRoot != null)
             {

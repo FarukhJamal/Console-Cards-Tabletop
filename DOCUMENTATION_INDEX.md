@@ -53,6 +53,8 @@ All code and type examples are illustrative unless explicitly labelled `Approved
 | `Docs/26_Final_UI.md` | Final UI prefabs: which prefab is which, builders never overwrite, no layout from code |
 | `Docs/27_Work_Lists.md` | The owner's work lists and the status of each stage |
 | `Docs/28_Player_Profiles_And_Saving.md` | Player profiles next to the game; where every save lives; the one save path (SaveFiles, ProfileService) |
+| `Docs/29_Player_Made_Games.md` | Games players make: Save table as a game (in steps: deck, cards, save), the game's deck, the table save file, written rules, playing and deleting your games |
+| `Docs/30_Answers_Table_And_Visual_Plans.md` | Answers on cursor/gestures, pings and flicking, usability, cartridge status, code cleanup, multiplayer readiness and gamification; the Table Selection plan (shape, size, playing area, edges, tools) and the visual polish plan (proposal) |
 | `Docs/AUDIT_RESOLUTION_v1.1.md` | v1.0 audit correction record |
 | `CHANGELOG.md` | Pack history |
 | `README.md` | Repository entry point |

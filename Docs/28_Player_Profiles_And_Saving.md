@@ -23,6 +23,7 @@ Profiles/
   <profile>/                    for example player-1-3fa9c2
     profile.json                name and dates
     hints/seen.json             hints shown or dismissed
+    my-games/<id>.json          games you made (doc 29)
     games/<game id>/
       cards.json                your new cards and your changes to the game's cards
       decks.json                your decks

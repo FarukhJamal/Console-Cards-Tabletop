@@ -8,6 +8,7 @@ using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.Definitions;
 using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Content;
+using ConsoleCards.Presentation.Saving;
 using ConsoleCards.Presentation.UI;
 using UnityEngine;
 
@@ -44,6 +45,8 @@ namespace ConsoleCards.Presentation.Prototype
             public string Name = string.Empty;
             public int Cards;
             public PlayerDeckRecord Deck;
+            // The game whose cards the deck uses (doc 29, L2-6b).
+            public GameDefinition Game;
         }
 
         private sealed class GameSelectEntry
@@ -51,6 +54,8 @@ namespace ConsoleCards.Presentation.Prototype
             public string Id = string.Empty;
             public string Name = string.Empty;
             public GameDefinition Game;
+            // Doc 29: a game the player made (Game is then null).
+            public PlayerGameFile PlayerGame;
             public readonly List<GameTemplateId> Templates = new List<GameTemplateId>();
             public readonly List<string> ModeNames = new List<string>();
         }
@@ -62,7 +67,8 @@ namespace ConsoleCards.Presentation.Prototype
             if (FindGameSelectEntry(entries, gameSelectEntryId) == null)
             {
                 // Start on the game on the table (or Trap Floor from an Empty Table).
-                bool onEmptyTable = activeSession == null || activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom;
+                bool onEmptyTable = activePlayerGame == null
+                    && (activeSession == null || activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom);
                 gameSelectEntryId = onEmptyTable && entries.Count > 1 ? entries[1].Id : CurrentGameEntryId(entries);
                 gameSelectModeIndex = CurrentModeIndex(FindGameSelectEntry(entries, gameSelectEntryId));
             }
@@ -86,6 +92,7 @@ namespace ConsoleCards.Presentation.Prototype
                     OpenCardEditor = OpenCardEditorFromGameSelect,
                     OpenDeckEditor = OpenDeckEditorFromGameSelect,
                     Start = StartSelectedGame,
+                    Delete = DeleteSelectedPlayerGame,
                     Close = CloseGameSelect,
                 };
             }
@@ -98,6 +105,11 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 rows.Add(new CardEditorRowModel(entries[i].Id, entries[i].Name, GameDetail(entries[i]),
                     GamePicture(entries[i].Game), entries[i].Id == entry.Id));
+            }
+
+            if (entry.PlayerGame != null)
+            {
+                return runtimeUi.ShowGameSelect(PlayerGameSelectModel(entry, rows, status), gameSelectActions);
             }
 
             bool isEmpty = entry.Game == null;
@@ -162,6 +174,18 @@ namespace ConsoleCards.Presentation.Prototype
                 entries.Add(entry);
             }
 
+            // Doc 29: the games you made, after the platform's games.
+            List<PlayerGameFile> mine = PlayerGames().List();
+            for (int i = 0; i < mine.Count; i++)
+            {
+                entries.Add(new GameSelectEntry
+                {
+                    Id = PlayerGameEntryPrefix + mine[i].id,
+                    Name = string.IsNullOrWhiteSpace(mine[i].name) ? "My game" : mine[i].name,
+                    PlayerGame = mine[i],
+                });
+            }
+
             return entries;
         }
 
@@ -177,6 +201,11 @@ namespace ConsoleCards.Presentation.Prototype
 
         private string CurrentGameEntryId(List<GameSelectEntry> entries)
         {
+            if (activePlayerGame != null && activeSession != null && activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom)
+            {
+                return PlayerGameEntryPrefix + activePlayerGame.id;
+            }
+
             if (activeSession == null || activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom) return EmptyTableEntryId;
             for (int i = 0; i < entries.Count; i++)
             {
@@ -195,6 +224,7 @@ namespace ConsoleCards.Presentation.Prototype
 
         private string GameDetail(GameSelectEntry entry)
         {
+            if (entry.PlayerGame != null) return $"Your game · {PlayersText(entry.PlayerGame.minimumPlayers, entry.PlayerGame.maximumPlayers)}";
             if (entry.Game == null) return "Free play · any number of players";
             int min = entry.Game.MinimumPlayers;
             int max = entry.Game.MaximumPlayers;
@@ -319,6 +349,7 @@ namespace ConsoleCards.Presentation.Prototype
             List<GameSelectEntry> entries = GameSelectEntries();
             GameSelectEntry entry = FindGameSelectEntry(entries, entryId);
             if (entry == null) return;
+            deleteArmedGameId = string.Empty;
             gameSelectEntryId = entry.Id;
             gameSelectModeIndex = CurrentGameEntryId(entries) == entry.Id ? CurrentModeIndex(entry) : 0;
             ShowGameSelect(string.Empty, entries);
@@ -338,6 +369,17 @@ namespace ConsoleCards.Presentation.Prototype
             List<GameSelectEntry> entries = GameSelectEntries();
             GameSelectEntry entry = FindGameSelectEntry(entries, gameSelectEntryId);
             if (entry == null) return;
+            if (entry.PlayerGame != null)
+            {
+                // Doc 29: a game you made starts as an Empty Table, then its table is laid out.
+                pendingDeckCards = null;
+                pendingPlayerGame = entry.PlayerGame;
+                returnToGameSelect = false;
+                runtimeUi?.CloseGameSelect();
+                RequestTableReplacement(TabletopSessionSelection.EmptyCustom);
+                return;
+            }
+
             if (entry.Game != null && entry.Templates.Count == 0)
             {
                 ShowGameSelect($"{entry.Name} cannot be played yet.", entries);
@@ -420,6 +462,7 @@ namespace ConsoleCards.Presentation.Prototype
                         Name = withGameName ? $"{name} ({game.DisplayName})" : name,
                         Cards = cards,
                         Deck = deck,
+                        Game = game,
                     });
                 }
             }
@@ -462,7 +505,7 @@ namespace ConsoleCards.Presentation.Prototype
         {
             List<GameSelectEntry> entries = GameSelectEntries();
             GameSelectEntry entry = FindGameSelectEntry(entries, gameSelectEntryId);
-            if (entry == null) return;
+            if (entry == null || entry.PlayerGame != null) return;
             List<DeckChoice> choices = DeckChoices(entry);
             if (choices.Count < 2) return;
             int index = ((ChosenDeckIndex(entry, choices) + step) % choices.Count + choices.Count) % choices.Count;
@@ -557,8 +600,19 @@ namespace ConsoleCards.Presentation.Prototype
         {
             List<ObjectDefinitionId> cards = pendingDeckCards;
             string name = pendingDeckName;
+            PlayerGameFile game = pendingPlayerGame;
             pendingDeckCards = null;
             pendingDeckName = string.Empty;
+            pendingPlayerGame = null;
+            ResetGameDeck();
+            // Doc 29: the table is a game you made only when it was started from one.
+            activePlayerGame = selection.Kind == TabletopSessionKind.EmptyCustom ? game : null;
+            if (activePlayerGame != null)
+            {
+                LayOutPlayerGame(activePlayerGame);
+                return;
+            }
+
             if (cards == null || selection.Kind != TabletopSessionKind.EmptyCustom) return;
             try
             {
@@ -613,9 +667,15 @@ namespace ConsoleCards.Presentation.Prototype
             ReturnToGameSelect();
         }
 
-        // Called when an editor or panel opened from the menu closes.
+        // Called when an editor or panel opened from the menu closes (or from a Save table as a game step, L2-6b).
         private void ReturnToGameSelect()
         {
+            if (returnToGameSave)
+            {
+                ReturnToGameSave();
+                return;
+            }
+
             if (!returnToGameSelect) return;
             returnToGameSelect = false;
             ShowGameSelect(string.Empty);

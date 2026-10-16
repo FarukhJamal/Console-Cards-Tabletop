@@ -2702,6 +2702,7 @@ namespace ConsoleCards.Presentation.Prototype
             if (TryCollectRealCards(entry, value, out List<ObjectDefinitionId> realCards))
             {
                 BeginRealCardsPlacement(entry.DisplayName, realCards); // C3c: box tiles place real cards
+                KeepToolboxPlacing(false);
                 return;
             }
 
@@ -2744,12 +2745,24 @@ namespace ConsoleCards.Presentation.Prototype
                         BoardGrid.Standard,
                         false,
                         localSeatLayout != null ? localSeatLayout.PlayerZonePose.RotationDegrees : 0f);
-                    break;
+                    KeepToolboxPlacing(true);
+                    return;
                 default:
                     toolboxPlacementIcon = null;
                     ShowMessage($"{entry.DisplayName} cannot be placed from the Toolbox yet.");
-                    break;
+                    return;
             }
+
+            KeepToolboxPlacing(false);
+        }
+
+        // L2-6b: a Toolbox piece (and a duplicate) is placed again and again until Esc or right-click. Each next
+        // piece takes the next spawn order; a board keeps its own.
+        private void KeepToolboxPlacing(bool board)
+        {
+            if (componentPlacementController == null || !componentPlacementController.IsActive) return;
+            componentPlacementController.KeepPlacing(board ? (Func<int>)null : () => toolboxSpawnSequence * ToolboxPhysicalOrderStride);
+            if (!string.IsNullOrWhiteSpace(toolboxPlacementSubject)) ShowPlacementHint($"{toolboxPlacementSubject} · Esc stops");
         }
 
         // C3c: an entry naming real cards (role "Card"): a Card entry places that card (2 or more: a deck of
@@ -2819,10 +2832,18 @@ namespace ConsoleCards.Presentation.Prototype
             ShowPlacementHint(single ? subject : $"{subject} ({cards.Count} cards)");
         }
 
-        // One command: the real card, or the Deck with its real face-down cards, so one Undo removes it.
-        private bool CommitRealCardsPlacement(string subject, List<ObjectDefinitionId> cards, TabletopPose requestedPose)
+        // One command: the real card, or the Deck with its real face-down cards, so one Undo removes it. A saved
+        // table (doc 29) also lays out cards with their face, decks of one card and the deck's arrival style, quietly.
+        private bool CommitRealCardsPlacement(
+            string subject,
+            List<ObjectDefinitionId> cards,
+            TabletopPose requestedPose,
+            CardFace face = CardFace.FaceUp,
+            ContainerArrivalFace arrivalFace = ContainerArrivalFace.Unchanged,
+            bool forceDeck = false,
+            bool quiet = false)
         {
-            bool single = cards.Count == 1;
+            bool single = cards.Count == 1 && !forceDeck;
             CreateTabletopComponentResult result = componentCreationUseCase.Execute(
                 matchState,
                 activeSession.Request.ActivePlayerIds,
@@ -2831,10 +2852,10 @@ namespace ConsoleCards.Presentation.Prototype
                     single ? TabletopComponentKind.Card : TabletopComponentKind.Deck,
                     requestedPose,
                     0,
-                    CardFace.FaceUp,
+                    single ? face : CardFace.FaceUp,
                     AuthoritativeActionKind.CreateComponent,
                     single ? 0 : cards.Count,
-                    ContainerArrivalFace.Unchanged,
+                    single ? ContainerArrivalFace.Unchanged : arrivalFace,
                     cards));
             if (!result.Succeeded)
             {
@@ -2843,6 +2864,7 @@ namespace ConsoleCards.Presentation.Prototype
             }
 
             toolboxSpawnSequence++;
+            lastPlacedContainerId = result.ContainerId; // doc 29: the game's deck is found by it
             for (int i = 0; i < result.CardIds.Count; i++)
             {
                 CardInstanceState created = matchState.Cards[result.CardIds[i]];
@@ -2857,7 +2879,7 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshSelectionPresenterAfterRuntimeProjection();
             RefreshCardContentVisibility();
             Physics.SyncTransforms();
-            ShowMessage(single ? $"Added {subject}." : $"Added {subject}: {cards.Count} cards.");
+            if (!quiet) ShowMessage(single ? $"Added {subject}." : $"Added {subject}: {cards.Count} cards.");
             return true;
         }
 
@@ -3028,7 +3050,9 @@ namespace ConsoleCards.Presentation.Prototype
         private CreateTabletopComponentResult AddToolboxComponentAtPose(
             TabletopComponentKind componentKind,
             int dieSideCount,
-            TabletopPose requestedPose)
+            TabletopPose requestedPose,
+            bool consoleShowsBack = false,
+            bool quiet = false)
         {
             CreateTabletopComponentResult result = componentCreationUseCase.Execute(
                 matchState,
@@ -3038,7 +3062,8 @@ namespace ConsoleCards.Presentation.Prototype
                     componentKind,
                     requestedPose,
                     dieSideCount,
-                    containerArrivalFace: ToolboxArrivalFace(componentKind)));
+                    containerArrivalFace: ToolboxArrivalFace(componentKind),
+                    consoleShowsBack: consoleShowsBack));
             if (!result.Succeeded)
             {
                 ShowMessage($"Add {ToolboxComponentLabel(componentKind)} rejected: {result.Error}.");
@@ -3047,7 +3072,7 @@ namespace ConsoleCards.Presentation.Prototype
 
             toolboxSpawnSequence++;
             ProjectCreatedToolboxComponent(result);
-            ShowMessage(componentKind == TabletopComponentKind.Die
+            if (!quiet) ShowMessage(componentKind == TabletopComponentKind.Die
                 ? $"Added d{dieSideCount}."
                 : $"Added {ToolboxComponentLabel(componentKind)}.");
             return result;
@@ -3108,6 +3133,7 @@ namespace ConsoleCards.Presentation.Prototype
                 ? $"Duplicate d{dieSideCount}"
                 : $"Duplicate {componentKind}";
             ShowPlacementHint(subject);
+            KeepToolboxPlacing(false);
         }
 
         private bool CommitDuplicatePlacement(
@@ -4501,6 +4527,12 @@ namespace ConsoleCards.Presentation.Prototype
                 sessionTitle = (separator < 0 ? displayName : displayName.Substring(0, separator)).ToUpperInvariant();
                 sessionSubtitle = separator < 0 ? string.Empty : displayName.Substring(separator + 3);
             }
+            else if (activePlayerGame != null)
+            {
+                // Doc 29: a game you made runs on an Empty Table; the chip shows its name.
+                sessionTitle = (activePlayerGame.name ?? "Your game").ToUpperInvariant();
+                sessionSubtitle = "Your game";
+            }
 
             runtimeUi.ShowActiveSession(
                 sessionTitle,
@@ -4537,6 +4569,7 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshCardEditorEntry(); // L2-2: the game's cards and yours, on every table
             RefreshDeckEditorEntry(); // L2-3: the game's deck and yours, on every table
             RefreshProfileEntry(); // doc 28, P2: who is playing, on every table
+            RefreshSaveGameEntry(); // doc 29: Save table as a game, on an Empty Table
             runtimeUi.ShowViewSettings(
                 trapFloorTemplate != null && activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom,
                 handsOnTable,
@@ -4555,6 +4588,11 @@ namespace ConsoleCards.Presentation.Prototype
         // when settings changed since the game was set up.
         private RulesCardModel BuildRulesCardModel()
         {
+            if (activeSession != null && activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom && activePlayerGame != null)
+            {
+                return PlayerGameRulesCardModel(); // doc 29: the written rules of a game you made
+            }
+
             if (activeSession == null
                 || activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom
                 || trapFloorGameDefinition == null)
@@ -12291,6 +12329,7 @@ namespace ConsoleCards.Presentation.Prototype
                 toolboxSpawnSequence * ToolboxPhysicalOrderStride,
                 pose => CommitConsoleDuplicate(pose, otherSideUp));
             ShowPlacementHint(otherSideUp ? "Duplicate Console (controller side up)" : "Duplicate Console (symbol side up)");
+            KeepToolboxPlacing(false);
         }
 
         private bool CommitConsoleDuplicate(TabletopPose requestedPose, bool showsBack)

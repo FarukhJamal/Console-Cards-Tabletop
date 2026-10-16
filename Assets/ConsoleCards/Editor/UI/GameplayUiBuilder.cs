@@ -45,6 +45,7 @@ namespace ConsoleCards.Editor.UI
         public const string DeckEditorPanelPath = Folder + "DeckEditorPanel.prefab";
         public const string DeckEditorCardRowPath = Folder + "DeckEditorCardRow.prefab";
         public const string GameSelectPanelPath = Folder + "GameSelectPanel.prefab";
+        public const string GameSavePanelPath = Folder + "GameSavePanel.prefab";
         private const string FeedbackAudioPath = "Assets/ConsoleCards/Content/Audio/Feedback/";
         private const string SessionIconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
 
@@ -123,10 +124,13 @@ namespace ConsoleCards.Editor.UI
             Save<DeckEditorCardRowView>(DeckEditorCardRowPath, "DeckEditorCardRow", BuildDeckEditorCardRow, stretch: false);
             Save<DeckEditorPanelView>(DeckEditorPanelPath, "DeckEditorPanel", BuildDeckEditorPanel, stretch: true);
             Save<GameSelectPanelView>(GameSelectPanelPath, "GameSelectPanel", BuildGameSelectPanel, stretch: true);
+            Save<GameSavePanelView>(GameSavePanelPath, "GameSavePanel", BuildGameSavePanel, stretch: true);
             Save<CardEditorPanelView>(CardEditorPanelPath, "CardEditorPanel", BuildCardEditorPanel, stretch: true);
             AddMissingRuleControls();
             AddMissingShopLabels();
             AddMissingDeckPicker();
+            AddMissingDeleteGameButton();
+            AddMissingGameSaveSteps();
 
             AssignCatalogEntry(PrototypeUiPrefabIds.PopupActionRow,
                 AssetDatabase.LoadAssetAtPath<PrototypePopupActionRowView>(ActionRowPath), UiLayer.Popup, UiRetention.Pooled);
@@ -201,6 +205,9 @@ namespace ConsoleCards.Editor.UI
                 UiRetention.Pooled);
             AssignCatalogEntry(PrototypeUiPrefabIds.GameSelectPanel,
                 AssetDatabase.LoadAssetAtPath<GameSelectPanelView>(GameSelectPanelPath), UiLayer.Modal,
+                UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(PrototypeUiPrefabIds.GameSavePanel,
+                AssetDatabase.LoadAssetAtPath<GameSavePanelView>(GameSavePanelPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
             AssetDatabase.SaveAssets();
             Debug.Log("[Gameplay UI] Created any missing Final UI gameplay prefabs and pointed the UI prefab catalog at them.");
@@ -833,6 +840,202 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("startButton").objectReferenceValue = start;
             so.FindProperty("startLabel").objectReferenceValue = startLabel;
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // ---------- player-made games (doc 29) ----------
+
+        // Centred modal: what of the table will be saved; then name, players (fewest and most), description and the
+        // written rules (a line starting with "#" is a heading); status; Cancel, Save over…, Save as a new game.
+        private static void BuildGameSavePanel(RectTransform root, GameSavePanelView view)
+        {
+            Button overlay = DismissOverlay(root);
+            Vector2 centre = new Vector2(0.5f, 0.5f);
+            RectTransform panel = ColumnCard(root, "GameSavePanel", centre, centre, 980f);
+            BlockClicks(panel);
+            Text title = CardHeader(panel, "SAVE TABLE AS A GAME", 22, 58f);
+            Button close = HeaderCloseButton(panel);
+            RectTransform body = Body(panel, 22, 8f);
+            Text summary = Label(Child("Summary", body), boldFont, 16, Ink, TextAnchor.MiddleLeft,
+                "The table: 2 decks, 1 board, 4 pawns.");
+
+            RectTransform columns = Child("Columns", body);
+            Row(columns.gameObject, 0, 0, 0, 0, 24f, TextAnchor.UpperLeft);
+            Size(columns.gameObject, -1f, 470f);
+
+            RectTransform left = Child("AboutColumn", columns);
+            Column(left.gameObject, 0, 0, 0, 0, 6f);
+            Size(left.gameObject, 400f, 470f, 400f);
+            FieldTitle(left, "NameTitle", "NAME");
+            InputField name = SingleLineInput(left, "NameInput", "Your game's name", 40);
+            FieldTitle(left, "PlayersTitle", "PLAYERS (FEWEST AND MOST)");
+            RectTransform players = ButtonRow(left, TextAnchor.MiddleLeft);
+            players.name = "PlayersRow";
+            Button fewerMinimum = PlainButton(players, "FewerMinimumButton", "-", 44f, out _);
+            RectTransform minimumRect = Child("Minimum", players);
+            Text minimum = Label(minimumRect, titleFont, 22, Ink, TextAnchor.MiddleCenter, "2");
+            Size(minimumRect.gameObject, 44f, 52f, 44f);
+            Button moreMinimum = PlainButton(players, "MoreMinimumButton", "+", 44f, out _);
+            FitLabel(Child("To", players), boldFont, 16, Muted, "to");
+            Button fewerMaximum = PlainButton(players, "FewerMaximumButton", "-", 44f, out _);
+            RectTransform maximumRect = Child("Maximum", players);
+            Text maximum = Label(maximumRect, titleFont, 22, Ink, TextAnchor.MiddleCenter, "4");
+            Size(maximumRect.gameObject, 44f, 52f, 44f);
+            Button moreMaximum = PlainButton(players, "MoreMaximumButton", "+", 44f, out _);
+            FieldTitle(left, "DescriptionTitle", "DESCRIPTION");
+            InputField description = TextInput(left, "DescriptionInput", 200f, "What is the game about?");
+
+            RectTransform right = Child("RulesColumn", columns);
+            Column(right.gameObject, 0, 0, 0, 0, 6f);
+            Size(right.gameObject, 500f, 470f, 400f).flexibleWidth = 1f;
+            FieldTitle(right, "RulesTitle", "RULES (ONE PER LINE; START A LINE WITH # FOR A HEADING)");
+            InputField rules = TextInput(right, "RulesInput", 440f, "# How to play\nEach player draws 5 cards.\n# Winning\nFirst to empty their hand wins.");
+
+            Text status = Label(Child("Status", body), bodyFont, 15, Muted, TextAnchor.MiddleLeft,
+                "Everything on the table is saved: boards, Consoles, decks, cards, pawns, tokens and dice.");
+            RectTransform footer = ButtonRow(body);
+            footer.name = "Footer";
+            Button cancel = PlainButton(footer, "CancelButton", "Cancel", 160f, out _);
+            Button saveOver = PlainButton(footer, "SaveOverButton", "Save over", 280f, out Text saveOverLabel);
+            Button saveAsNew = GoButton(footer, "SaveAsNewButton", "Save as a new game", 260f, out _);
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("dismissOverlayButton").objectReferenceValue = overlay;
+            so.FindProperty("closeButton").objectReferenceValue = close;
+            so.FindProperty("titleLabel").objectReferenceValue = title;
+            so.FindProperty("summaryLabel").objectReferenceValue = summary;
+            so.FindProperty("nameInput").objectReferenceValue = name;
+            so.FindProperty("descriptionInput").objectReferenceValue = description;
+            so.FindProperty("rulesInput").objectReferenceValue = rules;
+            so.FindProperty("fewerMinimumButton").objectReferenceValue = fewerMinimum;
+            so.FindProperty("moreMinimumButton").objectReferenceValue = moreMinimum;
+            so.FindProperty("minimumLabel").objectReferenceValue = minimum;
+            so.FindProperty("fewerMaximumButton").objectReferenceValue = fewerMaximum;
+            so.FindProperty("moreMaximumButton").objectReferenceValue = moreMaximum;
+            so.FindProperty("maximumLabel").objectReferenceValue = maximum;
+            so.FindProperty("statusLabel").objectReferenceValue = status;
+            so.FindProperty("cancelButton").objectReferenceValue = cancel;
+            so.FindProperty("saveOverButton").objectReferenceValue = saveOver;
+            so.FindProperty("saveOverLabel").objectReferenceValue = saveOverLabel;
+            so.FindProperty("saveAsNewButton").objectReferenceValue = saveAsNew;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // Doc 29: a Delete game button before Start in the game selection menu's footer (for your own games). Added
+        // to a GameSelectPanel that lacks it; nothing else in the prefab changes.
+        private static void AddMissingDeleteGameButton()
+        {
+            if (!File.Exists(GameSelectPanelPath)) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(GameSelectPanelPath);
+            try
+            {
+                GameSelectPanelView view = root.GetComponent<GameSelectPanelView>();
+                if (view == null) return;
+                SerializedObject so = new SerializedObject(view);
+                if (so.FindProperty("deleteGameButton").objectReferenceValue != null) return;
+                Button start = so.FindProperty("startButton").objectReferenceValue as Button;
+                if (start == null || start.transform.parent == null) return;
+                Button delete = PlainButton(start.transform.parent, "DeleteGameButton", "Delete game", 220f, out Text label);
+                delete.transform.SetSiblingIndex(start.transform.GetSiblingIndex());
+                delete.gameObject.SetActive(false);
+                so.FindProperty("deleteGameButton").objectReferenceValue = delete;
+                so.FindProperty("deleteGameLabel").objectReferenceValue = label;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                PrefabUtility.SaveAsPrefabAsset(root, GameSelectPanelPath);
+                Debug.Log($"[Gameplay UI] Added the Delete game button to {GameSelectPanelPath}.");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+        }
+
+        // L2-6b: the save panel in steps. Under the summary: the step buttons (1 Deck, 2 Cards, 3 Save) and the step
+        // section (title, text, < choice > line, two action buttons); the name/players/description/rules columns
+        // become the Save step; Back and Next join the footer after Cancel. Added to a GameSavePanel that lacks them
+        // (new ones too); nothing else in the prefab changes.
+        private static void AddMissingGameSaveSteps()
+        {
+            if (!File.Exists(GameSavePanelPath)) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(GameSavePanelPath);
+            try
+            {
+                GameSavePanelView view = root.GetComponent<GameSavePanelView>();
+                if (view == null) return;
+                SerializedObject so = new SerializedObject(view);
+                if (so.FindProperty("stepSection").objectReferenceValue != null) return;
+                Text summary = so.FindProperty("summaryLabel").objectReferenceValue as Text;
+                Button cancel = so.FindProperty("cancelButton").objectReferenceValue as Button;
+                if (summary == null || summary.transform.parent == null || cancel == null || cancel.transform.parent == null) return;
+                Transform body = summary.transform.parent;
+                Transform details = body.Find("Columns");
+                if (details == null) return;
+
+                RectTransform steps = ButtonRow(body, TextAnchor.MiddleLeft);
+                steps.name = "StepsRow";
+                steps.SetSiblingIndex(summary.transform.GetSiblingIndex() + 1);
+                Button[] stepButtons = new Button[3];
+                Text[] stepLabels = new Text[3];
+                string[] names = { "1 · Deck", "2 · Cards", "3 · Save" };
+                for (int i = 0; i < 3; i++)
+                {
+                    stepButtons[i] = PlainButton(steps, $"Step{i + 1}Button", names[i], 200f, out stepLabels[i]);
+                }
+
+                RectTransform section = Child("StepSection", body);
+                section.SetSiblingIndex(steps.GetSiblingIndex() + 1);
+                Column(section.gameObject, 0, 0, 0, 0, 10f);
+                Size(section.gameObject, -1f, 470f);
+                RectTransform titleRect = Child("StepTitle", section);
+                Text title = Label(titleRect, boldFont, 20, Ink, TextAnchor.MiddleLeft, "DECK");
+                Size(titleRect.gameObject, -1f, 34f);
+                RectTransform textRect = Child("StepText", section);
+                Text text = Label(textRect, bodyFont, 16, Ink, TextAnchor.UpperLeft,
+                    "Choose the deck your game is played with, or make a new one.");
+                Size(textRect.gameObject, -1f, 220f);
+                RectTransform picker = ButtonRow(section, TextAnchor.MiddleLeft);
+                picker.name = "PickerRow";
+                Button previous = PlainButton(picker, "PreviousPickButton", "<", 52f, out _);
+                RectTransform pickRect = Child("Pick", picker);
+                Text pick = Label(pickRect, boldFont, 17, Ink, TextAnchor.MiddleCenter, "Deck: none");
+                pick.resizeTextForBestFit = true;
+                pick.resizeTextMinSize = 11;
+                pick.resizeTextMaxSize = 17;
+                Size(pickRect.gameObject, 560f, 52f, 240f);
+                Button next = PlainButton(picker, "NextPickButton", ">", 52f, out _);
+                RectTransform actions = ButtonRow(section, TextAnchor.MiddleLeft);
+                actions.name = "ActionsRow";
+                Button actionA = PlainButton(actions, "ActionAButton", "New deck…", 260f, out Text actionALabel);
+                Button actionB = GoButton(actions, "ActionBButton", "Put on table", 260f, out Text actionBLabel);
+
+                Button back = PlainButton(cancel.transform.parent, "BackButton", "Back", 140f, out _);
+                back.transform.SetSiblingIndex(cancel.transform.GetSiblingIndex() + 1);
+                Button forward = GoButton(cancel.transform.parent, "NextButton", "Next", 160f, out _);
+                forward.transform.SetSiblingIndex(back.transform.GetSiblingIndex() + 1);
+
+                AssignArray(so.FindProperty("stepButtons"), stepButtons);
+                AssignArray(so.FindProperty("stepLabels"), stepLabels);
+                so.FindProperty("stepSection").objectReferenceValue = section.gameObject;
+                so.FindProperty("stepTitleLabel").objectReferenceValue = title;
+                so.FindProperty("stepTextLabel").objectReferenceValue = text;
+                so.FindProperty("pickerRow").objectReferenceValue = picker.gameObject;
+                so.FindProperty("previousPickButton").objectReferenceValue = previous;
+                so.FindProperty("pickLabel").objectReferenceValue = pick;
+                so.FindProperty("nextPickButton").objectReferenceValue = next;
+                so.FindProperty("actionAButton").objectReferenceValue = actionA;
+                so.FindProperty("actionALabel").objectReferenceValue = actionALabel;
+                so.FindProperty("actionBButton").objectReferenceValue = actionB;
+                so.FindProperty("actionBLabel").objectReferenceValue = actionBLabel;
+                so.FindProperty("detailsSection").objectReferenceValue = details.gameObject;
+                so.FindProperty("backButton").objectReferenceValue = back;
+                so.FindProperty("nextButton").objectReferenceValue = forward;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                PrefabUtility.SaveAsPrefabAsset(root, GameSavePanelPath);
+                Debug.Log($"[Gameplay UI] Added the Deck, Cards and Save steps to {GameSavePanelPath}.");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
         }
 
         // L2-5: < and > around the game selection menu's deck line, to choose the deck to play with. Added to a

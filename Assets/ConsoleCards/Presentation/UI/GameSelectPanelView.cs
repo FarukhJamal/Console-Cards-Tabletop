@@ -24,6 +24,8 @@ namespace ConsoleCards.Presentation.UI
         public bool CanEditCards;
         public bool CanEditDecks;
         public bool CanStart;
+        public bool CanDelete;
+        public string DeleteText = "Delete game";
         public string StartText = "Start";
         public string Status = string.Empty;
     }
@@ -39,6 +41,7 @@ namespace ConsoleCards.Presentation.UI
         public Action OpenCardEditor;
         public Action OpenDeckEditor;
         public Action Start;
+        public Action Delete;
         public Action Close;
     }
 
@@ -84,6 +87,9 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Text statusLabel;
         [SerializeField] private Button startButton;
         [SerializeField] private Text startLabel;
+        [Tooltip("Delete one of your games (doc 29). Added by Create Missing Gameplay UI Prefabs.")]
+        [SerializeField] private Button deleteGameButton;
+        [SerializeField] private Text deleteGameLabel;
 
         private readonly List<CardEditorRowView> gameRowViews = new List<CardEditorRowView>();
         private IRuntimeUiService uiService;
@@ -134,6 +140,8 @@ namespace ConsoleCards.Presentation.UI
             deckEditorButton.interactable = model.CanEditDecks;
             startButton.interactable = model.CanStart;
             startLabel.text = model.StartText;
+            if (deleteGameButton != null) deleteGameButton.gameObject.SetActive(model.CanDelete);
+            if (deleteGameLabel != null) deleteGameLabel.text = model.DeleteText;
             statusLabel.text = model.Status;
 
             dismissOverlayButton.onClick.AddListener(HandleClose);
@@ -147,6 +155,7 @@ namespace ConsoleCards.Presentation.UI
             cardEditorButton.onClick.AddListener(HandleCardEditor);
             deckEditorButton.onClick.AddListener(HandleDeckEditor);
             startButton.onClick.AddListener(HandleStart);
+            if (deleteGameButton != null) deleteGameButton.onClick.AddListener(HandleDelete);
 
             float place = gameScroll.verticalNormalizedPosition;
             bool keepPlace = gameRowViews.Count == model.Games.Count && gameRowViews.Count > 0;
@@ -194,6 +203,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(cardEditorButton);
             Clear(deckEditorButton);
             Clear(startButton);
+            Clear(deleteGameButton);
         }
 
         private static void Clear(Button button)
@@ -212,5 +222,6 @@ namespace ConsoleCards.Presentation.UI
         private void HandleCardEditor() => actions?.OpenCardEditor?.Invoke();
         private void HandleDeckEditor() => actions?.OpenDeckEditor?.Invoke();
         private void HandleStart() => actions?.Start?.Invoke();
+        private void HandleDelete() => actions?.Delete?.Invoke();
     }
 }

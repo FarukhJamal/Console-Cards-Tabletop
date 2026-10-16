@@ -213,7 +213,7 @@ namespace ConsoleCards.Editor.Toolbox
             Label(Rect("Controls", footer, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), new Vector2(8f, 0f), new Vector2(-30f, 0f)),
                 bodyFont, 17, Cream, TextAnchor.MiddleLeft,
                 Key("Click") + " a piece    " + Key("Click") + " the table to place    " + Key("Wheel") + " rotate    "
-                + Key("Right-click") + " cancel");
+                + Key("Right-click / Esc") + " stop");
 
             // Footer Hand switch (Empty Table, doc 22 H-E): shown only when the session has a switchable Hand;
             // the view then raises the content's bottom edge above it.
@@ -261,7 +261,7 @@ namespace ConsoleCards.Editor.Toolbox
             Img(placingControls, "ButtonOutlined", Ink).raycastTarget = false;
             Label(Rect("Controls", placingControls, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero),
                 bodyFont, 18, Cream, TextAnchor.MiddleCenter,
-                Key("Left-click") + " place     " + Key("Wheel") + " rotate     " + Key("Right-click / Esc") + " cancel");
+                Key("Left-click") + " place (again and again)     " + Key("Wheel") + " rotate     " + Key("Right-click / Esc") + " stop");
 
             BuildTemplates(root);
 

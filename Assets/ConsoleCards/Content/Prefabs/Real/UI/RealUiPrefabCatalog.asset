@@ -137,3 +137,7 @@ MonoBehaviour:
     prefab: {fileID: 8208863006708173073, guid: 440e09ef77cb8874d9e3b606e8907ac2, type: 3}
     layer: 3
     retention: 0
+  - id: platform.game-save-panel
+    prefab: {fileID: 1101922016561863838, guid: 9423fde988a50a143b400353b616003d, type: 3}
+    layer: 3
+    retention: 0

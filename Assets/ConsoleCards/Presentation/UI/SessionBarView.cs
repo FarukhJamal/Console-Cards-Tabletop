@@ -65,6 +65,9 @@ namespace ConsoleCards.Presentation.UI
         [Header("Card editor (L2-2; optional, added by Add Missing Table Menu Rows)")]
         [SerializeField] private Button cardEditorButton;
 
+        [Header("Save table as a game (doc 29; optional, added by Add Missing Table Menu Rows)")]
+        [SerializeField] private Button saveGameButton;
+
         [Header("Deck editor (L2-3; optional, added by Add Missing Table Menu Rows)")]
         [SerializeField] private Button deckEditorButton;
 
@@ -103,6 +106,7 @@ namespace ConsoleCards.Presentation.UI
         private Action openProfile;
         private Action openCardEditor;
         private Action openDeckEditor;
+        private Action openSaveGame;
         private Action openShop;
 
         public bool IsMenuOpen => menu != null && menu.gameObject.activeSelf;
@@ -324,6 +328,22 @@ namespace ConsoleCards.Presentation.UI
             return true;
         }
 
+        /// <summary>Binds the optional "Save table as a game…" row (doc 29); null hides it. False when the prefab lacks it.</summary>
+        public bool BindSaveGame(Action openSaveGameAction)
+        {
+            RequireAcquired();
+            if (saveGameButton == null)
+            {
+                return false;
+            }
+
+            Clear(saveGameButton);
+            openSaveGame = openSaveGameAction;
+            saveGameButton.gameObject.SetActive(openSaveGame != null);
+            saveGameButton.onClick.AddListener(HandleSaveGame);
+            return true;
+        }
+
         /// <summary>Binds the optional "Deck editor…" row (L2-3); null hides it. False when the prefab lacks it.</summary>
         public bool BindDeckEditor(Action openDeckEditorAction)
         {
@@ -463,6 +483,7 @@ namespace ConsoleCards.Presentation.UI
             openProfile = null;
             openCardEditor = null;
             openDeckEditor = null;
+            openSaveGame = null;
             openShop = null;
             openHelp = null;
             newTable = null;
@@ -629,6 +650,13 @@ namespace ConsoleCards.Presentation.UI
             action?.Invoke();
         }
 
+        private void HandleSaveGame()
+        {
+            Action action = openSaveGame;
+            CloseMenu();
+            action?.Invoke();
+        }
+
         private void HandleDeckEditor()
         {
             Action action = openDeckEditor;
@@ -731,6 +759,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(profileButton);
             Clear(cardEditorButton);
             Clear(deckEditorButton);
+            Clear(saveGameButton);
             Clear(shopButton);
         }
 

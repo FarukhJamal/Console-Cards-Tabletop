@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.13 · 2026-10-16 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.15 · 2026-10-16 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -68,8 +68,16 @@ What already exists and is reused:
 | L2-2 | Card editor in the game (Table > Card editor…): pick the game; the game's deck (every card with copies, and the total); your own cards; live preview; new cards that work like a card of the game; changes to game cards with Reset; "In decks" ticks with copies in each (the game's deck and yours); pictures copied into the profile (doc 24, L2-2 record). First build looked good to the owner; game picker, game deck and In decks added 2026-10-16 | Done, approved by the owner |
 | L2-3 | Deck editor in the game (Table > Deck editor…): pick the game; the game's deck and your decks; new, copy, rename, delete; every card's copies in the selected deck; Save / Undo changes (doc 24, L2-3 record) | Done, approved by the owner |
 | L2-4 | Game selection menu (New table…): every game with picture, players, mode, rules and deck; Playing as; Make it yours (card art, card editor, deck editor, moved off the Table menu); Start (doc 24, L2-4 record) | Done, approved by the owner |
-| L2-5 | Decks used by games: choose the deck to play with in the game selection menu; Trap Floor plays with your deck (setup tried first); an Empty Table starts with your deck to place (doc 24, L2-5 record) | Written, to be checked (not compiled yet) |
-| L2-6 | Rules and player-made games from our components | Next |
+| L2-5 | Decks used by games: choose the deck to play with in the game selection menu; Trap Floor plays with your deck (setup tried first); an Empty Table starts with your deck to place (doc 24, L2-5 record) | Done, approved by the owner |
+| L2-6 | Player-made games: set up an Empty Table, Save table as a game (name, players, description, written rules); the table save file; your games in New table… (Start lays the table out, rules on the rules card, Save over, Delete) (doc 29) | Written; owner asked for polish (L2-6b) |
+| L2-6b | Polish (owner, 2026-10-16): Save table as a game in steps — 1 Deck (choose yours or a game's, or make a new one; put it on the table), 2 Cards (create a card in it or pick its cards), 3 Save; the deck is the game's own deck, placed shuffled where it lay at Start (owner's choice). Toolbox placement keeps placing until Esc or right-click (owner's choice) (doc 29 §L2-6b) | Written, to be checked (not compiled yet) |
+
+### Next lists — proposed (doc 30, 2026-10-16)
+
+The owner asked for Table Selection next, then a visual polish plan. Doc 30 proposes, for the owner to approve and
+order: T1–T6 (table shape, size, playing area, edges, paint, base), V0–V7 (art direction, lighting and post,
+pieces, table and room, UI/UX, motion, colour grading, performance), UX-1 (cursor and gestures), CART-1 (the
+cartridge contract), R0–R3 (names and code cleanup) and MP-0–MP-5 (multiplayer).
 
 ### C3e — Game board v2 (owner, 2026-10-15)
 

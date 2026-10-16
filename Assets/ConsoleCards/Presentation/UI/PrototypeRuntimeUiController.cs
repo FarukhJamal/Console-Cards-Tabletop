@@ -47,6 +47,8 @@ namespace ConsoleCards.Presentation.UI
         private bool cardEditorEntryWarned;
         private DeckEditorPanelView deckEditorPanelView;
         private GameSelectPanelView gameSelectPanelView;
+        private GameSavePanelView gameSavePanelView;
+        private bool saveGameEntryWarned;
         private bool deckEditorEntryWarned;
         private bool profileEntryWarned;
         private HintStripView hintStripView;
@@ -317,6 +319,53 @@ namespace ConsoleCards.Presentation.UI
         }
 
         public bool IsGameSelectOpen => IsVisible(gameSelectPanelView);
+
+        /// <summary>Binds the Table menu's "Save table as a game…" row (doc 29); null hides it.</summary>
+        public void ShowSaveGameEntry(Action openSaveGame)
+        {
+            EnsureSessionBarView();
+            if (!sessionBarView.BindSaveGame(openSaveGame) && openSaveGame != null && !saveGameEntryWarned)
+            {
+                saveGameEntryWarned = true;
+                Debug.LogWarning(
+                    "The Table menu has no Save table as a game row: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
+            }
+        }
+
+        /// <summary>Shows or refreshes the Save table as a game panel (doc 29). False when its prefab is missing.</summary>
+        public bool ShowGameSave(GameSaveModel model, GameSaveActions actions)
+        {
+            try
+            {
+                EnsureService();
+                if (gameSavePanelView == null || !gameSavePanelView.IsAcquired)
+                {
+                    ReleaseView(tabletopPopupView);
+                    popupLayer.SetActive(false);
+                    ReleaseModalViews();
+                    componentToolboxView?.CloseToolbox();
+                    gameSavePanelView = uiService.AcquireCached<GameSavePanelView>(PrototypeUiPrefabIds.GameSavePanel);
+                }
+
+                modalLayer.SetActive(true);
+                gameSavePanelView.Bind(model, actions);
+                gameSavePanelView.Show();
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                Debug.LogWarning(
+                    "The Save table as a game panel is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs (Final UI). "
+                    + exception.Message);
+                return false;
+            }
+        }
+
+        public void CloseGameSave()
+        {
+            ReleaseView(gameSavePanelView);
+            SetModalLayerOffUnlessHandover();
+        }
 
         public void CloseGameSelect()
         {
@@ -633,7 +682,8 @@ namespace ConsoleCards.Presentation.UI
         {
             if (modalLayer != null && !IsVisible(hotSeatHandoverView) && !IsVisible(contentArtPanelView)
                 && !IsVisible(ruleProposalPanelView) && !IsVisible(profilePanelView) && !IsVisible(cardEditorPanelView)
-                && !IsVisible(deckEditorPanelView) && !IsVisible(gameSelectPanelView))
+                && !IsVisible(deckEditorPanelView) && !IsVisible(gameSelectPanelView)
+                && !IsVisible(gameSavePanelView))
             {
                 modalLayer.SetActive(false);
             }
@@ -999,6 +1049,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(cardEditorPanelView);
             ReleaseView(deckEditorPanelView);
             ReleaseView(gameSelectPanelView);
+            ReleaseView(gameSavePanelView);
             ReleaseView(hintStripView);
             CloseTabletopPopup();
         }
@@ -1131,6 +1182,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(cardEditorPanelView);
             ReleaseView(deckEditorPanelView);
             ReleaseView(gameSelectPanelView);
+            ReleaseView(gameSavePanelView);
             ReleaseView(quantityPopupView);
             ReleaseView(cardInspectPopupView);
             ReleaseView(actionAbilityPurchasePopupView);

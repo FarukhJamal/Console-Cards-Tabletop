@@ -15,6 +15,7 @@ namespace ConsoleCards.Presentation.Saving
     ///   &lt;profile&gt;/
     ///     profile.json                name and dates
     ///     hints/seen.json             hints shown or dismissed
+    ///     my-games/&lt;id&gt;.json          games you made (doc 29)
     ///     games/&lt;game id&gt;/
     ///       cards.json                your new cards and changes to the game's cards
     ///       decks.json                your decks
@@ -52,6 +53,9 @@ namespace ConsoleCards.Presentation.Saving
         public string GamesFolder => Path.Combine(ActiveFolder, GamesFolderName);
 
         public string HintsSeenFile => Path.Combine(ActiveFolder, "hints", "seen.json");
+
+        /// <summary>The games the player made (doc 29): my-games/&lt;id&gt;.json.</summary>
+        public string MyGamesFolder => Path.Combine(ActiveFolder, "my-games");
 
         public List<ProfileInfo> List() => Store.List();
 
