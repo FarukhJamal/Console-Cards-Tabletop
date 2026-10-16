@@ -46,6 +46,7 @@ namespace ConsoleCards.Editor.UI
         public const string DeckEditorCardRowPath = Folder + "DeckEditorCardRow.prefab";
         public const string GameSelectPanelPath = Folder + "GameSelectPanel.prefab";
         public const string GameSavePanelPath = Folder + "GameSavePanel.prefab";
+        public const string TablePanelPath = Folder + "TablePanel.prefab";
         private const string FeedbackAudioPath = "Assets/ConsoleCards/Content/Audio/Feedback/";
         private const string SessionIconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
 
@@ -126,6 +127,7 @@ namespace ConsoleCards.Editor.UI
             Save<GameSelectPanelView>(GameSelectPanelPath, "GameSelectPanel", BuildGameSelectPanel, stretch: true);
             Save<GameSavePanelView>(GameSavePanelPath, "GameSavePanel", BuildGameSavePanel, stretch: true);
             Save<CardEditorPanelView>(CardEditorPanelPath, "CardEditorPanel", BuildCardEditorPanel, stretch: true);
+            Save<TablePanelView>(TablePanelPath, "TablePanel", BuildTablePanel, stretch: true);
             AddMissingRuleControls();
             AddMissingShopLabels();
             AddMissingDeckPicker();
@@ -208,6 +210,9 @@ namespace ConsoleCards.Editor.UI
                 UiRetention.CachedSingleInstance);
             AssignCatalogEntry(UiPrefabIds.GameSavePanel,
                 AssetDatabase.LoadAssetAtPath<GameSavePanelView>(GameSavePanelPath), UiLayer.Modal,
+                UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(UiPrefabIds.TablePanel,
+                AssetDatabase.LoadAssetAtPath<TablePanelView>(TablePanelPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
             AssetDatabase.SaveAssets();
             Debug.Log("[Gameplay UI] Created any missing Final UI gameplay prefabs and pointed the UI prefab catalog at them.");
@@ -495,6 +500,114 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("renameButton").objectReferenceValue = rename;
             so.FindProperty("statusLabel").objectReferenceValue = status;
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // ---------- Table mode (doc 30, B3; T3) ----------
+
+        // A side panel at the top right (no dimming backdrop, so the table stays in view): shape buttons, a model
+        // picker, the size rows (label, −, number box, +), the edge picker, a status line, Undo / Redo / Reset and
+        // Cancel / Done.
+        private static void BuildTablePanel(RectTransform root, TablePanelView view)
+        {
+            Vector2 topRight = new Vector2(1f, 1f);
+            RectTransform panel = ColumnCard(root, "TablePanel", topRight, topRight, 470f);
+            panel.anchoredPosition = new Vector2(-Margin, -110f);
+            BlockClicks(panel);
+            CardHeader(panel, "TABLE", 22, 58f);
+            Button close = HeaderCloseButton(panel);
+            RectTransform body = Body(panel, 18, 8f);
+
+            FieldTitle(body, "ShapeTitle", "SHAPE");
+            string[] shapes = { "Classic", "Rectangle", "Square", "Round", "Oval", "Star" };
+            Button[] shapeButtons = new Button[shapes.Length];
+            for (int line = 0; line < 2; line++)
+            {
+                RectTransform row = ButtonRow(body, TextAnchor.MiddleLeft);
+                row.name = $"Shapes{line + 1}";
+                for (int i = 0; i < 3; i++)
+                {
+                    int index = (line * 3) + i;
+                    shapeButtons[index] = PlainButton(row, $"{shapes[index]}Button", shapes[index], 136f, out _);
+                }
+            }
+
+            RectTransform modelRow = PickerRow(body, "ModelRow", "Model", out Button previousModel, out Text modelLabel,
+                out Button nextModel);
+
+            FieldTitle(body, "SizeTitle", "SIZE  (Shift + − / + for big steps)");
+            string[] fields = { "Width", "Depth", "Corners", "Points", "Inner size", "Edge height", "Edge width" };
+            GameObject[] fieldRows = new GameObject[fields.Length];
+            Button[] minus = new Button[fields.Length];
+            Button[] plus = new Button[fields.Length];
+            InputField[] inputs = new InputField[fields.Length];
+            for (int i = 0; i < fields.Length; i++)
+            {
+                RectTransform row = Child($"{fields[i].Replace(" ", string.Empty)}Row", body);
+                Row(row.gameObject, 0, 0, 0, 0, 8f, TextAnchor.MiddleLeft);
+                Size(row.gameObject, -1f, 46f);
+                RectTransform name = Child("Name", row);
+                Label(name, boldFont, 17, Ink, TextAnchor.MiddleLeft, fields[i]);
+                Size(name.gameObject, 140f, 44f, 140f);
+                minus[i] = TextButton(row, "MinusButton", "-", boldFont, 24, Cream, Ink, 46f, 44f, out _);
+                inputs[i] = SingleLineInput(row, "Value", string.Empty, 8);
+                inputs[i].textComponent.alignment = TextAnchor.MiddleCenter;
+                Size(inputs[i].gameObject, 120f, 44f, 120f);
+                plus[i] = TextButton(row, "PlusButton", "+", boldFont, 24, Cream, Ink, 46f, 44f, out _);
+                fieldRows[i] = row.gameObject;
+            }
+
+            RectTransform edgeRow = PickerRow(body, "EdgeRow", "Edge", out Button previousEdge, out Text edgeLabel,
+                out Button nextEdge);
+            Text status = Label(Child("Status", body), bodyFont, 15, Muted, TextAnchor.MiddleLeft,
+                "Changes show on the table at once. Done keeps them; Cancel or Esc puts the table back.");
+            RectTransform history = ButtonRow(body, TextAnchor.MiddleLeft);
+            Button undo = PlainButton(history, "UndoButton", "Undo", 136f, out _);
+            Button redo = PlainButton(history, "RedoButton", "Redo", 136f, out _);
+            Button reset = PlainButton(history, "ResetButton", "Reset size", 136f, out _);
+            RectTransform finish = ButtonRow(body);
+            Button cancel = PlainButton(finish, "CancelButton", "Cancel", 150f, out _);
+            Button done = GoButton(finish, "DoneButton", "Done", 150f, out _);
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("closeButton").objectReferenceValue = close;
+            AssignArray(so.FindProperty("shapeButtons"), shapeButtons);
+            so.FindProperty("modelRow").objectReferenceValue = modelRow.gameObject;
+            so.FindProperty("previousModelButton").objectReferenceValue = previousModel;
+            so.FindProperty("modelLabel").objectReferenceValue = modelLabel;
+            so.FindProperty("nextModelButton").objectReferenceValue = nextModel;
+            AssignArray(so.FindProperty("fieldRows"), fieldRows);
+            AssignArray(so.FindProperty("fieldMinusButtons"), minus);
+            AssignArray(so.FindProperty("fieldPlusButtons"), plus);
+            AssignArray(so.FindProperty("fieldInputs"), inputs);
+            so.FindProperty("edgeRow").objectReferenceValue = edgeRow.gameObject;
+            so.FindProperty("previousEdgeButton").objectReferenceValue = previousEdge;
+            so.FindProperty("edgeLabel").objectReferenceValue = edgeLabel;
+            so.FindProperty("nextEdgeButton").objectReferenceValue = nextEdge;
+            so.FindProperty("statusLabel").objectReferenceValue = status;
+            so.FindProperty("undoButton").objectReferenceValue = undo;
+            so.FindProperty("redoButton").objectReferenceValue = redo;
+            so.FindProperty("resetButton").objectReferenceValue = reset;
+            so.FindProperty("cancelButton").objectReferenceValue = cancel;
+            so.FindProperty("doneButton").objectReferenceValue = done;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // Title, then < choice > on one line.
+        private static RectTransform PickerRow(Transform parent, string name, string title, out Button previous,
+            out Text choice, out Button next)
+        {
+            RectTransform row = Child(name, parent);
+            Row(row.gameObject, 0, 0, 0, 0, 8f, TextAnchor.MiddleLeft);
+            Size(row.gameObject, -1f, 46f);
+            RectTransform label = Child("Name", row);
+            Label(label, boldFont, 17, Ink, TextAnchor.MiddleLeft, title);
+            Size(label.gameObject, 140f, 44f, 140f);
+            previous = TextButton(row, "PreviousButton", "<", boldFont, 22, Cream, Ink, 46f, 44f, out _);
+            RectTransform choiceRect = Child("Choice", row);
+            choice = Label(choiceRect, boldFont, 17, Ink, TextAnchor.MiddleCenter, "Lip");
+            Size(choiceRect.gameObject, 120f, 44f, 120f);
+            next = TextButton(row, "NextButton", ">", boldFont, 22, Cream, Ink, 46f, 44f, out _);
+            return row;
         }
 
         // One profile: name and when it was last played, then Play as (or a PLAYING NOW mark for the active one).

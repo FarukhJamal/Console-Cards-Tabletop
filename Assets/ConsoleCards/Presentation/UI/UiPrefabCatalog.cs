@@ -121,5 +121,6 @@ namespace ConsoleCards.Presentation.UI
         public const string DeckEditorCardRow = "platform.deck-editor-card-row";
         public const string GameSelectPanel = "platform.game-select-panel";
         public const string GameSavePanel = "platform.game-save-panel";
+        public const string TablePanel = "platform.table-panel";
     }
 }

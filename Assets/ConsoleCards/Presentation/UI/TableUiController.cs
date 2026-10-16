@@ -43,6 +43,7 @@ namespace ConsoleCards.Presentation.UI
         private ContentArtPanelView contentArtPanelView;
         private RuleProposalPanelView ruleProposalPanelView;
         private ProfilePanelView profilePanelView;
+        private TablePanelView tablePanelView;
         private CardEditorPanelView cardEditorPanelView;
         private bool cardEditorEntryWarned;
         private DeckEditorPanelView deckEditorPanelView;
@@ -53,6 +54,7 @@ namespace ConsoleCards.Presentation.UI
         private bool profileEntryWarned;
         private bool tableShapeEntryWarned;
         private bool tableEdgeEntryWarned;
+        private bool tableToolsEntryWarned;
         private HintStripView hintStripView;
         private bool hintStripWarned;
         private bool tipsSettingWarned;
@@ -496,6 +498,58 @@ namespace ConsoleCards.Presentation.UI
 
         public bool IsProfilePanelOpen => IsVisible(profilePanelView);
 
+        /// <summary>Binds the Table menu's "Table tools…" row (T3), which opens Table mode; null hides it.</summary>
+        public void ShowTableToolsEntry(Action openTableTools)
+        {
+            EnsureSessionBarView();
+            if (!sessionBarView.BindTableTools(openTableTools) && openTableTools != null && !tableToolsEntryWarned)
+            {
+                tableToolsEntryWarned = true;
+                Debug.LogWarning(
+                    "The Table menu has no Table tools row: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
+            }
+        }
+
+        /// <summary>
+        /// Shows or refreshes the Table mode panel (T3), a side panel that leaves the table in view. False when its
+        /// prefab is missing.
+        /// </summary>
+        public bool ShowTablePanel(TablePanelModel model, TablePanelActions actions)
+        {
+            try
+            {
+                EnsureService();
+                if (tablePanelView == null || !tablePanelView.IsAcquired)
+                {
+                    ReleaseView(tabletopPopupView);
+                    popupLayer.SetActive(false);
+                    ReleaseModalViews();
+                    componentToolboxView?.CloseToolbox();
+                    tablePanelView = uiService.AcquireCached<TablePanelView>(UiPrefabIds.TablePanel);
+                }
+
+                modalLayer.SetActive(true);
+                tablePanelView.Bind(model, actions);
+                tablePanelView.Show();
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                Debug.LogWarning(
+                    "The Table panel is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs (Final UI). "
+                    + exception.Message);
+                return false;
+            }
+        }
+
+        public bool IsTablePanelOpen => IsVisible(tablePanelView);
+
+        public void CloseTablePanel()
+        {
+            ReleaseView(tablePanelView);
+            SetModalLayerOffUnlessHandover();
+        }
+
         public void CloseProfilePanel()
         {
             ReleaseView(profilePanelView);
@@ -712,7 +766,7 @@ namespace ConsoleCards.Presentation.UI
             if (modalLayer != null && !IsVisible(hotSeatHandoverView) && !IsVisible(contentArtPanelView)
                 && !IsVisible(ruleProposalPanelView) && !IsVisible(profilePanelView) && !IsVisible(cardEditorPanelView)
                 && !IsVisible(deckEditorPanelView) && !IsVisible(gameSelectPanelView)
-                && !IsVisible(gameSavePanelView))
+                && !IsVisible(gameSavePanelView) && !IsVisible(tablePanelView))
             {
                 modalLayer.SetActive(false);
             }
@@ -1079,6 +1133,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(deckEditorPanelView);
             ReleaseView(gameSelectPanelView);
             ReleaseView(gameSavePanelView);
+            ReleaseView(tablePanelView);
             ReleaseView(hintStripView);
             CloseTabletopPopup();
         }

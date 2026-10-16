@@ -86,6 +86,10 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button tableEdgeButton;
         [SerializeField] private Text tableEdgeLabel;
 
+        [Header("Table tools (T3; optional, added by Add Missing Table Menu Rows)")]
+        [Tooltip("The Table menu row \"Table tools…\" that opens Table mode.")]
+        [SerializeField] private Button tableToolsButton;
+
         [Header("Shop (doc 18 §15.4; optional, added by Add Missing Table Menu Rows)")]
         [Tooltip("The Shop entry on the bar: the shop icon and the word Shop, between Redo and Table.")]
         [SerializeField] private Button shopButton;
@@ -116,6 +120,7 @@ namespace ConsoleCards.Presentation.UI
         private Action openProfile;
         private Func<string> cycleTableShape;
         private Func<string> cycleTableEdge;
+        private Action openTableTools;
         private Action openCardEditor;
         private Action openDeckEditor;
         private Action openSaveGame;
@@ -431,6 +436,22 @@ namespace ConsoleCards.Presentation.UI
             return true;
         }
 
+        /// <summary>Binds the optional "Table tools…" row (T3); null hides it. False when the prefab lacks it.</summary>
+        public bool BindTableTools(Action openTableToolsAction)
+        {
+            RequireAcquired();
+            if (tableToolsButton == null)
+            {
+                return false;
+            }
+
+            Clear(tableToolsButton);
+            openTableTools = openTableToolsAction;
+            tableToolsButton.gameObject.SetActive(openTableTools != null);
+            tableToolsButton.onClick.AddListener(HandleTableTools);
+            return true;
+        }
+
         /// <summary>
         /// Binds the optional Shop entry on the bar (doc 18 §15.4): shown while <paramref name="openShopAction"/> is
         /// set (a game whose Shop is open), hidden for null. False when the prefab lacks it.
@@ -535,6 +556,7 @@ namespace ConsoleCards.Presentation.UI
             openProfile = null;
             cycleTableShape = null;
             cycleTableEdge = null;
+            openTableTools = null;
             openCardEditor = null;
             openDeckEditor = null;
             openSaveGame = null;
@@ -731,6 +753,13 @@ namespace ConsoleCards.Presentation.UI
             if (tableShapeLabel != null && label != null) tableShapeLabel.text = label;
         }
 
+        private void HandleTableTools()
+        {
+            Action action = openTableTools;
+            CloseMenu();
+            action?.Invoke();
+        }
+
         private void HandleTableEdge()
         {
             string label = cycleTableEdge?.Invoke();
@@ -825,6 +854,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(profileButton);
             Clear(tableShapeButton);
             Clear(tableEdgeButton);
+            Clear(tableToolsButton);
             Clear(cardEditorButton);
             Clear(deckEditorButton);
             Clear(saveGameButton);

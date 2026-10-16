@@ -141,3 +141,7 @@ MonoBehaviour:
     prefab: {fileID: 1101922016561863838, guid: 9423fde988a50a143b400353b616003d, type: 3}
     layer: 3
     retention: 0
+  - id: platform.table-panel
+    prefab: {fileID: 4294395777971505368, guid: 0bad867b1939f8343b925bbdb9fb2571, type: 3}
+    layer: 3
+    retention: 0

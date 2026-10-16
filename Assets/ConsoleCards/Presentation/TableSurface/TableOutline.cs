@@ -110,6 +110,21 @@ namespace ConsoleCards.Presentation.TableSurface
             return best;
         }
 
+        /// <summary>The shortest distance from a flat point to the outline (inside or out).</summary>
+        public float DistanceToOutline(Vector2 point)
+        {
+            float best = float.PositiveInfinity;
+            for (int i = 0, j = points.Count - 1; i < points.Count; j = i++)
+            {
+                Vector2 a = points[j];
+                Vector2 ab = points[i] - a;
+                float t = ab.sqrMagnitude > 0f ? Mathf.Clamp01(Vector2.Dot(point - a, ab) / ab.sqrMagnitude) : 0f;
+                best = Mathf.Min(best, (point - (a + (ab * t))).sqrMagnitude);
+            }
+
+            return float.IsPositiveInfinity(best) ? 0f : Mathf.Sqrt(best);
+        }
+
         /// <summary>
         /// How far the edge is from the centre in <paramref name="direction"/> (flat, need not be unit length).
         /// 0 when there is no outline.

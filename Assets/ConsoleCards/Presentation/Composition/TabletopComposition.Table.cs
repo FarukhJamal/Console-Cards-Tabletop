@@ -23,6 +23,7 @@ namespace ConsoleCards.Presentation.Composition
     /// the base table.</item>
     /// <item>The "Edge: …" row (T2) cycles the built tables' edge: None, Lip, Rounded rail, Wooden rail, Spikes,
     /// Neon.</item>
+    /// <item>"Table tools…" (T3) opens Table mode (TabletopComposition.TableMode.cs).</item>
     /// </list>
     /// The choice is saved in the profile (table.json). Sizes, the shape cards and Undo come in T3.
     /// </summary>
@@ -124,6 +125,7 @@ namespace ConsoleCards.Presentation.Composition
             bool canChange = FindClassicTable();
             runtimeUi.ShowTableShapeEntry(TableShapeText(), canChange ? cycleTableShapeAction : null);
             runtimeUi.ShowTableEdgeEntry(TableEdgeText(), canChange ? cycleTableEdgeAction : null);
+            runtimeUi.ShowTableToolsEntry(canChange ? OpenTableModeAction : null);
         }
 
         private string TableEdgeText() => $"Edge: {TableSpec.EdgeLabel(tableSpec.edge)}";
@@ -137,6 +139,12 @@ namespace ConsoleCards.Presentation.Composition
             if (!FindClassicTable()) return TableEdgeText();
             TableSpec candidate = tableSpec.Copy();
             candidate.edge = TableSpec.NextEdge(tableSpec.edge);
+            if (IsBuiltShape(candidate.shape) && !TableHolds(candidate, out string why))
+            {
+                ShowMessage(why);
+                return TableEdgeText();
+            }
+
             if (IsBuiltShape(candidate.shape) && !ShowTable(candidate, out string error))
             {
                 ShowMessage($"The edge was not changed: {error}.");
@@ -157,6 +165,12 @@ namespace ConsoleCards.Presentation.Composition
             if (!FindClassicTable()) return TableShapeText();
             TableSpec candidate = NextTableSpec();
             TableShape shape = candidate.shape;
+            if (IsBuiltShape(shape) && !TableHolds(candidate, out string why))
+            {
+                ShowMessage(why);
+                return TableShapeText();
+            }
+
             if (!ShowTable(candidate, out string error))
             {
                 ShowMessage($"The table was not changed: {error}.");

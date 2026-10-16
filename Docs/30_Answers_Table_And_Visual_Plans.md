@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.8 · 2026-10-17 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.9 · 2026-10-17 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -844,6 +844,62 @@ T1b was approved by the owner on 2026-10-17 ("Approved next Start").
 - Edge: at most about 11 points × 2 × 513 vertices for the rounded rail. The spikes: at most 256 × 24 vertices.
 - Draw calls: top 2, edge 1, glow or spikes 1.
 - Nothing is built per frame.
+
+
+### B10. T3 record: Table mode (written 2026-10-17, to be checked)
+
+T2 was approved by the owner on 2026-10-17 ("Approved start next").
+
+**Opening it.** The Table menu has a new row, **Table tools…**. It opens Table mode: a side panel at the top
+right, with no dimming, so the table stays in view. The camera turns to the top view.
+
+**The panel:**
+
+| Part | What it does |
+|---|---|
+| Shape | Six buttons: Classic, Rectangle, Square, Round, Oval, Star. The chosen one is greyed ("you are here"). |
+| Model | `<` name `>`, shown when there are table models besides the base table. |
+| Size rows | Each row: name, −, a number box, +. Only the rows that fit the shape show: Width (all built shapes; the diameter for Round and Star), Depth (Rectangle, Oval), Corners (Rectangle, Square), Points and Inner size (Star), Edge height and Edge width (when there is an edge). |
+| Steps | − / + snap to 0.5 for sizes, 0.25 for corners and 0.05 for edges. Shift takes big steps (5, 1, 0.25). A typed number is used as it is, without snapping. |
+| Edge | `<` name `>` for the six edges. |
+| Undo / Redo | Inside Table mode, up to 16 steps. |
+| Reset size | The shape's default size. |
+| Cancel (or Esc) | Puts the table back as it was when Table mode opened. |
+| Done | Keeps the table, saves it in the profile, and returns the camera to the default view. |
+
+Every change shows on the table at once.
+
+**Nothing falls off, and games still fit.** A built table never shrinks past a piece standing on it. The
+pieces counted are cards, dice, pawns, tokens, decks, discard piles, stacks, consoles, pile bays and game boards:
+
+- A piece stops the change when it is on the table now and would be off it, or less than half its width from the
+  edge.
+- The screen hand and pieces already off the table are ignored.
+- While a game is on the table (anything but the Empty Table), the table cannot get smaller than the classic
+  playing area, so the game's layout always fits.
+- The status line says why a change stopped.
+- The same check applies to the Table menu's Shape and Edge rows.
+- **Owner's choice still open (B2):** stop at pieces (built), or move pieces inside instead.
+
+**Moved to T3b (proposed):**
+
+- Drag handles on the table itself, and the morph animation between shapes.
+- Picture cards for the shapes (these come with the V4 menus).
+- Seats spread along the outline.
+
+All of these are safe to leave for now, because a game's room is always kept and the camera has no table-shaped
+limits today (its zoom range already covers the largest default table).
+
+**Code:**
+
+- New: `Presentation/UI/TablePanelView.cs` (the view, `TableField`, `TablePanelModel`, `TablePanelActions`) and
+  `Presentation/Composition/TabletopComposition.TableMode.cs` (Table mode, the hold check, Undo).
+- `UiPrefabIds.TablePanel` (`platform.table-panel`).
+- `GameplayUiBuilder`: the TablePanel prefab and its catalog entry, made by Create Missing Gameplay UI Prefabs.
+- `TableUiController`: `ShowTablePanel`, `CloseTablePanel`, `ShowTableToolsEntry`.
+- `SessionBarView.BindTableTools`; `SessionUiBuilder`: the Table tools row.
+- `TableOutline.DistanceToOutline`.
+- `TabletopComposition.Table.cs`: the tools row, and the hold check on the menu rows.
 
 ---
 
