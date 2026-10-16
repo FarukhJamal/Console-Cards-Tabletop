@@ -257,7 +257,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseRows();
             for (int i = 0; i < model.Rows.Count; i++)
             {
-                CardEditorRowView row = uiService.AcquirePooled<CardEditorRowView>(PrototypeUiPrefabIds.CardEditorRow, rowsRoot);
+                CardEditorRowView row = uiService.AcquirePooled<CardEditorRowView>(UiPrefabIds.CardEditorRow, rowsRoot);
                 row.Bind(model.Rows[i], HandleSelect);
                 row.Show();
                 rowViews.Add(row);
@@ -266,7 +266,7 @@ namespace ConsoleCards.Presentation.UI
             for (int i = 0; i < model.Decks.Count; i++)
             {
                 CardEditorDeckRowView deckRow =
-                    uiService.AcquirePooled<CardEditorDeckRowView>(PrototypeUiPrefabIds.CardEditorDeckRow, deckRowsRoot);
+                    uiService.AcquirePooled<CardEditorDeckRowView>(UiPrefabIds.CardEditorDeckRow, deckRowsRoot);
                 deckRow.Bind(model.Decks[i], HandleToggleDeck, HandleDeckCopies);
                 deckRow.Show();
                 deckRowViews.Add(deckRow);

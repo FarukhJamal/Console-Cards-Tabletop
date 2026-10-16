@@ -22,7 +22,7 @@ namespace ConsoleCards.Presentation.UI
     public sealed class RuntimeUiManager : MonoBehaviour, IRuntimeUiService
     {
         [Header("Scene-authored UI shell")]
-        [SerializeField] private PrototypeRuntimeUiRoot root;
+        [SerializeField] private TableUiRoot root;
         [SerializeField] private UiPrefabCatalog prefabCatalog;
         [SerializeField] private Transform screenLayerMount;
         [SerializeField] private Transform hudLayerMount;

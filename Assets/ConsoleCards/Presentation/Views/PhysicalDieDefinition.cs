@@ -58,7 +58,7 @@ namespace ConsoleCards.Presentation.Views
             return false;
         }
 
-        public void Build(Transform root, MeshFilter prototypeBodyMesh)
+        public void Build(Transform root, MeshFilter bodyMesh)
         {
             if (faces == null || faces.Length != sideCount) throw new InvalidOperationException("Die face count mismatch.");
             HashSet<int> values = new HashSet<int>();
@@ -68,7 +68,7 @@ namespace ConsoleCards.Presentation.Views
                     throw new InvalidOperationException("Invalid authored physical Die mapping.");
 
             if (root == null) throw new ArgumentNullException(nameof(root));
-            if (prototypeBodyMesh == null) throw new ArgumentNullException(nameof(prototypeBodyMesh));
+            if (bodyMesh == null) throw new ArgumentNullException(nameof(bodyMesh));
             if (visualPrefab == null) throw new InvalidOperationException($"Physical d{sideCount} requires its supplied visual prefab.");
             if (!IsFinitePositive(visualSize)) throw new InvalidOperationException($"Physical d{sideCount} visual size is invalid.");
 
@@ -126,7 +126,7 @@ namespace ConsoleCards.Presentation.Views
                 Destroy(importedCollider);
             }
 
-            prototypeBodyMesh.gameObject.SetActive(false);
+            bodyMesh.gameObject.SetActive(false);
             Collider oldCollider = root.GetComponent<Collider>();
             if (oldCollider != null)
             {

@@ -61,7 +61,7 @@ namespace ConsoleCards.Presentation.UI
             {
                 RulesCardLine line = model.Lines[i];
                 RulesCardLineView view = uiService.AcquirePooled<RulesCardLineView>(
-                    line.Kind == RulesCardLineKind.Heading ? PrototypeUiPrefabIds.RulesHeading : PrototypeUiPrefabIds.RulesLine,
+                    line.Kind == RulesCardLineKind.Heading ? UiPrefabIds.RulesHeading : UiPrefabIds.RulesLine,
                     linesRoot);
                 view.Bind(line, model.Actions?.ProposeChange);
                 view.Show();

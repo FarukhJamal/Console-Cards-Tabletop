@@ -1,0 +1,169 @@
+using System;
+using ConsoleCards.Presentation.Interaction;
+using ConsoleCards.Presentation.Views.Containers;
+using UnityEngine;
+
+namespace ConsoleCards.Presentation.Composition
+{
+    /// <summary>
+    /// Shared references of a fixed container prefab (Deck, Stack, Discard pile, Hand). A pile prefab with a
+    /// bay (the Real pile prefabs, doc 22) needs no plate: drop feedback tints the bay. Without a bay the plate
+    /// (feedback renderer and its materials) is required and shows the feedback, as before.
+    /// </summary>
+    public sealed class FixedContainerVisual : MonoBehaviour
+    {
+        [SerializeField] private MonoBehaviour containerView;
+        [SerializeField] private Transform layoutAnchor;
+        [SerializeField] private Collider targetCollider;
+        [SerializeField] private TabletopContainerDropTarget dropTarget;
+        [SerializeField] private TextMesh label;
+        [SerializeField] private Renderer feedbackRenderer;
+        [SerializeField] private Material baseMaterial;
+        [SerializeField] private Material validTargetMaterial;
+        [SerializeField] private Material sourceTargetMaterial;
+        [SerializeField] private Material invalidTargetMaterial;
+        [SerializeField] private PileBayView bay;
+        private bool basePlateHidden;
+        private PileBayFeedback feedbackState;
+        private Material feedbackMaterial;
+
+        public IContainerView ContainerView => containerView as IContainerView;
+
+        public Transform LayoutAnchor => layoutAnchor;
+
+        public Collider TargetCollider => targetCollider;
+
+        public TabletopContainerDropTarget DropTarget => dropTarget;
+
+        public TextMesh Label => label;
+
+        public Renderer FeedbackRenderer => feedbackRenderer;
+
+        /// <summary>The pile's bay; when set there is no plate and drop feedback tints the bay.</summary>
+        public PileBayView Bay => bay;
+
+        public TView GetView<TView>() where TView : MonoBehaviour, IContainerView
+        {
+            TView resolvedView = containerView as TView;
+            if (resolvedView == null)
+            {
+                throw new InvalidOperationException(
+                    $"{name} requires a {typeof(TView).Name} reference.");
+            }
+
+            return resolvedView;
+        }
+
+        public void ValidateReferences()
+        {
+            RequireReference(containerView, nameof(containerView));
+            RequireReference(layoutAnchor, nameof(layoutAnchor));
+            RequireReference(targetCollider, nameof(targetCollider));
+            RequireReference(dropTarget, nameof(dropTarget));
+            RequireReference(label, nameof(label));
+            if (bay == null)
+            {
+                RequireReference(feedbackRenderer, nameof(feedbackRenderer));
+                RequireReference(baseMaterial, nameof(baseMaterial));
+                RequireReference(validTargetMaterial, nameof(validTargetMaterial));
+                RequireReference(sourceTargetMaterial, nameof(sourceTargetMaterial));
+                RequireReference(invalidTargetMaterial, nameof(invalidTargetMaterial));
+            }
+
+            if (!(containerView is IContainerView))
+            {
+                throw new InvalidOperationException(
+                    "FixedContainerVisual requires an IContainerView component.");
+            }
+
+            if (!ReferenceEquals(containerView.gameObject, gameObject)
+                || !ReferenceEquals(dropTarget.gameObject, gameObject))
+            {
+                throw new InvalidOperationException(
+                    "FixedContainerVisual requires its View and drop target on the container root.");
+            }
+
+            ValidateHierarchyReference(layoutAnchor, nameof(layoutAnchor));
+            ValidateHierarchyReference(targetCollider.transform, nameof(targetCollider));
+            ValidateHierarchyReference(label.transform, nameof(label));
+            if (bay != null)
+            {
+                ValidateHierarchyReference(bay.transform, nameof(bay));
+            }
+            else
+            {
+                ValidateHierarchyReference(feedbackRenderer.transform, nameof(feedbackRenderer));
+            }
+        }
+
+        public void Reactivate()
+        {
+            gameObject.SetActive(true);
+            targetCollider.enabled = true;
+            dropTarget.enabled = true;
+            ClearFeedback();
+        }
+
+        public void ShowValidTarget()
+        {
+            SetFeedback(PileBayFeedback.Valid, validTargetMaterial);
+        }
+
+        public void ShowSourceTarget()
+        {
+            SetFeedback(PileBayFeedback.Source, sourceTargetMaterial);
+        }
+
+        public void ShowInvalidTarget()
+        {
+            SetFeedback(PileBayFeedback.Invalid, invalidTargetMaterial);
+        }
+
+        public void SetBasePlateHidden(bool hidden)
+        {
+            basePlateHidden = hidden;
+            SetFeedback(feedbackState, feedbackMaterial != null ? feedbackMaterial : baseMaterial);
+        }
+
+        public void ClearFeedback()
+        {
+            SetFeedback(PileBayFeedback.None, baseMaterial);
+        }
+
+        private void SetFeedback(PileBayFeedback state, Material material)
+        {
+            feedbackState = state;
+            feedbackMaterial = material;
+            if (bay != null)
+            {
+                if (feedbackRenderer != null)
+                {
+                    feedbackRenderer.enabled = false;
+                }
+
+                bay.ShowFeedback(state);
+                return;
+            }
+
+            feedbackRenderer.sharedMaterial = material;
+            feedbackRenderer.enabled = !basePlateHidden || state != PileBayFeedback.None;
+        }
+
+        private void ValidateHierarchyReference(Transform referencedTransform, string referenceName)
+        {
+            if (referencedTransform != transform && !referencedTransform.IsChildOf(transform))
+            {
+                throw new InvalidOperationException(
+                    $"FixedContainerVisual {referenceName} must belong to the container hierarchy.");
+            }
+        }
+
+        private static void RequireReference(UnityEngine.Object reference, string name)
+        {
+            if (reference == null)
+            {
+                throw new InvalidOperationException($"FixedContainerVisual requires {name}.");
+            }
+        }
+    }
+}

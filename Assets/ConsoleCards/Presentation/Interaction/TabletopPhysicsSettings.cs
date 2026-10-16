@@ -4,7 +4,7 @@ namespace ConsoleCards.Presentation.Interaction
 {
     /// <summary>
     /// Project-wide physics feel for the tabletop. Call Apply() once, before any physical objects are
-    /// initialized (e.g. at the top of TabletopPrototypeComposition.Awake). Also mirror the numbers in
+    /// initialized (e.g. at the top of TabletopComposition.Awake). Also mirror the numbers in
     /// Project Settings > Physics / Time so the editor and builds agree.
     /// </summary>
     public static class TabletopPhysicsSettings

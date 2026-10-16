@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using ConsoleCards.Presentation.Catalog;
-using ConsoleCards.Presentation.Prototype;
+using ConsoleCards.Presentation.Composition;
 using UnityEditor;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -22,7 +22,7 @@ namespace ConsoleCards.Editor.Toolbox
             GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
             if (prefab == null)
             {
-                TabletopPrototypeComposition composition = Object.FindFirstObjectByType<TabletopPrototypeComposition>();
+                TabletopComposition composition = Object.FindFirstObjectByType<TabletopComposition>();
                 if (composition == null)
                 {
                     Debug.LogWarning("[Board] Open the table scene first (it has the composition and the board).");

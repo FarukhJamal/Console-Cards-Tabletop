@@ -162,7 +162,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseRows();
             for (int i = 0; i < model.Games.Count; i++)
             {
-                CardEditorRowView row = uiService.AcquirePooled<CardEditorRowView>(PrototypeUiPrefabIds.CardEditorRow, gameRowsRoot);
+                CardEditorRowView row = uiService.AcquirePooled<CardEditorRowView>(UiPrefabIds.CardEditorRow, gameRowsRoot);
                 row.Bind(model.Games[i], HandleSelectGame);
                 row.Show();
                 gameRowViews.Add(row);

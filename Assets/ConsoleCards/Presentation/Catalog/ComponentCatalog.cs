@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ConsoleCards.Definitions;
-using ConsoleCards.Presentation.Prototype;
+using ConsoleCards.Presentation.Composition;
 using ConsoleCards.Presentation.Views;
 using ConsoleCards.Presentation.Views.Containers;
 using UnityEngine;
@@ -269,7 +269,7 @@ namespace ConsoleCards.Presentation.Catalog
         private void ValidatePile<TView>(ComponentCatalogEntry entry) where TView : MonoBehaviour, IContainerView
         {
             entry.GetPrefabComponent<TView>();
-            PrototypeFixedContainerVisual visual = entry.GetPrefabComponent<PrototypeFixedContainerVisual>();
+            FixedContainerVisual visual = entry.GetPrefabComponent<FixedContainerVisual>();
             if (visual.Bay == null)
             {
                 Fail(entry, "requires a Bay (Pile Bay View) on its fixed-container visual");

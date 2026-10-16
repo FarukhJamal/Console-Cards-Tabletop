@@ -19,7 +19,7 @@ namespace ConsoleCards.Games.TrapFloor
     /// </summary>
     public static class TrapFloorTemplateFactory
     {
-        public const int PrototypePlayerCount = 4;
+        public const int StandardPlayerCount = 4;
         /// <summary>
         /// Content sets with this role are the floor groups (doc 18 §15.6). Each draws its count at random, and
         /// together they must fill the Grid.
@@ -41,7 +41,7 @@ namespace ConsoleCards.Games.TrapFloor
         private const double FloorfallDiceX = 3.45d;
         private const double FloorfallDiceY = 3.45d;
         private const double FloorfallDiceSpacing = 0.9d;
-        private const float PrototypeCameraOrthographicSize = 7.35f;
+        private const float DefaultCameraOrthographicSize = 7.35f;
         private const string MainConsoleSlotKey = "Main";
 
         public static TrapFloorTemplateDefinition CreateStandardFourPlayer()
@@ -121,20 +121,20 @@ namespace ConsoleCards.Games.TrapFloor
                 avatars,
                 pawnDefinitionId,
                 dieDefinitionId);
-            List<GameTemplateSeatDefinition> seats = new List<GameTemplateSeatDefinition>(PrototypePlayerCount);
+            List<GameTemplateSeatDefinition> seats = new List<GameTemplateSeatDefinition>(StandardPlayerCount);
             List<GameTemplateContainerDefinition> containers = new List<GameTemplateContainerDefinition>();
             List<GameTemplateObjectInstanceDefinition> objects = new List<GameTemplateObjectInstanceDefinition>();
             List<GameTemplateContainerMembership> memberships = new List<GameTemplateContainerMembership>();
-            List<TrapFloorPlayerSetupDefinition> players = new List<TrapFloorPlayerSetupDefinition>(PrototypePlayerCount);
+            List<TrapFloorPlayerSetupDefinition> players = new List<TrapFloorPlayerSetupDefinition>(StandardPlayerCount);
             Dictionary<TabletopObjectId, string> labels = new Dictionary<TabletopObjectId, string>();
             Dictionary<TrapFloorCoordinate, TabletopObjectId> floorCardIds =
                 new Dictionary<TrapFloorCoordinate, TabletopObjectId>();
 
             CreateFloorBoard(floorContent, grid, randomValueSource, floorCardIds, labels, objects);
 
-            TrapFloorCoordinate[] startingCorners = AssignStartingCorners(playerLayout, grid, PrototypePlayerCount);
+            TrapFloorCoordinate[] startingCorners = AssignStartingCorners(playerLayout, grid, StandardPlayerCount);
 
-            for (int seatIndex = 0; seatIndex < PrototypePlayerCount; seatIndex++)
+            for (int seatIndex = 0; seatIndex < StandardPlayerCount; seatIndex++)
             {
                 playerLayout.TryGetSeat(seatIndex, out PlayerSeatLayoutEntry layoutSeat);
                 CreatePlayerSetup(
@@ -182,7 +182,7 @@ namespace ConsoleCards.Games.TrapFloor
                 $"{gameDefinition.DisplayName} — {activeMode.DisplayName}",
                 gameDefinition.ManualRules,
                 playerLayout.Id,
-                PrototypePlayerCount,
+                StandardPlayerCount,
                 seats,
                 containers,
                 objects,
@@ -250,7 +250,7 @@ namespace ConsoleCards.Games.TrapFloor
                 throw new ArgumentException("Trap Floor requires an authored Grid Definition.", nameof(definition));
             if (definition.Console == null)
                 throw new ArgumentException("Trap Floor requires an authored Console Configuration.", nameof(definition));
-            if (definition.MinimumPlayers > PrototypePlayerCount || definition.MaximumPlayers < PrototypePlayerCount)
+            if (definition.MinimumPlayers > StandardPlayerCount || definition.MaximumPlayers < StandardPlayerCount)
             {
                 throw new ArgumentException(
                     "Trap Floor's authored Player range must include the current four-Player layout.",
@@ -459,7 +459,7 @@ namespace ConsoleCards.Games.TrapFloor
         private static int MaximumStartingAbilityCount(IReadOnlyList<TrapFloorAvatarSetup> avatars)
         {
             int maximum = 0;
-            for (int seatIndex = 0; seatIndex < PrototypePlayerCount; seatIndex++)
+            for (int seatIndex = 0; seatIndex < StandardPlayerCount; seatIndex++)
                 maximum = Math.Max(maximum, AvatarForSeat(avatars, seatIndex).StartingAbilities.Count);
             return maximum;
         }
@@ -917,7 +917,7 @@ namespace ConsoleCards.Games.TrapFloor
             {
                 new ConsoleAdjacentPlacementItem("board", -1, boardBounds, false),
             };
-            for (int seatIndex = 0; seatIndex < PrototypePlayerCount; seatIndex++)
+            for (int seatIndex = 0; seatIndex < StandardPlayerCount; seatIndex++)
             {
                 playerLayout.TryGetSeat(seatIndex, out PlayerSeatLayoutEntry layoutSeat);
                 TabletopPose consolePose = GetConsolePose(layoutSeat);
@@ -1117,7 +1117,7 @@ namespace ConsoleCards.Games.TrapFloor
             double width = ((grid.Columns - 1) * grid.ColumnPitch) + grid.CellWidth;
             double height = ((grid.Rows - 1) * grid.RowPitch) + grid.CellHeight;
             double scale = Math.Max(width / 4.32d, height / 6d);
-            return (float)(PrototypeCameraOrthographicSize * scale);
+            return (float)(DefaultCameraOrthographicSize * scale);
         }
 
         public static TabletopPose GetConsolePose(PlayerSeatLayoutEntry layoutSeat)

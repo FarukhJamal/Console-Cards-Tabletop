@@ -1,0 +1,62 @@
+using System;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace ConsoleCards.Presentation.UI
+{
+    public sealed class SessionTemplateButtonView : ReusableUiView
+    {
+        [SerializeField] private Button button;
+        [SerializeField] private Text label;
+
+        public void ValidateReferences()
+        {
+            if (button == null)
+            {
+                throw new InvalidOperationException(
+                    "SessionTemplateButtonView requires a Button reference.");
+            }
+
+            if (label == null)
+            {
+                throw new InvalidOperationException(
+                    "SessionTemplateButtonView requires a label reference.");
+            }
+        }
+
+        public void Bind(string displayName, Action selected)
+        {
+            RequireAcquired();
+            if (string.IsNullOrWhiteSpace(displayName))
+            {
+                throw new ArgumentException("A Game Template option requires a display name.", nameof(displayName));
+            }
+
+            if (selected == null)
+            {
+                throw new ArgumentNullException(nameof(selected));
+            }
+
+            ValidateReferences();
+            label.text = displayName;
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(selected.Invoke);
+            // Pooled rows come back non-interactable from Unbind; a bound row is always selectable.
+            button.interactable = true;
+        }
+
+        public override void Unbind()
+        {
+            if (button != null)
+            {
+                button.onClick.RemoveAllListeners();
+                button.interactable = false;
+            }
+
+            if (label != null)
+            {
+                label.text = string.Empty;
+            }
+        }
+    }
+}

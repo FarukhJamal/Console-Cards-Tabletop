@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.2 · 2026-10-16 · Status: approved by the owner with changes (2026-10-16): the table ping is free
+Version 0.3 · 2026-10-16 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -530,19 +530,32 @@ total, whatever the shape or size.
   the screen, how much of the screen they cover, where they sit and in what order things are listed. It is not
   only colour.
 - **The pixel art is not readable enough.**
-- **The client's theme: the inside of a console's hardware.** A green circuit board with copper traces, chips,
+- **The client's theme: the inside of a console's hardware.** A circuit board with copper traces, chips,
   solder points and white printed labels.
 
 ### C1. The theme: inside the console
 
+**Board colour: teal, not green (owner, 2026-10-16).** The board is a deep teal so it sets off the orange, black
+and red of the components and game systems, instead of competing with them.
+
+| Role | Colour (starting values, tuned in V0) |
+|---|---|
+| Board (panel background) | deep teal `#0F3A3D`, a lighter teal `#16504F` for raised parts |
+| Board accent, selected and "powered" | teal `#2FA58A` (already the UI kit's Teal) |
+| Traces and edges | copper `#B87333` / gold `#C9A24A`, thin |
+| Printed labels and body text | silkscreen white `#F2F0E6` |
+| Chips and buttons | black `#1B1B1D` with a fine metal rim |
+| Components and game systems (unchanged) | orange `#E0531F`, black, red; mustard `#F2A81D` for warnings |
+
+
 | Element | Look |
 |---|---|
-| Panels | Dark green circuit board (solder mask) with a faint trace pattern; thin copper or gold edges; small solder dots at the corners |
+| Panels | Deep teal circuit board with a faint trace pattern; thin copper or gold edges; small solder dots at the corners |
 | Section titles | White "printed on the board" labels in a clean, condensed sans-serif, like real board markings (for example `U3 · DECK EDITOR`) |
-| Buttons | Chip-like blocks: black with a fine metal rim. Primary actions have a small LED that lights green; dangerous actions an amber or red LED |
-| Lists and rows | Rows separated by thin copper lines; the selected row lights with a soft green glow, like a powered trace |
+| Buttons | Chip-like blocks: black with a fine metal rim. Primary actions have a small LED that lights teal; dangerous actions an amber or red LED |
+| Lists and rows | Rows separated by thin copper lines; the selected row lights with a soft teal glow, like a powered trace |
 | Links between parts | Thin traces may run from a panel to the piece it is about, sparingly |
-| Player colours | LED colours (green, red, blue, amber and so on), checked to be colour-blind safe |
+| Player colours | LED colours (blue, red, amber, violet, white and so on, kept apart from the board's teal and the components' orange), checked to be colour-blind safe |
 | Sounds | Soft relay clicks and short electronic blips instead of 8-bit beeps (8-bit stays for the table ping and fun moments) |
 
 **Readability first (the pixel font goes):**
@@ -552,8 +565,8 @@ total, whatever the shape or size.
 - **Titles:** a condensed technical display font in the "board marking" style instead of the pixel font
   Silkscreen. The pixel font is kept only for tiny decorative markings, if at all.
 - **Minimum sizes at 1920 × 1080:** body 18 px, small labels 15 px, titles 24 px or more.
-- **Contrast:** text against the green board at least 4.5 : 1 (WCAG AA). White or very light text on the dark
-  board, never green on green.
+- **Contrast:** text against the teal board at least 4.5 : 1 (WCAG AA). White or very light text on the dark
+  board, never teal on teal.
 - **UI size setting:** 80–130 %.
 
 **The table stays a table.** The circuit board is the frame and the menus; the playing area keeps calm felt or
@@ -623,7 +636,7 @@ textures (Part B), so the pieces stay easy to see. A "circuit board" felt is one
 
 | Stage | What |
 |---|---|
-| V0 Art direction | A style sheet for the owner to sign off: "inside the console" (C1). Circuit-board palette, the two fonts, button and panel looks, icon style, sound style, and screen mock-ups of the play layout, a work screen and the title screen (C2). |
+| V0 Art direction | A style sheet for the owner to sign off: "inside the console" (C1). Teal circuit-board palette, the two fonts, button and panel looks, icon style, sound style, and screen mock-ups of the play layout, a work screen and the title screen (C2). |
 | V1 Lighting and post | One soft key light with soft shadows, a fill light and a reflection probe. A URP Global Volume with: tonemapping (Neutral or ACES); a colour-grading LUT per theme; low bloom (for neon and screens); light vignette; SSAO for contact shadows under cards and pieces; depth of field only when inspecting a card; anti-aliasing (MSAA, or TAA if needed). Light presets: Day, Evening, Arcade. |
 | V2 Pieces | Real models and materials for the card (thin rounded box with bevelled edge, card-stock material front and back), pawns and meeples, tokens, dice (bevelled, engraved pips), the controller box, the Console mat (cloth), the board mat. Consistent real-world scale (doc 00 §3.1). The Prototype prefabs are replaced through the catalogs, not edited. |
 | V3 Table and room | The generated table (Part B) with good felt and edge materials; a soft, blurred room around it; a floor. |
@@ -647,3 +660,124 @@ textures (Part B), so the pieces stay easy to see. A "circuit board" felt is one
 Not yet placed in the order: UX-1 (cursor, gestures and the table ping), CART-1 (cartridge contract), V6–V7.
 
 **To-do, only when the owner asks:** multiplayer, MP-1 to MP-5 (A6).
+
+
+---
+
+## Part D — R0 record: final names (2026-10-16)
+
+Status: written, to be checked (not compiled yet). Owner's go-ahead: "Start R0" (2026-10-16), which also allows
+touching the former Prototype prefabs.
+
+**How it was done, so no reference breaks:**
+
+1. **Code** (45 files) now uses the final names: classes, a few members, the namespace
+   `ConsoleCards.Presentation.Prototype` → `ConsoleCards.Presentation.Composition`. The files themselves were
+   left where they were.
+2. **The scene**: its objects get their new names, and the composition's hide setting is renamed. A
+   `FormerlySerializedAs` attribute keeps the old setting too. The world-text shader is shown as
+   "ConsoleCards/World Text".
+3. **A one-time Unity tool** (`Editor/Maintenance/R0RenameTool.cs`) then renames the files, prefabs, materials,
+   the scene and three folders *inside Unity*.
+   - Every file keeps its asset ID, so the scene, the catalogs and the prefabs still find everything.
+   - It is offered in a dialog as soon as the code compiles, and is also in Console Cards > Maintenance > Finish
+     R0 Renames. It skips what is already done.
+   - It updates the build scene list.
+   - It lists in the Console the old prefabs that nothing in the project uses (candidates to delete).
+   - Delete the tool once R0 is approved.
+4. Between the compile and the renames, Unity shows the renamed scripts as "cannot be loaded". Nothing is lost,
+   but do not press Play or save the scene until the renames are done.
+
+**Types:**
+
+| Old | New |
+|---|---|
+| `TabletopPrototypeCompositionEditor` | `TabletopCompositionEditor` |
+| `TabletopPrototypeComposition` | `TabletopComposition` |
+| `PrototypeVisualHide` | `TableVisualHide` |
+| `PrototypeContextMenuMode` | `ContextMenuMode` |
+| `PrototypeTemplateContext` | `TemplateContext` |
+| `PrototypeFixedContainerVisual` | `FixedContainerVisual` |
+| `PrototypeConsoleSlotVisual` | `ConsoleSlotVisual` |
+| `PrototypeCardVisualReferences` | `CardVisualReferences` |
+| `PrototypeSessionUndoSnapshot` | `SessionUndoSnapshot` |
+| `PrototypeWorldTextDepth` | `WorldTextDepth` |
+| `PrototypeUiPrefabIds` | `UiPrefabIds` |
+| `PrototypePopupActionOption` | `PopupActionOption` |
+| `PrototypePopupActionRowView` | `PopupActionRowView` |
+| `PrototypeCardInspectView` | `CardInspectView` |
+| `PrototypeCardInspectModel` | `CardInspectModel` |
+| `PrototypeCardInspectSideModel` | `CardInspectSideModel` |
+| `PrototypeActionAbilityPurchaseOption` | `ActionAbilityPurchaseOption` |
+| `PrototypeActionAbilityPurchasePopupView` | `ActionAbilityPurchasePopupView` |
+| `PrototypeFocusedCardOptionModel` | `FocusedCardOptionModel` |
+| `PrototypeFocusedCardSelectionModel` | `FocusedCardSelectionModel` |
+| `PrototypeFocusedCardRevealModel` | `FocusedCardRevealModel` |
+| `PrototypeFocusedCardSelectionView` | `FocusedCardSelectionView` |
+| `PrototypeFocusedCardOptionView` | `FocusedCardOptionView` |
+| `PrototypeTrapFloorStatusModel` | `TrapFloorStatusModel` |
+| `PrototypeFloorfallStatusModel` | `FloorfallStatusModel` |
+| `PrototypeTrapFloorHudView` | `TrapFloorHudView` |
+| `PrototypeGameTemplateOption` | `GameTemplateOption` |
+| `PrototypeGameTemplatesPanelView` | `GameTemplatesPanelView` |
+| `PrototypeTabletopPopupView` | `TabletopPopupView` |
+| `PrototypeQuantityPopupView` | `QuantityPopupView` |
+| `PrototypeInteractionGuide` | `InteractionGuideView` |
+| `PrototypeRuntimeUiRoot` | `TableUiRoot` |
+| `PrototypeRuntimeUiController` | `TableUiController` |
+| `PrototypeStatusMessageView` | `StatusMessageView` |
+| `PrototypeSessionTemplateButtonView` | `SessionTemplateButtonView` |
+| `PrototypeComponentToolboxView` | `LegacyComponentToolboxView` |
+| `PrototypeComponentToolboxBindings` | `LegacyComponentToolboxBindings` |
+
+**Members:**
+
+| Old | New |
+|---|---|
+| `prototypeTemplateContext` | `templateContext` |
+| `HidesPrototypeVisual` | `HidesTableVisual` |
+| `ConfigurePrototypeLabel` | `ConfigureWorldLabel` |
+| `PrototypePlayerCount` | `StandardPlayerCount` |
+| `prototypeUiInputConfiguredByComposition` | `uiInputConfiguredByComposition` |
+| `ConfigurePrototypeUiInput` | `ConfigureUiInput` |
+| `prototypeBodyMesh` | `bodyMesh` |
+| `PlayerPrototypeColor` | `PlayerSeatColor` |
+| `CreateTrapFloorPrototypeContext` | `CreateTrapFloorTemplateContext` |
+| `CompletePendingFloormasterTriggerPrototype` | `CompletePendingFloormasterTrigger` |
+| `prototypeVisualHide` | `tableVisualHide` |
+| `RestorePrototypeTemplateContext` | `RestoreTemplateContext` |
+| `ResetPrototype` | `ResetTable` |
+| `PrototypeControlsPanelRect` | `DeveloperControlsPanelRect` |
+| `PrototypeCameraOrthographicSize` | `DefaultCameraOrthographicSize` |
+| `CreatePrototypeActivePlayers` | `CreateDefaultActivePlayers` |
+| `CompleteFloorfallPhasePrototype` | `CompleteFloorfallPhase` |
+| `CompleteEndPrototype` | `CompleteEndPhase` |
+| `ClearPrototypeUiInput` | `ClearUiInput` |
+
+**Folders and assets:**
+
+| Old | New |
+|---|---|
+| `Presentation/Prototype/` | `Presentation/Composition/` (files without "Prototype": `TabletopComposition.cs` and its parts) |
+| `Content/Prefabs/Prototype/Prototype<Name>.prefab` | `Content/Prefabs/Base/<Name>.prefab` (`PrototypeRuntimeUiRoot` → `TableUiRoot`; the six die shapes move with the folder) |
+| `Content/Prefabs/Prototype/PrototypeUiPrefabCatalog.asset` | `Content/Prefabs/Base/BaseUiPrefabCatalog.asset` |
+| `Content/Materials/Prototype/<Name>Prototype.mat` | `Content/Materials/Base/<Name>.mat` |
+| `Content/Materials/TableSurfacePrototype.mat` | `Content/Materials/TableSurface.mat` |
+| `Content/Resources/PrototypeWorldText.mat` / `.shader` | `WorldText.mat` / `WorldText.shader` (loaded by the name "WorldText") |
+| `Presentation/Scenes/TabletopPrototype.unity` | `Presentation/Scenes/Tabletop.unity` |
+
+**Notes:**
+
+- `Content/Prefabs/Base/` holds the pieces in use (Card, Pawn, Token, Die, Hand) and several older prefabs that
+  newer ones replaced (for example Deck, Stack, DiscardPile, Console, and old UI prefabs). The tool's Console
+  list shows which ones nothing uses.
+- `Real/` keeps its own `Deck`, `Stack`, `DiscardPile` and `ConsoleMat` prefabs (the ones in use).
+- The rule "don't edit Prototype prefabs" now applies to the same prefabs under their new names, unless the owner
+  says otherwise.
+- Some error messages and comments still say "prototype" in passing; they change with the R1 split.
+- **Fix after the renames (2026-10-16):** six renamed scripts had a small data class above their view class. While the
+  file and class names did not match, Unity linked those scripts to the data class, and it kept that link after the
+  rename because the files themselves had not changed. The Shop panel then failed to start the table ("requires a
+  prefab asset reference"). Moving each view class to the top of its file changes the files, so Unity reads them again
+  and links them correctly. Rule from now on: the Unity component class comes first in its file.
+- Older docs keep the old names where they describe history. CLAUDE.md is updated.

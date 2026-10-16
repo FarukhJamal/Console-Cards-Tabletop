@@ -97,15 +97,15 @@ namespace ConsoleCards.Editor.UI
             boldFont = RequireFont("ChakraPetch-Bold.ttf");
             Directory.CreateDirectory(Folder);
 
-            Save<PrototypePopupActionRowView>(ActionRowPath, "ActionRow", BuildActionRow, stretch: false);
-            Save<PrototypeInteractionGuide>(GuidePath, "InteractionGuide", BuildGuide, stretch: true);
-            Save<PrototypeTrapFloorHudView>(TrapFloorHudPath, "TrapFloorHud", BuildTrapFloorHud, stretch: true);
-            Save<PrototypeTabletopPopupView>(TabletopPopupPath, "TabletopPopup", BuildTabletopPopup, stretch: true);
-            Save<PrototypeQuantityPopupView>(QuantityPopupPath, "QuantityPopup", BuildQuantityPopup, stretch: true);
-            Save<PrototypeCardInspectView>(CardInspectPath, "CardInspect", BuildCardInspect, stretch: true);
-            Save<PrototypeActionAbilityPurchasePopupView>(AbilityPurchasePath, "AbilityPurchase", BuildAbilityPurchase, stretch: true);
-            Save<PrototypeFocusedCardSelectionView>(FocusedSelectionPath, "FocusedCardSelection", BuildFocusedSelection, stretch: true);
-            Save<PrototypeFocusedCardOptionView>(FocusedOptionPath, "FocusedCardOption", BuildFocusedOption, stretch: false);
+            Save<PopupActionRowView>(ActionRowPath, "ActionRow", BuildActionRow, stretch: false);
+            Save<InteractionGuideView>(GuidePath, "InteractionGuide", BuildGuide, stretch: true);
+            Save<TrapFloorHudView>(TrapFloorHudPath, "TrapFloorHud", BuildTrapFloorHud, stretch: true);
+            Save<TabletopPopupView>(TabletopPopupPath, "TabletopPopup", BuildTabletopPopup, stretch: true);
+            Save<QuantityPopupView>(QuantityPopupPath, "QuantityPopup", BuildQuantityPopup, stretch: true);
+            Save<CardInspectView>(CardInspectPath, "CardInspect", BuildCardInspect, stretch: true);
+            Save<ActionAbilityPurchasePopupView>(AbilityPurchasePath, "AbilityPurchase", BuildAbilityPurchase, stretch: true);
+            Save<FocusedCardSelectionView>(FocusedSelectionPath, "FocusedCardSelection", BuildFocusedSelection, stretch: true);
+            Save<FocusedCardOptionView>(FocusedOptionPath, "FocusedCardOption", BuildFocusedOption, stretch: false);
             Save<RulesCardLineView>(RulesHeadingPath, "RulesHeading", BuildRulesHeading, stretch: false);
             Save<RulesCardLineView>(RulesLinePath, "RulesLine", BuildRulesLine, stretch: false);
             Save<RulesCardView>(RulesCardPath, "RulesCard", BuildRulesCard, stretch: true);
@@ -132,81 +132,81 @@ namespace ConsoleCards.Editor.UI
             AddMissingDeleteGameButton();
             AddMissingGameSaveSteps();
 
-            AssignCatalogEntry(PrototypeUiPrefabIds.PopupActionRow,
-                AssetDatabase.LoadAssetAtPath<PrototypePopupActionRowView>(ActionRowPath), UiLayer.Popup, UiRetention.Pooled);
-            AssignCatalogEntry(PrototypeUiPrefabIds.InteractionGuide,
-                AssetDatabase.LoadAssetAtPath<PrototypeInteractionGuide>(GuidePath), UiLayer.Hud, UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.TrapFloorHud,
-                AssetDatabase.LoadAssetAtPath<PrototypeTrapFloorHudView>(TrapFloorHudPath), UiLayer.Hud, UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.TabletopPopup,
-                AssetDatabase.LoadAssetAtPath<PrototypeTabletopPopupView>(TabletopPopupPath), UiLayer.Popup, UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.QuantityPopup,
-                AssetDatabase.LoadAssetAtPath<PrototypeQuantityPopupView>(QuantityPopupPath), UiLayer.Modal, UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.CardInspect,
-                AssetDatabase.LoadAssetAtPath<PrototypeCardInspectView>(CardInspectPath), UiLayer.Modal, UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.ActionAbilityPurchase,
-                AssetDatabase.LoadAssetAtPath<PrototypeActionAbilityPurchasePopupView>(AbilityPurchasePath), UiLayer.Modal,
+            AssignCatalogEntry(UiPrefabIds.PopupActionRow,
+                AssetDatabase.LoadAssetAtPath<PopupActionRowView>(ActionRowPath), UiLayer.Popup, UiRetention.Pooled);
+            AssignCatalogEntry(UiPrefabIds.InteractionGuide,
+                AssetDatabase.LoadAssetAtPath<InteractionGuideView>(GuidePath), UiLayer.Hud, UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(UiPrefabIds.TrapFloorHud,
+                AssetDatabase.LoadAssetAtPath<TrapFloorHudView>(TrapFloorHudPath), UiLayer.Hud, UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(UiPrefabIds.TabletopPopup,
+                AssetDatabase.LoadAssetAtPath<TabletopPopupView>(TabletopPopupPath), UiLayer.Popup, UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(UiPrefabIds.QuantityPopup,
+                AssetDatabase.LoadAssetAtPath<QuantityPopupView>(QuantityPopupPath), UiLayer.Modal, UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(UiPrefabIds.CardInspect,
+                AssetDatabase.LoadAssetAtPath<CardInspectView>(CardInspectPath), UiLayer.Modal, UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(UiPrefabIds.ActionAbilityPurchase,
+                AssetDatabase.LoadAssetAtPath<ActionAbilityPurchasePopupView>(AbilityPurchasePath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.FocusedCardSelection,
-                AssetDatabase.LoadAssetAtPath<PrototypeFocusedCardSelectionView>(FocusedSelectionPath), UiLayer.Modal,
+            AssignCatalogEntry(UiPrefabIds.FocusedCardSelection,
+                AssetDatabase.LoadAssetAtPath<FocusedCardSelectionView>(FocusedSelectionPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.FocusedCardOption,
-                AssetDatabase.LoadAssetAtPath<PrototypeFocusedCardOptionView>(FocusedOptionPath), UiLayer.Modal, UiRetention.Pooled);
-            AssignCatalogEntry(PrototypeUiPrefabIds.RulesCard,
+            AssignCatalogEntry(UiPrefabIds.FocusedCardOption,
+                AssetDatabase.LoadAssetAtPath<FocusedCardOptionView>(FocusedOptionPath), UiLayer.Modal, UiRetention.Pooled);
+            AssignCatalogEntry(UiPrefabIds.RulesCard,
                 AssetDatabase.LoadAssetAtPath<RulesCardView>(RulesCardPath), UiLayer.Hud, UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.RulesHeading,
+            AssignCatalogEntry(UiPrefabIds.RulesHeading,
                 AssetDatabase.LoadAssetAtPath<RulesCardLineView>(RulesHeadingPath), UiLayer.Hud, UiRetention.Pooled);
-            AssignCatalogEntry(PrototypeUiPrefabIds.RulesLine,
+            AssignCatalogEntry(UiPrefabIds.RulesLine,
                 AssetDatabase.LoadAssetAtPath<RulesCardLineView>(RulesLinePath), UiLayer.Hud, UiRetention.Pooled);
-            AssignCatalogEntry(PrototypeUiPrefabIds.FeedbackBanner,
+            AssignCatalogEntry(UiPrefabIds.FeedbackBanner,
                 AssetDatabase.LoadAssetAtPath<FeedbackBannerView>(FeedbackBannerPath), UiLayer.Notification,
                 UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.FeedbackMessages,
+            AssignCatalogEntry(UiPrefabIds.FeedbackMessages,
                 AssetDatabase.LoadAssetAtPath<FeedbackMessageStackView>(FeedbackMessagesPath), UiLayer.Notification,
                 UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.HotSeatHandover,
+            AssignCatalogEntry(UiPrefabIds.HotSeatHandover,
                 AssetDatabase.LoadAssetAtPath<HotSeatHandoverView>(HotSeatHandoverPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.ActivityLog,
+            AssignCatalogEntry(UiPrefabIds.ActivityLog,
                 AssetDatabase.LoadAssetAtPath<ActivityLogView>(ActivityLogPath), UiLayer.Hud,
                 UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.ContentArtPanel,
+            AssignCatalogEntry(UiPrefabIds.ContentArtPanel,
                 AssetDatabase.LoadAssetAtPath<ContentArtPanelView>(ContentArtPanelPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.ContentArtRow,
+            AssignCatalogEntry(UiPrefabIds.ContentArtRow,
                 AssetDatabase.LoadAssetAtPath<ContentArtRowView>(ContentArtRowPath), UiLayer.Modal,
                 UiRetention.Pooled);
-            AssignCatalogEntry(PrototypeUiPrefabIds.HintStrip,
+            AssignCatalogEntry(UiPrefabIds.HintStrip,
                 AssetDatabase.LoadAssetAtPath<HintStripView>(HintStripPath), UiLayer.Hud,
                 UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.RuleProposalPanel,
+            AssignCatalogEntry(UiPrefabIds.RuleProposalPanel,
                 AssetDatabase.LoadAssetAtPath<RuleProposalPanelView>(RuleProposalPanelPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.ProfilePanel,
+            AssignCatalogEntry(UiPrefabIds.ProfilePanel,
                 AssetDatabase.LoadAssetAtPath<ProfilePanelView>(ProfilePanelPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.ProfileRow,
+            AssignCatalogEntry(UiPrefabIds.ProfileRow,
                 AssetDatabase.LoadAssetAtPath<ProfileRowView>(ProfileRowPath), UiLayer.Modal,
                 UiRetention.Pooled);
-            AssignCatalogEntry(PrototypeUiPrefabIds.CardEditorPanel,
+            AssignCatalogEntry(UiPrefabIds.CardEditorPanel,
                 AssetDatabase.LoadAssetAtPath<CardEditorPanelView>(CardEditorPanelPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.CardEditorRow,
+            AssignCatalogEntry(UiPrefabIds.CardEditorRow,
                 AssetDatabase.LoadAssetAtPath<CardEditorRowView>(CardEditorRowPath), UiLayer.Modal,
                 UiRetention.Pooled);
-            AssignCatalogEntry(PrototypeUiPrefabIds.CardEditorDeckRow,
+            AssignCatalogEntry(UiPrefabIds.CardEditorDeckRow,
                 AssetDatabase.LoadAssetAtPath<CardEditorDeckRowView>(CardEditorDeckRowPath), UiLayer.Modal,
                 UiRetention.Pooled);
-            AssignCatalogEntry(PrototypeUiPrefabIds.DeckEditorPanel,
+            AssignCatalogEntry(UiPrefabIds.DeckEditorPanel,
                 AssetDatabase.LoadAssetAtPath<DeckEditorPanelView>(DeckEditorPanelPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.DeckEditorCardRow,
+            AssignCatalogEntry(UiPrefabIds.DeckEditorCardRow,
                 AssetDatabase.LoadAssetAtPath<DeckEditorCardRowView>(DeckEditorCardRowPath), UiLayer.Modal,
                 UiRetention.Pooled);
-            AssignCatalogEntry(PrototypeUiPrefabIds.GameSelectPanel,
+            AssignCatalogEntry(UiPrefabIds.GameSelectPanel,
                 AssetDatabase.LoadAssetAtPath<GameSelectPanelView>(GameSelectPanelPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
-            AssignCatalogEntry(PrototypeUiPrefabIds.GameSavePanel,
+            AssignCatalogEntry(UiPrefabIds.GameSavePanel,
                 AssetDatabase.LoadAssetAtPath<GameSavePanelView>(GameSavePanelPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
             AssetDatabase.SaveAssets();
@@ -1489,7 +1489,7 @@ namespace ConsoleCards.Editor.UI
 
         // ---------- action row (Trap Floor actions, right-click menus) ----------
 
-        private static void BuildActionRow(RectTransform root, PrototypePopupActionRowView view)
+        private static void BuildActionRow(RectTransform root, PopupActionRowView view)
         {
             root.sizeDelta = new Vector2(380f, RowHeight);
             Image fill = Img(root, "ButtonOutlined", Cream);
@@ -1514,7 +1514,7 @@ namespace ConsoleCards.Editor.UI
 
         // ---------- controls strip and help card ----------
 
-        private static void BuildGuide(RectTransform root, PrototypeInteractionGuide view)
+        private static void BuildGuide(RectTransform root, InteractionGuideView view)
         {
             // Controls strip, bottom right: the everyday controls and the Help button.
             RectTransform strip = Rect("ControlsStrip", root, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f),
@@ -1568,7 +1568,7 @@ namespace ConsoleCards.Editor.UI
 
         // ---------- Trap Floor: turn strip (top centre) and status card (top right) ----------
 
-        private static void BuildTrapFloorHud(RectTransform root, PrototypeTrapFloorHudView view)
+        private static void BuildTrapFloorHud(RectTransform root, TrapFloorHudView view)
         {
             // Fixed width in the gap between the session bar (ends near x 580) and the status card (starts at
             // x 1451): it never runs under either. Long progress text wraps and the strip grows downward.
@@ -1764,7 +1764,7 @@ namespace ConsoleCards.Editor.UI
 
         // ---------- right-click menu, draw count, merge destinations ----------
 
-        private static void BuildTabletopPopup(RectTransform root, PrototypeTabletopPopupView view)
+        private static void BuildTabletopPopup(RectTransform root, TabletopPopupView view)
         {
             // Root: invisible full-screen click catcher (left click dismisses, right click re-targets) and bounds.
             Img(root, "Solid", new Color(0f, 0f, 0f, 0f));
@@ -1824,7 +1824,7 @@ namespace ConsoleCards.Editor.UI
 
         // ---------- quantity popup ----------
 
-        private static void BuildQuantityPopup(RectTransform root, PrototypeQuantityPopupView view)
+        private static void BuildQuantityPopup(RectTransform root, QuantityPopupView view)
         {
             Button overlay = DismissOverlay(root);
             Vector2 centre = new Vector2(0.5f, 0.5f);
@@ -1855,7 +1855,7 @@ namespace ConsoleCards.Editor.UI
 
         // ---------- inspect a card ----------
 
-        private static void BuildCardInspect(RectTransform root, PrototypeCardInspectView view)
+        private static void BuildCardInspect(RectTransform root, CardInspectView view)
         {
             Button overlay = DismissOverlay(root);
             Vector2 centre = new Vector2(0.5f, 0.5f);
@@ -1908,7 +1908,7 @@ namespace ConsoleCards.Editor.UI
 
         // ---------- buy an ability ----------
 
-        private static void BuildAbilityPurchase(RectTransform root, PrototypeActionAbilityPurchasePopupView view)
+        private static void BuildAbilityPurchase(RectTransform root, ActionAbilityPurchasePopupView view)
         {
             Button overlay = DismissOverlay(root);
             Vector2 centre = new Vector2(0.5f, 0.5f);
@@ -1973,7 +1973,7 @@ namespace ConsoleCards.Editor.UI
             GameObject root = PrefabUtility.LoadPrefabContents(AbilityPurchasePath);
             try
             {
-                PrototypeActionAbilityPurchasePopupView view = root.GetComponent<PrototypeActionAbilityPurchasePopupView>();
+                ActionAbilityPurchasePopupView view = root.GetComponent<ActionAbilityPurchasePopupView>();
                 SerializedObject so = view != null ? new SerializedObject(view) : null;
                 SerializedProperty title = so?.FindProperty("titleLabel");
                 SerializedProperty listTitle = so?.FindProperty("listTitleLabel");
@@ -1998,7 +1998,7 @@ namespace ConsoleCards.Editor.UI
 
         // ---------- choose cards / reveal a card ----------
 
-        private static void BuildFocusedSelection(RectTransform root, PrototypeFocusedCardSelectionView view)
+        private static void BuildFocusedSelection(RectTransform root, FocusedCardSelectionView view)
         {
             Button overlay = DismissOverlay(root);
             Vector2 centre = new Vector2(0.5f, 0.5f);
@@ -2047,7 +2047,7 @@ namespace ConsoleCards.Editor.UI
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void BuildFocusedOption(RectTransform root, PrototypeFocusedCardOptionView view)
+        private static void BuildFocusedOption(RectTransform root, FocusedCardOptionView view)
         {
             // The root is the card: the view sizes, fans and lifts it.
             root.sizeDelta = new Vector2(148f, 214f);

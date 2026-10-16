@@ -60,12 +60,12 @@ namespace ConsoleCards.Presentation.Input
             suppressObjectPointerUntilRelease = false;
         }
 
-        internal void ConfigurePrototypeUiInput(Action<Vector2> secondaryPointerPressedHandler)
+        internal void ConfigureUiInput(Action<Vector2> secondaryPointerPressedHandler)
         {
-            ConfigurePrototypeUiInput(secondaryPointerPressedHandler, null);
+            ConfigureUiInput(secondaryPointerPressedHandler, null);
         }
 
-        internal void ConfigurePrototypeUiInput(
+        internal void ConfigureUiInput(
             Action<Vector2> secondaryPointerPressedHandler,
             Func<Vector2, bool> cameraOrbitEligibilityHandler)
         {
@@ -80,7 +80,7 @@ namespace ConsoleCards.Presentation.Input
             cameraOrbitEligibility = cameraOrbitEligibilityHandler;
         }
 
-        internal void ClearPrototypeUiInput()
+        internal void ClearUiInput()
         {
             suppressObjectPointerUntilRelease = false;
             secondaryPointerPressed = null;

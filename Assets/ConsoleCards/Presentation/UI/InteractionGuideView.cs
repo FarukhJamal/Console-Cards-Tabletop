@@ -1,0 +1,111 @@
+using System;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace ConsoleCards.Presentation.UI
+{
+    public sealed class InteractionGuideView : ReusableUiView
+    {
+        [SerializeField] private GameObject guidePanel;
+        [Tooltip("The always-on controls strip; hidden while Hints are off (doc 23, R1).")]
+        [SerializeField] private GameObject controlsStrip;
+        [SerializeField] private Button toggleButton;
+        [SerializeField] private Text toggleButtonLabel;
+        [SerializeField] private Button closeButton;
+        [SerializeField] private Text titleLabel;
+        [SerializeField] private Text bodyLabel;
+        [SerializeField] private string title = "Console Cards";
+        [SerializeField, TextArea(8, 20)] private string guideText =
+            "Click Card, Pawn, or Token: select\n"
+            + "Click empty table: clear selection\n"
+            + "Drag tabletop Card, Pawn, or Token: move\n"
+            + "Drag contained Card: transfer or play to table\n"
+            + "Drag tabletop Card onto Container: place in Container\n"
+            + "Right-click Component: actions\n"
+            + "Drag Hand Card left/right: reorder Hand\n"
+            + "Esc: cancel / rollback\n"
+            + "Mouse wheel + selection: rotate 15 degrees\n"
+            + "Mouse wheel during placement: rotate preview 15 degrees\n"
+            + "Mouse wheel + no selection: camera zoom\n"
+            + "Scroll during drag: no zoom or rotation\n"
+            + "F + selected Card: flip face\n"
+            + "F + Pawn or Token: rejected, no visible change\n"
+            + "WASD / Arrow keys: camera pan\n"
+            + "Middle mouse drag: camera pan";
+
+        public void ValidateReferences()
+        {
+            if (guidePanel == null
+                || toggleButton == null
+                || toggleButtonLabel == null
+                || closeButton == null
+                || titleLabel == null
+                || bodyLabel == null)
+            {
+                throw new InvalidOperationException(
+                    "InteractionGuideView requires its authored panel, buttons, and text references.");
+            }
+        }
+
+        public void Bind()
+        {
+            RequireAcquired();
+            ValidateReferences();
+            Unbind();
+            titleLabel.text = title;
+            bodyLabel.text = guideText;
+            toggleButton.onClick.AddListener(ToggleGuide);
+            closeButton.onClick.AddListener(HideGuide);
+            // Starts closed (UI-1b): the controls strip covers everyday play; the full help opens on demand.
+            SetGuideVisible(false);
+        }
+
+        /// <summary>Shows or hides the controls strip (Hints switch). The help card stays reachable from the Table menu.</summary>
+        public void SetStripVisible(bool visible)
+        {
+            if (controlsStrip != null)
+            {
+                controlsStrip.SetActive(visible);
+            }
+        }
+
+        /// <summary>Opens the help card (Table menu > Help).</summary>
+        public void OpenGuide()
+        {
+            if (guidePanel != null && toggleButtonLabel != null)
+            {
+                SetGuideVisible(true);
+            }
+        }
+
+        public override void Unbind()
+        {
+            if (toggleButton != null)
+            {
+                toggleButton.onClick.RemoveAllListeners();
+            }
+
+            if (closeButton != null)
+            {
+                closeButton.onClick.RemoveAllListeners();
+            }
+        }
+
+        private void ToggleGuide()
+        {
+            SetGuideVisible(!guidePanel.activeSelf);
+        }
+
+        private void HideGuide()
+        {
+            SetGuideVisible(false);
+        }
+
+        private void SetGuideVisible(bool visible)
+        {
+            guidePanel.SetActive(visible);
+            toggleButtonLabel.text = visible ? "Close help" : "? Help";
+        }
+
+    }
+}

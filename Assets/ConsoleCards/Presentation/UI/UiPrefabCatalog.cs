@@ -87,7 +87,7 @@ namespace ConsoleCards.Presentation.UI
         }
     }
 
-    public static class PrototypeUiPrefabIds
+    public static class UiPrefabIds
     {
         public const string ComponentToolbox = "platform.component-toolbox";
         public const string SessionBar = "platform.session-bar";

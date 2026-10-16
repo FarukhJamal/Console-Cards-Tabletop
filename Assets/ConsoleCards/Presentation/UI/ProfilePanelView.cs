@@ -109,7 +109,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseRows();
             for (int i = 0; i < model.Rows.Count; i++)
             {
-                ProfileRowView row = uiService.AcquirePooled<ProfileRowView>(PrototypeUiPrefabIds.ProfileRow, rowsRoot);
+                ProfileRowView row = uiService.AcquirePooled<ProfileRowView>(UiPrefabIds.ProfileRow, rowsRoot);
                 row.Bind(model.Rows[i], HandlePlayAs);
                 row.Show();
                 rowViews.Add(row);

@@ -117,7 +117,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseRows();
             for (int i = 0; i < model.Rows.Count; i++)
             {
-                ContentArtRowView row = uiService.AcquirePooled<ContentArtRowView>(PrototypeUiPrefabIds.ContentArtRow, rowsRoot);
+                ContentArtRowView row = uiService.AcquirePooled<ContentArtRowView>(UiPrefabIds.ContentArtRow, rowsRoot);
                 row.Bind(model.Rows[i], model.CanChoosePictures, HandleChoose, HandleReset);
                 row.Show();
                 rowViews.Add(row);

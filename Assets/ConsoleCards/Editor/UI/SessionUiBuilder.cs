@@ -54,7 +54,7 @@ namespace ConsoleCards.Editor.UI
             // Final UI prefabs belong to the designer: never overwrite an existing one.
             if (File.Exists(PrefabPath))
             {
-                AssignCatalogEntry(PrototypeUiPrefabIds.SessionBar, AssetDatabase.LoadAssetAtPath<SessionBarView>(PrefabPath),
+                AssignCatalogEntry(UiPrefabIds.SessionBar, AssetDatabase.LoadAssetAtPath<SessionBarView>(PrefabPath),
                     UiLayer.Hud, UiRetention.CachedSingleInstance);
                 AssetDatabase.SaveAssets();
                 Debug.Log($"[Session UI] Kept {PrefabPath} (already exists; edit it in the Final UI folder).");
@@ -77,7 +77,7 @@ namespace ConsoleCards.Editor.UI
                 UnityEngine.Object.DestroyImmediate(root);
             }
 
-            AssignCatalogEntry(PrototypeUiPrefabIds.SessionBar, AssetDatabase.LoadAssetAtPath<SessionBarView>(PrefabPath),
+            AssignCatalogEntry(UiPrefabIds.SessionBar, AssetDatabase.LoadAssetAtPath<SessionBarView>(PrefabPath),
                 UiLayer.Hud, UiRetention.CachedSingleInstance);
             AssetDatabase.SaveAssets();
             Debug.Log($"[Session UI] Built {PrefabPath}.");
