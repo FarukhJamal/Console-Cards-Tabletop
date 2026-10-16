@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.15 · 2026-10-16 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.16 · 2026-10-16 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -70,14 +70,27 @@ What already exists and is reused:
 | L2-4 | Game selection menu (New table…): every game with picture, players, mode, rules and deck; Playing as; Make it yours (card art, card editor, deck editor, moved off the Table menu); Start (doc 24, L2-4 record) | Done, approved by the owner |
 | L2-5 | Decks used by games: choose the deck to play with in the game selection menu; Trap Floor plays with your deck (setup tried first); an Empty Table starts with your deck to place (doc 24, L2-5 record) | Done, approved by the owner |
 | L2-6 | Player-made games: set up an Empty Table, Save table as a game (name, players, description, written rules); the table save file; your games in New table… (Start lays the table out, rules on the rules card, Save over, Delete) (doc 29) | Written; owner asked for polish (L2-6b) |
-| L2-6b | Polish (owner, 2026-10-16): Save table as a game in steps — 1 Deck (choose yours or a game's, or make a new one; put it on the table), 2 Cards (create a card in it or pick its cards), 3 Save; the deck is the game's own deck, placed shuffled where it lay at Start (owner's choice). Toolbox placement keeps placing until Esc or right-click (owner's choice) (doc 29 §L2-6b) | Written, to be checked (not compiled yet) |
+| L2-6b | Polish (owner, 2026-10-16): Save table as a game in steps — 1 Deck (choose yours or a game's, or make a new one; put it on the table), 2 Cards (create a card in it or pick its cards), 3 Save; the deck is the game's own deck, placed shuffled where it lay at Start (owner's choice). Toolbox placement keeps placing until Esc or right-click (owner's choice) (doc 29 §L2-6b) | Done, approved by the owner |
 
-### Next lists — proposed (doc 30, 2026-10-16)
+### Next — approved order (owner, 2026-10-16; doc 30)
 
-The owner asked for Table Selection next, then a visual polish plan. Doc 30 proposes, for the owner to approve and
-order: T1–T6 (table shape, size, playing area, edges, paint, base), V0–V7 (art direction, lighting and post,
-pieces, table and room, UI/UX, motion, colour grading, performance), UX-1 (cursor and gestures), CART-1 (the
-cartridge contract), R0–R3 (names and code cleanup) and MP-0–MP-5 (multiplayer).
+| Order | Stage | What | Status |
+|---|---|---|---|
+| 1 | L2-6b | Save table as a game in steps; keep placing | Done, approved |
+| 2 | R0 | Names: Prototype classes and prefabs get final names, renamed so references stay intact (doc 30 A5) | Next |
+| 3 | T1–T3 | Table shape and size: table spec and builder, star and edges, Table mode with handles (doc 30 B) | Planned |
+| 4 | V0–V1 | Art direction "inside the console" (circuit board) with layout mock-ups; lighting and post (doc 30 C) | Planned |
+| 5 | T4–T5 | Table textures (any picture, repeat or fit) and paint layer, within the B5 budget | Planned |
+| 6 | V2–V5 | Pieces; table and room; menus and layout (V4a), readability (V4b), circuit-board skin (V4c); motion and feel | Planned |
+| 7 | R1–R2 | Code cleanup: split the composition, local command door, UI from events (multiplayer-ready, doc 30 A6) | Planned |
+
+Not yet placed in the order: UX-1 (cursor, gestures, the free table ping), CART-1 (cartridge contract), V6–V7.
+
+### To-do — only when the owner asks
+
+- **Multiplayer (MP-1 to MP-5, doc 30 A6).** The architecture is approved; it is built only when the owner says
+  "implement multiplayer". Until then every stage keeps the code multiplayer-ready (doc 30 A6, "Keep the code
+  multiplayer-ready").
 
 ### C3e — Game board v2 (owner, 2026-10-15)
 

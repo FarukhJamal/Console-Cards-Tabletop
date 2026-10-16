@@ -1,6 +1,6 @@
 # 29 — Player-Made Games
 
-Version 0.2 · 2026-10-16 · Status: L2-6 written; L2-6b polish written, to be checked (not compiled yet)
+Version 0.2 · 2026-10-16 · Status: L2-6 written; L2-6b polish approved by the owner (2026-10-16)
 
 ## The owner's direction (2026-10-16)
 

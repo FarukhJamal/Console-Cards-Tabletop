@@ -1,7 +1,9 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.1 · 2026-10-16 · Status: proposal for the owner to approve, change or reorder. Nothing here is built yet
-except what is marked as existing.
+Version 0.2 · 2026-10-16 · Status: approved by the owner with changes (2026-10-16): the table ping is free
+(A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
+performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
+implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
 
 The owner asked seven questions (2026-10-16) and for two plans: Table Selection (shape, size, playing area,
 edges, with easy tools) and visual polish (visuals, UI, UX, colour grading). The answers come from reading the
@@ -78,14 +80,18 @@ everywhere.
 
 **What we can add in the console/retro theme:**
 
-1. **Controller-button pings.** Alt-click the table or a piece. A pixel ring pulses there in your colour, with a
-   button glyph and a short 8-bit beep:
-   - A = "look here"
-   - B = "no / careful"
-   - X = "mine / I'll take it"
-   - Y = "your turn / go"
-
-   They work at one screen now and are sent to everyone later. The turn ping already follows this style.
+1. **Table ping (owner, 2026-10-16: a ping anywhere on the table, not linked to any piece or system).**
+   - Alt-click (or the middle mouse button tapped) **anywhere** on the table. A ring pulses at that spot for about
+     two seconds in your colour, with a short beep, then fades.
+   - The ping only marks a spot. It ignores whatever is under it (card, board, empty felt): it does not select,
+     move or point at a piece, and no game system reads it.
+   - It is not table state: not saved, not in Undo, not in the activity log.
+   - Optional look: a button glyph (A, B, X or Y) chosen with keys 1–4 while holding Alt, only as a picture
+     ("look here", "careful", "mine", "go"). It means nothing to the game.
+   - One screen now. With multiplayer, it is sent as a small message to the other players, not as a game
+     command (A6).
+   - Built from a small pool of ring objects that are reused, so it allocates nothing per frame.
+   - The turn ping (doc 25) stays as it is.
 2. **Flick.** Hold on a card, coin or token, pull back and release. A small arrow shows the strength, and the
    piece slides across the table. It is good for "pass this card", shuffleboard-style mini-games and flicking
    coins.
@@ -224,6 +230,11 @@ code named "cartridge". These are the parts it is made of today:
 
 ### A6. Getting the architecture ready for multiplayer
 
+**Owner's decision (2026-10-16):** the architecture below is approved. Multiplayer is **not** on the
+implementation list. It sits in the to-do list (doc 27) and is built only when the owner says "implement
+multiplayer". Until then, the code is kept ready for it, so that work goes quickly. The rules for that are in
+"Keep the code multiplayer-ready" at the end of A6.
+
 **Already aligned with doc 10:**
 
 - Every command carries who asked (player ID), a command ID and the expected revision. Accepted actions get a
@@ -239,7 +250,7 @@ code named "cartridge". These are the parts it is made of today:
    the state directly (about 180 places).
    - Add `ITableAuthority.Submit(command)`. The local version calls the use cases as now; the network version
      sends the command to the host.
-   - Every UI action goes through it. This is stage MP-0, and it fits the R1 split.
+   - Every UI action goes through it. It is built, local only, as part of the R1 cleanup.
 2. **UI that reacts to changes.** Remote players' changes arrive as accepted events, not as local calls (R2).
 3. **Undo per player.**
    - Today Undo restores a whole-table snapshot.
@@ -261,14 +272,28 @@ code named "cartridge". These are the parts it is made of today:
    - Mirror;
    - Photon Fusion.
 
-**Stages:**
+**Multiplayer stages — to-do, only when the owner asks:**
 
-1. MP-0: the command door, local only.
-2. MP-1: events to the UI.
-3. MP-2: serialisable state, and join by snapshot.
-4. MP-3: two players on a local network.
-5. MP-4: content sharing.
-6. MP-5: Relay and Lobby, rejoining, and the host leaving.
+1. MP-1: serialisable table state, and joining by snapshot.
+2. MP-2: two players on a local network (networking product chosen then).
+3. MP-3: content sharing (cards, pictures, decks, player games, table spec).
+4. MP-4: Undo per player, online.
+5. MP-5: Relay and Lobby, rejoining, and the host leaving.
+
+**Keep the code multiplayer-ready (applies now, to every stage):**
+
+- **One door for changes.** The command door (`ITableAuthority.Submit`, local only) is built as part of the R1
+  cleanup. New code changes the table only through commands and use cases with the actor's player ID, never by
+  editing state or views directly.
+- **UI reacts to accepted changes.** New panels and views update from accepted actions and events (R2), not from
+  hand-called refreshes.
+- **Everything saved is plain data.** Table spec, player games, decks, cards and settings are plain data files
+  (already true for doc 28/29). The table shape is sent as its spec, never as a mesh.
+- **Randomness from the injected source.** Never `UnityEngine.Random` for anything that affects the table.
+- **No "the" local player.** Code asks for the local player's ID; it does not assume seat 0 or one player.
+- **Visual-only things stay out of table state.** The ping, hover, cursor and camera are local. A ping is sent
+  later as a small message, not a command.
+- **Physics release values (speed, spin) are passed as data**, so a host can simulate them later.
 
 ### A7. Gamification that keeps play free — better than Tabletop Simulator
 
@@ -445,9 +470,150 @@ The aim is "obvious in five seconds", no menus inside menus.
 
 Each stage is built, checked and approved before the next, as in List 2.
 
+### B5. Performance budget: no heavy work, no texturing limits (owner, 2026-10-16)
+
+The owner asked that nothing in the table system becomes heavy to compute or limits texturing. These are fixed
+rules for T1–T6.
+
+**Meshes:**
+
+| Part | Budget | How |
+|---|---|---|
+| Outline | at most 512 points, whatever the size | Points spaced by distance with a cap. A huge table gets slightly wider spacing instead of more points. |
+| Top | at most about 2,000 triangles | One fill of the outline. |
+| Edge | at most about 12,000 vertices | One profile swept along the outline; the profile has at most 12 points. |
+| Spikes and ornaments | one draw call | GPU instancing: one small mesh drawn many times. A cap of 256 per table. |
+| Base and legs | prefabs with level-of-detail | Only seen at low camera angles. |
+
+**Building:**
+
+- Rebuilt only when the spec changes, never every frame.
+- While a size handle is dragged, the light version is built at most once per frame, and only the parts that
+  change (the top and edge, not the base).
+- The full version, and the collider, are built once on release.
+- The mesh objects and lists are made once and reused, so a rebuild makes no garbage.
+- The collider uses a simplified outline (at most 128 points), baked once on release. Unity can bake it off the
+  main thread so the game does not stutter.
+- The edge collider uses simple boxes along the outline where possible, not a detailed mesh.
+
+**Textures (no limits for the player):**
+
+- **Any picture is accepted:** PNG or JPG, any size, any shape. Large pictures are scaled down on load to the
+  quality setting (2048 px by default, 4096 on High), compressed in memory (GPU format) and given mipmaps, so
+  they stay sharp at a distance and light on memory. The original file is kept in the profile untouched.
+- **Repeat or fit.** A picture can repeat (felt, wood) or be stretched once across the whole playing area (a
+  painted mat, a game map). Both work on every shape, because the texture coordinates come from table units and
+  the table's bounding box.
+- **Tint, tile size, rotation and offset** are material settings, not new pictures. Tints are set per table
+  through a property block, so no extra material copies are made.
+- **Built-in textures** are shipped compressed with mipmaps.
+- **Changing texture** releases the old one right away, so memory does not build up.
+
+**Paint layer:**
+
+- One fixed-size paint texture (2048 × 2048 by default; 1024 on Low), painted on the graphics card with a brush
+  shader. A stroke costs a few small draws, not a loop over pixels.
+- It is saved as a PNG only when you press Done, never per stroke.
+- Undo inside Table mode keeps at most 8 steps, as small copies on the graphics card.
+- Nothing is painted? Then no paint texture exists at all.
+
+**Draw calls for the whole table:** the top, the edge, the ornaments and the base are about 4–6 draw calls in
+total, whatever the shape or size.
+
 ---
 
 ## Part C — Visual polish plan: away from the prototype look
+
+**Owner's direction (2026-10-16):**
+
+- Visual polish also means **how the menus are organised**: what goes in which menu, how they are spread over
+  the screen, how much of the screen they cover, where they sit and in what order things are listed. It is not
+  only colour.
+- **The pixel art is not readable enough.**
+- **The client's theme: the inside of a console's hardware.** A green circuit board with copper traces, chips,
+  solder points and white printed labels.
+
+### C1. The theme: inside the console
+
+| Element | Look |
+|---|---|
+| Panels | Dark green circuit board (solder mask) with a faint trace pattern; thin copper or gold edges; small solder dots at the corners |
+| Section titles | White "printed on the board" labels in a clean, condensed sans-serif, like real board markings (for example `U3 · DECK EDITOR`) |
+| Buttons | Chip-like blocks: black with a fine metal rim. Primary actions have a small LED that lights green; dangerous actions an amber or red LED |
+| Lists and rows | Rows separated by thin copper lines; the selected row lights with a soft green glow, like a powered trace |
+| Links between parts | Thin traces may run from a panel to the piece it is about, sparingly |
+| Player colours | LED colours (green, red, blue, amber and so on), checked to be colour-blind safe |
+| Sounds | Soft relay clicks and short electronic blips instead of 8-bit beeps (8-bit stays for the table ping and fun moments) |
+
+**Readability first (the pixel font goes):**
+
+- **Body text, numbers and labels:** a clean sans-serif that is easy to read at small sizes. Chakra Petch (already
+  used) or a similar technical sans.
+- **Titles:** a condensed technical display font in the "board marking" style instead of the pixel font
+  Silkscreen. The pixel font is kept only for tiny decorative markings, if at all.
+- **Minimum sizes at 1920 × 1080:** body 18 px, small labels 15 px, titles 24 px or more.
+- **Contrast:** text against the green board at least 4.5 : 1 (WCAG AA). White or very light text on the dark
+  board, never green on green.
+- **UI size setting:** 80–130 %.
+
+**The table stays a table.** The circuit board is the frame and the menus; the playing area keeps calm felt or
+textures (Part B), so the pieces stay easy to see. A "circuit board" felt is one of the table textures to choose.
+
+### C2. Screen layout: menus, coverage, placement and order
+
+**Screen zones during play** (the table keeps at least 65 % of the screen when no panel is open):
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ [Game ▾] [↶][↷]        TURN STRIP (centre)      [Shop] [≡ Menu]│  top bar, thin
+├────────┬───────────────────────────────────────────┬─────────┤
+│ RULES  │                                           │ STATUS  │
+│ card   │               THE TABLE                   │ card +  │  side rails: narrow,
+│ (fold) │                                           │ log     │  fold to a tab
+│        │                                           │ (fold)  │
+├────────┴───────────────────────────────────────────┴─────────┤
+│ [+ Toolbox]          HAND TRAY (centre)            [? Help]   │  bottom bar
+└──────────────────────────────────────────────────────────────┘
+```
+
+- **Top bar:** the game button with undo/redo on the left, the turn strip in the centre, the Shop and the menu on
+  the right.
+- **Left rail:** the rules card, which folds to a tab.
+- **Right rail:** the game status and the activity log, which fold to a tab.
+- **Bottom:** the Toolbox on the left, the hand in the centre, help on the right.
+- **Messages and banners:** top centre, under the turn strip, never over the hand.
+
+**How much screen panels take:**
+
+| Kind | Size | Examples |
+|---|---|---|
+| Rail panels | at most 22 % of the width each, fold away | rules card, status, log |
+| Pop-ups at the cursor | small, next to what was clicked | right-click menu, quantity |
+| Work screens | at most 70 % width × 80 % height, centred, the table dimmed behind | card editor, deck editor, save game, table mode tools |
+| Full screens | the whole screen, only outside play | title screen, game selection, settings |
+
+**Where menus go, and in what order:**
+
+- **Title screen (new)**, shown after a console boot:
+  1. **Play** (game selection: Empty Table, games, your games)
+  2. **Make** (card editor, deck editor, your games, table presets)
+  3. **Profile**
+  4. **Settings**
+  5. **Quit**
+- **In-play menu (≡)**, grouped and kept short:
+  1. **This table:** Rules card, Hints, Reset, Save table as a game…
+  2. **Make:** Table mode…, Card editor…, Deck editor…
+  3. **View:** feedback, hands on table, camera views
+  4. **Profile and settings**
+  5. **Leave table** (back to the title screen)
+- **Game selection:** the games on the left (Empty Table, our games, your games, sorted by last played), the
+  chosen game on the right (picture, players, mode, rules, deck), Start at the bottom right.
+- **Lists everywhere:** sorted by name with a small filter box. Last used at the top where that helps (games,
+  decks).
+- **Buttons:** the main action bottom right; Cancel, Back and Close bottom left or top right, always in the same
+  places.
+
+### C3. Visual polish stages (approved list, updated)
 
 **Current setup:**
 
@@ -457,23 +623,27 @@ Each stage is built, checked and approved before the next, as in List 2.
 
 | Stage | What |
 |---|---|
-| V0 Art direction | A one-page style sheet for the owner to sign off: "retro console on a game night table". Palette (the UI kit colours plus player colours), materials (felt, card stock, soft plastic, wood), lighting mood, icon style, sound style. A few reference pictures. |
+| V0 Art direction | A style sheet for the owner to sign off: "inside the console" (C1). Circuit-board palette, the two fonts, button and panel looks, icon style, sound style, and screen mock-ups of the play layout, a work screen and the title screen (C2). |
 | V1 Lighting and post | One soft key light with soft shadows, a fill light and a reflection probe. A URP Global Volume with: tonemapping (Neutral or ACES); a colour-grading LUT per theme; low bloom (for neon and screens); light vignette; SSAO for contact shadows under cards and pieces; depth of field only when inspecting a card; anti-aliasing (MSAA, or TAA if needed). Light presets: Day, Evening, Arcade. |
 | V2 Pieces | Real models and materials for the card (thin rounded box with bevelled edge, card-stock material front and back), pawns and meeples, tokens, dice (bevelled, engraved pips), the controller box, the Console mat (cloth), the board mat. Consistent real-world scale (doc 00 §3.1). The Prototype prefabs are replaced through the catalogs, not edited. |
 | V3 Table and room | The generated table (Part B) with good felt and edge materials; a soft, blurred room around it; a floor. |
-| V4 UI and UX | Same design language everywhere (doc 21): a spacing scale, an icon set with icon + word buttons, clear hover/press/disabled states, 120–200 ms fades and slides, click and snap sounds, a UI size setting, readable minimum text sizes, controller glyphs (A/B/X/Y) as visual language; a title screen with a console boot, a settings screen and a loading screen; the developer controls removed from player builds. |
+| V4a Menus and layout | The screen zones, panel sizes, menu grouping and ordering of C2: the in-play menu regrouped, rails that fold, work screens at most 70 % × 80 %, the title screen with Play / Make / Profile / Settings / Quit, the settings screen, list sorting and filters, the developer controls removed from player builds. |
+| V4b Readability | The fonts, minimum sizes, contrast and the UI size setting of C1. |
+| V4c Circuit-board skin | Panels, buttons, rows, LEDs, traces and sounds of C1 for every Final UI prefab (one design language, doc 21), clear hover/press/disabled states, 120–200 ms fades and slides, the console boot. The prefabs stay yours to edit; the builders add the new look only to missing parts. |
 | V5 Motion and feel | Held pieces lift with a soft shadow; cards tilt slightly when moving; flip, shuffle and fan animations; dice rattle and roll sounds; quiet ambient room sound; small "snap" feedback when a card lands in a slot or grid space. |
 | V6 Colour grading and themes | A LUT and light preset per table theme; colour-blind-safe player colours; a check pass in grey-scale for contrast. |
 | V7 Performance | Quality levels (Low/Medium/High); GPU instancing for cards and pieces; fewer UI rebuilds; a 60 fps target on mid-range PCs, profiled. |
 
-**Suggested order overall:**
+**Order of implementation (approved by the owner, 2026-10-16):**
 
-1. Finish and approve L2-6b.
-2. R0 names, if approved.
-3. T1–T3: shape and size.
-4. V0–V1: look and light.
-5. T4–T5: textures and paint.
-6. V2–V5.
-7. Cleanup R1–R2 alongside MP-0, because they are the same split.
+1. L2-6b — done and approved.
+2. R0: names.
+3. T1–T3: table shape and size.
+4. V0–V1: art direction (with the layout mock-ups) and light.
+5. T4–T5: table textures and paint.
+6. V2–V5: pieces, table and room, menus and layout, readability, circuit-board skin, motion.
+7. R1–R2: code cleanup, including the local command door and events (the multiplayer-ready alignment, A6).
 
-The owner decides the order.
+Not yet placed in the order: UX-1 (cursor, gestures and the table ping), CART-1 (cartridge contract), V6–V7.
+
+**To-do, only when the owner asks:** multiplayer, MP-1 to MP-5 (A6).
