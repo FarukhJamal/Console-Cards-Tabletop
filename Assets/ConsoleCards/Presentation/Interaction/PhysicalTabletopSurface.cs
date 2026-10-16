@@ -28,6 +28,19 @@ namespace ConsoleCards.Presentation.Interaction
         private string lastReportedIssue;
 
         internal bool IsTemplateLayoutOrigin => templateLayoutOrigin;
+        internal Transform TemplateLayoutFrame => templateLayoutFrame != null ? templateLayoutFrame : transform;
+        internal float LocalUnitsPerTableUnit => localUnitsPerTableUnit;
+
+        /// <summary>
+        /// For a table built at runtime (T1): marks it as the Template Layout Origin with the classic table's frame,
+        /// so Game Templates land in the same places. Call before the surface is first enabled.
+        /// </summary>
+        internal void ConfigureTemplateOrigin(bool isOrigin, Transform frame, float localUnits)
+        {
+            templateLayoutOrigin = isOrigin;
+            templateLayoutFrame = frame;
+            localUnitsPerTableUnit = localUnits > 0f && IsFinite(localUnits) ? localUnits : 1f;
+        }
 
         private void Reset() => ResolveLocalCollider();
 

@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.3 · 2026-10-16 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.5 · 2026-10-17 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -519,6 +519,140 @@ rules for T1–T6.
 
 **Draw calls for the whole table:** the top, the edge, the ornaments and the base are about 4–6 draw calls in
 total, whatever the shape or size.
+
+
+### B6. T1 record: table shape (written 2026-10-16, to be checked)
+
+**What the player sees.** The Table menu has a new row, **Table: Classic**. Each press changes the table to the
+next shape — Classic → Rectangle → Square → Round → Oval → Classic — and the row shows the new name. The menu
+stays open, so you can step through the shapes. The choice is saved in your profile (`table.json`) and comes
+back at the next start.
+
+**How it fits the game without moving anything.**
+
+- Classic is the scene's own table (TCGTable2), unchanged.
+- The other shapes are built where the classic playing area is, at the same height, with the same frame.
+  Game Templates, the Empty Table and saved positions all land in the same places.
+- Each shape covers the whole classic playing area (W × D), so every game layout still fits:
+
+  | Shape | Default size |
+  |---|---|
+  | Rectangle | W × D |
+  | Square | the longer side |
+  | Round | the diagonal as the diameter |
+  | Oval | the ellipse through the area's corners (W·√2 × D·√2) |
+
+- Only one table is the placement surface at a time; the other is turned off first.
+- The playing area uses the classic felt, mapped so the felt does not stretch: a bigger table repeats it.
+- The sides, underside and lip use the classic table's material.
+- If a shape cannot be built, the last good table stays and a message says why.
+
+**Code (new, `Presentation/TableSurface/`):**
+
+| File | What |
+|---|---|
+| `TableSpec.cs` | The table as data: shape, width, depth, corner rounding, edge (None or Lip), edge height and width, thickness; safe ranges; the default sizes above. This is what is saved and, later, sent in multiplayer. |
+| `TableOutline.cs` | The outline: points spaced by distance, at most 512 (128 for the collider). It answers "is this point on the table?" and "where is the nearest point on it?". |
+| `TableMeshBuilder.cs` | The top as a slab (felt on top; sides and underside below) and the lip swept around the outline. The lists are made once and reused. |
+| `GeneratedTable.cs` | The built table: Top (mesh, collider, `PhysicalTabletopSurface` as the Template Layout Origin) and Edge. It is rebuilt only when the spec changes. |
+
+**Changed:**
+
+- `PhysicalTabletopSurface`: `ConfigureTemplateOrigin`, plus read access to the frame and units.
+- `TabletopComposition.Table.cs` (new partial):
+  - finds the classic table once;
+  - applies the saved shape at start, before the first table;
+  - provides the menu row.
+- `TabletopComposition.cs` calls it in `Start()` and in the table-menu refresh.
+- `SessionBarView`: `BindTableShape`.
+- `TableUiController`: `ShowTableShapeEntry`.
+- `SessionUiBuilder`: adds the row through Add Missing Table Menu Rows.
+
+**Budget (B5):**
+
+- Top: at most about 2,000 triangles (playing area, underside and sides). Lip: at most about 4,100 vertices.
+- 3 draw calls in all: felt, sides and lip.
+- Nothing is built per frame.
+
+**Not in T1 (moved, with the reason):**
+
+- **Seats along the outline and camera limits from the shape: moved to T3.** Every shape still covers the classic
+  area, so today's seats and camera limits stay correct. They only need to change once tables can be resized,
+  which is T3.
+- **Legs and base: T6.** The classic table's legs are part of its single model, so a built shape shows no legs
+  for now.
+- **The lip has no collider yet.** Edge colliders are part of T2.
+- **The shape is not yet saved with your games** (T4 saves the table with games), and changing shape is not an
+  Undo step (Undo comes with Table mode in T3).
+
+
+**First check (owner, 2026-10-17) and fixes:**
+
+| Seen | Why | Fix |
+|---|---|---|
+| "The surface MeshCollider has no mesh", then no placement at all | Code: the collider got its mesh while the new table was still switched off. | The table now switches on first, then the collider takes its mesh, and only then does the surface turn on. If the collider still has no mesh, the Classic table comes back with a message. |
+| Scrambled texture on the sides | The classic model's picture is laid out for that one model. It cannot wrap any other shape. | For now the sides, underside and lip are plain theme black (#1B1B1D). Proper materials follow the kit rules in B7. |
+| The table base (legs) disappears | Legs, rim and top are one mesh in TCGTable2, so hiding its top hides its legs too. | Needs the kit in B7: legs and base as their own pieces. |
+
+### B7. How the table model should be made (a kit, not one model)
+
+The rule: **the code builds everything whose shape changes, and the model supplies the pieces that do not.**
+One finished table model breaks as soon as the table changes shape, because its top, rim, legs and texture are
+welded to one size. A kit never breaks.
+
+**1. Built by the code; not modelled:**
+
+- the playing area (top);
+- the sides and underside;
+- the edge, from a cross-section.
+
+**2. Modelled, as separate pieces (one FBX or prefab each):**
+
+| Piece | What | Pivot | Budget |
+|---|---|---|---|
+| Leg | One leg. The code places 3–8 along the outline, set in from the edge. | Top centre, where it meets the underside | ≤ 1,500 triangles |
+| Pedestal | A centre column with a foot, for round and oval tables. | Top centre | ≤ 3,000 triangles |
+| Apron or skirt (optional) | Not a mesh: a cross-section like the edge, swept by the code. | — | ≤ 12 points |
+| Ornament | A spike, stud, bolt or neon cap, placed along the edge and drawn instanced. | Base centre | ≤ 200 triangles |
+| Edge profile | Rounded rail, wooden rail and so on, given as cross-sections. The artist can draw one as a flat 2D outline; the code sweeps it. | — | ≤ 12 points |
+
+**3. Export rules for every piece:**
+
+- **Axes and scale:**
+  - Unity axes: Y up, Z forward.
+  - Transforms applied (rotation 0, scale 1), at the scale of today's table. Its top is about 25 × 17 units, and
+    a leg is about 11 units tall from the floor to the top.
+- **Colliders and lights:** none inside the model. The code adds colliders (the top; simple boxes for edges and
+  legs).
+- **Parts:** separate objects, not one merged mesh. Nothing hidden inside another part.
+
+**4. Materials and textures:**
+
+- **Tileable (seamless) textures, never an atlas laid out for one model.** Felt, wood, metal and the circuit-board
+  pattern all repeat.
+- **Repeat size.** Each material says how many units one repeat covers (for example, wood every 2 units). The
+  code maps by distance:
+  - along the edge: length along the outline;
+  - up the side: height.
+  
+  So a texture never stretches, whatever the shape or size.
+- **Four separate slots:**
+  1. Playing area.
+  2. Body (sides and underside).
+  3. Edge.
+  4. Base (legs or pedestal).
+  
+  Each can be changed on its own, which is what the T4 texture shelf needs.
+- **Shader and maps:** URP Lit, with base map, normal map and optional mask map. 1024 or 2048 px, with mipmaps.
+
+**5. The classic look on every shape.** The look of TCGTable2 can be kept by splitting it in Blender:
+
+- one leg as the Leg piece;
+- the rim's cross-section as an edge profile;
+- its wood as a tileable Body/Edge texture;
+- its felt as the playing-area texture.
+
+The Classic shape then becomes "Rectangle with the classic kit", and the single model is no longer needed.
 
 ---
 

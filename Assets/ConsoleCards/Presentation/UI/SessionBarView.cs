@@ -76,6 +76,11 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button profileButton;
         [SerializeField] private Text profileLabel;
 
+        [Header("Table shape (T1; optional, added by Add Missing Table Menu Rows)")]
+        [Tooltip("The Table menu row \"Table: shape\": each press changes the table to the next shape.")]
+        [SerializeField] private Button tableShapeButton;
+        [SerializeField] private Text tableShapeLabel;
+
         [Header("Shop (doc 18 §15.4; optional, added by Add Missing Table Menu Rows)")]
         [Tooltip("The Shop entry on the bar: the shop icon and the word Shop, between Redo and Table.")]
         [SerializeField] private Button shopButton;
@@ -104,6 +109,7 @@ namespace ConsoleCards.Presentation.UI
         private bool fullFeedbackOn;
         private Action openCardArt;
         private Action openProfile;
+        private Func<string> cycleTableShape;
         private Action openCardEditor;
         private Action openDeckEditor;
         private Action openSaveGame;
@@ -380,6 +386,26 @@ namespace ConsoleCards.Presentation.UI
         }
 
         /// <summary>
+        /// Binds the optional "Table: shape" row (T1); null hides it. A press cycles the shape and shows the text the
+        /// action returns; the menu stays open so the shapes can be stepped through. False when the prefab lacks it.
+        /// </summary>
+        public bool BindTableShape(string label, Func<string> cycleTableShapeAction)
+        {
+            RequireAcquired();
+            if (tableShapeButton == null)
+            {
+                return false;
+            }
+
+            Clear(tableShapeButton);
+            cycleTableShape = cycleTableShapeAction;
+            if (tableShapeLabel != null) tableShapeLabel.text = label;
+            tableShapeButton.gameObject.SetActive(cycleTableShape != null);
+            tableShapeButton.onClick.AddListener(HandleTableShape);
+            return true;
+        }
+
+        /// <summary>
         /// Binds the optional Shop entry on the bar (doc 18 §15.4): shown while <paramref name="openShopAction"/> is
         /// set (a game whose Shop is open), hidden for null. False when the prefab lacks it.
         /// </summary>
@@ -481,6 +507,7 @@ namespace ConsoleCards.Presentation.UI
             setFullFeedback = null;
             openCardArt = null;
             openProfile = null;
+            cycleTableShape = null;
             openCardEditor = null;
             openDeckEditor = null;
             openSaveGame = null;
@@ -671,6 +698,12 @@ namespace ConsoleCards.Presentation.UI
             action?.Invoke();
         }
 
+        private void HandleTableShape()
+        {
+            string label = cycleTableShape?.Invoke();
+            if (tableShapeLabel != null && label != null) tableShapeLabel.text = label;
+        }
+
         private void HandleHelp()
         {
             CloseMenu();
@@ -757,6 +790,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(fullFeedbackSwitch?.Button);
             Clear(cardArtButton);
             Clear(profileButton);
+            Clear(tableShapeButton);
             Clear(cardEditorButton);
             Clear(deckEditorButton);
             Clear(saveGameButton);

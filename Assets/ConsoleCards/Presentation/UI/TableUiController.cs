@@ -51,6 +51,7 @@ namespace ConsoleCards.Presentation.UI
         private bool saveGameEntryWarned;
         private bool deckEditorEntryWarned;
         private bool profileEntryWarned;
+        private bool tableShapeEntryWarned;
         private HintStripView hintStripView;
         private bool hintStripWarned;
         private bool tipsSettingWarned;
@@ -432,6 +433,21 @@ namespace ConsoleCards.Presentation.UI
                 profileEntryWarned = true;
                 Debug.LogWarning(
                     "The Table menu has no Profile row: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
+            }
+        }
+
+        /// <summary>
+        /// Binds the Table menu's "Table: shape" row (T1); each press cycles the shape and shows the new name. Null
+        /// hides it.
+        /// </summary>
+        public void ShowTableShapeEntry(string label, Func<string> cycleShape)
+        {
+            EnsureSessionBarView();
+            if (!sessionBarView.BindTableShape(label, cycleShape) && cycleShape != null && !tableShapeEntryWarned)
+            {
+                tableShapeEntryWarned = true;
+                Debug.LogWarning(
+                    "The Table menu has no Table shape row: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
             }
         }
 

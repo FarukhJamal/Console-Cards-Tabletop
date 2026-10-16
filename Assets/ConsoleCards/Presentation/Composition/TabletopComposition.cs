@@ -2277,6 +2277,7 @@ namespace ConsoleCards.Presentation.Composition
                 AdoptCatalogGameBoard(); // C3c: the board comes from the catalog when it has one
                 EnsureContentArt(); // your pictures and the active pack load before the first table
                 PrepareTemplateCatalog();
+                ApplySavedTable(); // T1: the table shape saved in the profile, before the first table
                 if (!TryReplaceTable(TabletopSessionSelection.EmptyCustom))
                 {
                     throw new InvalidOperationException(
@@ -4570,6 +4571,7 @@ namespace ConsoleCards.Presentation.Composition
             RefreshCardEditorEntry(); // L2-2: the game's cards and yours, on every table
             RefreshDeckEditorEntry(); // L2-3: the game's deck and yours, on every table
             RefreshProfileEntry(); // doc 28, P2: who is playing, on every table
+            RefreshTableShapeEntry(); // T1: the table's shape, on every table
             RefreshSaveGameEntry(); // doc 29: Save table as a game, on an Empty Table
             runtimeUi.ShowViewSettings(
                 trapFloorTemplate != null && activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom,
