@@ -44,6 +44,7 @@ namespace ConsoleCards.Editor.UI
         public const string CardEditorDeckRowPath = Folder + "CardEditorDeckRow.prefab";
         public const string DeckEditorPanelPath = Folder + "DeckEditorPanel.prefab";
         public const string DeckEditorCardRowPath = Folder + "DeckEditorCardRow.prefab";
+        public const string GameSelectPanelPath = Folder + "GameSelectPanel.prefab";
         private const string FeedbackAudioPath = "Assets/ConsoleCards/Content/Audio/Feedback/";
         private const string SessionIconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
 
@@ -121,6 +122,7 @@ namespace ConsoleCards.Editor.UI
             Save<CardEditorDeckRowView>(CardEditorDeckRowPath, "CardEditorDeckRow", BuildCardEditorDeckRow, stretch: false);
             Save<DeckEditorCardRowView>(DeckEditorCardRowPath, "DeckEditorCardRow", BuildDeckEditorCardRow, stretch: false);
             Save<DeckEditorPanelView>(DeckEditorPanelPath, "DeckEditorPanel", BuildDeckEditorPanel, stretch: true);
+            Save<GameSelectPanelView>(GameSelectPanelPath, "GameSelectPanel", BuildGameSelectPanel, stretch: true);
             Save<CardEditorPanelView>(CardEditorPanelPath, "CardEditorPanel", BuildCardEditorPanel, stretch: true);
             AddMissingRuleControls();
             AddMissingShopLabels();
@@ -196,6 +198,9 @@ namespace ConsoleCards.Editor.UI
             AssignCatalogEntry(PrototypeUiPrefabIds.DeckEditorCardRow,
                 AssetDatabase.LoadAssetAtPath<DeckEditorCardRowView>(DeckEditorCardRowPath), UiLayer.Modal,
                 UiRetention.Pooled);
+            AssignCatalogEntry(PrototypeUiPrefabIds.GameSelectPanel,
+                AssetDatabase.LoadAssetAtPath<GameSelectPanelView>(GameSelectPanelPath), UiLayer.Modal,
+                UiRetention.CachedSingleInstance);
             AssetDatabase.SaveAssets();
             Debug.Log("[Gameplay UI] Created any missing Final UI gameplay prefabs and pointed the UI prefab catalog at them.");
         }
@@ -731,6 +736,101 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("detailLabel").objectReferenceValue = detail;
             so.FindProperty("normalColor").colorValue = Cream;
             so.FindProperty("selectedColor").colorValue = Selected;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // ---------- game selection menu (doc 27 List 2, L2-4) ----------
+
+        // Centred modal: the games on the left (rows are CardEditorRow); on the right the chosen game's picture, name,
+        // players, mode (< >), rules in play and deck; who is playing (Profile…); Make it yours (Card art, Card
+        // editor, Deck editor); status and Start.
+        private static void BuildGameSelectPanel(RectTransform root, GameSelectPanelView view)
+        {
+            Button overlay = DismissOverlay(root);
+            Vector2 centre = new Vector2(0.5f, 0.5f);
+            RectTransform panel = ColumnCard(root, "GameSelectPanel", centre, centre, 1160f);
+            BlockClicks(panel);
+            Text title = CardHeader(panel, "NEW TABLE", 22, 58f);
+            Button close = HeaderCloseButton(panel);
+            RectTransform body = Body(panel, 20, 10f);
+            RectTransform columns = Child("Columns", body);
+            Row(columns.gameObject, 0, 0, 0, 0, 20f, TextAnchor.UpperLeft);
+            Size(columns.gameObject, -1f, 600f);
+
+            RectTransform listColumn = Child("GamesColumn", columns);
+            Column(listColumn.gameObject, 0, 0, 0, 0, 8f);
+            Size(listColumn.gameObject, 380f, 600f, 380f);
+            Label(Child("GamesTitle", listColumn), boldFont, 16, Muted, TextAnchor.MiddleLeft, "GAMES");
+            ScrollList(listColumn, "GamesViewport", 560f, out ScrollRect scroll, out RectTransform rows);
+
+            RectTransform gameColumn = Child("GameColumn", columns);
+            Column(gameColumn.gameObject, 0, 0, 0, 0, 10f);
+            Size(gameColumn.gameObject, 700f, 600f, 560f).flexibleWidth = 1f;
+
+            RectTransform top = Child("Top", gameColumn);
+            Row(top.gameObject, 0, 0, 0, 0, 18f, TextAnchor.UpperLeft);
+            Size(top.gameObject, -1f, 280f);
+            RawImage picture = CardPicture(top, "Picture", 200f, 280f, false, out _);
+            RectTransform info = Child("Info", top);
+            Column(info.gameObject, 0, 0, 0, 0, 8f);
+            Size(info.gameObject, 480f, 280f, 320f).flexibleWidth = 1f;
+            Text gameName = Label(Child("GameName", info), titleFont, 28, Ink, TextAnchor.MiddleLeft, "Trap Floor");
+            Text detail = Label(Child("Detail", info), boldFont, 16, Muted, TextAnchor.MiddleLeft, "2–4 players · 3 modes");
+            RectTransform modeRow = ButtonRow(info, TextAnchor.MiddleLeft);
+            modeRow.name = "ModeRow";
+            FitLabel(Child("ModeTitle", modeRow), boldFont, 16, Muted, "MODE");
+            Button previousMode = PlainButton(modeRow, "PreviousModeButton", "<", 52f, out _);
+            RectTransform modeLabelRect = Child("Mode", modeRow);
+            Text mode = Label(modeLabelRect, boldFont, 18, Ink, TextAnchor.MiddleCenter, "Easy");
+            Size(modeLabelRect.gameObject, 220f, 52f, 220f);
+            Button nextMode = PlainButton(modeRow, "NextModeButton", ">", 52f, out _);
+            Text rules = Label(Child("Rules", info), bodyFont, 16, Ink, TextAnchor.UpperLeft, "Rules: Default");
+            Text deck = Label(Child("Deck", info), bodyFont, 16, Ink, TextAnchor.UpperLeft, "Deck: Trap Floor deck, 48 cards");
+
+            FieldTitle(gameColumn, "PlayingTitle", "PLAYING AS");
+            RectTransform profileRow = ButtonRow(gameColumn, TextAnchor.MiddleLeft);
+            profileRow.name = "ProfileRow";
+            RectTransform profileLabelRect = Child("ProfileName", profileRow);
+            Text profile = Label(profileLabelRect, titleFont, 20, Ink, TextAnchor.MiddleLeft, "Player 1");
+            Size(profileLabelRect.gameObject, 360f, 52f, 200f);
+            Button profileButton = PlainButton(profileRow, "ProfileButton", "Profile...", 170f, out _);
+
+            FieldTitle(gameColumn, "YoursTitle", "MAKE IT YOURS");
+            RectTransform yours = ButtonRow(gameColumn, TextAnchor.MiddleLeft);
+            yours.name = "YoursRow";
+            Button cardArt = PlainButton(yours, "CardArtButton", "Card art...", 200f, out _);
+            Button cardEditor = PlainButton(yours, "CardEditorButton", "Card editor...", 220f, out _);
+            Button deckEditor = PlainButton(yours, "DeckEditorButton", "Deck editor...", 220f, out _);
+
+            Text status = Label(Child("Status", body), bodyFont, 15, Muted, TextAnchor.MiddleLeft,
+                "Choose a game and a mode, make it yours if you like, then Start.");
+            RectTransform footer = ButtonRow(body);
+            footer.name = "Footer";
+            Button start = GoButton(footer, "StartButton", "Start", 320f, out Text startLabel);
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("dismissOverlayButton").objectReferenceValue = overlay;
+            so.FindProperty("closeButton").objectReferenceValue = close;
+            so.FindProperty("titleLabel").objectReferenceValue = title;
+            so.FindProperty("gameRowsRoot").objectReferenceValue = rows;
+            so.FindProperty("gameScroll").objectReferenceValue = scroll;
+            so.FindProperty("picture").objectReferenceValue = picture;
+            so.FindProperty("gameNameLabel").objectReferenceValue = gameName;
+            so.FindProperty("detailLabel").objectReferenceValue = detail;
+            so.FindProperty("modeRow").objectReferenceValue = modeRow.gameObject;
+            so.FindProperty("previousModeButton").objectReferenceValue = previousMode;
+            so.FindProperty("nextModeButton").objectReferenceValue = nextMode;
+            so.FindProperty("modeLabel").objectReferenceValue = mode;
+            so.FindProperty("rulesLabel").objectReferenceValue = rules;
+            so.FindProperty("deckLabel").objectReferenceValue = deck;
+            so.FindProperty("profileLabel").objectReferenceValue = profile;
+            so.FindProperty("profileButton").objectReferenceValue = profileButton;
+            so.FindProperty("cardArtButton").objectReferenceValue = cardArt;
+            so.FindProperty("cardEditorButton").objectReferenceValue = cardEditor;
+            so.FindProperty("deckEditorButton").objectReferenceValue = deckEditor;
+            so.FindProperty("statusLabel").objectReferenceValue = status;
+            so.FindProperty("startButton").objectReferenceValue = start;
+            so.FindProperty("startLabel").objectReferenceValue = startLabel;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

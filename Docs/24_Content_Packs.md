@@ -83,7 +83,8 @@ Stand-in art, to be replaced later under the same keys:
 | A4 | Player upload UI and art overlays, stored per game | Implemented |
 | L2-1 | Your cards: card data saved in the player profile (new cards, changes to default cards, decks); pack format 2 carries cards and decks (doc 27 List 2, doc 28) | Written, to be checked (not compiled yet) |
 | L2-2 | Card editor in the game (Table > Card editor…) | Done, approved by the owner |
-| L2-3 | Deck editor in the game (Table > Deck editor…) | Written, to be checked (not compiled yet) |
+| L2-3 | Deck editor in the game (Table > Deck editor…) | Done, approved by the owner |
+| L2-4 | Game selection menu (New table…): card art, card editor and deck editor move there | Written, to be checked (not compiled yet) |
 
 ## Privacy
 
@@ -266,4 +267,30 @@ made in the game, not in the Editor (doc 28). The in-game card editor that write
   - `TabletopPrototypeComposition.DeckEditor.cs` (shares the card editor's game list, picture service and files).
   - `PrototypeRuntimeUiController.ShowDeckEditor` and `ShowDeckEditorEntry`.
   - `SessionBarView.BindDeckEditor`.
+
+## L2-4 record — the game selection menu (2026-10-16)
+
+- **Where:** Table menu > **New table…** now opens the game selection menu. The older game list shows only if the
+  menu's prefab is missing.
+- **Games (left):** the Empty Table, then every game the platform has (this table's game, then each game box in
+  the component library; DLC games arrive as more boxes), each with a picture and players · modes.
+- **The chosen game (right):**
+  - Its picture (the game's first card for now; the game box has no picture of its own yet), name, players and
+    number of modes.
+  - **Mode** with **<** **>** (Trap Floor: its modes; a game that cannot be played yet shows "not playable yet").
+  - **Rules:** the rule set in play; changing rules stays on the rules card, with everyone's agreement.
+  - **Deck:** the game's deck as it will be played (your copies and your cards counted), and how many decks of
+    yours it has.
+  - **Playing as** with **Profile…**.
+  - **Make it yours:** **Card art…** (this table's game), **Card editor…** and **Deck editor…** (open on the chosen
+    game). Each comes back to the menu when closed.
+- **Start** replaces the table with the chosen game and mode (or an Empty Table), asking first when the table has
+  content. A game without a playable template cannot be started yet; its cards and decks can still be made yours.
+- **Moved off the table:** the Table menu no longer shows Card art, Card editor or Deck editor (owner, 2026-10-15:
+  player content belongs in the game selection menu, not inside a running table). Profile stays in the Table menu
+  too.
+- **Code:**
+  - `GameSelectPanelView` (Final UI prefab `GameSelectPanel`; the game rows reuse `CardEditorRow`).
+  - `TabletopPrototypeComposition.GameSelect.cs`.
+  - `PrototypeRuntimeUiController.ShowGameSelect` and `CloseGameSelect`.
 

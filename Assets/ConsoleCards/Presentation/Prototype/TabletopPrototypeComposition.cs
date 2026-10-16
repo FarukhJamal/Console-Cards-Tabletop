@@ -4340,7 +4340,8 @@ namespace ConsoleCards.Presentation.Prototype
             RefreshGameTemplatesPanelUi();
         }
 
-        // Table menu > New table… (UI-1): opens the game selection panel (the start flow replaces it later).
+        // Table menu > New table… (UI-1): opens the game selection menu (L2-4); the older game list only when that
+        // menu's prefab is missing.
         private void OpenGameTemplatesPanel()
         {
             if (!IsInitialized)
@@ -4348,6 +4349,7 @@ namespace ConsoleCards.Presentation.Prototype
                 return;
             }
 
+            if (OpenGameSelect()) return;
             gameTemplatesPanelVisible = true;
             RefreshGameTemplatesPanelUi();
         }
@@ -4513,10 +4515,8 @@ namespace ConsoleCards.Presentation.Prototype
                 NextScreenSeat,
                 hotSeatMode,
                 SetHotSeatMode);
-            runtimeUi.ShowCardArtEntry(
-                trapFloorGameDefinition != null && activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom
-                    ? (Action)OpenCardArtPanel
-                    : null);
+            // Card art, the card editor and the deck editor live in the game selection menu (L2-4), not on the table.
+            runtimeUi.ShowCardArtEntry(null);
             RefreshCardEditorEntry(); // L2-2: the game's cards and yours, on every table
             RefreshDeckEditorEntry(); // L2-3: the game's deck and yours, on every table
             RefreshProfileEntry(); // doc 28, P2: who is playing, on every table
@@ -14136,7 +14136,7 @@ namespace ConsoleCards.Presentation.Prototype
                     Reload = ReloadContent,
                     ChoosePicture = ChooseOwnPicture,
                     ResetPicture = ResetOwnPicture,
-                    Close = () => runtimeUi?.CloseContentArtPanel(),
+                    Close = CloseCardArtPanel,
                 };
             }
 

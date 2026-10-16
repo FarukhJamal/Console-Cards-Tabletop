@@ -11,7 +11,7 @@ using UnityEngine;
 namespace ConsoleCards.Presentation.Prototype
 {
     /// <summary>
-    /// The card editor (doc 27 List 2, L2-2): Table menu > Card editor…. Pick a game (every game in the library);
+    /// The card editor (doc 27 List 2, L2-2): New table… > Card editor… (the game selection menu, L2-4). Pick a game (every game in the library);
     /// its deck lists every card with its copies and the total, then the player's own cards. One card is edited at a
     /// time with a live preview, and the decks it is in (the game's deck and the player's decks) with copies in each.
     /// A game card's edits are saved as a change (Reset brings the game's card back); a new card works like a card of
@@ -57,10 +57,10 @@ namespace ConsoleCards.Presentation.Prototype
         private CardEditorActions cardEditorActions;
         private string editorArtFolder = string.Empty;
 
-        // On every table: the editor picks among all games, whatever is on the table.
+        // The card editor opens from the game selection menu (L2-4); the Table menu row stays hidden.
         private void RefreshCardEditorEntry()
         {
-            runtimeUi?.ShowCardEditorEntry(OpenCardEditor);
+            runtimeUi?.ShowCardEditorEntry(null);
         }
 
         private ContentArtService EditorArt => editorOtherArt ?? contentArt;
@@ -512,6 +512,7 @@ namespace ConsoleCards.Presentation.Prototype
             DropUnsavedNewCard();
             runtimeUi?.CloseCardEditor();
             DisposeCardEditor();
+            ReturnToGameSelect();
         }
 
         // ---------- saving ----------

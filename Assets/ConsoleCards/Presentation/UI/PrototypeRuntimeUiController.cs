@@ -46,6 +46,7 @@ namespace ConsoleCards.Presentation.UI
         private CardEditorPanelView cardEditorPanelView;
         private bool cardEditorEntryWarned;
         private DeckEditorPanelView deckEditorPanelView;
+        private GameSelectPanelView gameSelectPanelView;
         private bool deckEditorEntryWarned;
         private bool profileEntryWarned;
         private HintStripView hintStripView;
@@ -281,6 +282,45 @@ namespace ConsoleCards.Presentation.UI
         public void CloseCardEditor()
         {
             ReleaseView(cardEditorPanelView);
+            SetModalLayerOffUnlessHandover();
+        }
+
+        /// <summary>Shows or refreshes the game selection menu (L2-4). False when its prefab is missing.</summary>
+        public bool ShowGameSelect(GameSelectModel model, GameSelectActions actions)
+        {
+            try
+            {
+                EnsureService();
+                if (gameSelectPanelView == null || !gameSelectPanelView.IsAcquired)
+                {
+                    ReleaseView(tabletopPopupView);
+                    popupLayer.SetActive(false);
+                    ReleaseModalViews();
+                    componentToolboxView?.CloseToolbox();
+                    HideGameTemplatesPanel();
+                    gameSelectPanelView = uiService.AcquireCached<GameSelectPanelView>(PrototypeUiPrefabIds.GameSelectPanel);
+                    gameSelectPanelView.Initialize(uiService);
+                }
+
+                modalLayer.SetActive(true);
+                gameSelectPanelView.Bind(model, actions);
+                gameSelectPanelView.Show();
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                Debug.LogWarning(
+                    "The game selection menu is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs (Final UI). "
+                    + exception.Message);
+                return false;
+            }
+        }
+
+        public bool IsGameSelectOpen => IsVisible(gameSelectPanelView);
+
+        public void CloseGameSelect()
+        {
+            ReleaseView(gameSelectPanelView);
             SetModalLayerOffUnlessHandover();
         }
 
@@ -593,7 +633,7 @@ namespace ConsoleCards.Presentation.UI
         {
             if (modalLayer != null && !IsVisible(hotSeatHandoverView) && !IsVisible(contentArtPanelView)
                 && !IsVisible(ruleProposalPanelView) && !IsVisible(profilePanelView) && !IsVisible(cardEditorPanelView)
-                && !IsVisible(deckEditorPanelView))
+                && !IsVisible(deckEditorPanelView) && !IsVisible(gameSelectPanelView))
             {
                 modalLayer.SetActive(false);
             }
@@ -958,6 +998,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(profilePanelView);
             ReleaseView(cardEditorPanelView);
             ReleaseView(deckEditorPanelView);
+            ReleaseView(gameSelectPanelView);
             ReleaseView(hintStripView);
             CloseTabletopPopup();
         }
@@ -1089,6 +1130,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(profilePanelView);
             ReleaseView(cardEditorPanelView);
             ReleaseView(deckEditorPanelView);
+            ReleaseView(gameSelectPanelView);
             ReleaseView(quantityPopupView);
             ReleaseView(cardInspectPopupView);
             ReleaseView(actionAbilityPurchasePopupView);

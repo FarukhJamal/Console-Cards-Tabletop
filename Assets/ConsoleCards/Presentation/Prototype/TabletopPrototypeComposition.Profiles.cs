@@ -64,7 +64,7 @@ namespace ConsoleCards.Presentation.Prototype
                     PlayAs = PlayAsProfile,
                     Create = CreateProfile,
                     Rename = RenameProfile,
-                    Close = () => runtimeUi?.CloseProfilePanel(),
+                    Close = CloseProfilePanel,
                 };
             }
 
@@ -76,6 +76,12 @@ namespace ConsoleCards.Presentation.Prototype
             {
                 ShowMessage("The profile panel is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs.");
             }
+        }
+
+        private void CloseProfilePanel()
+        {
+            runtimeUi?.CloseProfilePanel();
+            ReturnToGameSelect();
         }
 
         private void PlayAsProfile(string profileId)

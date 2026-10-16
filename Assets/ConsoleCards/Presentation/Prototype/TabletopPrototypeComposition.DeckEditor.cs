@@ -8,7 +8,7 @@ using UnityEngine;
 namespace ConsoleCards.Presentation.Prototype
 {
     /// <summary>
-    /// The deck editor (doc 27 List 2, L2-3): Table menu > Deck editor…. Pick a game; its decks are the game's own deck
+    /// The deck editor (doc 27 List 2, L2-3): New table… > Deck editor… (the game selection menu, L2-4). Pick a game; its decks are the game's own deck
     /// (every card with its copies, the copies used in play) and the player's decks for that game. Decks are made,
     /// copied, renamed and deleted here, and the selected deck's cards get their copies with − and +. Everything is
     /// kept in memory until Save, which writes the profile (cards.json for the game's deck copies, decks.json for
@@ -38,9 +38,10 @@ namespace ConsoleCards.Presentation.Prototype
             public string Id => GameCard != null ? GameCard.StableId : Record.id;
         }
 
+        // The deck editor opens from the game selection menu (L2-4); the Table menu row stays hidden.
         private void RefreshDeckEditorEntry()
         {
-            runtimeUi?.ShowDeckEditorEntry(OpenDeckEditor);
+            runtimeUi?.ShowDeckEditorEntry(null);
         }
 
         private void OpenDeckEditor()
@@ -321,6 +322,7 @@ namespace ConsoleCards.Presentation.Prototype
             deckEditorCloseArmed = false;
             runtimeUi?.CloseDeckEditor();
             DisposeCardEditor();
+            ReturnToGameSelect();
         }
 
         // ---------- copies ----------

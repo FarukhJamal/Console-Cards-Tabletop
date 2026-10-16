@@ -1,6 +1,6 @@
 # 26 — Final UI
 
-Version 0.3 · Status: Implemented (UI-F, 2026-10-13); Shop entry and Shop panel added 2026-10-15; profile panel and Profile row added 2026-10-16; card editor and deck editor added 2026-10-16
+Version 0.3 · Status: Implemented (UI-F, 2026-10-13); Shop entry and Shop panel added 2026-10-15; profile panel and Profile row added 2026-10-16; card editor, deck editor and game selection menu added 2026-10-16
 
 ## What it is
 
@@ -23,6 +23,7 @@ nothing else.
 | GameTemplateRow | Game list row |
 | CardEditorPanel, CardEditorRow, CardEditorDeckRow | Card editor (L2-2): the game picker and the game's deck size; the card list with + New card; the preview (front and back on the white base card, and the card's words); the fields (code, name, description, cost, works like, pictures) and "In decks" (tick, name and size, − copies +; + New deck); Delete, Reset, Save |
 | DeckEditorPanel, DeckEditorCardRow | Deck editor (L2-3): the game picker; the decks (the game's deck, then yours; rows are CardEditorRow) with the name box, + New deck, Copy deck, Rename, Delete deck; the selected deck's size and cards with − copies +, all cards or this deck only; Undo changes, Save |
+| GameSelectPanel | Game selection menu (L2-4, New table…): the games (rows are CardEditorRow); the chosen game's picture, name, players, mode < >, rules and deck; Playing as with Profile…; Make it yours (Card art…, Card editor…, Deck editor…); status and Start. The Table menu's Card art, Card editor and Deck editor rows stay hidden |
 | ProfilePanel, ProfileRow | Player profile panel (doc 28): who is playing, every profile with Play as, a name box with New profile and Rename this profile (no folder button in play; Console Cards > Content > Open Profiles Folder is for us) |
 
 ## Rules
@@ -38,4 +39,4 @@ nothing else.
 - **Canvas.** The UI root scales from 1920 × 1080, matching width and height equally (0.5).
 - The older copies in `Real/UI/` are no longer used and can be deleted.
 - **Adding to existing prefabs.** *Console Cards > UI > Add Missing Table Menu Rows (Final UI)* also adds the Shop entry to an existing SessionBar (before the Table button; icon `Content/UI/Session/Icons/IconShop.png`). *Create Missing Gameplay UI Prefabs (Final UI)* wires the Shop title labels in an existing AbilityPurchase. Nothing else in those prefabs changes.
-- **Profile and card editor (2026-10-16).** *Add Missing Table Menu Rows* adds the "Card editor…", "Deck editor…" and "Profile: name…" rows under Card art in an existing SessionBar. *Create Missing Gameplay UI Prefabs* makes ProfilePanel, ProfileRow, CardEditorPanel, CardEditorRow, CardEditorDeckRow, DeckEditorPanel and DeckEditorCardRow when they are missing. A CardEditorPanel made before the game picker and "In decks" (first L2-2 build) must be deleted and made again.
+- **Profile and card editor (2026-10-16).** *Add Missing Table Menu Rows* adds the "Card editor…", "Deck editor…" and "Profile: name…" rows under Card art in an existing SessionBar. *Create Missing Gameplay UI Prefabs* makes ProfilePanel, ProfileRow, CardEditorPanel, CardEditorRow, CardEditorDeckRow, DeckEditorPanel, DeckEditorCardRow and GameSelectPanel when they are missing. A CardEditorPanel made before the game picker and "In decks" (first L2-2 build) must be deleted and made again.
