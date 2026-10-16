@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.19 · 2026-10-17 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.20 · 2026-10-17 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -78,7 +78,7 @@ What already exists and is reused:
 |---|---|---|---|
 | 1 | L2-6b | Save table as a game in steps; keep placing | Done, approved |
 | 2 | R0 | Names: Prototype classes and prefabs get final names, renamed so references stay intact (doc 30 A5, record in Part D) | Done, approved ("Works now"; the one-off R0 tool may be deleted) |
-| 3 | T1–T3 | Table shape and size: table spec and builder, star and edges, Table mode with handles (doc 30 B) | T1 done, working after the collider fix (owner, 2026-10-17; doc 30 §B6); T1b model tables approved (owner, 2026-10-17) and written, to be checked (not compiled yet; doc 30 §B8); T2–T3 planned |
+| 3 | T1–T3 | Table shape and size: table spec and builder, star and edges, Table mode with handles (doc 30 B) | T1 done, working after the collider fix (owner, 2026-10-17; doc 30 §B6); T1b model tables done, approved (owner, 2026-10-17; doc 30 §B8); T2 star, edges and edge colliders written, to be checked (not compiled yet; doc 30 §B9); T3 planned |
 | 4 | V0–V1 | Art direction "inside the console" (circuit board) with layout mock-ups; lighting and post (doc 30 C) | Planned |
 | 5 | T4–T5 | Table textures (any picture, repeat or fit) and paint layer, within the B5 budget | Planned |
 | 6 | V2–V5 | Pieces; table and room; menus and layout (V4a), readability (V4b), circuit-board skin (V4c); motion and feel | Planned |

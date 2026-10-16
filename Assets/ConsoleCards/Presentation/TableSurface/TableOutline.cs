@@ -28,6 +28,12 @@ namespace ConsoleCards.Presentation.TableSurface
         /// <summary>Half the width and depth of the outline's bounding box.</summary>
         public Vector2 HalfSize { get; private set; }
 
+        /// <summary>False when the outline has inward corners (a star): its filling then needs ear clipping.</summary>
+        public bool IsConvex { get; private set; } = true;
+
+        /// <summary>The length all the way round.</summary>
+        public float Perimeter { get; private set; }
+
         /// <summary>
         /// Builds the outline for <paramref name="spec"/> with <paramref name="worldPerUnit"/> world units per table
         /// unit, points about <paramref name="spacing"/> world units apart. False for Classic or a broken result.
@@ -44,6 +50,14 @@ namespace ConsoleCards.Presentation.TableSurface
                 case TableShape.Rectangle:
                 case TableShape.Square:
                     AddRoundedRectangle(halfW, halfD, spec.cornerRadius * worldPerUnit, spacing);
+                    break;
+                case TableShape.Star:
+                    // Straight sides need no points of their own: just the tips and the inner corners.
+                    for (int i = 0; i < 2 * spec.starPoints; i++)
+                    {
+                        points.Add(TableSpec.StarCorner(i, spec.starPoints, spec.starInner) * halfW);
+                    }
+
                     break;
                 default:
                     AddEllipse(halfW, halfD, spacing);
@@ -203,7 +217,19 @@ namespace ConsoleCards.Presentation.TableSurface
                 area += (points[j].x * p.y) - (p.x * points[j].y);
             }
 
-            return area > 1e-4f;
+            if (area <= 1e-4f) return false;
+            IsConvex = true;
+            Perimeter = 0f;
+            for (int i = 0; i < points.Count; i++)
+            {
+                Vector2 a = points[(i + points.Count - 1) % points.Count];
+                Vector2 b = points[i];
+                Vector2 c = points[(i + 1) % points.Count];
+                if ((((b.x - a.x) * (c.y - b.y)) - ((b.y - a.y) * (c.x - b.x))) < -1e-6f) IsConvex = false;
+                Perimeter += (c - b).magnitude;
+            }
+
+            return true;
         }
     }
 }

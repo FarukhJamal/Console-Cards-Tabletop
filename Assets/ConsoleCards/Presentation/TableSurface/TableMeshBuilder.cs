@@ -8,7 +8,7 @@ namespace ConsoleCards.Presentation.TableSurface
     /// the top as a slab (playing area on top, sides and underside below) and the edge as a small cross-section
     /// swept around the outline. Playing-area texture coordinates come from table units, so a felt repeats instead of
     /// stretching when the table grows (B5). All lists are made once and reused: a rebuild makes no garbage.
-    /// Convex shapes only (T1); the star's concave filling comes in T2.
+    /// Convex outlines are filled with a fan; outlines with inward corners (the star, T2) by ear clipping.
     /// </summary>
     public sealed class TableMeshBuilder
     {
@@ -20,6 +20,9 @@ namespace ConsoleCards.Presentation.TableSurface
         private readonly List<int> playingAreaTriangles = new List<int>(2048);
         private readonly List<int> bodyTriangles = new List<int>(8192);
         private readonly Vector2[] profile = new Vector2[MaximumProfilePoints];
+        private readonly List<int> fill = new List<int>(1536);
+        private readonly List<int> remaining = new List<int>(512);
+        public const int MaximumOrnaments = 256;
 
         /// <summary>
         /// The top slab. With <paramref name="twoMaterials"/> the playing area is sub-mesh 0 and the sides and
@@ -42,9 +45,10 @@ namespace ConsoleCards.Presentation.TableSurface
             }
 
             List<int> top = playingAreaTriangles;
-            for (int i = 0; i < count; i++)
+            Fill(outline);
+            for (int i = 0; i + 2 < fill.Count; i += 3)
             {
-                AddTriangle(top, centre, centre + 1 + ((i + 1) % count), centre + 1 + i);
+                AddTriangle(top, centre + 1 + fill[i], centre + 1 + fill[i + 2], centre + 1 + fill[i + 1]);
             }
 
             // Underside: the same fan, facing down.
@@ -57,9 +61,9 @@ namespace ConsoleCards.Presentation.TableSurface
                 AddVertex(new Vector3(p.x, -thickness, p.y), Vector3.down, new Vector2((p.x / size.x) + 0.5f, (p.y / size.y) + 0.5f));
             }
 
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i + 2 < fill.Count; i += 3)
             {
-                AddTriangle(body, under, under + 1 + i, under + 1 + ((i + 1) % count));
+                AddTriangle(body, under + 1 + fill[i], under + 1 + fill[i + 1], under + 1 + fill[i + 2]);
             }
 
             // Sides: straight down from the edge of the playing area.
@@ -70,20 +74,190 @@ namespace ConsoleCards.Presentation.TableSurface
         }
 
         /// <summary>
-        /// The edge: a lip <paramref name="height"/> above the playing area and <paramref name="width"/> wide, just
-        /// outside the outline, wrapping down over the slab's side to its underside.
+        /// The edge (T2): a cross-section <paramref name="height"/> above the playing area and
+        /// <paramref name="width"/> wide, just outside the outline, wrapping down over the slab's side to its
+        /// underside. Lip: square; rounded rail: a rounded top; wooden rail: a bevelled top. Spikes and Neon stand on
+        /// a lip. False (nothing built) for None.
         /// </summary>
-        public void BuildLip(TableOutline outline, float height, float width, float thickness, float textureLength, Mesh mesh)
+        public bool BuildEdge(TableOutline outline, TableEdge kind, float height, float width, float thickness, float textureLength, Mesh mesh)
         {
+            int count = 0;
+            profile[count++] = new Vector2(0f, 0f);
+            switch (kind)
+            {
+                case TableEdge.None:
+                    return false;
+                case TableEdge.RoundedRail:
+                    profile[count++] = new Vector2(0f, 0.55f * height);
+                    profile[count++] = new Vector2(0.07f * width, 0.8f * height);
+                    profile[count++] = new Vector2(0.25f * width, 0.95f * height);
+                    profile[count++] = new Vector2(0.5f * width, height);
+                    profile[count++] = new Vector2(0.75f * width, 0.95f * height);
+                    profile[count++] = new Vector2(0.93f * width, 0.8f * height);
+                    profile[count++] = new Vector2(width, 0.55f * height);
+                    break;
+                case TableEdge.WoodenRail:
+                    profile[count++] = new Vector2(0f, 0.65f * height);
+                    profile[count++] = new Vector2(0.3f * width, height);
+                    profile[count++] = new Vector2(0.85f * width, height);
+                    profile[count++] = new Vector2(width, 0.85f * height);
+                    break;
+                default:
+                    profile[count++] = new Vector2(0f, height);
+                    profile[count++] = new Vector2(width, height);
+                    break;
+            }
+
+            profile[count++] = new Vector2(width, -thickness);
+            profile[count++] = new Vector2(0f, -thickness);
             Begin();
-            profile[0] = new Vector2(0f, 0f);
-            profile[1] = new Vector2(0f, height);
-            profile[2] = new Vector2(width, height);
-            profile[3] = new Vector2(width, -thickness);
-            profile[4] = new Vector2(0f, -thickness);
-            Sweep(outline, 5, Mathf.Max(0.01f, textureLength), playingAreaTriangles);
+            Sweep(outline, count, Mathf.Max(0.01f, textureLength), playingAreaTriangles);
+            Finish(mesh, false);
+            return true;
+        }
+
+        /// <summary>The Neon edge's glowing strip (T2): a thin band along the middle of the lip's top.</summary>
+        public void BuildNeonStrip(TableOutline outline, float height, float width, float textureLength, Mesh mesh)
+        {
+            float raise = Mathf.Max(0.01f, 0.25f * height);
+            profile[0] = new Vector2(0.3f * width, height);
+            profile[1] = new Vector2(0.3f * width, height + raise);
+            profile[2] = new Vector2(0.7f * width, height + raise);
+            profile[3] = new Vector2(0.7f * width, height);
+            Begin();
+            Sweep(outline, 4, Mathf.Max(0.01f, textureLength), playingAreaTriangles);
             Finish(mesh, false);
         }
+
+        /// <summary>
+        /// The Spikes edge's spikes (T2): small eight-sided cones standing on the middle of the lip, evenly spaced
+        /// along the outline (at most <see cref="MaximumOrnaments"/>), merged into one mesh: one draw call and no
+        /// work per frame.
+        /// </summary>
+        public void BuildSpikes(TableOutline outline, float height, float width, Mesh mesh)
+        {
+            Begin();
+            float radius = 0.32f * width;
+            float tall = 1.6f * width;
+            float spacing = Mathf.Max(4f * width, outline.Perimeter / MaximumOrnaments);
+            int spikes = Mathf.Clamp(Mathf.FloorToInt(outline.Perimeter / spacing), 3, MaximumOrnaments);
+            spacing = outline.Perimeter / spikes;
+            int segment = 0;
+            float walked = 0f;
+            int count = outline.Count;
+            for (int s = 0; s < spikes; s++)
+            {
+                float target = (s + 0.5f) * spacing;
+                Vector2 a = outline.Points[segment];
+                Vector2 b = outline.Points[(segment + 1) % count];
+                float length = (b - a).magnitude;
+                while (walked + length < target && segment < count - 1)
+                {
+                    walked += length;
+                    segment++;
+                    a = outline.Points[segment];
+                    b = outline.Points[(segment + 1) % count];
+                    length = (b - a).magnitude;
+                }
+
+                Vector2 along = length > 1e-6f ? (b - a) / length : Vector2.right;
+                Vector2 point = a + (along * Mathf.Clamp(target - walked, 0f, length));
+                Vector2 outward = new Vector2(along.y, -along.x);
+                Vector2 centre = point + (outward * (0.5f * width));
+                AddCone(new Vector3(centre.x, height, centre.y), radius, tall, playingAreaTriangles);
+            }
+
+            Finish(mesh, false);
+        }
+
+        // An eight-sided cone with flat faces, its base centre at the given point.
+        private void AddCone(Vector3 baseCentre, float radius, float tall, List<int> triangles)
+        {
+            const int sides = 8;
+            Vector3 apex = baseCentre + (Vector3.up * tall);
+            for (int i = 0; i < sides; i++)
+            {
+                float a0 = 2f * Mathf.PI * i / sides;
+                float a1 = 2f * Mathf.PI * (i + 1) / sides;
+                Vector3 p0 = baseCentre + new Vector3(Mathf.Cos(a0) * radius, 0f, Mathf.Sin(a0) * radius);
+                Vector3 p1 = baseCentre + new Vector3(Mathf.Cos(a1) * radius, 0f, Mathf.Sin(a1) * radius);
+                Vector3 normal = Vector3.Cross(apex - p0, p1 - p0).normalized;
+                if (Vector3.Dot(normal, (p0 + p1) * 0.5f - baseCentre) < 0f) normal = -normal;
+                int start = vertices.Count;
+                AddVertex(p0, normal, new Vector2(0f, 0f));
+                AddVertex(p1, normal, new Vector2(1f, 0f));
+                AddVertex(apex, normal, new Vector2(0.5f, 1f));
+                // Front side outward: Vector3.Cross(b - a, c - a) must point along the normal.
+                if (Vector3.Dot(Vector3.Cross(p1 - p0, apex - p0), normal) > 0f) AddTriangle(triangles, start, start + 1, start + 2);
+                else AddTriangle(triangles, start, start + 2, start + 1);
+            }
+        }
+
+        // Triangles filling the outline, as outline indices, counter-clockwise seen from above (math orientation).
+        // Convex: a fan from point 0. Otherwise ear clipping, fine for the few corners a star has.
+        private void Fill(TableOutline outline)
+        {
+            fill.Clear();
+            int count = outline.Count;
+            if (outline.IsConvex)
+            {
+                for (int i = 1; i + 1 < count; i++)
+                {
+                    fill.Add(0);
+                    fill.Add(i);
+                    fill.Add(i + 1);
+                }
+
+                return;
+            }
+
+            remaining.Clear();
+            for (int i = 0; i < count; i++) remaining.Add(i);
+            int guard = count * count;
+            while (remaining.Count > 3 && guard-- > 0)
+            {
+                bool clipped = false;
+                for (int r = 0; r < remaining.Count; r++)
+                {
+                    int ia = remaining[(r + remaining.Count - 1) % remaining.Count];
+                    int ib = remaining[r];
+                    int ic = remaining[(r + 1) % remaining.Count];
+                    Vector2 a = outline.Points[ia];
+                    Vector2 b = outline.Points[ib];
+                    Vector2 c = outline.Points[ic];
+                    if (Cross(a, b, c) <= 1e-9f) continue; // an inward corner is not an ear
+                    bool empty = true;
+                    for (int k = 0; k < remaining.Count && empty; k++)
+                    {
+                        int ik = remaining[k];
+                        if (ik == ia || ik == ib || ik == ic) continue;
+                        if (Inside(outline.Points[ik], a, b, c)) empty = false;
+                    }
+
+                    if (!empty) continue;
+                    fill.Add(ia);
+                    fill.Add(ib);
+                    fill.Add(ic);
+                    remaining.RemoveAt(r);
+                    clipped = true;
+                    break;
+                }
+
+                if (!clipped) break;
+            }
+
+            if (remaining.Count == 3)
+            {
+                fill.Add(remaining[0]);
+                fill.Add(remaining[1]);
+                fill.Add(remaining[2]);
+            }
+        }
+
+        private static float Cross(Vector2 a, Vector2 b, Vector2 c) => ((b.x - a.x) * (c.y - a.y)) - ((b.y - a.y) * (c.x - a.x));
+
+        private static bool Inside(Vector2 p, Vector2 a, Vector2 b, Vector2 c) =>
+            Cross(a, b, p) >= 0f && Cross(b, c, p) >= 0f && Cross(c, a, p) >= 0f;
 
         // Sweeps the profile (x: out from the edge, y: up) around the outline. Each profile segment is one strip,
         // flat across and smooth along; the last column repeats the first so the texture wraps without a seam jump.

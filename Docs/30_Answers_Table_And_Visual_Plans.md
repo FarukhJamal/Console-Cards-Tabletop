@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.7 · 2026-10-17 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.8 · 2026-10-17 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -787,6 +787,63 @@ Blender needed (no Blender connection is available to Claude here).
   - Resize modes are stored but not used. Every model shows at its own size until the Table tools (T3).
   - Seat and camera markers come with T3.
   - Built shapes get kit legs later (B7).
+
+
+### B9. T2 record: star, edges, edge colliders (written 2026-10-17, to be checked)
+
+T1b was approved by the owner on 2026-10-17 ("Approved next Start").
+
+**What the player sees:**
+
+- **The Table row** now goes Classic → Rectangle → Square → Round → Oval → **Star** → other models → Classic.
+- **A new Table menu row, "Edge: Lip".** Each press changes the built tables' edge: None → Lip → Rounded rail →
+  Wooden rail → Spikes → Neon. A built table is rebuilt at once. On Classic or a model, the choice is kept for the
+  next built shape. It is saved in the profile.
+
+**Star:**
+
+- 5 points; the inner corners sit at 0.6 of the outer radius (both are in the spec: 3–12 points, 0.25–0.9).
+- Default size: the smallest star that holds the whole classic playing area, so every game layout fits (about
+  43 units across for today's table).
+- The tips are sharp; rounded tips can come later.
+- Its filling uses ear clipping, because a star has inward corners; the other shapes keep the simple fan.
+- The legs are fitted as for the other shapes, so a leg that falls in a notch moves in.
+
+**Edges** (each a cross-section swept round the outline, at most 12 points, as in B2):
+
+| Edge | Look | Collider |
+|---|---|---|
+| None | nothing | none |
+| Lip | square lip | boxes |
+| Rounded rail | rounded top | boxes |
+| Wooden rail | bevelled top, 1.6 × wider, wood colour | boxes |
+| Spikes | a lip with up to 256 small eight-sided spikes, evenly spaced | boxes for the lip; spikes are decoration |
+| Neon | a lip with a glowing teal strip (#2FA58A) | boxes |
+
+- **Spikes** are merged into one mesh rather than drawn with GPU instancing. It is the same single draw call,
+  with no work at all per frame (B5 allowed instancing; this is lighter still).
+- **Edge colliders** are simple boxes, one per side of the simpler collider outline (at most 128). They are made
+  once and reused, and they are not placement surfaces: pieces bump the edge instead of sliding off.
+- **Materials** are made once each: the plain body, the wood colour, and the teal glow (URP Lit emission).
+
+**Code:**
+
+- `TableSpec`: `Star`; the new edges; `starPoints`, `starInner`; `StarCorner`, `NextEdge`, `EdgeLabel`.
+- `TableOutline`: star corners, `IsConvex`, `Perimeter`.
+- `TableMeshBuilder`:
+  - `BuildEdge` (profiles) replaces `BuildLip`;
+  - `BuildNeonStrip`, `BuildSpikes`;
+  - ear clipping (`Fill`).
+- `GeneratedTable`: edge glow, spikes, edge colliders, wood and neon materials.
+- `TabletopComposition.Table.cs`: Star in the cycle, the Edge row.
+- `SessionBarView.BindTableEdge`, `TableUiController.ShowTableEdgeEntry`, and the `SessionUiBuilder` Edge row
+  (through Add Missing Table Menu Rows).
+
+**Budget:**
+
+- Edge: at most about 11 points × 2 × 513 vertices for the rounded rail. The spikes: at most 256 × 24 vertices.
+- Draw calls: top 2, edge 1, glow or spikes 1.
+- Nothing is built per frame.
 
 ---
 

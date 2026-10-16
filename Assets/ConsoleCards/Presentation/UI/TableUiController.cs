@@ -52,6 +52,7 @@ namespace ConsoleCards.Presentation.UI
         private bool deckEditorEntryWarned;
         private bool profileEntryWarned;
         private bool tableShapeEntryWarned;
+        private bool tableEdgeEntryWarned;
         private HintStripView hintStripView;
         private bool hintStripWarned;
         private bool tipsSettingWarned;
@@ -448,6 +449,18 @@ namespace ConsoleCards.Presentation.UI
                 tableShapeEntryWarned = true;
                 Debug.LogWarning(
                     "The Table menu has no Table shape row: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
+            }
+        }
+
+        /// <summary>Binds the Table menu's "Edge: kind" row (T2); each press cycles the edge. Null hides it.</summary>
+        public void ShowTableEdgeEntry(string label, Func<string> cycleEdge)
+        {
+            EnsureSessionBarView();
+            if (!sessionBarView.BindTableEdge(label, cycleEdge) && cycleEdge != null && !tableEdgeEntryWarned)
+            {
+                tableEdgeEntryWarned = true;
+                Debug.LogWarning(
+                    "The Table menu has no Edge row: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
             }
         }
 

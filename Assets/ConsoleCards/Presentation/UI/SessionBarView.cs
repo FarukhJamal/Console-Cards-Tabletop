@@ -81,6 +81,11 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button tableShapeButton;
         [SerializeField] private Text tableShapeLabel;
 
+        [Header("Table edge (T2; optional, added by Add Missing Table Menu Rows)")]
+        [Tooltip("The Table menu row \"Edge: kind\": each press changes the built table's edge to the next kind.")]
+        [SerializeField] private Button tableEdgeButton;
+        [SerializeField] private Text tableEdgeLabel;
+
         [Header("Shop (doc 18 §15.4; optional, added by Add Missing Table Menu Rows)")]
         [Tooltip("The Shop entry on the bar: the shop icon and the word Shop, between Redo and Table.")]
         [SerializeField] private Button shopButton;
@@ -110,6 +115,7 @@ namespace ConsoleCards.Presentation.UI
         private Action openCardArt;
         private Action openProfile;
         private Func<string> cycleTableShape;
+        private Func<string> cycleTableEdge;
         private Action openCardEditor;
         private Action openDeckEditor;
         private Action openSaveGame;
@@ -406,6 +412,26 @@ namespace ConsoleCards.Presentation.UI
         }
 
         /// <summary>
+        /// Binds the optional "Edge: kind" row (T2); null hides it. A press cycles the edge and shows the text the
+        /// action returns; the menu stays open. False when the prefab lacks it.
+        /// </summary>
+        public bool BindTableEdge(string label, Func<string> cycleTableEdgeAction)
+        {
+            RequireAcquired();
+            if (tableEdgeButton == null)
+            {
+                return false;
+            }
+
+            Clear(tableEdgeButton);
+            cycleTableEdge = cycleTableEdgeAction;
+            if (tableEdgeLabel != null) tableEdgeLabel.text = label;
+            tableEdgeButton.gameObject.SetActive(cycleTableEdge != null);
+            tableEdgeButton.onClick.AddListener(HandleTableEdge);
+            return true;
+        }
+
+        /// <summary>
         /// Binds the optional Shop entry on the bar (doc 18 §15.4): shown while <paramref name="openShopAction"/> is
         /// set (a game whose Shop is open), hidden for null. False when the prefab lacks it.
         /// </summary>
@@ -508,6 +534,7 @@ namespace ConsoleCards.Presentation.UI
             openCardArt = null;
             openProfile = null;
             cycleTableShape = null;
+            cycleTableEdge = null;
             openCardEditor = null;
             openDeckEditor = null;
             openSaveGame = null;
@@ -704,6 +731,12 @@ namespace ConsoleCards.Presentation.UI
             if (tableShapeLabel != null && label != null) tableShapeLabel.text = label;
         }
 
+        private void HandleTableEdge()
+        {
+            string label = cycleTableEdge?.Invoke();
+            if (tableEdgeLabel != null && label != null) tableEdgeLabel.text = label;
+        }
+
         private void HandleHelp()
         {
             CloseMenu();
@@ -791,6 +824,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(cardArtButton);
             Clear(profileButton);
             Clear(tableShapeButton);
+            Clear(tableEdgeButton);
             Clear(cardEditorButton);
             Clear(deckEditorButton);
             Clear(saveGameButton);

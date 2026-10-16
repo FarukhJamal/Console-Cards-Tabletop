@@ -19,7 +19,10 @@ namespace ConsoleCards.Presentation.Composition
     /// <item>Classic shows the whole base table. Rectangle, Square, Round and Oval are built on the base table: they
     /// replace its playing area and sides, keep its lower frame (legs), use its playing-area material and reach
     /// down to its legs.</item>
-    /// <item>After Oval the Table menu row goes through the other table models, which replace the base table.</item>
+    /// <item>After Oval comes Star (T2); then the Table menu row goes through the other table models, which replace
+    /// the base table.</item>
+    /// <item>The "Edge: …" row (T2) cycles the built tables' edge: None, Lip, Rounded rail, Wooden rail, Spikes,
+    /// Neon.</item>
     /// </list>
     /// The choice is saved in the profile (table.json). Sizes, the shape cards and Undo come in T3.
     /// </summary>
@@ -44,6 +47,7 @@ namespace ConsoleCards.Presentation.Composition
         private GeneratedTable generatedTable;
         private TableSpec tableSpec = new TableSpec();
         private Func<string> cycleTableShapeAction;
+        private Func<string> cycleTableEdgeAction;
 
         // The base table (T1b) and, when there is none, the scene's old one-piece table.
         private TableModel baseTable;
@@ -116,7 +120,35 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (runtimeUi == null) return;
             if (cycleTableShapeAction == null) cycleTableShapeAction = CycleTableShape;
-            runtimeUi.ShowTableShapeEntry(TableShapeText(), FindClassicTable() ? cycleTableShapeAction : null);
+            if (cycleTableEdgeAction == null) cycleTableEdgeAction = CycleTableEdge;
+            bool canChange = FindClassicTable();
+            runtimeUi.ShowTableShapeEntry(TableShapeText(), canChange ? cycleTableShapeAction : null);
+            runtimeUi.ShowTableEdgeEntry(TableEdgeText(), canChange ? cycleTableEdgeAction : null);
+        }
+
+        private string TableEdgeText() => $"Edge: {TableSpec.EdgeLabel(tableSpec.edge)}";
+
+        private static bool IsBuiltShape(TableShape shape) => shape != TableShape.Classic && shape != TableShape.Model;
+
+        // The next edge (T2). A built table is rebuilt with it at once; Classic and models keep their own edge, and
+        // the choice waits for the next built shape. Returns the row's new text; the menu stays open.
+        private string CycleTableEdge()
+        {
+            if (!FindClassicTable()) return TableEdgeText();
+            TableSpec candidate = tableSpec.Copy();
+            candidate.edge = TableSpec.NextEdge(tableSpec.edge);
+            if (IsBuiltShape(candidate.shape) && !ShowTable(candidate, out string error))
+            {
+                ShowMessage($"The edge was not changed: {error}.");
+                return TableEdgeText();
+            }
+
+            tableSpec = candidate;
+            SaveFiles.WriteJson(TableSpecPath, tableSpec, TableArea);
+            ShowMessage(IsBuiltShape(tableSpec.shape)
+                ? $"Edge: {TableSpec.EdgeLabel(tableSpec.edge)}."
+                : $"Edge: {TableSpec.EdgeLabel(tableSpec.edge)}. It shows on the built tables (Rectangle, Square, Round, Oval, Star).");
+            return TableEdgeText();
         }
 
         // The next shape at its default size, keeping the edge. Returns the row's new text; the menu stays open.
@@ -408,12 +440,12 @@ namespace ConsoleCards.Presentation.Composition
             return null;
         }
 
-        // Built shapes in order, then every other table model, then Classic again.
+        // Built shapes in order (Star last), then every other table model, then Classic again.
         private TableSpec NextTableSpec()
         {
             LoadTableModels();
             TableSpec model = null;
-            if (tableSpec.shape == TableShape.Oval)
+            if (tableSpec.shape == TableShape.Star)
             {
                 int first = NextCycleModel(-1);
                 if (first >= 0) model = ModelSpec(tableModels[first]);

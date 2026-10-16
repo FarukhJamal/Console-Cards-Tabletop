@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ConsoleCards.Presentation.Interaction;
 using UnityEngine;
 
@@ -9,6 +10,8 @@ namespace ConsoleCards.Presentation.TableSurface
     /// underside) with its surface collider, and the edge. It stands where the classic table's playing area is and
     /// uses the classic table's frame, so Game Templates, the Empty Table and saved positions land in the same
     /// places. Rebuilt only when the spec changes, never per frame; the meshes are made once and reused (B5).
+    /// T2: the edge can be a lip, a rounded or wooden rail, spikes (merged into one mesh) or neon (a glowing strip);
+    /// lips and rails get simple box colliders along the outline so pieces bump them. Spikes are decoration only.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class GeneratedTable : MonoBehaviour
@@ -27,6 +30,21 @@ namespace ConsoleCards.Presentation.TableSurface
         // picture. The classic model's texture is laid out for that model only, so it would look scrambled here.
         private static readonly Color BodyColour = new Color(0.106f, 0.106f, 0.114f, 1f); // #1B1B1D (doc 30, C1)
         private Material bodyMaterial;
+        private Material woodMaterial;
+        private Material neonMaterial;
+        private static readonly Color WoodColour = new Color(0.40f, 0.25f, 0.13f, 1f);
+        private static readonly Color NeonColour = new Color(0.184f, 0.647f, 0.541f, 1f); // #2FA58A teal (doc 30, C1)
+        private const float NeonGlow = 3f;
+
+        private GameObject glow;
+        private MeshRenderer glowRenderer;
+        private Mesh glowMesh;
+        private GameObject spikes;
+        private MeshRenderer spikesRenderer;
+        private Mesh spikesMesh;
+        private Transform edgeColliderRoot;
+        private readonly List<BoxCollider> edgeBoxes = new List<BoxCollider>(128);
+        private int edgeLayer;
 
         private GameObject top;
         private GameObject edge;
@@ -72,6 +90,17 @@ namespace ConsoleCards.Presentation.TableSurface
             table.edgeMesh = new Mesh { name = "Generated Table Edge" };
             table.topFilter.sharedMesh = table.topMesh;
             table.edgeFilter.sharedMesh = table.edgeMesh;
+            table.edgeLayer = edgeLayer;
+            table.glow = Child(root.transform, "Edge Glow", edgeLayer, out MeshFilter glowFilter, out table.glowRenderer);
+            table.glowMesh = new Mesh { name = "Generated Table Edge Glow" };
+            glowFilter.sharedMesh = table.glowMesh;
+            table.spikes = Child(root.transform, "Edge Spikes", edgeLayer, out MeshFilter spikesFilter, out table.spikesRenderer);
+            table.spikesMesh = new Mesh { name = "Generated Table Spikes" };
+            spikesFilter.sharedMesh = table.spikesMesh;
+            GameObject colliders = new GameObject("Edge Colliders");
+            colliders.layer = edgeLayer;
+            colliders.transform.SetParent(root.transform, false);
+            table.edgeColliderRoot = colliders.transform;
             return table;
         }
 
@@ -116,14 +145,29 @@ namespace ConsoleCards.Presentation.TableSurface
             topMaterials[1] = sides;
             topRenderer.sharedMaterials = topMaterials;
 
-            bool hasEdge = clean.edge == TableEdge.Lip;
-            if (hasEdge)
+            float edgeHeight = clean.edgeHeight * unit;
+            float edgeWidth = (clean.edge == TableEdge.WoodenRail ? 1.6f : 1f) * clean.edgeWidth * unit;
+            bool hasEdge = builder.BuildEdge(outline, clean.edge, edgeHeight, edgeWidth, thickness, textureSize.x, edgeMesh);
+            if (hasEdge) edgeRenderer.sharedMaterial = clean.edge == TableEdge.WoodenRail ? WoodMaterial(sides) : sides;
+            edge.SetActive(hasEdge);
+
+            bool hasGlow = clean.edge == TableEdge.Neon;
+            if (hasGlow)
             {
-                builder.BuildLip(outline, clean.edgeHeight * unit, clean.edgeWidth * unit, thickness, textureSize.x, edgeMesh);
-                edgeRenderer.sharedMaterial = sides;
+                builder.BuildNeonStrip(outline, edgeHeight, edgeWidth, textureSize.x, glowMesh);
+                glowRenderer.sharedMaterial = NeonMaterial(sides);
             }
 
-            edge.SetActive(hasEdge);
+            glow.SetActive(hasGlow);
+            bool hasSpikes = clean.edge == TableEdge.Spikes;
+            if (hasSpikes)
+            {
+                builder.BuildSpikes(outline, edgeHeight, edgeWidth, spikesMesh);
+                spikesRenderer.sharedMaterial = sides;
+            }
+
+            spikes.SetActive(hasSpikes);
+            BuildEdgeColliders(hasEdge, edgeHeight, edgeWidth, thickness);
 
             // The collider takes its mesh while active (reassigning makes physics take the new shape); only then is
             // the surface turned on, so it never starts without a mesh.
@@ -175,7 +219,92 @@ namespace ConsoleCards.Presentation.TableSurface
             DestroyMesh(topMesh);
             DestroyMesh(colliderMesh);
             DestroyMesh(edgeMesh);
+            DestroyMesh(glowMesh);
+            DestroyMesh(spikesMesh);
             if (bodyMaterial != null) Destroy(bodyMaterial);
+            if (woodMaterial != null) Destroy(woodMaterial);
+            if (neonMaterial != null) Destroy(neonMaterial);
+        }
+
+        private static GameObject Child(Transform parent, string name, int layer, out MeshFilter filter, out MeshRenderer renderer)
+        {
+            GameObject child = new GameObject(name);
+            child.layer = layer;
+            child.transform.SetParent(parent, false);
+            filter = child.AddComponent<MeshFilter>();
+            renderer = child.AddComponent<MeshRenderer>();
+            child.SetActive(false);
+            return child;
+        }
+
+        // Simple boxes along the (simpler) collider outline, one per side, covering the edge from its top down to
+        // the underside, so pieces bump the edge instead of sliding off (B5: boxes, not a detailed mesh). Made once
+        // and reused; spare boxes are switched off.
+        private void BuildEdgeColliders(bool hasEdge, float height, float width, float thickness)
+        {
+            int count = hasEdge ? colliderOutline.Count : 0;
+            for (int i = 0; i < count; i++)
+            {
+                Vector2 a = colliderOutline.Points[i];
+                Vector2 b = colliderOutline.Points[(i + 1) % colliderOutline.Count];
+                Vector2 side = b - a;
+                float length = side.magnitude;
+                if (i >= edgeBoxes.Count)
+                {
+                    GameObject box = new GameObject($"Edge Box {i + 1}");
+                    box.layer = edgeLayer;
+                    box.transform.SetParent(edgeColliderRoot, false);
+                    BoxCollider collider = box.AddComponent<BoxCollider>();
+                    collider.sharedMaterial = TabletopPhysicsSettings.Table;
+                    edgeBoxes.Add(collider);
+                }
+
+                BoxCollider edgeBox = edgeBoxes[i];
+                bool usable = length > 1e-4f;
+                if (edgeBox.gameObject.activeSelf != usable) edgeBox.gameObject.SetActive(usable);
+                if (!usable) continue;
+                Vector2 along = side / length;
+                Vector2 outward = new Vector2(along.y, -along.x);
+                Vector2 middle = ((a + b) * 0.5f) + (outward * (0.5f * width));
+                edgeBox.transform.localPosition = new Vector3(middle.x, 0.5f * (height - thickness), middle.y);
+                edgeBox.transform.localRotation = Quaternion.LookRotation(new Vector3(along.x, 0f, along.y), Vector3.up);
+                edgeBox.size = new Vector3(width, height + thickness, length + (0.5f * width));
+            }
+
+            for (int i = count; i < edgeBoxes.Count; i++)
+            {
+                if (edgeBoxes[i].gameObject.activeSelf) edgeBoxes[i].gameObject.SetActive(false);
+            }
+        }
+
+        private Material WoodMaterial(Material body)
+        {
+            if (woodMaterial != null || body == null) return woodMaterial != null ? woodMaterial : body;
+            woodMaterial = new Material(body) { name = "Generated Table Wooden Rail" };
+            SetColour(woodMaterial, WoodColour);
+            return woodMaterial;
+        }
+
+        // The theme's teal, glowing (URP Lit emission), made once.
+        private Material NeonMaterial(Material body)
+        {
+            if (neonMaterial != null || body == null) return neonMaterial != null ? neonMaterial : body;
+            neonMaterial = new Material(body) { name = "Generated Table Neon" };
+            SetColour(neonMaterial, NeonColour);
+            if (neonMaterial.HasProperty("_EmissionColor"))
+            {
+                neonMaterial.EnableKeyword("_EMISSION");
+                neonMaterial.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+                neonMaterial.SetColor("_EmissionColor", NeonColour * NeonGlow);
+            }
+
+            return neonMaterial;
+        }
+
+        private static void SetColour(Material material, Color colour)
+        {
+            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", colour);
+            if (material.HasProperty("_Color")) material.SetColor("_Color", colour);
         }
 
         // Made once from the classic body material: same shader and lighting, no picture, the theme's black.

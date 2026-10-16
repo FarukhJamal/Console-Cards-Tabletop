@@ -259,7 +259,7 @@ namespace ConsoleCards.Editor.UI
         }
 
         /// <summary>
-        /// Adds the play and view rows (Seat, Hot-seat, Hands on table, Feedback, Card art, Card editor, Deck editor, Profile, Save table as a game, Table shape; doc 18 §15.11, doc 25 F3,
+        /// Adds the play and view rows (Seat, Hot-seat, Hands on table, Feedback, Card art, Card editor, Deck editor, Profile, Save table as a game, Table shape, Table edge; doc 18 §15.11, doc 25 F3,
         /// doc 28) and
         /// the Shop entry on the bar (doc 18 §15.4) to an existing SessionBar prefab when they are missing. Rows that already exist and everything else in the
         /// prefab are kept as they are.
@@ -402,6 +402,17 @@ namespace ConsoleCards.Editor.UI
                 tableShape.transform.SetSiblingIndex(AfterRow(menu, above, menu.childCount - 1));
                 so.FindProperty("tableShapeButton").objectReferenceValue = tableShape;
                 so.FindProperty("tableShapeLabel").objectReferenceValue = tableShape.transform.Find("Label").GetComponent<Text>();
+                added++;
+            }
+
+            // The Table edge row (T2) goes under Table shape.
+            if (so.FindProperty("tableEdgeButton").objectReferenceValue == null)
+            {
+                Component above = so.FindProperty("tableShapeButton").objectReferenceValue as Component;
+                Button tableEdge = MenuRow(menu, "TableEdgeRow", "Edge: Lip", false);
+                tableEdge.transform.SetSiblingIndex(AfterRow(menu, above, menu.childCount - 1));
+                so.FindProperty("tableEdgeButton").objectReferenceValue = tableEdge;
+                so.FindProperty("tableEdgeLabel").objectReferenceValue = tableEdge.transform.Find("Label").GetComponent<Text>();
                 added++;
             }
 
