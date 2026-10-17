@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.12 · 2026-10-18 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.13 · 2026-10-18 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1238,3 +1238,63 @@ touching the former Prototype prefabs.
   prefab asset reference"). Moving each view class to the top of its file changes the files, so Unity reads them again
   and links them correctly. Rule from now on: the Unity component class comes first in its file.
 - Older docs keep the old names where they describe history. CLAUDE.md is updated.
+
+---
+
+## Part E — R1 record: splitting the composition (2026-10-18)
+
+The owner approved T3 and the moving skybox on 2026-10-18 ("Approved next"), so R1 started.
+
+**R1 in stages.** Each stage keeps the game working, changes no behaviour and is checked in Unity before the next.
+
+| Stage | What | Status |
+|---|---|---|
+| R1a | Split `TabletopComposition.cs` into partial files by job. Code moved unchanged. | Written 2026-10-18, to be checked |
+| R1b | The command door: `ITableAuthority.Submit(command)`, local only, and the table's use-case calls routed through it (doc 30 A6, gap 1). | Next |
+| R1c | `ViewRegistry` (finds a piece's view) and `PieceSpawner` (catalog spawns and views) as plain classes. | Planned |
+| R1d | `ContextMenuPresenter` and one presenter per panel. | Planned |
+| R1e | `TrapFloorCartridge`: the Trap Floor, Trap Floor status, Shop and Trap Floor hints code in one plain class (the first cartridge, A4). | Planned |
+| R1f | `TableSessionService`: start, replace, reset, Undo and Redo. | Planned |
+| R2 | Events instead of hand refreshes. | Planned |
+
+**R1a — what changed.** `TabletopComposition.cs` went from 16,920 lines to 1,880. It keeps the fields, the nested
+types, start-up, shutdown and the Unity messages (Start, Update, OnGUI, OnDestroy). Every other method moved,
+unchanged and in the same order, to one of 21 new partial files in `Presentation/Composition/`:
+
+| File | Lines | Job |
+|---|---|---|
+| `TabletopComposition.TrapFloor.cs` | 2,369 | Trap Floor flow: dice, turns, waiting Traps, landing, prizes, Keys, escape |
+| `TabletopComposition.Toolbox.cs` | 1,786 | Toolbox placing, duplicates, moving containers and Consoles |
+| `TabletopComposition.ContextMenus.cs` | 1,403 | Right-click menus |
+| `TabletopComposition.Views.cs` | 1,073 | Finding, binding and creating views |
+| `TabletopComposition.TrapFloorStatus.cs` | 869 | Trap Floor status texts and turn menu |
+| `TabletopComposition.Consoles.cs` | 813 | Console sides, flipping, slots, dice on the mat |
+| `TabletopComposition.Build.cs` | 703 | Runtime graph, template board, restoring the template |
+| `TabletopComposition.Release.cs` | 700 | Releasing views and instances |
+| `TabletopComposition.Piles.cs` | 669 | Decks, stacks and hands |
+| `TabletopComposition.CardArt.cs` | 659 | Card art and looks |
+| `TabletopComposition.RulesCard.cs` | 606 | Rules card, house rules, hint switches |
+| `TabletopComposition.Boards.cs` | 575 | Game board mats |
+| `TabletopComposition.Session.cs` | 526 | Templates, session UI, replacing the table |
+| `TabletopComposition.Seats.cs` | 516 | Seats, hot-seat, activity log |
+| `TabletopComposition.Undo.cs` | 512 | Reset, Undo, Redo |
+| `TabletopComposition.Shop.cs` | 495 | The Shop |
+| `TabletopComposition.Feedback.cs` | 452 | Drag feedback, messages, banners, board markers |
+| `TabletopComposition.Validation.cs` | 403 | Scene and prefab checks |
+| `TabletopComposition.Interaction.cs` | 402 | Drop targets and the interaction graph |
+| `TabletopComposition.CardInspect.cs` | 290 | Card inspection |
+| `TabletopComposition.Camera.cs` | 276 | Camera framing |
+
+(Line counts include each file's `using` lines.)
+
+**How it was checked.** A C# compiler is not available here. Instead:
+
+- the members were cut at the class's own member boundaries, found with a brace scanner that skips strings,
+  comments and interpolated strings;
+- every member appears exactly once, and the members joined back in their original order give the original class
+  body character for character;
+- only methods and properties moved; fields, constants and nested types stayed in the main file, so field order is
+  unchanged;
+- every file's braces balance.
+
+Unity makes the `.meta` files for the new scripts on the next import.

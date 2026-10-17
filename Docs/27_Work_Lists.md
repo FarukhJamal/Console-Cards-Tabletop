@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.26 · 2026-10-18 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.27 · 2026-10-18 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -81,9 +81,9 @@ the list. The order that stays active:
 |---|---|---|---|
 | 1 | L2-6b | Save table as a game in steps; keep placing | Done, approved |
 | 2 | R0 | Names: Prototype classes and prefabs get final names, renamed so references stay intact (doc 30 A5, record in Part D) | Done, approved ("Works now"; the one-off R0 tool may be deleted) |
-| 3 | T1–T3 | Table shape and size: table spec and builder, star and edges, Table mode with handles (doc 30 B) | T1 done, working after the collider fix (owner, 2026-10-17; doc 30 §B6); T1b model tables done, approved (owner, 2026-10-17; doc 30 §B8); T2 star, edges and edge colliders done, approved (owner, 2026-10-17; doc 30 §B9); T3 Table mode approved; T3 completed with the owner's choice (pieces move in), size handles and the shape change; owner 2026-10-18: every Toolbox piece must move in (the game mat did not), written, to be checked (not compiled yet; doc 30 §B10). Seats along the outline moved to CART-1 |
-| 4 | Q2 | Circuit-board skybox (doc 30 §C0): Console Cards > Look > Use Circuit Skybox | Still picture checked, the owner likes it; moving currents along the traces added 2026-10-18 (owner), to be checked |
-| 5 | R1–R2 | Code cleanup: split the composition, local command door, UI from events (multiplayer-ready, doc 30 A6) | Planned, next to start |
+| 3 | T1–T3 | Table shape and size: table spec and builder, star and edges, Table mode with handles (doc 30 B) | T1 done, working after the collider fix (owner, 2026-10-17; doc 30 §B6); T1b model tables done, approved (owner, 2026-10-17; doc 30 §B8); T2 star, edges and edge colliders done, approved (owner, 2026-10-17; doc 30 §B9); T3 Table mode approved; T3 completed with the owner's choice (pieces move in), size handles and the shape change; owner 2026-10-18: every Toolbox piece must move in (the game mat did not), done, approved (owner, 2026-10-18; doc 30 §B10). Seats along the outline moved to CART-1 |
+| 4 | Q2 | Circuit-board skybox (doc 30 §C0): Console Cards > Look > Use Circuit Skybox | Done, approved with the moving currents (owner, 2026-10-18) |
+| 5 | R1–R2 | Code cleanup: split the composition, local command door, UI from events (multiplayer-ready, doc 30 A6); stages R1a–R1f, then R2 (doc 30 Part E) | R1a (split into partial files by job, no code changed) written 2026-10-18, to be checked (not compiled yet); R1b next |
 
 Not yet placed in the order (owner to choose): UX-1 (cursor, gestures, the free table ping), CART-1 (cartridge
 contract; also seats along the table outline), SLS (Super Leroy Sisters, waiting for the game from Russell).
