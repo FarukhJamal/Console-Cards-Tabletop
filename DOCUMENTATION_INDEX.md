@@ -55,6 +55,7 @@ All code and type examples are illustrative unless explicitly labelled `Approved
 | `Docs/28_Player_Profiles_And_Saving.md` | Player profiles next to the game; where every save lives; the one save path (SaveFiles, ProfileService) |
 | `Docs/29_Player_Made_Games.md` | Games players make: Save table as a game (in steps: deck, cards, save), the game's deck, the table save file, written rules, playing and deleting your games |
 | `Docs/30_Answers_Table_And_Visual_Plans.md` | Answers on cursor/gestures, pings and flicking, usability, cartridge status, code cleanup, multiplayer readiness and gamification; the Table Selection plan (shape, size, playing area, edges, tools, performance budget) and the visual polish plan (circuit-board theme, screen layout and menus); the approved order; multiplayer as a to-do |
+| `Docs/31_Mechanics_Register.md` | Every mechanic built so far (Trap Floor, platform, planned), each under a fixed heading with an ID; how playtest documents with the same headings update it; the playtest checklists |
 | `Docs/AUDIT_RESOLUTION_v1.1.md` | v1.0 audit correction record |
 | `CHANGELOG.md` | Pack history |
 | `README.md` | Repository entry point |

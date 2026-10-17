@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.10 · 2026-10-17 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.11 · 2026-10-17 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -941,6 +941,39 @@ collider is the new one from the start. Classic and models appear at once.
 - **The client's theme: the inside of a console's hardware.** A circuit board with copper traces, chips,
   solder points and white printed labels.
 
+### C0. Client direction (Tony, weekly meeting 2026-10-15)
+
+From the meeting transcript; Tony is the client.
+
+| Topic | What Tony said | What it changes here |
+|---|---|---|
+| Readability | From the normal view he could not read the big card words ("Clairvoyant", "Engineer"), let alone "Dodge" or "Jump". He asked why it is pixelated and whether it can be sharper from far away. | V4b covers the card faces too, not only the UI: card text rendered sharp at a distance (higher-resolution text, mipmaps and filtering, no pixel font for body text). |
+| Retro look | "I like the interface itself, like, the kind of retro look to things." | Keep the retro feel: chunky outlined panels and a retro display face for big titles only; everything that must be read uses the readable font. |
+| Clean-up | Small rounding glitches on the top-right and top-left of the Trap Floor and Rules panels. He wants to start seeing a more polished look. | A quick fix before V0 (Q1 below). |
+| Background | A skybox instead of the grey: the grey "is reducing the quality of the rest of the experience". No style chosen; he wondered what 8- and 32-bit games used. | Brought forward from V3 as a quick win (Q2 below). |
+| Theme | Make it look like the inside of a device: chip lines and the data lines inside a chip. **"We're using the bright teal color as the lines."** **"We're leaving the orange."** The connector lines are the pathways of a digital environment. Use it on the interface, maybe the table, and a little in the background. | Lines and traces are **bright teal**, not copper (C1 updated). The lines carry meaning: they connect related panels and run along edges. Orange stays for the components and game systems. |
+| Who | Work the theme out **with Russell**. | V0 is made with Russell (a V0 brief to share with him). |
+| Table | The resizable playing area with separate edges was explained; he was fine with it. | Done in T1–T3. Gino looks for table references and textures. |
+
+**Not visual, but from the same meeting:**
+
+- **Mats.** There will be no generic Console Cards playmat. Instead:
+  - a **modular, magnetic playmat system** that works for any game;
+  - **game-specific mats** (Trap Floor, Super Leroy Sisters, Mortal Arena);
+  - cheap **per-game overlay kits** for the modular system.
+
+  This matches the board-mat snapping already built (C3e); the virtual version should follow the same idea.
+- **Super Leroy Sisters:** get it from Russell and add it here and in Tabletop Simulator, to see how much work
+  each new game is.
+- **Art looks squished** until the right-sized PNGs arrive.
+- **Playtests:** record videos of them.
+
+**Quick wins (before V0):**
+
+- **Q1.** Fix the corner glitches on the panels.
+- **Q2.** A circuit-board skybox, so the background is no longer grey: dark teal with faint bright-teal data
+  lines.
+
 ### C1. The theme: inside the console
 
 **Board colour: teal, not green (owner, 2026-10-16).** The board is a deep teal so it sets off the orange, black
@@ -950,7 +983,7 @@ and red of the components and game systems, instead of competing with them.
 |---|---|
 | Board (panel background) | deep teal `#0F3A3D`, a lighter teal `#16504F` for raised parts |
 | Board accent, selected and "powered" | teal `#2FA58A` (already the UI kit's Teal) |
-| Traces and edges | copper `#B87333` / gold `#C9A24A`, thin |
+| Traces, data lines and edges | **bright teal** `#34E0C8` (client, 2026-10-15), thin, with a soft glow where powered; copper `#B87333` only as a rare accent |
 | Printed labels and body text | silkscreen white `#F2F0E6` |
 | Chips and buttons | black `#1B1B1D` with a fine metal rim |
 | Components and game systems (unchanged) | orange `#E0531F`, black, red; mustard `#F2A81D` for warnings |
@@ -958,10 +991,10 @@ and red of the components and game systems, instead of competing with them.
 
 | Element | Look |
 |---|---|
-| Panels | Deep teal circuit board with a faint trace pattern; thin copper or gold edges; small solder dots at the corners |
+| Panels | Deep teal circuit board with a faint trace pattern; thin bright-teal edges; small solder dots at the corners |
 | Section titles | White "printed on the board" labels in a clean, condensed sans-serif, like real board markings (for example `U3 · DECK EDITOR`) |
 | Buttons | Chip-like blocks: black with a fine metal rim. Primary actions have a small LED that lights teal; dangerous actions an amber or red LED |
-| Lists and rows | Rows separated by thin copper lines; the selected row lights with a soft teal glow, like a powered trace |
+| Lists and rows | Rows separated by thin teal lines; the selected row lights with a soft bright-teal glow, like a powered trace |
 | Links between parts | Thin traces may run from a panel to the piece it is about, sparingly |
 | Player colours | LED colours (blue, red, amber, violet, white and so on, kept apart from the board's teal and the components' orange), checked to be colour-blind safe |
 | Sounds | Soft relay clicks and short electronic blips instead of 8-bit beeps (8-bit stays for the table ping and fun moments) |

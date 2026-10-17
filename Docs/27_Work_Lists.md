@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.23 · 2026-10-17 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.24 · 2026-10-17 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -84,7 +84,9 @@ What already exists and is reused:
 | 6 | V2–V5 | Pieces; table and room; menus and layout (V4a), readability (V4b), circuit-board skin (V4c); motion and feel | Planned |
 | 7 | R1–R2 | Code cleanup: split the composition, local command door, UI from events (multiplayer-ready, doc 30 A6) | Planned |
 
-Not yet placed in the order: UX-1 (cursor, gestures, the free table ping), CART-1 (cartridge contract), V6–V7.
+Client meeting 2026-10-15 (doc 30 §C0): quick wins before V0 — **Q1** fix the panel corner glitches, **Q2** circuit-board skybox (written 2026-10-17, to be checked); V0 is made with Russell; **SLS** add Super Leroy Sisters once Russell sends it.
+
+Not yet placed in the order: UX-1 (cursor, gestures, the free table ping), CART-1 (cartridge contract; also seats along the table outline), V6–V7, SLS.
 
 ### To-do — only when the owner asks
 
