@@ -5,6 +5,7 @@ using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.UseCases;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Boards;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Identifiers;
@@ -26,11 +27,12 @@ namespace ConsoleCards.Presentation.Composition
     /// size, the edge and its size, and size handles on the table itself (drag; Alt for free sizes). A new shape
     /// grows out of the old one. Every change is one Undo step (up to 16) inside Table mode; Done keeps the table
     /// (saved in the profile), Cancel or Esc puts back the table Table mode started with.
-    /// <para>Nothing falls off (owner, 2026-10-17: move the pieces in): when the table gets smaller, cards, dice,
-    /// pawns, tokens, decks, discard piles and stacks that would end up off it or right at its edge are moved in
-    /// along the shortest line to the centre, as one Undo step of the game. Consoles, game boards and pile bays
-    /// belong to the game's layout and are not moved: the table stops at them. While a game is on the table, the
-    /// table never gets smaller than the classic playing area, so the game's layout always fits.</para>
+    /// <para>Nothing falls off (owner, 2026-10-17: move the pieces in; 2026-10-18: every Toolbox piece): when the
+    /// table gets smaller, every piece that would end up off it or right at its edge is moved in along the shortest
+    /// line to the centre, as one Undo step of the game: cards, dice, pawns, tokens, decks, discard piles, stacks
+    /// (with their pile bays), Consoles (with the cards in their slots) and game board mats (with the loose cards
+    /// lying on them). Only another player's pile stops the table. While a game is on the table, the table never
+    /// gets smaller than the classic playing area, so the game's own board always fits.</para>
     /// </summary>
     public sealed partial class TabletopComposition
     {
@@ -53,9 +55,14 @@ namespace ConsoleCards.Presentation.Composition
         private readonly TablePanelModel tablePanelModel = new TablePanelModel();
         private readonly TableOutline holdOutline = new TableOutline(256);
         private readonly TableOutline nowOutline = new TableOutline(256);
-        private readonly List<Bounds> tableFixedPieces = new List<Bounds>(32);
         private readonly List<TabletopObjectView> loosePiecesToMove = new List<TabletopObjectView>(32);
         private readonly List<ContainerId> containersToMove = new List<ContainerId>(16);
+        private readonly List<ContainerId> consolesToMove = new List<ContainerId>(8);
+        private readonly List<Bounds> consoleBoundsToMove = new List<Bounds>(8);
+        private readonly List<BoardId> boardsToMove = new List<BoardId>(8);
+        private readonly List<Bounds> boardBoundsToMove = new List<Bounds>(8);
+        private readonly List<TabletopObjectView> boardRiders = new List<TabletopObjectView>(32);
+        private readonly List<int> boardRiderBoard = new List<int>(32);
         private TablePanelActions tablePanelActions;
         private Action openTableModeAction;
         private TableSpec tableModeStart;
@@ -165,7 +172,7 @@ namespace ConsoleCards.Presentation.Composition
 
         /// <summary>
         /// Shows the table for <paramref name="to"/>, keeping everything on it: the game's room is kept, fixed pieces
-        /// stop the change, loose pieces and piles at the new edge are moved in. Does not change
+        /// are moved in with everything else at the new edge (only another player's pile stops it). Does not change
         /// <see cref="tableSpec"/>; the caller does on success. <paramref name="message"/> says why it stopped, or
         /// how many pieces were moved.
         /// </summary>
@@ -531,8 +538,7 @@ namespace ConsoleCards.Presentation.Composition
         private bool PrepareTableChange(TableSpec from, TableSpec to, out string why)
         {
             why = null;
-            loosePiecesToMove.Clear();
-            containersToMove.Clear();
+            ClearPiecesToMove();
             float unit = classicFrame.WorldPerTableUnit;
             if (!holdOutline.Build(HoldSpecFor(to), unit, 1f))
             {
@@ -559,24 +565,44 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
-            // Consoles, game boards and pile bays are part of the game's layout: they are not moved.
-            CollectFixedPieces(tableFixedPieces);
-            for (int i = 0; i < tableFixedPieces.Count; i++)
+            if (matchState == null || coordinateConverter == null) return true;
+
+            // Consoles (the cards in their slots go with them).
+            foreach (ConsoleView console in UnityEngine.Object.FindObjectsByType<ConsoleView>(
+                         FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
-                if (OnTableAndOffNew(tableFixedPieces[i], inverse, centre, knowNow))
-                {
-                    why = "A console, game board or pile bay is in the way near the edge, so the table stops here. "
-                        + "Move it in first.";
-                    return false;
-                }
+                if (!console.IsBound || console.ConsoleState.SlotContainerIds.Count == 0) continue;
+                Bounds bounds = AllBounds(console);
+                if (!OnTableAndOffNew(bounds, inverse, centre, knowNow)) continue;
+                consolesToMove.Add(console.ConsoleState.SlotContainerIds[0]);
+                consoleBoundsToMove.Add(bounds);
             }
 
-            if (matchState == null || coordinateConverter == null) return true;
+            // Board mats placed from the Toolbox (the game's own board sits inside the classic area).
+            foreach (KeyValuePair<BoardId, GameBoardMatView> pair in boardViews)
+            {
+                if (pair.Value == null || !matchState.PlacedBoards.ContainsKey(pair.Key)) continue;
+                Bounds bounds = AllBounds(pair.Value);
+                if (!OnTableAndOffNew(bounds, inverse, centre, knowNow)) continue;
+                boardsToMove.Add(pair.Key);
+                boardBoundsToMove.Add(bounds);
+            }
+
+            // Loose pieces: those lying on a board that moves ride along with it; the rest move in on their own.
             foreach (TabletopObjectView piece in UnityEngine.Object.FindObjectsByType<TabletopObjectView>(
                          FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
                 if (!piece.IsBound || piece.IsContainerLayoutApplied || piece.IsOverlayPresentation) continue;
-                if (OnTableAndOffNew(PieceBounds(piece), inverse, centre, knowNow)) loosePiecesToMove.Add(piece);
+                int board = BoardUnder(piece.transform.position);
+                if (board >= 0)
+                {
+                    boardRiders.Add(piece);
+                    boardRiderBoard.Add(board);
+                }
+                else if (OnTableAndOffNew(PieceBounds(piece), inverse, centre, knowNow))
+                {
+                    loosePiecesToMove.Add(piece);
+                }
             }
 
             foreach (KeyValuePair<ContainerId, ContainerPlacementState> pair in matchState.ContainerPlacements)
@@ -620,12 +646,48 @@ namespace ConsoleCards.Presentation.Composition
         // step of the game. Returns how many moved. Call after the new table is shown (pieces land on it).
         private int MovePiecesIn()
         {
-            if (loosePiecesToMove.Count == 0 && containersToMove.Count == 0) return 0;
+            if (loosePiecesToMove.Count == 0 && containersToMove.Count == 0 && consolesToMove.Count == 0
+                && boardsToMove.Count == 0)
+            {
+                return 0;
+            }
+
             int moved = 0;
             Quaternion inverse = Quaternion.Inverse(classicFrame.Rotation);
             BeginUndoBatch();
             try
             {
+                for (int i = 0; i < boardsToMove.Count; i++)
+                {
+                    Vector3 offset = Flat(PointInside(boardBoundsToMove[i], inverse) - boardBoundsToMove[i].center);
+                    if (MoveBoardBy(boardsToMove[i], offset)) moved++;
+                    for (int r = 0; r < boardRiders.Count; r++)
+                    {
+                        TabletopObjectView rider = boardRiders[r];
+                        if (boardRiderBoard[r] != i || rider == null || !rider.IsBound) continue;
+                        TabletopObjectState riderState = rider.BoundState;
+                        TabletopPose riderPose = new TabletopPose(
+                            coordinateConverter.ToTableCoordinate(rider.transform.position + offset),
+                            riderState.Pose.RotationDegrees,
+                            riderState.Pose.Layer,
+                            riderState.Pose.LocalOrder);
+                        if (MoveLoosePiece(rider, riderState, riderPose)) moved++;
+                    }
+                }
+
+                for (int i = 0; i < consolesToMove.Count; i++)
+                {
+                    if (!TryResolveConsolePlacement(consolesToMove[i], out TabletopPose consolePose, out _, out _)) continue;
+                    Vector3 offset = Flat(PointInside(consoleBoundsToMove[i], inverse) - consoleBoundsToMove[i].center);
+                    Vector3 world = coordinateConverter.ToWorldPosition(consolePose) + offset;
+                    TabletopPose pose = new TabletopPose(
+                        coordinateConverter.ToTableCoordinate(world),
+                        consolePose.RotationDegrees,
+                        consolePose.Layer,
+                        consolePose.LocalOrder);
+                    if (CommitContainerMove(consolesToMove[i], pose)) moved++;
+                }
+
                 for (int i = 0; i < loosePiecesToMove.Count; i++)
                 {
                     TabletopObjectView piece = loosePiecesToMove[i];
@@ -657,8 +719,7 @@ namespace ConsoleCards.Presentation.Composition
             finally
             {
                 EndUndoBatch();
-                loosePiecesToMove.Clear();
-                containersToMove.Clear();
+                ClearPiecesToMove();
             }
 
             return moved;
@@ -724,20 +785,65 @@ namespace ConsoleCards.Presentation.Composition
             return renderer != null ? renderer.bounds : new Bounds(piece.transform.position, Vector3.zero);
         }
 
-        private static void CollectFixedPieces(List<Bounds> into)
+        private void ClearPiecesToMove()
         {
-            into.Clear();
-            AddFixedPieces<ConsoleView>(into);
-            AddFixedPieces<PileBayView>(into);
-            AddFixedPieces<GameBoardMatView>(into);
+            loosePiecesToMove.Clear();
+            containersToMove.Clear();
+            consolesToMove.Clear();
+            consoleBoundsToMove.Clear();
+            boardsToMove.Clear();
+            boardBoundsToMove.Clear();
+            boardRiders.Clear();
+            boardRiderBoard.Clear();
         }
 
-        private static void AddFixedPieces<T>(List<Bounds> into) where T : Component
+        // The index (in boardsToMove) of the moving board a world point lies on, or -1.
+        private int BoardUnder(Vector3 world)
         {
-            foreach (T piece in UnityEngine.Object.FindObjectsByType<T>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            for (int i = 0; i < boardsToMove.Count; i++)
             {
-                into.Add(PieceBounds(piece));
+                if (boardViews.TryGetValue(boardsToMove[i], out GameBoardMatView view) && view != null && view.Contains(world))
+                {
+                    return i;
+                }
             }
+
+            return -1;
+        }
+
+        // Moves a placed board mat by a world offset, keeping its turn (as Move Board does, without its message).
+        private bool MoveBoardBy(BoardId boardId, Vector3 offset)
+        {
+            if (!matchState.PlacedBoards.TryGetValue(boardId, out PlacedBoardState board)) return false;
+            Vector3 world = coordinateConverter.ToWorldPosition(board.Pose) + offset;
+            TabletopPose pose = new TabletopPose(
+                coordinateConverter.ToTableCoordinate(world),
+                board.Pose.RotationDegrees,
+                board.Pose.Layer,
+                board.Pose.LocalOrder);
+            if (!boardUseCases.Move(matchState, CreateCommandContext(), boardId, pose, null).Succeeded) return false;
+            if (boardViews.TryGetValue(boardId, out GameBoardMatView view) && view != null)
+            {
+                ApplyConsolePose(view.transform, matchState.PlacedBoards[boardId].Pose, null);
+            }
+
+            Physics.SyncTransforms();
+            return true;
+        }
+
+        private static Vector3 Flat(Vector3 offset)
+        {
+            return new Vector3(offset.x, 0f, offset.z);
+        }
+
+        // Every renderer of a piece together (a Console or board is made of several parts). Event-time only.
+        private static Bounds AllBounds(Component piece)
+        {
+            Renderer[] renderers = piece.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0) return new Bounds(piece.transform.position, Vector3.zero);
+            Bounds bounds = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
+            return bounds;
         }
     }
 }

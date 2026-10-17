@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.24 · 2026-10-17 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.26 · 2026-10-18 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -72,21 +72,38 @@ What already exists and is reused:
 | L2-6 | Player-made games: set up an Empty Table, Save table as a game (name, players, description, written rules); the table save file; your games in New table… (Start lays the table out, rules on the rules card, Save over, Delete) (doc 29) | Written; owner asked for polish (L2-6b) |
 | L2-6b | Polish (owner, 2026-10-16): Save table as a game in steps — 1 Deck (choose yours or a game's, or make a new one; put it on the table), 2 Cards (create a card in it or pick its cards), 3 Save; the deck is the game's own deck, placed shuffled where it lay at Start (owner's choice). Toolbox placement keeps placing until Esc or right-click (owner's choice) (doc 29 §L2-6b) | Done, approved by the owner |
 
-### Next — approved order (owner, 2026-10-16; doc 30)
+### Next — approved order (owner, 2026-10-16; doc 30). Visual work moved down (owner, 2026-10-18)
+
+The owner is waiting for visual approval (V0 board with Tony and Russell), so all visual work waits at the end of
+the list. The order that stays active:
 
 | Order | Stage | What | Status |
 |---|---|---|---|
 | 1 | L2-6b | Save table as a game in steps; keep placing | Done, approved |
 | 2 | R0 | Names: Prototype classes and prefabs get final names, renamed so references stay intact (doc 30 A5, record in Part D) | Done, approved ("Works now"; the one-off R0 tool may be deleted) |
-| 3 | T1–T3 | Table shape and size: table spec and builder, star and edges, Table mode with handles (doc 30 B) | T1 done, working after the collider fix (owner, 2026-10-17; doc 30 §B6); T1b model tables done, approved (owner, 2026-10-17; doc 30 §B8); T2 star, edges and edge colliders done, approved (owner, 2026-10-17; doc 30 §B9); T3 Table mode approved; T3 completed with the owner's choice (pieces move in), size handles and the shape change, to be checked (not compiled yet; doc 30 §B10). Seats along the outline moved to CART-1 |
-| 4 | V0–V1 | Art direction "inside the console" (circuit board) with layout mock-ups; lighting and post (doc 30 C) | Planned |
-| 5 | T4–T5 | Table textures (any picture, repeat or fit) and paint layer, within the B5 budget | Planned |
-| 6 | V2–V5 | Pieces; table and room; menus and layout (V4a), readability (V4b), circuit-board skin (V4c); motion and feel | Planned |
-| 7 | R1–R2 | Code cleanup: split the composition, local command door, UI from events (multiplayer-ready, doc 30 A6) | Planned |
+| 3 | T1–T3 | Table shape and size: table spec and builder, star and edges, Table mode with handles (doc 30 B) | T1 done, working after the collider fix (owner, 2026-10-17; doc 30 §B6); T1b model tables done, approved (owner, 2026-10-17; doc 30 §B8); T2 star, edges and edge colliders done, approved (owner, 2026-10-17; doc 30 §B9); T3 Table mode approved; T3 completed with the owner's choice (pieces move in), size handles and the shape change; owner 2026-10-18: every Toolbox piece must move in (the game mat did not), written, to be checked (not compiled yet; doc 30 §B10). Seats along the outline moved to CART-1 |
+| 4 | Q2 | Circuit-board skybox (doc 30 §C0): Console Cards > Look > Use Circuit Skybox | Still picture checked, the owner likes it; moving currents along the traces added 2026-10-18 (owner), to be checked |
+| 5 | R1–R2 | Code cleanup: split the composition, local command door, UI from events (multiplayer-ready, doc 30 A6) | Planned, next to start |
 
-Client meeting 2026-10-15 (doc 30 §C0): quick wins before V0 — **Q1** fix the panel corner glitches, **Q2** circuit-board skybox (written 2026-10-17, to be checked); V0 is made with Russell; **SLS** add Super Leroy Sisters once Russell sends it.
+Not yet placed in the order (owner to choose): UX-1 (cursor, gestures, the free table ping), CART-1 (cartridge
+contract; also seats along the table outline), SLS (Super Leroy Sisters, waiting for the game from Russell).
 
-Not yet placed in the order: UX-1 (cursor, gestures, the free table ping), CART-1 (cartridge contract; also seats along the table outline), V6–V7, SLS.
+### Waiting for visual approval (owner, 2026-10-18)
+
+Started only after the V0 look is approved (the V0 design board: versions A, B and C of every screen, and the
+console-style table). Owner's own preference so far: version B.
+
+| Stage | What | Status |
+|---|---|---|
+| Q1 | Fix the panel corner glitches (client meeting 2026-10-15) | Waiting |
+| V0–V1 | Art direction "inside the console" (circuit board) with layout mock-ups; lighting and post (doc 30 C) | V0 board made 2026-10-17 (16 screens in A, B and C, with references); waiting for approval |
+| T4–T5 | Table textures (any picture, repeat or fit) and paint layer, within the B5 budget; includes the console-style table textures (plastic body and mat) if approved | Waiting |
+| V2–V5 | Pieces; table and room; menus and layout (V4a), readability (V4b), circuit-board skin (V4c); motion and feel | Waiting |
+| V6–V7 | Later visual stages (doc 30 C) | Waiting |
+
+Client meeting 2026-10-15 (doc 30 §C0): quick wins before V0 — **Q1** fix the panel corner glitches (now waiting
+for visual approval), **Q2** circuit-board skybox (written 2026-10-17, to be checked); V0 is made with Russell;
+**SLS** add Super Leroy Sisters once Russell sends it.
 
 ### To-do — only when the owner asks
 

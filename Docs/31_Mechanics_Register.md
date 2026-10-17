@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.0 · 2026-10-17 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.1 · 2026-10-18 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -468,12 +468,13 @@ Change: …
   table models; **Edge** cycles None, Lip, Rounded rail, Wooden rail, Spikes, Neon. **Table tools…** opens Table
   mode: shape buttons, sizes (− / +, typed values), corners, star points and inner size, edge size, size handles
   dragged on the table (Alt for free sizes), Undo and Redo, Cancel (Esc) or Done. A new shape grows out of the old
-  one. When the table shrinks, pieces at the edge move in; consoles, boards and pile bays stop it; during a game the
-  table never gets smaller than the classic area. Legs come from the base table model and stay attached. The
+  one. When the table shrinks, every piece at the edge moves in: cards, dice, pawns, tokens, decks, discard piles,
+  stacks, Consoles (with their cards) and board mats (with the cards on them). Only another player's pile stops it.
+  During a game the table never gets smaller than the classic area. Legs come from the base table model and stay attached. The
   choice is saved in the profile.
 - **Source:** doc 30 §B6–§B10
 - **Open:** seats along the table outline (with CART-1); picture cards for the shapes (V4).
-- **Changes:** 2026-10-17 T1–T3 approved.
+- **Changes:** 2026-10-18 every Toolbox piece moves in, game mats included (owner); 2026-10-17 T1–T3 approved.
 
 ### P-TABLE-MODELS · Table models
 - **Status:** Built, approved
@@ -485,11 +486,11 @@ Change: …
 
 ### P-LOOK · Background and look
 - **Status:** Quick wins in progress
-- **Rule now:** a dark teal circuit-board skybox with faint bright-teal data lines (Console Cards > Look > Use
-  Circuit Skybox). The full look (bright-teal lines, orange kept, retro but readable) comes with V0–V5.
+- **Rule now:** a dark teal circuit-board skybox with faint bright-teal data lines, with bright-teal pulses running
+  along them like electrical current (Console Cards > Look > Use Circuit Skybox). The full look (bright-teal lines, orange kept, retro but readable) comes with V0–V5.
 - **Source:** doc 30 Part C, §C0
 - **Open:** V0 style sheet with Russell.
-- **Changes:** 2026-10-17 circuit skybox (Q2).
+- **Changes:** 2026-10-18 moving currents (owner); 2026-10-17 circuit skybox (Q2).
 
 ---
 

@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.11 · 2026-10-17 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.12 · 2026-10-18 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -873,11 +873,16 @@ Every change shows on the table at once.
 
 - **Pieces are moved in.** When the table gets smaller, any piece that would end up off it, or less than half its
   width from the new edge, is moved in along the line to the centre until it stands a little inside.
-  - This covers cards, dice, pawns, tokens, decks, discard piles and stacks.
+  - This covers every Toolbox piece (owner, 2026-10-18: "should include all toolbox items"; the game mat was
+    missing): cards, dice, pawns, tokens, decks, discard piles and stacks (their pile bays go with them),
+    Consoles (with the cards in their slots) and game board mats placed from the Toolbox (with the loose cards
+    lying on them, which keep their place on the mat).
   - Physical pieces rest on the new top and keep their turn.
   - The moves are one Undo step of the game, and the status line says how many moved.
-- **Fixed pieces stop the change.** Consoles, game boards and pile bays belong to the game's layout, so they are
-  not moved; the table stops at them and says so. So do another player's own piles.
+- **Only another player's pile stops the change** (moving it is that player's right). Before 2026-10-18,
+  Consoles, board mats and pile bays also stopped it.
+- **The game's own board** (Trap Floor's mat over its floor) sits inside the classic playing area, which a table
+  keeps while a game is on it, so it never needs to move.
 - **Ignored:** pieces already off the table, and the screen hand.
 - **Games always fit.** While a game is on the table, the table never gets smaller than the classic playing area.
 - **Everywhere:** the same rules apply to the Shape and Edge rows, the handles, Undo and Redo, and Cancel.
@@ -895,8 +900,8 @@ Every change shows on the table at once.
 
 - Sizes snap to 0.5 (0.05 for the inner size); hold Alt for free sizes. The size shows on the status line.
 - While dragging, only the look changes: the collider stays, so nothing moves or falls.
-- On release, the table is built, pieces are moved in, and it is one Undo step. If something fixed is in the way,
-  the table goes back.
+- On release, the table is built, pieces are moved in, and it is one Undo step. If another player's pile is in the
+  way, the table goes back.
 - The handles are part of the Table panel prefab. Create Missing Gameplay UI Prefabs adds them to a panel made
   before they existed.
 
@@ -927,6 +932,9 @@ collider is the new one from the start. Classic and models appear at once.
 - T3b and the move-in rule: `TableHandleView` (new), the handles in `TablePanelView` and the panel builder,
   `GeneratedTable.MorphFrom` and `Preview`, `TableOutline.BuildBlend`, and a centre-fan option in
   `TableMeshBuilder.BuildTop`.
+- Every Toolbox piece moves in (2026-10-18): `TabletopComposition.TableMode.cs` (Consoles through the Console move,
+  board mats through `GameBoardUseCases.Move` with the cards on them, all in the same Undo step; the fixed-piece
+  check is gone).
 
 ---
 
@@ -972,7 +980,15 @@ From the meeting transcript; Tony is the client.
 
 - **Q1.** Fix the corner glitches on the panels.
 - **Q2.** A circuit-board skybox, so the background is no longer grey: dark teal with faint bright-teal data
-  lines.
+  lines. Written 2026-10-17; the owner liked it.
+  - **Moving currents (owner, 2026-10-18):** bright-teal pulses run along the traces like electrical current.
+  - How: `Content/Environment/CircuitSkybox.shader` (ConsoleCards/Circuit Skybox) and a flow map,
+    `CircuitSkyboxFlow.png`, made from the same traces as the picture. Red marks the traces (faded towards the top
+    and bottom); green and blue hold the position along each trace, so a pulse can travel along it.
+  - Console Cards > Look > Use Circuit Skybox now uses the moving shader, and falls back to the still picture if
+    the shader or flow map is missing.
+  - On the material: pulse colour, strength (0 = still), speed, length and how many pulses per trace.
+  - Cost: one extra texture read per sky pixel, no code running each frame.
 
 ### C1. The theme: inside the console
 
