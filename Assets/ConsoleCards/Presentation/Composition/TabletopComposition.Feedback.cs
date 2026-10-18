@@ -120,7 +120,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private void ShowMessage(string message)
+        internal void ShowMessage(string message)
         {
             RecordHandoverLine(message);
             // With the message stack, messages go there and the status strip keeps only the standing status.
@@ -129,13 +129,13 @@ namespace ConsoleCards.Presentation.Composition
                 && runtimeUi.ShowFeedbackMessage(message, SeverityOf(message)))
             {
                 operationMessageUntil = 0f;
-                runtimeUi.SetStatusMessage(CurrentStatusText());
+                runtimeUi.SetStatusMessage(TrapFloorGame.CurrentStatusText());
                 return;
             }
 
             operationMessage = message;
             operationMessageUntil = Time.unscaledTime + 2.5f;
-            runtimeUi?.SetStatusMessage(CurrentStatusText());
+            runtimeUi?.SetStatusMessage(TrapFloorGame.CurrentStatusText());
         }
 
         private static FeedbackSeverity SeverityOf(string message)
@@ -205,14 +205,14 @@ namespace ConsoleCards.Presentation.Composition
         private void AnnounceTurn()
         {
             if (trapFloorTurnState.IsCurrentFloorFailed) return;
-            RaiseHint(HintTriggers.TurnStart, trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn ? "player" : "floor");
+            RulesCardPanel.RaiseHint(HintTriggers.TurnStart, trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn ? "player" : "floor");
             if (trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn)
             {
                 PlayerId active = trapFloorTurnState.ActivePlayerId;
                 string colour = TryGetTrapFloorSeatIndex(active, out int seat) ? $" ({PlayerColorName(seat)})" : string.Empty;
                 runtimeUi.ShowFeedbackBanner(new FeedbackBannerModel(
                     FeedbackEventKind.TurnStart,
-                    $"{FormatPlayerName(active).ToUpperInvariant()}{colour} — YOUR TURN",
+                    $"{TrapFloorGame.FormatPlayerName(active).ToUpperInvariant()}{colour} — YOUR TURN",
                     $"ROUND {trapFloorTurnState.CurrentRound}",
                     FeedbackColour(active)));
             }
@@ -221,7 +221,7 @@ namespace ConsoleCards.Presentation.Composition
                 runtimeUi.ShowFeedbackBanner(new FeedbackBannerModel(
                     FeedbackEventKind.RoundStart,
                     "FLOOR TURN",
-                    $"{FormatPlayerName(trapFloorTurnState.FloorOperatorPlayerId)} rolls the floor",
+                    $"{TrapFloorGame.FormatPlayerName(trapFloorTurnState.FloorOperatorPlayerId)} rolls the floor",
                     new Color(0.878f, 0.325f, 0.122f)));
             }
         }
@@ -234,13 +234,13 @@ namespace ConsoleCards.Presentation.Composition
         private void AnnounceActivity(TrapFloorActivityEntry entry)
         {
             PlayerId actor = entry.ActorPlayerId;
-            string who = actor.IsEmpty ? "A player" : FormatPlayerName(actor);
+            string who = actor.IsEmpty ? "A player" : TrapFloorGame.FormatPlayerName(actor);
             Color colour = FeedbackColour(actor);
             string name = entry.ContentName ?? string.Empty;
             BoardFeedbackAt(entry, colour);
-            RaiseHint(HintTriggers.GameActivity, entry.Kind.ToString());
+            RulesCardPanel.RaiseHint(HintTriggers.GameActivity, entry.Kind.ToString());
             if (entry.Kind == TrapFloorActivityKind.RevealedFloorContent)
-                RaiseHint(HintTriggers.ContentRevealed, entry.ContentCategory.ToString());
+                RulesCardPanel.RaiseHint(HintTriggers.ContentRevealed, entry.ContentCategory.ToString());
             switch (entry.Kind)
             {
                 case TrapFloorActivityKind.RevealedFloorContent:
@@ -324,7 +324,7 @@ namespace ConsoleCards.Presentation.Composition
                 ? cameraInputAdapter.CameraController
                 : null;
             CardView tileView = null;
-            bool hasTile = !entry.FloorCardId.IsEmpty && TryGetCardView(entry.FloorCardId, out tileView);
+            bool hasTile = !entry.FloorCardId.IsEmpty && Registry.TryGetCardView(entry.FloorCardId, out tileView);
             Vector3 tile = hasTile ? tileView.transform.position : Vector3.zero;
             switch (entry.Kind)
             {
@@ -349,7 +349,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private bool EnsureBoardFeedback()
+        internal bool EnsureBoardFeedback()
         {
             if (boardFeedback != null) return true;
             if (boardFeedbackUnavailable) return false;
@@ -386,11 +386,11 @@ namespace ConsoleCards.Presentation.Composition
             Color colour = FeedbackColour(active);
             bool pawnFound = false;
             Vector3 pawnPosition = Vector3.zero;
-            if (playerTurn && TryGetTrapFloorPlayerSetup(active, out TrapFloorPlayerSetupDefinition setup))
+            if (playerTurn && TrapFloorGame.TryGetTrapFloorPlayerSetup(active, out TrapFloorPlayerSetupDefinition setup))
             {
-                for (int i = 0; i < pawnViews.Count; i++)
+                for (int i = 0; i < Registry.pawnViews.Count; i++)
                 {
-                    PawnView pawnView = pawnViews[i];
+                    PawnView pawnView = Registry.pawnViews[i];
                     if (pawnView != null && pawnView.IsBound && pawnView.ObjectId == setup.PawnId)
                     {
                         pawnPosition = pawnView.transform.position;
@@ -410,7 +410,7 @@ namespace ConsoleCards.Presentation.Composition
                     TrapFloorTrapResolutionRecord record = records[i];
                     if (record.IsPending
                         && record.Content.HasSupportedAssistedTrapEffect
-                        && TryGetCardView(record.FloorCardId, out CardView trapView))
+                        && Registry.TryGetCardView(record.FloorCardId, out CardView trapView))
                     {
                         boardFeedbackTraps.Add(trapView.transform.position);
                     }
@@ -425,7 +425,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 for (int i = 0; i < targetIds.Count; i++)
                 {
-                    if (TryGetCardView(targetIds[i], out CardView targetView))
+                    if (Registry.TryGetCardView(targetIds[i], out CardView targetView))
                         boardFeedbackTargets.Add(targetView.transform.position);
                 }
             }

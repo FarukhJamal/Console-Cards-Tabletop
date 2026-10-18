@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ConsoleCards.Application.Authority;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
 using ConsoleCards.Application.UseCases;
@@ -21,14 +22,14 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly LocalInteractionLockService lockService;
         private readonly TabletopInteractionStateMachine stateMachine;
         private readonly TabletopDragPreviewSession previewSession;
-        private readonly MoveObjectUseCase moveUseCase;
+        private readonly ITableAuthority tableAuthority;
         private readonly CardDropTargetResolver cardDropTargetResolver;
         private readonly CardTransferInteractionCoordinator cardTransferCoordinator;
         private readonly ContainerLayoutViewLookup layoutViewLookup;
         private readonly IContainedCardDragFeedback cardDragFeedback;
         private readonly float magneticDistance;
         private readonly TokenDropTargetResolver tokenDropTargetResolver;
-        private readonly TransferTokenUseCase tokenTransferUseCase;
+        private readonly bool tokenTransfersEnabled;
         private readonly IReadOnlyList<TokenContainerView> tokenContainerViews;
         private TabletopObjectView activeView;
 
@@ -42,7 +43,7 @@ namespace ConsoleCards.Presentation.Interaction
             LocalInteractionLockService lockService,
             TabletopInteractionStateMachine stateMachine,
             TabletopDragPreviewSession previewSession,
-            MoveObjectUseCase moveUseCase)
+            ITableAuthority tableAuthority)
             : this(
                 matchState,
                 requestedByPlayerId,
@@ -53,7 +54,7 @@ namespace ConsoleCards.Presentation.Interaction
                 lockService,
                 stateMachine,
                 previewSession,
-                moveUseCase,
+                tableAuthority,
                 null,
                 null)
         {
@@ -69,7 +70,7 @@ namespace ConsoleCards.Presentation.Interaction
             LocalInteractionLockService lockService,
             TabletopInteractionStateMachine stateMachine,
             TabletopDragPreviewSession previewSession,
-            MoveObjectUseCase moveUseCase,
+            ITableAuthority tableAuthority,
             CardDropTargetResolver cardDropTargetResolver,
             CardTransferInteractionCoordinator cardTransferCoordinator)
         {
@@ -90,14 +91,14 @@ namespace ConsoleCards.Presentation.Interaction
             this.lockService = lockService ?? throw new ArgumentNullException(nameof(lockService));
             this.stateMachine = stateMachine ?? throw new ArgumentNullException(nameof(stateMachine));
             this.previewSession = previewSession ?? throw new ArgumentNullException(nameof(previewSession));
-            this.moveUseCase = moveUseCase ?? throw new ArgumentNullException(nameof(moveUseCase));
+            this.tableAuthority = tableAuthority ?? throw new ArgumentNullException(nameof(tableAuthority));
             this.cardDropTargetResolver = cardDropTargetResolver;
             this.cardTransferCoordinator = cardTransferCoordinator;
             layoutViewLookup = null;
             cardDragFeedback = null;
             magneticDistance = 0f;
             tokenDropTargetResolver = null;
-            tokenTransferUseCase = null;
+            tokenTransfersEnabled = false;
             tokenContainerViews = Array.Empty<TokenContainerView>();
 
             if (stateMachine.Phase != TabletopInteractionPhase.Idle)
@@ -124,7 +125,7 @@ namespace ConsoleCards.Presentation.Interaction
             LocalInteractionLockService lockService,
             TabletopInteractionStateMachine stateMachine,
             TabletopDragPreviewSession previewSession,
-            MoveObjectUseCase moveUseCase,
+            ITableAuthority tableAuthority,
             CardDropTargetResolver cardDropTargetResolver,
             CardTransferInteractionCoordinator cardTransferCoordinator,
             ContainerLayoutViewLookup layoutViewLookup,
@@ -140,7 +141,7 @@ namespace ConsoleCards.Presentation.Interaction
                 lockService,
                 stateMachine,
                 previewSession,
-                moveUseCase,
+                tableAuthority,
                 cardDropTargetResolver,
                 cardTransferCoordinator)
         {
@@ -153,7 +154,7 @@ namespace ConsoleCards.Presentation.Interaction
 
             this.magneticDistance = magneticDistance;
             tokenDropTargetResolver = null;
-            tokenTransferUseCase = null;
+            tokenTransfersEnabled = false;
             tokenContainerViews = Array.Empty<TokenContainerView>();
         }
 
@@ -167,14 +168,13 @@ namespace ConsoleCards.Presentation.Interaction
             LocalInteractionLockService lockService,
             TabletopInteractionStateMachine stateMachine,
             TabletopDragPreviewSession previewSession,
-            MoveObjectUseCase moveUseCase,
+            ITableAuthority tableAuthority,
             CardDropTargetResolver cardDropTargetResolver,
             CardTransferInteractionCoordinator cardTransferCoordinator,
             ContainerLayoutViewLookup layoutViewLookup,
             IContainedCardDragFeedback cardDragFeedback,
             float magneticDistance,
             TokenDropTargetResolver tokenResolver,
-            TransferTokenUseCase transferTokenUseCase,
             IReadOnlyList<TokenContainerView> containerViews)
             : this(
                 matchState,
@@ -186,7 +186,7 @@ namespace ConsoleCards.Presentation.Interaction
                 lockService,
                 stateMachine,
                 previewSession,
-                moveUseCase,
+                tableAuthority,
                 cardDropTargetResolver,
                 cardTransferCoordinator,
                 layoutViewLookup,
@@ -194,7 +194,7 @@ namespace ConsoleCards.Presentation.Interaction
                 magneticDistance)
         {
             tokenDropTargetResolver = tokenResolver ?? throw new ArgumentNullException(nameof(tokenResolver));
-            tokenTransferUseCase = transferTokenUseCase ?? throw new ArgumentNullException(nameof(transferTokenUseCase));
+            tokenTransfersEnabled = true;
             tokenContainerViews = containerViews ?? throw new ArgumentNullException(nameof(containerViews));
         }
 
@@ -456,7 +456,7 @@ namespace ConsoleCards.Presentation.Interaction
                 RequestedByPlayerId,
                 MatchState.Revision);
             MoveObjectCommand command = new MoveObjectCommand(context, view.ObjectId, targetPose);
-            MoveObjectResult moveResult = moveUseCase.Execute(MatchState, command);
+            MoveObjectResult moveResult = tableAuthority.Submit<MoveObjectCommand, MoveObjectResult>(command);
 
             if (moveResult.Succeeded)
             {
@@ -605,7 +605,7 @@ namespace ConsoleCards.Presentation.Interaction
             if (tokenView == null
                 || tokenView.TokenState == null
                 || tokenDropTargetResolver == null
-                || tokenTransferUseCase == null)
+                || !tokenTransfersEnabled)
             {
                 return false;
             }
@@ -681,7 +681,7 @@ namespace ConsoleCards.Presentation.Interaction
                         acceptedPose.LocalOrder), tokenView.PhysicalObject?.ReleaseState());
             }
 
-            TransferTokenResult transferResult = tokenTransferUseCase.Execute(MatchState, command);
+            TransferTokenResult transferResult = tableAuthority.Submit<TransferTokenCommand, TransferTokenResult>(command);
             releaseResult = MoveInteractionReleaseResult.FromTokenTransferResult(transferResult);
             if (!transferResult.Succeeded)
             {

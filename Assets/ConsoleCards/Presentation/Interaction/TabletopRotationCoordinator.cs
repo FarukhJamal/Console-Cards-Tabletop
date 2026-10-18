@@ -1,4 +1,5 @@
 using System;
+using ConsoleCards.Application.Authority;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
 using ConsoleCards.Application.UseCases;
@@ -12,7 +13,7 @@ namespace ConsoleCards.Presentation.Interaction
     {
         private readonly TabletopSelectionState selectionState;
         private readonly LocalInteractionLockService lockService;
-        private readonly RotateObjectUseCase rotateUseCase;
+        private readonly ITableAuthority tableAuthority;
 
         public TabletopRotationCoordinator(
             MatchState matchState,
@@ -20,7 +21,7 @@ namespace ConsoleCards.Presentation.Interaction
             InteractionOwnerId interactionOwnerId,
             TabletopSelectionState selectionState,
             LocalInteractionLockService lockService,
-            RotateObjectUseCase rotateUseCase)
+            ITableAuthority tableAuthority)
         {
             MatchState = matchState ?? throw new ArgumentNullException(nameof(matchState));
             if (requestedByPlayerId.IsEmpty)
@@ -35,7 +36,7 @@ namespace ConsoleCards.Presentation.Interaction
 
             this.selectionState = selectionState ?? throw new ArgumentNullException(nameof(selectionState));
             this.lockService = lockService ?? throw new ArgumentNullException(nameof(lockService));
-            this.rotateUseCase = rotateUseCase ?? throw new ArgumentNullException(nameof(rotateUseCase));
+            this.tableAuthority = tableAuthority ?? throw new ArgumentNullException(nameof(tableAuthority));
 
             RequestedByPlayerId = requestedByPlayerId;
             InteractionOwnerId = interactionOwnerId;
@@ -51,7 +52,8 @@ namespace ConsoleCards.Presentation.Interaction
 
         public LocalInteractionLockService LockService => lockService;
 
-        public RotateObjectUseCase RotateUseCase => rotateUseCase;
+        /// <summary>The command door every change here goes through (R1b).</summary>
+        public ITableAuthority TableAuthority => tableAuthority;
 
         public RotationInteractionResult RotateSelected(float rotationDeltaDegrees)
         {
@@ -107,7 +109,7 @@ namespace ConsoleCards.Presentation.Interaction
                     selectedView.ObjectId,
                     targetRotationDegrees);
 
-                RotateObjectResult rotateResult = rotateUseCase.Execute(MatchState, command);
+                RotateObjectResult rotateResult = tableAuthority.Submit<RotateObjectCommand, RotateObjectResult>(command);
                 if (selectedView != null && selectedView.IsBound)
                 {
                     selectedView.ApplyAcceptedState();

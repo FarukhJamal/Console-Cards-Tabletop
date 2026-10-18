@@ -50,7 +50,7 @@ namespace ConsoleCards.Presentation.Composition
     {
         // Board (floor) card backs change per round: round 1 uses the first back, round 2 the second,
         // and so on, repeating after the last (doc 24). Null when the game has no backs.
-        private Texture2D CurrentBoardCardBack()
+        internal Texture2D CurrentBoardCardBack()
         {
             if (trapFloorGameDefinition == null)
             {
@@ -91,18 +91,18 @@ namespace ConsoleCards.Presentation.Composition
             return contentArt.Resolve(key, builtIn);
         }
 
-        private Texture2D FrontArt(CardDefinition definition) =>
+        internal Texture2D FrontArt(CardDefinition definition) =>
             definition == null ? null : Art(definition.FrontArtworkReference, definition.FrontArtwork);
 
-        private Texture2D BackArt(CardDefinition definition) =>
+        internal Texture2D BackArt(CardDefinition definition) =>
             definition == null ? null : Art(definition.BackArtworkReference, definition.BackArtwork);
 
-        private Texture2D AvatarArt(AvatarDefinition avatar) =>
+        internal Texture2D AvatarArt(AvatarDefinition avatar) =>
             avatar == null ? null : Art(avatar.ArtworkReference, avatar.Artwork);
 
         // The player profile (doc 28): the one used last, or a new "Player 1". Choosing another profile comes with the
         // profile screen; until then the stores are made once for this profile.
-        private ProfileService EnsureProfile()
+        internal ProfileService EnsureProfile()
         {
             if (profiles == null) profiles = ProfileService.CreateDefault();
             profiles.EnsureActive();
@@ -110,7 +110,7 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // The content service for this table's game: built-in art, the active pack and your pictures (A2–A4).
-        private void EnsureContentArt()
+        internal void EnsureContentArt()
         {
             if (contentArt == null)
             {
@@ -137,12 +137,12 @@ namespace ConsoleCards.Presentation.Composition
             artRefreshing = true;
             try
             {
-                for (int i = 0; i < cardVisualReferences.Count; i++)
+                for (int i = 0; i < Registry.cardVisualReferences.Count; i++)
                 {
-                    CardVisualReferences references = cardVisualReferences[i];
+                    CardVisualReferences references = Registry.cardVisualReferences[i];
                     CardView view = references != null ? references.CardView : null;
                     if (view == null || !view.IsBound || view.CardState == null) continue;
-                    ConfigureCardVisuals(references, view.CardState, ResolveCardLabel(view.CardState));
+                    Spawner.ConfigureCardVisuals(references, view.CardState, ResolveCardLabel(view.CardState));
                     references.SetCardContentVisible(ShouldShowCardContent(view.CardState));
                 }
             }
@@ -154,7 +154,7 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- Card Art panel (doc 24, A3/A4) ----------
 
-        private void OpenCardArtPanel()
+        internal void OpenCardArtPanel()
         {
             EnsureContentArt();
             if (!contentArt.HasGame)
@@ -201,7 +201,7 @@ namespace ConsoleCards.Presentation.Composition
                     Reload = ReloadContent,
                     ChoosePicture = ChooseOwnPicture,
                     ResetPicture = ResetOwnPicture,
-                    Close = CloseCardArtPanel,
+                    Close = GameSelectPanel.CloseCardArtPanel,
                 };
             }
 
@@ -329,7 +329,7 @@ namespace ConsoleCards.Presentation.Composition
 
             foreach (TabletopObjectId floorCardId in trapFloorTemplate.FloorCardIds.Values)
             {
-                RefreshTrapFloorFloorCardPresentation(floorCardId);
+                TrapFloorGame.RefreshTrapFloorFloorCardPresentation(floorCardId);
             }
         }
 
@@ -357,7 +357,7 @@ namespace ConsoleCards.Presentation.Composition
             return false;
         }
 
-        private CardSizeClass CardSizeClassOf(CardInstanceState card)
+        internal CardSizeClass CardSizeClassOf(CardInstanceState card)
         {
             if (TryGetCardLook(card.BaseState.DefinitionId, out CardDefinition definition))
             {
@@ -371,7 +371,7 @@ namespace ConsoleCards.Presentation.Composition
 
         // How a card looks (name, art, size): its game's card definition, found in this table's game or in any
         // game box of the library. Presentation only; game rules keep using TryGetAuthoredCardDefinition.
-        private bool TryGetCardLook(ObjectDefinitionId definitionId, out CardDefinition definition)
+        internal bool TryGetCardLook(ObjectDefinitionId definitionId, out CardDefinition definition)
         {
             if (TryGetAuthoredCardDefinition(definitionId, out definition)) return true;
             definition = null;
@@ -389,7 +389,7 @@ namespace ConsoleCards.Presentation.Composition
             return false;
         }
 
-        private bool TryGetAvatarLook(ObjectDefinitionId definitionId, out AvatarDefinition avatar)
+        internal bool TryGetAvatarLook(ObjectDefinitionId definitionId, out AvatarDefinition avatar)
         {
             if (TryGetAuthoredAvatar(definitionId, out avatar)) return true;
             if (definitionId.IsEmpty) return false;
@@ -422,7 +422,7 @@ namespace ConsoleCards.Presentation.Composition
             return false;
         }
 
-        private static Color TrapFloorContentColor(TrapFloorFloorContentCategory category)
+        internal static Color TrapFloorContentColor(TrapFloorFloorContentCategory category)
         {
             switch (category)
             {
@@ -443,19 +443,19 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private bool HidesTableVisual(TableVisualHide part)
+        internal bool HidesTableVisual(TableVisualHide part)
         {
             return (tableVisualHide & part) != 0;
         }
 
-        private void ApplyFixedContainerVisualHide(FixedContainerVisual visual, bool labelIsDecoration)
+        internal void ApplyFixedContainerVisualHide(FixedContainerVisual visual, bool labelIsDecoration)
         {
             visual.Label.gameObject.SetActive(
                 !labelIsDecoration || !HidesTableVisual(TableVisualHide.ContainerLabels));
             visual.SetBasePlateHidden(HidesTableVisual(TableVisualHide.ContainerPlates));
         }
 
-        private void ApplySelectionHighlightHide(TabletopSelectionVisual selectionVisual)
+        internal void ApplySelectionHighlightHide(TabletopSelectionVisual selectionVisual)
         {
             bool visible = !HidesTableVisual(TableVisualHide.SelectionHighlight);
             Renderer[] renderers = selectionVisual.HighlightRoot.GetComponentsInChildren<Renderer>(true);
@@ -465,7 +465,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private void ApplyLabelRendererHide(TextMesh label, TableVisualHide part)
+        internal void ApplyLabelRendererHide(TextMesh label, TableVisualHide part)
         {
             Renderer labelRenderer = label != null ? label.GetComponent<Renderer>() : null;
             if (labelRenderer != null)
@@ -474,7 +474,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private static void ConfigureContainerLabel(TextMesh label, string text)
+        internal static void ConfigureContainerLabel(TextMesh label, string text)
         {
             ConfigureWorldLabel(
                 label,
@@ -483,7 +483,7 @@ namespace ConsoleCards.Presentation.Composition
                 TrapFloorContainerLabelFontSize);
         }
 
-        private static void ConfigureWorldLabel(
+        internal static void ConfigureWorldLabel(
             TextMesh label,
             string text,
             float characterSize,
@@ -498,7 +498,7 @@ namespace ConsoleCards.Presentation.Composition
             WorldTextDepth.Apply(label);
         }
 
-        private static void ApplyCardColor(Renderer renderer, Color color)
+        internal static void ApplyCardColor(Renderer renderer, Color color)
         {
             MaterialPropertyBlock properties = new MaterialPropertyBlock();
             renderer.GetPropertyBlock(properties);
@@ -509,7 +509,7 @@ namespace ConsoleCards.Presentation.Composition
             renderer.SetPropertyBlock(properties);
         }
 
-        private void ApplyCardArtwork(Renderer renderer, Texture2D artwork)
+        internal void ApplyCardArtwork(Renderer renderer, Texture2D artwork)
         {
             Material current = renderer.sharedMaterial;
             if (current == null)
@@ -526,7 +526,7 @@ namespace ConsoleCards.Presentation.Composition
 
         // The supplied card model (Trading Card FBX) has a "back" material slot and a "face" slot.
         // The face slot carries the front art, the back slot the back art; each slot is tinted on its own.
-        private void ApplySuppliedModelArtwork(
+        internal void ApplySuppliedModelArtwork(
             CardVisualReferences visualReferences,
             Texture2D frontArtwork,
             Texture2D backArtwork,
@@ -635,7 +635,7 @@ namespace ConsoleCards.Presentation.Composition
             cardArtBaseMaterials.Clear();
         }
 
-        private bool TryGetAuthoredCardDefinition(
+        internal bool TryGetAuthoredCardDefinition(
             ObjectDefinitionId definitionId,
             out CardDefinition definition)
         {

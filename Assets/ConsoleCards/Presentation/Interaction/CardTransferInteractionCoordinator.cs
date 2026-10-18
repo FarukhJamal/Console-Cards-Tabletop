@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ConsoleCards.Application.Authority;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
 using ConsoleCards.Application.UseCases;
@@ -18,7 +19,7 @@ namespace ConsoleCards.Presentation.Interaction
     {
         private readonly ContainerLayoutViewLookup layoutViewLookup;
         private readonly LocalInteractionLockService lockService;
-        private readonly TransferCardUseCase transferUseCase;
+        private readonly ITableAuthority tableAuthority;
         private readonly IReadOnlyList<CardView> cardViews;
         private readonly TabletopPresentationTransitionController transitions;
         private readonly float settleDuration;
@@ -31,7 +32,7 @@ namespace ConsoleCards.Presentation.Interaction
             PlayerId requestedByPlayerId,
             InteractionOwnerId interactionOwnerId,
             LocalInteractionLockService lockService,
-            TransferCardUseCase transferUseCase,
+            ITableAuthority tableAuthority,
             IReadOnlyList<IContainerLayoutView> layoutViews)
         {
             MatchState = matchState ?? throw new ArgumentNullException(nameof(matchState));
@@ -46,7 +47,7 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             this.lockService = lockService ?? throw new ArgumentNullException(nameof(lockService));
-            this.transferUseCase = transferUseCase ?? throw new ArgumentNullException(nameof(transferUseCase));
+            this.tableAuthority = tableAuthority ?? throw new ArgumentNullException(nameof(tableAuthority));
             layoutViewLookup = new ContainerLayoutViewLookup(layoutViews);
             cardViews = null;
             transitions = null;
@@ -64,7 +65,7 @@ namespace ConsoleCards.Presentation.Interaction
             PlayerId requestedByPlayerId,
             InteractionOwnerId interactionOwnerId,
             LocalInteractionLockService lockService,
-            TransferCardUseCase transferUseCase,
+            ITableAuthority tableAuthority,
             IReadOnlyList<IContainerLayoutView> layoutViews,
             IReadOnlyList<CardView> cardViews,
             TabletopPresentationTransitionController transitions,
@@ -77,7 +78,7 @@ namespace ConsoleCards.Presentation.Interaction
                 requestedByPlayerId,
                 interactionOwnerId,
                 lockService,
-                transferUseCase,
+                tableAuthority,
                 layoutViews)
         {
             this.cardViews = cardViews ?? throw new ArgumentNullException(nameof(cardViews));
@@ -96,7 +97,8 @@ namespace ConsoleCards.Presentation.Interaction
 
         public LocalInteractionLockService LockService => lockService;
 
-        public TransferCardUseCase TransferUseCase => transferUseCase;
+        /// <summary>The command door every card transfer goes through (R1b).</summary>
+        public ITableAuthority TableAuthority => tableAuthority;
 
         public ContainerLayoutViewLookup LayoutViewLookup => layoutViewLookup;
 
@@ -177,7 +179,7 @@ namespace ConsoleCards.Presentation.Interaction
                 TransferCardResult transferResult;
                 try
                 {
-                    transferResult = transferUseCase.Execute(MatchState, command);
+                    transferResult = tableAuthority.Submit<TransferCardCommand, TransferCardResult>(command);
                     if (!transferResult.Succeeded) cardView.PhysicalObject?.Cancel();
 
                     ReconcileAfterTransfer(

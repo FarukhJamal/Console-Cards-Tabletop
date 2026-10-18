@@ -92,8 +92,9 @@ namespace ConsoleCards.Application.UseCases
     }
 
     /// <summary>
-    /// Validates an authoritative loose source and delegates creation of one unassociated generic copy
-    /// to the shared component-creation operation.
+    /// Validates an authoritative loose source and delegates creation of one copy to the shared
+    /// component-creation operation. A card is copied exactly (same card definition and face, owner 2026-10-18);
+    /// a pawn, token or die becomes an unassociated generic copy.
     /// </summary>
     public sealed class DuplicateTabletopComponentUseCase
     {
@@ -133,11 +134,13 @@ namespace ConsoleCards.Application.UseCases
             TabletopComponentKind componentKind;
             int dieSideCount = 0;
             CardFace cardFace = CardFace.FaceUp;
+            ObjectDefinitionId[] cardDefinition = null;
             switch (sourceState.Kind)
             {
                 case TabletopObjectKind.Card:
                     componentKind = TabletopComponentKind.Card;
                     cardFace = matchState.Cards[request.SourceObjectId].Face;
+                    cardDefinition = new[] { sourceState.DefinitionId }; // the same card, not a blank one
                     break;
                 case TabletopObjectKind.Pawn:
                     componentKind = TabletopComponentKind.Pawn;
@@ -165,7 +168,8 @@ namespace ConsoleCards.Application.UseCases
                     request.PlacementPose,
                     dieSideCount,
                     cardFace,
-                    AuthoritativeActionKind.DuplicateComponent));
+                    AuthoritativeActionKind.DuplicateComponent,
+                    cardDefinitionIds: cardDefinition));
             return result.Succeeded
                 ? DuplicateTabletopComponentResult.Accepted(result)
                 : DuplicateTabletopComponentResult.Failure(

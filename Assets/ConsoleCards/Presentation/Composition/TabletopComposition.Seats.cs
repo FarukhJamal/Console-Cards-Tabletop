@@ -96,7 +96,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             TemplateContext previousContext = templateContext;
             MatchState previousMatch = activeSession.CurrentMatch;
-            SessionUndoSnapshot current = CaptureUndoSnapshot();
+            SessionUndoSnapshot current = SessionService.CaptureUndoSnapshot();
             rebuildingFromUndo = true;
             try
             {
@@ -105,8 +105,8 @@ namespace ConsoleCards.Presentation.Composition
                 pendingRestoredTrapFloorState = current.TrapFloor?.Restore();
                 pendingRestoredControllerPurchaseState = current.PendingControllerPurchase?.Restore();
                 InitializeActiveSession(false);
-                undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
-                ShowActiveSessionUi();
+                undoHistory.ReplaceCurrentState(SessionService.CaptureUndoSnapshot());
+                SessionService.ShowActiveSessionUi();
                 announceTurnAfterRebuild = announceTurn;
                 return true;
             }
@@ -124,12 +124,12 @@ namespace ConsoleCards.Presentation.Composition
                 pendingRestoredTrapFloorState = null;
                 pendingRestoredControllerPurchaseState = null;
                 rebuildingFromUndo = false;
-                RefreshUndoUi();
+                SessionService.RefreshUndoUi();
             }
         }
 
         // Table menu: Hands on table (F3). Rebuilds the table view so the hand moves between tray and table.
-        private void SetHandsOnTable(bool on)
+        internal void SetHandsOnTable(bool on)
         {
             bool before = handsOnTable;
             handsOnTable = on;
@@ -138,7 +138,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 handsOnTable = before;
                 ShowMessage("The table is busy; try again in a moment.");
-                ShowActiveSessionUi();
+                SessionService.ShowActiveSessionUi();
                 return;
             }
 
@@ -153,7 +153,7 @@ namespace ConsoleCards.Presentation.Composition
                 : "Your hand is back on screen.");
         }
 
-        private void SetFullFeedback(bool on)
+        internal void SetFullFeedback(bool on)
         {
             fullFeedback = on;
             ShowMessage(on
@@ -162,7 +162,7 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // Table menu Seat row: this screen plays the next seated player (not in hot-seat mode).
-        private void NextScreenSeat()
+        internal void NextScreenSeat()
         {
             Debug.Log("[Seat] Seat row clicked.", this);
             if (!IsInitialized || trapFloorTemplate == null || matchState == null)
@@ -281,7 +281,7 @@ namespace ConsoleCards.Presentation.Composition
                 this);
         }
 
-        private void SetHotSeatMode(bool on)
+        internal void SetHotSeatMode(bool on)
         {
             hotSeatMode = on;
             handSeatSyncFailedFor = PlayerId.Empty;
@@ -315,7 +315,7 @@ namespace ConsoleCards.Presentation.Composition
                 "PASS THE SCREEN",
                 label.ToUpperInvariant(),
                 BuildHandoverSummary(player),
-                $"I'm {FormatPlayerName(player)} — show my hand",
+                $"I'm {TrapFloorGame.FormatPlayerName(player)} — show my hand",
                 FeedbackColour(player));
             if (runtimeUi != null && runtimeUi.ShowHotSeatHandover(model, ConfirmHotSeatHandover))
             {
@@ -396,7 +396,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private int PlayerHandCount(PlayerId player)
         {
-            return TryGetTrapFloorPlayerSetup(player, out TrapFloorPlayerSetupDefinition setup)
+            return TrapFloorGame.TryGetTrapFloorPlayerSetup(player, out TrapFloorPlayerSetupDefinition setup)
                 && matchState.Containers.TryGetValue(setup.HandContainerId, out ContainerState hand)
                 ? hand.Count
                 : 0;
@@ -442,16 +442,16 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private void FeedbackLine(string message, FeedbackSeverity severity)
+        internal void FeedbackLine(string message, FeedbackSeverity severity)
         {
             RecordHandoverLine(message);
             runtimeUi.ShowFeedbackMessage(message, severity);
         }
 
-        private string PlayerLabel(PlayerId player)
+        internal string PlayerLabel(PlayerId player)
         {
             string colour = TryGetTrapFloorSeatIndex(player, out int seat) ? $" ({PlayerColorName(seat)})" : string.Empty;
-            return $"{FormatPlayerName(player)}{colour}";
+            return $"{TrapFloorGame.FormatPlayerName(player)}{colour}";
         }
 
         // True while a Player turn belongs to someone whose hand is not the screen hand.
@@ -469,7 +469,7 @@ namespace ConsoleCards.Presentation.Composition
 
         // The hand a draw from this deck fills: the deck owner's hand (a Console's Controller Deck belongs to
         // its seat), otherwise the screen hand.
-        private ContainerId DrawTargetHandFor(ContainerId deckId)
+        internal ContainerId DrawTargetHandFor(ContainerId deckId)
         {
             if (trapFloorTemplate != null
                 && matchState != null
@@ -490,12 +490,12 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // " to Player 2 (RED)'s hand" when the hand is not this screen's hand; empty otherwise.
-        private string ToHandSuffix(ContainerId handId)
+        internal string ToHandSuffix(ContainerId handId)
         {
             return handId == handContainerId ? string.Empty : $" to {HandOwnerName(handId)}'s hand";
         }
 
-        private string HandOwnerName(ContainerId handId)
+        internal string HandOwnerName(ContainerId handId)
         {
             if (trapFloorTemplate != null && matchState != null)
             {
@@ -506,7 +506,7 @@ namespace ConsoleCards.Presentation.Composition
                     {
                         PlayerId owner = matchState.GetSeat(player.SeatId).OccupantPlayerId;
                         string colour = TryGetTrapFloorSeatIndex(owner, out int seat) ? $" ({PlayerColorName(seat)})" : string.Empty;
-                        return $"{FormatPlayerName(owner)}{colour}";
+                        return $"{TrapFloorGame.FormatPlayerName(owner)}{colour}";
                     }
                 }
             }

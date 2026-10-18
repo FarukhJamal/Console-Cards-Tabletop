@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.5 · 2026-10-18 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.6 · 2026-10-18 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -337,12 +337,11 @@ Change: …
   (size chips), Consoles, board mats, and box tiles that place real game cards (the Controller Deck, a game's
   card sets, Avatars). Placement **keeps placing** until Esc or right-click. **Duplicate** is on every piece's
   right-click menu: cards, dice, pawns, tokens, Consoles, board mats, and now decks, stacks and discard piles
-  (copied with all their cards).
+  (copied with all their cards). A duplicated card is an exact copy (the same card and face), a game's own cards
+  included; a pawn, token or die from a game becomes a generic copy ("Duplicate as Generic …").
 - **Source:** doc 22 §2–§13; doc 29 (L2-6b)
-- **Open:** a duplicated single card is still a blank generic card (decks, stacks and discard piles copy the real
-  cards); whether single cards should copy the real card too.
-- **Changes:** 2026-10-18 Duplicate on decks, stacks and discard piles (owner); 2026-10-16 keep placing until Esc
-  or right-click.
+- **Changes:** 2026-10-18 a duplicated card copies the real card (owner); 2026-10-18 Duplicate on decks, stacks and
+  discard piles (owner); 2026-10-16 keep placing until Esc or right-click.
 
 ### P-PILES · Decks, stacks, discard piles and hands
 - **Status:** Built

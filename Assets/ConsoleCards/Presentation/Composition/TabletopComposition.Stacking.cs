@@ -71,7 +71,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private readonly Dictionary<ContainerId, int> watchedPileCounts = new Dictionary<ContainerId, int>();
         private MatchState watchedPileMatch;
-        private bool pileCountCheckPending;
+        internal bool pileCountCheckPending;
 
         private TabletopObjectId watchedDraggedCardId;
         private CardView stackHoverTarget;
@@ -147,7 +147,7 @@ namespace ConsoleCards.Presentation.Composition
 
             // Making a stack rebuilds the interaction graph, which is not allowed mid-gesture.
             if (interactionRouter != null && interactionRouter.HasActiveInteraction) return;
-            if (!TryGetCardView(releasedCardId, out CardView top))
+            if (!Registry.TryGetCardView(releasedCardId, out CardView top))
             {
                 ClearReleasedStack();
                 return;
@@ -207,9 +207,9 @@ namespace ConsoleCards.Presentation.Composition
             if (top == null || !top.IsBound) return false;
             Vector3 position = RestPosition(top);
             float best = float.MaxValue;
-            for (int i = 0; i < cardViews.Count; i++)
+            for (int i = 0; i < Registry.cardViews.Count; i++)
             {
-                CardView candidate = cardViews[i];
+                CardView candidate = Registry.cardViews[i];
                 if (candidate == null || ReferenceEquals(candidate, top) || !IsStackableLooseCard(candidate)) continue;
                 if (candidate.PhysicalObject != null && candidate.PhysicalObject.IsHeld) continue;
                 Renderer renderer = candidate.GetComponentInChildren<Renderer>();
@@ -274,7 +274,7 @@ namespace ConsoleCards.Presentation.Composition
             TabletopPose stackPose = RestPose(bottom);
             ContainerId stackId = ContainerId.Empty;
             bool stacked = false;
-            BeginUndoBatch();
+            SessionService.BeginUndoBatch();
             try
             {
                 CreateTabletopComponentResult created = TableAuthority.Submit<CreateTabletopComponentRequest, CreateTabletopComponentResult>(
@@ -307,7 +307,7 @@ namespace ConsoleCards.Presentation.Composition
             }
             finally
             {
-                EndUndoBatch();
+                SessionService.EndUndoBatch();
             }
 
             if (!stacked) return;
@@ -344,7 +344,7 @@ namespace ConsoleCards.Presentation.Composition
 
             ContainerId collapseId = ContainerId.Empty;
             ContainerId landedOn = ContainerId.Empty;
-            foreach (KeyValuePair<ContainerId, StackRuntimeView> pair in stackViewsByContainerId)
+            foreach (KeyValuePair<ContainerId, StackRuntimeView> pair in Registry.stackViewsByContainerId)
             {
                 if (!matchState.Containers.TryGetValue(pair.Key, out ContainerState pile)) continue;
                 int count = pile.Count;
@@ -364,9 +364,9 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
-            for (int i = 0; i < runtimeDeckInstances.Count; i++)
+            for (int i = 0; i < Registry.runtimeDeckInstances.Count; i++)
             {
-                RuntimeDeckInstance deck = runtimeDeckInstances[i];
+                RuntimeDeckInstance deck = Registry.runtimeDeckInstances[i];
                 if (deck.View == null || !deck.View.IsBound
                     || !matchState.Containers.TryGetValue(deck.ContainerId, out ContainerState pile)) continue;
                 int count = pile.Count;
@@ -393,21 +393,21 @@ namespace ConsoleCards.Presentation.Composition
         private void CollapseStack(ContainerId stackId)
         {
             watchedPileCounts.Remove(stackId);
-            if (!stackViewsByContainerId.ContainsKey(stackId)
+            if (!Registry.stackViewsByContainerId.ContainsKey(stackId)
                 || !matchState.Containers.TryGetValue(stackId, out ContainerState pile)
                 || pile.Count > 1)
             {
                 return;
             }
 
-            BeginUndoAmend();
+            SessionService.BeginUndoAmend();
             try
             {
                 if (pile.Count == 1)
                 {
                     if (transferCoordinator == null
                         || !matchState.TryGetContainerPlacement(stackId, out ContainerPlacementState placement)
-                        || !TryGetCardView(pile.GetObjectAt(0), out CardView last))
+                        || !Registry.TryGetCardView(pile.GetObjectAt(0), out CardView last))
                     {
                         return;
                     }
@@ -429,7 +429,7 @@ namespace ConsoleCards.Presentation.Composition
             }
             finally
             {
-                EndUndoAmend();
+                SessionService.EndUndoAmend();
             }
         }
 

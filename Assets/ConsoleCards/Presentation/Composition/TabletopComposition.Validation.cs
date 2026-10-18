@@ -253,7 +253,7 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // Resolved once from the Console prefab's ConsoleLayoutBinding; the layout asset does not change in play.
-        private ConsoleLayoutData GetConsoleLayout()
+        internal ConsoleLayoutData GetConsoleLayout()
         {
             if (consoleLayout != null)
             {

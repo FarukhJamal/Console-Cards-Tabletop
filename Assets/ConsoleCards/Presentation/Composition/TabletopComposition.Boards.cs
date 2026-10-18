@@ -76,7 +76,7 @@ namespace ConsoleCards.Presentation.Composition
         private GameBoardMatView CreateBoardMatInstance(string name, BoardGrid grid)
         {
             GameBoardMatView view = Instantiate(boardMatPrefab);
-            PrepareRuntimeRoot(view.gameObject, name);
+            Spawner.PrepareRuntimeRoot(view.gameObject, name);
             view.Apply(grid);
             return view;
         }
@@ -127,7 +127,7 @@ namespace ConsoleCards.Presentation.Composition
             if (gameBoardVisualRoot != null) gameBoardVisualRoot.gameObject.SetActive(false);
         }
 
-        private bool TryFindBoardUnderPointer(Vector2 screenPosition, out BoardId boardId, out GameBoardMatView view)
+        internal bool TryFindBoardUnderPointer(Vector2 screenPosition, out BoardId boardId, out GameBoardMatView view)
         {
             boardId = BoardId.Empty;
             view = null;
@@ -165,7 +165,7 @@ namespace ConsoleCards.Presentation.Composition
             GameBoardMatView preview = Instantiate(boardMatPrefab);
             preview.Apply(grid);
             GameObject root = preview.gameObject;
-            PrepareRuntimeRoot(root, "Board Placement Preview");
+            Spawner.PrepareRuntimeRoot(root, "Board Placement Preview");
             DisablePlacementPreviewInteraction(root);
             TintPlacementPreview(root);
             return root;
@@ -180,7 +180,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             GameObject previewRoot = CreateBoardPlacementPreview(grid);
             componentPlacementController.BeginCustomComponentPlacement(
                 TabletopComponentKind.GameBoard,
@@ -193,7 +193,7 @@ namespace ConsoleCards.Presentation.Composition
             ShowPlacementHint(duplicate ? "Duplicate Board" : "Board Mat");
         }
 
-        private bool CommitBoardCreate(TabletopPose pose, BoardGrid grid, bool duplicate)
+        internal bool CommitBoardCreate(TabletopPose pose, BoardGrid grid, bool duplicate)
         {
             CreateBoardResult created = TableAuthority.Submit<CreateBoardCommand, CreateBoardResult>(
                 new CreateBoardCommand(CreateCommandContext(), pose, grid, null, duplicate));
@@ -226,7 +226,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             componentPlacementController.Cancel();
             GameObject previewRoot = CreateBoardPlacementPreview(board.Grid);
             BoardGrid grid = board.Grid;
@@ -336,9 +336,9 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---- The board menu (right-click a board) ----
 
-        private void OpenBoardContextMenu(Vector2 screenPosition, BoardId boardId)
+        internal void OpenBoardContextMenu(Vector2 screenPosition, BoardId boardId)
         {
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             boardMenuScreenPosition = screenPosition;
             ShowBoardContextMenu(boardId);
         }
@@ -381,8 +381,8 @@ namespace ConsoleCards.Presentation.Composition
                 $"{grid.Columns} x {grid.Rows} spaces ({(cardSpaces ? "card size" : "small tiles")})."
                     + (placed ? " Cards on it stay where they are." : " The floor tiles do not move."),
                 actions,
-                CloseContextMenu,
-                DismissPopupFromSecondary);
+                ContextMenus.CloseContextMenu,
+                ContextMenus.DismissPopupFromSecondary);
         }
 
         private bool TryGetBoardGrid(BoardId boardId, out BoardGrid grid)
@@ -437,7 +437,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             CommandResult result = TableAuthority.Submit<DeleteBoardCommand, CommandResult>(
                 new DeleteBoardCommand(CreateCommandContext(), boardId));
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             if (!result.Succeeded)
             {
                 ShowMessage($"Delete rejected: {result.Status}.");
@@ -462,9 +462,9 @@ namespace ConsoleCards.Presentation.Composition
             if (!boardSnapCheckPending || !IsInitialized || matchState == null) return;
             boardSnapCheckPending = false;
             if (boardViews.Count == 0 && templateBoardMat == null) return;
-            for (int i = 0; i < cardViews.Count; i++)
+            for (int i = 0; i < Registry.cardViews.Count; i++)
             {
-                CardView card = cardViews[i];
+                CardView card = Registry.cardViews[i];
                 if (card == null || !card.IsBound || card.BoundState == null) continue;
                 TabletopObjectState state = card.BoundState;
                 if (!state.ContainerId.IsEmpty || state.IsUserLocked) continue;

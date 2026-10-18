@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.14 · 2026-10-18 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.16 · 2026-10-18 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1250,12 +1250,12 @@ The owner approved T3 and the moving skybox on 2026-10-18 ("Approved next"), so 
 | Stage | What | Status |
 |---|---|---|
 | R1a | Split `TabletopComposition.cs` into partial files by job. Code moved unchanged. | Done, approved (owner, 2026-10-18) |
-| R1b, part 1 | The command door: `ITableAuthority.Submit(command)`, local only, and the table code's direct use-case calls routed through it (doc 30 A6, gap 1). | Written 2026-10-18, to be checked |
-| R1b, part 2 | Drag and drop, flips, turns and physics commits through the same door (the interaction coordinators and the local physics authority still hold their own use cases). | Next |
-| R1c | `ViewRegistry` (finds a piece's view) and `PieceSpawner` (catalog spawns and views) as plain classes. | Planned |
-| R1d | `ContextMenuPresenter` and one presenter per panel. | Planned |
-| R1e | `TrapFloorCartridge`: the Trap Floor, Trap Floor status, Shop and Trap Floor hints code in one plain class (the first cartridge, A4). | Planned |
-| R1f | `TableSessionService`: start, replace, reset, Undo and Redo. | Planned |
+| R1b, part 1 | The command door: `ITableAuthority.Submit(command)`, local only, and the table code's direct use-case calls routed through it (doc 30 A6, gap 1). | Done, approved (owner, 2026-10-18) |
+| R1b, part 2 | Drag and drop, flips, turns and physics commits through the same door (the interaction coordinators and the local physics authority still hold their own use cases). | Written 2026-10-18, to be checked |
+| R1c | `ViewRegistry` (finds a piece's view) and `PieceSpawner` (catalog spawns and views) as plain classes. | Written 2026-10-18, to be checked |
+| R1d | `ContextMenuPresenter` and one presenter per panel. | Written 2026-10-18, to be checked |
+| R1e | `TrapFloorCartridge`: the Trap Floor, Trap Floor status, Shop and Trap Floor hints code in one plain class (the first cartridge, A4). | Written 2026-10-18, to be checked |
+| R1f | `TableSessionService`: start, replace, reset, Undo and Redo. | Written 2026-10-18, to be checked |
 | R2 | Events instead of hand refreshes. | Planned |
 
 **R1a — what changed.** `TabletopComposition.cs` went from 16,920 lines to 1,880. It keeps the fields, the nested
@@ -1323,3 +1323,35 @@ Unity makes the `.meta` files for the new scripts on the next import.
   nothing.
 - **Still direct (part 2):** the interaction coordinators (drag moves, card and token transfers, flips, turns,
   Toolbox placement) and the local physics authority are handed their own use cases when the table is built.
+
+**R1b part 2 and R1c–R1f — all at once (2026-10-18).** The owner approved R1b part 1 and asked: "Do all R1's in one
+go." Not compiled here; the owner checks in Unity and compile errors are read from Editor.log and fixed.
+
+- **R1b part 2 — drags and physics through the door.** The card transfer, move, turn and flip coordinators and the
+  local physics authority no longer hold use cases; they are given `ITableAuthority` and submit
+  `TransferCardCommand`, `MoveObjectCommand`, `TransferTokenCommand`, `RotateObjectCommand`, `FlipCardCommand` and
+  `CommitPhysicalObjectCommand`. Four new handlers are registered (transfer card, transfer token, rotate, flip). The
+  use cases that keep no state are made once (drags and physics submit often; no garbage per command). Nothing in
+  the table code calls a use case directly any more.
+- **How R1c–R1f were done.** A script moved members of the partial class into plain classes and rewrote references
+  both ways: in a moved class, composition members are reached through `host` (static members and nested types
+  through `using static TabletopComposition`); in the composition, moved members are reached through one property
+  per class. Fields and constants that only the moved code uses moved with it; composition members the moved code
+  needs became `internal`, and so did every nested type. Unity messages (Update, LateUpdate, OnGUI …), explicit
+  interface members and serialized fields never move. A second script checked every `host.X` and `<Property>.X`
+  against what exists and is reachable, and that no bare name was left pointing at the wrong class.
+- **R1c.** `ViewRegistry` (property `Registry`): every view list (cards, pawns, tokens, dice, decks, discard piles,
+  Consoles, token trays, stacks, hands, slots, layout views) and the lookups (`TryGetCardView`, `TryGetDeckPresentation`
+  …). `PieceSpawner` (property `Spawner`): making cards, pawns, tokens, dice, decks, Consoles, token trays, stacks and
+  the hand plate from the catalog prefabs.
+- **R1d.** `ContextMenuPresenter` (`ContextMenus`): all right-click menus and their popups. One presenter per panel:
+  `CardInspectPresenter`, `RulesCardPresenter`, `CardEditorPresenter`, `DeckEditorPresenter`, `GameSelectPresenter`,
+  `PlayerGamesPresenter`, `ProfilePanelPresenter`.
+- **R1e.** `TrapFloorCartridge` (`TrapFloorGame`): the Trap Floor flow, its status texts and turn menu, the Shop and
+  the hint helpers' calls (about 4,100 lines). The composition keeps only what the Unity side needs (pawn hops in
+  LateUpdate, passing Console card events on, since only the composition may raise its event).
+- **R1f.** `TableSessionService` (`SessionService`): templates, starting, replacing and resetting the table, and Undo
+  and Redo with their batches and history labels.
+- **Files left empty** (CardInspect, ContextMenus, PlayerGames, Profiles, RulesCard, Session, Shop, TrapFloorStatus,
+  Undo partial files) hold only an empty partial class and a note; they can be deleted in Unity.
+- **What did not change:** behaviour. Every method body is the same apart from the `host.` / property prefixes.

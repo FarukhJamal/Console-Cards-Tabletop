@@ -59,18 +59,18 @@ namespace ConsoleCards.Presentation.Composition
                 : null;
         }
 
-        private bool ConsoleMatHasBackSide()
+        internal bool ConsoleMatHasBackSide()
         {
             return catalogConsolePrefab != null
-                && runtimeConsoleInstances.Count > 0
+                && Registry.runtimeConsoleInstances.Count > 0
                 && GetConsoleLayout().HasBackSide;
         }
 
         private void ApplyAllConsoleSides()
         {
-            for (int i = 0; i < runtimeConsoleInstances.Count; i++)
+            for (int i = 0; i < Registry.runtimeConsoleInstances.Count; i++)
             {
-                ApplyConsoleSide(runtimeConsoleInstances[i]);
+                ApplyConsoleSide(Registry.runtimeConsoleInstances[i]);
             }
         }
 
@@ -154,9 +154,9 @@ namespace ConsoleCards.Presentation.Composition
 
         private RuntimeConsoleInstance FindConsoleInstanceBySlot(ContainerId slotContainerId)
         {
-            for (int i = 0; i < runtimeConsoleInstances.Count; i++)
+            for (int i = 0; i < Registry.runtimeConsoleInstances.Count; i++)
             {
-                RuntimeConsoleInstance instance = runtimeConsoleInstances[i];
+                RuntimeConsoleInstance instance = Registry.runtimeConsoleInstances[i];
                 for (int s = 0; s < instance.SlotViews.Length; s++)
                 {
                     ConsoleSlotView slotView = instance.SlotViews[s];
@@ -171,13 +171,13 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // The Console whose mat (plus a small margin) is under the pointer, whichever side faces up.
-        private bool TryFindConsoleUnderPointer(Vector2 screenPosition, out RuntimeConsoleInstance found)
+        internal bool TryFindConsoleUnderPointer(Vector2 screenPosition, out RuntimeConsoleInstance found)
         {
             found = null;
             if (pointerProjector == null
                 || coordinateConverter == null
                 || catalogConsolePrefab == null
-                || runtimeConsoleInstances.Count == 0
+                || Registry.runtimeConsoleInstances.Count == 0
                 || !pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate coordinate))
             {
                 return false;
@@ -187,9 +187,9 @@ namespace ConsoleCards.Presentation.Composition
             ConsoleLayoutData layout = GetConsoleLayout();
             float halfWidth = (layout.MatWidth * 0.5f) + 0.2f;
             float halfDepth = (layout.MatDepth * 0.5f) + 0.2f;
-            for (int i = 0; i < runtimeConsoleInstances.Count; i++)
+            for (int i = 0; i < Registry.runtimeConsoleInstances.Count; i++)
             {
-                RuntimeConsoleInstance instance = runtimeConsoleInstances[i];
+                RuntimeConsoleInstance instance = Registry.runtimeConsoleInstances[i];
                 if (instance.Root == null
                     || !instance.Root.activeInHierarchy
                     || instance.SlotViews.Length == 0
@@ -231,14 +231,14 @@ namespace ConsoleCards.Presentation.Composition
             FlipConsoleFromSlot(instance.SlotViews[0].ContainerId);
         }
 
-        private void FlipConsoleFromSlot(ContainerId slotContainerId)
+        internal void FlipConsoleFromSlot(ContainerId slotContainerId)
         {
             RuntimeConsoleInstance instance = FindConsoleInstanceBySlot(slotContainerId);
             ConsoleState console = ResolveConsoleState(instance);
             if (console == null || !ConsoleMatHasBackSide())
             {
                 ShowMessage("Flip rejected: Console unavailable.");
-                CloseContextMenu();
+                ContextMenus.CloseContextMenu();
                 return;
             }
 
@@ -253,7 +253,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             ShowMessage(toBack ? "Console turned over: controller side up." : "Console turned over: symbol side up.");
             if (faces == null || faces.TurnPivot == null)
             {
@@ -318,7 +318,7 @@ namespace ConsoleCards.Presentation.Composition
                 IReadOnlyList<TabletopObjectId> cardIds = slotView.ContainerState.ObjectIds;
                 for (int c = 0; c < cardIds.Count; c++)
                 {
-                    if (!TryGetCardView(cardIds[c], out CardView cardView))
+                    if (!Registry.TryGetCardView(cardIds[c], out CardView cardView))
                     {
                         continue;
                     }
@@ -346,7 +346,7 @@ namespace ConsoleCards.Presentation.Composition
             boardFeedback.Flash(position, new Color(0.34f, 0.94f, 0.86f, 1f));
         }
 
-        private void BeginCardFlipTurn(CardView card)
+        internal void BeginCardFlipTurn(CardView card)
         {
             if (cardFlipTurns == null)
             {
@@ -360,7 +360,7 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // Duplicate places a second Console with the other side up, where the player puts it.
-        private void BeginConsoleDuplicate(ContainerId slotContainerId)
+        internal void BeginConsoleDuplicate(ContainerId slotContainerId)
         {
             EnsureInitialized();
             RuntimeConsoleInstance instance = FindConsoleInstanceBySlot(slotContainerId);
@@ -370,7 +370,7 @@ namespace ConsoleCards.Presentation.Composition
                 || !TryResolveConsolePlacement(slotContainerId, out TabletopPose sourcePose, out _, out _))
             {
                 ShowMessage("Duplicate rejected: Console unavailable.");
-                CloseContextMenu();
+                ContextMenus.CloseContextMenu();
                 return;
             }
 
@@ -379,7 +379,7 @@ namespace ConsoleCards.Presentation.Composition
             GameObject previewRoot = CreateToolboxPlacementPreview(TabletopComponentKind.Console, 0);
             ConsoleMatFaces previewFaces = previewRoot.GetComponentInChildren<ConsoleMatFaces>(true);
             previewFaces?.SetSideImmediate(otherSideUp);
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             componentPlacementController.BeginCustomComponentPlacement(
                 TabletopComponentKind.Console,
                 previewRoot,
@@ -418,7 +418,7 @@ namespace ConsoleCards.Presentation.Composition
 
         bool ICardDropMagnet.IsActive => IsInitialized
             && catalogConsolePrefab != null
-            && runtimeConsoleInstances.Count > 0
+            && Registry.runtimeConsoleInstances.Count > 0
             && TryGetDraggedCard(out CardView card)
             && CardConsoleSymbol(card) != ConsoleSymbol.None;
 
@@ -430,7 +430,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             adjustedContainerId = directContainerId;
             if (catalogConsolePrefab == null
-                || runtimeConsoleInstances.Count == 0
+                || Registry.runtimeConsoleInstances.Count == 0
                 || !TryGetDraggedCard(out CardView card))
             {
                 return false;
@@ -466,9 +466,9 @@ namespace ConsoleCards.Presentation.Composition
                 return true;
             }
 
-            for (int i = 0; i < cardViews.Count; i++)
+            for (int i = 0; i < Registry.cardViews.Count; i++)
             {
-                CardView candidate = cardViews[i];
+                CardView candidate = Registry.cardViews[i];
                 if (candidate != null && candidate.PhysicalObject != null && candidate.PhysicalObject.IsHeld)
                 {
                     card = candidate;
@@ -507,9 +507,9 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             ConsoleLayoutData layout = GetConsoleLayout();
-            for (int i = 0; i < runtimeConsoleInstances.Count; i++)
+            for (int i = 0; i < Registry.runtimeConsoleInstances.Count; i++)
             {
-                ConsoleSlotView[] slotViews = runtimeConsoleInstances[i].SlotViews;
+                ConsoleSlotView[] slotViews = Registry.runtimeConsoleInstances[i].SlotViews;
                 for (int s = 0; s < slotViews.Length && s < layout.CardSlots.Count; s++)
                 {
                     if (slotViews[s] != null && slotViews[s].IsBound && slotViews[s].ContainerId == slotContainerId)
@@ -528,9 +528,9 @@ namespace ConsoleCards.Presentation.Composition
             ConsoleLayoutData layout = GetConsoleLayout();
             ContainerId nearest = ContainerId.Empty;
             double nearestDistance = consoleSymbolMagnetDistance;
-            for (int i = 0; i < runtimeConsoleInstances.Count; i++)
+            for (int i = 0; i < Registry.runtimeConsoleInstances.Count; i++)
             {
-                ConsoleSlotView[] slotViews = runtimeConsoleInstances[i].SlotViews;
+                ConsoleSlotView[] slotViews = Registry.runtimeConsoleInstances[i].SlotViews;
                 for (int s = 0; s < slotViews.Length && s < layout.CardSlots.Count; s++)
                 {
                     ConsoleSlotView slotView = slotViews[s];
@@ -576,9 +576,9 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            for (int d = 0; d < dieViews.Count; d++)
+            for (int d = 0; d < Registry.dieViews.Count; d++)
             {
-                DieView dieView = dieViews[d];
+                DieView dieView = Registry.dieViews[d];
                 if (dieView == null || !dieView.IsBound || dieView.DieState == null)
                 {
                     continue;
@@ -635,9 +635,9 @@ namespace ConsoleCards.Presentation.Composition
                 ? dieView.PhysicalObject.Body.position
                 : dieView.transform.position;
             ConsoleLayoutData layout = GetConsoleLayout();
-            for (int i = 0; i < runtimeConsoleInstances.Count; i++)
+            for (int i = 0; i < Registry.runtimeConsoleInstances.Count; i++)
             {
-                RuntimeConsoleInstance instance = runtimeConsoleInstances[i];
+                RuntimeConsoleInstance instance = Registry.runtimeConsoleInstances[i];
                 ConsoleState console = ResolveConsoleState(instance);
                 if (console == null || instance.Root == null || !instance.Root.activeInHierarchy)
                 {
@@ -737,7 +737,7 @@ namespace ConsoleCards.Presentation.Composition
             Vector3 screen = camera.WorldToScreenPoint(dieView.transform.position);
             selectionState.Select(dieView);
             selectionPresenter.Refresh();
-            OpenContextMenu(
+            ContextMenus.OpenContextMenu(
                 ContextMenuMode.Die,
                 new Vector2(screen.x, screen.y),
                 TabletopObjectId.Empty,
@@ -746,7 +746,7 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // The number picker: one row per face, shown in the Die menu while the die is on a D-pad arrow.
-        private void AddDieNumberActions(List<PopupActionOption> actions, DieView dieView)
+        internal void AddDieNumberActions(List<PopupActionOption> actions, DieView dieView)
         {
             if (dieView == null
                 || dieView.DieState == null
@@ -775,11 +775,11 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (!TryGetDieView(dieId, out DieView dieView)
+            if (!Registry.TryGetDieView(dieId, out DieView dieView)
                 || !TryFindDieSpot(dieView, out RuntimeConsoleInstance instance, out ConsoleLayoutSlotData spot, out Vector3 spotWorld, out _))
             {
                 ShowMessage("Number not set: the die is not on a D-pad arrow.");
-                CloseContextMenu();
+                ContextMenus.CloseContextMenu();
                 return;
             }
 
@@ -790,7 +790,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             diceOnConsoleSpots[dieId] = spot.Key;
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             ShowMessage($"The die on the {DescribeDieSpot(spot)} now shows {value}.");
         }
 

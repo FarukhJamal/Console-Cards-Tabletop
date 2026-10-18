@@ -655,7 +655,7 @@ namespace ConsoleCards.Presentation.Composition
 
             int moved = 0;
             Quaternion inverse = Quaternion.Inverse(classicFrame.Rotation);
-            BeginUndoBatch();
+            SessionService.BeginUndoBatch();
             try
             {
                 for (int i = 0; i < boardsToMove.Count; i++)
@@ -719,7 +719,7 @@ namespace ConsoleCards.Presentation.Composition
             }
             finally
             {
-                EndUndoBatch();
+                SessionService.EndUndoBatch();
                 ClearPiecesToMove();
             }
 

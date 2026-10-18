@@ -33,7 +33,7 @@ namespace ConsoleCards.Presentation.Composition
         private const string TableArea = "Table";
         private const string ClassicModelId = "classic";
 
-        private enum BaseTableView
+        internal enum BaseTableView
         {
             Whole,
             LegsOnly,
@@ -117,7 +117,7 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // The Table menu row, on every table. Hidden when the scene has no table to start from.
-        private void RefreshTableShapeEntry()
+        internal void RefreshTableShapeEntry()
         {
             if (runtimeUi == null) return;
             if (cycleTableShapeAction == null) cycleTableShapeAction = CycleTableShape;

@@ -52,12 +52,12 @@ namespace ConsoleCards.Presentation.Composition
         public ShuffleDeckResult ShuffleDeck(ContainerId targetDeckContainerId)
         {
             EnsureInitialized();
-            bool isDeck = TryGetDeckPresentation(
+            bool isDeck = Registry.TryGetDeckPresentation(
                 targetDeckContainerId,
                 out DeckView targetDeckView,
                 out FixedContainerVisual targetDeckVisual);
             StackRuntimeView targetStack = null;
-            if (!isDeck && !stackViewsByContainerId.TryGetValue(targetDeckContainerId, out targetStack))
+            if (!isDeck && !Registry.stackViewsByContainerId.TryGetValue(targetDeckContainerId, out targetStack))
             {
                 ShowMessage("Shuffle rejected: Deck Presentation unavailable.");
                 return ShuffleDeckResult.Failure(
@@ -99,12 +99,12 @@ namespace ConsoleCards.Presentation.Composition
         public ControllerInputHandDrawResult DrawUpToConfiguredHandLimit()
         {
             EnsureInitialized();
-            TrapFloorPlayerSetupDefinition player = GetAssistedTrapFloorPlayerSetup();
+            TrapFloorPlayerSetupDefinition player = TrapFloorGame.GetAssistedTrapFloorPlayerSetup();
             if (matchState.Containers.TryGetValue(player.HandContainerId, out ContainerState capHand))
             {
                 // Draw To Hand Limit fills the hand up to the player's hand cap; the game's own limit is
                 // shown as advisory text in the DRAW popup.
-                return DrawControllerCardsUpToComfortCap(player, capHand);
+                return ContextMenus.DrawControllerCardsUpToComfortCap(player, capHand);
             }
 
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
@@ -132,7 +132,7 @@ namespace ConsoleCards.Presentation.Composition
             int requestedCount = count;
             // H1: a draw from a player's own deck fills that player's hand, whoever's turn it is.
             ContainerId targetHandId = DrawTargetHandFor(sourceDeckContainerId);
-            count = ClampToHandComfortCap(targetHandId, count);
+            count = ContextMenus.ClampToHandComfortCap(targetHandId, count);
             if (count <= 0)
             {
                 ShowMessage(handComfortSettings.ReachedMessage + ".");
@@ -145,7 +145,7 @@ namespace ConsoleCards.Presentation.Composition
                 CaptureContainerCardTransforms(sourceDeckContainerId, targetHandId);
             DrawCardsResult result = TableAuthority.Submit<DrawCardsCommand, DrawCardsResult>(
                 new DrawCardsCommand(CreateCommandContext(), sourceDeckContainerId, targetHandId, count));
-            TryGetDeckPresentation(sourceDeckContainerId, out DeckView sourceDeckView, out _);
+            Registry.TryGetDeckPresentation(sourceDeckContainerId, out DeckView sourceDeckView, out _);
             if (result.Succeeded)
             {
                 if (sourceDeckView != null) sourceDeckView.ApplyAcceptedLayout();
@@ -160,7 +160,7 @@ namespace ConsoleCards.Presentation.Composition
                     && trapFloorTurnState != null
                     && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
                     && !trapFloorTurnState.IsCurrentFloorFailed
-                    && (!TryGetTrapFloorPlayerSetup(trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition activeSetup)
+                    && (!TrapFloorGame.TryGetTrapFloorPlayerSetup(trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition activeSetup)
                         || activeSetup.HandContainerId != targetHandId))
                 {
                     whose += " (not their turn)";
@@ -217,7 +217,7 @@ namespace ConsoleCards.Presentation.Composition
             return SplitStack(source, sourceView);
         }
 
-        private SplitStackResult SplitStack(ContainerState source, StackRuntimeView sourceView)
+        internal SplitStackResult SplitStack(ContainerState source, StackRuntimeView sourceView)
         {
             EnsureInitialized();
             if (source == null
@@ -226,7 +226,7 @@ namespace ConsoleCards.Presentation.Composition
                 || source.Count < 2
                 || !matchState.Containers.TryGetValue(source.Id, out ContainerState authoritativeSource)
                 || !ReferenceEquals(authoritativeSource, source)
-                || !stackViewsByContainerId.TryGetValue(source.Id, out StackRuntimeView authoritativeView)
+                || !Registry.stackViewsByContainerId.TryGetValue(source.Id, out StackRuntimeView authoritativeView)
                 || !ReferenceEquals(authoritativeView, sourceView))
             {
                 ShowMessage("Split unavailable.");
@@ -236,7 +236,7 @@ namespace ConsoleCards.Presentation.Composition
             int firstMovedIndex = Math.Max(1, source.Count / 2);
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(source.Id);
-            ContainerId newStackId = CreateDeterministicDynamicStackId(dynamicStackSequence++);
+            ContainerId newStackId = Spawner.CreateDeterministicDynamicStackId(dynamicStackSequence++);
             TabletopPose sourcePose = sourceView.Placement.Pose;
             TabletopPose newPose = new TabletopPose(
                 new TableCoordinate(sourcePose.Position.X + 1.4d, sourcePose.Position.Y + 0.9d),
@@ -253,12 +253,12 @@ namespace ConsoleCards.Presentation.Composition
 
             if (result.Succeeded)
             {
-                StackRuntimeView newStackView = CreateStackRuntimeView(
-                    $"Stack {stackViewsByContainerId.Count + 1}",
+                StackRuntimeView newStackView = Spawner.CreateStackRuntimeView(
+                    $"Stack {Registry.stackViewsByContainerId.Count + 1}",
                     matchState.GetContainer(newStackId),
                     matchState.ContainerPlacements[newStackId],
                     true);
-                stackViewsByContainerId.Add(newStackId, newStackView);
+                Registry.stackViewsByContainerId.Add(newStackId, newStackView);
                 primaryStackContainerId = newStackId;
                 sourceView.View.ApplyAcceptedLayout();
                 newStackView.View.ApplyAcceptedLayout();
@@ -295,7 +295,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             ContainerId containerId = selectedCard.CardState.BaseState.ContainerId;
-            if (!stackViewsByContainerId.ContainsKey(containerId))
+            if (!Registry.stackViewsByContainerId.ContainsKey(containerId))
             {
                 ShowMessage("Selected Card is not in a Stack.");
                 return ReorderContainerResult.Failure(CommandResultStatus.Rejected, ReorderContainerError.ContainerMissing);
@@ -401,11 +401,11 @@ namespace ConsoleCards.Presentation.Composition
             return result;
         }
 
-        private MergeStacksResult MergeStacks(ContainerId sourceId, ContainerId destinationId)
+        internal MergeStacksResult MergeStacks(ContainerId sourceId, ContainerId destinationId)
         {
             EnsureInitialized();
-            if (!stackViewsByContainerId.ContainsKey(sourceId)
-                || !stackViewsByContainerId.ContainsKey(destinationId)
+            if (!Registry.stackViewsByContainerId.ContainsKey(sourceId)
+                || !Registry.stackViewsByContainerId.ContainsKey(destinationId)
                 || !matchState.Containers.ContainsKey(sourceId)
                 || !matchState.Containers.ContainsKey(destinationId))
             {
@@ -419,7 +419,7 @@ namespace ConsoleCards.Presentation.Composition
                 new MergeStacksCommand(CreateCommandContext(), sourceId, destinationId));
             if (result.Succeeded)
             {
-                StackRuntimeView destinationView = stackViewsByContainerId[destinationId];
+                StackRuntimeView destinationView = Registry.stackViewsByContainerId[destinationId];
                 RemoveStackRuntimeView(sourceId);
                 destinationView.View.ApplyAcceptedLayout();
                 presentationTransitions.AnimateCardsFromCurrentResults(
@@ -432,8 +432,8 @@ namespace ConsoleCards.Presentation.Composition
             }
             else
             {
-                stackViewsByContainerId[sourceId].View.ApplyAcceptedLayout();
-                stackViewsByContainerId[destinationId].View.ApplyAcceptedLayout();
+                Registry.stackViewsByContainerId[sourceId].View.ApplyAcceptedLayout();
+                Registry.stackViewsByContainerId[destinationId].View.ApplyAcceptedLayout();
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
                     returnDuration);
@@ -451,7 +451,7 @@ namespace ConsoleCards.Presentation.Composition
             CardView selectedCard = SelectionState.SelectedView as CardView;
             if (selectedCard != null
                 && selectedCard.CardState != null
-                && stackViewsByContainerId.TryGetValue(selectedCard.CardState.BaseState.ContainerId, out sourceView)
+                && Registry.stackViewsByContainerId.TryGetValue(selectedCard.CardState.BaseState.ContainerId, out sourceView)
                 && matchState.Containers.TryGetValue(selectedCard.CardState.BaseState.ContainerId, out source)
                 && source.Count >= 2)
             {
@@ -459,14 +459,14 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (!primaryStackContainerId.IsEmpty
-                && stackViewsByContainerId.TryGetValue(primaryStackContainerId, out sourceView)
+                && Registry.stackViewsByContainerId.TryGetValue(primaryStackContainerId, out sourceView)
                 && matchState.Containers.TryGetValue(primaryStackContainerId, out source)
                 && source.Count >= 2)
             {
                 return true;
             }
 
-            foreach (KeyValuePair<ContainerId, StackRuntimeView> pair in stackViewsByContainerId)
+            foreach (KeyValuePair<ContainerId, StackRuntimeView> pair in Registry.stackViewsByContainerId)
             {
                 if (matchState.Containers.TryGetValue(pair.Key, out source) && source.Count >= 2)
                 {
@@ -480,7 +480,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private void RemoveStackRuntimeView(ContainerId containerId)
         {
-            if (!stackViewsByContainerId.TryGetValue(containerId, out StackRuntimeView stackRuntimeView))
+            if (!Registry.stackViewsByContainerId.TryGetValue(containerId, out StackRuntimeView stackRuntimeView))
             {
                 return;
             }
@@ -490,7 +490,7 @@ namespace ConsoleCards.Presentation.Composition
             ResumeInteractionDependenciesAfterRebuild();
         }
 
-        private void ApplyLayout(ContainerId containerId)
+        internal void ApplyLayout(ContainerId containerId)
         {
             if (containerId.IsEmpty)
             {
@@ -501,38 +501,38 @@ namespace ConsoleCards.Presentation.Composition
             {
                 handView.ApplyAcceptedLayout();
             }
-            else if (stackViewsByContainerId.TryGetValue(containerId, out StackRuntimeView stackRuntimeView))
+            else if (Registry.stackViewsByContainerId.TryGetValue(containerId, out StackRuntimeView stackRuntimeView))
             {
                 stackRuntimeView.View.ApplyAcceptedLayout();
             }
             else
             {
-                for (int i = 0; i < hiddenHandViews.Count; i++)
+                for (int i = 0; i < Registry.hiddenHandViews.Count; i++)
                 {
-                    if (hiddenHandViews[i] != null && hiddenHandViews[i].ContainerId == containerId)
+                    if (Registry.hiddenHandViews[i] != null && Registry.hiddenHandViews[i].ContainerId == containerId)
                     {
-                        hiddenHandViews[i].ApplyAcceptedLayout();
+                        Registry.hiddenHandViews[i].ApplyAcceptedLayout();
                     }
                 }
 
-                for (int i = 0; i < controllerDeckViews.Count; i++)
+                for (int i = 0; i < Registry.controllerDeckViews.Count; i++)
                 {
-                    if (controllerDeckViews[i].ContainerId == containerId)
+                    if (Registry.controllerDeckViews[i].ContainerId == containerId)
                     {
-                        controllerDeckViews[i].ApplyAcceptedLayout();
+                        Registry.controllerDeckViews[i].ApplyAcceptedLayout();
                     }
                 }
 
-                if (TryGetRuntimeDiscardPile(containerId, out RuntimeDiscardPileInstance discardPile))
+                if (Registry.TryGetRuntimeDiscardPile(containerId, out RuntimeDiscardPileInstance discardPile))
                 {
                     discardPile.View.ApplyAcceptedLayout();
                 }
 
-                for (int i = 0; i < consoleSlotViews.Count; i++)
+                for (int i = 0; i < Registry.consoleSlotViews.Count; i++)
                 {
-                    if (consoleSlotViews[i].ContainerId == containerId)
+                    if (Registry.consoleSlotViews[i].ContainerId == containerId)
                     {
-                        consoleSlotViews[i].ApplyAcceptedLayout();
+                        Registry.consoleSlotViews[i].ApplyAcceptedLayout();
                     }
                 }
             }
@@ -540,59 +540,35 @@ namespace ConsoleCards.Presentation.Composition
             RefreshCardContentVisibility();
         }
 
-        private bool TryGetDeckPresentation(
-            ContainerId containerId,
-            out DeckView resolvedView,
-            out FixedContainerVisual resolvedVisual)
-        {
-            for (int i = 0; i < runtimeDeckInstances.Count; i++)
-            {
-                RuntimeDeckInstance instance = runtimeDeckInstances[i];
-                if (instance.ContainerId == containerId
-                    && instance.View != null
-                    && instance.View.IsBound
-                    && instance.Visual != null)
-                {
-                    resolvedView = instance.View;
-                    resolvedVisual = instance.Visual;
-                    return true;
-                }
-            }
-
-            resolvedView = null;
-            resolvedVisual = null;
-            return false;
-        }
-
         // A transfer into a pile with an arrival face (a Discard Pile) changes the Card's face in the same
         // command; show the accepted face. Runs once per accepted transfer, not per frame.
-        private void RefreshAcceptedCardFaces()
+        internal void RefreshAcceptedCardFaces()
         {
-            for (int i = 0; i < cardViews.Count; i++)
+            for (int i = 0; i < Registry.cardViews.Count; i++)
             {
-                CardView view = cardViews[i];
+                CardView view = Registry.cardViews[i];
                 if (view != null
                     && view.IsBound
                     && view.CardState != null
                     && view.IsFacePresentationConfigured
                     && view.DisplayedFace != view.CardState.Face
-                    && !IsInAnotherPlayersHand(view.CardState.BaseState.Id))
+                    && !ContextMenus.IsInAnotherPlayersHand(view.CardState.BaseState.Id))
                 {
                     view.ApplyAcceptedFacePresentation();
                 }
             }
         }
 
-        private void RefreshCardContentVisibility()
+        internal void RefreshCardContentVisibility()
         {
             if (matchState == null)
             {
                 return;
             }
 
-            for (int i = 0; i < cardVisualReferences.Count; i++)
+            for (int i = 0; i < Registry.cardVisualReferences.Count; i++)
             {
-                CardVisualReferences visualReferences = cardVisualReferences[i];
+                CardVisualReferences visualReferences = Registry.cardVisualReferences[i];
                 if (visualReferences == null)
                 {
                     continue;
@@ -611,7 +587,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private bool ShouldShowCardContent(CardInstanceState card)
+        internal bool ShouldShowCardContent(CardInstanceState card)
         {
             ContainerId containerId = card.BaseState.ContainerId;
             if (!containerId.IsEmpty
@@ -639,14 +615,14 @@ namespace ConsoleCards.Presentation.Composition
                 || kind == ContainerKind.DiscardPile;
         }
 
-        private IReadOnlyDictionary<Transform, TabletopTransformSnapshot> CaptureContainerCardTransforms(
+        internal IReadOnlyDictionary<Transform, TabletopTransformSnapshot> CaptureContainerCardTransforms(
             params ContainerId[] containerIds)
         {
             Dictionary<Transform, TabletopTransformSnapshot> starts =
                 new Dictionary<Transform, TabletopTransformSnapshot>();
-            for (int cardIndex = 0; cardIndex < cardViews.Count; cardIndex++)
+            for (int cardIndex = 0; cardIndex < Registry.cardViews.Count; cardIndex++)
             {
-                CardView candidate = cardViews[cardIndex];
+                CardView candidate = Registry.cardViews[cardIndex];
                 if (candidate == null || candidate.CardState == null)
                 {
                     continue;

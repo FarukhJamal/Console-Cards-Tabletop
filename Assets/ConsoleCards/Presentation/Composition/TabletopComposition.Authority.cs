@@ -56,7 +56,16 @@ namespace ConsoleCards.Presentation.Composition
     {
         private LocalTableAuthority tableAuthority;
 
-        private ITableAuthority TableAuthority
+        // Use cases that keep no state are made once: drags and physics submit often, and a new object per command
+        // would be garbage every time a piece moves.
+        private readonly MoveObjectUseCase moveObjectUseCase = new MoveObjectUseCase();
+        private readonly CommitPhysicalObjectUseCase commitPhysicalObjectUseCase = new CommitPhysicalObjectUseCase();
+        private readonly TransferCardUseCase transferCardUseCase = new TransferCardUseCase();
+        private readonly TransferTokenUseCase transferTokenUseCase = new TransferTokenUseCase();
+        private readonly RotateObjectUseCase rotateObjectUseCase = new RotateObjectUseCase();
+        private readonly FlipCardUseCase flipCardUseCase = new FlipCardUseCase();
+
+        internal ITableAuthority TableAuthority
         {
             get
             {
@@ -69,11 +78,19 @@ namespace ConsoleCards.Presentation.Composition
         {
             LocalTableAuthority authority = new LocalTableAuthority();
 
-            // Pieces and physics.
+            // Pieces and physics: drags, drops, turns, flips and physics commits (R1b part 2).
             authority.Register<MoveObjectCommand, MoveObjectResult>(
-                command => new MoveObjectUseCase().Execute(matchState, command));
+                command => moveObjectUseCase.Execute(matchState, command));
             authority.Register<CommitPhysicalObjectCommand, CommandResult>(
-                command => new CommitPhysicalObjectUseCase().Execute(matchState, activeSession.Request.ActivePlayerIds, command));
+                command => commitPhysicalObjectUseCase.Execute(matchState, activeSession.Request.ActivePlayerIds, command));
+            authority.Register<TransferCardCommand, TransferCardResult>(
+                command => transferCardUseCase.Execute(matchState, command));
+            authority.Register<TransferTokenCommand, TransferTokenResult>(
+                command => transferTokenUseCase.Execute(matchState, command));
+            authority.Register<RotateObjectCommand, RotateObjectResult>(
+                command => rotateObjectUseCase.Execute(matchState, command));
+            authority.Register<FlipCardCommand, FlipCardResult>(
+                command => flipCardUseCase.Execute(matchState, command));
             authority.Register<MoveContainerCommand, MoveContainerResult>(
                 command => new MoveContainerUseCase(physicalSurfaceQuery.ResolveContainerSurfaceHeight).Execute(matchState, command));
             authority.Register<FlipConsoleCommand, CommandResult>(

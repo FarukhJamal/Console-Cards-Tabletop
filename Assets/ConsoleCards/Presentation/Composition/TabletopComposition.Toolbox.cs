@@ -58,7 +58,7 @@ namespace ConsoleCards.Presentation.Composition
                 throw new InvalidOperationException("Component placement is not configured.");
             }
 
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             GameObject previewRoot = CreateToolboxPlacementPreview(componentKind, dieSideCount);
             float rotation = localSeatLayout != null
                 ? localSeatLayout.PlayerZonePose.RotationDegrees
@@ -83,7 +83,7 @@ namespace ConsoleCards.Presentation.Composition
 
         // A Toolbox pile takes its arrival face from the system pile style (doc 22, C2b): a Discard Pile turns
         // arriving Cards face down; a Deck or Stack keeps their face.
-        private static ContainerArrivalFace ToolboxArrivalFace(TabletopComponentKind componentKind)
+        internal static ContainerArrivalFace ToolboxArrivalFace(TabletopComponentKind componentKind)
         {
             switch (componentKind)
             {
@@ -100,11 +100,11 @@ namespace ConsoleCards.Presentation.Composition
 
         // A Toolbox tile was picked (doc 22, C2a). Cards: 1 places a loose card, 2 or more place one Deck of that
         // many face-down cards. Dice: the value is the chosen size. Everything else places its component.
-        private void PlaceCatalogEntry(ComponentCatalogEntry entry, int value)
+        internal void PlaceCatalogEntry(ComponentCatalogEntry entry, int value)
         {
             EnsureInitialized();
-            CloseContextMenu();
-            RaiseHint(HintTriggers.ToolboxPlacing, entry.Kind.ToString());
+            ContextMenus.CloseContextMenu();
+            RulesCardPanel.RaiseHint(HintTriggers.ToolboxPlacing, entry.Kind.ToString());
             toolboxPlacementIcon = entry.Icon;
             if (TryCollectRealCards(entry, value, out List<ObjectDefinitionId> realCards))
             {
@@ -220,7 +220,7 @@ namespace ConsoleCards.Presentation.Composition
             return true;
         }
 
-        private void BeginRealCardsPlacement(string subject, List<ObjectDefinitionId> cards)
+        internal void BeginRealCardsPlacement(string subject, List<ObjectDefinitionId> cards)
         {
             bool single = cards.Count == 1;
             GameObject previewRoot = single
@@ -241,7 +241,7 @@ namespace ConsoleCards.Presentation.Composition
 
         // One command: the real card, or the Deck with its real face-down cards, so one Undo removes it. A saved
         // table (doc 29) also lays out cards with their face, decks of one card and the deck's arrival style, quietly.
-        private bool CommitRealCardsPlacement(
+        internal bool CommitRealCardsPlacement(
             string subject,
             List<ObjectDefinitionId> cards,
             TabletopPose requestedPose,
@@ -269,13 +269,13 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             toolboxSpawnSequence++;
-            lastPlacedContainerId = result.ContainerId; // doc 29: the game's deck is found by it
+            PlayerGamesPanel.lastPlacedContainerId = result.ContainerId; // doc 29: the game's deck is found by it
             for (int i = 0; i < result.CardIds.Count; i++)
             {
                 CardInstanceState created = matchState.Cards[result.CardIds[i]];
-                CardView view = CreateCardView(created, ResolveCardLabel(created), out TabletopSelectionVisual selectionVisual);
-                cardViews.Add(view);
-                cardSelectionVisuals.Add(selectionVisual);
+                CardView view = Spawner.CreateCardView(created, ResolveCardLabel(created), out TabletopSelectionVisual selectionVisual);
+                Registry.cardViews.Add(view);
+                Registry.cardSelectionVisuals.Add(selectionVisual);
             }
 
             RefreshContainerCardViewSources();
@@ -326,12 +326,12 @@ namespace ConsoleCards.Presentation.Composition
             // The new cards need their Views before the Deck View binds (it resolves every member card).
             for (int i = 0; i < result.CardIds.Count; i++)
             {
-                CardView view = CreateCardView(
+                CardView view = Spawner.CreateCardView(
                     matchState.Cards[result.CardIds[i]],
                     "CARD",
                     out TabletopSelectionVisual selectionVisual);
-                cardViews.Add(view);
-                cardSelectionVisuals.Add(selectionVisual);
+                Registry.cardViews.Add(view);
+                Registry.cardSelectionVisuals.Add(selectionVisual);
             }
 
             RefreshContainerCardViewSources();
@@ -345,7 +345,7 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // The Deck ghost (its bay with the Draw mark) with up to 12 card ghosts stacked inside it.
-        private GameObject CreateDeckOfCardsPlacementPreview(int quantity)
+        internal GameObject CreateDeckOfCardsPlacementPreview(int quantity)
         {
             GameObject previewRoot = CreateToolboxPlacementPreview(TabletopComponentKind.Deck, 0);
             int shown = Mathf.Min(quantity, 12);
@@ -367,7 +367,7 @@ namespace ConsoleCards.Presentation.Composition
         private void OpenCardQuantityPopup()
         {
             EnsureInitialized();
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             selectedQuantity = Mathf.Clamp(
                 selectedQuantity,
                 1,
@@ -382,10 +382,10 @@ namespace ConsoleCards.Presentation.Composition
                 () => ChangeSelectedQuantity(-1, GenericCardBatchLayout.MaximumLooseBatchQuantity),
                 () => ChangeSelectedQuantity(1, GenericCardBatchLayout.MaximumLooseBatchQuantity),
                 ConfirmCardQuantity,
-                CloseContextMenu);
+                ContextMenus.CloseContextMenu);
         }
 
-        private void ChangeSelectedQuantity(int delta, int maximum)
+        internal void ChangeSelectedQuantity(int delta, int maximum)
         {
             selectedQuantity = Mathf.Clamp(selectedQuantity + delta, 1, maximum);
             runtimeUi?.SetQuantityPopupValue(selectedQuantity, 1, maximum);
@@ -448,7 +448,7 @@ namespace ConsoleCards.Presentation.Composition
                 CreateNextToolboxSpawnPose());
         }
 
-        private CreateTabletopComponentResult AddToolboxComponentAtPose(
+        internal CreateTabletopComponentResult AddToolboxComponentAtPose(
             TabletopComponentKind componentKind,
             int dieSideCount,
             TabletopPose requestedPose,
@@ -485,7 +485,7 @@ namespace ConsoleCards.Presentation.Composition
             return AddToolboxComponentAtPose(componentKind, dieSideCount, requestedPose).Succeeded;
         }
 
-        private void BeginDuplicatePlacement(TabletopObjectId sourceObjectId)
+        internal void BeginDuplicatePlacement(TabletopObjectId sourceObjectId)
         {
             EnsureInitialized();
             if (componentPlacementController == null)
@@ -496,7 +496,7 @@ namespace ConsoleCards.Presentation.Composition
             if (sourceObjectId.IsEmpty || !matchState.ContainsObject(sourceObjectId))
             {
                 ShowMessage("Duplicate rejected: SourceMissing.");
-                CloseContextMenu();
+                ContextMenus.CloseContextMenu();
                 return;
             }
 
@@ -504,7 +504,7 @@ namespace ConsoleCards.Presentation.Composition
             if (!sourceState.ContainerId.IsEmpty)
             {
                 ShowMessage("Duplicate rejected: SourceMustBeLoose.");
-                CloseContextMenu();
+                ContextMenus.CloseContextMenu();
                 return;
             }
 
@@ -515,12 +515,12 @@ namespace ConsoleCards.Presentation.Composition
                     out int dieSideCount))
             {
                 ShowMessage("Duplicate rejected: SourceKindUnsupported.");
-                CloseContextMenu();
+                ContextMenus.CloseContextMenu();
                 return;
             }
 
             GameObject previewRoot = CreateToolboxPlacementPreview(componentKind, dieSideCount);
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             componentPlacementController.BeginCustomComponentPlacement(
                 componentKind,
                 previewRoot,
@@ -584,7 +584,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private void BeginContainerMove(ContainerId containerId)
+        internal void BeginContainerMove(ContainerId containerId)
         {
             EnsureInitialized();
             if (componentPlacementController == null)
@@ -624,7 +624,7 @@ namespace ConsoleCards.Presentation.Composition
             List<GameObjectActivationSnapshot> sourceVisibility = HideContainerMoveSource(
                 sourceRoot,
                 new[] { containerId });
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             try
             {
                 componentPlacementController.BeginContainerMove(
@@ -673,7 +673,7 @@ namespace ConsoleCards.Presentation.Composition
             return true;
         }
 
-        private void BeginConsoleMove(ContainerId slotContainerId)
+        internal void BeginConsoleMove(ContainerId slotContainerId)
         {
             EnsureInitialized();
             if (componentPlacementController == null)
@@ -696,7 +696,7 @@ namespace ConsoleCards.Presentation.Composition
             List<GameObjectActivationSnapshot> sourceVisibility = HideContainerMoveSource(
                 sourceView.gameObject,
                 sourceView.ConsoleState.SlotContainerIds);
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             try
             {
                 componentPlacementController.BeginContainerMove(
@@ -727,14 +727,14 @@ namespace ConsoleCards.Presentation.Composition
             out GameObject sourceRoot)
         {
             if (containerKind == ContainerKind.Deck
-                && TryGetDeckPresentation(containerId, out _, out FixedContainerVisual deckVisual))
+                && Registry.TryGetDeckPresentation(containerId, out _, out FixedContainerVisual deckVisual))
             {
                 sourceRoot = deckVisual.gameObject;
                 return true;
             }
 
             if (containerKind == ContainerKind.Stack
-                && stackViewsByContainerId.TryGetValue(containerId, out StackRuntimeView stackView)
+                && Registry.stackViewsByContainerId.TryGetValue(containerId, out StackRuntimeView stackView)
                 && stackView.Root != null)
             {
                 sourceRoot = stackView.Root;
@@ -742,7 +742,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (containerKind == ContainerKind.DiscardPile
-                && TryGetRuntimeDiscardPile(containerId, out RuntimeDiscardPileInstance discardPile)
+                && Registry.TryGetRuntimeDiscardPile(containerId, out RuntimeDiscardPileInstance discardPile)
                 && discardPile.Root != null)
             {
                 sourceRoot = discardPile.Root;
@@ -771,7 +771,7 @@ namespace ConsoleCards.Presentation.Composition
 
                 for (int objectIndex = 0; objectIndex < memberContainer.ObjectIds.Count; objectIndex++)
                 {
-                    if (TryGetCardView(memberContainer.ObjectIds[objectIndex], out CardView card))
+                    if (Registry.TryGetCardView(memberContainer.ObjectIds[objectIndex], out CardView card))
                     {
                         CaptureActivation(card.gameObject, snapshots, capturedObjects);
                     }
@@ -1023,7 +1023,7 @@ namespace ConsoleCards.Presentation.Composition
                     throw new ArgumentOutOfRangeException(nameof(componentKind));
             }
 
-            PrepareRuntimeRoot(previewRoot, $"{componentKind} Placement Preview");
+            Spawner.PrepareRuntimeRoot(previewRoot, $"{componentKind} Placement Preview");
             DisablePlacementPreviewInteraction(previewRoot);
             TintPlacementPreview(previewRoot);
             return previewRoot;
@@ -1032,7 +1032,7 @@ namespace ConsoleCards.Presentation.Composition
         private GameObject CreateCardBatchPlacementPreview(int quantity)
         {
             GameObject previewRoot = new GameObject("Card Batch Placement Preview");
-            PrepareRuntimeRoot(previewRoot, previewRoot.name);
+            Spawner.PrepareRuntimeRoot(previewRoot, previewRoot.name);
             TabletopPose origin = TabletopPose.Default;
             for (int i = 0; i < quantity; i++)
             {
@@ -1129,9 +1129,9 @@ namespace ConsoleCards.Presentation.Composition
                 case TabletopComponentKind.Card:
                 {
                     CardInstanceState card = matchState.Cards[result.ObjectId];
-                    CardView view = CreateCardView(card, ResolveCardLabel(card), out TabletopSelectionVisual selectionVisual);
-                    cardViews.Add(view);
-                    cardSelectionVisuals.Add(selectionVisual);
+                    CardView view = Spawner.CreateCardView(card, ResolveCardLabel(card), out TabletopSelectionVisual selectionVisual);
+                    Registry.cardViews.Add(view);
+                    Registry.cardSelectionVisuals.Add(selectionVisual);
                     RefreshContainerCardViewSources();
                     appearedTransform = view.transform;
                     break;
@@ -1150,34 +1150,34 @@ namespace ConsoleCards.Presentation.Composition
                     break;
                 case TabletopComponentKind.Pawn:
                 {
-                    PawnView view = CreatePawnView(
+                    PawnView view = Spawner.CreatePawnView(
                         matchState.Pawns[result.ObjectId],
                         out TabletopSelectionVisual selectionVisual);
-                    pawnViews.Add(view);
-                    pawnSelectionVisuals.Add(selectionVisual);
+                    Registry.pawnViews.Add(view);
+                    Registry.pawnSelectionVisuals.Add(selectionVisual);
                     appearedTransform = view.transform;
                     break;
                 }
                 case TabletopComponentKind.Token:
                 {
-                    TokenView view = CreateTokenView(
+                    TokenView view = Spawner.CreateTokenView(
                         matchState.Tokens[result.ObjectId],
                         out TabletopSelectionVisual selectionVisual,
                         1f);
-                    tokenViews.Add(view);
-                    tokenSelectionVisuals.Add(selectionVisual);
+                    Registry.tokenViews.Add(view);
+                    Registry.tokenSelectionVisuals.Add(selectionVisual);
                     appearedTransform = view.transform;
                     break;
                 }
                 case TabletopComponentKind.Die:
                 {
                     DieState die = matchState.Dice[result.ObjectId];
-                    DieView view = CreateDieView(
+                    DieView view = Spawner.CreateDieView(
                         die,
                         $"d{die.SideCount}",
                         out TabletopSelectionVisual selectionVisual);
-                    dieViews.Add(view);
-                    dieSelectionVisuals.Add(selectionVisual);
+                    Registry.dieViews.Add(view);
+                    Registry.dieSelectionVisuals.Add(selectionVisual);
                     appearedTransform = view.transform;
                     break;
                 }
@@ -1205,13 +1205,13 @@ namespace ConsoleCards.Presentation.Composition
         // rebuild or appear animation here; the callers do that.
         private Transform ProjectToolboxDeck(ContainerId containerId)
         {
-            RuntimeDeckInstance instance = CreateRuntimeDeckInstance(
+            RuntimeDeckInstance instance = Spawner.CreateRuntimeDeckInstance(
                 "Toolbox Deck",
                 "DECK",
                 containerId,
                 true);
-            runtimeDeckInstances.Add(instance);
-            controllerDeckViews.Add(instance.View);
+            Registry.runtimeDeckInstances.Add(instance);
+            Registry.controllerDeckViews.Add(instance.View);
             GameTemplatePileStyle toolboxDeckStyle = GameTemplatePileStyle.DefaultFor(ContainerKind.Deck);
             instance.View.ConfigureTableRest(true, toolboxDeckStyle.MaximumPileHeight);
             ConfigurePileBay(instance.Visual, toolboxDeckStyle, SeatId.Empty);
@@ -1219,7 +1219,7 @@ namespace ConsoleCards.Presentation.Composition
                 matchState.GetContainer(containerId),
                 matchState.ContainerPlacements[containerId],
                 coordinateConverter,
-                cardViews);
+                Registry.cardViews);
             ConfigureFixedContainer(instance.Visual, instance.View);
             return instance.Root.transform;
         }
@@ -1228,18 +1228,18 @@ namespace ConsoleCards.Presentation.Composition
         {
             ContainerState container = matchState.GetContainer(containerId);
             ContainerPlacementState placement = matchState.ContainerPlacements[containerId];
-            StackRuntimeView stack = CreateStackRuntimeView(name, container, placement, true);
-            stackViewsByContainerId.Add(containerId, stack);
+            StackRuntimeView stack = Spawner.CreateStackRuntimeView(name, container, placement, true);
+            Registry.stackViewsByContainerId.Add(containerId, stack);
             return stack.Root.transform;
         }
 
         private Transform ProjectToolboxConsole(PlacedConsoleState placedConsole)
         {
-            RuntimeConsoleInstance instance = CreateRuntimeConsoleInstance(
+            RuntimeConsoleInstance instance = Spawner.CreateRuntimeConsoleInstance(
                 "Toolbox Console",
                 placedConsole);
-            runtimeConsoleInstances.Add(instance);
-            playerConsoleViews.Add(instance.View);
+            Registry.runtimeConsoleInstances.Add(instance);
+            Registry.playerConsoleViews.Add(instance.View);
             BindConsole(
                 instance.View,
                 placedConsole.Console,
@@ -1262,7 +1262,7 @@ namespace ConsoleCards.Presentation.Composition
             GameTemplatePileStyle style = ResolveTemplatePileStyle(containerId)
                 ?? GameTemplatePileStyle.DefaultFor(ContainerKind.DiscardPile);
             FixedContainerVisual visual = Instantiate(catalogDiscardPilePrefab);
-            GameObject root = PrepareRuntimeRoot(
+            GameObject root = Spawner.PrepareRuntimeRoot(
                 visual.gameObject,
                 matchState.IsTemplateContainer(containerId) ? "Template Discard Pile" : "Toolbox Discard Pile");
             visual.ValidateReferences();
@@ -1276,9 +1276,9 @@ namespace ConsoleCards.Presentation.Composition
                 container,
                 matchState.ContainerPlacements[containerId],
                 coordinateConverter,
-                cardViews);
+                Registry.cardViews);
             ConfigureFixedContainer(visual, view);
-            runtimeDiscardPileInstances.Add(new RuntimeDiscardPileInstance(root, visual, view, containerId));
+            Registry.runtimeDiscardPileInstances.Add(new RuntimeDiscardPileInstance(root, visual, view, containerId));
             return root.transform;
         }
 
@@ -1302,7 +1302,7 @@ namespace ConsoleCards.Presentation.Composition
                 {
                     case ContainerKind.Deck:
                         if (!matchState.IsTemplateContainer(containerId)
-                            && !TryGetDeckPresentation(containerId, out _, out _))
+                            && !Registry.TryGetDeckPresentation(containerId, out _, out _))
                         {
                             ProjectToolboxDeck(containerId);
                         }
@@ -1310,14 +1310,14 @@ namespace ConsoleCards.Presentation.Composition
                         break;
                     case ContainerKind.Stack:
                         if (!matchState.IsTemplateContainer(containerId)
-                            && !stackViewsByContainerId.ContainsKey(containerId))
+                            && !Registry.stackViewsByContainerId.ContainsKey(containerId))
                         {
                             ProjectToolboxStack(containerId, "STACK");
                         }
 
                         break;
                     case ContainerKind.DiscardPile:
-                        if (!TryGetRuntimeDiscardPile(containerId, out _))
+                        if (!Registry.TryGetRuntimeDiscardPile(containerId, out _))
                         {
                             ProjectDiscardPile(containerId);
                         }
@@ -1329,9 +1329,9 @@ namespace ConsoleCards.Presentation.Composition
             foreach (PlacedConsoleState placedConsole in matchState.PlacedConsoles.Values)
             {
                 bool projected = false;
-                for (int i = 0; i < runtimeConsoleInstances.Count; i++)
+                for (int i = 0; i < Registry.runtimeConsoleInstances.Count; i++)
                 {
-                    if (runtimeConsoleInstances[i].ConsoleId == placedConsole.Id)
+                    if (Registry.runtimeConsoleInstances[i].ConsoleId == placedConsole.Id)
                     {
                         projected = true;
                         break;
@@ -1347,25 +1347,9 @@ namespace ConsoleCards.Presentation.Composition
             AssignPileBayMouthTargets();
         }
 
-        private bool TryGetRuntimeDiscardPile(ContainerId containerId, out RuntimeDiscardPileInstance instance)
-        {
-            for (int i = 0; i < runtimeDiscardPileInstances.Count; i++)
-            {
-                if (runtimeDiscardPileInstances[i].ContainerId == containerId
-                    && runtimeDiscardPileInstances[i].View != null)
-                {
-                    instance = runtimeDiscardPileInstances[i];
-                    return true;
-                }
-            }
-
-            instance = null;
-            return false;
-        }
-
         private void ReleaseRuntimeDiscardPileInstance(int index)
         {
-            RuntimeDiscardPileInstance instance = runtimeDiscardPileInstances[index];
+            RuntimeDiscardPileInstance instance = Registry.runtimeDiscardPileInstances[index];
             GameObject root = instance.Root;
             FixedContainerVisual visual = instance.Visual;
             DiscardPileView view = instance.View;
@@ -1383,18 +1367,18 @@ namespace ConsoleCards.Presentation.Composition
                 view.Unbind();
             }
 
-            layoutViews.Remove(view);
+            Registry.layoutViews.Remove(view);
             feedbackTargetsByContainerId.Remove(instance.ContainerId);
-            runtimeDiscardPileInstances.RemoveAt(index);
+            Registry.runtimeDiscardPileInstances.RemoveAt(index);
             instance.ClearReferences();
             DestroyRuntimeOwnedGameObject(root);
         }
 
         private void ReleaseRuntimeDiscardPileInstance(ContainerId containerId)
         {
-            for (int i = runtimeDiscardPileInstances.Count - 1; i >= 0; i--)
+            for (int i = Registry.runtimeDiscardPileInstances.Count - 1; i >= 0; i--)
             {
-                if (runtimeDiscardPileInstances[i].ContainerId == containerId)
+                if (Registry.runtimeDiscardPileInstances[i].ContainerId == containerId)
                 {
                     ReleaseRuntimeDiscardPileInstance(i);
                     return;
@@ -1404,15 +1388,15 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ReleaseRuntimeDiscardPileInstances()
         {
-            while (runtimeDiscardPileInstances.Count > 0)
+            while (Registry.runtimeDiscardPileInstances.Count > 0)
             {
-                ReleaseRuntimeDiscardPileInstance(runtimeDiscardPileInstances.Count - 1);
+                ReleaseRuntimeDiscardPileInstance(Registry.runtimeDiscardPileInstances.Count - 1);
             }
         }
 
         // ---------- Empty Table hand (doc 22, H-E) ----------
 
-        private bool HasLocalHand()
+        internal bool HasLocalHand()
         {
             return handView != null && handView.IsBound && !handContainerId.IsEmpty;
         }
@@ -1448,7 +1432,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             handContainerId = emptyTableHandContainerId;
-            localHandVisual = CreateLocalHandVisual();
+            localHandVisual = Spawner.CreateLocalHandVisual();
             handView = localHandVisual.GetView<HandView>();
             handView.ConfigurePresentation(presentationTransitions, localHandVisual.FeedbackRenderer);
             if (handTrayRig == null)
@@ -1461,7 +1445,7 @@ namespace ConsoleCards.Presentation.Composition
 
             handTrayRig.Activate();
             handView.ConfigureTray(handTrayRig);
-            handView.Bind(hand, localHandVisual.LayoutAnchor, coordinateConverter, cardViews);
+            handView.Bind(hand, localHandVisual.LayoutAnchor, coordinateConverter, Registry.cardViews);
             ConfigureContainerLabel(localHandVisual.Label, "HAND");
             ConfigureHandTrayDropTarget();
             RefreshCardContentVisibility();
@@ -1469,7 +1453,7 @@ namespace ConsoleCards.Presentation.Composition
 
         // The Toolbox footer's Hand switch. Off: the Hand's cards go to the table as one face-down Deck (one Undo
         // step); the table is then rebuilt without the Hand. On: the table is rebuilt with it.
-        private void SetEmptyTableHandEnabled(bool enabled)
+        internal void SetEmptyTableHandEnabled(bool enabled)
         {
             if (!IsInitialized
                 || activeSession == null
@@ -1483,11 +1467,11 @@ namespace ConsoleCards.Presentation.Composition
             if (interactionRouter != null && interactionRouter.HasActiveInteraction)
             {
                 ShowMessage("Finish the current move first.");
-                ShowActiveSessionUi();
+                SessionService.ShowActiveSessionUi();
                 return;
             }
 
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             componentPlacementController?.Cancel();
             string message = enabled ? "Hand on." : "Hand off.";
             ContainerState hand = matchState.GetContainer(emptyTableHandContainerId);
@@ -1502,7 +1486,7 @@ namespace ConsoleCards.Presentation.Composition
                 if (!result.Succeeded)
                 {
                     ShowMessage($"Hand off rejected: {result.Error}.");
-                    ShowActiveSessionUi();
+                    SessionService.ShowActiveSessionUi();
                     return;
                 }
 
@@ -1525,19 +1509,19 @@ namespace ConsoleCards.Presentation.Composition
             {
                 Shutdown(true);
                 InitializeActiveSession(false);
-                ShowActiveSessionUi();
+                SessionService.ShowActiveSessionUi();
             }
             finally
             {
                 rebuildingFromUndo = false;
-                RefreshUndoUi();
+                SessionService.RefreshUndoUi();
             }
         }
 
         // Deck right-click "Draw to Hand": a count, then the draw goes from the top of the deck into the local Hand.
-        private void OpenDrawToHandPopup(ContainerId deckId)
+        internal void OpenDrawToHandPopup(ContainerId deckId)
         {
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             if (!HasLocalHand() || !matchState.Containers.TryGetValue(deckId, out ContainerState deck) || deck.Count == 0)
             {
                 ShowMessage("Draw to Hand is unavailable.");
@@ -1561,7 +1545,7 @@ namespace ConsoleCards.Presentation.Composition
                     runtimeUi?.CloseTabletopPopup();
                     DrawCards(deckId, count);
                 },
-                CloseContextMenu);
+                ContextMenus.CloseContextMenu);
         }
 
         private void ProjectCreatedCardBatch(IReadOnlyList<TabletopObjectId> cardIds)
@@ -1570,9 +1554,9 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < cardIds.Count; i++)
             {
                 CardInstanceState card = matchState.Cards[cardIds[i]];
-                CardView view = CreateCardView(card, "CARD", out TabletopSelectionVisual selectionVisual);
-                cardViews.Add(view);
-                cardSelectionVisuals.Add(selectionVisual);
+                CardView view = Spawner.CreateCardView(card, "CARD", out TabletopSelectionVisual selectionVisual);
+                Registry.cardViews.Add(view);
+                Registry.cardSelectionVisuals.Add(selectionVisual);
                 appearedTransforms.Add(view.transform);
             }
 
@@ -1587,20 +1571,20 @@ namespace ConsoleCards.Presentation.Composition
             Physics.SyncTransforms();
         }
 
-        private void ProjectPopulatedDeckCards(
+        internal void ProjectPopulatedDeckCards(
             ContainerId deckContainerId,
             IReadOnlyList<TabletopObjectId> cardIds)
         {
             for (int i = 0; i < cardIds.Count; i++)
             {
                 CardInstanceState card = matchState.Cards[cardIds[i]];
-                CardView view = CreateCardView(card, "CARD", out TabletopSelectionVisual selectionVisual);
-                cardViews.Add(view);
-                cardSelectionVisuals.Add(selectionVisual);
+                CardView view = Spawner.CreateCardView(card, "CARD", out TabletopSelectionVisual selectionVisual);
+                Registry.cardViews.Add(view);
+                Registry.cardSelectionVisuals.Add(selectionVisual);
             }
 
             RefreshContainerCardViewSources();
-            if (!TryGetDeckPresentation(deckContainerId, out DeckView deck, out _))
+            if (!Registry.TryGetDeckPresentation(deckContainerId, out DeckView deck, out _))
             {
                 throw new InvalidOperationException("Populated Deck has no Presentation binding.");
             }
@@ -1611,12 +1595,12 @@ namespace ConsoleCards.Presentation.Composition
             Physics.SyncTransforms();
         }
 
-        private void ProjectDeletedComponent(DeleteTabletopComponentResult result)
+        internal void ProjectDeletedComponent(DeleteTabletopComponentResult result)
         {
             if (result.ComponentKind == TabletopComponentKind.Card
                 && inspectedCardId == result.Target.ObjectId)
             {
-                CloseCardInspect();
+                CardInspectPanel.CloseCardInspect();
             }
 
             selectionState.ClearAll();
@@ -1634,16 +1618,16 @@ namespace ConsoleCards.Presentation.Composition
                 case TabletopComponentKind.Pawn:
                     ReleaseRuntimeObjectInstance(
                         result.Target.ObjectId,
-                        runtimePawnInstances,
-                        pawnViews,
-                        pawnSelectionVisuals);
+                        Registry.runtimePawnInstances,
+                        Registry.pawnViews,
+                        Registry.pawnSelectionVisuals);
                     break;
                 case TabletopComponentKind.Token:
                     ReleaseRuntimeObjectInstance(
                         result.Target.ObjectId,
-                        runtimeTokenInstances,
-                        tokenViews,
-                        tokenSelectionVisuals);
+                        Registry.runtimeTokenInstances,
+                        Registry.tokenViews,
+                        Registry.tokenSelectionVisuals);
                     if (!result.PreviousContainerId.IsEmpty)
                     {
                         ApplyTokenContainerLayout(result.PreviousContainerId);
@@ -1652,9 +1636,9 @@ namespace ConsoleCards.Presentation.Composition
                 case TabletopComponentKind.Die:
                     ReleaseRuntimeObjectInstance(
                         result.Target.ObjectId,
-                        runtimeDieInstances,
-                        dieViews,
-                        dieSelectionVisuals);
+                        Registry.runtimeDieInstances,
+                        Registry.dieViews,
+                        Registry.dieSelectionVisuals);
                     break;
                 case TabletopComponentKind.Deck:
                     SuspendInteractionDependenciesForRebuild();
@@ -1694,9 +1678,9 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ApplyTokenContainerLayout(ContainerId containerId)
         {
-            for (int i = 0; i < tokenContainerViews.Count; i++)
+            for (int i = 0; i < Registry.tokenContainerViews.Count; i++)
             {
-                TokenContainerView view = tokenContainerViews[i];
+                TokenContainerView view = Registry.tokenContainerViews[i];
                 if (view != null && view.IsBound && view.ContainerId == containerId)
                 {
                     view.ApplyAcceptedLayout();
@@ -1705,28 +1689,28 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private void RefreshContainerCardViewSources()
+        internal void RefreshContainerCardViewSources()
         {
-            for (int i = 0; i < layoutViews.Count; i++)
+            for (int i = 0; i < Registry.layoutViews.Count; i++)
             {
-                IContainerLayoutView layoutView = layoutViews[i];
+                IContainerLayoutView layoutView = Registry.layoutViews[i];
                 if (layoutView != null && layoutView.IsBound)
                 {
-                    layoutView.SetCardViews(cardViews);
+                    layoutView.SetCardViews(Registry.cardViews);
                 }
             }
         }
 
-        private void RefreshSelectionPresenterAfterRuntimeProjection()
+        internal void RefreshSelectionPresenterAfterRuntimeProjection()
         {
             RegisterPhysicalViews();
             inputFrameCoordinator.ClearSelectionPresenter();
             selectionPresenter = new TabletopSelectionPresenter(
                 selectionState,
-                cardSelectionVisuals,
-                pawnSelectionVisuals,
-                tokenSelectionVisuals,
-                dieSelectionVisuals);
+                Registry.cardSelectionVisuals,
+                Registry.pawnSelectionVisuals,
+                Registry.tokenSelectionVisuals,
+                Registry.dieSelectionVisuals);
             inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
             selectionPresenter.Refresh();
         }
@@ -1749,7 +1733,7 @@ namespace ConsoleCards.Presentation.Composition
             runtimeUi?.ClearPlacementHint();
         }
 
-        private void ShowPlacementHint(string subject)
+        internal void ShowPlacementHint(string subject)
         {
             toolboxPlacementHintActive = true;
             toolboxPlacementSubject = subject;

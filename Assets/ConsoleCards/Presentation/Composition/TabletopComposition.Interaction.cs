@@ -50,9 +50,9 @@ namespace ConsoleCards.Presentation.Composition
     {
         private void ConfigureDropTargets()
         {
-            for (int i = 0; i < runtimeDeckInstances.Count; i++)
+            for (int i = 0; i < Registry.runtimeDeckInstances.Count; i++)
             {
-                RuntimeDeckInstance instance = runtimeDeckInstances[i];
+                RuntimeDeckInstance instance = Registry.runtimeDeckInstances[i];
                 ConfigureFixedContainer(instance.Visual, instance.View);
             }
 
@@ -68,21 +68,21 @@ namespace ConsoleCards.Presentation.Composition
                 ConfigureHandTrayDropTarget();
             }
 
-            foreach (StackRuntimeView stackRuntimeView in stackViewsByContainerId.Values)
+            foreach (StackRuntimeView stackRuntimeView in Registry.stackViewsByContainerId.Values)
             {
                 ConfigureStackDropTarget(stackRuntimeView);
             }
 
-            for (int i = 0; i < consoleSlotViews.Count; i++)
+            for (int i = 0; i < Registry.consoleSlotViews.Count; i++)
             {
-                ConfigureConsoleSlot(consoleSlotViews[i]);
+                ConfigureConsoleSlot(Registry.consoleSlotViews[i]);
             }
 
             ApplyAllConsoleSides();
 
-            for (int i = 0; i < runtimeTokenContainerInstances.Count; i++)
+            for (int i = 0; i < Registry.runtimeTokenContainerInstances.Count; i++)
             {
-                RuntimeTokenContainerInstance instance = runtimeTokenContainerInstances[i];
+                RuntimeTokenContainerInstance instance = Registry.runtimeTokenContainerInstances[i];
                 instance.DropTarget.Configure(instance.View, instance.TargetCollider);
                 instance.DropTarget.enabled = true;
                 instance.TargetCollider.enabled = true;
@@ -108,7 +108,7 @@ namespace ConsoleCards.Presentation.Composition
             ContainerState hand,
             ContainerPlacementState zone)
         {
-            GameObject root = PrepareRuntimeRoot(new GameObject(name), name);
+            GameObject root = Spawner.PrepareRuntimeRoot(new GameObject(name), name);
             HiddenHandView view = root.AddComponent<HiddenHandView>();
             GameObject labelRoot = new GameObject("Hidden Hand Count Label");
             labelRoot.layer = root.layer;
@@ -120,15 +120,15 @@ namespace ConsoleCards.Presentation.Composition
                 string.Empty,
                 TrapFloorCoinAreaLabelCharacterSize,
                 TrapFloorCoinAreaLabelFontSize);
-            view.Bind(hand, zone, coordinateConverter, cardViews, label);
+            view.Bind(hand, zone, coordinateConverter, Registry.cardViews, label);
             return view;
         }
 
         private void ReleaseHiddenHandViews()
         {
-            for (int i = 0; i < hiddenHandViews.Count; i++)
+            for (int i = 0; i < Registry.hiddenHandViews.Count; i++)
             {
-                HiddenHandView hidden = hiddenHandViews[i];
+                HiddenHandView hidden = Registry.hiddenHandViews[i];
                 if (hidden == null)
                 {
                     continue;
@@ -142,11 +142,11 @@ namespace ConsoleCards.Presentation.Composition
                 Destroy(hidden.gameObject);
             }
 
-            hiddenHandViews.Clear();
+            Registry.hiddenHandViews.Clear();
         }
 
         // Another seat's hand while this session has a local hand: shown face-down, contents not inspectable.
-        private bool IsHiddenHandContainer(ContainerState container)
+        internal bool IsHiddenHandContainer(ContainerState container)
         {
             return container != null
                 && container.Kind == ContainerKind.Hand
@@ -188,10 +188,10 @@ namespace ConsoleCards.Presentation.Composition
             RebuildInteractionDependencies();
             selectionPresenter = new TabletopSelectionPresenter(
                 selectionState,
-                cardSelectionVisuals,
-                pawnSelectionVisuals,
-                tokenSelectionVisuals,
-                dieSelectionVisuals);
+                Registry.cardSelectionVisuals,
+                Registry.pawnSelectionVisuals,
+                Registry.tokenSelectionVisuals,
+                Registry.dieSelectionVisuals);
             componentPlacementController = new TabletopComponentPlacementController(
                 pointerProjector,
                 coordinateConverter,
@@ -206,15 +206,15 @@ namespace ConsoleCards.Presentation.Composition
         {
             RegisterPhysicalViews();
             RebuildLayoutViewCollection();
-            layoutViewLookup = new ContainerLayoutViewLookup(layoutViews);
+            layoutViewLookup = new ContainerLayoutViewLookup(Registry.layoutViews);
             transferCoordinator = new CardTransferInteractionCoordinator(
                 matchState,
                 localPlayerId,
                 interactionOwnerId,
                 lockService,
-                new TransferCardUseCase(),
-                layoutViews,
-                cardViews,
+                TableAuthority,
+                Registry.layoutViews,
+                Registry.cardViews,
                 presentationTransitions,
                 settleDuration,
                 returnDuration,
@@ -255,29 +255,28 @@ namespace ConsoleCards.Presentation.Composition
                 lockService,
                 interactionStateMachine,
                 previewSession,
-                new MoveObjectUseCase(),
+                TableAuthority,
                 dropTargetResolver,
                 transferCoordinator,
                 layoutViewLookup,
                 this,
                 magneticDistance,
                 tokenDropTargetResolver,
-                new TransferTokenUseCase(),
-                tokenContainerViews);
+                Registry.tokenContainerViews);
             rotationCoordinator = new TabletopRotationCoordinator(
                 matchState,
                 localPlayerId,
                 interactionOwnerId,
                 selectionState,
                 lockService,
-                new RotateObjectUseCase());
+                TableAuthority);
             flipCoordinator = new TabletopCardFlipCoordinator(
                 matchState,
                 localPlayerId,
                 interactionOwnerId,
                 selectionState,
                 lockService,
-                new FlipCardUseCase());
+                TableAuthority);
             cardFlipTurns?.CompleteAll();
             flipCoordinator.Flipped = BeginCardFlipTurn;
             inputRoutingPolicy = new TabletopInteractionInputRoutingPolicy(selectionState, moveCoordinator);
@@ -288,10 +287,10 @@ namespace ConsoleCards.Presentation.Composition
                 selectionState);
             interactionRouter.HandView = handView;
             hitResolver.HandPicker = handView;
-            moveCoordinator.IsContainerAtComfortCap = IsOwnHandAtComfortCap;
-            moveCoordinator.ComfortCapRejected = ShowHandCapReached;
-            containedCardDragCoordinator.IsContainerAtComfortCap = IsOwnHandAtComfortCap;
-            containedCardDragCoordinator.ComfortCapRejected = ShowHandCapReached;
+            moveCoordinator.IsContainerAtComfortCap = ContextMenus.IsOwnHandAtComfortCap;
+            moveCoordinator.ComfortCapRejected = ContextMenus.ShowHandCapReached;
+            containedCardDragCoordinator.IsContainerAtComfortCap = ContextMenus.IsOwnHandAtComfortCap;
+            containedCardDragCoordinator.ComfortCapRejected = ContextMenus.ShowHandCapReached;
             inputRoutingPolicy.ConfigureInteractionRouter(interactionRouter);
             cameraInputAdapter.ConfigureScrollRoutingPolicy(inputRoutingPolicy);
             cameraRoutingConfiguredByComposition = true;
@@ -360,50 +359,50 @@ namespace ConsoleCards.Presentation.Composition
 
         private void RegisterPhysicalViews()
         {
-            foreach (CardView view in cardViews) physicalAuthority?.Register(view);
-            foreach (PawnView view in pawnViews) physicalAuthority?.Register(view);
-            foreach (TokenView view in tokenViews) physicalAuthority?.Register(view);
-            foreach (DieView view in dieViews) physicalAuthority?.Register(view);
+            foreach (CardView view in Registry.cardViews) physicalAuthority?.Register(view);
+            foreach (PawnView view in Registry.pawnViews) physicalAuthority?.Register(view);
+            foreach (TokenView view in Registry.tokenViews) physicalAuthority?.Register(view);
+            foreach (DieView view in Registry.dieViews) physicalAuthority?.Register(view);
         }
 
         private void RebuildLayoutViewCollection()
         {
-            layoutViews.Clear();
-            for (int i = 0; i < controllerDeckViews.Count; i++)
+            Registry.layoutViews.Clear();
+            for (int i = 0; i < Registry.controllerDeckViews.Count; i++)
             {
-                if (controllerDeckViews[i] != null && controllerDeckViews[i].IsBound)
+                if (Registry.controllerDeckViews[i] != null && Registry.controllerDeckViews[i].IsBound)
                 {
-                    layoutViews.Add(controllerDeckViews[i]);
+                    Registry.layoutViews.Add(Registry.controllerDeckViews[i]);
                 }
             }
 
             if (handView != null && handView.IsBound)
             {
-                layoutViews.Add(handView);
+                Registry.layoutViews.Add(handView);
             }
 
-            foreach (StackRuntimeView stackRuntimeView in stackViewsByContainerId.Values)
+            foreach (StackRuntimeView stackRuntimeView in Registry.stackViewsByContainerId.Values)
             {
                 if (stackRuntimeView.View != null && stackRuntimeView.View.IsBound)
                 {
-                    layoutViews.Add(stackRuntimeView.View);
+                    Registry.layoutViews.Add(stackRuntimeView.View);
                 }
             }
 
-            for (int i = 0; i < runtimeDiscardPileInstances.Count; i++)
+            for (int i = 0; i < Registry.runtimeDiscardPileInstances.Count; i++)
             {
-                DiscardPileView runtimeDiscardView = runtimeDiscardPileInstances[i].View;
+                DiscardPileView runtimeDiscardView = Registry.runtimeDiscardPileInstances[i].View;
                 if (runtimeDiscardView != null && runtimeDiscardView.IsBound)
                 {
-                    layoutViews.Add(runtimeDiscardView);
+                    Registry.layoutViews.Add(runtimeDiscardView);
                 }
             }
 
-            for (int i = 0; i < consoleSlotViews.Count; i++)
+            for (int i = 0; i < Registry.consoleSlotViews.Count; i++)
             {
-                if (consoleSlotViews[i] != null && consoleSlotViews[i].IsBound)
+                if (Registry.consoleSlotViews[i] != null && Registry.consoleSlotViews[i].IsBound)
                 {
-                    layoutViews.Add(consoleSlotViews[i]);
+                    Registry.layoutViews.Add(Registry.consoleSlotViews[i]);
                 }
             }
         }

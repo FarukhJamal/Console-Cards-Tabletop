@@ -61,27 +61,74 @@ namespace ConsoleCards.Presentation.Composition
     }
 
     /// <summary>
-    /// The table session (composition root): its fields, start-up, shutdown and the Unity messages. The rest of
-    /// the class lives in partial files by job (R1a, doc 30 A5): Piles, Undo, TrapFloor, TrapFloorStatus,
-    /// Feedback, Toolbox, Session, RulesCard, Seats, ContextMenus, CardInspect, Shop, Views, Release, Validation,
-    /// Build, Camera, Boards, Consoles, Interaction and CardArt, plus Table, TableMode, CardEditor, DeckEditor,
-    /// GameSelect, PlayerGames, Profiles and TrapFloorHints.
+    /// The table (composition root): its fields, start-up, shutdown and the Unity messages, in partial files by job
+    /// (R1a, doc 30 A5). Since R1 (2026-10-18) the larger jobs are plain classes it owns, each reached through one
+    /// property: Registry (every view and the lookups), Spawner (makes the pieces), ContextMenus (right-click menus),
+    /// CardInspectPanel, RulesCardPanel, CardEditorPanel, DeckEditorPanel, GameSelectPanel, PlayerGamesPanel and
+    /// ProfilePanel (one presenter per panel), TrapFloorGame (the Trap Floor cartridge) and SessionService (start,
+    /// replace, reset, Undo and Redo). Every change to the table goes through TableAuthority (the command door, R1b).
     /// </summary>
     public sealed partial class TabletopComposition : MonoBehaviour, IContainedCardDragFeedback, ICardDropMagnet
     {
+        // The table session: starting, replacing and resetting the table, and Undo and Redo with their history.
+        private TableSessionService tableSessionServiceInstance;
+        internal TableSessionService SessionService => tableSessionServiceInstance ??= new TableSessionService(this);
+
+        // The Trap Floor game, the first cartridge (doc 30 A4): turns, dice, waiting Traps, landing, prizes, Keys, escape, its status texts and turn menu, the Shop and its hint helpers.
+        private TrapFloorCartridge trapFloorCartridgeInstance;
+        internal TrapFloorCartridge TrapFloorGame => trapFloorCartridgeInstance ??= new TrapFloorCartridge(this);
+
+        // The player profile panel: who is playing, new and renamed profiles.
+        private ProfilePanelPresenter profilePanelPresenterInstance;
+        internal ProfilePanelPresenter ProfilePanel => profilePanelPresenterInstance ??= new ProfilePanelPresenter(this);
+
+        // The player-made games panel: saving the table as a game, step by step, and playing saved games.
+        private PlayerGamesPresenter playerGamesPresenterInstance;
+        internal PlayerGamesPresenter PlayerGamesPanel => playerGamesPresenterInstance ??= new PlayerGamesPresenter(this);
+
+        // The game selection panel: choosing a game and setting it up.
+        private GameSelectPresenter gameSelectPresenterInstance;
+        internal GameSelectPresenter GameSelectPanel => gameSelectPresenterInstance ??= new GameSelectPresenter(this);
+
+        // The deck editor panel: building and changing decks.
+        private DeckEditorPresenter deckEditorPresenterInstance;
+        internal DeckEditorPresenter DeckEditorPanel => deckEditorPresenterInstance ??= new DeckEditorPresenter(this);
+
+        // The card editor panel: your new cards and changes to the default cards.
+        private CardEditorPresenter cardEditorPresenterInstance;
+        internal CardEditorPresenter CardEditorPanel => cardEditorPresenterInstance ??= new CardEditorPresenter(this);
+
+        // The rules card panel: house rules, rule proposals, saved rule sets and the hint switches.
+        private RulesCardPresenter rulesCardPresenterInstance;
+        internal RulesCardPresenter RulesCardPanel => rulesCardPresenterInstance ??= new RulesCardPresenter(this);
+
+        // The card inspection panel: showing a card large with its text and art.
+        private CardInspectPresenter cardInspectPresenterInstance;
+        internal CardInspectPresenter CardInspectPanel => cardInspectPresenterInstance ??= new CardInspectPresenter(this);
+
+        // The right-click menus: which menu a click opens, what each menu offers and the small count and choice popups that follow from them.
+        private ContextMenuPresenter contextMenuPresenterInstance;
+        internal ContextMenuPresenter ContextMenus => contextMenuPresenterInstance ??= new ContextMenuPresenter(this);
+
+        // Makes the pieces seen on the table from the catalog prefabs: cards, pawns, tokens, dice, decks, Consoles, token trays, stacks and the local hand plate.
+        private PieceSpawner pieceSpawnerInstance;
+        internal PieceSpawner Spawner => pieceSpawnerInstance ??= new PieceSpawner(this);
+
+        // Every view on the table and how to find one: the lists of card, pawn, token, die, pile, Console and stack views, and the lookups by ID.
+        private ViewRegistry viewRegistryInstance;
+        internal ViewRegistry Registry => viewRegistryInstance ??= new ViewRegistry(this);
+
         // Console Slot anchors must sit at their layout positions (console-local x/z) within this tolerance.
         private const float ConsoleLayoutAnchorTolerance = 0.0005f;
         private const float TrapFloorCoinVisualScale = 0.34f;
-        private const float TrapFloorCoinAreaLabelCharacterSize = 0.12f;
-        private const int TrapFloorCoinAreaLabelFontSize = 56;
-        private const float TrapFloorFloorLabelCharacterSize = 0.16f;
-        private const float TrapFloorCardLabelCharacterSize = 0.18f;
-        private const float TrapFloorCardBackLabelCharacterSize = 0.14f;
+        internal const float TrapFloorCoinAreaLabelCharacterSize = 0.12f;
+        internal const int TrapFloorCoinAreaLabelFontSize = 56;
+        internal const float TrapFloorCardLabelCharacterSize = 0.18f;
+        internal const float TrapFloorCardBackLabelCharacterSize = 0.14f;
         private const float TrapFloorContainerLabelCharacterSize = 0.1f;
-        private const int TrapFloorCardLabelFontSize = 64;
+        internal const int TrapFloorCardLabelFontSize = 64;
         private const int TrapFloorContainerLabelFontSize = 48;
-        private const int ToolboxPhysicalOrderStride = 40;
-        private static readonly Vector3 LocalHandRestPosition = new Vector3(0f, 0f, -1.86f);
+        internal const int ToolboxPhysicalOrderStride = 40;
         private static readonly Rect DeveloperControlsPanelRect = new Rect(16f, 330f, 280f, 320f);
 
         [SerializeField] internal UnityCamera targetCamera;
@@ -110,18 +157,18 @@ namespace ConsoleCards.Presentation.Composition
         private GameBoardMatView boardMatPrefab;
         private GameBoardMatView templateBoardMat;
         private BoardGrid? templateBoardGrid;
-        private bool boardSnapCheckPending;
+        internal bool boardSnapCheckPending;
         private Vector2 boardMenuScreenPosition;
         [SerializeField] private PhysicalInteractionConfig physicalInteraction = new PhysicalInteractionConfig();
         private PhysicalTabletopSurfaces physicalSurfaceQuery;
-        private LocalPhysicalObjectAuthority physicalAuthority;
-        private bool physicalFloorfallPending;
-        private PlayerId physicalFloorfallActor;
-        private bool physicalFloorCollapsePending;
-        private PlayerId physicalFloorCollapseActor;
-        private bool physicalBlindDirectionPending;
-        private PlayerId physicalBlindDirectionActor;
-        private TabletopObjectId physicalBlindDirectionDieId;
+        internal LocalPhysicalObjectAuthority physicalAuthority;
+        internal bool physicalFloorfallPending;
+        internal PlayerId physicalFloorfallActor;
+        internal bool physicalFloorCollapsePending;
+        internal PlayerId physicalFloorCollapseActor;
+        internal bool physicalBlindDirectionPending;
+        internal PlayerId physicalBlindDirectionActor;
+        internal TabletopObjectId physicalBlindDirectionDieId;
         // Component library (doc 22): Base box, Controller box, Game boxes and environment, each a catalog of
         // components (stable ID, prefab, linked definitions). Every spawn prefab comes from it (C1 piles, C3a
         // cards, pawns, tokens, dice and Consoles).
@@ -130,7 +177,7 @@ namespace ConsoleCards.Presentation.Composition
         [Tooltip("Optional authored local Controller Mapping area included by Camera presets that request it.")]
         [SerializeField] private Transform sceneControllerMappingArea;
         [Tooltip("Designer-authored Trap Floor identity, content, Grid, Mode, Console, and presentation data.")]
-        [SerializeField] private GameDefinition trapFloorGameDefinition;
+        [SerializeField] internal GameDefinition trapFloorGameDefinition;
 
         [SerializeField] internal LayerMask interactionLayerMask;
         [SerializeField] internal float maximumHitDistance = 100f;
@@ -189,58 +236,26 @@ namespace ConsoleCards.Presentation.Composition
             | TableVisualHide.DieResultLabel
             | TableVisualHide.PawnOwnerLabel
             | TableVisualHide.CardFaceLabels;
-
-        private readonly List<RuntimeCardInstance> runtimeCardInstances = new List<RuntimeCardInstance>();
-        private readonly List<RuntimeObjectInstance> runtimePawnInstances = new List<RuntimeObjectInstance>();
-        private readonly List<RuntimeObjectInstance> runtimeTokenInstances = new List<RuntimeObjectInstance>();
-        private readonly List<RuntimeObjectInstance> runtimeDieInstances = new List<RuntimeObjectInstance>();
-        private readonly List<RuntimeDeckInstance> runtimeDeckInstances = new List<RuntimeDeckInstance>();
-        private readonly List<RuntimeDiscardPileInstance> runtimeDiscardPileInstances =
-            new List<RuntimeDiscardPileInstance>();
-        private readonly List<RuntimeConsoleInstance> runtimeConsoleInstances = new List<RuntimeConsoleInstance>();
-        private readonly List<RuntimeTokenContainerInstance> runtimeTokenContainerInstances =
-            new List<RuntimeTokenContainerInstance>();
-        private readonly List<GameObject> runtimeOwnedStackRoots = new List<GameObject>();
-        private readonly List<CardView> cardViews = new List<CardView>();
-        private readonly List<CardVisualReferences> cardVisualReferences =
-            new List<CardVisualReferences>();
-        private readonly List<TabletopSelectionVisual> cardSelectionVisuals = new List<TabletopSelectionVisual>();
-        private readonly List<TabletopSelectionVisual> pawnSelectionVisuals = new List<TabletopSelectionVisual>();
-        private readonly List<TabletopSelectionVisual> tokenSelectionVisuals = new List<TabletopSelectionVisual>();
-        private readonly List<TabletopSelectionVisual> dieSelectionVisuals = new List<TabletopSelectionVisual>();
-        private readonly List<PawnView> pawnViews = new List<PawnView>();
-        private readonly List<TokenView> tokenViews = new List<TokenView>();
-        private readonly List<TokenContainerView> tokenContainerViews = new List<TokenContainerView>();
-        private readonly List<DieView> dieViews = new List<DieView>();
-        private readonly List<DeckView> controllerDeckViews = new List<DeckView>();
-        private readonly List<ConsoleView> playerConsoleViews = new List<ConsoleView>();
-        private readonly List<IContainerLayoutView> layoutViews = new List<IContainerLayoutView>();
-        private readonly Dictionary<TabletopObjectId, string> labelsByCardId = new Dictionary<TabletopObjectId, string>();
+        internal readonly Dictionary<TabletopObjectId, string> labelsByCardId = new Dictionary<TabletopObjectId, string>();
         // Card art is drawn through one shared material per (base material, picture), made once and reused.
         // Texture overrides in a MaterialPropertyBlock are not drawn on every render path, so art never goes there.
         private readonly Dictionary<(Material, Texture2D), Material> cardArtMaterials = new Dictionary<(Material, Texture2D), Material>();
         private readonly Dictionary<Material, Material> cardArtBaseMaterials = new Dictionary<Material, Material>();
         // Content (doc 24, A2–A4): every picture is looked up by art key through the content service
         // (your pictures, then the active pack, then built-in, then the asset's texture).
-        private ContentArtService contentArt;
+        internal ContentArtService contentArt;
         // The player profile in use (doc 28): every save (pictures, packs, cards, decks, rules, hints) goes in its folder.
-        private ProfileService profiles;
+        internal ProfileService profiles;
         // This table's cards (doc 27 L2-1): the game's cards with the player's changes and new cards. Rebuilt when
         // the Trap Floor templates are; its runtime cards are destroyed with it.
-        private GameContent trapFloorContent;
+        internal GameContent trapFloorContent;
         private ContentArtPanelActions cardArtActions;
         private bool artRefreshing;
         private MaterialPropertyBlock cardSlotProperties; // created on first use: Unity forbids it in field initializers
         private readonly Dictionary<ObjectDefinitionId, ButtonCardDefinition> buttonDefinitions =
             new Dictionary<ObjectDefinitionId, ButtonCardDefinition>();
-        private readonly Dictionary<ContainerId, StackRuntimeView> stackViewsByContainerId =
-            new Dictionary<ContainerId, StackRuntimeView>();
         private readonly Dictionary<ContainerId, ContainerFeedbackTarget> feedbackTargetsByContainerId =
             new Dictionary<ContainerId, ContainerFeedbackTarget>();
-        private readonly Dictionary<ContainerId, ConsoleSlotVisual> consoleSlotVisualsByContainerId =
-            new Dictionary<ContainerId, ConsoleSlotVisual>();
-        private readonly List<GameObject> officialPawnLabels = new List<GameObject>();
-        private readonly List<Renderer> officialPawnRenderers = new List<Renderer>();
 
         private bool cameraRoutingConfiguredByComposition;
         private bool frameCoordinatorEnabledByComposition;
@@ -248,95 +263,68 @@ namespace ConsoleCards.Presentation.Composition
         private bool uiInputConfiguredByComposition;
         private bool componentPlacementInputConfiguredByComposition;
         private bool objectAdapterInitializedByComposition;
-        private bool gameTemplatesPanelVisible;
-        private readonly ActiveSessionUndoHistory<SessionUndoSnapshot> undoHistory =
+        internal bool gameTemplatesPanelVisible;
+        internal readonly ActiveSessionUndoHistory<SessionUndoSnapshot> undoHistory =
             new ActiveSessionUndoHistory<SessionUndoSnapshot>();
-        private MatchState undoTrackedMatch;
-        private bool undoTransactionInProgress;
-        private bool rebuildingFromUndo;
+        internal MatchState undoTrackedMatch;
+        internal bool undoTransactionInProgress;
+        internal bool rebuildingFromUndo;
         // Empty Table hand (doc 22, H-E): the session's Hand container and whether the Hand is on. The switch is a
         // table setting, not a move: it survives Undo and Redo; Reset and loading a table turn it back on.
-        private ContainerId emptyTableHandContainerId;
-        private bool emptyTableHandEnabled = true;
+        internal ContainerId emptyTableHandContainerId;
+        internal bool emptyTableHandEnabled = true;
         // Viewer settings from the Table menu (doc 23, R1); not table state, so Undo and Reset never change them.
-        private bool rulesCardEnabled = true;
-        private bool hintsEnabled = true;
+        internal bool rulesCardEnabled = true;
+        internal bool hintsEnabled = true;
         // Hints (doc 23 §10): the service, the Tips switch (Learning) and the hint in the strip. Viewer settings.
-        private HintService hintService;
-        private bool tipsEnabled = true;
-        private HintEntry shownHint;
-        private bool hintLibraryWarned;
-        private bool hintCardDragSeen;
-        private bool hintPawnDragSeen;
-        private static string[] actionHintTriggers;
-        // House rules (doc 23, R3): the rule set in play (null = the game's default), the sets saved on this
-        // computer, the set the current templates were built with, and the open proposal. Kept across Undo and Reset.
-        private RuleSetDefinition activeRuleSet;
-        private RuleSetDefinition templatesRuleSet;
-        private readonly List<RuleSetDefinition> houseRuleSets = new List<RuleSetDefinition>();
-        private readonly List<HouseRuleSetRecord> houseRuleRecords = new List<HouseRuleSetRecord>();
-        private HouseRulesStore houseRulesStore;
-        private bool houseRulesLoaded;
-        private RulesCardActions rulesCardActions;
-        private RuleProposalActions ruleProposalActions;
-        private bool ruleProposalOpen;
-        private bool ruleProposalAgreeing;
-        private string ruleProposalEntryId;
-        private int ruleProposalSetIndex = -1;
-        private string ruleProposalValue;
-        private string ruleProposalText;
-        private readonly List<PlayerId> ruleProposalVoters = new List<PlayerId>();
-        private readonly List<bool> ruleProposalAgreed = new List<bool>();
-        private TrapFloorSessionState pendingRestoredTrapFloorState;
-        private PendingControllerPurchaseState pendingRestoredControllerPurchaseState;
+        internal HintService hintService;
+        internal bool tipsEnabled = true;
+        internal HintEntry shownHint;
+        internal RuleSetDefinition templatesRuleSet;
+        internal readonly List<RuleSetDefinition> houseRuleSets = new List<RuleSetDefinition>();
+        internal bool ruleProposalOpen;
+        internal TrapFloorSessionState pendingRestoredTrapFloorState;
+        internal PendingControllerPurchaseState pendingRestoredControllerPurchaseState;
 
-        private MatchState matchState;
-        private TabletopSession activeSession;
-        private TabletopSessionBootstrapService sessionBootstrapService;
-        private GameTemplateCatalog sessionTemplateCatalog;
-        private readonly Dictionary<GameTemplateId, TrapFloorTemplateDefinition> availableTrapFloorTemplates =
+        internal MatchState matchState;
+        internal TabletopSession activeSession;
+        internal GameTemplateCatalog sessionTemplateCatalog;
+        internal readonly Dictionary<GameTemplateId, TrapFloorTemplateDefinition> availableTrapFloorTemplates =
             new Dictionary<GameTemplateId, TrapFloorTemplateDefinition>();
-        private PlayerId tableActionActorId;
-        private string templateCatalogError;
-        private string gameTemplatesPanelError;
-        private TemplateContext templateContext;
-        private TrapFloorTemplateDefinition trapFloorTemplate;
-        private TrapFloorActivityFeedState trapFloorActivityFeed;
-        private TrapFloorRevealFloorUseCase trapFloorRevealFloorUseCase;
-        private TrapFloorObjectiveState trapFloorObjectiveState;
-        private TrapFloorObjectiveUseCase trapFloorObjectiveUseCase;
-        private TrapFloorCollapseState trapFloorCollapseState;
-        private TrapFloorCollapseUseCase trapFloorCollapseUseCase;
-        private TrapFloorTurnState trapFloorTurnState;
-        private TrapFloorTurnService trapFloorTurnService;
-        private TrapFloorTakePrizeUseCase trapFloorTakePrizeUseCase;
+        internal string gameTemplatesPanelError;
+        internal TemplateContext templateContext;
+        internal TrapFloorTemplateDefinition trapFloorTemplate;
+        internal TrapFloorActivityFeedState trapFloorActivityFeed;
+        internal TrapFloorRevealFloorUseCase trapFloorRevealFloorUseCase;
+        internal TrapFloorObjectiveState trapFloorObjectiveState;
+        internal TrapFloorObjectiveUseCase trapFloorObjectiveUseCase;
+        internal TrapFloorCollapseState trapFloorCollapseState;
+        internal TrapFloorCollapseUseCase trapFloorCollapseUseCase;
+        internal TrapFloorTurnState trapFloorTurnState;
+        internal TrapFloorTurnService trapFloorTurnService;
+        internal TrapFloorTakePrizeUseCase trapFloorTakePrizeUseCase;
         // The Shop (doc 18 §15.4, owner 2026-10-15): every Ability for sale on your turn, open while the rule
         // "shop.enabled" is on. The source says whether the Hand picker pays for a Shop card or a floor prize.
-        private TrapFloorBuyFromShopUseCase trapFloorShopUseCase;
-        private PendingPurchaseSource pendingPurchaseSource;
-        // G2a landing flips: the tile each pawn stood on when last checked, and whether an accepted move is
-        // waiting to be checked. Checked once per accepted move, never per frame.
-        private readonly Dictionary<TabletopObjectId, TrapFloorCoordinate?> landingPawnTiles =
-            new Dictionary<TabletopObjectId, TrapFloorCoordinate?>();
-        private bool landingCheckPending;
+        internal TrapFloorBuyFromShopUseCase trapFloorShopUseCase;
+        internal bool landingCheckPending;
         // Owner, 2026-10-15: a tile the active pawn lands on turns over only once no pawn stands on it (the pawn
         // moves aside or ahead), or when the turn ends. Its card still counts for the player who landed.
-        private readonly HashSet<TabletopObjectId> landedFloorCards = new HashSet<TabletopObjectId>();
-        private TabletopObjectId waitingLandingFloorCardId;
-        private PlayerId waitingLandingActor;
-        private TrapFloorAbilityResolutionState trapFloorAbilityResolutionState;
-        private TrapFloorAbilityResolutionService trapFloorAbilityResolutionService;
-        private PendingControllerPurchaseState pendingControllerPurchaseState;
+        internal readonly HashSet<TabletopObjectId> landedFloorCards = new HashSet<TabletopObjectId>();
+        internal TabletopObjectId waitingLandingFloorCardId;
+        internal PlayerId waitingLandingActor;
+        internal TrapFloorAbilityResolutionState trapFloorAbilityResolutionState;
+        internal TrapFloorAbilityResolutionService trapFloorAbilityResolutionService;
+        internal PendingControllerPurchaseState pendingControllerPurchaseState;
         private readonly ControllerInputHandService controllerInputHandService =
             new ControllerInputHandService();
-        private TrapFloorActivityEntry activeFloorRevealActivity;
-        private TrapFloorFloorfallState floorfallState;
-        private TrapFloorFloorfallService floorfallService;
-        private TrapFloorFloorfallTargetPresenter floorfallTargetPresenter;
-        private TrapFloorAbilityTargetPresenter abilityTargetPresenter;
-        private TrapFloorFloormasterLifecycleState floormasterLifecycleState;
+        internal TrapFloorActivityEntry activeFloorRevealActivity;
+        internal TrapFloorFloorfallState floorfallState;
+        internal TrapFloorFloorfallService floorfallService;
+        internal TrapFloorFloorfallTargetPresenter floorfallTargetPresenter;
+        internal TrapFloorAbilityTargetPresenter abilityTargetPresenter;
+        internal TrapFloorFloormasterLifecycleState floormasterLifecycleState;
         private TrapFloorFloormasterLifecycleService floormasterLifecycleService;
-        private TrapFloorRoundState trapFloorRoundState;
+        internal TrapFloorRoundState trapFloorRoundState;
         private int boardCardBacksRound;
         // Player feedback (doc 25, F1): what has already been announced.
         private TrapFloorActivityFeedState announcedFeed;
@@ -346,7 +334,7 @@ namespace ConsoleCards.Presentation.Composition
         private PlayerId announcedActivePlayer;
         private TrapFloorTurnPhase announcedPhase;
         // Board feedback markers (doc 25, F2), made once from Resources/BoardFeedbackSet.
-        private BoardFeedbackPresenter boardFeedback;
+        internal BoardFeedbackPresenter boardFeedback;
         private bool boardFeedbackUnavailable;
         private readonly List<Vector3> boardFeedbackTraps = new List<Vector3>(8);
         private readonly List<Vector3> boardFeedbackTargets = new List<Vector3>(16);
@@ -366,7 +354,7 @@ namespace ConsoleCards.Presentation.Composition
         private long shownActivityLogCount = -1;
         private bool activityLogUnavailable;
         // F4: pawns moved by End Turn hop along their path (a visual offset only; the pawn is already there).
-        private struct PawnHop
+        internal struct PawnHop
         {
             public Transform Visual;
             public Vector3 RestLocal;
@@ -374,7 +362,7 @@ namespace ConsoleCards.Presentation.Composition
             public float Started;
         }
 
-        private readonly List<PawnHop> pawnHops = new List<PawnHop>(4);
+        internal readonly List<PawnHop> pawnHops = new List<PawnHop>(4);
         private long handoverLogCount;
         private readonly Dictionary<PlayerId, long> seatLeftAtLog = new Dictionary<PlayerId, long>();
         private readonly Dictionary<PlayerId, int> seatLeftHandCount = new Dictionary<PlayerId, int>();
@@ -385,103 +373,96 @@ namespace ConsoleCards.Presentation.Composition
         private bool seatSwitchFromHandover;
         private float seatSwitchDeadline;
         private float seatRevealAt = -1f;
-        // Spring/Crane target the active player still has to move to (G2c); applied by End Turn if left.
-        private PlayerId pendingLaunchPlayerId;
-        private TabletopObjectId pendingLaunchTargetId;
         // Groups every accepted action between Begin/EndUndoBatch into one Undo step (End Turn + Trap effects).
-        private bool undoBatchActive;
-        private SessionUndoSnapshot undoBatchBefore;
-        private AuthoritativeActionAcceptance? undoBatchLastAcceptance;
-        private TrapFloorRoundOrchestrationService trapFloorRoundOrchestrationService;
-        private SystemRandomValueSource authoritativeRandomValueSource;
+        internal bool undoBatchActive;
+        internal TrapFloorRoundOrchestrationService trapFloorRoundOrchestrationService;
+        internal SystemRandomValueSource authoritativeRandomValueSource;
         private ITabletopComponentIdentitySource componentIdentitySource;
         private CreateTabletopComponentUseCase componentCreationUseCase;
         private CreateGenericCardBatchUseCase cardBatchCreationUseCase;
         private PopulateDeckUseCase populateDeckUseCase;
         private DeleteTabletopComponentUseCase componentDeletionUseCase;
         private DuplicateTabletopComponentUseCase componentDuplicationUseCase;
-        private TabletopComponentPlacementController componentPlacementController;
-        private PlayerLayoutDefinition playerLayout;
-        private PlayerSeatLayoutEntry localSeatLayout;
+        internal TabletopComponentPlacementController componentPlacementController;
+        internal PlayerLayoutDefinition playerLayout;
+        internal PlayerSeatLayoutEntry localSeatLayout;
         private PlayAreaId centralPlayAreaId;
-        private PlayerId localPlayerId;
+        internal PlayerId localPlayerId;
         private int localPlayerLayoutSeatIndex = -1;
         private InteractionOwnerId interactionOwnerId;
         private CardInstanceState cardState;
         private PawnState pawnState;
         private TokenState tokenState;
-        private TabletopCoordinateConverter coordinateConverter;
-        private TabletopSelectionState selectionState;
-        private TabletopObjectHitResolver hitResolver;
+        internal TabletopCoordinateConverter coordinateConverter;
+        internal TabletopSelectionState selectionState;
+        internal TabletopObjectHitResolver hitResolver;
         private TabletopPointerProjector pointerProjector;
         private LocalInteractionLockService lockService;
-        private TabletopInteractionStateMachine interactionStateMachine;
+        internal TabletopInteractionStateMachine interactionStateMachine;
         private TabletopDragPreviewSession previewSession;
         private TabletopMoveInteractionCoordinator moveCoordinator;
         private TabletopRotationCoordinator rotationCoordinator;
-        private TabletopCardFlipCoordinator flipCoordinator;
+        internal TabletopCardFlipCoordinator flipCoordinator;
         private TabletopInteractionInputRoutingPolicy inputRoutingPolicy;
-        private TabletopSelectionPresenter selectionPresenter;
-        private CardDropTargetResolver dropTargetResolver;
+        internal TabletopSelectionPresenter selectionPresenter;
+        internal CardDropTargetResolver dropTargetResolver;
         private TokenDropTargetResolver tokenDropTargetResolver;
         private CardTransferInteractionCoordinator transferCoordinator;
         private ContainedCardDragCoordinator containedCardDragCoordinator;
-        private TabletopInteractionRouter interactionRouter;
+        internal TabletopInteractionRouter interactionRouter;
         private ContainerLayoutViewLookup layoutViewLookup;
-        private TabletopPresentationTransitionController presentationTransitions;
+        internal TabletopPresentationTransitionController presentationTransitions;
 
-        private SeatId localSeatId;
-        private ContainerId handContainerId;
+        internal SeatId localSeatId;
+        internal ContainerId handContainerId;
         // Local comfort setting for this player's own hand; never game state, Undo or authority.
-        private readonly PlayerHandComfortSettings handComfortSettings = new PlayerHandComfortSettings();
+        internal readonly PlayerHandComfortSettings handComfortSettings = new PlayerHandComfortSettings();
         private ContainerId primaryStackContainerId;
         private ContainerId sourceFeedbackContainerId;
         private int dynamicStackSequence;
-        private string operationMessage = "Tabletop ready.";
-        private float operationMessageUntil;
+        internal string operationMessage = "Tabletop ready.";
+        internal float operationMessageUntil;
         private float feedbackHoldUntil;
-        private ContextMenuMode contextMenuMode;
-        private Vector2 contextMenuAnchorScreenPosition;
-        private TabletopObjectId contextMenuCardId;
-        private ContainerId contextMenuContainerId;
-        private int selectedDrawCount = 1;
-        private int selectedQuantity = 1;
-        private int toolboxSpawnSequence;
+        internal ContextMenuMode contextMenuMode;
+        internal Vector2 contextMenuAnchorScreenPosition;
+        internal TabletopObjectId contextMenuCardId;
+        internal ContainerId contextMenuContainerId;
+        internal int selectedDrawCount = 1;
+        internal int selectedQuantity = 1;
+        internal int toolboxSpawnSequence;
         private bool toolboxPlacementHintActive;
         private string toolboxPlacementSubject;
         // Icon of the catalog entry being placed from the Toolbox (shown on the Placing card); null otherwise.
         private Sprite toolboxPlacementIcon;
-        private TabletopObjectId contextMenuDieId;
-        private TabletopObjectId contextMenuPawnId;
-        private TabletopObjectId contextMenuTokenId;
-        private ConsoleId contextMenuConsoleId;
-        private long contextMenuRenderedRevision = -1;
-        private TabletopObjectId inspectedCardId;
-        private long inspectedCardRenderedRevision = -1;
-        private string pendingPurchaseDefinitionStableId = string.Empty;
+        internal TabletopObjectId contextMenuDieId;
+        internal TabletopObjectId contextMenuPawnId;
+        internal TabletopObjectId contextMenuTokenId;
+        internal ConsoleId contextMenuConsoleId;
+        internal long contextMenuRenderedRevision = -1;
+        internal TabletopObjectId inspectedCardId;
+        internal long inspectedCardRenderedRevision = -1;
+        internal string pendingPurchaseDefinitionStableId = string.Empty;
         private readonly List<TabletopObjectId> assistedHandCardIds =
             new List<TabletopObjectId>();
 
-        private HandView handView;
+        internal HandView handView;
         // Camera hand tray: created once, reused across session rebuilds (keeps its collapsed state).
         private HandTrayRig handTrayRig;
         private Action toggleHandTrayAction;
-        // Other seats' hands as face-down piles on their hand zones; rebuilt with each session.
-        private readonly List<HiddenHandView> hiddenHandViews = new List<HiddenHandView>();
         // Pile bays (doc 21): each pile's bay and the seat whose Console its mouth faces.
         private readonly List<PileBayView> pileBays = new List<PileBayView>();
         private readonly List<SeatId> pileBayOwnerSeats = new List<SeatId>();
         // Pile prefabs resolved from the box catalogs at initialisation (doc 22).
-        private FixedContainerVisual catalogDeckPrefab;
-        private FixedContainerVisual catalogStackPrefab;
+        internal FixedContainerVisual catalogDeckPrefab;
+        internal FixedContainerVisual catalogStackPrefab;
         private FixedContainerVisual catalogDiscardPilePrefab;
         // Object and Console prefabs resolved from the box catalogs (doc 22, C3a); no prefab field in the scene.
-        private CardVisualReferences catalogCardPrefab;
-        private PawnView catalogPawnPrefab;
-        private TokenView catalogTokenPrefab;
-        private DieView catalogDiePrefab;
-        private ConsoleView catalogConsolePrefab;
-        private FixedContainerVisual catalogHandPrefab;
+        internal CardVisualReferences catalogCardPrefab;
+        internal PawnView catalogPawnPrefab;
+        internal TokenView catalogTokenPrefab;
+        internal DieView catalogDiePrefab;
+        internal ConsoleView catalogConsolePrefab;
+        internal FixedContainerVisual catalogHandPrefab;
         // The local Hand, built from the catalog Hand entry for each session (C3b-1).
         private FixedContainerVisual localHandVisual;
         private ConsoleView consoleView;
@@ -493,8 +474,7 @@ namespace ConsoleCards.Presentation.Composition
         private readonly Dictionary<ObjectDefinitionId, ConsoleSymbol> consoleSymbolsByDefinition =
             new Dictionary<ObjectDefinitionId, ConsoleSymbol>();
         private CardFlipTurnPresenter cardFlipTurns;
-        private bool consoleDieCheckPending;
-        private readonly List<ConsoleSlotView> consoleSlotViews = new List<ConsoleSlotView>();
+        internal bool consoleDieCheckPending;
 
         public bool IsInitialized { get; private set; }
 
@@ -580,13 +560,13 @@ namespace ConsoleCards.Presentation.Composition
 
         public Rect ControlsPanelScreenRect => DeveloperControlsPanelRect;
 
-        public IReadOnlyList<CardView> CardViews => cardViews.AsReadOnly();
+        public IReadOnlyList<CardView> CardViews => Registry.cardViews.AsReadOnly();
 
         public HandView HandView => handView;
 
         public ConsoleView ConsoleView => consoleView;
 
-        public IReadOnlyList<ConsoleSlotView> ConsoleSlotViews => consoleSlotViews.AsReadOnly();
+        public IReadOnlyList<ConsoleSlotView> ConsoleSlotViews => Registry.consoleSlotViews.AsReadOnly();
 
         public IReadOnlyDictionary<ObjectDefinitionId, ButtonCardDefinition> ButtonDefinitions => buttonDefinitions;
 
@@ -597,7 +577,7 @@ namespace ConsoleCards.Presentation.Composition
             InitializeActiveSession(false);
         }
 
-        private void InitializeActiveSession(bool restoreInitialBaseline)
+        internal void InitializeActiveSession(bool restoreInitialBaseline)
         {
             if (IsInitialized)
             {
@@ -636,7 +616,7 @@ namespace ConsoleCards.Presentation.Composition
                 BuildToolboxRuntime();
                 BuildFloorfallRuntime();
                 BindObjectViews();
-                HoldWaitingLandingTileView();
+                TrapFloorGame.HoldWaitingLandingTileView();
                 BuildContainerViews();
                 BindContainerViews();
                 ProjectUnprojectedPlacedComponents();
@@ -646,8 +626,8 @@ namespace ConsoleCards.Presentation.Composition
                 ConfigureDropTargets();
                 BuildInteractionGraph();
                 inputFrameCoordinator.ConfigureUiInput(
-                    HandleSecondaryPointerPressed,
-                    CanBeginCameraOrbit);
+                    ContextMenus.HandleSecondaryPointerPressed,
+                    ContextMenus.CanBeginCameraOrbit);
                 uiInputConfiguredByComposition = true;
                 ConfigureDeveloperControlsInputBlockIfNeeded();
 
@@ -662,11 +642,11 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 selectionPresenter.Refresh();
-                RefreshNeutralizedTrapPresentation();
-                RefreshMovementAssistancePresentation();
+                TrapFloorGame.RefreshNeutralizedTrapPresentation();
+                TrapFloorGame.RefreshMovementAssistancePresentation();
                 ShowMessage("Trap Floor tabletop foundation ready.");
                 IsInitialized = true;
-                BeginUndoTrackingForCurrentMatch();
+                SessionService.BeginUndoTrackingForCurrentMatch();
             }
             catch
             {
@@ -724,8 +704,8 @@ namespace ConsoleCards.Presentation.Composition
 
                 BuildInteractionGraph();
                 inputFrameCoordinator.ConfigureUiInput(
-                    HandleSecondaryPointerPressed,
-                    CanBeginCameraOrbit);
+                    ContextMenus.HandleSecondaryPointerPressed,
+                    ContextMenus.CanBeginCameraOrbit);
                 uiInputConfiguredByComposition = true;
                 ConfigureDeveloperControlsInputBlockIfNeeded();
                 inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
@@ -741,7 +721,7 @@ namespace ConsoleCards.Presentation.Composition
                 selectionPresenter.Refresh();
                 ShowMessage("Empty Table ready.");
                 IsInitialized = true;
-                BeginUndoTrackingForCurrentMatch();
+                SessionService.BeginUndoTrackingForCurrentMatch();
             }
             catch
             {
@@ -755,9 +735,9 @@ namespace ConsoleCards.Presentation.Composition
             Shutdown(false);
         }
 
-        private void Shutdown(bool preserveTemplateContext)
+        internal void Shutdown(bool preserveTemplateContext)
         {
-            FinishPawnHops();
+            TrapFloorGame.FinishPawnHops();
             if (!rebuildingFromUndo)
             {
                 // A new or reset table: forget who had the screen when (Undo and seat switches keep it).
@@ -775,7 +755,7 @@ namespace ConsoleCards.Presentation.Composition
                 waitingLandingActor = PlayerId.Empty;
             }
 
-            StopUndoTrackingCurrentMatch();
+            SessionService.StopUndoTrackingCurrentMatch();
             physicalFloorfallPending = false;
             physicalFloorfallActor = PlayerId.Empty;
             physicalFloorCollapsePending = false;
@@ -803,8 +783,8 @@ namespace ConsoleCards.Presentation.Composition
 
             frameCoordinatorEnabledByComposition = false;
 
-            CloseContextMenu();
-            CloseCardInspect();
+            ContextMenus.CloseContextMenu();
+            CardInspectPanel.CloseCardInspect();
 
             if (componentPlacementInputConfiguredByComposition && inputFrameCoordinator != null)
             {
@@ -859,11 +839,11 @@ namespace ConsoleCards.Presentation.Composition
             // ConsoleView depends on its bound Slot Views while applying layout, so release the
             // parent binding before releasing the Slot bindings. Rebuild performs the inverse.
             consoleView?.Unbind();
-            for (int i = 0; i < consoleSlotViews.Count; i++)
+            for (int i = 0; i < Registry.consoleSlotViews.Count; i++)
             {
-                if (consoleSlotViews[i] != null && consoleSlotViews[i].IsBound)
+                if (Registry.consoleSlotViews[i] != null && Registry.consoleSlotViews[i].IsBound)
                 {
-                    consoleSlotViews[i].Unbind();
+                    Registry.consoleSlotViews[i].Unbind();
                 }
             }
 
@@ -884,7 +864,7 @@ namespace ConsoleCards.Presentation.Composition
             flipCoordinator = null;
             inputRoutingPolicy = null;
             interactionRouter = null;
-            layoutViews.Clear();
+            Registry.layoutViews.Clear();
 
             ReleaseAllStackViews();
             ReleaseSceneOwnedFixedContainerViews();
@@ -893,10 +873,10 @@ namespace ConsoleCards.Presentation.Composition
             ReleaseRuntimeConsoleInstances();
             ReleaseBoardViews();
             ReleaseRuntimeTokenContainerInstances();
-            ClearOfficialPawnPresentation();
-            ReleaseRuntimeObjectInstances(runtimePawnInstances, pawnViews, pawnSelectionVisuals);
-            ReleaseRuntimeObjectInstances(runtimeTokenInstances, tokenViews, tokenSelectionVisuals);
-            ReleaseRuntimeObjectInstances(runtimeDieInstances, dieViews, dieSelectionVisuals);
+            Spawner.ClearOfficialPawnPresentation();
+            ReleaseRuntimeObjectInstances(Registry.runtimePawnInstances, Registry.pawnViews, Registry.pawnSelectionVisuals);
+            ReleaseRuntimeObjectInstances(Registry.runtimeTokenInstances, Registry.tokenViews, Registry.tokenSelectionVisuals);
+            ReleaseRuntimeObjectInstances(Registry.runtimeDieInstances, Registry.dieViews, Registry.dieSelectionVisuals);
             ReleaseRuntimeCardInstances();
 
             matchState = null;
@@ -912,7 +892,7 @@ namespace ConsoleCards.Presentation.Composition
             trapFloorCollapseUseCase = null;
             trapFloorTurnState = null;
             trapFloorTurnService = null;
-            ConsoleCardInteractionAccepted -= HandleTrapFloorConsoleCardInteractionAccepted;
+            ConsoleCardInteractionAccepted -= TrapFloorGame.HandleTrapFloorConsoleCardInteractionAccepted;
             trapFloorAbilityResolutionState = null;
             trapFloorAbilityResolutionService = null;
             pendingControllerPurchaseState?.Clear();
@@ -967,35 +947,35 @@ namespace ConsoleCards.Presentation.Composition
             layoutViewLookup = null;
             handView = null;
             consoleView = null;
-            cardViews.Clear();
-            cardVisualReferences.Clear();
-            cardSelectionVisuals.Clear();
-            runtimeCardInstances.Clear();
-            runtimePawnInstances.Clear();
-            runtimeTokenInstances.Clear();
-            runtimeDieInstances.Clear();
-            runtimeDeckInstances.Clear();
-            runtimeConsoleInstances.Clear();
-            runtimeTokenContainerInstances.Clear();
-            runtimeOwnedStackRoots.Clear();
-            pawnViews.Clear();
-            tokenViews.Clear();
-            tokenContainerViews.Clear();
-            dieViews.Clear();
-            pawnSelectionVisuals.Clear();
-            tokenSelectionVisuals.Clear();
-            dieSelectionVisuals.Clear();
-            controllerDeckViews.Clear();
+            Registry.cardViews.Clear();
+            Registry.cardVisualReferences.Clear();
+            Registry.cardSelectionVisuals.Clear();
+            Registry.runtimeCardInstances.Clear();
+            Registry.runtimePawnInstances.Clear();
+            Registry.runtimeTokenInstances.Clear();
+            Registry.runtimeDieInstances.Clear();
+            Registry.runtimeDeckInstances.Clear();
+            Registry.runtimeConsoleInstances.Clear();
+            Registry.runtimeTokenContainerInstances.Clear();
+            Registry.runtimeOwnedStackRoots.Clear();
+            Registry.pawnViews.Clear();
+            Registry.tokenViews.Clear();
+            Registry.tokenContainerViews.Clear();
+            Registry.dieViews.Clear();
+            Registry.pawnSelectionVisuals.Clear();
+            Registry.tokenSelectionVisuals.Clear();
+            Registry.dieSelectionVisuals.Clear();
+            Registry.controllerDeckViews.Clear();
             pileBays.Clear();
             pileBayOwnerSeats.Clear();
-            playerConsoleViews.Clear();
-            consoleSlotViews.Clear();
-            layoutViews.Clear();
+            Registry.playerConsoleViews.Clear();
+            Registry.consoleSlotViews.Clear();
+            Registry.layoutViews.Clear();
             labelsByCardId.Clear();
             buttonDefinitions.Clear();
-            stackViewsByContainerId.Clear();
+            Registry.stackViewsByContainerId.Clear();
             feedbackTargetsByContainerId.Clear();
-            consoleSlotVisualsByContainerId.Clear();
+            Registry.consoleSlotVisualsByContainerId.Clear();
             feedbackHoldUntil = 0f;
             contextMenuMode = ContextMenuMode.None;
             contextMenuCardId = TabletopObjectId.Empty;
@@ -1032,18 +1012,18 @@ namespace ConsoleCards.Presentation.Composition
 
             try
             {
-                InitializeRuntimeUi();
+                SessionService.InitializeRuntimeUi();
                 AdoptCatalogGameBoard(); // C3c: the board comes from the catalog when it has one
                 EnsureContentArt(); // your pictures and the active pack load before the first table
-                PrepareTemplateCatalog();
+                SessionService.PrepareTemplateCatalog();
                 ApplySavedTable(); // T1: the table shape saved in the profile, before the first table
-                if (!TryReplaceTable(TabletopSessionSelection.EmptyCustom))
+                if (!SessionService.TryReplaceTable(TabletopSessionSelection.EmptyCustom))
                 {
                     throw new InvalidOperationException(
                         gameTemplatesPanelError ?? "Empty Table startup failed.");
                 }
 
-                OfferProfileChoiceAtStart(); // doc 28, P2: with several profiles, ask who is playing
+                ProfilePanel.OfferProfileChoiceAtStart(); // doc 28, P2: with several profiles, ask who is playing
             }
             catch (Exception exception)
             {
@@ -1061,7 +1041,7 @@ namespace ConsoleCards.Presentation.Composition
             boardFeedback = null;
             ReleaseCardArtMaterials();
             contentArt?.Dispose(); // destroys the pictures the content service loaded
-            DisposeCardEditor(); // and those the card editor loaded for another game
+            CardEditorPanel.DisposeCardEditor(); // and those the card editor loaded for another game
             trapFloorContent?.Destroy(); // destroys the cards made from the player's content
             trapFloorContent = null;
             for (int i = 0; i < houseRuleSets.Count; i++)
@@ -1113,18 +1093,18 @@ namespace ConsoleCards.Presentation.Composition
                 UpdateHotSeat();
             }
 
-            if (HandleRedoShortcut()) return;
-            if (HandleUndoShortcut()) return;
+            if (SessionService.HandleRedoShortcut()) return;
+            if (SessionService.HandleUndoShortcut()) return;
             HandleHandTrayShortcut();
             HandleConsoleFlipShortcut();
             physicalAuthority?.Tick();
-            CompletePendingLandingFlip();
+            TrapFloorGame.CompletePendingLandingFlip();
             hintService?.TickHelpers(); // H3: the game's hint helpers (reach markers, collapse target)
-            UpdateHintTriggers();
+            RulesCardPanel.UpdateHintTriggers();
             RefreshBoardCardBacksIfRoundChanged();
-            CompletePhysicalFloorfallIfSettled();
-            CompletePhysicalFloorCollapseIfSettled();
-            CompletePhysicalBlindDirectionIfSettled();
+            TrapFloorGame.CompletePhysicalFloorfallIfSettled();
+            TrapFloorGame.CompletePhysicalFloorCollapseIfSettled();
+            TrapFloorGame.CompletePhysicalBlindDirectionIfSettled();
             CompleteConsoleDieSnaps();
             UpdateCardStackDrops(); // before the board snap: a card dropped on a card stacks
             CompleteBoardCardSnaps();
@@ -1137,11 +1117,11 @@ namespace ConsoleCards.Presentation.Composition
                 ClearFeedback();
             }
 
-            RefreshRuntimeStatusUi();
-            RefreshTrapFloorStatusUi();
+            SessionService.RefreshRuntimeStatusUi();
+            TrapFloorGame.RefreshTrapFloorStatusUi();
             RefreshToolboxPlacementUi();
-            RefreshOpenTabletopPopup();
-            RefreshCardInspectPopup();
+            ContextMenus.RefreshOpenTabletopPopup();
+            CardInspectPanel.RefreshCardInspectPopup();
             AnnounceTrapFloorFeedback();
             RefreshBoardFeedback();
         }
@@ -1158,7 +1138,7 @@ namespace ConsoleCards.Presentation.Composition
             handTrayRig.SetDropTargetActive(cardDragActive);
         }
 
-        private bool IsCardDragActive()
+        internal bool IsCardDragActive()
         {
             return interactionStateMachine != null
                 && interactionStateMachine.Phase == TabletopInteractionPhase.DraggingObject
@@ -1190,7 +1170,7 @@ namespace ConsoleCards.Presentation.Composition
         // plate, labels kept, and the root drop box is a trigger so the pile never blocks loose pieces; drops
         // and right-clicks still resolve through it. The mouth faces the owner seat's Console once the
         // Consoles are bound.
-        private void ConfigurePileBay(
+        internal void ConfigurePileBay(
             FixedContainerVisual visual,
             GameTemplatePileStyle pileStyle,
             SeatId ownerSeatId)
@@ -1223,9 +1203,9 @@ namespace ConsoleCards.Presentation.Composition
                     continue;
                 }
 
-                for (int c = 0; c < playerConsoleViews.Count; c++)
+                for (int c = 0; c < Registry.playerConsoleViews.Count; c++)
                 {
-                    ConsoleView console = playerConsoleViews[c];
+                    ConsoleView console = Registry.playerConsoleViews[c];
                     if (console != null
                         && console.IsBound
                         && console.ConsoleState.OwnerSeatId == pileBayOwnerSeats[i])
@@ -1263,7 +1243,7 @@ namespace ConsoleCards.Presentation.Composition
             ShowMessage(handTrayRig.IsCollapsed ? "Hand collapsed (H to show)." : "Hand shown.");
         }
 
-        private List<PopupActionOption> AddHandTrayToggleAction(
+        internal List<PopupActionOption> AddHandTrayToggleAction(
             List<PopupActionOption> actions)
         {
             if (handTrayRig != null && handView != null && handView.IsTrayMode)
@@ -1403,12 +1383,12 @@ namespace ConsoleCards.Presentation.Composition
             GUILayout.EndArea();
         }
 
-        private CommandContext CreateCommandContext()
+        internal CommandContext CreateCommandContext()
         {
             return CreateCommandContext(localPlayerId);
         }
 
-        private CommandContext CreateCommandContext(PlayerId requestingPlayerId)
+        internal CommandContext CreateCommandContext(PlayerId requestingPlayerId)
         {
             return new CommandContext(
                 CommandId.New(),
@@ -1428,7 +1408,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private static readonly string[] PlayerColorNames = { "BLUE", "RED", "GREEN", "YELLOW" };
 
-        private readonly struct GameObjectActivationSnapshot
+        internal readonly struct GameObjectActivationSnapshot
         {
             public GameObjectActivationSnapshot(GameObject target, bool wasActive)
             {
@@ -1441,7 +1421,7 @@ namespace ConsoleCards.Presentation.Composition
             public bool WasActive { get; }
         }
 
-        private readonly struct PurchasePaymentCardOption
+        internal readonly struct PurchasePaymentCardOption
         {
             public PurchasePaymentCardOption(
                 TabletopObjectId cardId,
@@ -1464,7 +1444,7 @@ namespace ConsoleCards.Presentation.Composition
             public bool Eligible { get; }
         }
 
-        private enum ContextMenuMode
+        internal enum ContextMenuMode
         {
             None,
             Deck,
@@ -1485,13 +1465,13 @@ namespace ConsoleCards.Presentation.Composition
             SplitPile,
         }
 
-        private enum StackViewOwnership
+        internal enum StackViewOwnership
         {
             SceneOwned,
             RuntimeOwned,
         }
 
-        private sealed class TemplateContext
+        internal sealed class TemplateContext
         {
             private readonly Dictionary<TabletopObjectId, string> labelsByCardId;
             private readonly Dictionary<ObjectDefinitionId, ButtonCardDefinition> buttonDefinitions;
@@ -1547,7 +1527,7 @@ namespace ConsoleCards.Presentation.Composition
             public IReadOnlyDictionary<ObjectDefinitionId, ButtonCardDefinition> ButtonDefinitions => buttonDefinitions;
         }
 
-        private sealed class RuntimeCardInstance
+        internal sealed class RuntimeCardInstance
         {
             public RuntimeCardInstance(GameObject root)
             {
@@ -1581,7 +1561,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private sealed class RuntimeObjectInstance
+        internal sealed class RuntimeObjectInstance
         {
             public RuntimeObjectInstance(
                 GameObject root,
@@ -1605,7 +1585,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private sealed class RuntimeDeckInstance
+        internal sealed class RuntimeDeckInstance
         {
             public RuntimeDeckInstance(
                 GameObject root,
@@ -1632,7 +1612,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private sealed class RuntimeDiscardPileInstance
+        internal sealed class RuntimeDiscardPileInstance
         {
             public RuntimeDiscardPileInstance(
                 GameObject root,
@@ -1659,7 +1639,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private sealed class RuntimeConsoleInstance
+        internal sealed class RuntimeConsoleInstance
         {
             public RuntimeConsoleInstance(
                 GameObject root,
@@ -1693,7 +1673,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private sealed class RuntimeTokenContainerInstance
+        internal sealed class RuntimeTokenContainerInstance
         {
             public RuntimeTokenContainerInstance(
                 GameObject root,
@@ -1739,7 +1719,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private sealed class StackRuntimeView
+        internal sealed class StackRuntimeView
         {
             public StackRuntimeView(
                 StackViewOwnership ownership,
@@ -1784,7 +1764,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private sealed class ContainerFeedbackTarget
+        internal sealed class ContainerFeedbackTarget
         {
             private readonly ConsoleSlotVisual authoredSlotVisual;
             private readonly FixedContainerVisual authoredFixedContainerVisual;

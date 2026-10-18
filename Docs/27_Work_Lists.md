@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.32 · 2026-10-18 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.34 · 2026-10-18 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -83,7 +83,9 @@ the list. The order that stays active:
 | 2 | R0 | Names: Prototype classes and prefabs get final names, renamed so references stay intact (doc 30 A5, record in Part D) | Done, approved ("Works now"; the one-off R0 tool may be deleted) |
 | 3 | T1–T3 | Table shape and size: table spec and builder, star and edges, Table mode with handles (doc 30 B) | T1 done, working after the collider fix (owner, 2026-10-17; doc 30 §B6); T1b model tables done, approved (owner, 2026-10-17; doc 30 §B8); T2 star, edges and edge colliders done, approved (owner, 2026-10-17; doc 30 §B9); T3 Table mode approved; T3 completed with the owner's choice (pieces move in), size handles and the shape change; owner 2026-10-18: every Toolbox piece must move in (the game mat did not), done, approved (owner, 2026-10-18; doc 30 §B10). Seats along the outline moved to CART-1 |
 | 4 | Q2 | Circuit-board skybox (doc 30 §C0): Console Cards > Look > Use Circuit Skybox | Done, approved with the moving currents (owner, 2026-10-18) |
-| 5 | R1–R2 | Code cleanup: split the composition, local command door, UI from events (multiplayer-ready, doc 30 A6); stages R1a–R1f, then R2 (doc 30 Part E) | R1a done, approved (owner, 2026-10-18). R1b part 1 (the command door; the table code's 38 direct use-case calls go through it) written 2026-10-18, to be checked (not compiled yet); R1b part 2 (drag-and-drop and physics through the door) next |
+| 5 | R1–R2 | Code cleanup: split the composition, local command door, UI from events (multiplayer-ready, doc 30 A6); stages R1a–R1f, then R2 (doc 30 Part E) | R1a done, approved (owner, 2026-10-18). R1b part 1 (the command door; the table code's 38 direct use-case calls go through it) approved (owner, 2026-10-18: "rest seems fine", with the pile tools found while checking it); R1b part 2 and R1c–R1f written together on the owner's request (2026-10-18, "Do all R1's in one go"; doc 30 Part E), to be checked (not compiled here). R2 next |
+| 6 | UX-1 | Cursor, gestures and the free table ping (doc 30 A2) | Placed in the order (owner, 2026-10-18); planned after R2 |
+| 7 | CART-1 | Cartridge contract (what a game hands the platform, doc 30 A4), including seats along the table outline | Placed in the order (owner, 2026-10-18); planned after UX-1. TrapFloorCartridge (R1e) is the first cartridge it will formalise |
 
 **Pile tools (owner, 2026-10-18, found while checking R1b):** Duplicate was missing on decks, stacks and discard
 piles; there was no Split on decks; a card dropped on a card did not stack. Owner's choices: Duplicate copies all
@@ -114,11 +116,13 @@ Split into…, Merge Into…, Duplicate, Move, Delete (the old card-in-stack men
 draw and shuffle like decks). Undo: a card let go onto the table is one step together with its landing (it used to be
 two steps, and undoing the second put the card back in mid-air with its throw speed); the one-card tidy-up joins that
 step and no Undo snapshot is taken of a card in mid-air. Written 2026-10-18, not compiled here; for the owner to
-check. **Working rule (owner, 2026-10-18):** when fixing, change the code only; do not drive Unity on the owner's
+check. Pile tools, stacking feel and these fixes approved (owner, 2026-10-18). **Working rule (owner, 2026-10-18):** when fixing, change the code only; do not drive Unity on the owner's
 computer, the owner checks.
 
-Not yet placed in the order (owner to choose): UX-1 (cursor, gestures, the free table ping), CART-1 (cartridge
-contract; also seats along the table outline), SLS (Super Leroy Sisters, waiting for the game from Russell).
+Not yet placed in the order: SLS (Super Leroy Sisters, waiting for the game from Russell; the owner will say when).
+
+**Duplicate a single card (owner, 2026-10-18):** a duplicated card is now an exact copy (same card and face), also for
+a game's own cards; pawns, tokens and dice from a game still become generic copies. Written 2026-10-18, to be checked.
 
 ### Waiting for visual approval (owner, 2026-10-18)
 

@@ -122,16 +122,16 @@ namespace ConsoleCards.Presentation.Composition
                 trapFloorTemplate,
                 trapFloorCollapseState);
             // Rush/Dodge/Spring help reads where the Pawn really is (physical state first), not its placed pose.
-            trapFloorAbilityResolutionService.PawnPositionResolver = PawnTablePosition;
+            trapFloorAbilityResolutionService.PawnPositionResolver = TrapFloorGame.PawnTablePosition;
             trapFloorTakePrizeUseCase = new TrapFloorTakePrizeUseCase(
                 trapFloorTemplate,
                 trapFloorCollapseState,
                 trapFloorTurnState);
             trapFloorShopUseCase = new TrapFloorBuyFromShopUseCase(trapFloorTemplate, trapFloorTurnState);
-            ConsoleCardInteractionAccepted -= HandleTrapFloorConsoleCardInteractionAccepted;
-            ConsoleCardInteractionAccepted += HandleTrapFloorConsoleCardInteractionAccepted;
+            ConsoleCardInteractionAccepted -= TrapFloorGame.HandleTrapFloorConsoleCardInteractionAccepted;
+            ConsoleCardInteractionAccepted += TrapFloorGame.HandleTrapFloorConsoleCardInteractionAccepted;
             activeFloorRevealActivity = null;
-            SyncLandingPawnTiles();
+            TrapFloorGame.SyncLandingPawnTiles();
         }
 
         private void BuildFloorfallRuntime()
@@ -144,7 +144,7 @@ namespace ConsoleCards.Presentation.Composition
                 floorfallState);
             floorfallTargetPresenter = new TrapFloorFloorfallTargetPresenter();
             abilityTargetPresenter = new TrapFloorAbilityTargetPresenter();
-            reachHintShown = false;
+            TrapFloorGame.reachHintShown = false;
             boardFeedback?.HideReach();
         }
 
@@ -179,7 +179,7 @@ namespace ConsoleCards.Presentation.Composition
             physicalSurfaceQuery.ValidateSetup();
             physicalAuthority = new LocalPhysicalObjectAuthority(matchState, activeSession.Request.ActivePlayerIds,
                 () => localPlayerId, targetCamera, physicalSurfaceQuery, target => presentationTransitions.Stop(target, false),
-                physicalInteraction);
+                TableAuthority, physicalInteraction);
             if (authoritativeRandomValueSource == null)
             {
                 authoritativeRandomValueSource = new SystemRandomValueSource();
@@ -205,39 +205,39 @@ namespace ConsoleCards.Presentation.Composition
             // the selected authoritative snapshot before interaction registries are rebuilt.
             foreach (CardInstanceState card in matchState.Cards.Values)
             {
-                CardView view = CreateCardView(card, "CARD", out TabletopSelectionVisual selectionVisual);
-                cardViews.Add(view);
-                cardSelectionVisuals.Add(selectionVisual);
+                CardView view = Spawner.CreateCardView(card, "CARD", out TabletopSelectionVisual selectionVisual);
+                Registry.cardViews.Add(view);
+                Registry.cardSelectionVisuals.Add(selectionVisual);
             }
 
             foreach (PawnState pawn in matchState.Pawns.Values)
             {
-                PawnView view = CreatePawnView(pawn, out TabletopSelectionVisual selectionVisual);
-                pawnViews.Add(view);
-                pawnSelectionVisuals.Add(selectionVisual);
+                PawnView view = Spawner.CreatePawnView(pawn, out TabletopSelectionVisual selectionVisual);
+                Registry.pawnViews.Add(view);
+                Registry.pawnSelectionVisuals.Add(selectionVisual);
             }
 
             foreach (TokenState token in matchState.Tokens.Values)
             {
-                TokenView view = CreateTokenView(token, out TabletopSelectionVisual selectionVisual, 1f);
-                tokenViews.Add(view);
-                tokenSelectionVisuals.Add(selectionVisual);
+                TokenView view = Spawner.CreateTokenView(token, out TabletopSelectionVisual selectionVisual, 1f);
+                Registry.tokenViews.Add(view);
+                Registry.tokenSelectionVisuals.Add(selectionVisual);
             }
 
             foreach (DieState die in matchState.Dice.Values)
             {
-                DieView view = CreateDieView(
+                DieView view = Spawner.CreateDieView(
                     die,
                     $"d{die.SideCount}",
                     out TabletopSelectionVisual selectionVisual);
-                dieViews.Add(view);
-                dieSelectionVisuals.Add(selectionVisual);
+                Registry.dieViews.Add(view);
+                Registry.dieSelectionVisuals.Add(selectionVisual);
             }
 
             Physics.SyncTransforms();
         }
 
-        private static TemplateContext CreateTrapFloorTemplateContext(
+        internal static TemplateContext CreateTrapFloorTemplateContext(
             TabletopSession session,
             TrapFloorTemplateDefinition templateDefinition,
             PlayerId requestingPlayerId)
@@ -612,7 +612,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private void RestorePresentationAfterFailedRebuild(
+        internal void RestorePresentationAfterFailedRebuild(
             MatchState previousMatch,
             SessionUndoSnapshot previousSnapshot,
             string operationName)
@@ -642,7 +642,7 @@ namespace ConsoleCards.Presentation.Composition
                 pendingRestoredTrapFloorState = null;
                 pendingRestoredControllerPurchaseState = null;
                 rebuildingFromUndo = wasRebuildingFromUndo;
-                RefreshUndoUi();
+                SessionService.RefreshUndoUi();
             }
         }
 

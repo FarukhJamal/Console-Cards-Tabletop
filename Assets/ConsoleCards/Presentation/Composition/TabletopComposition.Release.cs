@@ -48,7 +48,7 @@ namespace ConsoleCards.Presentation.Composition
     /// <summary>Releasing views and runtime instances, and small validation helpers. (R1a: moved here unchanged from TabletopComposition.cs.)</summary>
     public sealed partial class TabletopComposition
     {
-        private void EnsureInitialized()
+        internal void EnsureInitialized()
         {
             if (!IsInitialized)
             {
@@ -59,22 +59,22 @@ namespace ConsoleCards.Presentation.Composition
         private void ReleaseAllStackViews()
         {
             List<KeyValuePair<ContainerId, StackRuntimeView>> activeStackViews =
-                new List<KeyValuePair<ContainerId, StackRuntimeView>>(stackViewsByContainerId);
+                new List<KeyValuePair<ContainerId, StackRuntimeView>>(Registry.stackViewsByContainerId);
             for (int i = activeStackViews.Count - 1; i >= 0; i--)
             {
                 ReleaseStackView(activeStackViews[i].Key, activeStackViews[i].Value);
             }
 
-            while (runtimeOwnedStackRoots.Count > 0)
+            while (Registry.runtimeOwnedStackRoots.Count > 0)
             {
-                int lastIndex = runtimeOwnedStackRoots.Count - 1;
-                GameObject root = runtimeOwnedStackRoots[lastIndex];
-                runtimeOwnedStackRoots.RemoveAt(lastIndex);
+                int lastIndex = Registry.runtimeOwnedStackRoots.Count - 1;
+                GameObject root = Registry.runtimeOwnedStackRoots[lastIndex];
+                Registry.runtimeOwnedStackRoots.RemoveAt(lastIndex);
                 DisableRuntimeInteraction(root);
                 DestroyRuntimeOwnedGameObject(root);
             }
 
-            stackViewsByContainerId.Clear();
+            Registry.stackViewsByContainerId.Clear();
         }
 
         private void ReleaseStackView(ContainerId containerId, StackRuntimeView stackRuntimeView)
@@ -104,13 +104,13 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             feedbackTargetsByContainerId.Remove(containerId);
-            stackViewsByContainerId.Remove(containerId);
+            Registry.stackViewsByContainerId.Remove(containerId);
             if (view != null)
             {
-                layoutViews.Remove(view);
+                Registry.layoutViews.Remove(view);
             }
 
-            runtimeOwnedStackRoots.Remove(root);
+            Registry.runtimeOwnedStackRoots.Remove(root);
             stackRuntimeView.ClearReferences();
 
             if (root == null)
@@ -126,7 +126,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private void ConfigureFixedContainer(
+        internal void ConfigureFixedContainer(
             FixedContainerVisual visual,
             IContainerView view)
         {
@@ -196,7 +196,7 @@ namespace ConsoleCards.Presentation.Composition
             feedbackTargetsByContainerId.Remove(containerId);
             if (view != null)
             {
-                layoutViews.Remove(view);
+                Registry.layoutViews.Remove(view);
             }
 
             visual.gameObject.SetActive(false);
@@ -225,10 +225,10 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ReleaseRuntimeDeckInstances()
         {
-            while (runtimeDeckInstances.Count > 0)
+            while (Registry.runtimeDeckInstances.Count > 0)
             {
-                int lastIndex = runtimeDeckInstances.Count - 1;
-                RuntimeDeckInstance instance = runtimeDeckInstances[lastIndex];
+                int lastIndex = Registry.runtimeDeckInstances.Count - 1;
+                RuntimeDeckInstance instance = Registry.runtimeDeckInstances[lastIndex];
                 GameObject root = instance.Root;
                 FixedContainerVisual visual = instance.Visual;
                 DeckView view = instance.View;
@@ -246,10 +246,10 @@ namespace ConsoleCards.Presentation.Composition
                     view.Unbind();
                 }
 
-                controllerDeckViews.Remove(view);
-                layoutViews.Remove(view);
+                Registry.controllerDeckViews.Remove(view);
+                Registry.layoutViews.Remove(view);
                 feedbackTargetsByContainerId.Remove(instance.ContainerId);
-                runtimeDeckInstances.RemoveAt(lastIndex);
+                Registry.runtimeDeckInstances.RemoveAt(lastIndex);
                 instance.ClearReferences();
                 DestroyRuntimeOwnedGameObject(root);
             }
@@ -257,9 +257,9 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ReleaseRuntimeDeckInstance(ContainerId containerId)
         {
-            for (int i = runtimeDeckInstances.Count - 1; i >= 0; i--)
+            for (int i = Registry.runtimeDeckInstances.Count - 1; i >= 0; i--)
             {
-                RuntimeDeckInstance instance = runtimeDeckInstances[i];
+                RuntimeDeckInstance instance = Registry.runtimeDeckInstances[i];
                 if (instance.ContainerId != containerId)
                 {
                     continue;
@@ -282,10 +282,10 @@ namespace ConsoleCards.Presentation.Composition
                     view.Unbind();
                 }
 
-                controllerDeckViews.Remove(view);
-                layoutViews.Remove(view);
+                Registry.controllerDeckViews.Remove(view);
+                Registry.layoutViews.Remove(view);
                 feedbackTargetsByContainerId.Remove(containerId);
-                runtimeDeckInstances.RemoveAt(i);
+                Registry.runtimeDeckInstances.RemoveAt(i);
                 instance.ClearReferences();
                 DestroyRuntimeOwnedGameObject(root);
                 return;
@@ -296,10 +296,10 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ReleaseRuntimeConsoleInstances()
         {
-            while (runtimeConsoleInstances.Count > 0)
+            while (Registry.runtimeConsoleInstances.Count > 0)
             {
-                int lastIndex = runtimeConsoleInstances.Count - 1;
-                RuntimeConsoleInstance instance = runtimeConsoleInstances[lastIndex];
+                int lastIndex = Registry.runtimeConsoleInstances.Count - 1;
+                RuntimeConsoleInstance instance = Registry.runtimeConsoleInstances[lastIndex];
                 ForgetConsoleSide(instance);
                 GameObject root = instance.Root;
                 DisableRuntimeInteraction(root);
@@ -327,13 +327,13 @@ namespace ConsoleCards.Presentation.Composition
 
                     if (slotView != null)
                     {
-                        consoleSlotViews.Remove(slotView);
-                        layoutViews.Remove(slotView);
+                        Registry.consoleSlotViews.Remove(slotView);
+                        Registry.layoutViews.Remove(slotView);
                     }
                 }
 
-                playerConsoleViews.Remove(instance.View);
-                runtimeConsoleInstances.RemoveAt(lastIndex);
+                Registry.playerConsoleViews.Remove(instance.View);
+                Registry.runtimeConsoleInstances.RemoveAt(lastIndex);
                 instance.ClearReferences();
                 DestroyRuntimeOwnedGameObject(root);
             }
@@ -341,9 +341,9 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ReleaseRuntimeConsoleInstance(ConsoleId consoleId)
         {
-            for (int instanceIndex = runtimeConsoleInstances.Count - 1; instanceIndex >= 0; instanceIndex--)
+            for (int instanceIndex = Registry.runtimeConsoleInstances.Count - 1; instanceIndex >= 0; instanceIndex--)
             {
-                RuntimeConsoleInstance instance = runtimeConsoleInstances[instanceIndex];
+                RuntimeConsoleInstance instance = Registry.runtimeConsoleInstances[instanceIndex];
                 if (instance.ConsoleId != consoleId)
                 {
                     continue;
@@ -379,19 +379,19 @@ namespace ConsoleCards.Presentation.Composition
 
                     if (slotView != null)
                     {
-                        consoleSlotViews.Remove(slotView);
-                        layoutViews.Remove(slotView);
+                        Registry.consoleSlotViews.Remove(slotView);
+                        Registry.layoutViews.Remove(slotView);
                     }
 
                     if (!slotContainerId.IsEmpty)
                     {
-                        consoleSlotVisualsByContainerId.Remove(slotContainerId);
+                        Registry.consoleSlotVisualsByContainerId.Remove(slotContainerId);
                         feedbackTargetsByContainerId.Remove(slotContainerId);
                     }
                 }
 
-                playerConsoleViews.Remove(instance.View);
-                runtimeConsoleInstances.RemoveAt(instanceIndex);
+                Registry.playerConsoleViews.Remove(instance.View);
+                Registry.runtimeConsoleInstances.RemoveAt(instanceIndex);
                 instance.ClearReferences();
                 DestroyRuntimeOwnedGameObject(root);
                 return;
@@ -402,10 +402,10 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ReleaseRuntimeTokenContainerInstances()
         {
-            while (runtimeTokenContainerInstances.Count > 0)
+            while (Registry.runtimeTokenContainerInstances.Count > 0)
             {
-                int lastIndex = runtimeTokenContainerInstances.Count - 1;
-                RuntimeTokenContainerInstance instance = runtimeTokenContainerInstances[lastIndex];
+                int lastIndex = Registry.runtimeTokenContainerInstances.Count - 1;
+                RuntimeTokenContainerInstance instance = Registry.runtimeTokenContainerInstances[lastIndex];
                 GameObject root = instance.Root;
                 if (instance.DropTarget != null)
                 {
@@ -423,8 +423,8 @@ namespace ConsoleCards.Presentation.Composition
                     instance.View.Unbind();
                 }
 
-                tokenContainerViews.Remove(instance.View);
-                runtimeTokenContainerInstances.RemoveAt(lastIndex);
+                Registry.tokenContainerViews.Remove(instance.View);
+                Registry.runtimeTokenContainerInstances.RemoveAt(lastIndex);
                 instance.ClearReferences();
                 DisableRuntimeInteraction(root);
                 DestroyRuntimeOwnedGameObject(root);
@@ -511,10 +511,10 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ReleaseRuntimeCardInstances()
         {
-            while (runtimeCardInstances.Count > 0)
+            while (Registry.runtimeCardInstances.Count > 0)
             {
-                int lastIndex = runtimeCardInstances.Count - 1;
-                RuntimeCardInstance runtimeCardInstance = runtimeCardInstances[lastIndex];
+                int lastIndex = Registry.runtimeCardInstances.Count - 1;
+                RuntimeCardInstance runtimeCardInstance = Registry.runtimeCardInstances[lastIndex];
                 GameObject root = runtimeCardInstance.Root;
                 CardView view = runtimeCardInstance.View;
                 TabletopSelectionVisual selectionVisual = runtimeCardInstance.SelectionVisual;
@@ -529,17 +529,17 @@ namespace ConsoleCards.Presentation.Composition
 
                 if (view != null)
                 {
-                    cardViews.Remove(view);
+                    Registry.cardViews.Remove(view);
                 }
 
                 if (selectionVisual != null)
                 {
-                    cardSelectionVisuals.Remove(selectionVisual);
+                    Registry.cardSelectionVisuals.Remove(selectionVisual);
                 }
 
                 if (visualReferences != null)
                 {
-                    cardVisualReferences.Remove(visualReferences);
+                    Registry.cardVisualReferences.Remove(visualReferences);
                 }
 
                 if (view != null)
@@ -547,7 +547,7 @@ namespace ConsoleCards.Presentation.Composition
                     presentationTransitions?.Forget(view.transform);
                 }
 
-                runtimeCardInstances.RemoveAt(lastIndex);
+                Registry.runtimeCardInstances.RemoveAt(lastIndex);
                 runtimeCardInstance.ClearReferences();
                 DestroyRuntimeOwnedGameObject(root);
             }
@@ -617,7 +617,7 @@ namespace ConsoleCards.Presentation.Composition
             root.SetActive(false);
         }
 
-        private void DestroyRuntimeOwnedGameObject(GameObject root)
+        internal void DestroyRuntimeOwnedGameObject(GameObject root)
         {
             if (root == null)
             {
@@ -629,7 +629,7 @@ namespace ConsoleCards.Presentation.Composition
             Destroy(root);
         }
 
-        private static void RequireReference(UnityEngine.Object reference, string name)
+        internal static void RequireReference(UnityEngine.Object reference, string name)
         {
             if (reference == null)
             {
@@ -665,9 +665,9 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ReleaseRuntimeCardInstance(TabletopObjectId objectId)
         {
-            for (int i = runtimeCardInstances.Count - 1; i >= 0; i--)
+            for (int i = Registry.runtimeCardInstances.Count - 1; i >= 0; i--)
             {
-                RuntimeCardInstance instance = runtimeCardInstances[i];
+                RuntimeCardInstance instance = Registry.runtimeCardInstances[i];
                 CardView view = instance.View;
                 if (view == null || view.ObjectId != objectId)
                 {
@@ -684,12 +684,12 @@ namespace ConsoleCards.Presentation.Composition
                     view.Unbind();
                 }
 
-                cardViews.Remove(view);
-                cardSelectionVisuals.Remove(selectionVisual);
-                cardVisualReferences.Remove(visualReferences);
+                Registry.cardViews.Remove(view);
+                Registry.cardSelectionVisuals.Remove(selectionVisual);
+                Registry.cardVisualReferences.Remove(visualReferences);
                 labelsByCardId.Remove(objectId);
                 presentationTransitions?.Forget(view.transform);
-                runtimeCardInstances.RemoveAt(i);
+                Registry.runtimeCardInstances.RemoveAt(i);
                 instance.ClearReferences();
                 DestroyRuntimeOwnedGameObject(root);
                 return;

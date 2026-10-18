@@ -92,9 +92,9 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
-            for (int i = 0; i < playerConsoleViews.Count; i++)
+            for (int i = 0; i < Registry.playerConsoleViews.Count; i++)
             {
-                ConsoleView playerConsole = playerConsoleViews[i];
+                ConsoleView playerConsole = Registry.playerConsoleViews[i];
                 if (playerConsole != null && playerConsole.gameObject.activeInHierarchy)
                 {
                     EncapsulateBounds(
@@ -248,14 +248,14 @@ namespace ConsoleCards.Presentation.Composition
                     bookmark.OrthographicSize));
         }
 
-        private void ApplyAuthoredPose(Transform target, TabletopPose pose)
+        internal void ApplyAuthoredPose(Transform target, TabletopPose pose)
         {
             target.SetPositionAndRotation(
                 coordinateConverter.ToWorldPosition(pose),
                 coordinateConverter.ToWorldRotation(pose));
         }
 
-        private void ApplyConsolePose(
+        internal void ApplyConsolePose(
             Transform target,
             TabletopPose pose,
             float? surfaceHeight)

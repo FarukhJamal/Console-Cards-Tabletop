@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using ConsoleCards.Application.Authority;
 using ConsoleCards.Application.Commands;
+using ConsoleCards.Application.Results;
 using ConsoleCards.Application.UseCases;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Match;
@@ -14,17 +16,17 @@ namespace ConsoleCards.Presentation.Interaction
     public sealed class LocalPhysicalObjectAuthority
     {
         private readonly MatchState match;
-        private readonly IReadOnlyList<PlayerId> actors;
         private readonly Func<PlayerId> actor;
         private readonly Action<Transform> stopAnimation;
-        private readonly CommitPhysicalObjectUseCase commits = new CommitPhysicalObjectUseCase();
+        private readonly ITableAuthority tableAuthority; // physics commits go through the command door (R1b)
         private readonly List<PhysicalLooseObject> objects = new List<PhysicalLooseObject>();
         private readonly Dictionary<PhysicalLooseObject, bool> contained = new Dictionary<PhysicalLooseObject, bool>();
         public LocalPhysicalObjectAuthority(MatchState match, IReadOnlyList<PlayerId> actors, Func<PlayerId> actor,
             UnityEngine.Camera camera, PhysicalTabletopSurfaces surfaces, Action<Transform> stopAnimation,
-            PhysicalInteractionConfig interactionConfig = null)
+            ITableAuthority tableAuthority, PhysicalInteractionConfig interactionConfig = null)
         {
-            this.match = match; this.actors = actors; this.actor = actor;
+            this.match = match; this.actor = actor; // actors: the door's handler checks the active players
+            this.tableAuthority = tableAuthority ?? throw new ArgumentNullException(nameof(tableAuthority));
             Camera = camera; Surfaces = surfaces; this.stopAnimation = stopAnimation;
             InteractionConfig = interactionConfig ?? new PhysicalInteractionConfig();
         }
@@ -61,7 +63,7 @@ namespace ConsoleCards.Presentation.Interaction
         {
             if (!view.IsBound || !match.ContainsObject(view.ObjectId)
                 || !ReferenceEquals(view.BoundState, match.GetObject(view.ObjectId))) return false;
-            return commits.Execute(match, actors, new CommitPhysicalObjectCommand(
+            return tableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(new CommitPhysicalObjectCommand(
                 new CommandContext(CommandId.New(), match.Id, state.ControllingPlayerId, match.Revision),
                 view.ObjectId, state, view.BoundState.PhysicalRevision, value, recordMode)).Succeeded;
         }

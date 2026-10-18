@@ -82,7 +82,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private void AddPileDuplicateAction(List<PopupActionOption> actions, ContainerId pileId)
+        internal void AddPileDuplicateAction(List<PopupActionOption> actions, ContainerId pileId)
         {
             if (!matchState.Containers.TryGetValue(pileId, out ContainerState pile)
                 || !TryPileComponentKind(pile.Kind, out _))
@@ -109,13 +109,13 @@ namespace ConsoleCards.Presentation.Composition
                 || !matchState.TryGetContainerPlacement(sourceId, out ContainerPlacementState placement))
             {
                 ShowMessage("Duplicate rejected: SourcePileInvalid.");
-                CloseContextMenu();
+                ContextMenus.CloseContextMenu();
                 return;
             }
 
             componentPlacementController.Cancel();
             GameObject previewRoot = CreateToolboxPlacementPreview(componentKind, 0);
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             componentPlacementController.BeginCustomComponentPlacement(
                 componentKind,
                 previewRoot,
@@ -142,9 +142,9 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < result.CardIds.Count; i++)
             {
                 CardInstanceState card = matchState.Cards[result.CardIds[i]];
-                CardView view = CreateCardView(card, ResolveCardLabel(card), out TabletopSelectionVisual selectionVisual);
-                cardViews.Add(view);
-                cardSelectionVisuals.Add(selectionVisual);
+                CardView view = Spawner.CreateCardView(card, ResolveCardLabel(card), out TabletopSelectionVisual selectionVisual);
+                Registry.cardViews.Add(view);
+                Registry.cardSelectionVisuals.Add(selectionVisual);
             }
 
             RefreshContainerCardViewSources();
@@ -161,15 +161,15 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- Split into N piles ----------
 
-        private bool CanSplitIntoPiles(ContainerId pileId)
+        internal bool CanSplitIntoPiles(ContainerId pileId)
         {
             return matchState.Containers.TryGetValue(pileId, out ContainerState pile)
                 && (pile.Kind == ContainerKind.Deck || pile.Kind == ContainerKind.Stack)
                 && pile.Count >= 2
-                && !IsAssistedControllerDeck(pileId);
+                && !TrapFloorGame.IsAssistedControllerDeck(pileId);
         }
 
-        private void AddSplitIntoPilesAction(List<PopupActionOption> actions, ContainerId pileId)
+        internal void AddSplitIntoPilesAction(List<PopupActionOption> actions, ContainerId pileId)
         {
             if (!CanSplitIntoPiles(pileId)) return;
             actions.Add(new PopupActionOption(
@@ -178,7 +178,7 @@ namespace ConsoleCards.Presentation.Composition
                 () =>
                 {
                     selectedSplitCount = 2;
-                    SetContextMenuMode(ContextMenuMode.SplitPile);
+                    ContextMenus.SetContextMenuMode(ContextMenuMode.SplitPile);
                 }));
         }
 
@@ -189,7 +189,7 @@ namespace ConsoleCards.Presentation.Composition
                 : 2;
         }
 
-        private void ShowSplitPilePopup()
+        internal void ShowSplitPilePopup()
         {
             int maximum = MaximumSplitCount(contextMenuContainerId);
             selectedSplitCount = Mathf.Clamp(selectedSplitCount, 2, maximum);
@@ -203,7 +203,7 @@ namespace ConsoleCards.Presentation.Composition
                 () => ChangeSplitCount(-1),
                 () => ChangeSplitCount(1),
                 ConfirmSplitPile,
-                CloseContextMenu);
+                ContextMenus.CloseContextMenu);
         }
 
         private void ChangeSplitCount(int delta)
@@ -217,7 +217,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             ContainerId pileId = contextMenuContainerId;
             int piles = selectedSplitCount;
-            CloseContextMenu();
+            ContextMenus.CloseContextMenu();
             SplitIntoPiles(pileId, piles);
         }
 
@@ -249,15 +249,15 @@ namespace ConsoleCards.Presentation.Composition
                 CaptureContainerCardTransforms(sourceId);
             List<StackRuntimeView> made = new List<StackRuntimeView>(piles - 1);
             SplitStackError failure = SplitStackError.None;
-            BeginUndoBatch();
+            SessionService.BeginUndoBatch();
             try
             {
                 for (int k = piles - 1; k >= 1; k--)
                 {
-                    ContainerId newStackId = CreateDeterministicDynamicStackId(dynamicStackSequence++);
+                    ContainerId newStackId = Spawner.CreateDeterministicDynamicStackId(dynamicStackSequence++);
                     while (matchState.Containers.ContainsKey(newStackId) || matchState.ContainerPlacements.ContainsKey(newStackId))
                     {
-                        newStackId = CreateDeterministicDynamicStackId(dynamicStackSequence++);
+                        newStackId = Spawner.CreateDeterministicDynamicStackId(dynamicStackSequence++);
                     }
 
                     TabletopPose newPose = new TabletopPose(
@@ -278,19 +278,19 @@ namespace ConsoleCards.Presentation.Composition
                         break;
                     }
 
-                    StackRuntimeView newStackView = CreateStackRuntimeView(
-                        $"Stack {stackViewsByContainerId.Count + 1}",
+                    StackRuntimeView newStackView = Spawner.CreateStackRuntimeView(
+                        $"Stack {Registry.stackViewsByContainerId.Count + 1}",
                         matchState.GetContainer(newStackId),
                         matchState.ContainerPlacements[newStackId],
                         true);
-                    stackViewsByContainerId.Add(newStackId, newStackView);
+                    Registry.stackViewsByContainerId.Add(newStackId, newStackView);
                     newStackView.View.ApplyAcceptedLayout();
                     made.Add(newStackView);
                 }
             }
             finally
             {
-                EndUndoBatch();
+                SessionService.EndUndoBatch();
             }
 
             ApplyLayout(sourceId);

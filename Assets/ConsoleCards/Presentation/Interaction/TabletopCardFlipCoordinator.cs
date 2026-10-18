@@ -1,4 +1,5 @@
 using System;
+using ConsoleCards.Application.Authority;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
 using ConsoleCards.Application.UseCases;
@@ -13,7 +14,7 @@ namespace ConsoleCards.Presentation.Interaction
     {
         private readonly TabletopSelectionState selectionState;
         private readonly LocalInteractionLockService lockService;
-        private readonly FlipCardUseCase flipUseCase;
+        private readonly ITableAuthority tableAuthority;
 
         public TabletopCardFlipCoordinator(
             MatchState matchState,
@@ -21,7 +22,7 @@ namespace ConsoleCards.Presentation.Interaction
             InteractionOwnerId interactionOwnerId,
             TabletopSelectionState selectionState,
             LocalInteractionLockService lockService,
-            FlipCardUseCase flipUseCase)
+            ITableAuthority tableAuthority)
         {
             MatchState = matchState ?? throw new ArgumentNullException(nameof(matchState));
             if (requestedByPlayerId.IsEmpty)
@@ -36,7 +37,7 @@ namespace ConsoleCards.Presentation.Interaction
 
             this.selectionState = selectionState ?? throw new ArgumentNullException(nameof(selectionState));
             this.lockService = lockService ?? throw new ArgumentNullException(nameof(lockService));
-            this.flipUseCase = flipUseCase ?? throw new ArgumentNullException(nameof(flipUseCase));
+            this.tableAuthority = tableAuthority ?? throw new ArgumentNullException(nameof(tableAuthority));
 
             RequestedByPlayerId = requestedByPlayerId;
             InteractionOwnerId = interactionOwnerId;
@@ -52,7 +53,8 @@ namespace ConsoleCards.Presentation.Interaction
 
         public LocalInteractionLockService LockService => lockService;
 
-        public FlipCardUseCase FlipUseCase => flipUseCase;
+        /// <summary>The command door every change here goes through (R1b).</summary>
+        public ITableAuthority TableAuthority => tableAuthority;
 
         /// <summary>
         /// Called after a card is accepted turned over, so Presentation can play the turn-over (doc 22 §14).
@@ -123,7 +125,7 @@ namespace ConsoleCards.Presentation.Interaction
                     cardView.ObjectId,
                     targetFace);
 
-                FlipCardResult flipResult = flipUseCase.Execute(MatchState, command);
+                FlipCardResult flipResult = tableAuthority.Submit<FlipCardCommand, FlipCardResult>(command);
                 if (cardView != null && cardView.IsBound)
                 {
                     cardView.ApplyAcceptedState();
