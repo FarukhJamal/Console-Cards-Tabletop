@@ -824,10 +824,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 return false;
             }
-            if (boardViews.TryGetValue(boardId, out GameBoardMatView view) && view != null)
-            {
-                ApplyConsolePose(view.transform, matchState.PlacedBoards[boardId].Pose, null);
-            }
+            // R2: the mat was set in its new place by the table's view sync.
 
             Physics.SyncTransforms();
             return true;

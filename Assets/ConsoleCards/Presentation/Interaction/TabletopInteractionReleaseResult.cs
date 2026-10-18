@@ -51,6 +51,15 @@ namespace ConsoleCards.Presentation.Interaction
                 result);
         }
 
+        public static TabletopInteractionReleaseResult FromCarry()
+        {
+            return new TabletopInteractionReleaseResult(
+                TabletopInteractionRoute.StackCarry,
+                true,
+                null,
+                null);
+        }
+
         public bool Equals(TabletopInteractionReleaseResult other)
         {
             return Route == other.Route

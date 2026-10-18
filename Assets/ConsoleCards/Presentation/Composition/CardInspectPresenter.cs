@@ -100,6 +100,13 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            // R2c: the card's picture and texts only change with the table; build the model only then (it used to
+            // be built every frame and thrown away).
+            if (host.matchState != null && host.inspectedCardRenderedRevision == host.matchState.Revision)
+            {
+                return;
+            }
+
             if (!TryBuildCardInspectModel(host.inspectedCardId, out CardInspectModel model))
             {
                 CloseCardInspect();

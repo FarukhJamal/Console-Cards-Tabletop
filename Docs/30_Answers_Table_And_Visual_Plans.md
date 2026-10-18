@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.16 · 2026-10-18 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.18 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1251,12 +1251,12 @@ The owner approved T3 and the moving skybox on 2026-10-18 ("Approved next"), so 
 |---|---|---|
 | R1a | Split `TabletopComposition.cs` into partial files by job. Code moved unchanged. | Done, approved (owner, 2026-10-18) |
 | R1b, part 1 | The command door: `ITableAuthority.Submit(command)`, local only, and the table code's direct use-case calls routed through it (doc 30 A6, gap 1). | Done, approved (owner, 2026-10-18) |
-| R1b, part 2 | Drag and drop, flips, turns and physics commits through the same door (the interaction coordinators and the local physics authority still hold their own use cases). | Written 2026-10-18, to be checked |
-| R1c | `ViewRegistry` (finds a piece's view) and `PieceSpawner` (catalog spawns and views) as plain classes. | Written 2026-10-18, to be checked |
-| R1d | `ContextMenuPresenter` and one presenter per panel. | Written 2026-10-18, to be checked |
-| R1e | `TrapFloorCartridge`: the Trap Floor, Trap Floor status, Shop and Trap Floor hints code in one plain class (the first cartridge, A4). | Written 2026-10-18, to be checked |
-| R1f | `TableSessionService`: start, replace, reset, Undo and Redo. | Written 2026-10-18, to be checked |
-| R2 | Events instead of hand refreshes. | Planned |
+| R1b, part 2 | Drag and drop, flips, turns and physics commits through the same door (the interaction coordinators and the local physics authority still hold their own use cases). | Done, approved (owner, 2026-10-18) |
+| R1c | `ViewRegistry` (finds a piece's view) and `PieceSpawner` (catalog spawns and views) as plain classes. | Done, approved (owner, 2026-10-18) |
+| R1d | `ContextMenuPresenter` and one presenter per panel. | Done, approved (owner, 2026-10-18) |
+| R1e | `TrapFloorCartridge`: the Trap Floor, Trap Floor status, Shop and Trap Floor hints code in one plain class (the first cartridge, A4). | Done, approved (owner, 2026-10-18) |
+| R1f | `TableSessionService`: start, replace, reset, Undo and Redo. | Done, approved (owner, 2026-10-18) |
+| R2 | Events instead of hand refreshes, in stages R2a–R2d (Part F). | R2a–R2d written 2026-10-18, to be checked |
 
 **R1a — what changed.** `TabletopComposition.cs` went from 16,920 lines to 1,880. It keeps the fields, the nested
 types, start-up, shutdown and the Unity messages (Start, Update, OnGUI, OnDestroy). Every other method moved,
@@ -1355,3 +1355,79 @@ go." Not compiled here; the owner checks in Unity and compile errors are read fr
 - **Files left empty** (CardInspect, ContextMenus, PlayerGames, Profiles, RulesCard, Session, Shop, TrapFloorStatus,
   Undo partial files) hold only an empty partial class and a note; they can be deleted in Unity.
 - **What did not change:** behaviour. Every method body is the same apart from the `host.` / property prefixes.
+
+---
+
+## Part F — R2 record: the table follows accepted changes (2026-10-18)
+
+The owner approved R1 (with the card and deck editors back in the Table menu) on 2026-10-18 ("Approved next?"), so
+R2 started.
+
+**Why.** Until now the code that asks for a change also updates the views afterwards: after a shuffle it lays the
+deck out again, after a split it makes the new stack's view, after a merge it removes one. That works on one
+computer, but a change made by another player (multiplayer, later) never passes through that code. R2 turns it
+round: the table announces every accepted change, and the views follow the announcement, whoever made the change.
+
+**R2 in stages.** Each stage keeps the game working and is checked in Unity before the next.
+
+| Stage | What | Status |
+|---|---|---|
+| R2a | The change stream: the table authority announces every accepted command (`ITableAuthority.CommandAccepted`). `TableViewSync` lays out the piles a shuffle, draw, reorder, split or merge touched, makes the view of a stack a split made and removes the view of a stack a merge emptied. The code that asked keeps only the animation, pulse and message. | Written 2026-10-18, to be checked |
+| R2b | The rest of the table through `TableViewSync`: Toolbox create, duplicate, populate and delete, boards, moved piles and Consoles, the Shop and prize cards; gestures (transfers, moves, turns, flips, physics rests, Console turns) for players on another computer. | Written 2026-10-18, to be checked |
+| R2c | Panels and the HUD redraw when something changed, not every frame. Found while planning: the Trap Floor status card and turn strip, the status line and the tip text are rebuilt every frame (new texts and lists each frame, against the no-per-frame-garbage rule). They redraw when an accepted change arrives or a game step asks, when the turn and pending states change, when a message runs out, and every half second as a safety net. | Written 2026-10-18, to be checked |
+| R2d | Undo, Redo, Reset and loading announce "the table was replaced", and everything that follows the table rebuilds from that one signal. | Written 2026-10-18, to be checked |
+
+**R2a — what changed (2026-10-18).**
+
+- **`ITableAuthority.CommandAccepted`** (new event): raised once for each accepted command with the command itself.
+  The local authority raises it inside `Submit`, before `Submit` returns, so the views are already right when the
+  asking code goes on. A network authority will raise it when the host's accepted change arrives.
+- **`LocalTableAuthority.Register(handler, accepted)`** (new overload): wraps the handler once, when the door is set
+  up; after each submit it asks `accepted(result)` and announces the command when the answer is yes. Every one of the
+  31 handlers in `TabletopComposition.Authority.cs` is registered this way (each result type has `Succeeded`). A
+  submit allocates nothing more than before.
+- **`TableViewSync`** (new, property `ViewSync`, subscribed when the door is made): handles shuffle, draw, reorder,
+  split and merge. A deck is laid out through its deck view, every other pile, hand and slot through the table's
+  layout; a split's new stack gets its view (and the drag and drop lookups are rebuilt); a merged stack's view is
+  removed. Every other command is ignored for now (R2b).
+- **The asking code** (`Piles`: shuffle, draw, split, reorder, merge; `PileTools`: split into piles; the two
+  Controller draws in `ContextMenuPresenter`) no longer lays out or makes and removes views after an accepted change.
+  After a rejected change it still puts the cards back where they were, since nothing was announced.
+- Made `internal` for the sync: `RebuildLayoutLookupAndRouter`, `RemoveStackRuntimeView`.
+- Not compiled here; the owner checks in Unity.
+
+**R2b–R2d — what changed (2026-10-18, owner: "implement whole R2").**
+
+- **Typed announcements.** `ITableAuthority.Observe<TCommand, TResult>(listener)`: called after every accepted
+  command of that type with the command and its result (the new IDs a create made, the card a Shop purchase gave).
+  Typed, so no garbage per change. `LocalTableAuthority` keeps one listener slot per command type, shared by
+  `Register` and `Observe` in either order. `TableViewSync.Attach` listens to every command the table registers.
+- **R2b — what exists on the table follows the announcements.** Toolbox create (pieces, decks with cards, Consoles,
+  card-on-card stacks), card batches, pile duplicates, duplicates, Populate Deck, delete, Move (piles and Consoles,
+  Table mode, a carried stack), boards (place, move, grid, remove) and the cards the Trap Floor Shop and prizes
+  hand out get, change or lose their views in `TableViewSync`, through the composition's `Present…` methods
+  (`TabletopComposition.ViewSync.cs`). The code that asked keeps only its own touches: the appear effect, the
+  sounds and the message. Card views are made before a new pile binds, and never twice.
+- **R2b — gestures.** A card or token carried, a piece moved, turned or flipped, a physics rest and a Console turned
+  over are shown by the gesture or its animation on the computer where they happen. When the player plays on
+  another computer, `TableViewSync` sets the view from the accepted state (`IsPlayerOnThisComputer`; today every
+  seat plays on this computer, so this part is ready for multiplayer and does nothing yet).
+- **Trap Floor's own moments** (reveals, the collapse, Keys, escape) stay with the cartridge, which animates them;
+  they belong to the cartridge contract (CART-1).
+- **R2c — redraw only when something changed** (`TabletopComposition.UiRefresh.cs`). The status line and the Trap
+  Floor status card and turn strip used to be rebuilt every frame. Now they redraw at the end of a frame when an
+  accepted change was announced, the match revision moved, a game step asked (`RefreshTrapFloorStatusUi` now only
+  asks), the turn, round, waiting or pending states changed (`TrapFloorCartridge.StatusUiSignature`, one number
+  per frame, no garbage), a status message ran out, or half a second has passed (safety net). Card Inspect builds
+  its model only when the table changed.
+- **R2d — one "table replaced" signal.** Every table build (new table, Reset, Undo, Redo, loading, a seat switch,
+  hands on or off) goes through `InitializeActiveSession`, which now raises `TableReplaced` when the table is ready;
+  the redraw state and Card Inspect start again from it (a rebuilt match can carry a revision number already drawn).
+  Joining a networked game will arrive the same way (MP-1).
+- **Carry a whole stack** (owner, 2026-10-18, with R2): press and hold a stack card still for 0.45 s and the router
+  hands the gesture to `ITabletopCarryHandler` (new route `StackCarry`); the composition lifts the stack's transforms
+  with the pointer, lights the outline of a stack within reach, and on release merges (`MergeStacks`) or moves
+  (`MoveContainer`) on the next frame, so the interaction graph is never rebuilt mid-gesture. Merge Into… left the
+  stack menu (and its popup and menu mode were removed).
+- Not compiled here; the owner checks in Unity.
+

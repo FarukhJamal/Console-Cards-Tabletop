@@ -70,10 +70,19 @@ namespace ConsoleCards.Presentation.Composition
         internal bool deckEditorChanged;
         internal bool deckEditorCloseArmed;
 
-        // The deck editor opens from the game selection menu (L2-4); the Table menu row stays hidden.
+        // The deck editor opens from the game selection menu (L2-4) and, so decks can be looked at without starting
+        // a new table, straight from the Table menu row "Deck editor…" (2026-10-18, owner request).
         internal void RefreshDeckEditorEntry()
         {
-            host.runtimeUi?.ShowDeckEditorEntry(null);
+            host.runtimeUi?.ShowDeckEditorEntry(OpenDeckEditorFromTableMenu);
+        }
+
+        // From the Table menu: Close just closes (no return to the game selection menu or a Save table as a game step).
+        internal void OpenDeckEditorFromTableMenu()
+        {
+            host.GameSelectPanel.returnToGameSelect = false;
+            host.PlayerGamesPanel.returnToGameSave = false;
+            OpenDeckEditor();
         }
 
         internal void OpenDeckEditor()

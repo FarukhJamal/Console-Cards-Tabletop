@@ -114,6 +114,10 @@ namespace ConsoleCards.Presentation.Composition
         private PieceSpawner pieceSpawnerInstance;
         internal PieceSpawner Spawner => pieceSpawnerInstance ??= new PieceSpawner(this);
 
+        // R2: brings the views in line with every accepted change, whoever made it.
+        private TableViewSync tableViewSyncInstance;
+        internal TableViewSync ViewSync => tableViewSyncInstance ??= new TableViewSync(this);
+
         // Every view on the table and how to find one: the lists of card, pawn, token, die, pile, Console and stack views, and the lookups by ID.
         private ViewRegistry viewRegistryInstance;
         internal ViewRegistry Registry => viewRegistryInstance ??= new ViewRegistry(this);
@@ -577,7 +581,15 @@ namespace ConsoleCards.Presentation.Composition
             InitializeActiveSession(false);
         }
 
+        // Every table build goes through here: a new table, Reset, Undo, Redo, loading, a seat switch, hands on or
+        // off. When the table is ready, R2d's one "table replaced" signal tells everything that follows the table.
         internal void InitializeActiveSession(bool restoreInitialBaseline)
+        {
+            InitializeActiveSessionCore(restoreInitialBaseline);
+            NotifyTableReplaced();
+        }
+
+        private void InitializeActiveSessionCore(bool restoreInitialBaseline)
         {
             if (IsInitialized)
             {
@@ -756,6 +768,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             SessionService.StopUndoTrackingCurrentMatch();
+            carryDropPending = false; // a carried stack is dropped with the old table
+            ClearCarryState();
             physicalFloorfallPending = false;
             physicalFloorfallActor = PlayerId.Empty;
             physicalFloorCollapsePending = false;
@@ -1107,6 +1121,7 @@ namespace ConsoleCards.Presentation.Composition
             TrapFloorGame.CompletePhysicalBlindDirectionIfSettled();
             CompleteConsoleDieSnaps();
             UpdateCardStackDrops(); // before the board snap: a card dropped on a card stacks
+            CompletePendingStackCarry(); // a stack carried by press-and-hold is merged or put down
             CompleteBoardCardSnaps();
             presentationTransitions?.Tick(Time.unscaledDeltaTime);
             RefreshHandInteractionPresentation();
@@ -1117,8 +1132,7 @@ namespace ConsoleCards.Presentation.Composition
                 ClearFeedback();
             }
 
-            SessionService.RefreshRuntimeStatusUi();
-            TrapFloorGame.RefreshTrapFloorStatusUi();
+            RefreshTableUiIfChanged(); // R2c: status line and Trap Floor status only when something changed
             RefreshToolboxPlacementUi();
             ContextMenus.RefreshOpenTabletopPopup();
             CardInspectPanel.RefreshCardInspectPopup();
@@ -1456,7 +1470,6 @@ namespace ConsoleCards.Presentation.Composition
             PendingFloormasterCard,
             ContainedCard,
             Stack,
-            MergeDestination,
             Die,
             Pawn,
             Token,

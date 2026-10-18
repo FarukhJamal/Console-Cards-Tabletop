@@ -1,6 +1,6 @@
 # 24 — Content Packs
 
-Version 0.6 · Status: Approved direction, A1–A4 implemented; L2-1 (your cards, saved in the profile) written, to be checked
+Version 0.7 · Status: Approved direction, A1–A4 implemented; L2-1 (your cards, saved in the profile) written, to be checked
 
 ## Purpose
 
@@ -290,6 +290,10 @@ made in the game, not in the Editor (doc 28). The in-game card editor that write
 - **Moved off the table:** the Table menu no longer shows Card art, Card editor or Deck editor (owner, 2026-10-15:
   player content belongs in the game selection menu, not inside a running table). Profile stays in the Table menu
   too.
+- **Back on the Table menu (owner, 2026-10-18):** "What if I just want to check my deck and cards and don't want to
+  make a new game?" **Card editor…** and **Deck editor…** show again in the Table menu and open straight away on this
+  table's game; Close just closes. They still open from the game selection menu too (and come back to it there).
+  Card art stays in the game selection menu only. Where all of this finally lives is part of MENU-1 (doc 27).
 - **Code:**
   - `GameSelectPanelView` (Final UI prefab `GameSelectPanel`; the game rows reuse `CardEditorRow`).
   - `TabletopPrototypeComposition.GameSelect.cs`.

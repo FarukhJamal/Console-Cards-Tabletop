@@ -286,6 +286,7 @@ namespace ConsoleCards.Presentation.Composition
                 containedCardDragCoordinator,
                 selectionState);
             interactionRouter.HandView = handView;
+            interactionRouter.CarryHandler = this; // press and hold a stack to carry it whole (owner, 2026-10-18)
             hitResolver.HandPicker = handView;
             moveCoordinator.IsContainerAtComfortCap = ContextMenus.IsOwnHandAtComfortCap;
             moveCoordinator.ComfortCapRejected = ContextMenus.ShowHandCapReached;
@@ -299,7 +300,7 @@ namespace ConsoleCards.Presentation.Composition
             objectAdapterInitializedByComposition = true;
         }
 
-        private void RebuildLayoutLookupAndRouter()
+        internal void RebuildLayoutLookupAndRouter()
         {
             SuspendInteractionDependenciesForRebuild();
             ResumeInteractionDependenciesAfterRebuild();

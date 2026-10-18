@@ -445,9 +445,6 @@ namespace ConsoleCards.Presentation.Composition
                 case ContextMenuMode.Stack:
                     ShowStackContextMenu();
                     break;
-                case ContextMenuMode.MergeDestination:
-                    ShowMergeDestinationPopup();
-                    break;
                 case ContextMenuMode.Die:
                     ShowDieContextMenu();
                     break;
@@ -613,8 +610,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            CloseContextMenu();
-            host.ProjectDeletedComponent(result);
+            CloseContextMenu(); // R2: the view was removed by the table's view sync
             host.ShowMessage($"Deleted {result.ComponentKind}.");
         }
 
@@ -768,7 +764,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            host.ProjectPopulatedDeckCards(targetDeckId, result.CardIds);
+            // R2: the new cards got their views from the table's view sync.
             host.ShowMessage($"Populated Deck with {quantity} generic Cards.");
             CloseContextMenu();
         }
@@ -921,14 +917,7 @@ namespace ConsoleCards.Presentation.Composition
 
             host.AddSplitIntoPilesAction(actions, sourceStackId);
 
-            if (HasValidMergeDestination(sourceStackId))
-            {
-                actions.Add(new PopupActionOption(
-                    "Merge Into...",
-                    true,
-                    () => SetContextMenuMode(ContextMenuMode.MergeDestination)));
-            }
-
+            // Merging is done by hand (owner, 2026-10-18): press and hold the stack, carry it onto another stack.
             host.AddPileDuplicateAction(actions, sourceStackId);
             actions.Add(new PopupActionOption(
                 "Move",
@@ -1106,8 +1095,13 @@ namespace ConsoleCards.Presentation.Composition
                     targetDeckId,
                     player.HandContainerId,
                     drawCount));
-            host.ApplyLayout(targetDeckId);
-            host.ApplyLayout(player.HandContainerId);
+            if (!result.Succeeded)
+            {
+                // Put the cards back where they were; an accepted draw was laid out by the table's view sync (R2).
+                host.ApplyLayout(targetDeckId);
+                host.ApplyLayout(player.HandContainerId);
+            }
+
             host.presentationTransitions.AnimateCardsFromCurrentResults(
                 transitionStarts,
                 result.Succeeded ? host.handReflowDuration : host.returnDuration,
@@ -1163,8 +1157,13 @@ namespace ConsoleCards.Presentation.Composition
                     player.ControllerDeckId,
                     player.HandContainerId,
                     drawCount));
-            host.ApplyLayout(player.ControllerDeckId);
-            host.ApplyLayout(player.HandContainerId);
+            if (!result.Succeeded)
+            {
+                // Put the cards back where they were; an accepted draw was laid out by the table's view sync (R2).
+                host.ApplyLayout(player.ControllerDeckId);
+                host.ApplyLayout(player.HandContainerId);
+            }
+
             host.presentationTransitions.AnimateCardsFromCurrentResults(
                 transitionStarts,
                 result.Succeeded ? host.handReflowDuration : host.returnDuration,
@@ -1223,43 +1222,6 @@ namespace ConsoleCards.Presentation.Composition
             CloseContextMenu();
         }
 
-        internal void ShowMergeDestinationPopup()
-        {
-            TryGetContextStack(out ContainerState source, out _);
-            ContainerId sourceStackId = source.Id;
-            List<PopupActionOption> destinations = new List<PopupActionOption>();
-            foreach (KeyValuePair<ContainerId, StackRuntimeView> pair in host.Registry.stackViewsByContainerId)
-            {
-                if (!IsValidMergeDestination(sourceStackId, pair.Key, pair.Value))
-                {
-                    continue;
-                }
-
-                ContainerId destinationStackId = pair.Key;
-                string label = pair.Value.Visual != null && pair.Value.Visual.Label != null
-                    ? pair.Value.Visual.Label.text
-                    : "Stack";
-                destinations.Add(new PopupActionOption(
-                    label,
-                    true,
-                    () =>
-                    {
-                        MergeStacksResult result = host.MergeStacks(sourceStackId, destinationStackId);
-                        if (result.Succeeded)
-                        {
-                            CloseContextMenu();
-                        }
-                    }));
-            }
-
-            host.runtimeUi.ShowMergeDestinationPopup(
-                host.contextMenuAnchorScreenPosition,
-                destinations,
-                () => SetContextMenuMode(ContextMenuMode.Stack),
-                CloseContextMenu,
-                DismissPopupFromSecondary);
-        }
-
         internal bool IsCurrentContextCardInContainer(ContainerId containerId)
         {
             return !host.contextMenuCardId.IsEmpty
@@ -1277,19 +1239,6 @@ namespace ConsoleCards.Presentation.Composition
                 && host.Registry.stackViewsByContainerId.TryGetValue(host.contextMenuContainerId, out stackView)
                 && stackView.View != null
                 && stackView.View.IsBound;
-        }
-
-        internal bool HasValidMergeDestination(ContainerId sourceId)
-        {
-            foreach (KeyValuePair<ContainerId, StackRuntimeView> pair in host.Registry.stackViewsByContainerId)
-            {
-                if (IsValidMergeDestination(sourceId, pair.Key, pair.Value))
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         internal bool IsValidMergeDestination(
@@ -1350,8 +1299,6 @@ namespace ConsoleCards.Presentation.Composition
                         && (host.contextMenuCardId.IsEmpty
                             || (IsCurrentContextCardInContainer(host.contextMenuContainerId)
                                 && host.Registry.TryGetCardView(host.contextMenuCardId, out _)));
-                case ContextMenuMode.MergeDestination:
-                    return TryGetContextStack(out _, out _);
                 case ContextMenuMode.SplitPile:
                     return host.CanSplitIntoPiles(host.contextMenuContainerId);
                 case ContextMenuMode.DiscardPile:

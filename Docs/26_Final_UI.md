@@ -1,6 +1,6 @@
 # 26 — Final UI
 
-Version 0.3 · Status: Implemented (UI-F, 2026-10-13); Shop entry and Shop panel added 2026-10-15; profile panel and Profile row added 2026-10-16; card editor, deck editor, game selection menu and Save table as a game added 2026-10-16; Save table as a game in steps (L2-6b) 2026-10-16
+Version 0.4 · Status: Implemented (UI-F, 2026-10-13); Shop entry and Shop panel added 2026-10-15; profile panel and Profile row added 2026-10-16; card editor, deck editor, game selection menu and Save table as a game added 2026-10-16; Save table as a game in steps (L2-6b) 2026-10-16; Card editor… and Deck editor… back in the Table menu 2026-10-18
 
 ## What it is
 
@@ -10,7 +10,7 @@ nothing else.
 
 | Prefab | Shows |
 |---|---|
-| SessionBar | Top-left game button, undo/redo, the Shop entry (shop icon and the word Shop; Trap Floor while the Shop is on) and the Table menu (Card art, then Card editor…, Deck editor…, "Profile: name…", then Save table as a game… on an Empty Table) |
+| SessionBar | Top-left game button, undo/redo, the Shop entry (shop icon and the word Shop; Trap Floor while the Shop is on) and the Table menu (Card editor…, Deck editor…, "Profile: name…", then Save table as a game… on an Empty Table; the Card art row stays hidden) |
 | ComponentToolbox | + TOOLBOX button and panel |
 | RulesCard, RulesHeading, RulesLine | Rules card (left column) and its rows |
 | TrapFloorHud | Turn strip (top centre) and Trap Floor status card (top right) |
@@ -23,7 +23,7 @@ nothing else.
 | GameTemplateRow | Game list row |
 | CardEditorPanel, CardEditorRow, CardEditorDeckRow | Card editor (L2-2): the game picker and the game's deck size; the card list with + New card; the preview (front and back on the white base card, and the card's words); the fields (code, name, description, cost, works like, pictures) and "In decks" (tick, name and size, − copies +; + New deck); Delete, Reset, Save |
 | DeckEditorPanel, DeckEditorCardRow | Deck editor (L2-3): the game picker; the decks (the game's deck, then yours; rows are CardEditorRow) with the name box, + New deck, Copy deck, Rename, Delete deck; the selected deck's size and cards with − copies +, all cards or this deck only; Undo changes, Save |
-| GameSelectPanel | Game selection menu (L2-4, New table…): the games (rows are CardEditorRow); the chosen game's picture, name, players, mode < >, rules and deck < > (the deck to play with, L2-5); Playing as with Profile…; Make it yours (Card art…, Card editor…, Deck editor…); status and Start. The Table menu's Card art, Card editor and Deck editor rows stay hidden |
+| GameSelectPanel | Game selection menu (L2-4, New table…): the games (rows are CardEditorRow); the chosen game's picture, name, players, mode < >, rules and deck < > (the deck to play with, L2-5); Playing as with Profile…; Make it yours (Card art…, Card editor…, Deck editor…); status and Start. The Table menu's Card art row stays hidden; Card editor… and Deck editor… are shown in the Table menu again (owner, 2026-10-18) |
 | GameSavePanel | Save table as a game (doc 29), in steps (L2-6b): the step buttons 1 Deck · 2 Cards · 3 Save; Deck and Cards show a title, a text, a < choice > line and two action buttons (New deck… / Put on table; Create a card… / Pick cards…); Save shows what of the table will be saved, name, players (fewest and most), description and the written rules (# for headings); Cancel, Back, Next, Save over <game>, Save as a new game |
 | ProfilePanel, ProfileRow | Player profile panel (doc 28): who is playing, every profile with Play as, a name box with New profile and Rename this profile (no folder button in play; Console Cards > Content > Open Profiles Folder is for us) |
 

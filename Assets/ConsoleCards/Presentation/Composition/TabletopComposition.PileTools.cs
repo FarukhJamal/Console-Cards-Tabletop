@@ -138,21 +138,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             toolboxSpawnSequence++;
-            // The new cards need their views before the pile view binds (it resolves every member card).
-            for (int i = 0; i < result.CardIds.Count; i++)
-            {
-                CardInstanceState card = matchState.Cards[result.CardIds[i]];
-                CardView view = Spawner.CreateCardView(card, ResolveCardLabel(card), out TabletopSelectionVisual selectionVisual);
-                Registry.cardViews.Add(view);
-                Registry.cardSelectionVisuals.Add(selectionVisual);
-            }
-
-            RefreshContainerCardViewSources();
-            ProjectCreatedToolboxComponent(result);
-            RefreshContainerCardViewSources();
-            RefreshSelectionPresenterAfterRuntimeProjection();
-            RefreshCardContentVisibility();
-            Physics.SyncTransforms();
+            // R2: the pile and its cards got their views from the table's view sync.
             ShowMessage(result.CardIds.Count > 0
                 ? $"Duplicated the {ToolboxComponentLabel(result.ComponentKind)} with its {result.CardIds.Count} cards."
                 : $"Duplicated the {ToolboxComponentLabel(result.ComponentKind)}.");
@@ -278,14 +264,8 @@ namespace ConsoleCards.Presentation.Composition
                         break;
                     }
 
-                    StackRuntimeView newStackView = Spawner.CreateStackRuntimeView(
-                        $"Stack {Registry.stackViewsByContainerId.Count + 1}",
-                        matchState.GetContainer(newStackId),
-                        matchState.ContainerPlacements[newStackId],
-                        true);
-                    Registry.stackViewsByContainerId.Add(newStackId, newStackView);
-                    newStackView.View.ApplyAcceptedLayout();
-                    made.Add(newStackView);
+                    // R2: the table's view sync made the new pile's view and laid it and the source out.
+                    made.Add(Registry.stackViewsByContainerId[newStackId]);
                 }
             }
             finally
@@ -293,14 +273,12 @@ namespace ConsoleCards.Presentation.Composition
                 SessionService.EndUndoBatch();
             }
 
-            ApplyLayout(sourceId);
             presentationTransitions.AnimateCardsFromCurrentResults(transitionStarts, settleDuration, 0.035f);
             for (int i = 0; i < made.Count; i++)
             {
                 presentationTransitions.Appear(made[i].Root.transform, settleDuration);
             }
 
-            if (made.Count > 0) RebuildLayoutLookupAndRouter();
             for (int i = 0; i < made.Count; i++)
             {
                 if (made[i].View.ContainerState != null && made[i].View.ContainerState.Count == 1)

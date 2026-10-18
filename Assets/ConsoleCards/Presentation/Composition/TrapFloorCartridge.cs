@@ -485,18 +485,11 @@ namespace ConsoleCards.Presentation.Composition
             ReplaceCurrentUndoStateForPurchaseAssistance();
 
             string name = result.Card.DisplayName;
-            host.labelsByCardId[result.GrantedCardId] = name;
-            CardView boughtView = host.Spawner.CreateCardView(
-                host.matchState.Cards[result.GrantedCardId],
-                name,
-                out TabletopSelectionVisual selectionVisual);
-            host.Registry.cardViews.Add(boughtView);
-            host.Registry.cardSelectionVisuals.Add(selectionVisual);
-            host.physicalAuthority?.Register(boughtView);
-            host.RefreshContainerCardViewSources();
-            host.ApplyLayout(result.DestinationContainerId);
-            host.RefreshSelectionPresenterAfterRuntimeProjection();
-            host.presentationTransitions.Appear(boughtView.transform, host.settleDuration);
+            // R2: the bought card got its view from the table's view sync (PresentGrantedCard).
+            if (host.Registry.TryGetCardView(result.GrantedCardId, out CardView boughtView))
+            {
+                host.presentationTransitions.Appear(boughtView.transform, host.settleDuration);
+            }
             if (TryGetTrapFloorPlayerSetup(host.trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition buyer))
             {
                 string buyerName = host.HandOwnerName(buyer.HandContainerId);
@@ -2102,23 +2095,35 @@ namespace ConsoleCards.Presentation.Composition
             ReplaceCurrentUndoStateForPurchaseAssistance();
 
             string prizeName = result.FloorCard.Content.DisplayName;
-            host.labelsByCardId[result.GrantedCardId] = prizeName;
-            CardView grantedView = host.Spawner.CreateCardView(
-                host.matchState.Cards[result.GrantedCardId],
-                prizeName,
-                out TabletopSelectionVisual selectionVisual);
-            host.Registry.cardViews.Add(grantedView);
-            host.Registry.cardSelectionVisuals.Add(selectionVisual);
-            host.physicalAuthority?.Register(grantedView);
-            host.RefreshContainerCardViewSources();
-            host.ApplyLayout(result.DestinationContainerId);
-            host.RefreshSelectionPresenterAfterRuntimeProjection();
-            host.presentationTransitions.Appear(grantedView.transform, host.settleDuration);
+            // R2: the prize card got its view from the table's view sync (PresentGrantedCard).
+            if (host.Registry.TryGetCardView(result.GrantedCardId, out CardView grantedView))
+            {
+                host.presentationTransitions.Appear(grantedView.transform, host.settleDuration);
+            }
             ApplyCollapsedFloorPresentation(floorCardId);
             string takerName = host.HandOwnerName(taker.HandContainerId);
             host.ShowMessage(result.PlacedInHand
                 ? $"Took {prizeName} into {takerName}'s hand. The tile is now a hole."
                 : $"Took {prizeName}. {takerName}'s hand is full, so it is beside their Console. The tile is now a hole.");
+        }
+
+        // R2: a card the Shop or a prize hands out gets its view, named after the card, in the pile or hand it went to.
+        internal void PresentGrantedCard(TabletopObjectId cardId, string name, ContainerId destinationContainerId)
+        {
+            if (host.Registry.TryGetCardView(cardId, out _)
+                || !host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card))
+            {
+                return;
+            }
+
+            host.labelsByCardId[cardId] = name;
+            CardView view = host.Spawner.CreateCardView(card, name, out TabletopSelectionVisual selectionVisual);
+            host.Registry.cardViews.Add(view);
+            host.Registry.cardSelectionVisuals.Add(selectionVisual);
+            host.physicalAuthority?.Register(view);
+            host.RefreshContainerCardViewSources();
+            host.ViewSync.SyncContainer(destinationContainerId);
+            host.RefreshSelectionPresenterAfterRuntimeProjection();
         }
 
         // G2a: remembers the tile under every pawn, so only a real move onto a new tile flips it.
@@ -3254,7 +3259,54 @@ namespace ConsoleCards.Presentation.Composition
         }
         // ---------- from TabletopComposition.TrapFloorStatus.cs ----------
 
+        // R2c: asks for a redraw at the end of the frame (the status card is no longer rebuilt every frame).
         internal void RefreshTrapFloorStatusUi()
+        {
+            host.MarkTableUiDirty();
+        }
+
+        // R2c: the turn, round, waiting and pending states the status card shows, folded into one number each frame
+        // (no garbage), so a change made without an announcement still redraws it.
+        internal int StatusUiSignature()
+        {
+            unchecked
+            {
+                int hash = 17;
+                TrapFloorTurnState turn = host.trapFloorTurnState;
+                if (turn != null)
+                {
+                    hash = (hash * 31) + (int)turn.Phase;
+                    hash = (hash * 31) + turn.CurrentRound;
+                    hash = (hash * 31) + turn.ActivePlayerId.GetHashCode();
+                    hash = (hash * 31) + turn.FloorOperatorPlayerId.GetHashCode();
+                    hash = (hash * 31) + (turn.IsCurrentFloorFailed ? 1 : 0);
+                }
+
+                if (host.trapFloorObjectiveState != null) hash = (hash * 31) + (host.trapFloorObjectiveState.IsWon ? 1 : 0);
+                if (host.trapFloorRoundState != null)
+                {
+                    hash = (hash * 31) + (int)host.trapFloorRoundState.Phase;
+                    hash = (hash * 31) + host.trapFloorRoundState.CurrentRoundNumber;
+                    hash = (hash * 31) + host.trapFloorRoundState.AcceptedFloorfallCount;
+                    hash = (hash * 31) + (host.trapFloorRoundState.IsScheduleCompleted ? 1 : 0);
+                }
+
+                hash = (hash * 31) + (host.floormasterLifecycleState?.PendingCard != null ? 1 : 0);
+                hash = (hash * 31) + (host.physicalFloorfallPending ? 1 : 0);
+                hash = (hash * 31) + (host.physicalFloorCollapsePending ? 1 : 0);
+                hash = (hash * 31) + (host.physicalBlindDirectionPending ? 1 : 0);
+                hash = (hash * 31) + (host.pendingPurchaseDefinitionStableId?.Length ?? 0);
+                hash = (hash * 31) + host.waitingLandingFloorCardId.GetHashCode();
+                hash = (hash * 31) + pendingLaunchPlayerId.GetHashCode();
+                hash = (hash * 31) + pendingLaunchTargetId.GetHashCode();
+                hash = (hash * 31) + (host.trapFloorActivityFeed?.Entries.Count ?? 0);
+                hash = (hash * 31) + host.localPlayerId.GetHashCode();
+                return hash;
+            }
+        }
+
+        // R2c: builds and shows the status card and turn strip (called by the composition when something changed).
+        internal void RenderTrapFloorStatusUi()
         {
             if (host.runtimeUi == null || !host.IsInitialized)
             {

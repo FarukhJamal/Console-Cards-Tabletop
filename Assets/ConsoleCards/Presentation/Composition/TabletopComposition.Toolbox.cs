@@ -270,20 +270,7 @@ namespace ConsoleCards.Presentation.Composition
 
             toolboxSpawnSequence++;
             PlayerGamesPanel.lastPlacedContainerId = result.ContainerId; // doc 29: the game's deck is found by it
-            for (int i = 0; i < result.CardIds.Count; i++)
-            {
-                CardInstanceState created = matchState.Cards[result.CardIds[i]];
-                CardView view = Spawner.CreateCardView(created, ResolveCardLabel(created), out TabletopSelectionVisual selectionVisual);
-                Registry.cardViews.Add(view);
-                Registry.cardSelectionVisuals.Add(selectionVisual);
-            }
-
-            RefreshContainerCardViewSources();
-            ProjectCreatedToolboxComponent(result);
-            RefreshContainerCardViewSources();
-            RefreshSelectionPresenterAfterRuntimeProjection();
-            RefreshCardContentVisibility();
-            Physics.SyncTransforms();
+            // R2: the cards and the deck got their views from the table's view sync when the change was accepted.
             if (!quiet) ShowMessage(single ? $"Added {subject}." : $"Added {subject}: {cards.Count} cards.");
             return true;
         }
@@ -323,23 +310,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             toolboxSpawnSequence++;
-            // The new cards need their Views before the Deck View binds (it resolves every member card).
-            for (int i = 0; i < result.CardIds.Count; i++)
-            {
-                CardView view = Spawner.CreateCardView(
-                    matchState.Cards[result.CardIds[i]],
-                    "CARD",
-                    out TabletopSelectionVisual selectionVisual);
-                Registry.cardViews.Add(view);
-                Registry.cardSelectionVisuals.Add(selectionVisual);
-            }
-
-            RefreshContainerCardViewSources();
-            ProjectCreatedToolboxComponent(result);
-            RefreshContainerCardViewSources();
-            RefreshSelectionPresenterAfterRuntimeProjection();
-            RefreshCardContentVisibility();
-            Physics.SyncTransforms();
+            // R2: the deck and its cards got their views from the table's view sync.
             ShowMessage($"Added a deck of {quantity} cards.");
             return true;
         }
@@ -432,7 +403,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             toolboxSpawnSequence++;
-            ProjectCreatedCardBatch(result.CardIds);
+            // R2: the cards got their views from the table's view sync.
             ShowMessage(quantity == 1 ? "Added Card." : $"Added {quantity} Cards.");
             return true;
         }
@@ -470,7 +441,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             toolboxSpawnSequence++;
-            ProjectCreatedToolboxComponent(result);
+            // R2: the piece got its view from the table's view sync.
             if (!quiet) ShowMessage(componentKind == TabletopComponentKind.Die
                 ? $"Added d{dieSideCount}."
                 : $"Added {ToolboxComponentLabel(componentKind)}.");
@@ -551,8 +522,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             toolboxSpawnSequence++;
-            ProjectCreatedToolboxComponent(result.CreationResult);
-            ShowMessage($"Duplicated {result.CreationResult.ComponentKind} as a generic Component.");
+            // R2: the copy got its view from the table's view sync.
+            ShowMessage($"Duplicated the {ToolboxComponentLabel(result.CreationResult.ComponentKind)}.");
             return true;
         }
 
@@ -659,16 +630,7 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            if (matchState.Containers.TryGetValue(containerId, out ContainerState container)
-                && container.Kind == ContainerKind.ConsoleSlot)
-            {
-                ApplyConsolePlacement(containerId);
-            }
-            else
-            {
-                ApplyLayout(containerId);
-            }
-
+            // R2: the pile or Console was set in its new place by the table's view sync.
             ShowMessage("Container moved.");
             return true;
         }
@@ -1128,11 +1090,16 @@ namespace ConsoleCards.Presentation.Composition
             {
                 case TabletopComponentKind.Card:
                 {
-                    CardInstanceState card = matchState.Cards[result.ObjectId];
-                    CardView view = Spawner.CreateCardView(card, ResolveCardLabel(card), out TabletopSelectionVisual selectionVisual);
-                    Registry.cardViews.Add(view);
-                    Registry.cardSelectionVisuals.Add(selectionVisual);
-                    RefreshContainerCardViewSources();
+                    // The view sync (R2) may already have made the card's view with the rest of the new cards.
+                    if (!Registry.TryGetCardView(result.ObjectId, out CardView view))
+                    {
+                        CardInstanceState card = matchState.Cards[result.ObjectId];
+                        view = Spawner.CreateCardView(card, ResolveCardLabel(card), out TabletopSelectionVisual selectionVisual);
+                        Registry.cardViews.Add(view);
+                        Registry.cardSelectionVisuals.Add(selectionVisual);
+                        RefreshContainerCardViewSources();
+                    }
+
                     appearedTransform = view.transform;
                     break;
                 }

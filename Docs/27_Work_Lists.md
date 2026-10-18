@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.34 · 2026-10-18 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.37 · 2026-10-19 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -67,7 +67,7 @@ What already exists and is reused:
 | P2 | Profile screen in the game: pick, create, rename a profile; Table menu "Profile: name…"; asked at start when there are several profiles; switching starts a fresh table (doc 28) | Done, approved by the owner |
 | L2-2 | Card editor in the game (Table > Card editor…): pick the game; the game's deck (every card with copies, and the total); your own cards; live preview; new cards that work like a card of the game; changes to game cards with Reset; "In decks" ticks with copies in each (the game's deck and yours); pictures copied into the profile (doc 24, L2-2 record). First build looked good to the owner; game picker, game deck and In decks added 2026-10-16 | Done, approved by the owner |
 | L2-3 | Deck editor in the game (Table > Deck editor…): pick the game; the game's deck and your decks; new, copy, rename, delete; every card's copies in the selected deck; Save / Undo changes (doc 24, L2-3 record) | Done, approved by the owner |
-| L2-4 | Game selection menu (New table…): every game with picture, players, mode, rules and deck; Playing as; Make it yours (card art, card editor, deck editor, moved off the Table menu); Start (doc 24, L2-4 record) | Done, approved by the owner |
+| L2-4 | Game selection menu (New table…): every game with picture, players, mode, rules and deck; Playing as; Make it yours (card art, card editor, deck editor, moved off the Table menu); Start (doc 24, L2-4 record). Owner 2026-10-18: Card editor… and Deck editor… are back in the Table menu too, to check cards and decks without starting a new table | Done, approved by the owner |
 | L2-5 | Decks used by games: choose the deck to play with in the game selection menu; Trap Floor plays with your deck (setup tried first); an Empty Table starts with your deck to place (doc 24, L2-5 record) | Done, approved by the owner |
 | L2-6 | Player-made games: set up an Empty Table, Save table as a game (name, players, description, written rules); the table save file; your games in New table… (Start lays the table out, rules on the rules card, Save over, Delete) (doc 29) | Written; owner asked for polish (L2-6b) |
 | L2-6b | Polish (owner, 2026-10-16): Save table as a game in steps — 1 Deck (choose yours or a game's, or make a new one; put it on the table), 2 Cards (create a card in it or pick its cards), 3 Save; the deck is the game's own deck, placed shuffled where it lay at Start (owner's choice). Toolbox placement keeps placing until Esc or right-click (owner's choice) (doc 29 §L2-6b) | Done, approved by the owner |
@@ -83,7 +83,7 @@ the list. The order that stays active:
 | 2 | R0 | Names: Prototype classes and prefabs get final names, renamed so references stay intact (doc 30 A5, record in Part D) | Done, approved ("Works now"; the one-off R0 tool may be deleted) |
 | 3 | T1–T3 | Table shape and size: table spec and builder, star and edges, Table mode with handles (doc 30 B) | T1 done, working after the collider fix (owner, 2026-10-17; doc 30 §B6); T1b model tables done, approved (owner, 2026-10-17; doc 30 §B8); T2 star, edges and edge colliders done, approved (owner, 2026-10-17; doc 30 §B9); T3 Table mode approved; T3 completed with the owner's choice (pieces move in), size handles and the shape change; owner 2026-10-18: every Toolbox piece must move in (the game mat did not), done, approved (owner, 2026-10-18; doc 30 §B10). Seats along the outline moved to CART-1 |
 | 4 | Q2 | Circuit-board skybox (doc 30 §C0): Console Cards > Look > Use Circuit Skybox | Done, approved with the moving currents (owner, 2026-10-18) |
-| 5 | R1–R2 | Code cleanup: split the composition, local command door, UI from events (multiplayer-ready, doc 30 A6); stages R1a–R1f, then R2 (doc 30 Part E) | R1a done, approved (owner, 2026-10-18). R1b part 1 (the command door; the table code's 38 direct use-case calls go through it) approved (owner, 2026-10-18: "rest seems fine", with the pile tools found while checking it); R1b part 2 and R1c–R1f written together on the owner's request (2026-10-18, "Do all R1's in one go"; doc 30 Part E), to be checked (not compiled here). R2 next |
+| 5 | R1–R2 | Code cleanup: split the composition, local command door, UI from events (multiplayer-ready, doc 30 A6); stages R1a–R1f, then R2 (doc 30 Part E) | R1a done, approved (owner, 2026-10-18). R1b part 1 (the command door; the table code's 38 direct use-case calls go through it) approved (owner, 2026-10-18: "rest seems fine", with the pile tools found while checking it); R1b part 2 and R1c–R1f written together on the owner's request (2026-10-18, "Do all R1's in one go"; doc 30 Part E), approved (owner, 2026-10-18). R2a–R2d all written on the owner's request (2026-10-18, "implement whole R2"; doc 30 Part F), to be checked (not compiled here) |
 | 6 | UX-1 | Cursor, gestures and the free table ping (doc 30 A2) | Placed in the order (owner, 2026-10-18); planned after R2 |
 | 7 | CART-1 | Cartridge contract (what a game hands the platform, doc 30 A4), including seats along the table outline | Placed in the order (owner, 2026-10-18); planned after UX-1. TrapFloorCartridge (R1e) is the first cartridge it will formalise |
 
@@ -121,6 +121,11 @@ computer, the owner checks.
 
 Not yet placed in the order: SLS (Super Leroy Sisters, waiting for the game from Russell; the owner will say when).
 
+**Carry a whole stack (owner, 2026-10-18):** Merge Into… is gone from the stack menu. Press and hold a card in a
+stack without moving and the whole stack lifts and follows the pointer; let go on another stack (its outline lights
+green) to merge, anywhere else to put it down; Escape puts it back. A quick drag still takes the top card. Written
+2026-10-18 (`TabletopComposition.StackCarry.cs`, the router's new carry route), to be checked. Register: P-PILES.
+
 **Duplicate a single card (owner, 2026-10-18):** a duplicated card is now an exact copy (same card and face), also for
 a game's own cards; pawns, tokens and dice from a game still become generic copies. Written 2026-10-18, to be checked.
 
@@ -135,7 +140,22 @@ console-style table). Owner's own preference so far: version B.
 | V0–V1 | Art direction "inside the console" (circuit board) with layout mock-ups; lighting and post (doc 30 C) | V0 board made 2026-10-17 (16 screens in A, B and C, with references); waiting for approval |
 | T4–T5 | Table textures (any picture, repeat or fit) and paint layer, within the B5 budget; includes the console-style table textures (plastic body and mat) if approved | Waiting |
 | V2–V5 | Pieces; table and room; menus and layout (V4a), readability (V4b), circuit-board skin (V4c); motion and feel | Waiting |
+| MENU-1 | Organise all menus (owner, 2026-10-18: "right now everything is on the Table menu; sections should be easy to view and navigate"). Designed as a senior artist and designer would, in the approved V0 look, and shown for approval before any code. Goes with V4a (menus and layout) | Waiting; plan below |
 | V6–V7 | Later visual stages (doc 30 C) | Waiting |
+
+**MENU-1 plan (2026-10-18).** Today one Table menu holds about twenty rows of different kinds: starting and clearing
+tables, play settings, the table's shape, your content, your profile and help. The plan:
+
+- **Sort by what the player is doing**, not by when the feature was added. A first grouping to design from:
+  - **Play** (this table): seat, hot seat, hands on table, rules card, hints, full feedback.
+  - **Table:** New table…, Reset, Clear, shape, edge, Table tools…, Save table as a game….
+  - **Workshop** (your content): cards, decks, card art, your games.
+  - **You:** profile, tips, help.
+- **One place, clear sections.** For example a menu panel with a section rail (icon and name) and the section's rows
+  beside it, instead of one long list. The bar stays small: game chip, Undo/Redo, Shop, Menu.
+- **The same row everywhere:** icon, name, current value or switch, a short hint; "…" only on rows that open a panel.
+- **Design first:** the layout is drawn as a design board (on version B unless the owner picks otherwise), checked
+  with the owner, and only then built into the Final UI prefabs (no UI built from code).
 
 Client meeting 2026-10-15 (doc 30 §C0): quick wins before V0 — **Q1** fix the panel corner glitches (now waiting
 for visual approval), **Q2** circuit-board skybox (written 2026-10-17, to be checked); V0 is made with Russell;

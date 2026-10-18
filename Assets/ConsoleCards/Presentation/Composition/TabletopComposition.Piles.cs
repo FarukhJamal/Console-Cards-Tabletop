@@ -71,8 +71,7 @@ namespace ConsoleCards.Presentation.Composition
                 new ShuffleDeckCommand(CreateCommandContext(), targetDeckContainerId));
             if (result.Succeeded)
             {
-                if (isDeck) targetDeckView.ApplyAcceptedLayout();
-                else ApplyLayout(targetDeckContainerId);
+                // R2: the deck or stack was laid out again by the table's view sync when the shuffle was accepted.
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
                     settleDuration);
@@ -148,9 +147,7 @@ namespace ConsoleCards.Presentation.Composition
             Registry.TryGetDeckPresentation(sourceDeckContainerId, out DeckView sourceDeckView, out _);
             if (result.Succeeded)
             {
-                if (sourceDeckView != null) sourceDeckView.ApplyAcceptedLayout();
-                else ApplyLayout(sourceDeckContainerId); // drawn from a stack
-                ApplyLayout(targetHandId);
+                // R2: the deck (or stack) and the hand were laid out again by the table's view sync.
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
                     handReflowDuration,
@@ -253,21 +250,14 @@ namespace ConsoleCards.Presentation.Composition
 
             if (result.Succeeded)
             {
-                StackRuntimeView newStackView = Spawner.CreateStackRuntimeView(
-                    $"Stack {Registry.stackViewsByContainerId.Count + 1}",
-                    matchState.GetContainer(newStackId),
-                    matchState.ContainerPlacements[newStackId],
-                    true);
-                Registry.stackViewsByContainerId.Add(newStackId, newStackView);
+                // R2: the table's view sync made the new stack's view and laid both stacks out.
+                StackRuntimeView newStackView = Registry.stackViewsByContainerId[newStackId];
                 primaryStackContainerId = newStackId;
-                sourceView.View.ApplyAcceptedLayout();
-                newStackView.View.ApplyAcceptedLayout();
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
                     settleDuration,
                     0.035f);
                 presentationTransitions.Appear(newStackView.Root.transform, settleDuration);
-                RebuildLayoutLookupAndRouter();
                 if (matchState.GetContainer(newStackId).Count == 1) WatchStackForCollapse(newStackId); // a single card goes back to being a card
                 ShowMessage("Stack split.");
             }
@@ -383,7 +373,7 @@ namespace ConsoleCards.Presentation.Composition
 
             if (result.Succeeded)
             {
-                ApplyLayout(containerId);
+                // R2: laid out again by the table's view sync.
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
                     containerId == handContainerId ? handReflowDuration : settleDuration);
@@ -419,9 +409,8 @@ namespace ConsoleCards.Presentation.Composition
                 new MergeStacksCommand(CreateCommandContext(), sourceId, destinationId));
             if (result.Succeeded)
             {
+                // R2: the table's view sync removed the merged stack's view and laid the destination out.
                 StackRuntimeView destinationView = Registry.stackViewsByContainerId[destinationId];
-                RemoveStackRuntimeView(sourceId);
-                destinationView.View.ApplyAcceptedLayout();
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
                     settleDuration,
@@ -478,7 +467,7 @@ namespace ConsoleCards.Presentation.Composition
             return false;
         }
 
-        private void RemoveStackRuntimeView(ContainerId containerId)
+        internal void RemoveStackRuntimeView(ContainerId containerId)
         {
             if (!Registry.stackViewsByContainerId.TryGetValue(containerId, out StackRuntimeView stackRuntimeView))
             {

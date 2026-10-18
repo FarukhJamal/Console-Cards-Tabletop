@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.6 · 2026-10-18 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.7 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -356,8 +356,12 @@ Change: …
     piles are never removed; a stack placed empty from the Toolbox stays until it has been used. A split that
     leaves a single card leaves it as a card. Undo goes straight back to the stack before.
   - **Stack menu:** right-clicking a stack or any card in it opens the STACK menu, the same pile actions as a deck:
-    Inspect (the card clicked), Draw to Hand, Shuffle, Split Stack, Split into…, Merge Into…, Duplicate, Move,
-    Delete. A stack made by dropping cards on each other is an ordinary stack.
+    Inspect (the card clicked), Draw to Hand, Shuffle, Split Stack, Split into…, Duplicate, Move, Delete. A stack
+    made by dropping cards on each other is an ordinary stack.
+  - **Carry a whole stack** (owner, 2026-10-18; replaces the menu's Merge Into…): press and hold a card in a stack
+    without moving (about half a second) and the whole stack lifts and follows the pointer (a quick drag still takes
+    only the top card). Over another stack, that stack's green outline lights; let go there and the carried cards
+    are merged onto it. Let go anywhere else and the stack is put down there. Escape puts it back. One Undo step.
   - **Undo and the table:** a card let go onto the table and its landing are one Undo step; Undo never puts a card
     back in mid-air.
   - **Split into…** (decks and stacks): choose 2 to 6; the cards are dealt into that many piles in a row beside it,
@@ -370,7 +374,9 @@ Change: …
   card-on-card stack, cards taken out of it stayed unclickable; fixed and checked live. 2026-10-18 stacking feel:
   outline while carrying, instant stack, taps and flashes, a one-card stack turns back into a card (owner).
   2026-10-18 fixes: stack forms where the bottom card lies; stack menu on its cards with deck actions (Draw to Hand,
-  Shuffle); drop and landing one Undo step, no card in mid-air after Undo (owner).
+  Shuffle); drop and landing one Undo step, no card in mid-air after Undo (owner). 2026-10-18: Merge Into… removed
+  from the menu; press and hold a stack to carry it whole, let go on another stack to merge (owner). Not yet
+  checked in Unity.
 
 ### P-CONSOLE · The Console mat
 - **Status:** Built, approved

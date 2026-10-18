@@ -4,6 +4,8 @@ namespace ConsoleCards.Presentation.Interaction
     {
         None = 0,
         TabletopMove = 1,
-        ContainedCardDrag = 2
+        ContainedCardDrag = 2,
+        // A whole stack picked up by pressing and holding (owner, 2026-10-18).
+        StackCarry = 3
     }
 }

@@ -205,7 +205,7 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            ProjectPlacedBoards();
+            // R2: the mat got its view from the table's view sync.
             if (boardViews.TryGetValue(boardId, out GameBoardMatView view))
             {
                 presentationTransitions.Appear(view.transform, settleDuration);
@@ -248,12 +248,7 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            if (boardViews.TryGetValue(boardId, out GameBoardMatView view))
-            {
-                ApplyConsolePose(view.transform, matchState.PlacedBoards[boardId].Pose, null);
-            }
-
-            Physics.SyncTransforms();
+            // R2: the mat was set in its new place by the table's view sync.
             ShowMessage("Board moved. Cards on it stay where they are.");
             return true;
         }
@@ -421,13 +416,7 @@ namespace ConsoleCards.Presentation.Composition
                     return;
                 }
 
-                if (boardViews.TryGetValue(boardId, out GameBoardMatView view))
-                {
-                    view.Apply(grid);
-                    ApplyConsolePose(view.transform, matchState.PlacedBoards[boardId].Pose, null);
-                }
-
-                Physics.SyncTransforms();
+                // R2: the mat was redrawn with its new grid by the table's view sync.
             }
 
             ShowBoardContextMenu(boardId); // stays open for the next + or −
@@ -444,13 +433,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (boardViews.TryGetValue(boardId, out GameBoardMatView view))
-            {
-                if (view != null) DestroyRuntimeOwnedGameObject(view.gameObject);
-                boardViews.Remove(boardId);
-            }
-
-            Physics.SyncTransforms();
+            // R2: the mat's view was removed by the table's view sync.
             ShowMessage("Board removed. Cards that were on it stay on the table.");
         }
 

@@ -238,18 +238,7 @@ namespace ConsoleCards.Presentation.Composition
             ClearStackHover();
             if (target == null) return;
             stackHoverTarget = target;
-            if (stackHoverHint == null)
-            {
-                stackHoverHint = CreateToolboxPlacementPreview(TabletopComponentKind.Stack, 0);
-                stackHoverHint.name = "Stack Drop Hint";
-                stackHoverHintVisual = stackHoverHint.GetComponent<FixedContainerVisual>();
-                if (stackHoverHintVisual != null)
-                {
-                    stackHoverHintVisual.SetBasePlateHidden(true); // only the outline
-                    if (stackHoverHintVisual.Label != null) stackHoverHintVisual.Label.gameObject.SetActive(false);
-                }
-            }
-
+            EnsureStackHoverHint();
             Vector3 position = RestPosition(target);
             Renderer renderer = target.GetComponentInChildren<Renderer>();
             float surface = renderer != null ? renderer.bounds.min.y : position.y;
@@ -258,6 +247,20 @@ namespace ConsoleCards.Presentation.Composition
                 Quaternion.Euler(0f, target.transform.eulerAngles.y, 0f));
             stackHoverHint.SetActive(true);
             stackHoverHintVisual?.ShowValidTarget();
+        }
+
+        // The green stack outline, made once and shared by card-on-card stacking and carrying a stack.
+        private void EnsureStackHoverHint()
+        {
+            if (stackHoverHint != null) return;
+            stackHoverHint = CreateToolboxPlacementPreview(TabletopComponentKind.Stack, 0);
+            stackHoverHint.name = "Stack Drop Hint";
+            stackHoverHintVisual = stackHoverHint.GetComponent<FixedContainerVisual>();
+            if (stackHoverHintVisual != null)
+            {
+                stackHoverHintVisual.SetBasePlateHidden(true); // only the outline
+                if (stackHoverHintVisual.Label != null) stackHoverHintVisual.Label.gameObject.SetActive(false);
+            }
         }
 
         private void ClearStackHover()
@@ -289,18 +292,18 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 stackId = created.ContainerId;
-                ProjectCreatedToolboxComponent(created); // also rebuilds the transfer coordinator
+                // R2: the stack got its view from the table's view sync (which also rebuilt the transfer coordinator).
                 CardDropTarget target = CardDropTarget.ForContainer(stackId);
                 stacked = transferCoordinator != null
                     && transferCoordinator.Transfer(bottom, target).Succeeded
                     && transferCoordinator.Transfer(top, target).Succeeded;
                 if (!stacked && matchState.Containers.TryGetValue(stackId, out ContainerState stack) && stack.Count == 0)
                 {
-                    DeleteTabletopComponentResult removed = TableAuthority.Submit<DeleteTabletopComponentRequest, DeleteTabletopComponentResult>(
+                    // R2: an accepted delete removes the view through the table's view sync.
+                    TableAuthority.Submit<DeleteTabletopComponentRequest, DeleteTabletopComponentResult>(
                         new DeleteTabletopComponentRequest(
                             CreateCommandContext(),
                             TabletopComponentTarget.ForContainer(stackId)));
-                    if (removed.Succeeded) ProjectDeletedComponent(removed);
                 }
 
                 if (!stacked) ShowMessage("Could not stack those cards.");
@@ -421,11 +424,11 @@ namespace ConsoleCards.Presentation.Composition
                     }
                 }
 
-                DeleteTabletopComponentResult removed = TableAuthority.Submit<DeleteTabletopComponentRequest, DeleteTabletopComponentResult>(
+                // R2: an accepted delete removes the view through the table's view sync.
+                TableAuthority.Submit<DeleteTabletopComponentRequest, DeleteTabletopComponentResult>(
                     new DeleteTabletopComponentRequest(
                         CreateCommandContext(),
                         TabletopComponentTarget.ForContainer(stackId)));
-                if (removed.Succeeded) ProjectDeletedComponent(removed);
             }
             finally
             {

@@ -78,79 +78,111 @@ namespace ConsoleCards.Presentation.Composition
         {
             LocalTableAuthority authority = new LocalTableAuthority();
 
+            // R2: views follow accepted changes, not the code that asked for them; panels redraw when something
+            // changed (R2c).
+            ViewSync.Attach(authority);
+            authority.CommandAccepted += HandleTableCommandAccepted;
+
             // Pieces and physics: drags, drops, turns, flips and physics commits (R1b part 2).
             authority.Register<MoveObjectCommand, MoveObjectResult>(
-                command => moveObjectUseCase.Execute(matchState, command));
+                command => moveObjectUseCase.Execute(matchState, command), IsAccepted);
             authority.Register<CommitPhysicalObjectCommand, CommandResult>(
-                command => commitPhysicalObjectUseCase.Execute(matchState, activeSession.Request.ActivePlayerIds, command));
+                command => commitPhysicalObjectUseCase.Execute(matchState, activeSession.Request.ActivePlayerIds, command), IsAccepted);
             authority.Register<TransferCardCommand, TransferCardResult>(
-                command => transferCardUseCase.Execute(matchState, command));
+                command => transferCardUseCase.Execute(matchState, command), IsAccepted);
             authority.Register<TransferTokenCommand, TransferTokenResult>(
-                command => transferTokenUseCase.Execute(matchState, command));
+                command => transferTokenUseCase.Execute(matchState, command), IsAccepted);
             authority.Register<RotateObjectCommand, RotateObjectResult>(
-                command => rotateObjectUseCase.Execute(matchState, command));
+                command => rotateObjectUseCase.Execute(matchState, command), IsAccepted);
             authority.Register<FlipCardCommand, FlipCardResult>(
-                command => flipCardUseCase.Execute(matchState, command));
+                command => flipCardUseCase.Execute(matchState, command), IsAccepted);
             authority.Register<MoveContainerCommand, MoveContainerResult>(
-                command => new MoveContainerUseCase(physicalSurfaceQuery.ResolveContainerSurfaceHeight).Execute(matchState, command));
+                command => new MoveContainerUseCase(physicalSurfaceQuery.ResolveContainerSurfaceHeight).Execute(matchState, command), IsAccepted);
             authority.Register<FlipConsoleCommand, CommandResult>(
-                command => new FlipConsoleUseCase().Execute(matchState, command));
+                command => new FlipConsoleUseCase().Execute(matchState, command), IsAccepted);
 
             // Decks, stacks and hands.
             authority.Register<ShuffleDeckCommand, ShuffleDeckResult>(
-                command => new ShuffleDeckUseCase(authoritativeRandomValueSource).Execute(matchState, command));
+                command => new ShuffleDeckUseCase(authoritativeRandomValueSource).Execute(matchState, command), IsAccepted);
             authority.Register<DrawCardsCommand, DrawCardsResult>(
-                command => new DrawCardsUseCase().Execute(matchState, command));
+                command => new DrawCardsUseCase().Execute(matchState, command), IsAccepted);
             authority.Register<SplitStackCommand, SplitStackResult>(
-                command => new SplitStackUseCase().Execute(matchState, command));
+                command => new SplitStackUseCase().Execute(matchState, command), IsAccepted);
             authority.Register<ReorderContainerCommand, ReorderContainerResult>(
-                command => new ReorderContainerUseCase().Execute(matchState, command));
+                command => new ReorderContainerUseCase().Execute(matchState, command), IsAccepted);
             authority.Register<MergeStacksCommand, MergeStacksResult>(
-                command => new MergeStacksUseCase().Execute(matchState, command));
+                command => new MergeStacksUseCase().Execute(matchState, command), IsAccepted);
             authority.Register<CollectHandIntoDeckRequest, CollectHandIntoDeckResult>(
                 command => new CollectHandIntoDeckUseCase(componentIdentitySource, physicalSurfaceQuery.ResolveContainerSurfaceHeight)
-                    .Execute(matchState, command));
+                    .Execute(matchState, command), IsAccepted);
 
             // The Toolbox: create, duplicate, populate and delete.
             authority.Register<CreateTabletopComponentRequest, CreateTabletopComponentResult>(
-                command => componentCreationUseCase.Execute(matchState, activeSession.Request.ActivePlayerIds, command));
+                command => componentCreationUseCase.Execute(matchState, activeSession.Request.ActivePlayerIds, command), IsAccepted);
             authority.Register<CreateGenericCardBatchRequest, CreateGenericCardBatchResult>(
-                command => cardBatchCreationUseCase.Execute(matchState, activeSession.Request.ActivePlayerIds, command));
+                command => cardBatchCreationUseCase.Execute(matchState, activeSession.Request.ActivePlayerIds, command), IsAccepted);
             authority.Register<DuplicateTabletopComponentRequest, DuplicateTabletopComponentResult>(
-                command => componentDuplicationUseCase.Execute(matchState, activeSession.Request.ActivePlayerIds, command));
+                command => componentDuplicationUseCase.Execute(matchState, activeSession.Request.ActivePlayerIds, command), IsAccepted);
             authority.Register<PopulateDeckRequest, PopulateDeckResult>(
-                command => populateDeckUseCase.Execute(matchState, activeSession.Request.ActivePlayerIds, command));
+                command => populateDeckUseCase.Execute(matchState, activeSession.Request.ActivePlayerIds, command), IsAccepted);
             authority.Register<DuplicatePileRequest, CreateTabletopComponentResult>(
-                command => componentCreationUseCase.DuplicatePile(matchState, activeSession.Request.ActivePlayerIds, command));
+                command => componentCreationUseCase.DuplicatePile(matchState, activeSession.Request.ActivePlayerIds, command), IsAccepted);
             authority.Register<DeleteTabletopComponentRequest, DeleteTabletopComponentResult>(
-                command => componentDeletionUseCase.Execute(matchState, activeSession.Request.ActivePlayerIds, command));
+                command => componentDeletionUseCase.Execute(matchState, activeSession.Request.ActivePlayerIds, command), IsAccepted);
 
             // Game board mats.
-            authority.Register<CreateBoardCommand, CreateBoardResult>(CreateBoard);
+            authority.Register<CreateBoardCommand, CreateBoardResult>(CreateBoard, IsAccepted);
             authority.Register<MoveBoardCommand, CommandResult>(
-                command => boardUseCases.Move(matchState, command.Context, command.BoardId, command.Pose, command.SurfaceHeight));
+                command => boardUseCases.Move(matchState, command.Context, command.BoardId, command.Pose, command.SurfaceHeight), IsAccepted);
             authority.Register<SetBoardGridCommand, CommandResult>(
-                command => boardUseCases.SetGrid(matchState, command.Context, command.BoardId, command.Grid));
+                command => boardUseCases.SetGrid(matchState, command.Context, command.BoardId, command.Grid), IsAccepted);
             authority.Register<DeleteBoardCommand, CommandResult>(
-                command => boardUseCases.Delete(matchState, command.Context, command.BoardId));
+                command => boardUseCases.Delete(matchState, command.Context, command.BoardId), IsAccepted);
 
             // Trap Floor.
             authority.Register<TrapFloorBeginCollapseCommand, TrapFloorCollapseResult>(
-                command => trapFloorCollapseUseCase.Begin(matchState, command));
+                command => trapFloorCollapseUseCase.Begin(matchState, command), IsAccepted);
             authority.Register<TrapFloorResolveCollapseCommand, TrapFloorCollapseResult>(
-                command => trapFloorCollapseUseCase.ResolveSettled(matchState, command));
+                command => trapFloorCollapseUseCase.ResolveSettled(matchState, command), IsAccepted);
             authority.Register<TrapFloorRevealFloorCommand, TrapFloorRevealFloorResult>(
-                command => trapFloorRevealFloorUseCase.Execute(matchState, command));
+                command => trapFloorRevealFloorUseCase.Execute(matchState, command), IsAccepted);
             authority.Register<TrapFloorClaimKeyCommand, TrapFloorObjectiveResult>(
-                command => trapFloorObjectiveUseCase.ClaimKey(matchState, command));
+                command => trapFloorObjectiveUseCase.ClaimKey(matchState, command), IsAccepted);
             authority.Register<TrapFloorAttemptEscapeCommand, TrapFloorObjectiveResult>(
-                command => trapFloorObjectiveUseCase.AttemptEscape(matchState, command));
+                command => trapFloorObjectiveUseCase.AttemptEscape(matchState, command), IsAccepted);
             authority.Register<TrapFloorTakePrizeCommand, TrapFloorTakePrizeResult>(
-                command => trapFloorTakePrizeUseCase.Execute(matchState, command));
+                command => trapFloorTakePrizeUseCase.Execute(matchState, command), IsAccepted);
             authority.Register<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(
-                command => trapFloorShopUseCase.Execute(matchState, command));
+                command => trapFloorShopUseCase.Execute(matchState, command), IsAccepted);
             return authority;
         }
+
+        // R2: "was it accepted" for each result type (every one has Succeeded). Each is turned into a delegate once,
+        // when the door is set up; a submit allocates nothing.
+        private static bool IsAccepted(MoveObjectResult result) => result.Succeeded;
+        private static bool IsAccepted(CommandResult result) => result.Succeeded;
+        private static bool IsAccepted(TransferCardResult result) => result.Succeeded;
+        private static bool IsAccepted(TransferTokenResult result) => result.Succeeded;
+        private static bool IsAccepted(RotateObjectResult result) => result.Succeeded;
+        private static bool IsAccepted(FlipCardResult result) => result.Succeeded;
+        private static bool IsAccepted(MoveContainerResult result) => result.Succeeded;
+        private static bool IsAccepted(ShuffleDeckResult result) => result.Succeeded;
+        private static bool IsAccepted(DrawCardsResult result) => result.Succeeded;
+        private static bool IsAccepted(SplitStackResult result) => result.Succeeded;
+        private static bool IsAccepted(ReorderContainerResult result) => result.Succeeded;
+        private static bool IsAccepted(MergeStacksResult result) => result.Succeeded;
+        private static bool IsAccepted(CollectHandIntoDeckResult result) => result.Succeeded;
+        private static bool IsAccepted(CreateTabletopComponentResult result) => result.Succeeded;
+        private static bool IsAccepted(CreateGenericCardBatchResult result) => result.Succeeded;
+        private static bool IsAccepted(DuplicateTabletopComponentResult result) => result.Succeeded;
+        private static bool IsAccepted(PopulateDeckResult result) => result.Succeeded;
+        private static bool IsAccepted(DeleteTabletopComponentResult result) => result.Succeeded;
+        private static bool IsAccepted(CreateBoardResult result) => result.Succeeded;
+        private static bool IsAccepted(TrapFloorCollapseResult result) => result.Succeeded;
+        private static bool IsAccepted(TrapFloorRevealFloorResult result) => result.Succeeded;
+        private static bool IsAccepted(TrapFloorObjectiveResult result) => result.Succeeded;
+        private static bool IsAccepted(TrapFloorTakePrizeResult result) => result.Succeeded;
+        private static bool IsAccepted(TrapFloorBuyFromShopResult result) => result.Succeeded;
 
         private CreateBoardResult CreateBoard(CreateBoardCommand command)
         {

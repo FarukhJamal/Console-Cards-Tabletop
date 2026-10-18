@@ -407,7 +407,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             toolboxSpawnSequence++;
-            ProjectCreatedToolboxComponent(result);
+            // R2: the Console got its view from the table's view sync.
             ShowMessage(showsBack
                 ? "Duplicated the Console with the controller side up."
                 : "Duplicated the Console with the symbol side up.");

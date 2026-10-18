@@ -80,10 +80,19 @@ namespace ConsoleCards.Presentation.Composition
         internal CardEditorActions cardEditorActions;
         internal string editorArtFolder = string.Empty;
 
-        // The card editor opens from the game selection menu (L2-4); the Table menu row stays hidden.
+        // The card editor opens from the game selection menu (L2-4) and, so cards can be looked at without starting
+        // a new table, straight from the Table menu row "Card editor…" (2026-10-18, owner request).
         internal void RefreshCardEditorEntry()
         {
-            host.runtimeUi?.ShowCardEditorEntry(null);
+            host.runtimeUi?.ShowCardEditorEntry(OpenCardEditorFromTableMenu);
+        }
+
+        // From the Table menu: Close just closes (no return to the game selection menu or a Save table as a game step).
+        internal void OpenCardEditorFromTableMenu()
+        {
+            host.GameSelectPanel.returnToGameSelect = false;
+            host.PlayerGamesPanel.returnToGameSave = false;
+            OpenCardEditor();
         }
 
         internal ContentArtService EditorArt => editorOtherArt ?? host.contentArt;

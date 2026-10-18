@@ -15,6 +15,7 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly TabletopSelectionState selectionState;
 
         private TabletopInteractionRoute activeRoute;
+        private float pressStartedAt;
 
         public TabletopInteractionRouter(
             TabletopObjectHitResolver hitResolver,
@@ -40,6 +41,15 @@ namespace ConsoleCards.Presentation.Interaction
         /// </summary>
         public HandView HandView { get; set; }
 
+        /// <summary>
+        /// Optional: picks up a whole stack when a card in it is pressed and held still for
+        /// <see cref="LongPressSeconds"/> (owner, 2026-10-18). Moving first still takes the top card out.
+        /// </summary>
+        public ITabletopCarryHandler CarryHandler { get; set; }
+
+        /// <summary>How long a still press on a stack card waits before the whole stack is picked up.</summary>
+        public float LongPressSeconds { get; set; } = 0.45f;
+
         public bool TryBegin(Vector2 screenPosition)
         {
             ValidateScreenPosition(screenPosition, nameof(screenPosition));
@@ -61,6 +71,7 @@ namespace ConsoleCards.Presentation.Interaction
                 selectionState.Select(containedCardView);
                 selectionState.ClearHovered();
                 activeRoute = TabletopInteractionRoute.ContainedCardDrag;
+                pressStartedAt = Time.unscaledTime;
                 return true;
             }
 
@@ -83,7 +94,15 @@ namespace ConsoleCards.Presentation.Interaction
                     moveCoordinator.UpdatePointer(screenPosition);
                     return;
                 case TabletopInteractionRoute.ContainedCardDrag:
+                    if (TryStartCarry(screenPosition))
+                    {
+                        return;
+                    }
+
                     containedCardDragCoordinator.UpdatePointer(screenPosition);
+                    return;
+                case TabletopInteractionRoute.StackCarry:
+                    CarryHandler.UpdateCarry(screenPosition);
                     return;
                 case TabletopInteractionRoute.None:
                     throw new InvalidOperationException("No tabletop interaction route is active.");
@@ -122,12 +141,41 @@ namespace ConsoleCards.Presentation.Interaction
                     {
                         activeRoute = TabletopInteractionRoute.None;
                     }
+                case TabletopInteractionRoute.StackCarry:
+                    // The route ends first: committing the carry may rebuild the table's interaction graph.
+                    activeRoute = TabletopInteractionRoute.None;
+                    CarryHandler.ReleaseCarry(screenPosition);
+                    return TabletopInteractionReleaseResult.FromCarry();
                 case TabletopInteractionRoute.None:
                     return TabletopInteractionReleaseResult.NoActiveInteraction();
                 default:
                     activeRoute = TabletopInteractionRoute.None;
                     throw new InvalidOperationException("Unsupported tabletop interaction route.");
             }
+        }
+
+        // A press on a stack card held still long enough picks up the whole stack instead of its top card.
+        private bool TryStartCarry(Vector2 screenPosition)
+        {
+            if (CarryHandler == null
+                || containedCardDragCoordinator.Phase != TabletopInteractionPhase.Pressed
+                || Time.unscaledTime - pressStartedAt < LongPressSeconds)
+            {
+                return false;
+            }
+
+            CardView pressedCard = containedCardDragCoordinator.ActiveCardView;
+            if (pressedCard == null || !CarryHandler.CanCarry(pressedCard))
+            {
+                return false;
+            }
+
+            containedCardDragCoordinator.Cancel();
+            selectionState.ClearSelection();
+            activeRoute = CarryHandler.TryBeginCarry(pressedCard, screenPosition)
+                ? TabletopInteractionRoute.StackCarry
+                : TabletopInteractionRoute.None;
+            return true;
         }
 
         private void ClearSelectionAfterHandDrop(TabletopInteractionReleaseResult result)
@@ -186,6 +234,10 @@ namespace ConsoleCards.Presentation.Interaction
                     }
 
                     return;
+                case TabletopInteractionRoute.StackCarry:
+                    activeRoute = TabletopInteractionRoute.None;
+                    CarryHandler?.CancelCarry();
+                    return;
                 case TabletopInteractionRoute.None:
                     return;
                 default:
@@ -197,6 +249,11 @@ namespace ConsoleCards.Presentation.Interaction
         public void Reset()
         {
             Exception firstFailure = null;
+            if (activeRoute == TabletopInteractionRoute.StackCarry)
+            {
+                activeRoute = TabletopInteractionRoute.None;
+                CarryHandler?.CancelCarry();
+            }
 
             try
             {
