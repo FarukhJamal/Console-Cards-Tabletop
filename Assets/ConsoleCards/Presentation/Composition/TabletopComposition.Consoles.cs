@@ -245,8 +245,7 @@ namespace ConsoleCards.Presentation.Composition
             ConsoleMatFaces faces = instance.View.GetComponent<ConsoleMatFaces>();
             faces?.CompleteTurn();
             bool toBack = !console.ShowsBack;
-            CommandResult result = new FlipConsoleUseCase().Execute(
-                matchState,
+            CommandResult result = TableAuthority.Submit<FlipConsoleCommand, CommandResult>(
                 new FlipConsoleCommand(CreateCommandContext(), slotContainerId, toBack));
             if (!result.Succeeded)
             {
@@ -394,9 +393,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private bool CommitConsoleDuplicate(TabletopPose requestedPose, bool showsBack)
         {
-            CreateTabletopComponentResult result = componentCreationUseCase.Execute(
-                matchState,
-                activeSession.Request.ActivePlayerIds,
+            CreateTabletopComponentResult result = TableAuthority.Submit<CreateTabletopComponentRequest, CreateTabletopComponentResult>(
                 new CreateTabletopComponentRequest(
                     CreateCommandContext(),
                     TabletopComponentKind.Console,
@@ -712,9 +709,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             placed = placed.WithRotation(new PhysicalRotation(rotation.x, rotation.y, rotation.z, rotation.w));
-            CommandResult result = new CommitPhysicalObjectUseCase().Execute(
-                matchState,
-                activeSession.Request.ActivePlayerIds,
+            CommandResult result = TableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(
                 new CommitPhysicalObjectCommand(
                     CreateCommandContext(),
                     state.Id,

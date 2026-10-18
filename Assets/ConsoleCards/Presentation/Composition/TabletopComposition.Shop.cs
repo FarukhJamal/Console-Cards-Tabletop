@@ -454,8 +454,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            TrapFloorBuyFromShopResult result = trapFloorShopUseCase.Execute(
-                matchState,
+            TrapFloorBuyFromShopResult result = TableAuthority.Submit<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(
                 new TrapFloorBuyFromShopCommand(
                     CreateCommandContext(trapFloorTurnState.ActivePlayerId),
                     cardDefinitionStableId,

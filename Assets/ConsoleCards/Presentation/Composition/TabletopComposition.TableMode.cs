@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using ConsoleCards.Application.Commands;
+using ConsoleCards.Application.Results;
 using ConsoleCards.Application.UseCases;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
@@ -744,8 +745,7 @@ namespace ConsoleCards.Presentation.Composition
             bool accepted;
             if (piece.PhysicalObject == null)
             {
-                accepted = new MoveObjectUseCase().Execute(
-                    matchState,
+                accepted = TableAuthority.Submit<MoveObjectCommand, MoveObjectResult>(
                     new MoveObjectCommand(CreateCommandContext(), state.Id, pose)).Succeeded;
             }
             else
@@ -763,9 +763,7 @@ namespace ConsoleCards.Presentation.Composition
 
                 Quaternion turn = piece.PhysicalObject.Body != null ? piece.PhysicalObject.Body.rotation : piece.transform.rotation;
                 placed = placed.WithRotation(new PhysicalRotation(turn.x, turn.y, turn.z, turn.w));
-                accepted = new CommitPhysicalObjectUseCase().Execute(
-                    matchState,
-                    activeSession.Request.ActivePlayerIds,
+                accepted = TableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(
                     new CommitPhysicalObjectCommand(
                         CreateCommandContext(),
                         state.Id,
@@ -821,7 +819,11 @@ namespace ConsoleCards.Presentation.Composition
                 board.Pose.RotationDegrees,
                 board.Pose.Layer,
                 board.Pose.LocalOrder);
-            if (!boardUseCases.Move(matchState, CreateCommandContext(), boardId, pose, null).Succeeded) return false;
+            if (!TableAuthority.Submit<MoveBoardCommand, CommandResult>(
+                    new MoveBoardCommand(CreateCommandContext(), boardId, pose, null)).Succeeded)
+            {
+                return false;
+            }
             if (boardViews.TryGetValue(boardId, out GameBoardMatView view) && view != null)
             {
                 ApplyConsolePose(view.transform, matchState.PlacedBoards[boardId].Pose, null);

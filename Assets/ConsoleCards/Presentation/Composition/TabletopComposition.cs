@@ -1126,6 +1126,7 @@ namespace ConsoleCards.Presentation.Composition
             CompletePhysicalFloorCollapseIfSettled();
             CompletePhysicalBlindDirectionIfSettled();
             CompleteConsoleDieSnaps();
+            UpdateCardStackDrops(); // before the board snap: a card dropped on a card stacks
             CompleteBoardCardSnaps();
             presentationTransitions?.Tick(Time.unscaledDeltaTime);
             RefreshHandInteractionPresentation();
@@ -1473,7 +1474,6 @@ namespace ConsoleCards.Presentation.Composition
             TabletopCard,
             FloorCard,
             PendingFloormasterCard,
-            StackCard,
             ContainedCard,
             Stack,
             MergeDestination,
@@ -1482,6 +1482,7 @@ namespace ConsoleCards.Presentation.Composition
             Token,
             Console,
             DiscardPile,
+            SplitPile,
         }
 
         private enum StackViewOwnership

@@ -251,9 +251,7 @@ namespace ConsoleCards.Presentation.Composition
             bool quiet = false)
         {
             bool single = cards.Count == 1 && !forceDeck;
-            CreateTabletopComponentResult result = componentCreationUseCase.Execute(
-                matchState,
-                activeSession.Request.ActivePlayerIds,
+            CreateTabletopComponentResult result = TableAuthority.Submit<CreateTabletopComponentRequest, CreateTabletopComponentResult>(
                 new CreateTabletopComponentRequest(
                     CreateCommandContext(),
                     single ? TabletopComponentKind.Card : TabletopComponentKind.Deck,
@@ -309,9 +307,7 @@ namespace ConsoleCards.Presentation.Composition
         // One command: the Deck and its face-down cards, so one Undo removes both.
         private bool CommitDeckOfCardsPlacement(int quantity, TabletopPose requestedPose)
         {
-            CreateTabletopComponentResult result = componentCreationUseCase.Execute(
-                matchState,
-                activeSession.Request.ActivePlayerIds,
+            CreateTabletopComponentResult result = TableAuthority.Submit<CreateTabletopComponentRequest, CreateTabletopComponentResult>(
                 new CreateTabletopComponentRequest(
                     CreateCommandContext(),
                     TabletopComponentKind.Deck,
@@ -424,9 +420,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private bool CommitCardBatchPlacement(int quantity, TabletopPose requestedPose)
         {
-            CreateGenericCardBatchResult result = cardBatchCreationUseCase.Execute(
-                matchState,
-                activeSession.Request.ActivePlayerIds,
+            CreateGenericCardBatchResult result = TableAuthority.Submit<CreateGenericCardBatchRequest, CreateGenericCardBatchResult>(
                 new CreateGenericCardBatchRequest(
                     CreateCommandContext(),
                     quantity,
@@ -461,9 +455,7 @@ namespace ConsoleCards.Presentation.Composition
             bool consoleShowsBack = false,
             bool quiet = false)
         {
-            CreateTabletopComponentResult result = componentCreationUseCase.Execute(
-                matchState,
-                activeSession.Request.ActivePlayerIds,
+            CreateTabletopComponentResult result = TableAuthority.Submit<CreateTabletopComponentRequest, CreateTabletopComponentResult>(
                 new CreateTabletopComponentRequest(
                     CreateCommandContext(),
                     componentKind,
@@ -547,9 +539,7 @@ namespace ConsoleCards.Presentation.Composition
             TabletopObjectId sourceObjectId,
             TabletopPose requestedPose)
         {
-            DuplicateTabletopComponentResult result = componentDuplicationUseCase.Execute(
-                matchState,
-                activeSession.Request.ActivePlayerIds,
+            DuplicateTabletopComponentResult result = TableAuthority.Submit<DuplicateTabletopComponentRequest, DuplicateTabletopComponentResult>(
                 new DuplicateTabletopComponentRequest(
                     CreateCommandContext(),
                     sourceObjectId,
@@ -661,8 +651,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private bool CommitContainerMove(ContainerId containerId, TabletopPose requestedPose)
         {
-            MoveContainerResult result = new MoveContainerUseCase(physicalSurfaceQuery.ResolveContainerSurfaceHeight).Execute(
-                matchState,
+            MoveContainerResult result = TableAuthority.Submit<MoveContainerCommand, MoveContainerResult>(
                 new MoveContainerCommand(CreateCommandContext(), containerId, requestedPose));
             if (!result.Succeeded)
             {
@@ -1505,12 +1494,8 @@ namespace ConsoleCards.Presentation.Composition
             if (!enabled && hand.Count > 0)
             {
                 int count = hand.Count;
-                CollectHandIntoDeckResult result = new CollectHandIntoDeckUseCase(
-                        componentIdentitySource,
-                        physicalSurfaceQuery.ResolveContainerSurfaceHeight)
-                    .Execute(
-                        matchState,
-                        new CollectHandIntoDeckRequest(
+                CollectHandIntoDeckResult result = TableAuthority.Submit<CollectHandIntoDeckRequest, CollectHandIntoDeckResult>(
+                    new CollectHandIntoDeckRequest(
                             CreateCommandContext(),
                             emptyTableHandContainerId,
                             CreateFreeToolboxSpawnPose()));
@@ -1563,7 +1548,7 @@ namespace ConsoleCards.Presentation.Composition
             selectedQuantity = Mathf.Clamp(selectedQuantity, 1, maximum);
             runtimeUi.ShowQuantityPopup(
                 "DRAW TO HAND",
-                $"Draw from the top of this deck into your hand. {deck.Count} card{(deck.Count == 1 ? string.Empty : "s")} left.",
+                $"Draw from the top of this {(deck.Kind == ContainerKind.Stack ? "stack" : "deck")} into your hand. {deck.Count} card{(deck.Count == 1 ? string.Empty : "s")} left.",
                 "Draw",
                 selectedQuantity,
                 1,

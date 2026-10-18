@@ -56,7 +56,7 @@ namespace ConsoleCards.Application.UseCases
                 return ShuffleDeckResult.Failure(CommandResultStatus.Rejected, ShuffleDeckError.ContainerMissing);
             }
 
-            if (deck.Kind != ContainerKind.Deck)
+            if (deck.Kind != ContainerKind.Deck && deck.Kind != ContainerKind.Stack) // a stack shuffles like a deck
             {
                 return ShuffleDeckResult.Failure(CommandResultStatus.Rejected, ShuffleDeckError.ContainerNotDeck);
             }

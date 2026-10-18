@@ -46,7 +46,8 @@ namespace ConsoleCards.Application.UseCases
                 return SplitStackResult.Failure(CommandResultStatus.Rejected, SplitStackError.SourceStackMissing);
             }
 
-            if (source.Kind != ContainerKind.Stack)
+            // A Deck splits the same way (owner, 2026-10-18: Split into N piles); the new pile is a Stack.
+            if (source.Kind != ContainerKind.Stack && source.Kind != ContainerKind.Deck)
             {
                 return SplitStackResult.Failure(CommandResultStatus.Rejected, SplitStackError.SourceContainerNotStack);
             }

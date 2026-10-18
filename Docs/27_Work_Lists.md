@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.27 · 2026-10-18 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.32 · 2026-10-18 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -83,7 +83,39 @@ the list. The order that stays active:
 | 2 | R0 | Names: Prototype classes and prefabs get final names, renamed so references stay intact (doc 30 A5, record in Part D) | Done, approved ("Works now"; the one-off R0 tool may be deleted) |
 | 3 | T1–T3 | Table shape and size: table spec and builder, star and edges, Table mode with handles (doc 30 B) | T1 done, working after the collider fix (owner, 2026-10-17; doc 30 §B6); T1b model tables done, approved (owner, 2026-10-17; doc 30 §B8); T2 star, edges and edge colliders done, approved (owner, 2026-10-17; doc 30 §B9); T3 Table mode approved; T3 completed with the owner's choice (pieces move in), size handles and the shape change; owner 2026-10-18: every Toolbox piece must move in (the game mat did not), done, approved (owner, 2026-10-18; doc 30 §B10). Seats along the outline moved to CART-1 |
 | 4 | Q2 | Circuit-board skybox (doc 30 §C0): Console Cards > Look > Use Circuit Skybox | Done, approved with the moving currents (owner, 2026-10-18) |
-| 5 | R1–R2 | Code cleanup: split the composition, local command door, UI from events (multiplayer-ready, doc 30 A6); stages R1a–R1f, then R2 (doc 30 Part E) | R1a (split into partial files by job, no code changed) written 2026-10-18, to be checked (not compiled yet); R1b next |
+| 5 | R1–R2 | Code cleanup: split the composition, local command door, UI from events (multiplayer-ready, doc 30 A6); stages R1a–R1f, then R2 (doc 30 Part E) | R1a done, approved (owner, 2026-10-18). R1b part 1 (the command door; the table code's 38 direct use-case calls go through it) written 2026-10-18, to be checked (not compiled yet); R1b part 2 (drag-and-drop and physics through the door) next |
+
+**Pile tools (owner, 2026-10-18, found while checking R1b):** Duplicate was missing on decks, stacks and discard
+piles; there was no Split on decks; a card dropped on a card did not stack. Owner's choices: Duplicate copies all
+the cards; Split into 2–6 piles; card on card works as in Tabletop Simulator. Written 2026-10-18
+(`TabletopComposition.PileTools.cs`, `DuplicatePile` in the creation use case, decks allowed in Split Stack), to be
+checked (not compiled yet). Register: P-PILES, P-COMPONENTS.
+
+**Fix (owner, 2026-10-18: "cards moved from a stack become not interactable"):** when a card-on-card stack formed
+while the pointer rested over a card, rebuilding the table's interaction code stopped half way with an error, so
+nothing on the table could be picked up afterwards. The rebuild now drops the hover first, and the stack waits if the
+player is already holding something else. Checked live in Unity 2026-10-18: stack made, card dragged out, both cards
+pick up again, no errors.
+
+**Stacking feel (owner, 2026-10-18: "empty stack should disappear when one card is left and stacking should feel
+satisfying"):** carrying a card over a loose card lights a green stack outline under it; letting go stacks at once
+(the cards glide together, a soft double tap, the new pile flashes green). A card landing on a stack or deck gives a
+light tap and a short green flash. A stack left with one card turns back into a loose card, and an emptied stack goes
+away (game piles never; a Toolbox stack only once it has been used); Undo never shows a stack of one. Two short
+sounds made for the game (`Content/Resources/CardSounds`). Code: `TabletopComposition.Stacking.cs` (new). Checked live
+in Unity 2026-10-18: outline, instant stack, one-card tidy-up and Undo work, no new errors. The flash and sound are
+for the owner to judge.
+
+**Stacking fixes (owner, 2026-10-18: feel approved; "stack always forms at a certain point", "no Split on a stack
+made from free cards, the mechanic should be the same", "Undo on a stack makes cards fly"):** the stack now forms
+where the bottom card really lies (its physics position, not where it was first placed). Right-clicking any card in a
+stack opens the STACK menu, as a card in a deck opens the DECK menu: Inspect, Draw to Hand, Shuffle, Split Stack,
+Split into…, Merge Into…, Duplicate, Move, Delete (the old card-in-stack menu with Move Up/Down is gone; stacks now
+draw and shuffle like decks). Undo: a card let go onto the table is one step together with its landing (it used to be
+two steps, and undoing the second put the card back in mid-air with its throw speed); the one-card tidy-up joins that
+step and no Undo snapshot is taken of a card in mid-air. Written 2026-10-18, not compiled here; for the owner to
+check. **Working rule (owner, 2026-10-18):** when fixing, change the code only; do not drive Unity on the owner's
+computer, the owner checks.
 
 Not yet placed in the order (owner to choose): UX-1 (cursor, gestures, the free table ping), CART-1 (cartridge
 contract; also seats along the table outline), SLS (Super Leroy Sisters, waiting for the game from Russell).

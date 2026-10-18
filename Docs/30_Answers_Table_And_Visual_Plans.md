@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.13 · 2026-10-18 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.14 · 2026-10-18 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1249,8 +1249,9 @@ The owner approved T3 and the moving skybox on 2026-10-18 ("Approved next"), so 
 
 | Stage | What | Status |
 |---|---|---|
-| R1a | Split `TabletopComposition.cs` into partial files by job. Code moved unchanged. | Written 2026-10-18, to be checked |
-| R1b | The command door: `ITableAuthority.Submit(command)`, local only, and the table's use-case calls routed through it (doc 30 A6, gap 1). | Next |
+| R1a | Split `TabletopComposition.cs` into partial files by job. Code moved unchanged. | Done, approved (owner, 2026-10-18) |
+| R1b, part 1 | The command door: `ITableAuthority.Submit(command)`, local only, and the table code's direct use-case calls routed through it (doc 30 A6, gap 1). | Written 2026-10-18, to be checked |
+| R1b, part 2 | Drag and drop, flips, turns and physics commits through the same door (the interaction coordinators and the local physics authority still hold their own use cases). | Next |
 | R1c | `ViewRegistry` (finds a piece's view) and `PieceSpawner` (catalog spawns and views) as plain classes. | Planned |
 | R1d | `ContextMenuPresenter` and one presenter per panel. | Planned |
 | R1e | `TrapFloorCartridge`: the Trap Floor, Trap Floor status, Shop and Trap Floor hints code in one plain class (the first cartridge, A4). | Planned |
@@ -1298,3 +1299,27 @@ unchanged and in the same order, to one of 21 new partial files in `Presentation
 - every file's braces balance.
 
 Unity makes the `.meta` files for the new scripts on the next import.
+
+**R1b, part 1 — the command door (2026-10-18).** The owner approved R1a ("Approved next").
+
+- **The door.** `Runtime/Application/Authority/ITableAuthority.cs`: `Submit<TCommand, TResult>(command)` and
+  `CanSubmit<TCommand>()`. It lives in the Application layer, next to the commands, so a network version can
+  later replace it without touching the table code.
+- **The local authority.** `LocalTableAuthority.cs`: one handler per command type, set up once. `Submit` looks the
+  handler up by the command's type and calls it; the door itself allocates nothing. A command with no handler
+  stops with a clear message instead of doing nothing.
+- **The handlers.** `Presentation/Composition/TabletopComposition.Authority.cs` gives each command its use case.
+  The handlers read the session's current match, players, random source and surface query when they run, so a
+  new table needs no new set-up.
+- **Board commands.** The board actions had no command objects yet, so four were added
+  (`Runtime/Application/Commands/GameBoardCommands.cs`): `CreateBoardCommand` (with `CreateBoardResult`, which
+  carries the new board's ID), `MoveBoardCommand`, `SetBoardGridCommand` and `DeleteBoardCommand`.
+- **Routed: 38 calls in 8 files.** Boards (6), Consoles (3), ContextMenus (4), Piles (5), Shop (1), TableMode (3),
+  Toolbox (7) and TrapFloor (9). They cover moving pieces, physics commits, Console flips, container moves,
+  shuffle, draw, split, reorder, merge, collecting the hand, Toolbox create, duplicate, populate and delete, the
+  four board actions, and the Trap Floor collapse, reveal, Key, escape, prize and Shop.
+- **Not changed:** every command, use case and result is the same as before, and so is the order of the calls.
+  Read-only helpers (such as `IsMoveBlockedByOwner`, `IsPrize`, `CostOf`) stay direct, because they change
+  nothing.
+- **Still direct (part 2):** the interaction coordinators (drag moves, card and token transfers, flips, turns,
+  Toolbox placement) and the local physics authority are handed their own use cases when the table is built.

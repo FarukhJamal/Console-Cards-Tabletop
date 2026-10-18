@@ -154,8 +154,7 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            TrapFloorCollapseResult begin = trapFloorCollapseUseCase.Begin(
-                matchState,
+            TrapFloorCollapseResult begin = TableAuthority.Submit<TrapFloorBeginCollapseCommand, TrapFloorCollapseResult>(
                 new TrapFloorBeginCollapseCommand(CreateCommandContext(actor)));
             if (!begin.Succeeded)
             {
@@ -202,8 +201,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            TrapFloorCollapseResult result = trapFloorCollapseUseCase.ResolveSettled(
-                matchState,
+            TrapFloorCollapseResult result = TableAuthority.Submit<TrapFloorResolveCollapseCommand, TrapFloorCollapseResult>(
                 new TrapFloorResolveCollapseCommand(
                     CreateCommandContext(physicalFloorCollapseActor)));
             if (!result.Succeeded)
@@ -901,9 +899,7 @@ namespace ConsoleCards.Presentation.Composition
                     return false;
                 }
 
-                moved = new CommitPhysicalObjectUseCase().Execute(
-                    matchState,
-                    activeSession.Request.ActivePlayerIds,
+                moved = TableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(
                     new CommitPhysicalObjectCommand(
                         CreateCommandContext(player),
                         pawn.BaseState.Id,
@@ -914,8 +910,7 @@ namespace ConsoleCards.Presentation.Composition
             }
             else
             {
-                moved = new MoveObjectUseCase().Execute(
-                    matchState,
+                moved = TableAuthority.Submit<MoveObjectCommand, MoveObjectResult>(
                     new MoveObjectCommand(CreateCommandContext(player), pawn.BaseState.Id, targetPose)).Succeeded;
             }
 
@@ -1012,8 +1007,7 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            TrapFloorRevealFloorResult result = trapFloorRevealFloorUseCase.Execute(
-                matchState,
+            TrapFloorRevealFloorResult result = TableAuthority.Submit<TrapFloorRevealFloorCommand, TrapFloorRevealFloorResult>(
                 new TrapFloorRevealFloorCommand(
                     CreateCommandContext(player),
                     floorCardId,
@@ -1429,8 +1423,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            TrapFloorObjectiveResult result = trapFloorObjectiveUseCase.ClaimKey(
-                matchState,
+            TrapFloorObjectiveResult result = TableAuthority.Submit<TrapFloorClaimKeyCommand, TrapFloorObjectiveResult>(
                 new TrapFloorClaimKeyCommand(CreateCommandContext(), floorCardId));
             if (!result.Succeeded)
             {
@@ -1465,8 +1458,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            TrapFloorObjectiveResult result = trapFloorObjectiveUseCase.AttemptEscape(
-                matchState,
+            TrapFloorObjectiveResult result = TableAuthority.Submit<TrapFloorAttemptEscapeCommand, TrapFloorObjectiveResult>(
                 new TrapFloorAttemptEscapeCommand(CreateCommandContext(), floorCardId));
             if (!result.Succeeded)
             {
@@ -1658,8 +1650,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            TrapFloorTakePrizeResult result = trapFloorTakePrizeUseCase.Execute(
-                matchState,
+            TrapFloorTakePrizeResult result = TableAuthority.Submit<TrapFloorTakePrizeCommand, TrapFloorTakePrizeResult>(
                 new TrapFloorTakePrizeCommand(
                     CreateCommandContext(trapFloorTurnState.ActivePlayerId),
                     floorCardId,
@@ -1789,8 +1780,7 @@ namespace ConsoleCards.Presentation.Composition
         private void TriggerLandedTile(TabletopObjectId floorCardId, PlayerId actor)
         {
             if (trapFloorRevealFloorUseCase == null) return;
-            TrapFloorRevealFloorResult result = trapFloorRevealFloorUseCase.Execute(
-                matchState,
+            TrapFloorRevealFloorResult result = TableAuthority.Submit<TrapFloorRevealFloorCommand, TrapFloorRevealFloorResult>(
                 new TrapFloorRevealFloorCommand(
                     CreateCommandContext(actor),
                     floorCardId,

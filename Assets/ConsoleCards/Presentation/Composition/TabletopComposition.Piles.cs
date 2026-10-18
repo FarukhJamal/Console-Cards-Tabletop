@@ -48,13 +48,16 @@ namespace ConsoleCards.Presentation.Composition
     /// <summary>Decks, stacks and hands: shuffle, draw, split, merge, reorder and lay out the cards in a container. (R1a: moved here unchanged from TabletopComposition.cs.)</summary>
     public sealed partial class TabletopComposition
     {
+        // Shuffles a Deck or a Stack (a stack works like a deck, owner 2026-10-18).
         public ShuffleDeckResult ShuffleDeck(ContainerId targetDeckContainerId)
         {
             EnsureInitialized();
-            if (!TryGetDeckPresentation(
-                    targetDeckContainerId,
-                    out DeckView targetDeckView,
-                    out FixedContainerVisual targetDeckVisual))
+            bool isDeck = TryGetDeckPresentation(
+                targetDeckContainerId,
+                out DeckView targetDeckView,
+                out FixedContainerVisual targetDeckVisual);
+            StackRuntimeView targetStack = null;
+            if (!isDeck && !stackViewsByContainerId.TryGetValue(targetDeckContainerId, out targetStack))
             {
                 ShowMessage("Shuffle rejected: Deck Presentation unavailable.");
                 return ShuffleDeckResult.Failure(
@@ -64,24 +67,25 @@ namespace ConsoleCards.Presentation.Composition
 
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(targetDeckContainerId);
-            ShuffleDeckResult result = new ShuffleDeckUseCase(authoritativeRandomValueSource).Execute(
-                matchState,
+            ShuffleDeckResult result = TableAuthority.Submit<ShuffleDeckCommand, ShuffleDeckResult>(
                 new ShuffleDeckCommand(CreateCommandContext(), targetDeckContainerId));
             if (result.Succeeded)
             {
-                targetDeckView.ApplyAcceptedLayout();
+                if (isDeck) targetDeckView.ApplyAcceptedLayout();
+                else ApplyLayout(targetDeckContainerId);
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
                     settleDuration);
                 presentationTransitions.Pulse(
-                    targetDeckVisual.transform,
+                    isDeck ? targetDeckVisual.transform : targetStack.Root.transform,
                     shuffleCompression,
                     feedbackDuration);
-                ShowMessage("Deck shuffled.");
+                ShowMessage(isDeck ? "Deck shuffled." : "Stack shuffled.");
             }
             else
             {
-                targetDeckView.ApplyAcceptedLayout();
+                if (isDeck) targetDeckView.ApplyAcceptedLayout();
+                else ApplyLayout(targetDeckContainerId);
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
                     returnDuration);
@@ -139,13 +143,13 @@ namespace ConsoleCards.Presentation.Composition
 
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(sourceDeckContainerId, targetHandId);
-            DrawCardsResult result = new DrawCardsUseCase().Execute(
-                matchState,
+            DrawCardsResult result = TableAuthority.Submit<DrawCardsCommand, DrawCardsResult>(
                 new DrawCardsCommand(CreateCommandContext(), sourceDeckContainerId, targetHandId, count));
             TryGetDeckPresentation(sourceDeckContainerId, out DeckView sourceDeckView, out _);
             if (result.Succeeded)
             {
-                sourceDeckView?.ApplyAcceptedLayout();
+                if (sourceDeckView != null) sourceDeckView.ApplyAcceptedLayout();
+                else ApplyLayout(sourceDeckContainerId); // drawn from a stack
                 ApplyLayout(targetHandId);
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
@@ -168,7 +172,8 @@ namespace ConsoleCards.Presentation.Composition
             }
             else
             {
-                sourceDeckView?.ApplyAcceptedLayout();
+                if (sourceDeckView != null) sourceDeckView.ApplyAcceptedLayout();
+                else ApplyLayout(sourceDeckContainerId);
                 ApplyLayout(targetHandId);
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
@@ -239,9 +244,7 @@ namespace ConsoleCards.Presentation.Composition
                 sourcePose.Layer,
                 sourcePose.LocalOrder);
 
-            SplitStackResult result = new SplitStackUseCase().Execute(
-                matchState,
-                new SplitStackCommand(
+            SplitStackResult result = TableAuthority.Submit<SplitStackCommand, SplitStackResult>(new SplitStackCommand(
                     CreateCommandContext(),
                     source.Id,
                     newStackId,
@@ -265,6 +268,7 @@ namespace ConsoleCards.Presentation.Composition
                     0.035f);
                 presentationTransitions.Appear(newStackView.Root.transform, settleDuration);
                 RebuildLayoutLookupAndRouter();
+                if (matchState.GetContainer(newStackId).Count == 1) WatchStackForCollapse(newStackId); // a single card goes back to being a card
                 ShowMessage("Stack split.");
             }
             else
@@ -369,8 +373,7 @@ namespace ConsoleCards.Presentation.Composition
 
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(containerId);
-            ReorderContainerResult result = new ReorderContainerUseCase().Execute(
-                matchState,
+            ReorderContainerResult result = TableAuthority.Submit<ReorderContainerCommand, ReorderContainerResult>(
                 new ReorderContainerCommand(
                     CreateCommandContext(),
                     containerId,
@@ -412,8 +415,7 @@ namespace ConsoleCards.Presentation.Composition
 
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(sourceId, destinationId);
-            MergeStacksResult result = new MergeStacksUseCase().Execute(
-                matchState,
+            MergeStacksResult result = TableAuthority.Submit<MergeStacksCommand, MergeStacksResult>(
                 new MergeStacksCommand(CreateCommandContext(), sourceId, destinationId));
             if (result.Succeeded)
             {

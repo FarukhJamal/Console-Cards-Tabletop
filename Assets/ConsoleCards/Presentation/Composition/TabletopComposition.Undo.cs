@@ -316,6 +316,8 @@ namespace ConsoleCards.Presentation.Composition
 
         private void HandleAuthoritativeActionAccepted(AuthoritativeActionAcceptance acceptance)
         {
+            pileCountCheckPending = true; // landing taps and small-stack tidy-up (TabletopComposition.Stacking.cs)
+
             if (acceptance.Kind == AuthoritativeActionKind.TransferCard
                 || acceptance.Kind == AuthoritativeActionKind.DrawCards)
             {
@@ -421,6 +423,29 @@ namespace ConsoleCards.Presentation.Composition
                     last,
                     DescribeUndoAction(last));
                 undoTransactionInProgress = false;
+                RefreshUndoUi();
+            }
+
+            undoBatchBefore = null;
+            undoBatchLastAcceptance = null;
+        }
+
+        // Folds follow-up tidying (a stack left with one card turned back into a card) into the step the player
+        // just made, so Undo never brings back the in-between state (a stack of one). When that step is still
+        // being recorded (the card taken off is still falling), nothing is replaced: the step is recorded when the
+        // card lands, with the tidy-up in it. Snapshots are never taken of a card in mid-air.
+        private void BeginUndoAmend()
+        {
+            BeginUndoBatch();
+        }
+
+        private void EndUndoAmend()
+        {
+            if (!undoBatchActive) return;
+            undoBatchActive = false;
+            if (undoBatchLastAcceptance.HasValue && undoTrackedMatch == matchState && !undoTransactionInProgress)
+            {
+                undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
                 RefreshUndoUi();
             }
 

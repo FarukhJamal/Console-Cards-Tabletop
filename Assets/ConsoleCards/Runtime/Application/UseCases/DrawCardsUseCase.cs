@@ -49,7 +49,7 @@ namespace ConsoleCards.Application.UseCases
                 return DrawCardsResult.Failure(CommandResultStatus.Rejected, DrawCardsError.SourceContainerMissing);
             }
 
-            if (sourceDeck.Kind != ContainerKind.Deck)
+            if (sourceDeck.Kind != ContainerKind.Deck && sourceDeck.Kind != ContainerKind.Stack) // draw from a stack like a deck
             {
                 return DrawCardsResult.Failure(CommandResultStatus.Rejected, DrawCardsError.SourceContainerNotDeck);
             }

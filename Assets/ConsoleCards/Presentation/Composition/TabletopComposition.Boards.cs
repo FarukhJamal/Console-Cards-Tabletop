@@ -195,14 +195,10 @@ namespace ConsoleCards.Presentation.Composition
 
         private bool CommitBoardCreate(TabletopPose pose, BoardGrid grid, bool duplicate)
         {
-            CommandResult result = boardUseCases.Create(
-                matchState,
-                CreateCommandContext(),
-                pose,
-                grid,
-                null,
-                duplicate,
-                out BoardId boardId);
+            CreateBoardResult created = TableAuthority.Submit<CreateBoardCommand, CreateBoardResult>(
+                new CreateBoardCommand(CreateCommandContext(), pose, grid, null, duplicate));
+            CommandResult result = created.Result;
+            BoardId boardId = created.BoardId;
             if (!result.Succeeded)
             {
                 ShowMessage($"Board rejected: {result.Status}.");
@@ -244,7 +240,8 @@ namespace ConsoleCards.Presentation.Composition
 
         private bool CommitBoardMove(BoardId boardId, TabletopPose pose)
         {
-            CommandResult result = boardUseCases.Move(matchState, CreateCommandContext(), boardId, pose, null);
+            CommandResult result = TableAuthority.Submit<MoveBoardCommand, CommandResult>(
+                new MoveBoardCommand(CreateCommandContext(), boardId, pose, null));
             if (!result.Succeeded)
             {
                 ShowMessage($"Board move rejected: {result.Status}.");
@@ -416,7 +413,8 @@ namespace ConsoleCards.Presentation.Composition
             }
             else
             {
-                CommandResult result = boardUseCases.SetGrid(matchState, CreateCommandContext(), boardId, grid);
+                CommandResult result = TableAuthority.Submit<SetBoardGridCommand, CommandResult>(
+                    new SetBoardGridCommand(CreateCommandContext(), boardId, grid));
                 if (!result.Succeeded)
                 {
                     ShowMessage($"Grid change rejected: {result.Status}.");
@@ -437,7 +435,8 @@ namespace ConsoleCards.Presentation.Composition
 
         private void DeleteBoard(BoardId boardId)
         {
-            CommandResult result = boardUseCases.Delete(matchState, CreateCommandContext(), boardId);
+            CommandResult result = TableAuthority.Submit<DeleteBoardCommand, CommandResult>(
+                new DeleteBoardCommand(CreateCommandContext(), boardId));
             CloseContextMenu();
             if (!result.Succeeded)
             {
@@ -527,9 +526,7 @@ namespace ConsoleCards.Presentation.Composition
                 float yaw = state.Pose.RotationDegrees;
                 float boardYaw = board.transform.eulerAngles.y;
                 float square = boardYaw + (Mathf.Round(Mathf.DeltaAngle(boardYaw, yaw) / 90f) * 90f);
-                return new MoveObjectUseCase().Execute(
-                    matchState,
-                    new MoveObjectCommand(
+                return TableAuthority.Submit<MoveObjectCommand, MoveObjectResult>(new MoveObjectCommand(
                         CreateCommandContext(),
                         state.Id,
                         new TabletopPose(coordinate, square, state.Pose.Layer, state.Pose.LocalOrder))).Succeeded
@@ -554,9 +551,7 @@ namespace ConsoleCards.Presentation.Composition
             float correction = (Mathf.Round(angle / 90f) * 90f) - angle;
             Quaternion squared = Quaternion.AngleAxis(correction, Vector3.up) * current;
             placed = placed.WithRotation(new PhysicalRotation(squared.x, squared.y, squared.z, squared.w));
-            CommandResult result = new CommitPhysicalObjectUseCase().Execute(
-                matchState,
-                activeSession.Request.ActivePlayerIds,
+            CommandResult result = TableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(
                 new CommitPhysicalObjectCommand(
                     CreateCommandContext(),
                     state.Id,

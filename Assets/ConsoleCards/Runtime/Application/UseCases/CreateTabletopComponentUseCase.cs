@@ -44,6 +44,35 @@ namespace ConsoleCards.Application.UseCases
         ConsoleLayoutRequired,
         DeckCardCountInvalid,
         ArrivalFaceInvalid,
+        SourcePileInvalid,
+    }
+
+    /// <summary>
+    /// Duplicate a Deck, Stack or Discard Pile with all its cards (owner, 2026-10-18: like Tabletop Simulator): the
+    /// copy has the same kind and arrival face, and new cards with the same definitions, faces and order.
+    /// </summary>
+    public sealed class DuplicatePileRequest
+    {
+        public DuplicatePileRequest(CommandContext context, ContainerId sourceContainerId, TabletopPose placementPose)
+        {
+            if (!IsFinite(placementPose.Position.X)
+                || !IsFinite(placementPose.Position.Y)
+                || !IsFinite(placementPose.RotationDegrees))
+            {
+                throw new ArgumentOutOfRangeException(nameof(placementPose), "Placement pose must be finite.");
+            }
+
+            Context = context;
+            SourceContainerId = sourceContainerId;
+            PlacementPose = placementPose;
+        }
+
+        public CommandContext Context { get; }
+        public ContainerId SourceContainerId { get; }
+        public TabletopPose PlacementPose { get; }
+
+        private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+        private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 
     public sealed class CreateTabletopComponentRequest
@@ -453,6 +482,123 @@ namespace ConsoleCards.Application.UseCases
                 acceptedRevision,
                 request.ComponentKind,
                 objectId);
+        }
+
+        /// <summary>
+        /// Duplicates a Deck, Stack or Discard Pile with all its cards, as one command and one Undo step: a new
+        /// unowned, public pile of the same kind and arrival face at the placement pose, holding new cards with
+        /// the same definitions and faces, in the same order. The result lists the new cards in that order.
+        /// </summary>
+        public CreateTabletopComponentResult DuplicatePile(
+            MatchState matchState,
+            IReadOnlyList<PlayerId> activePlayerIds,
+            DuplicatePileRequest request)
+        {
+            if (request == null)
+            {
+                return CreateTabletopComponentResult.Failure(
+                    CommandResultStatus.Invalid,
+                    CreateTabletopComponentError.RequestRequired);
+            }
+
+            ContainerState source = null;
+            if (matchState == null
+                || request.SourceContainerId.IsEmpty
+                || !matchState.Containers.TryGetValue(request.SourceContainerId, out source)
+                || (source.Kind != ContainerKind.Deck
+                    && source.Kind != ContainerKind.Stack
+                    && source.Kind != ContainerKind.DiscardPile))
+            {
+                return matchState == null
+                    ? CreateTabletopComponentResult.Failure(
+                        CommandResultStatus.Invalid,
+                        CreateTabletopComponentError.MatchRequired)
+                    : CreateTabletopComponentResult.Failure(
+                        CommandResultStatus.Rejected,
+                        CreateTabletopComponentError.SourcePileInvalid);
+            }
+
+            TabletopComponentKind kind = source.Kind == ContainerKind.Deck
+                ? TabletopComponentKind.Deck
+                : source.Kind == ContainerKind.DiscardPile
+                    ? TabletopComponentKind.DiscardPile
+                    : TabletopComponentKind.Stack;
+            CreateTabletopComponentResult? failure = Validate(
+                matchState,
+                activePlayerIds,
+                new CreateTabletopComponentRequest(
+                    request.Context,
+                    kind,
+                    request.PlacementPose,
+                    actionKind: AuthoritativeActionKind.DuplicateComponent,
+                    containerArrivalFace: source.ArrivalFace));
+            if (failure.HasValue)
+            {
+                return failure.Value;
+            }
+
+            int count = source.Count;
+            for (int i = 0; i < count; i++)
+            {
+                if (!matchState.Cards.ContainsKey(source.ObjectIds[i]))
+                {
+                    return CreateTabletopComponentResult.Failure(
+                        CommandResultStatus.Rejected,
+                        CreateTabletopComponentError.SourcePileInvalid);
+                }
+            }
+
+            float? surfaceHeight = resolveContainerSurfaceHeight?.Invoke(request.PlacementPose);
+            if (resolveContainerSurfaceHeight != null && !surfaceHeight.HasValue)
+            {
+                return CreateTabletopComponentResult.Failure(
+                    CommandResultStatus.Rejected,
+                    CreateTabletopComponentError.PhysicalSurfaceRequired);
+            }
+
+            List<TabletopObjectId> cardIds = null;
+            if (!TryAllocateContainerId(matchState, out ContainerId containerId)
+                || (count > 0 && !TryAllocateObjectIds(matchState, count, out cardIds)))
+            {
+                return CreateTabletopComponentResult.Failure(
+                    CommandResultStatus.Conflict,
+                    CreateTabletopComponentError.IdentityAllocationFailed);
+            }
+
+            matchState.AddEmptyPlacedContainer(
+                new ContainerState(
+                    containerId,
+                    source.Kind,
+                    SeatId.Empty,
+                    ObjectVisibility.Public,
+                    source.Capacity,
+                    source.ArrivalFace),
+                new ContainerPlacementState(containerId, request.PlacementPose, surfaceHeight));
+            if (count > 0)
+            {
+                List<CardInstanceState> copies = new List<CardInstanceState>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    CardInstanceState original = matchState.Cards[source.ObjectIds[i]];
+                    copies.Add(new CardInstanceState(
+                        new TabletopObjectState(
+                            cardIds[i],
+                            original.BaseState.DefinitionId,
+                            TabletopObjectKind.Card,
+                            request.PlacementPose,
+                            containerId,
+                            request.Context.RequestedByPlayerId,
+                            ObjectVisibility.Public,
+                            false),
+                        original.Face));
+                }
+
+                matchState.AddCardsToEmptyContainer(containerId, copies);
+            }
+
+            long revision = matchState.AdvanceRevision(
+                request.Context.Id, request.Context.RequestedByPlayerId, AuthoritativeActionKind.DuplicateComponent);
+            return CreateTabletopComponentResult.ContainerAccepted(revision, kind, containerId, cardIds);
         }
 
         private static CreateTabletopComponentResult? Validate(

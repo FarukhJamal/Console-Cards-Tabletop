@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.1 · 2026-10-18 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.5 · 2026-10-18 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -335,17 +335,43 @@ Change: …
 - **Rule now:** every piece comes from one component library (Base Box, Controller Box, one box per game). The
   Toolbox places them: cards (1 = a loose card, 2+ = a deck), decks, stacks, discard piles, pawns, tokens, dice
   (size chips), Consoles, board mats, and box tiles that place real game cards (the Controller Deck, a game's
-  card sets, Avatars). Placement **keeps placing** until Esc or right-click.
+  card sets, Avatars). Placement **keeps placing** until Esc or right-click. **Duplicate** is on every piece's
+  right-click menu: cards, dice, pawns, tokens, Consoles, board mats, and now decks, stacks and discard piles
+  (copied with all their cards).
 - **Source:** doc 22 §2–§13; doc 29 (L2-6b)
-- **Changes:** 2026-10-16 keep placing until Esc or right-click.
+- **Open:** a duplicated single card is still a blank generic card (decks, stacks and discard piles copy the real
+  cards); whether single cards should copy the real card too.
+- **Changes:** 2026-10-18 Duplicate on decks, stacks and discard piles (owner); 2026-10-16 keep placing until Esc
+  or right-click.
 
 ### P-PILES · Decks, stacks, discard piles and hands
 - **Status:** Built
 - **Rule now:** decks shuffle and draw; a discard pile turns arriving cards face down; piles move and, when
   Toolbox-made and empty, delete. **Draw to Hand** with a count from a deck's menu. The Empty Table starts with a
-  hand (switch in the Toolbox footer).
+  hand (switch in the Toolbox footer). As in Tabletop Simulator (owner, 2026-10-18):
+  - **Card on card:** while a card is carried over a loose card, a green stack outline shows under that card; let
+    go and they become a stack at once where the bottom card lies (the cards glide together, a soft double tap, a
+    green flash). Each card keeps its face. One Undo step. Trap Floor's floor tiles never stack.
+  - **Landing:** a card landing on a stack or deck gives a light tap and a short green flash on that pile.
+  - **One card left:** a stack left with one card turns back into a loose card; a stack left empty goes away. Game
+    piles are never removed; a stack placed empty from the Toolbox stays until it has been used. A split that
+    leaves a single card leaves it as a card. Undo goes straight back to the stack before.
+  - **Stack menu:** right-clicking a stack or any card in it opens the STACK menu, the same pile actions as a deck:
+    Inspect (the card clicked), Draw to Hand, Shuffle, Split Stack, Split into…, Merge Into…, Duplicate, Move,
+    Delete. A stack made by dropping cards on each other is an ordinary stack.
+  - **Undo and the table:** a card let go onto the table and its landing are one Undo step; Undo never puts a card
+    back in mid-air.
+  - **Split into…** (decks and stacks): choose 2 to 6; the cards are dealt into that many piles in a row beside it,
+    the top part first, and the pile keeps the bottom part. One Undo step. A stack also keeps **Split Stack** (in
+    half). Not on a game's assisted Controller Deck.
+  - **Duplicate** (decks, stacks, discard piles): a copy with the same cards, order and faces, placed like any
+    duplicate.
 - **Source:** doc 22 §8, §11
-- **Changes:** —
+- **Changes:** 2026-10-18 card on card, Split into…, Duplicate with cards (owner). 2026-10-18 fix: after a
+  card-on-card stack, cards taken out of it stayed unclickable; fixed and checked live. 2026-10-18 stacking feel:
+  outline while carrying, instant stack, taps and flashes, a one-card stack turns back into a card (owner).
+  2026-10-18 fixes: stack forms where the bottom card lies; stack menu on its cards with deck actions (Draw to Hand,
+  Shuffle); drop and landing one Undo step, no card in mid-air after Undo (owner).
 
 ### P-CONSOLE · The Console mat
 - **Status:** Built, approved

@@ -250,13 +250,13 @@ namespace ConsoleCards.Presentation.Composition
                 return true;
             }
 
+            // A card in a stack opens the stack's menu, as a card in a deck opens the deck's (owner, 2026-10-18):
+            // a stack made by dropping cards on each other works like any other pile.
             if (container.Kind == ContainerKind.Stack
                 && stackViewsByContainerId.ContainsKey(containerId))
             {
-                selectionState.Select(hitCard);
-                selectionPresenter.Refresh();
                 OpenContextMenu(
-                    ContextMenuMode.StackCard,
+                    ContextMenuMode.Stack,
                     screenPosition,
                     hitCard.ObjectId,
                     containerId,
@@ -413,6 +413,9 @@ namespace ConsoleCards.Presentation.Composition
                 case ContextMenuMode.PopulateDeck:
                     ShowPopulateDeckQuantityPopup();
                     break;
+                case ContextMenuMode.SplitPile:
+                    ShowSplitPilePopup();
+                    break;
                 case ContextMenuMode.TabletopCard:
                     ShowTabletopCardContextMenu();
                     break;
@@ -421,9 +424,6 @@ namespace ConsoleCards.Presentation.Composition
                     break;
                 case ContextMenuMode.PendingFloormasterCard:
                     ShowPendingFloormasterCardContextMenu();
-                    break;
-                case ContextMenuMode.StackCard:
-                    ShowStackCardContextMenu();
                     break;
                 case ContextMenuMode.ContainedCard:
                     ShowContainedCardContextMenu();
@@ -499,6 +499,8 @@ namespace ConsoleCards.Presentation.Composition
                         CloseContextMenu();
                     }
                 }));
+            AddSplitIntoPilesAction(actions, targetDeckId);
+            AddPileDuplicateAction(actions, targetDeckId);
             actions.Add(new PopupActionOption(
                 "Move",
                 true,
@@ -524,6 +526,7 @@ namespace ConsoleCards.Presentation.Composition
                 AddInspectAction(actions, contextMenuCardId);
             }
 
+            AddPileDuplicateAction(actions, targetPileId);
             actions.Add(new PopupActionOption(
                 "Move",
                 true,
@@ -582,9 +585,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private void DeleteComponent(TabletopComponentTarget target)
         {
-            DeleteTabletopComponentResult result = componentDeletionUseCase.Execute(
-                matchState,
-                activeSession.Request.ActivePlayerIds,
+            DeleteTabletopComponentResult result = TableAuthority.Submit<DeleteTabletopComponentRequest, DeleteTabletopComponentResult>(
                 new DeleteTabletopComponentRequest(CreateCommandContext(), target));
             if (!result.Succeeded)
             {
@@ -743,9 +744,7 @@ namespace ConsoleCards.Presentation.Composition
                 ? Math.Min(PopulateDeckUseCase.MaximumQuantity, deck.Capacity)
                 : PopulateDeckUseCase.MaximumQuantity;
             int quantity = Mathf.Clamp(selectedQuantity, 1, maximum);
-            PopulateDeckResult result = populateDeckUseCase.Execute(
-                matchState,
-                activeSession.Request.ActivePlayerIds,
+            PopulateDeckResult result = TableAuthority.Submit<PopulateDeckRequest, PopulateDeckResult>(
                 new PopulateDeckRequest(CreateCommandContext(), targetDeckId, quantity));
             if (!result.Succeeded)
             {
@@ -794,65 +793,6 @@ namespace ConsoleCards.Presentation.Composition
 
             FlipInteractionResult result = flipCoordinator.Flip(targetCardView);
             ShowMessage(result.Succeeded ? "Card flipped." : $"Flip rejected: {result.Status}.");
-            if (result.Succeeded)
-            {
-                CloseContextMenu();
-            }
-        }
-
-        private void ShowStackCardContextMenu()
-        {
-            TabletopObjectId targetCardId = contextMenuCardId;
-            ContainerId targetStackId = contextMenuContainerId;
-            ContainerState stack = matchState.GetContainer(targetStackId);
-            int index = stack.IndexOf(targetCardId);
-            List<PopupActionOption> actions = new List<PopupActionOption>();
-            AddInspectAction(actions, targetCardId);
-            if (index < stack.Count - 1)
-            {
-                actions.Add(new PopupActionOption(
-                    "Move Up",
-                    true,
-                    () => ReorderContextStackCard(targetCardId, targetStackId, 1)));
-            }
-
-            if (index > 0)
-            {
-                actions.Add(new PopupActionOption(
-                    "Move Down",
-                    true,
-                    () => ReorderContextStackCard(targetCardId, targetStackId, -1)));
-            }
-
-            actions.Add(new PopupActionOption(
-                "Move",
-                true,
-                () => BeginContainerMove(targetStackId)));
-            AddDeleteActionIfRuntime(
-                actions,
-                TabletopComponentTarget.ForObject(targetCardId));
-            runtimeUi.ShowContextMenu(
-                contextMenuAnchorScreenPosition,
-                "CARD",
-                string.Empty,
-                actions,
-                CloseContextMenu,
-                DismissPopupFromSecondary);
-        }
-
-        private void ReorderContextStackCard(
-            TabletopObjectId targetCardId,
-            ContainerId targetStackId,
-            int offset)
-        {
-            if (!TryGetCardView(targetCardId, out CardView targetCardView)
-                || targetCardView.CardState.BaseState.ContainerId != targetStackId)
-            {
-                CloseContextMenu();
-                return;
-            }
-
-            ReorderContainerResult result = MoveCardInContainer(targetCardView, targetStackId, offset);
             if (result.Succeeded)
             {
                 CloseContextMenu();
@@ -920,6 +860,35 @@ namespace ConsoleCards.Presentation.Composition
             TryGetContextStack(out ContainerState stack, out StackRuntimeView stackView);
             ContainerId sourceStackId = stack.Id;
             List<PopupActionOption> actions = new List<PopupActionOption>();
+            if (!contextMenuCardId.IsEmpty)
+            {
+                AddInspectAction(actions, contextMenuCardId);
+            }
+
+            // The same pile actions as a deck (owner, 2026-10-18).
+            if (HasLocalHand() && stack.Count > 0)
+            {
+                actions.Add(new PopupActionOption(
+                    "Draw to Hand",
+                    true,
+                    () => OpenDrawToHandPopup(sourceStackId)));
+            }
+
+            if (stack.Count >= 2)
+            {
+                actions.Add(new PopupActionOption(
+                    "Shuffle",
+                    true,
+                    () =>
+                    {
+                        ShuffleDeckResult result = ShuffleDeck(sourceStackId);
+                        if (result.Succeeded)
+                        {
+                            CloseContextMenu();
+                        }
+                    }));
+            }
+
             if (stack.Count >= 2)
             {
                 actions.Add(new PopupActionOption(
@@ -935,6 +904,8 @@ namespace ConsoleCards.Presentation.Composition
                     }));
             }
 
+            AddSplitIntoPilesAction(actions, sourceStackId);
+
             if (HasValidMergeDestination(sourceStackId))
             {
                 actions.Add(new PopupActionOption(
@@ -943,6 +914,7 @@ namespace ConsoleCards.Presentation.Composition
                     () => SetContextMenuMode(ContextMenuMode.MergeDestination)));
             }
 
+            AddPileDuplicateAction(actions, sourceStackId);
             actions.Add(new PopupActionOption(
                 "Move",
                 true,
@@ -953,7 +925,7 @@ namespace ConsoleCards.Presentation.Composition
             runtimeUi.ShowContextMenu(
                 contextMenuAnchorScreenPosition,
                 "STACK",
-                string.Empty,
+                $"{stack.Count} card{(stack.Count == 1 ? string.Empty : "s")}",
                 actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);
@@ -1114,9 +1086,7 @@ namespace ConsoleCards.Presentation.Composition
 
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(targetDeckId, player.HandContainerId);
-            DrawCardsResult result = new DrawCardsUseCase().Execute(
-                matchState,
-                new DrawCardsCommand(
+            DrawCardsResult result = TableAuthority.Submit<DrawCardsCommand, DrawCardsResult>(new DrawCardsCommand(
                     CreateCommandContext(trapFloorTurnState.ActivePlayerId),
                     targetDeckId,
                     player.HandContainerId,
@@ -1173,9 +1143,7 @@ namespace ConsoleCards.Presentation.Composition
 
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(player.ControllerDeckId, player.HandContainerId);
-            DrawCardsResult result = new DrawCardsUseCase().Execute(
-                matchState,
-                new DrawCardsCommand(
+            DrawCardsResult result = TableAuthority.Submit<DrawCardsCommand, DrawCardsResult>(new DrawCardsCommand(
                     CreateCommandContext(trapFloorTurnState.ActivePlayerId),
                     player.ControllerDeckId,
                     player.HandContainerId,
@@ -1358,18 +1326,19 @@ namespace ConsoleCards.Presentation.Composition
                         && floormasterLifecycleState.PendingCard.CardId == contextMenuCardId
                         && matchState.Cards.ContainsKey(contextMenuCardId)
                         && TryGetCardView(contextMenuCardId, out _);
-                case ContextMenuMode.StackCard:
-                    return IsCurrentContextCardInContainer(contextMenuContainerId)
-                        && matchState.Containers.TryGetValue(contextMenuContainerId, out ContainerState stackCardContainer)
-                        && stackCardContainer.Kind == ContainerKind.Stack
-                        && TryGetCardView(contextMenuCardId, out _);
                 case ContextMenuMode.ContainedCard:
                     return IsCurrentContextCardInContainer(contextMenuContainerId)
                         && matchState.Containers.ContainsKey(contextMenuContainerId)
                         && TryGetCardView(contextMenuCardId, out _);
                 case ContextMenuMode.Stack:
+                    return TryGetContextStack(out _, out _)
+                        && (contextMenuCardId.IsEmpty
+                            || (IsCurrentContextCardInContainer(contextMenuContainerId)
+                                && TryGetCardView(contextMenuCardId, out _)));
                 case ContextMenuMode.MergeDestination:
                     return TryGetContextStack(out _, out _);
+                case ContextMenuMode.SplitPile:
+                    return CanSplitIntoPiles(contextMenuContainerId);
                 case ContextMenuMode.DiscardPile:
                     return !contextMenuContainerId.IsEmpty
                         && matchState.Containers.TryGetValue(contextMenuContainerId, out ContainerState discardPile)

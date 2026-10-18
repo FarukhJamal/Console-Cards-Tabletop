@@ -188,8 +188,13 @@ namespace ConsoleCards.Application.UseCases
                     }
                 }
 
+                // A card let go onto the table (with a physical release) is still falling: its landing is recorded
+                // as the end of the same step, so Undo returns to before the drag, not to a card in mid-air.
+                AuthoritativeActionRecordMode recordMode = command.DestinationContainerId.IsEmpty && command.PhysicalState != null
+                    ? AuthoritativeActionRecordMode.Intermediate
+                    : AuthoritativeActionRecordMode.Transaction;
                 long revision = matchState.AdvanceRevision(
-                    command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.TransferCard);
+                    command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.TransferCard, recordMode);
                 IReadOnlyList<IConsoleCardInteraction> consoleInteractions =
                     CreateConsoleInteractions(matchState, command, cardObject, revision);
                 return TransferCardResult.Accepted(revision, consoleInteractions);

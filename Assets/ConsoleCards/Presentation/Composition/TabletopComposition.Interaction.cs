@@ -313,6 +313,14 @@ namespace ConsoleCards.Presentation.Composition
                 throw new InvalidOperationException("Cannot rebuild M3 interaction graph during an active interaction.");
             }
 
+            // The state machine is shared and outlives the rebuild, and the new coordinators require it to be Idle.
+            // A rebuild can run while the pointer merely rests over a piece (e.g. a card-on-card stack forming under
+            // the cursor); drop that hover first, or the rebuild stops half way and nothing on the table responds.
+            if (interactionStateMachine != null && interactionStateMachine.Phase == TabletopInteractionPhase.Hovering)
+            {
+                interactionStateMachine.ClearHoveredObject();
+            }
+
             if (frameCoordinatorEnabledByComposition)
             {
                 inputFrameCoordinator.enabled = false;
