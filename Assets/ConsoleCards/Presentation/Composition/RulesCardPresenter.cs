@@ -473,7 +473,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void FinishRuleCommit(string message)
         {
             RefreshGameHints(); // tips follow the rules in play
-            host.TrapFloorGame.RefreshShopEntry(); // the Shop opens or closes at once (owner, 2026-10-15)
+            host.ActiveCartridge.RefreshShopEntry(); // the Shop opens or closes at once (owner, 2026-10-15)
             bool restartNeeded = host.templatesRuleSet != null && SettingsDiffer(host.templatesRuleSet, ActiveRuleSet);
             CloseRuleProposal(restartNeeded ? $"{message} Changed settings start when you restart." : message);
             RefreshRulesCard();
@@ -498,7 +498,7 @@ namespace ConsoleCards.Presentation.Composition
             host.hintsEnabled = enabled;
             host.runtimeUi?.SetHintsVisible(enabled);
             ApplyHintLevel();
-            host.TrapFloorGame.RefreshTrapFloorStatusUi();
+            host.ActiveCartridge.RefreshStatusUi();
         }
 
         internal string HintText(string text) => host.hintsEnabled ? text : string.Empty;
@@ -523,7 +523,8 @@ namespace ConsoleCards.Presentation.Composition
                 Debug.LogWarning("Platform hints are missing: run Console Cards > Hints > Create Missing Platform Hints.");
             }
 
-            host.TrapFloorGame.AddTrapFloorHintHelpers(); // H3: each runs only while a rule in play names it
+            // H3: each runs only while a rule in play names it. CART-1a: every code cartridge's helpers, added once.
+            for (int i = 0; i < host.Cartridges.CodeCartridges.Count; i++) host.Cartridges.CodeCartridges[i].AddHintHelpers();
             ApplyHintLevel();
         }
 

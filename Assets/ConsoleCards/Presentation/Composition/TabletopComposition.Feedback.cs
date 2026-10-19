@@ -134,13 +134,13 @@ namespace ConsoleCards.Presentation.Composition
                 && runtimeUi.ShowFeedbackMessage(message, SeverityOf(message)))
             {
                 operationMessageUntil = 0f;
-                runtimeUi.SetStatusMessage(TrapFloorGame.CurrentStatusText());
+                runtimeUi.SetStatusMessage(ActiveCartridge.StatusText());
                 return;
             }
 
             operationMessage = message;
             operationMessageUntil = Time.unscaledTime + 2.5f;
-            runtimeUi?.SetStatusMessage(TrapFloorGame.CurrentStatusText());
+            runtimeUi?.SetStatusMessage(ActiveCartridge.StatusText());
         }
 
         private static FeedbackSeverity SeverityOf(string message)

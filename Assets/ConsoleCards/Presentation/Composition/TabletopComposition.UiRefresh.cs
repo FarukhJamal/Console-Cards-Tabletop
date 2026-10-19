@@ -101,7 +101,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             long revision = matchState != null ? matchState.Revision : -1;
-            int signature = TrapFloorGame.StatusUiSignature();
+            int signature = ActiveCartridge.StatusUiSignature();
             bool withMessage = Time.unscaledTime <= operationMessageUntil;
             bool safetyDue = Time.unscaledTime >= tableUiNextSafetyRefreshAt;
             if (!tableUiDirty
@@ -119,7 +119,7 @@ namespace ConsoleCards.Presentation.Composition
             tableUiRenderedWithMessage = withMessage;
             tableUiNextSafetyRefreshAt = Time.unscaledTime + TableUiSafetyRefreshSeconds;
             SessionService.RefreshRuntimeStatusUi();
-            TrapFloorGame.RenderTrapFloorStatusUi();
+            ActiveCartridge.RenderStatusUi();
         }
     }
 }

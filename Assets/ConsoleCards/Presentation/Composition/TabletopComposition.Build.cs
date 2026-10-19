@@ -128,8 +128,8 @@ namespace ConsoleCards.Presentation.Composition
                 trapFloorCollapseState,
                 trapFloorTurnState);
             trapFloorShopUseCase = new TrapFloorBuyFromShopUseCase(trapFloorTemplate, trapFloorTurnState);
-            ConsoleCardInteractionAccepted -= TrapFloorGame.HandleTrapFloorConsoleCardInteractionAccepted;
-            ConsoleCardInteractionAccepted += TrapFloorGame.HandleTrapFloorConsoleCardInteractionAccepted;
+            ConsoleCardInteractionAccepted -= HandleCartridgeConsoleInteraction; // CART-1a: to the cartridge in play
+            ConsoleCardInteractionAccepted += HandleCartridgeConsoleInteraction;
             activeFloorRevealActivity = null;
             TrapFloorGame.SyncLandingPawnTiles();
         }

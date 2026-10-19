@@ -436,10 +436,14 @@ namespace ConsoleCards.Presentation.Composition
                     ShowTabletopCardContextMenu();
                     break;
                 case ContextMenuMode.FloorCard:
-                    host.TrapFloorGame.ShowFloorCardContextMenu();
-                    break;
                 case ContextMenuMode.PendingFloormasterCard:
-                    host.TrapFloorGame.ShowPendingFloormasterCardContextMenu();
+                    // CART-1a: the game's own menus come from the cartridge in play.
+                    if (!host.ActiveCartridge.TryShowContextMenu(host.contextMenuMode))
+                    {
+                        CloseContextMenu();
+                        return;
+                    }
+
                     break;
                 case ContextMenuMode.ContainedCard:
                     ShowContainedCardContextMenu();

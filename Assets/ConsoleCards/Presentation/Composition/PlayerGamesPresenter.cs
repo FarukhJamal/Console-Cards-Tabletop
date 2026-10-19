@@ -743,7 +743,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             try
             {
-                host.SessionService.RegisterFreshTrapFloorTemplates(); // your newest cards look right on the table
+                host.SessionService.RegisterGameTemplates(); // your newest cards look right on the table
             }
             catch (Exception exception)
             {

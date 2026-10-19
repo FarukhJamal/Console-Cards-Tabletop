@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.20 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.21 · 2026-10-20 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -650,9 +650,12 @@ Change: …
 - **Source:** owner, 2026-10-19 (Console card frames 13, 14, 36-39)
 
 ### PL-CARTRIDGE · Cartridge contract
-- **Status:** Planned (CART-1)
+- **Status:** In progress: CART-1a written (2026-10-20), to be checked; 1b and 1c to come
 - **Rule now:** what a game ("cartridge") must declare to plug into the platform, including where its seats may go
-  on any table shape.
+  on any table shape. CART-1a: the table talks to the cartridge in play for its table setups, its per-frame step, its
+  status line and card, its Shop entry, its hint helpers, its own card menus and its reactions to cards played into
+  Console slots. Trap Floor is the first code cartridge; an Empty Table, a game a player made and a game box without
+  code are data cartridges (the status line names a player's game).
 - **Source:** doc 30 §A4
 
 ### PL-MULTIPLAYER · Online multiplayer

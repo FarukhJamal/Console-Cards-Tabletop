@@ -78,6 +78,33 @@ namespace ConsoleCards.Presentation.Composition
         private TrapFloorCartridge trapFloorCartridgeInstance;
         internal TrapFloorCartridge TrapFloorGame => trapFloorCartridgeInstance ??= new TrapFloorCartridge(this);
 
+        // CART-1a (doc 30 §A4): the cartridges the table knows, and the one in play. A table set up from a game's
+        // template plays that game's cartridge; an Empty Table (and a game a player made) plays the data cartridge.
+        private GameCartridgeRegistry cartridgeRegistry;
+
+        internal GameCartridgeRegistry Cartridges
+        {
+            get
+            {
+                if (cartridgeRegistry == null)
+                {
+                    cartridgeRegistry = new GameCartridgeRegistry(this);
+                    cartridgeRegistry.Register(TrapFloorGame); // the first code cartridge
+                }
+
+                return cartridgeRegistry;
+            }
+        }
+
+        // CART-1b replaces the Trap Floor check here with the template's own cartridge.
+        internal IGameCartridge ActiveCartridge => trapFloorTemplate != null ? (IGameCartridge)TrapFloorGame : Cartridges.EmptyTable;
+
+        // The table forwards a card played into a Console slot to the cartridge in play.
+        private void HandleCartridgeConsoleInteraction(IConsoleCardInteraction interaction, ConsoleCardBehavior behavior)
+        {
+            ActiveCartridge.OnConsoleCardInteraction(interaction, behavior);
+        }
+
         // The player profile panel: who is playing, new and renamed profiles.
         private ProfilePanelPresenter profilePanelPresenterInstance;
         internal ProfilePanelPresenter ProfilePanel => profilePanelPresenterInstance ??= new ProfilePanelPresenter(this);
@@ -660,8 +687,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 selectionPresenter.Refresh();
-                TrapFloorGame.RefreshNeutralizedTrapPresentation();
-                TrapFloorGame.RefreshMovementAssistancePresentation();
+                ActiveCartridge.OnTableReady(); // CART-1a
                 ShowMessage("Trap Floor tabletop foundation ready.");
                 IsInitialized = true;
                 SessionService.BeginUndoTrackingForCurrentMatch();
@@ -760,7 +786,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void Shutdown(bool preserveTemplateContext)
         {
-            TrapFloorGame.FinishPawnHops();
+            ActiveCartridge.OnTableShutdown(); // CART-1a
             if (!rebuildingFromUndo)
             {
                 // A new or reset table: forget who had the screen when (Undo and seat switches keep it).
@@ -918,7 +944,7 @@ namespace ConsoleCards.Presentation.Composition
             trapFloorCollapseUseCase = null;
             trapFloorTurnState = null;
             trapFloorTurnService = null;
-            ConsoleCardInteractionAccepted -= TrapFloorGame.HandleTrapFloorConsoleCardInteractionAccepted;
+            ConsoleCardInteractionAccepted -= HandleCartridgeConsoleInteraction;
             trapFloorAbilityResolutionState = null;
             trapFloorAbilityResolutionService = null;
             pendingControllerPurchaseState?.Clear();
@@ -1126,13 +1152,11 @@ namespace ConsoleCards.Presentation.Composition
             HandleHandTrayShortcut();
             HandleConsoleFlipShortcut();
             physicalAuthority?.Tick();
-            TrapFloorGame.CompletePendingLandingFlip();
+            ActiveCartridge.TickEarly(); // CART-1a: the game's own step before the hint helpers
             hintService?.TickHelpers(); // H3: the game's hint helpers (reach markers, collapse target)
             RulesCardPanel.UpdateHintTriggers();
             RefreshBoardCardBacksIfRoundChanged();
-            TrapFloorGame.CompletePhysicalFloorfallIfSettled();
-            TrapFloorGame.CompletePhysicalFloorCollapseIfSettled();
-            TrapFloorGame.CompletePhysicalBlindDirectionIfSettled();
+            ActiveCartridge.TickLate(); // CART-1a: the game's own step after them
             CompleteConsoleDieSnaps();
             UpdateCardStackDrops(); // before the board snap: a card dropped on a card stacks
             CompletePendingStackCarry(); // a stack carried by press-and-hold is merged or put down

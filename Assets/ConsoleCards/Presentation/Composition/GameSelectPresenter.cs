@@ -612,7 +612,7 @@ namespace ConsoleCards.Presentation.Composition
             if (cards == null || selection.Kind != TabletopSessionKind.EmptyCustom) return;
             try
             {
-                host.SessionService.RegisterFreshTrapFloorTemplates(); // your newest cards look right on the table
+                host.SessionService.RegisterGameTemplates(); // your newest cards look right on the table
             }
             catch (Exception exception)
             {

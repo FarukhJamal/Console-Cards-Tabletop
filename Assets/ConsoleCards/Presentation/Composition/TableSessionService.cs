@@ -118,79 +118,35 @@ namespace ConsoleCards.Presentation.Composition
             host.gameTemplatesPanelError = null;
             try
             {
-                RegisterFreshTrapFloorTemplates();
+                RegisterGameTemplates();
             }
             catch (Exception exception)
             {
                 host.availableTrapFloorTemplates.Clear();
                 host.sessionTemplateCatalog = new GameTemplateCatalog(Array.Empty<GameTemplateRegistration>());
-                templateCatalogError = $"Trap Floor is unavailable: {exception.Message}";
+                templateCatalogError = exception.Message;
             }
         }
 
-        // With a deck of yours chosen (L2-5) that cannot set up the game, the game's own deck is used instead: a
-        // choice never stops play.
-        internal void RegisterFreshTrapFloorTemplates()
+        // CART-1a: every code cartridge adds its table setups (one per mode) to the catalog New table… starts from. A
+        // cartridge that cannot set up says so by name.
+        internal void RegisterGameTemplates()
         {
-            try
+            List<GameTemplateRegistration> registrations = new List<GameTemplateRegistration>();
+            IReadOnlyList<IGameCartridge> cartridges = host.Cartridges.CodeCartridges;
+            for (int i = 0; i < cartridges.Count; i++)
             {
-                RegisterTrapFloorTemplates(true);
-            }
-            catch (Exception exception) when (!string.IsNullOrEmpty(host.GameSelectPanel.ChosenTrapFloorDeckId()))
-            {
-                string message = $"Your deck cannot set up Trap Floor ({exception.Message}); the game's own deck is used.";
-                Debug.LogWarning("[Your decks] " + message, host);
-                host.ShowMessage(message);
-                RegisterTrapFloorTemplates(false);
-            }
-        }
-
-        internal void RegisterTrapFloorTemplates(bool useChosenDeck)
-        {
-            RequireReference(host.trapFloorGameDefinition, nameof(host.trapFloorGameDefinition));
-            if (host.authoritativeRandomValueSource == null)
-            {
-                host.authoritativeRandomValueSource = new SystemRandomValueSource();
-            }
-
-            // Rules drive play (doc 23, R2a): the rule set in play (the default or agreed house rules, R3) feeds the
-            // game data the template uses.
-            host.RulesCardPanel.EnsureHouseRulesLoaded();
-            RuleSetDefinition rules = host.RulesCardPanel.ActiveRuleSet;
-            // Your cards (doc 27 L2-1) come first: changed default cards and new cards; house-rule costs win on top.
-            GameContent content = host.TrapFloorGame.BuildTrapFloorContent(useChosenDeck);
-            GameDefinitionData gameDefinition;
-            try
-            {
-                gameDefinition = content.ToData(rules);
-            }
-            catch
-            {
-                content.Destroy();
-                throw;
-            }
-
-            GameContent previousContent = host.trapFloorContent;
-            host.trapFloorContent = content;
-            previousContent?.Destroy();
-            if (gameDefinition.Modes.Count == 0)
-                throw new InvalidOperationException("Trap Floor requires at least one authored Mode.");
-
-            host.availableTrapFloorTemplates.Clear();
-            List<GameTemplateRegistration> registrations = new List<GameTemplateRegistration>(gameDefinition.Modes.Count);
-            for (int i = 0; i < gameDefinition.Modes.Count; i++)
-            {
-                TrapFloorTemplateDefinition template = TrapFloorTemplateFactory.CreateStandardFourPlayer(
-                    host.authoritativeRandomValueSource,
-                    gameDefinition,
-                    gameDefinition.Modes[i].StableId,
-                    host.GetConsoleLayout());
-                host.availableTrapFloorTemplates.Add(template.Template.Id, template);
-                registrations.Add(new GameTemplateRegistration(template.Template, template.ContentCatalog));
+                try
+                {
+                    cartridges[i].RegisterTemplates(registrations);
+                }
+                catch (Exception exception)
+                {
+                    throw new InvalidOperationException($"{cartridges[i].DisplayName} is unavailable: {exception.Message}", exception);
+                }
             }
 
             host.sessionTemplateCatalog = new GameTemplateCatalog(registrations);
-            host.templatesRuleSet = rules;
         }
 
         internal void InitializeRuntimeUi()
@@ -266,7 +222,7 @@ namespace ConsoleCards.Presentation.Composition
                 OpenGameTemplatesPanel,
                 ResetTable,
                 ClearTable,
-                host.TrapFloorGame.CurrentStatusText(),
+                host.ActiveCartridge.StatusText(),
                 new ComponentToolboxBindings(
                     host.componentLibrary,
                     host.activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom ? null : host.trapFloorGameDefinition,
@@ -301,9 +257,9 @@ namespace ConsoleCards.Presentation.Composition
                 host.fullFeedback,
                 host.SetFullFeedback);
             RefreshUndoUi();
-            host.TrapFloorGame.RefreshTrapFloorStatusUi();
+            host.ActiveCartridge.RefreshStatusUi();
             host.RulesCardPanel.RefreshGameHints();
-            host.TrapFloorGame.RefreshShopEntry();
+            host.ActiveCartridge.RefreshShopEntry();
             host.RefreshToolBar(); // TOOLS-1: the tool bar and its keys strip (after the Hints switch is applied)
             host.RefreshTableOverlay(); // POL-3 / POL-5: tooltips, the card peek and die results
             host.RulesCardPanel.RaiseHint(HintTriggers.TableReady, isGameSession ? "game" : "empty");
@@ -323,7 +279,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (host.runtimeUi != null && host.IsInitialized)
             {
-                host.runtimeUi.SetStatusMessage(host.TrapFloorGame.CurrentStatusText());
+                host.runtimeUi.SetStatusMessage(host.ActiveCartridge.StatusText());
             }
         }
 
@@ -371,11 +327,11 @@ namespace ConsoleCards.Presentation.Composition
             {
                 try
                 {
-                    RegisterFreshTrapFloorTemplates();
+                    RegisterGameTemplates();
                 }
                 catch (Exception exception)
                 {
-                    host.gameTemplatesPanelError = $"Trap Floor setup could not be prepared: {exception.Message}";
+                    host.gameTemplatesPanelError = $"The game's setup could not be prepared: {exception.Message}";
                     host.runtimeUi?.SetGameTemplatesError(host.gameTemplatesPanelError);
                     return false;
                 }
@@ -561,7 +517,7 @@ namespace ConsoleCards.Presentation.Composition
                 throw;
             }
 
-            host.TrapFloorGame.RefreshTrapFloorStatusUi();
+            host.ActiveCartridge.RefreshStatusUi();
         }
 
         public bool UndoLatestAction()

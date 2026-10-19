@@ -51,7 +51,7 @@ namespace ConsoleCards.Presentation.Composition
     /// (R1e: moved out of TabletopComposition; the table reaches it as <c>TrapFloorGame</c> and it
     /// reaches the table through <c>host</c>.)
     /// </summary>
-    internal sealed class TrapFloorCartridge
+    internal sealed class TrapFloorCartridge : IGameCartridge
     {
         private readonly TabletopComposition host;
 
@@ -4134,5 +4134,135 @@ namespace ConsoleCards.Presentation.Composition
         // Spring/Crane target the active player still has to move to (G2c); applied by End Turn if left.
         internal PlayerId pendingLaunchPlayerId;
         internal TabletopObjectId pendingLaunchTargetId;
+
+        // ---------- the cartridge contract (CART-1a, doc 30 §A4) ----------
+
+        public string StableId => host.trapFloorGameDefinition != null ? host.trapFloorGameDefinition.StableId ?? string.Empty : "trap-floor";
+        public string DisplayName => host.trapFloorGameDefinition != null ? host.trapFloorGameDefinition.DisplayName : "Trap Floor";
+        public GameDefinition Game => host.trapFloorGameDefinition;
+        public bool HasCode => true;
+
+        // One table setup per mode, from the rule set in play and your cards. With a deck of yours chosen (L2-5) that
+        // cannot set up the game, the game's own deck is used instead: a choice never stops play.
+        public void RegisterTemplates(List<GameTemplateRegistration> registrations)
+        {
+            if (registrations == null) throw new ArgumentNullException(nameof(registrations));
+            List<GameTemplateRegistration> mine;
+            try
+            {
+                mine = BuildTemplates(true);
+            }
+            catch (Exception exception) when (!string.IsNullOrEmpty(host.GameSelectPanel.ChosenTrapFloorDeckId()))
+            {
+                string message = $"Your deck cannot set up Trap Floor ({exception.Message}); the game's own deck is used.";
+                Debug.LogWarning("[Your decks] " + message, host);
+                host.ShowMessage(message);
+                mine = BuildTemplates(false);
+            }
+
+            registrations.AddRange(mine);
+        }
+
+        // (Moved from TableSessionService.RegisterTrapFloorTemplates.)
+        private List<GameTemplateRegistration> BuildTemplates(bool useChosenDeck)
+        {
+            if (host.trapFloorGameDefinition == null)
+            {
+                throw new InvalidOperationException("TabletopComposition requires trapFloorGameDefinition.");
+            }
+
+            if (host.authoritativeRandomValueSource == null)
+            {
+                host.authoritativeRandomValueSource = new SystemRandomValueSource();
+            }
+
+            // Rules drive play (doc 23, R2a): the rule set in play (the default or agreed house rules, R3) feeds the
+            // game data the template uses.
+            host.RulesCardPanel.EnsureHouseRulesLoaded();
+            RuleSetDefinition rules = host.RulesCardPanel.ActiveRuleSet;
+            // Your cards (doc 27 L2-1) come first: changed default cards and new cards; house-rule costs win on top.
+            GameContent content = BuildTrapFloorContent(useChosenDeck);
+            GameDefinitionData gameDefinition;
+            try
+            {
+                gameDefinition = content.ToData(rules);
+            }
+            catch
+            {
+                content.Destroy();
+                throw;
+            }
+
+            GameContent previousContent = host.trapFloorContent;
+            host.trapFloorContent = content;
+            previousContent?.Destroy();
+            if (gameDefinition.Modes.Count == 0)
+                throw new InvalidOperationException("Trap Floor requires at least one authored Mode.");
+
+            host.availableTrapFloorTemplates.Clear();
+            List<GameTemplateRegistration> registrations = new List<GameTemplateRegistration>(gameDefinition.Modes.Count);
+            for (int i = 0; i < gameDefinition.Modes.Count; i++)
+            {
+                TrapFloorTemplateDefinition template = TrapFloorTemplateFactory.CreateStandardFourPlayer(
+                    host.authoritativeRandomValueSource,
+                    gameDefinition,
+                    gameDefinition.Modes[i].StableId,
+                    host.GetConsoleLayout());
+                host.availableTrapFloorTemplates.Add(template.Template.Id, template);
+                registrations.Add(new GameTemplateRegistration(template.Template, template.ContentCatalog));
+            }
+
+            host.templatesRuleSet = rules;
+            return registrations;
+        }
+
+        public void OnTableReady()
+        {
+            RefreshNeutralizedTrapPresentation();
+            RefreshMovementAssistancePresentation();
+        }
+
+        public void OnTableShutdown() => FinishPawnHops();
+
+        public void TickEarly() => CompletePendingLandingFlip();
+
+        public void TickLate()
+        {
+            CompletePhysicalFloorfallIfSettled();
+            CompletePhysicalFloorCollapseIfSettled();
+            CompletePhysicalBlindDirectionIfSettled();
+        }
+
+        public string StatusText() => CurrentStatusText();
+
+        int IGameCartridge.StatusUiSignature() => StatusUiSignature();
+
+        public void RenderStatusUi() => RenderTrapFloorStatusUi();
+
+        public void RefreshStatusUi() => RefreshTrapFloorStatusUi();
+
+        void IGameCartridge.RefreshShopEntry() => RefreshShopEntry();
+
+        public void AddHintHelpers() => AddTrapFloorHintHelpers();
+
+        public void OnConsoleCardInteraction(IConsoleCardInteraction interaction, ConsoleCardBehavior behavior) =>
+            HandleTrapFloorConsoleCardInteractionAccepted(interaction, behavior);
+
+        public bool TryShowContextMenu(ContextMenuMode mode)
+        {
+            switch (mode)
+            {
+                case ContextMenuMode.FloorCard:
+                    ShowFloorCardContextMenu();
+                    return true;
+                case ContextMenuMode.PendingFloormasterCard:
+                    ShowPendingFloormasterCardContextMenu();
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        bool IGameCartridge.IsAssistedControllerDeck(ContainerId containerId) => IsAssistedControllerDeck(containerId);
     }
 }

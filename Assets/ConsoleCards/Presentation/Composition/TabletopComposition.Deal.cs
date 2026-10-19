@@ -126,7 +126,7 @@ namespace ConsoleCards.Presentation.Composition
                 && matchState.Containers.TryGetValue(pileId, out ContainerState pile)
                 && (pile.Kind == ContainerKind.Deck || pile.Kind == ContainerKind.Stack)
                 && pile.Count > 0
-                && !TrapFloorGame.IsAssistedControllerDeck(pileId);
+                && !ActiveCartridge.IsAssistedControllerDeck(pileId);
         }
 
         private void OpenDealForm(DealRule from)

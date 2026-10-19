@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.35 · 2026-10-20 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.36 · 2026-10-20 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1800,3 +1800,27 @@ show flies toward that player's seat and is put away there.
 table, the deal looks for free places: on a table without seats it skips a row where any deck, stack, discard pile or
 loose card already lies and uses the next row out (up to 8 rows); at a seat it moves the player's place sideways until
 it is free. Piles from an earlier deal stay where they are and the new ones never land on them.
+
+**CART-1 plan (owner, 2026-10-20: "Approved next"; in stages; the cartridge piece and boot moment later with the
+visuals).** 1a the contract and the hook points; 1b the rest of Trap Floor's state (its template, turn, round and
+helpers) behind the cartridge, so the table code no longer names Trap Floor; 1c seats along the table outline, from
+where each cartridge says its seats may go.
+
+**CART-1a record (written 2026-10-20, to be checked).**
+- **The contract** (`IGameCartridge`, `GameCartridges.cs`): stable ID, name, game definition, code or data; its
+  table setups (one per mode, for New table…); table ready and shutdown; a step each frame before and after the hint
+  helpers; the status line, the status card (with a redraw signature) and asking it to redraw; the Shop entry; the
+  hint helpers; its own card menus; cards played into Console slots; which decks it deals from itself.
+- **Trap Floor** is the first code cartridge (`TrapFloorCartridge : IGameCartridge`). Its table setups moved from the
+  table's session code into the cartridge (`RegisterTemplates`, with the fallback to the game's own deck when your
+  chosen deck cannot set it up).
+- **Data cartridges** (`DataCartridge`): an Empty Table, a game a player made and a game box without code need no code;
+  the status line names the game ("My game | Objects 12").
+- **The registry** (`GameCartridgeRegistry`): the code cartridges by game, and a data cartridge for any other game box.
+- **The table now asks "the cartridge in play"** for: New table…'s setups (every code cartridge adds its own), the
+  table ready and shutdown, the per-frame steps, the status line and card, the Shop entry, the hint helpers, the Floor
+  card menus, Console card reactions, and Deal's check for the game's own decks.
+- No change in play is expected: Trap Floor and the Empty Table behave as before.
+- Still naming Trap Floor (CART-1b): the table's build of the game, its turn and round state, its Shop and prize
+  announcements, the seat and hand helpers and the game selection menu.
+- Not compiled here; the owner checks in Unity.
