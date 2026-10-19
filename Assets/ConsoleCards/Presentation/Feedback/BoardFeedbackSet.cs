@@ -22,6 +22,8 @@ namespace ConsoleCards.Presentation.Feedback
         [SerializeField] private BoardFeedbackMarker reachTile;
         [Tooltip("The tile the floor dice point at (the Floorfall collapse target, doc 23 H3). Empty: the move-target marker is used.")]
         [SerializeField] private BoardFeedbackMarker collapseTarget;
+        [Tooltip("The table ping (UX-1): a ring at the spot a player pings. Empty: the active-pawn ring is used.")]
+        [SerializeField] private BoardFeedbackMarker tablePing;
         [Header("Placement")]
         [SerializeField] private float tileMarkerLift = 0.03f;
         [SerializeField] private float trapWarningLift = 0.9f;
@@ -40,6 +42,7 @@ namespace ConsoleCards.Presentation.Feedback
         public BoardFeedbackArrow MoveArrow => moveArrow;
         public BoardFeedbackMarker ReachTile => reachTile != null ? reachTile : moveTarget;
         public BoardFeedbackMarker CollapseTarget => collapseTarget != null ? collapseTarget : moveTarget;
+        public BoardFeedbackMarker TablePing => tablePing != null ? tablePing : activePawnRing;
         public float TileMarkerLift => tileMarkerLift;
         public float TrapWarningLift => trapWarningLift;
         public float TrapKick => trapKick;

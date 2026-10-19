@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.7 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.10 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -375,8 +375,8 @@ Change: …
   outline while carrying, instant stack, taps and flashes, a one-card stack turns back into a card (owner).
   2026-10-18 fixes: stack forms where the bottom card lies; stack menu on its cards with deck actions (Draw to Hand,
   Shuffle); drop and landing one Undo step, no card in mid-air after Undo (owner). 2026-10-18: Merge Into… removed
-  from the menu; press and hold a stack to carry it whole, let go on another stack to merge (owner). Not yet
-  checked in Unity.
+  from the menu; press and hold a stack to carry it whole, let go on another stack to merge (owner); approved
+  (owner, 2026-10-19).
 
 ### P-CONSOLE · The Console mat
 - **Status:** Built, approved
@@ -523,19 +523,51 @@ Change: …
 - **Open:** V0 style sheet with Russell.
 - **Changes:** 2026-10-18 moving currents (owner); 2026-10-17 circuit skybox (Q2).
 
+### P-PING · Table ping
+- **Status:** Built, to be checked (UX-1)
+- **Rule now:** Alt + left click, or a quick tap of the middle mouse button, anywhere on the table: a ring pulses at
+  that spot in your colour for two seconds with a short beep, then fades. It only marks a spot: it never selects,
+  moves or points at a piece, it is not saved, not in Undo and not in the activity log, and no game system reads it.
+  Up to six rings at once. Not in Table mode. With multiplayer it becomes a small message to the others.
+- **Source:** doc 30 §A2
+- **Open:** the optional A/B/X/Y picture on the ring (left out: keys 1–4 already change the camera view).
+- **Changes:** 2026-10-19 built (UX-1).
+
+### P-GESTURES · Cursor, flick and dice shake
+- **Status:** Built, to be checked (UX-1)
+- **Rule now:**
+  - **Cursor:** an open hand over a piece; a closed hand while carrying; a stack mark while a press on a stack waits
+    to pick the whole stack up; a red "no" over a pile that will not take the card; a target while Alt is held
+    (ping); a cross-hair while Shift is held over a piece or a flick is aimed. Over menus, the normal arrow. 8-bit
+    pictures made for the game.
+  - **Flick:** hold Shift, press on a loose card, coin, token, pawn or die, pull back and let go. An arrow shows the
+    direction and strength (teal soft, orange hard); the piece slides across the table, a die tumbles. A tiny pull
+    does nothing; Escape cancels. One Undo step once it rests. Floor tiles and locked pieces never flick.
+  - **Dice shake:** while carrying a die, hold Shift: it rattles in the hand; let go and it leaves tumbling (a real
+    roll).
+- **Source:** doc 30 §A1, §A2
+- **Changes:** 2026-10-19 built (UX-1).
+
 ---
 
 ## Part 3 — Planned mechanics (not built yet)
 
-### PL-PING · Table ping
-- **Status:** Planned (UX-1)
-- **Rule now:** a ping anywhere on the table, not tied to any piece or system, for pointing things out.
-- **Source:** doc 30 §A2
+### PL-SHUFFLE · Shuffle animations and styles
+- **Status:** Planned (SHUF-1)
+- **Rule now:** shuffling is shown, in the player's chosen style: riffle, overhand, Hindu, pile, wash or cut; the
+  order always comes from the table's random source.
+- **Source:** doc 30 Part H
 
-### PL-CURSOR · Game cursor and gestures
-- **Status:** Planned (UX-1)
-- **Rule now:** a game cursor that changes with what it is over, and gestures such as flicking.
-- **Source:** doc 30 §A1, §A2
+### PL-DEAL · Dealing by the game's rules
+- **Status:** Planned (DEAL-1)
+- **Rule now:** a game's rules say how cards are dealt (deck, how many, face, to hand or table, order, when); Deal
+  follows them, or asks on an Empty Table. Player-made games set it in Save table as a game; house rules can change it.
+- **Source:** doc 30 Part H
+
+### PL-ICONS · Icons on card sides and corners
+- **Status:** Planned (ICON-1)
+- **Rule now:** a card's icons on any side or corner connect to the matching Console slot icon at any rotation.
+- **Source:** client feature checklist item 1 (doc 32)
 
 ### PL-CARTRIDGE · Cartridge contract
 - **Status:** Planned (CART-1)

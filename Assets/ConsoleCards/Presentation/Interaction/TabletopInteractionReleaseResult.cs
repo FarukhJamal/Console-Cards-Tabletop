@@ -60,6 +60,15 @@ namespace ConsoleCards.Presentation.Interaction
                 null);
         }
 
+        public static TabletopInteractionReleaseResult FromFlick()
+        {
+            return new TabletopInteractionReleaseResult(
+                TabletopInteractionRoute.Flick,
+                true,
+                null,
+                null);
+        }
+
         public bool Equals(TabletopInteractionReleaseResult other)
         {
             return Route == other.Route

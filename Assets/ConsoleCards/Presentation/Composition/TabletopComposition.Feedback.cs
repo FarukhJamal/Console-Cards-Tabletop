@@ -90,6 +90,7 @@ namespace ConsoleCards.Presentation.Composition
             else
             {
                 feedbackTarget.SetInvalid();
+                dragTargetRejects = true; // UX-1: the cursor shows "no" over a pile that will not take the card
             }
         }
 
@@ -114,6 +115,7 @@ namespace ConsoleCards.Presentation.Composition
         private void ClearFeedback()
         {
             feedbackHoldUntil = 0f;
+            dragTargetRejects = false;
             foreach (ContainerFeedbackTarget target in feedbackTargetsByContainerId.Values)
             {
                 target.Clear();

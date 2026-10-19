@@ -496,18 +496,24 @@ namespace ConsoleCards.Presentation.Composition
                 && ReferenceEquals(current, flashingPile);
         }
 
+        // The table's sounds: loaded once, played on one 2D source; a missing clip just means silence.
+        private void EnsureCardSounds()
+        {
+            if (cardSoundsLoaded) return;
+            cardSoundsLoaded = true;
+            cardStackClip = Resources.Load<AudioClip>(CardStackSoundPath);
+            cardTapClip = Resources.Load<AudioClip>(CardTapSoundPath);
+            tablePingClip = Resources.Load<AudioClip>(TablePingSoundPath);
+            diceShakeClip = Resources.Load<AudioClip>(DiceShakeSoundPath);
+            if (!TryGetComponent(out cardSoundSource)) cardSoundSource = gameObject.AddComponent<AudioSource>();
+            cardSoundSource.playOnAwake = false;
+            cardSoundSource.spatialBlend = 0f;
+        }
+
         private void PlayCardSound(bool stacked)
         {
             if (Time.unscaledTime - lastCardSoundAt < CardSoundMinimumGap) return;
-            if (!cardSoundsLoaded)
-            {
-                cardSoundsLoaded = true; // loaded once; missing clips just mean silence
-                cardStackClip = Resources.Load<AudioClip>(CardStackSoundPath);
-                cardTapClip = Resources.Load<AudioClip>(CardTapSoundPath);
-                if (!TryGetComponent(out cardSoundSource)) cardSoundSource = gameObject.AddComponent<AudioSource>();
-                cardSoundSource.playOnAwake = false;
-                cardSoundSource.spatialBlend = 0f;
-            }
+            EnsureCardSounds();
 
             AudioClip clip = stacked ? cardStackClip : cardTapClip;
             if (clip == null || cardSoundSource == null) return;

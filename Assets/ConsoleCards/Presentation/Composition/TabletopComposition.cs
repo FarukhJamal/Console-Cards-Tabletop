@@ -640,6 +640,7 @@ namespace ConsoleCards.Presentation.Composition
                 inputFrameCoordinator.ConfigureUiInput(
                     ContextMenus.HandleSecondaryPointerPressed,
                     ContextMenus.CanBeginCameraOrbit);
+                inputFrameCoordinator.ConfigureTablePing(TryPingTable); // UX-1
                 uiInputConfiguredByComposition = true;
                 ConfigureDeveloperControlsInputBlockIfNeeded();
 
@@ -718,6 +719,7 @@ namespace ConsoleCards.Presentation.Composition
                 inputFrameCoordinator.ConfigureUiInput(
                     ContextMenus.HandleSecondaryPointerPressed,
                     ContextMenus.CanBeginCameraOrbit);
+                inputFrameCoordinator.ConfigureTablePing(TryPingTable); // UX-1
                 uiInputConfiguredByComposition = true;
                 ConfigureDeveloperControlsInputBlockIfNeeded();
                 inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
@@ -770,6 +772,7 @@ namespace ConsoleCards.Presentation.Composition
             SessionService.StopUndoTrackingCurrentMatch();
             carryDropPending = false; // a carried stack is dropped with the old table
             ClearCarryState();
+            ClearGestures(); // UX-1: no flick aim or dice shake carries over to a rebuilt table
             physicalFloorfallPending = false;
             physicalFloorfallActor = PlayerId.Empty;
             physicalFloorCollapsePending = false;
@@ -1051,6 +1054,7 @@ namespace ConsoleCards.Presentation.Composition
         private void OnDestroy()
         {
             Shutdown();
+            ResetTableCursor();
             boardFeedback?.Destroy();
             boardFeedback = null;
             ReleaseCardArtMaterials();
@@ -1138,6 +1142,7 @@ namespace ConsoleCards.Presentation.Composition
             CardInspectPanel.RefreshCardInspectPopup();
             AnnounceTrapFloorFeedback();
             RefreshBoardFeedback();
+            UpdateGestures(); // UX-1: dice shake and the cursor
         }
 
         // The tray band is a drop target only while a card drag is in progress.

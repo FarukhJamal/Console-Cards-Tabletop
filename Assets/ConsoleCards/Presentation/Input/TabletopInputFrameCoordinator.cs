@@ -30,6 +30,13 @@ namespace ConsoleCards.Presentation.Input
         private TabletopSelectionPresenter selectionPresenter;
         private TabletopComponentPlacementController componentPlacementController;
 
+        // UX-1, the table ping: Alt + left click, or a quick middle-button tap, anywhere on the table.
+        private const float MiddleTapSeconds = 0.3f;
+        private Func<Vector2, bool> tablePingRequested;
+        private bool middleTapPending;
+        private Vector2 middleTapPressPosition;
+        private float middleTapPressedAt;
+
         public bool IsInitialized => isInitialized;
 
         public TabletopCameraInputAdapter CameraInputAdapter => cameraInputAdapter;
@@ -80,8 +87,20 @@ namespace ConsoleCards.Presentation.Input
             cameraOrbitEligibility = cameraOrbitEligibilityHandler;
         }
 
+        /// <summary>
+        /// UX-1: Alt + left click or a quick middle-button tap on the table asks the handler for a ping at that
+        /// screen point. When the handler pings (returns true) after an Alt-click, the click does nothing else.
+        /// </summary>
+        internal void ConfigureTablePing(Func<Vector2, bool> pingHandler)
+        {
+            tablePingRequested = pingHandler;
+            middleTapPending = false;
+        }
+
         internal void ClearUiInput()
         {
+            tablePingRequested = null;
+            middleTapPending = false;
             suppressObjectPointerUntilRelease = false;
             secondaryPointerPressed = null;
             cameraOrbitEligibility = null;
@@ -208,6 +227,7 @@ namespace ConsoleCards.Presentation.Input
                 pointerDelta = Vector2.zero;
                 scrollDelta = 0f;
             }
+            UpdateTablePing(screenPosition, selectPressedThisFrame, pointerInsideBlockedUi);
             bool orbitHeld = !placementCancelledBySecondary
                 && UpdateSecondaryPointerGesture(
                     screenPosition,
@@ -390,6 +410,51 @@ namespace ConsoleCards.Presentation.Input
             }
 
             return orbitActive;
+        }
+
+        private void UpdateTablePing(Vector2 screenPosition, bool selectPressedThisFrame, bool pointerInsideBlockedUi)
+        {
+            if (tablePingRequested == null)
+            {
+                return;
+            }
+
+            bool free = !pointerInsideBlockedUi
+                && !HasActiveObjectInteraction()
+                && (componentPlacementController == null || !componentPlacementController.IsActive);
+            Keyboard keyboard = Keyboard.current;
+            if (selectPressedThisFrame
+                && free
+                && keyboard != null
+                && keyboard.altKey.isPressed
+                && tablePingRequested(screenPosition))
+            {
+                suppressObjectPointerUntilRelease = true; // the click was the ping, not a pick-up
+            }
+
+            Mouse mouse = Mouse.current;
+            if (mouse == null)
+            {
+                return;
+            }
+
+            if (mouse.middleButton.wasPressedThisFrame)
+            {
+                middleTapPending = free;
+                middleTapPressPosition = screenPosition;
+                middleTapPressedAt = Time.unscaledTime;
+            }
+
+            if (middleTapPending && mouse.middleButton.wasReleasedThisFrame)
+            {
+                middleTapPending = false;
+                if (Time.unscaledTime - middleTapPressedAt <= MiddleTapSeconds
+                    && Vector2.Distance(middleTapPressPosition, screenPosition) <= cameraOrbitDragThresholdPixels
+                    && !pointerInsideBlockedUi)
+                {
+                    tablePingRequested(screenPosition);
+                }
+            }
         }
 
         private void ClearSecondaryPointerGesture()

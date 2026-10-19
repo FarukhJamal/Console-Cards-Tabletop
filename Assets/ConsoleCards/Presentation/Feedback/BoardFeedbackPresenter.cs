@@ -14,6 +14,7 @@ namespace ConsoleCards.Presentation.Feedback
         private const int FlashPool = 6;
         private const int BurstPool = 3;
         private const int ReachPool = 16;
+        private const int PingPool = 6;
 
         private readonly BoardFeedbackSet set;
         private readonly BoardFeedbackMarker ring;
@@ -24,6 +25,9 @@ namespace ConsoleCards.Presentation.Feedback
         private readonly BoardFeedbackMarker[] reach;
         private readonly BoardFeedbackMarker collapseTarget;
         private readonly BoardFeedbackArrow arrow;
+        private readonly BoardFeedbackMarker[] pings;
+        private readonly BoardFeedbackArrow aimArrow;
+        private int nextPing;
         private readonly List<GameObject> owned = new List<GameObject>();
         private int nextFlash;
         private int nextBurst;
@@ -44,7 +48,37 @@ namespace ConsoleCards.Presentation.Feedback
                 arrow.name = set.MoveArrow.name;
                 arrow.gameObject.SetActive(false);
                 owned.Add(arrow.gameObject);
+
+                // UX-1: the flick's aim arrow, apart from the move arrow so the game's markers never hide it.
+                aimArrow = Object.Instantiate(set.MoveArrow, parent, false);
+                aimArrow.name = set.MoveArrow.name + " (Aim)";
+                aimArrow.gameObject.SetActive(false);
+                owned.Add(aimArrow.gameObject);
             }
+
+            pings = MakePool(set.TablePing, parent, PingPool);
+        }
+
+        /// <summary>
+        /// UX-1: a ping on the table, a ring that pulses at the spot for a while and fades. Kept apart from the
+        /// game's markers: <see cref="HideAll"/> leaves it. Reuses a small pool, oldest first.
+        /// </summary>
+        public void Ping(Vector3 position, Color colour, float seconds)
+        {
+            if (pings.Length == 0) return;
+            pings[nextPing].ShowFor(position + (Vector3.up * set.TileMarkerLift), colour, seconds);
+            nextPing = (nextPing + 1) % pings.Length;
+        }
+
+        /// <summary>UX-1: the flick's aim arrow, from the piece in the direction it will go.</summary>
+        public void ShowAim(Vector3 from, Vector3 to, Color colour)
+        {
+            aimArrow?.Show(from, to, colour);
+        }
+
+        public void HideAim()
+        {
+            aimArrow?.Hide();
         }
 
         public BoardFeedbackSet Set => set;

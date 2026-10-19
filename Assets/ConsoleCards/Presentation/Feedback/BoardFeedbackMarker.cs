@@ -30,6 +30,9 @@ namespace ConsoleCards.Presentation.Feedback
         private Color color = Color.white;
         private float startedAt;
         private bool scaleCaptured;
+        private float lifetime; // > 0: a timed show (the table ping) that fades out at the end
+
+        private const float TimedFadeSeconds = 0.5f;
 
         public bool IsShowing => gameObject.activeSelf;
 
@@ -56,8 +59,21 @@ namespace ConsoleCards.Presentation.Feedback
             Animate();
         }
 
+        /// <summary>
+        /// A looping marker shown for a while (UX-1, the table ping): it pulses as authored, fades out over its last
+        /// half second and hides itself. Showing it again restarts it.
+        /// </summary>
+        public void ShowFor(Vector3 position, Color tint, float seconds)
+        {
+            lifetime = Mathf.Max(0.1f, seconds);
+            if (gameObject.activeSelf) startedAt = Time.unscaledTime;
+            Show(position, tint);
+            startedAt = Time.unscaledTime;
+        }
+
         public void Hide()
         {
+            lifetime = 0f;
             if (gameObject.activeSelf) gameObject.SetActive(false);
         }
 
@@ -88,6 +104,17 @@ namespace ConsoleCards.Presentation.Feedback
                 float wave = Mathf.Sin(t * pulseSpeed);
                 scale = 1f + (wave * pulseScale);
                 alpha *= 1f - (pulseAlpha * 0.5f * (1f - wave));
+            }
+
+            if (lifetime > 0f)
+            {
+                if (t >= lifetime)
+                {
+                    Hide();
+                    return;
+                }
+
+                alpha *= Mathf.Clamp01((lifetime - t) / TimedFadeSeconds);
             }
 
             transform.localScale = baseScale * scale;

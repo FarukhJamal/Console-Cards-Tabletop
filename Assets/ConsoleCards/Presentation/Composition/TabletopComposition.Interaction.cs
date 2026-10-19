@@ -287,6 +287,7 @@ namespace ConsoleCards.Presentation.Composition
                 selectionState);
             interactionRouter.HandView = handView;
             interactionRouter.CarryHandler = this; // press and hold a stack to carry it whole (owner, 2026-10-18)
+            interactionRouter.FlickHandler = this; // UX-1: Shift-press a loose piece, pull back, let go
             hitResolver.HandPicker = handView;
             moveCoordinator.IsContainerAtComfortCap = ContextMenus.IsOwnHandAtComfortCap;
             moveCoordinator.ComfortCapRejected = ContextMenus.ShowHandCapReached;

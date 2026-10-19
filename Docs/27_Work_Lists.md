@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.37 · 2026-10-19 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.41 · 2026-10-19 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -83,8 +83,10 @@ the list. The order that stays active:
 | 2 | R0 | Names: Prototype classes and prefabs get final names, renamed so references stay intact (doc 30 A5, record in Part D) | Done, approved ("Works now"; the one-off R0 tool may be deleted) |
 | 3 | T1–T3 | Table shape and size: table spec and builder, star and edges, Table mode with handles (doc 30 B) | T1 done, working after the collider fix (owner, 2026-10-17; doc 30 §B6); T1b model tables done, approved (owner, 2026-10-17; doc 30 §B8); T2 star, edges and edge colliders done, approved (owner, 2026-10-17; doc 30 §B9); T3 Table mode approved; T3 completed with the owner's choice (pieces move in), size handles and the shape change; owner 2026-10-18: every Toolbox piece must move in (the game mat did not), done, approved (owner, 2026-10-18; doc 30 §B10). Seats along the outline moved to CART-1 |
 | 4 | Q2 | Circuit-board skybox (doc 30 §C0): Console Cards > Look > Use Circuit Skybox | Done, approved with the moving currents (owner, 2026-10-18) |
-| 5 | R1–R2 | Code cleanup: split the composition, local command door, UI from events (multiplayer-ready, doc 30 A6); stages R1a–R1f, then R2 (doc 30 Part E) | R1a done, approved (owner, 2026-10-18). R1b part 1 (the command door; the table code's 38 direct use-case calls go through it) approved (owner, 2026-10-18: "rest seems fine", with the pile tools found while checking it); R1b part 2 and R1c–R1f written together on the owner's request (2026-10-18, "Do all R1's in one go"; doc 30 Part E), approved (owner, 2026-10-18). R2a–R2d all written on the owner's request (2026-10-18, "implement whole R2"; doc 30 Part F), to be checked (not compiled here) |
-| 6 | UX-1 | Cursor, gestures and the free table ping (doc 30 A2) | Placed in the order (owner, 2026-10-18); planned after R2 |
+| 5 | R1–R2 | Code cleanup: split the composition, local command door, UI from events (multiplayer-ready, doc 30 A6); stages R1a–R1f, then R2 (doc 30 Part E) | R1a done, approved (owner, 2026-10-18). R1b part 1 (the command door; the table code's 38 direct use-case calls go through it) approved (owner, 2026-10-18: "rest seems fine", with the pile tools found while checking it); R1b part 2 and R1c–R1f written together on the owner's request (2026-10-18, "Do all R1's in one go"; doc 30 Part E), approved (owner, 2026-10-18). R2a–R2d written on the owner's request (2026-10-18, "implement whole R2"; doc 30 Part F), approved (owner, 2026-10-19). R1–R2 done |
+| 6 | UX-1 | Cursor, gestures and the free table ping (doc 30 A2) | Written 2026-10-19 on the owner's "go": table ping (Alt-click or middle tap), cursor states, Shift-flick, dice shake (doc 30 Part G). Accepted with the polish plan (owner, 2026-10-19); the keys become editable in POL-0 |
+| 6b | POL-0–POL-9, SHUF-1, DEAL-1 | Polish the mechanics to Tabletop Simulator's feel (doc 30 Part H): editable keys, icons and feel numbers first, then pick-up and carry, drop and settle, hover and info, piles (spread), dice and flick, hand, select several and group into deck, sound, a hideable controls toolbar; shuffle animations and styles; dealing written in the game's rules | Accepted (owner, 2026-10-19); waiting for the owner's top three pain points and the shuffle video |
+| 6c | ICON-1 | Cards with icons on any side or corner connect to matching Console slot icons at any rotation (client checklist item 1, doc 32) | New 2026-10-19; to place in the order |
 | 7 | CART-1 | Cartridge contract (what a game hands the platform, doc 30 A4), including seats along the table outline | Placed in the order (owner, 2026-10-18); planned after UX-1. TrapFloorCartridge (R1e) is the first cartridge it will formalise |
 
 **Pile tools (owner, 2026-10-18, found while checking R1b):** Duplicate was missing on decks, stacks and discard
@@ -124,7 +126,7 @@ Not yet placed in the order: SLS (Super Leroy Sisters, waiting for the game from
 **Carry a whole stack (owner, 2026-10-18):** Merge Into… is gone from the stack menu. Press and hold a card in a
 stack without moving and the whole stack lifts and follows the pointer; let go on another stack (its outline lights
 green) to merge, anywhere else to put it down; Escape puts it back. A quick drag still takes the top card. Written
-2026-10-18 (`TabletopComposition.StackCarry.cs`, the router's new carry route), to be checked. Register: P-PILES.
+2026-10-18 (`TabletopComposition.StackCarry.cs`, the router's new carry route), approved (owner, 2026-10-19). Register: P-PILES.
 
 **Duplicate a single card (owner, 2026-10-18):** a duplicated card is now an exact copy (same card and face), also for
 a game's own cards; pawns, tokens and dice from a game still become generic copies. Written 2026-10-18, to be checked.

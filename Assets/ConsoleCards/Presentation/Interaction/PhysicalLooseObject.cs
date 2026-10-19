@@ -82,6 +82,7 @@ namespace ConsoleCards.Presentation.Interaction
         private PhysicalObjectInteractionProfile profile;
         private PhysicalObjectState applied;
         private bool held;
+        private bool shaking;
         private float holdDepth;
         private Vector2 grabScreenOffset;
         private Vector3 grabLocalAnchor;
@@ -132,6 +133,16 @@ namespace ConsoleCards.Presentation.Interaction
         private bool missingRecoveryPoseReported;
 
         public bool IsHeld => held;
+
+        /// <summary>
+        /// UX-1, dice shake: while a held die is shaken it rattles in the hand (a quick wobble on top of the carry
+        /// turn), and when it is let go it leaves with a fresh tumble, so the roll is a real one. Ends on release.
+        /// </summary>
+        public bool Shaking
+        {
+            get => shaking;
+            set => shaking = value && held && view is DieView;
+        }
         public bool OwnsLooseTransform => view != null && view.IsBound && view.BoundState.ContainerId.IsEmpty;
         public Rigidbody Body => body;
         public TableCoordinate LayoutCoordinate => authority.Surfaces.Coordinate(body.position);
@@ -453,6 +464,16 @@ namespace ConsoleCards.Presentation.Interaction
             }
 
             Quaternion targetRotation = lean * heldBaseRotation;
+            if (shaking)
+            {
+                // A fast wobble (no garbage, no random state): three out-of-step waves.
+                float t = Time.fixedUnscaledTime;
+                targetRotation = targetRotation * Quaternion.Euler(
+                    Mathf.Sin(t * 47f) * 28f,
+                    Mathf.Sin((t * 53f) + 1f) * 28f,
+                    Mathf.Sin((t * 41f) + 2f) * 28f);
+            }
+
             body.angularVelocity = Vector3.Lerp(
                 body.angularVelocity,
                 AngularVelocityTo(body.rotation, targetRotation, Tune.RotationGain, Tune.MaxHeldAngularSpeed),
@@ -497,6 +518,15 @@ namespace ConsoleCards.Presentation.Interaction
             profile.ApplyRelease(ref velocity, ref angularVelocity);
             // TTS-FEEL: spin is synthesized AFTER profile clamps so a flick actually tumbles.
             angularVelocity = SynthesizeReleaseSpin(velocity, angularVelocity);
+            if (shaking)
+            {
+                // UX-1: a shaken die leaves the hand tumbling and a little upward, like a throw from a closed fist.
+                angularVelocity = Vector3.ClampMagnitude(
+                    angularVelocity + (UnityEngine.Random.onUnitSphere * UnityEngine.Random.Range(18f, 32f)),
+                    body.maxAngularVelocity);
+                velocity.y = Mathf.Max(velocity.y, 2.5f);
+                shaking = false;
+            }
             hasReleasePose = true;
             releasePosition = body.position;
             releaseRotation = body.rotation;
@@ -556,8 +586,44 @@ namespace ConsoleCards.Presentation.Interaction
                     : AuthoritativeActionRecordMode.None);
         }
 
+        /// <summary>
+        /// UX-1, flick: sends a loose piece sliding across the table with the given velocity (world units a second),
+        /// as Roll sends a die: one Undo step once it comes to rest. A die tumbles; anything else turns a little.
+        /// </summary>
+        public bool Flick(Vector3 velocity, PlayerId? requestingActor = null)
+        {
+            if (!OwnsLooseTransform || view.BoundState.IsUserLocked || held) return false;
+            RestoreContainedSmoothing();
+            actor = requestingActor ?? authority.Actor;
+            userActionActive = true;
+            compoundActionActive = false;
+            Vector3 spin = view is DieView
+                ? UnityEngine.Random.onUnitSphere * UnityEngine.Random.Range(12f, 24f)
+                : Vector3.up * (UnityEngine.Random.Range(-1f, 1f) * Tune.PieceYawSpinMax);
+            PhysicalObjectState launch = State(
+                transform.position + (Vector3.up * 0.02f),
+                transform.rotation,
+                velocity,
+                spin,
+                PhysicalObjectMode.Dynamic,
+                actor);
+            if (!Commit(launch, null, AuthoritativeActionRecordMode.Intermediate))
+            {
+                userActionActive = false;
+                return false;
+            }
+
+            cockedNudges = 0;
+            frozenAfterRecovery = false;
+            if (float.IsNaN(recoveryHeight)) RefreshRecoveryHeight();
+            applied = null;
+            ApplyAccepted();
+            return true;
+        }
+
         public void Cancel()
         {
+            shaking = false;
             if (held && OwnsLooseTransform && grabOrigin != null)
                 Commit(State(Vector(grabOrigin.Position), Rotation(grabOrigin.Rotation), Vector(grabOrigin.Velocity),
                     Vector(grabOrigin.AngularVelocity), PhysicalObjectMode.Dynamic, actor), null,

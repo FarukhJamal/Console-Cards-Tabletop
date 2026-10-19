@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.18 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.22 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1256,7 +1256,7 @@ The owner approved T3 and the moving skybox on 2026-10-18 ("Approved next"), so 
 | R1d | `ContextMenuPresenter` and one presenter per panel. | Done, approved (owner, 2026-10-18) |
 | R1e | `TrapFloorCartridge`: the Trap Floor, Trap Floor status, Shop and Trap Floor hints code in one plain class (the first cartridge, A4). | Done, approved (owner, 2026-10-18) |
 | R1f | `TableSessionService`: start, replace, reset, Undo and Redo. | Done, approved (owner, 2026-10-18) |
-| R2 | Events instead of hand refreshes, in stages R2a–R2d (Part F). | R2a–R2d written 2026-10-18, to be checked |
+| R2 | Events instead of hand refreshes, in stages R2a–R2d (Part F). | Done, approved (owner, 2026-10-19) |
 
 **R1a — what changed.** `TabletopComposition.cs` went from 16,920 lines to 1,880. It keeps the fields, the nested
 types, start-up, shutdown and the Unity messages (Start, Update, OnGUI, OnDestroy). Every other method moved,
@@ -1372,10 +1372,10 @@ round: the table announces every accepted change, and the views follow the annou
 
 | Stage | What | Status |
 |---|---|---|
-| R2a | The change stream: the table authority announces every accepted command (`ITableAuthority.CommandAccepted`). `TableViewSync` lays out the piles a shuffle, draw, reorder, split or merge touched, makes the view of a stack a split made and removes the view of a stack a merge emptied. The code that asked keeps only the animation, pulse and message. | Written 2026-10-18, to be checked |
-| R2b | The rest of the table through `TableViewSync`: Toolbox create, duplicate, populate and delete, boards, moved piles and Consoles, the Shop and prize cards; gestures (transfers, moves, turns, flips, physics rests, Console turns) for players on another computer. | Written 2026-10-18, to be checked |
-| R2c | Panels and the HUD redraw when something changed, not every frame. Found while planning: the Trap Floor status card and turn strip, the status line and the tip text are rebuilt every frame (new texts and lists each frame, against the no-per-frame-garbage rule). They redraw when an accepted change arrives or a game step asks, when the turn and pending states change, when a message runs out, and every half second as a safety net. | Written 2026-10-18, to be checked |
-| R2d | Undo, Redo, Reset and loading announce "the table was replaced", and everything that follows the table rebuilds from that one signal. | Written 2026-10-18, to be checked |
+| R2a | The change stream: the table authority announces every accepted command (`ITableAuthority.CommandAccepted`). `TableViewSync` lays out the piles a shuffle, draw, reorder, split or merge touched, makes the view of a stack a split made and removes the view of a stack a merge emptied. The code that asked keeps only the animation, pulse and message. | Done, approved (owner, 2026-10-19) |
+| R2b | The rest of the table through `TableViewSync`: Toolbox create, duplicate, populate and delete, boards, moved piles and Consoles, the Shop and prize cards; gestures (transfers, moves, turns, flips, physics rests, Console turns) for players on another computer. | Done, approved (owner, 2026-10-19) |
+| R2c | Panels and the HUD redraw when something changed, not every frame. Found while planning: the Trap Floor status card and turn strip, the status line and the tip text are rebuilt every frame (new texts and lists each frame, against the no-per-frame-garbage rule). They redraw when an accepted change arrives or a game step asks, when the turn and pending states change, when a message runs out, and every half second as a safety net. | Done, approved (owner, 2026-10-19) |
+| R2d | Undo, Redo, Reset and loading announce "the table was replaced", and everything that follows the table rebuilds from that one signal. | Done, approved (owner, 2026-10-19) |
 
 **R2a — what changed (2026-10-18).**
 
@@ -1430,4 +1430,81 @@ round: the table announces every accepted change, and the views follow the annou
   (`MoveContainer`) on the next frame, so the interaction graph is never rebuilt mid-gesture. Merge Into… left the
   stack menu (and its popup and menu mode were removed).
 - Not compiled here; the owner checks in Unity.
+
+**Approved** by the owner on 2026-10-19 ("Approved"): R2a–R2d and carrying a whole stack. R2 is done.
+
+---
+
+## Part G — UX-1 record: cursor, gestures and the table ping (2026-10-19)
+
+The owner said "go" for UX-1 on 2026-10-19, after approving R2.
+
+- **Table ping** (A2, item 1). Alt + left click, or a quick middle-button tap (under 0.3 s, no drag), anywhere on the
+  table. A ring pulses there in your colour for two seconds with a short two-tone beep, then fades over its last
+  half second. It sits on top of whatever is under the pointer (a card, a board) or on the table. It never selects or
+  moves anything (the Alt-click is swallowed), is not table state, and no game system reads it. Not in Table mode
+  (Alt there frees the size handles) or while placing. Code: `TabletopInputFrameCoordinator.ConfigureTablePing`
+  (input), `TabletopComposition.Gestures.cs` (`TryPingTable`), a pool of six rings in `BoardFeedbackPresenter.Ping`
+  (`BoardFeedbackMarker.ShowFor`: a timed show that fades). The ring is the board feedback's active-pawn ring
+  unless `BoardFeedbackSet` gets its own **Table Ping** prefab (new optional slot). Sound:
+  `Content/Resources/UiSounds/TablePing.wav` (made for the game). The A/B/X/Y picture was left out: keys 1–4
+  already change the camera view.
+- **Cursor** (A1). Pictures in `Content/Resources/Cursors` (32 × 32, 8-bit, made for the game; imported as cursors):
+  open hand over a piece, closed hand while carrying, stack mark while a press on a stack waits to carry it, a red
+  "no" over a pile that will not take the dragged card, a target while Alt is held, a cross-hair while Shift is held
+  over a piece or a flick is aimed. Over menus, the normal arrow. The cursor changes only when its kind does.
+- **Flick** (A2, item 2). Hold Shift, press on a loose card, coin, token, pawn or die, pull back and let go, like a
+  slingshot. An arrow (a second copy of the board feedback's move arrow, kept apart so the game's markers never hide
+  it) shows the direction and strength, teal to orange. Full strength at a pull of three card widths; speed 2 to 16
+  card widths a second. A tiny pull does nothing; Escape cancels. The piece is launched as Roll launches a die
+  (`PhysicalLooseObject.Flick`), so it is one Undo step once it rests. New router route `Flick` with
+  `ITabletopFlickHandler`.
+- **Dice shake** (A2, item 3). While carrying a die, hold Shift: it wobbles fast in the hand
+  (`PhysicalLooseObject.Shaking`) with a rattle (`UiSounds/DiceShake.wav`); let go and it leaves tumbling and a
+  little upward, a real roll. No dice cup piece yet.
+- Not compiled here; the owner checks in Unity.
+
+---
+
+## Part H — Polish plan: make the mechanics feel like Tabletop Simulator (2026-10-19, accepted)
+
+The owner (2026-10-19): the mechanics work but do not feel as polished as Tabletop Simulator. Also asked whether
+icons and keys can be changed afterwards.
+
+**Can icons and keys be changed now?**
+- **Icons: yes.** Replace the pictures in `Content/Resources/Cursors` keeping the same names (32 × 32, import type
+  Cursor). The ping ring has its own slot in Board Feedback Set; the sounds are the WAVs in `Content/Resources/UiSounds`
+  and `CardSounds`. The cursor hot spots are still numbers in code (moved to an asset in POL-0).
+- **Keys: partly.** Camera keys (WASD, arrows, 1–4, middle drag, scroll), F (flip), Escape and the left button are in
+  the Input Actions assets (`Presentation/Input/*.inputactions`) and can be changed in Unity's Input Actions editor.
+  Alt (ping), Shift (flick and dice shake), the middle tap and Ctrl/Alt shortcuts are still written in code. POL-0
+  moves them into the Input Actions asset; key remapping inside the game comes with Settings (A3, item 11).
+
+**How the polish is done.** The owner plays the same thing in both games and writes down (or records) what feels
+different; each stage below fixes one area, with its numbers in one tuning asset so they can be changed in Play mode
+without code. Each stage is checked by the owner before the next. Visual pieces that depend on the V0 look (outline
+colours, art of markers) use placeholders until V0 is approved.
+
+| Stage | What | What Tabletop Simulator does that we copy |
+|---|---|---|
+| POL-0 | **Editable keys, icons and feel numbers.** Ping, flick, shake and the other shortcut keys move into the Input Actions asset; a Cursor Set asset (pictures and hot spots); a **Feel Settings** asset with every lift height, speed, delay and duration used by pick-up, carry, drop, piles, flick and dice. | Everything is a setting. |
+| POL-1 | **Pick up and carry.** A clear lift on pick-up (fast up, eased); the carried piece rides at one steady height above everything under it; a soft shadow / landing dot straight below it shows where it will land; it leans a little into the movement and settles upright when it stops; scroll while carrying raises or lowers it; no jitter against other pieces. | The lifted piece, the drop line below it, the lean. |
+| POL-2 | **Drop and settle.** A ghost (outline) of the piece where it will land on a pile, slot or board space; a short, springy settle instead of a slide; rotation snaps to 15° steps with Q/E (45° with Shift); impact sounds by speed and material (card, wood, plastic, die); a tiny landing puff for hard drops. | Snap points, drop ghost, impact sounds. |
+| POL-3 | **Hover and information.** An outline in your colour on the piece under the cursor; a small tooltip after a moment (name, owner, and the card count of a pile); Alt held over a card shows it large (peek); hand cards lift and grow on hover. | Highlight, tooltips, Alt-zoom. |
+| POL-4 | **Piles.** Number keys over a deck draw that many; hovering a deck shows its count; cards slide out of the top with a quick arc; drops onto a pile slide in neatly; stack carry gets a lift animation and pulls toward the target stack when close; spread (fan out) and gather from the menu; a riffle animation on Shuffle. | Draw by number, deck count, spread, riffle. |
+| POL-5 | **Dice and flick (the UX-1 gestures).** Dice: R over a die rolls it; shaking the mouse while holding a die also shakes it (as in TTS), with Shift kept; the shake grows with how hard you shake (louder rattle, bigger wobble); the dice tumble with real weight and settle without creeping; the result floats above the die for a moment. Flick: a power curve that feels right at short and long pulls, a dotted path preview of where it will slide, a charge sound that rises with the pull, a snap sound on release, pieces slide with friction by material (cards glide, coins spin, pawns wobble). Ping: a sharper ring with a short ripple and an optional A/B/X/Y picture. | Roll key, shake by moving, result pop-up, flick feel. |
+| POL-6 | **Hand.** A curved fan; the card under the cursor rises and grows; smooth reorder while dragging; dealt cards fly into the hand one by one. | The hand row. |
+| POL-7 | **Select several.** Ctrl-drag a box to select many pieces (or Ctrl-click to add one); move, flip, rotate and delete them together (A3, item 1). | Box select, group move. |
+| POL-8 | **Sound pass.** One sound set by material (cards, chips, wood, dice, mat) with small random pitch; volume follows impact speed; quieter when many sounds play at once. | Material sounds. |
+| POL-9 | **Controls toolbar (hideable).** A slim bar at the bottom of the screen that shows the keys for what you are doing now: over a card "Drag move · F flip · Wheel turn · Right-click menu · Shift flick · Alt ping"; carrying "Q/E turn · Wheel raise · Esc cancel"; over a deck "1–9 draw · Hold to carry · R shuffle"; a die "R roll · Shift shake". A button (and H) hides and shows it; it remembers your choice in your profile. Built in the Final UI prefabs (no UI from code); it replaces the current controls strip. | TTS's on-screen hints and its controls panel. |
+| SHUF-1 | **Shuffle animations and styles.** Shuffling shows the cards being shuffled, and the player chooses how (menu "Shuffle ▸", a default per player): **Riffle** (two halves, cards interleave, bridge them together), **Overhand** (small packets moved from back to front), **Hindu** (packets pulled off the top), **Pile** (dealt into piles, piles stacked), **Wash** (cards spread face down on the table and swirled, then gathered) and **Cut** (one cut, top half under). Each is a short animation with its own sound; the order itself always comes from the table's one random source (the animation never decides the order), so it stays fair and multiplayer-ready. Quick Shuffle (R) keeps a short riffle. | Shuffle like real players do. |
+| DEAL-1 | **Dealing, written in the rules.** A game's rules can say how cards are dealt: from which deck, how many to each player (or "all"), one at a time or in packets, face up or down, to the hand or to a place on the table (in front of each seat, a row, the Console), in turn order starting left of the dealer, and when (at setup, each round). The **Deal** action on a deck (menu and a key) follows the game's deal rule; on an Empty Table or for a game without one it asks (how many each, to hand or table). The cards fly out one by one to each seat. Player-made games get a Deal step in Save table as a game (doc 29), and the deal rule shows on the rules card where it can be changed as a house rule (with everyone's agreement, doc 23). | Deal by rules, not by hand. |
+
+**Order suggested:** POL-0 first (it makes all later tuning fast), then POL-1 and POL-2 (most of the "feel"), then
+POL-3 to POL-9, SHUF-1 and DEAL-1 in the owner's order. Accepted by the owner on 2026-10-19 ("I accept the
+polishes"), with the gesture polish (flick, dice shake), the hideable controls toolbar, shuffle animations and
+styles, and dealing by rules added. The client's feature checklist is checked in doc 32; its open items (ICON-1
+icon connections at any rotation, piece snap, spread, select several and group into deck, drawing tool, controller
+pad dice) are folded in here or listed there. Before POL-1, the owner names the three things that feel worst next to TTS, and
+those go first.
 
