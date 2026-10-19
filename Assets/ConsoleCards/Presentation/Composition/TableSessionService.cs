@@ -728,15 +728,10 @@ namespace ConsoleCards.Presentation.Composition
             return false;
         }
 
+        // POL-0: the keys come from the Input Actions asset (Undo: Ctrl+Z).
         internal bool HandleUndoShortcut()
         {
-            Keyboard keyboard = Keyboard.current;
-            if (!host.IsInitialized
-                || keyboard == null
-                || !keyboard.zKey.wasPressedThisFrame
-                || !(keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed)
-                || keyboard.leftShiftKey.isPressed
-                || keyboard.rightShiftKey.isPressed)
+            if (!host.IsInitialized || !host.Keys.UndoPressedThisFrame)
             {
                 return false;
             }
@@ -745,19 +740,10 @@ namespace ConsoleCards.Presentation.Composition
             return true;
         }
 
+        // POL-0: the keys come from the Input Actions asset (Redo: Ctrl+Y or Ctrl+Shift+Z).
         internal bool HandleRedoShortcut()
         {
-            Keyboard keyboard = Keyboard.current;
-            if (!host.IsInitialized || keyboard == null)
-            {
-                return false;
-            }
-
-            bool controlPressed = keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed;
-            bool shiftPressed = keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed;
-            bool redoPressed = keyboard.yKey.wasPressedThisFrame
-                || (shiftPressed && keyboard.zKey.wasPressedThisFrame);
-            if (!controlPressed || !redoPressed)
+            if (!host.IsInitialized || !host.Keys.RedoPressedThisFrame)
             {
                 return false;
             }

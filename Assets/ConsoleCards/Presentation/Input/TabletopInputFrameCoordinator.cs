@@ -31,7 +31,8 @@ namespace ConsoleCards.Presentation.Input
         private TabletopComponentPlacementController componentPlacementController;
 
         // UX-1, the table ping: Alt + left click, or a quick middle-button tap, anywhere on the table.
-        private const float MiddleTapSeconds = 0.3f;
+        private float middleTapSeconds = 0.3f;
+        private TableKeys tableKeys;
         private Func<Vector2, bool> tablePingRequested;
         private bool middleTapPending;
         private Vector2 middleTapPressPosition;
@@ -91,11 +92,19 @@ namespace ConsoleCards.Presentation.Input
         /// UX-1: Alt + left click or a quick middle-button tap on the table asks the handler for a ping at that
         /// screen point. When the handler pings (returns true) after an Alt-click, the click does nothing else.
         /// </summary>
-        internal void ConfigureTablePing(Func<Vector2, bool> pingHandler)
+        internal void ConfigureTablePing(Func<Vector2, bool> pingHandler, TableKeys keys, float tapSeconds)
         {
             tablePingRequested = pingHandler;
+            tableKeys = keys;
+            middleTapSeconds = Mathf.Max(0.05f, tapSeconds);
             middleTapPending = false;
         }
+
+        /// <summary>
+        /// POL-0 diagnostics: when true, a click on the table that a menu or panel took is written to the Console
+        /// (and Editor.log) with the name of what took it, so clicks that need a second try can be traced.
+        /// </summary>
+        internal bool LogMissedPresses { get; set; }
 
         internal void ClearUiInput()
         {
@@ -312,6 +321,7 @@ namespace ConsoleCards.Presentation.Input
                 && pointerInsideBlockedUi)
             {
                 suppressObjectPointerUntilRelease = true;
+                LogPressTakenByUi(frame.ScreenPosition);
             }
 
             bool suppressObjectPointer = suppressObjectPointerUntilRelease;
@@ -422,33 +432,34 @@ namespace ConsoleCards.Presentation.Input
             bool free = !pointerInsideBlockedUi
                 && !HasActiveObjectInteraction()
                 && (componentPlacementController == null || !componentPlacementController.IsActive);
-            Keyboard keyboard = Keyboard.current;
+            bool pingModifierHeld = tableKeys != null
+                ? tableKeys.PingModifierHeld
+                : Keyboard.current != null && Keyboard.current.altKey.isPressed;
             if (selectPressedThisFrame
                 && free
-                && keyboard != null
-                && keyboard.altKey.isPressed
+                && pingModifierHeld
                 && tablePingRequested(screenPosition))
             {
                 suppressObjectPointerUntilRelease = true; // the click was the ping, not a pick-up
             }
 
-            Mouse mouse = Mouse.current;
-            if (mouse == null)
-            {
-                return;
-            }
-
-            if (mouse.middleButton.wasPressedThisFrame)
+            bool tapPressed = tableKeys != null
+                ? tableKeys.PingTapPressedThisFrame
+                : Mouse.current != null && Mouse.current.middleButton.wasPressedThisFrame;
+            bool tapReleased = tableKeys != null
+                ? tableKeys.PingTapReleasedThisFrame
+                : Mouse.current != null && Mouse.current.middleButton.wasReleasedThisFrame;
+            if (tapPressed)
             {
                 middleTapPending = free;
                 middleTapPressPosition = screenPosition;
                 middleTapPressedAt = Time.unscaledTime;
             }
 
-            if (middleTapPending && mouse.middleButton.wasReleasedThisFrame)
+            if (middleTapPending && tapReleased)
             {
                 middleTapPending = false;
-                if (Time.unscaledTime - middleTapPressedAt <= MiddleTapSeconds
+                if (Time.unscaledTime - middleTapPressedAt <= middleTapSeconds
                     && Vector2.Distance(middleTapPressPosition, screenPosition) <= cameraOrbitDragThresholdPixels
                     && !pointerInsideBlockedUi)
                 {
@@ -503,6 +514,27 @@ namespace ConsoleCards.Presentation.Input
             screenUiRaycastResults.Clear();
             currentEventSystem.RaycastAll(screenUiPointerEventData, screenUiRaycastResults);
             return screenUiRaycastResults.Count > 0;
+        }
+
+        // POL-0 diagnostics: names what took a click meant for the table (only when a click is taken, never per frame).
+        private void LogPressTakenByUi(Vector2 screenPosition)
+        {
+            if (!LogMissedPresses)
+            {
+                return;
+            }
+
+            string taker = "the developer controls area";
+            if (IsPointerOverScreenUi(screenPosition) && screenUiRaycastResults.Count > 0)
+            {
+                GameObject top = screenUiRaycastResults[0].gameObject;
+                Transform parent = top != null ? top.transform.parent : null;
+                taker = top == null
+                    ? "a menu"
+                    : parent != null ? parent.name + "/" + top.name : top.name;
+            }
+
+            Debug.Log($"[ConsoleCards Input] A click at {screenPosition} went to the UI ({taker}), not the table.");
         }
 
         private static Vector2 ToGuiPosition(Vector2 screenPosition)

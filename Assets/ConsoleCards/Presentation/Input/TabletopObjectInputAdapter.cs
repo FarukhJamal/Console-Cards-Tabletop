@@ -373,6 +373,12 @@ namespace ConsoleCards.Presentation.Input
                 {
                     interactionRouter.TryBegin(screenPosition);
                 }
+                else if (selectPressedThisFrame && interactionRouter.LogMissedPresses)
+                {
+                    // POL-0 diagnostics: the press was ignored because an earlier action had not finished.
+                    Debug.Log($"[ConsoleCards Input] A click at {screenPosition} was ignored: the earlier action "
+                        + $"({interactionRouter.ActiveRoute}) had not finished.");
+                }
 
                 if (selectReleasedThisFrame && interactionRouter.HasActiveInteraction)
                 {

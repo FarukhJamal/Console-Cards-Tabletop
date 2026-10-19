@@ -640,7 +640,7 @@ namespace ConsoleCards.Presentation.Composition
                 inputFrameCoordinator.ConfigureUiInput(
                     ContextMenus.HandleSecondaryPointerPressed,
                     ContextMenus.CanBeginCameraOrbit);
-                inputFrameCoordinator.ConfigureTablePing(TryPingTable); // UX-1
+                inputFrameCoordinator.ConfigureTablePing(TryPingTable, Keys, Feel.PingTapSeconds); // UX-1, POL-0 keys
                 uiInputConfiguredByComposition = true;
                 ConfigureDeveloperControlsInputBlockIfNeeded();
 
@@ -719,7 +719,7 @@ namespace ConsoleCards.Presentation.Composition
                 inputFrameCoordinator.ConfigureUiInput(
                     ContextMenus.HandleSecondaryPointerPressed,
                     ContextMenus.CanBeginCameraOrbit);
-                inputFrameCoordinator.ConfigureTablePing(TryPingTable); // UX-1
+                inputFrameCoordinator.ConfigureTablePing(TryPingTable, Keys, Feel.PingTapSeconds); // UX-1, POL-0 keys
                 uiInputConfiguredByComposition = true;
                 ConfigureDeveloperControlsInputBlockIfNeeded();
                 inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
@@ -1238,12 +1238,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private void HandleHandTrayShortcut()
         {
-            Keyboard keyboard = Keyboard.current;
-            if (!IsInitialized
-                || keyboard == null
-                || !keyboard.hKey.wasPressedThisFrame
-                || keyboard.leftCtrlKey.isPressed
-                || keyboard.rightCtrlKey.isPressed)
+            if (!IsInitialized || !Keys.HandTrayPressedThisFrame) // POL-0: the key comes from the Input Actions asset
             {
                 return;
             }

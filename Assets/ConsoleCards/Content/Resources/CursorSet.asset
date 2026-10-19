@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0b659f595da64ef88e9f17e142c6c999, type: 3}
+  m_Name: CursorSet
+  m_EditorClassIdentifier: ConsoleCards.Presentation::ConsoleCards.Presentation.Settings.CursorSet
+  hand: {fileID: 2800000, guid: c9a03a30cad3421784150e1ec1c964ec, type: 3}
+  handHotspot: {x: 12, y: 3}
+  grab: {fileID: 2800000, guid: 4369c90e5be74323aec20994bbed11da, type: 3}
+  grabHotspot: {x: 12, y: 8}
+  stack: {fileID: 2800000, guid: b06abadbc38c445b948222882a3797a3, type: 3}
+  stackHotspot: {x: 12, y: 8}
+  no: {fileID: 2800000, guid: 15dd3e73ca744bd0af8f61f0f87162d0, type: 3}
+  noHotspot: {x: 16, y: 16}
+  ping: {fileID: 2800000, guid: 42aa7ba36b0b40b494d49ce28d6210e2, type: 3}
+  pingHotspot: {x: 16, y: 16}
+  aim: {fileID: 2800000, guid: d9ce1eaaebf04e0aa8be0dc75d63c6fd, type: 3}
+  aimHotspot: {x: 16, y: 16}

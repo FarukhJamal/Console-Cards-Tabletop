@@ -50,6 +50,12 @@ namespace ConsoleCards.Presentation.Interaction
         /// <summary>Optional: Shift-press on a loose piece aims a flick instead of picking it up (UX-1).</summary>
         public ITabletopFlickHandler FlickHandler { get; set; }
 
+        /// <summary>
+        /// POL-0 diagnostics: when true, a press on a piece that could not start (and why) is written to the Console
+        /// (and Editor.log). Pressing empty table is not logged.
+        /// </summary>
+        public bool LogMissedPresses { get; set; }
+
         /// <summary>How long a still press on a stack card waits before the whole stack is picked up.</summary>
         public float LongPressSeconds { get; set; } = 0.45f;
 
@@ -78,6 +84,7 @@ namespace ConsoleCards.Presentation.Interaction
             {
                 if (!containedCardDragCoordinator.TryBegin(containedCardView, screenPosition))
                 {
+                    LogMissedPress(containedCardView, "the card in its pile could not be taken (locked, or its pile is not laid out)");
                     return false;
                 }
 
@@ -90,11 +97,25 @@ namespace ConsoleCards.Presentation.Interaction
 
             if (!moveCoordinator.TryBeginPress(screenPosition))
             {
+                if (resolvedView != null)
+                {
+                    LogMissedPress(resolvedView, resolvedView.BoundState != null && resolvedView.BoundState.IsUserLocked
+                        ? "the piece is locked"
+                        : "the piece is held by another action");
+                }
+
                 return false;
             }
 
             activeRoute = TabletopInteractionRoute.TabletopMove;
             return true;
+        }
+
+        // POL-0 diagnostics: only on a failed press, never per frame.
+        private void LogMissedPress(TabletopObjectView view, string reason)
+        {
+            if (!LogMissedPresses || view == null) return;
+            Debug.Log($"[ConsoleCards Input] A press on {view.name} did not pick it up: {reason}.");
         }
 
         public void UpdatePointer(Vector2 screenPosition)

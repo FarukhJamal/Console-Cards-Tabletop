@@ -64,7 +64,7 @@ namespace ConsoleCards.Presentation.Composition
         private const float CardStackReleaseWindow = 1f; // seconds a let-go card may take to come out of its pile
         private const float PileFlashSeconds = 0.35f;
         private const float CardSoundMinimumGap = 0.05f;
-        private const float CardSoundVolume = 0.5f;
+        private float CardSoundVolume => Feel.CardSoundVolume; // POL-0: from Resources/FeelSettings
         private const int PileLandingMaximumCards = 3; // bigger jumps are deals and merges, not a card landing
         private const string CardStackSoundPath = "CardSounds/CardStack";
         private const string CardTapSoundPath = "CardSounds/CardTap";

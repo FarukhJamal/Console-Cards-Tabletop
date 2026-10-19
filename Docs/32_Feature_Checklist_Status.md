@@ -1,6 +1,6 @@
 # 32 — Feature Checklist Status
 
-Version 0.1 · 2026-10-19 · Status: checked against the build by Claude; owner to confirm
+Version 0.2 · 2026-10-19 · Status: checked against the build by Claude; owner to confirm
 
 The owner's client checklist "Console Cards — Feature Checklist" (received again 2026-10-19) lists what the virtual
 game must support. This doc checks each item against what the platform has today (doc 31, the code) and says what
@@ -41,3 +41,10 @@ abilities; they have dice mapped to them (for example Right Arrow = 2d6, so play
 1. Controller Pad: the back of the Console (as now), or a separate controller-shaped piece?
 2. Arrow dice: does each game set the dice per arrow (Right = 2d6), or do players set it on the pad?
 3. Drawing tool: sooner (before the visual list) or with T5?
+
+## Owner's answers (2026-10-19)
+
+1. Controller Pad: **the back of the Console** (as now).
+2. Arrow dice: **players can set them** if they want (the arrow slot takes a dice set, shown as "→ 2d6").
+3. Drawing tool: **with T5**.
+

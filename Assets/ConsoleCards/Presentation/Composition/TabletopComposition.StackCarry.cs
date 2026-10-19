@@ -55,8 +55,9 @@ namespace ConsoleCards.Presentation.Composition
     /// </summary>
     public sealed partial class TabletopComposition : ITabletopCarryHandler
     {
-        private const float StackCarryLift = 0.35f;        // how high the carried stack rides (world units)
-        private const float StackCarryMergeReach = 0.9f;   // table units between stack centres that count as "on it"
+        // POL-0: from Resources/FeelSettings.
+        private float StackCarryLift => Feel.StackCarryLift;          // how high the carried stack rides (world units)
+        private float StackCarryMergeReach => Feel.StackMergeReach;   // table units between stack centres that count as "on it"
 
         private readonly List<Transform> carriedCards = new List<Transform>(64);
         private readonly List<Vector3> carriedCardStarts = new List<Vector3>(64);

@@ -288,6 +288,9 @@ namespace ConsoleCards.Presentation.Composition
             interactionRouter.HandView = handView;
             interactionRouter.CarryHandler = this; // press and hold a stack to carry it whole (owner, 2026-10-18)
             interactionRouter.FlickHandler = this; // UX-1: Shift-press a loose piece, pull back, let go
+            interactionRouter.LongPressSeconds = Feel.StackHoldSeconds; // POL-0: from Resources/FeelSettings
+            interactionRouter.LogMissedPresses = Feel.LogMissedClicks;
+            inputFrameCoordinator.LogMissedPresses = Feel.LogMissedClicks;
             hitResolver.HandPicker = handView;
             moveCoordinator.IsContainerAtComfortCap = ContextMenus.IsOwnHandAtComfortCap;
             moveCoordinator.ComfortCapRejected = ContextMenus.ShowHandCapReached;
@@ -320,6 +323,12 @@ namespace ConsoleCards.Presentation.Composition
             if (interactionStateMachine != null && interactionStateMachine.Phase == TabletopInteractionPhase.Hovering)
             {
                 interactionStateMachine.ClearHoveredObject();
+            }
+
+            // POL-0 diagnostics: a click in the same frame as a rebuild can be lost.
+            if (Feel.LogMissedClicks && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+            {
+                Debug.Log("[ConsoleCards Input] A click came in the same frame as the table rebuilt its controls; it may be lost.");
             }
 
             if (frameCoordinatorEnabledByComposition)

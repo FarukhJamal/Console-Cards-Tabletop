@@ -68,14 +68,15 @@ namespace ConsoleCards.Presentation.Composition
     {
         private const string TablePingSoundPath = "UiSounds/TablePing";
         private const string DiceShakeSoundPath = "UiSounds/DiceShake";
-        private const float TablePingSeconds = 2f;
-        private const float TablePingVolume = 0.55f;
-        private const float FlickFullPullTableUnits = 3f;   // pulling back this far is full strength
-        private const float FlickDeadZone = 0.06f;          // below this the flick is off
-        private const float FlickMinSpeedTableUnits = 2f;   // per second
-        private const float FlickMaxSpeedTableUnits = 16f;  // per second
-        private const float DiceRattleInterval = 0.11f;
-        private const float DiceRattleVolume = 0.4f;
+        // POL-0: the numbers come from Resources/FeelSettings (Feel), the keys from the Input Actions asset (Keys).
+        private float TablePingSeconds => Feel.PingSeconds;
+        private float TablePingVolume => Feel.PingVolume;
+        private float FlickFullPullTableUnits => Feel.FlickFullPull;
+        private float FlickDeadZone => Feel.FlickDeadZone;
+        private float FlickMinSpeedTableUnits => Feel.FlickMinSpeed;
+        private float FlickMaxSpeedTableUnits => Feel.FlickMaxSpeed;
+        private float DiceRattleInterval => Feel.DiceRattleInterval;
+        private float DiceRattleVolume => Feel.DiceRattleVolume;
         private static readonly Color FlickSoftColour = new Color(0.16f, 0.78f, 0.74f, 1f);  // teal
         private static readonly Color FlickHardColour = new Color(0.94f, 0.45f, 0.16f, 1f);  // orange
 
@@ -146,8 +147,7 @@ namespace ConsoleCards.Presentation.Composition
 
         bool ITabletopFlickHandler.WantsFlick()
         {
-            Keyboard keyboard = Keyboard.current;
-            return IsInitialized && tableModeStart == null && keyboard != null && keyboard.shiftKey.isPressed;
+            return IsInitialized && tableModeStart == null && Keys.ActionModifierHeld;
         }
 
         bool ITabletopFlickHandler.TryBeginFlick(TabletopObjectView view, Vector2 screenPosition)
@@ -270,8 +270,7 @@ namespace ConsoleCards.Presentation.Composition
                 nextDiceRattleAt = 0f;
             }
 
-            Keyboard keyboard = Keyboard.current;
-            bool shake = keyboard != null && keyboard.shiftKey.isPressed;
+            bool shake = Keys.ActionModifierHeld;
             die.PhysicalObject.Shaking = shake;
             if (!shake || Time.unscaledTime < nextDiceRattleAt) return;
             nextDiceRattleAt = Time.unscaledTime + DiceRattleInterval;
@@ -303,10 +302,7 @@ namespace ConsoleCards.Presentation.Composition
             Aim = 6,
         }
 
-        private const string CursorFolder = "Cursors/";
         private TableCursorKind shownCursor = TableCursorKind.Default;
-        private readonly Texture2D[] cursorTextures = new Texture2D[7];
-        private bool cursorTexturesLoaded;
 
         private void UpdateTableCursor()
         {
@@ -338,9 +334,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (componentPlacementController != null && componentPlacementController.IsActive) return TableCursorKind.Default;
-            Keyboard keyboard = Keyboard.current;
-            if (keyboard != null && keyboard.altKey.isPressed && tableModeStart == null) return TableCursorKind.Ping;
-            if (keyboard != null && keyboard.shiftKey.isPressed && selectionState != null && !selectionState.HoveredObjectId.IsEmpty)
+            if (Keys.PingModifierHeld && tableModeStart == null) return TableCursorKind.Ping;
+            if (Keys.ActionModifierHeld && selectionState != null && !selectionState.HoveredObjectId.IsEmpty)
             {
                 return TableCursorKind.Aim;
             }
@@ -357,23 +352,23 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (!cursorTexturesLoaded)
+            // POL-0: the pictures and hot spots come from Resources/CursorSet (replace them there).
+            CursorSet set = Cursors;
+            Texture2D texture = null;
+            Vector2 hotspot = Vector2.zero;
+            if (set != null)
             {
-                cursorTexturesLoaded = true; // loaded once; a missing picture just keeps the normal arrow
-                cursorTextures[(int)TableCursorKind.Hand] = Resources.Load<Texture2D>(CursorFolder + "CursorHand");
-                cursorTextures[(int)TableCursorKind.Grab] = Resources.Load<Texture2D>(CursorFolder + "CursorGrab");
-                cursorTextures[(int)TableCursorKind.Stack] = Resources.Load<Texture2D>(CursorFolder + "CursorStack");
-                cursorTextures[(int)TableCursorKind.No] = Resources.Load<Texture2D>(CursorFolder + "CursorNo");
-                cursorTextures[(int)TableCursorKind.Ping] = Resources.Load<Texture2D>(CursorFolder + "CursorPing");
-                cursorTextures[(int)TableCursorKind.Aim] = Resources.Load<Texture2D>(CursorFolder + "CursorAim");
+                switch (kind)
+                {
+                    case TableCursorKind.Hand: texture = set.Hand; hotspot = set.HandHotspot; break;
+                    case TableCursorKind.Grab: texture = set.Grab; hotspot = set.GrabHotspot; break;
+                    case TableCursorKind.Stack: texture = set.Stack; hotspot = set.StackHotspot; break;
+                    case TableCursorKind.No: texture = set.No; hotspot = set.NoHotspot; break;
+                    case TableCursorKind.Ping: texture = set.Ping; hotspot = set.PingHotspot; break;
+                    case TableCursorKind.Aim: texture = set.Aim; hotspot = set.AimHotspot; break;
+                }
             }
 
-            Texture2D texture = cursorTextures[(int)kind];
-            Vector2 hotspot = kind == TableCursorKind.Hand
-                ? new Vector2(12f, 3f)    // the fingertip
-                : kind == TableCursorKind.Grab || kind == TableCursorKind.Stack
-                    ? new Vector2(12f, 8f)    // the knuckles
-                    : new Vector2(16f, 16f);  // the centre
             Cursor.SetCursor(texture, texture != null ? hotspot : Vector2.zero, CursorMode.Auto);
         }
 

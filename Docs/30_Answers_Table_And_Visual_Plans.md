@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.22 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.23 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1507,4 +1507,44 @@ styles, and dealing by rules added. The client's feature checklist is checked in
 icon connections at any rotation, piece snap, spread, select several and group into deck, drawing tool, controller
 pad dice) are folded in here or listed there. Before POL-1, the owner names the three things that feel worst next to TTS, and
 those go first.
+
+**Owner's answers and order (2026-10-19).** Controller Pad = the back of the Console; players may set the arrow dice
+themselves; drawing tool with T5; ICON-1 placed by Claude (after the smoothness work, before CART-1). The owner's
+worst points next to Tabletop Simulator, which go first:
+1. **Pinging is complicated, and the ring and its icon look wrong.**
+2. **Shuffle and split are not smooth.**
+3. **Pieces sometimes lag, or need a second click.**
+4. **A proper tool bar like TTS's** (grab, select, draw …) in our own look, with only the tools we need.
+
+The shuffle video the owner sent ("10 beautiful card flourishes": fans, springs and other flourishes) adds card
+**flourishes** to SHUF-1: Fan (thumb fan), Spring (cards spring from hand to hand), Ribbon spread on the table, Cascade
+and Swivel cut, as short show-off animations from a deck's menu that leave the order unchanged.
+
+**New order:**
+
+| Order | Stage | What |
+|---|---|---|
+| 1 | POL-0 | Editable keys, cursor set and feel numbers, plus a missed-click log (below). Written 2026-10-19. |
+| 2 | TOOLS-1 | **Tool bar** (owner's point 4, absorbing POL-9): a slim bar in our look with only the tools we need: **Grab** (normal), **Select** (box-select and group into deck, POL-7), **Ping** (click to ping: the simple way, owner's point 1), **Flick**, and **Draw** greyed until T5; next to it the hideable **keys strip** for what you are doing. A new ping ring (its own prefab, made by the UI builder) and a new ping cursor. |
+| 3 | SMOOTH-1 | **Smooth shuffle and split, no missed clicks** (owner's points 2 and 3): fix what the missed-click log finds; cards move along short arcs with a stagger in split, Split into… and draw; Shuffle plays a quick riffle (the first SHUF-1 animation); no snapping at the end of an animation. |
+| 4 | POL-1, POL-2 | Pick up and carry; drop and settle (piece snap included). |
+| 5 | ICON-1 | Icons on card sides and corners connect to the Console at any rotation. |
+| 6 | POL-3 to POL-8, SHUF-1 (styles and flourishes), DEAL-1 | In this order unless the owner says otherwise. |
+
+**POL-0 record (2026-10-19, written, to be checked).**
+- **Keys in the Input Actions asset.** `TabletopObjectControls.inputactions` gains Ping (middle button, a quick tap),
+  PingModifier (Alt, with a click), ActionModifier (Shift: flick and dice shake), HandTray (H), Undo (Ctrl+Z) and Redo
+  (Ctrl+Y, Ctrl+Shift+Z). `TableKeys` reads them (and falls back to the old keys if an action is missing); the
+  ping input, flick, dice shake, cursor, Undo, Redo and the hand tray use it. Change a key in Unity's Input Actions
+  editor. Still fixed in code: F over a Console mat, and Alt while dragging a Table-mode handle.
+- **Cursor Set** (`Resources/CursorSet`, script `Presentation/Settings/CursorSet.cs`): the six cursor pictures and
+  their hot spots, editable in the Inspector.
+- **Feel Settings** (`Resources/FeelSettings`, script `Presentation/Settings/FeelSettings.cs`): stack hold time,
+  carry lift and merge reach; ping time, volume and tap length; flick full pull, dead zone, slowest and fastest
+  speed; dice rattle rate and volume; card sound volume. Changes apply while playing (stack hold time from the next
+  table build).
+- **Missed-click log** (Feel Settings › Log Missed Clicks, on): a line in the Console and Editor.log when a click on
+  the table did not pick anything up, and why: a menu or panel took it (named), the piece was locked or busy, an
+  earlier action had not finished, or the table was rebuilding its controls in that frame. The owner plays until a
+  click needs a second try; Claude reads the log and fixes the cause in SMOOTH-1.
 
