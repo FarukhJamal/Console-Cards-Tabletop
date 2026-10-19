@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.15 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.18 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -614,9 +614,27 @@ Change: …
 - **Source:** doc 30 Part H
 
 ### PL-ICONS · Icons on card sides and corners
-- **Status:** Planned (ICON-1)
-- **Rule now:** a card's icons on any side or corner connect to the matching Console slot icon at any rotation.
-- **Source:** client feature checklist item 1 (doc 32)
+- **Status:** Built (ICON-1, 2026-10-19), to be checked
+- **Rule now:** a card can carry up to 8 icons (Square, Circle, Star, Cross, Diamond, Triangle, Plus, Minus), one at
+  each side (top, right, bottom, left) and each corner, set in the card editor and drawn small on the card's front.
+  A card fits every Console slot whose symbol is one of its icons (or its older single Console symbol) and is pulled
+  into the nearest one; a card without icons fits any slot. In the slot the card turns so that the matching icon
+  points outward on the mat: across the mat edge for an edge slot (half turns in a long slot, any quarter turn in a
+  square one), out through the corner for a corner slot. A card matched only by its Console symbol keeps the slot's
+  orientation. Icons are saved with your cards (new cards and changes to the game's cards, doc 28).
+- **Not covered:** cards connecting to other cards (the owner chose Console slots only).
+- **Source:** client feature checklist item 1 (doc 32); owner's choices 2026-10-19
+
+### PL-FRAMES · Card frames per game
+- **Status:** Built (FRAME-1, 2026-10-19, stand-in pictures), to be checked
+- **Rule now:** the platform draws every card's border from its game's Card Frame Style (frame picture with a clear
+  middle, colours, tick marks, side and corner tab shapes, how far tabs stick out). A game has a default frame and
+  named variants; each card picks one in the card editor. A tab is drawn only where the card has an icon, sticks out
+  past the card edge in the frame's colour and holds the shared symbol (PL-ICONS). Card art is the picture only.
+  Picking up and stacking still use the plain card rectangle. A variant can turn the frame off (the icons then
+  sit inside the card as small badges). A style can also carry its own symbol picture; empty uses the shared one.
+  Frame variants are saved with your cards and with changes to the game's cards (doc 28).
+- **Source:** owner, 2026-10-19 (Console card frames 13, 14, 36-39)
 
 ### PL-CARTRIDGE · Cartridge contract
 - **Status:** Planned (CART-1)

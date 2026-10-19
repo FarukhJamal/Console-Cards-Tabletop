@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 49d67c409144c5542a6e85758bc76f09, type: 3}
+  m_Name: DefaultCardFrameStyle
+  m_EditorClassIdentifier: ConsoleCards.Definitions::ConsoleCards.Definitions.CardFrameStyle
+  stableId: console-cards.frames.default
+  displayName: Console Cards frames
+  frameTexture: {fileID: 2800000, guid: 3b44a1351b5fcc74e9f5b95073350832, type: 3}
+  sideTabTexture: {fileID: 2800000, guid: 75b873b8f4966a444a3e79ce18086760, type: 3}
+  cornerTabTexture: {fileID: 2800000, guid: 20a6ce68ef1d2fa4a839fa9d51b37f6d, type: 3}
+  symbolAtlas: {fileID: 0}
+  sideTabWidth: 0.36
+  sideTabHeight: 0.2
+  sideTabOutside: 0.55
+  cornerTabSize: 0.26
+  cornerTabOutside: 0.3
+  symbolSize: 0.15
+  variants:
+  - id: dark
+    displayName: Dark
+    showFrame: 1
+    frameColor: {r: 0.24, g: 0.2, b: 0.19, a: 1}
+    tabColor: {r: 0.45, g: 0.45, b: 0.48, a: 1}
+    frameTexture: {fileID: 0}
+  - id: orange
+    displayName: Orange
+    showFrame: 1
+    frameColor: {r: 0.93, g: 0.42, b: 0.05, a: 1}
+    tabColor: {r: 0.93, g: 0.42, b: 0.05, a: 1}
+    frameTexture: {fileID: 0}
+  - id: none
+    displayName: No frame
+    showFrame: 0
+    frameColor: {r: 1, g: 1, b: 1, a: 1}
+    tabColor: {r: 1, g: 1, b: 1, a: 1}
+    frameTexture: {fileID: 0}

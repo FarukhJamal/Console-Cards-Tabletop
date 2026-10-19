@@ -118,6 +118,15 @@ namespace ConsoleCards.Definitions
         /// </summary>
         public string frontArtKey = string.Empty;
         public string backArtKey = string.Empty;
+
+        /// <summary>
+        /// The 8 icons on the card front (ICON-1) as symbol names, "Top,Right,Bottom,Left,TopRight,BottomRight,
+        /// BottomLeft,TopLeft" order (for example "Square,None,None,None,None,None,None,Circle"). Empty: no icons.
+        /// </summary>
+        public string icons = string.Empty;
+
+        /// <summary>The frame variant ID (FRAME-1) of the game's Card Frame Style; empty: the game's default frame.</summary>
+        public string frame = string.Empty;
     }
 
     /// <summary>
@@ -147,8 +156,17 @@ namespace ConsoleCards.Definitions
         public bool changeBackArt;
         public string backArtKey = string.Empty;
 
+        /// <summary>New icons for the card front (ICON-1), as in <see cref="PlayerCardRecord.icons"/>.</summary>
+        public bool changeIcons;
+        public string icons = string.Empty;
+
+        /// <summary>Another frame variant (FRAME-1), as in <see cref="PlayerCardRecord.frame"/>.</summary>
+        public bool changeFrame;
+        public string frame = string.Empty;
+
         public bool HasAnyChange =>
-            changeName || changeDescription || changeQuantity || changeCost || changeFrontArt || changeBackArt;
+            changeName || changeDescription || changeQuantity || changeCost || changeFrontArt || changeBackArt
+            || changeIcons || changeFrame;
     }
 
     /// <summary>A player's deck: a name and cards with counts, game cards or your own (used by games from L2-5).</summary>

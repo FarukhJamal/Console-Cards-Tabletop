@@ -1,6 +1,6 @@
 # 32 — Feature Checklist Status
 
-Version 0.5 · 2026-10-19 · Status: checked against the build by Claude; owner to confirm
+Version 0.6 · 2026-10-19 · Status: checked against the build by Claude; owner to confirm
 
 The owner's client checklist "Console Cards — Feature Checklist" (received again 2026-10-19) lists what the virtual
 game must support. This doc checks each item against what the platform has today (doc 31, the code) and says what
@@ -27,7 +27,7 @@ abilities; they have dice mapped to them (for example Right Arrow = 2d6, so play
 | # | Item | Status | Today | What is left / where planned |
 |---|---|---|---|---|
 | 1 | **Console slot icons** (top 3 Square, top-right Triangle, top-left Circle, bottom-right Minus, bottom-left Plus, bottom 3 Diamond) | **Done** | The Console front has exactly these, plus Star left and Cross right (P-CONSOLE). | — |
-| 1 | **Cards with icons on any side or corner snap and connect to a matching slot icon, at any rotation** | **Partly** | A card with one symbol snaps magnetically to a slot with the same symbol (symbol magnet). | Cards can carry icons on each side and corner (data per card side/corner); when a card is brought near the Console, the matching icon is found on whichever side it is, the card turns so that side faces the slot and clicks into place (the edge-to-edge connections in the client's picture). Planned: **ICON-1**. |
+| 1 | **Cards with icons on any side or corner snap and connect to a matching slot icon, at any rotation** | **Done** (to be checked) | ICON-1: in the card editor each card gets up to 8 icons (4 sides, 4 corners), drawn small on its front. Brought near the Console, the card is pulled into the nearest slot whose symbol is one of its icons and turns so that icon points outward (PL-ICONS). | Cards connecting to other cards is not included (owner's choice: Console slots only). |
 | 2 | **Grid snapping**: a card taken out of the grid and put back snaps neatly into its space | **Done** | A loose card that comes to rest on a board space snaps to its centre, squared to the board; Trap Floor's floor is such a board (P-BOARD). | Polish: snap while still carried (ghost of where it lands), POL-2. |
 | 3 | **Piece snapping**: pawns snap onto the grid cards as they move tile to tile | **Done** (to be checked) | Pawns moved by the turn helper land on the tile; a pawn or token let go on a board space or a loose card glides onto its centre (POL-2), unless another piece already stands there. | — |
 | 4 | **Multiplayer** (lobby, 2+ players taking turns) | **Partly** | Hot-seat turns for 2+ players on one computer; the code is ready for networking (one command door, changes announced, doc 30 A6, R1–R2). | MP-1 to MP-5 (doc 30 A6), only when the owner asks. |

@@ -12,6 +12,9 @@ namespace ConsoleCards.Presentation.Composition
     {
         private const float FaceLabelSurfaceEpsilon = 0.0001f;
 
+        /// <summary>Name of the child that draws the card's front icons (ICON-1); never part of the supplied model.</summary>
+        public const string IconObjectName = "CardIcons";
+
         [SerializeField] private CardView cardView;
         [SerializeField] private TabletopSelectionVisual selectionVisual;
         [SerializeField] private Renderer faceUpRenderer;
@@ -19,7 +22,9 @@ namespace ConsoleCards.Presentation.Composition
         [SerializeField] private TextMesh frontLabel;
         [SerializeField] private TextMesh backLabel;
         private bool backLabelHidden;
+        private bool cardContentVisible = true;
         private Renderer[] suppliedModelRenderers;
+        private Renderer iconRenderer;
 
         public CardView CardView => cardView;
 
@@ -60,7 +65,8 @@ namespace ConsoleCards.Presentation.Composition
                 MeshRenderer candidate = candidates[i];
                 if (ReferenceEquals(candidate, faceUpRenderer)
                     || ReferenceEquals(candidate, faceDownRenderer)
-                    || candidate.GetComponent<TextMesh>() != null)
+                    || candidate.GetComponent<TextMesh>() != null
+                    || candidate.gameObject.name == IconObjectName)
                 {
                     continue;
                 }
@@ -115,8 +121,27 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
+        /// <summary>
+        /// The renderer of the card's front icons (ICON-1), or null when it has none. It shows and hides with the
+        /// card's words (<see cref="SetCardContentVisible"/>).
+        /// </summary>
+        public void SetIconRenderer(Renderer renderer)
+        {
+            iconRenderer = renderer;
+            if (iconRenderer != null && iconRenderer.enabled != cardContentVisible)
+            {
+                iconRenderer.enabled = cardContentVisible;
+            }
+        }
+
         public void SetCardContentVisible(bool visible)
         {
+            cardContentVisible = visible;
+            if (iconRenderer != null && iconRenderer.enabled != visible)
+            {
+                iconRenderer.enabled = visible;
+            }
+
             if (frontLabel != null && frontLabel.gameObject.activeSelf != visible)
             {
                 frontLabel.gameObject.SetActive(visible);

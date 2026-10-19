@@ -415,12 +415,14 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // ---- Symbol magnet (ICardDropMagnet) ----
+        // A card fits the Console slots marked with its Console symbol or any of its icons (ICON-1) and is pulled
+        // into the nearest one; a card without symbols fits any slot.
 
         bool ICardDropMagnet.IsActive => IsInitialized
             && catalogConsolePrefab != null
             && Registry.runtimeConsoleInstances.Count > 0
             && TryGetDraggedCard(out CardView card)
-            && CardConsoleSymbol(card) != ConsoleSymbol.None;
+            && CardHasConsoleSymbols(ConsoleCardDefinition(card));
 
         bool ICardDropMagnet.TryAdjust(
             ContainerId directContainerId,
@@ -436,8 +438,8 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            ConsoleSymbol symbol = CardConsoleSymbol(card);
-            if (symbol == ConsoleSymbol.None)
+            CardDefinition definition = ConsoleCardDefinition(card);
+            if (!CardHasConsoleSymbols(definition))
             {
                 return false;
             }
@@ -448,12 +450,12 @@ namespace ConsoleCards.Presentation.Composition
                 return false; // a Deck, Stack, pile or Hand under the pointer keeps the card
             }
 
-            if (directIsSlot && (directSymbol == ConsoleSymbol.None || directSymbol == symbol))
+            if (directIsSlot && (directSymbol == ConsoleSymbol.None || definition.CarriesSymbol(directSymbol)))
             {
                 return false;
             }
 
-            ContainerId nearest = hasPoint ? FindNearestSymbolSlot(symbol, point) : ContainerId.Empty;
+            ContainerId nearest = hasPoint ? FindNearestSymbolSlot(definition, point) : ContainerId.Empty;
             adjustedContainerId = nearest; // Empty: a slot with another symbol refuses the card; it stays on the table
             return directIsSlot || !nearest.IsEmpty;
         }
@@ -479,24 +481,27 @@ namespace ConsoleCards.Presentation.Composition
             return false;
         }
 
-        private ConsoleSymbol CardConsoleSymbol(CardView card)
+        // The card's definition, cached by definition ID (looked up again when the cached one is gone, for example
+        // after a new table made the game's runtime cards again).
+        private CardDefinition ConsoleCardDefinition(CardView card)
         {
             if (card == null || card.CardState == null)
             {
-                return ConsoleSymbol.None;
+                return null;
             }
 
             ObjectDefinitionId definitionId = card.CardState.BaseState.DefinitionId;
-            if (!consoleSymbolsByDefinition.TryGetValue(definitionId, out ConsoleSymbol symbol))
+            if (!consoleCardsByDefinition.TryGetValue(definitionId, out CardDefinition definition) || definition == null)
             {
-                symbol = TryGetCardLook(definitionId, out CardDefinition definition)
-                    ? definition.ConsoleSymbol
-                    : ConsoleSymbol.None;
-                consoleSymbolsByDefinition[definitionId] = symbol;
+                definition = TryGetCardLook(definitionId, out CardDefinition found) ? found : null;
+                consoleCardsByDefinition[definitionId] = definition;
             }
 
-            return symbol;
+            return definition;
         }
+
+        private static bool CardHasConsoleSymbols(CardDefinition definition) =>
+            definition != null && (definition.ConsoleSymbol != ConsoleSymbol.None || definition.HasEdgeSymbols);
 
         private bool TryGetConsoleSlotSymbol(ContainerId slotContainerId, out ConsoleSymbol symbol)
         {
@@ -523,7 +528,8 @@ namespace ConsoleCards.Presentation.Composition
             return false;
         }
 
-        private ContainerId FindNearestSymbolSlot(ConsoleSymbol symbol, TableCoordinate point)
+        // The nearest free, shown slot whose symbol the card carries (its Console symbol or any icon).
+        private ContainerId FindNearestSymbolSlot(CardDefinition definition, TableCoordinate point)
         {
             ConsoleLayoutData layout = GetConsoleLayout();
             ContainerId nearest = ContainerId.Empty;
@@ -537,7 +543,7 @@ namespace ConsoleCards.Presentation.Composition
                     if (slotView == null
                         || !slotView.IsBound
                         || slotView.IsSideHidden
-                        || layout.CardSlots[s].Symbol != symbol
+                        || !definition.CarriesSymbol(layout.CardSlots[s].Symbol)
                         || slotView.ContainerState.IsFull
                         || slotView.LayoutAnchor == null)
                     {
@@ -558,6 +564,132 @@ namespace ConsoleCards.Presentation.Composition
 
             return nearest;
         }
+
+        // ---- Icon turn (ICON-1) ----
+
+        // Card-local directions of the 8 icon places (CardIconPlace order): +z is the top of the card, +x its right.
+        private static readonly Vector3[] CardIconDirections =
+        {
+            new Vector3(0f, 0f, 1f),
+            new Vector3(1f, 0f, 0f),
+            new Vector3(0f, 0f, -1f),
+            new Vector3(-1f, 0f, 0f),
+            new Vector3(0.7071068f, 0f, 0.7071068f),
+            new Vector3(0.7071068f, 0f, -0.7071068f),
+            new Vector3(-0.7071068f, 0f, -0.7071068f),
+            new Vector3(-0.7071068f, 0f, 0.7071068f),
+        };
+
+        private static readonly float[] SquareSlotTurns = { 0f, 90f, 180f, 270f };
+        private static readonly float[] LongSlotTurns = { 0f, 180f };
+
+        private Func<CardView, ConsoleSlotView, float> ConsoleCardTurn =>
+            consoleCardTurn ?? (consoleCardTurn = CardTurnInSlot);
+
+        // How far a card turns in a Console slot on top of the slot orientation: the turn (0/180 in a long slot, any
+        // quarter turn in a square one) that points the card's icon matching the slot's symbol most outward on the
+        // mat. Edge slots point out across their edge, corner slots out through their corner. 0 when the card has no
+        // matching icon (a card matched by its Console symbol alone keeps the slot orientation).
+        private float CardTurnInSlot(CardView card, ConsoleSlotView slot)
+        {
+            CardDefinition definition = ConsoleCardDefinition(card);
+            if (definition == null || !definition.HasEdgeSymbols || !TryGetSlotLayout(slot, out ConsoleLayoutSlotData data))
+            {
+                return 0f;
+            }
+
+            ConsoleSymbol symbol = data.Symbol;
+            if (symbol == ConsoleSymbol.None || !TryGetSlotOutward(data, out Vector3 outward))
+            {
+                return 0f;
+            }
+
+            float[] turns = IsSquareSlot(data) ? SquareSlotTurns : LongSlotTurns;
+            float bestTurn = 0f;
+            float bestScore = float.NegativeInfinity;
+            for (int t = 0; t < turns.Length; t++)
+            {
+                Quaternion relative = Quaternion.Euler(0f, slot.OrientationOffsetDegrees + turns[t], 0f);
+                for (int place = 0; place < CardDefinition.EdgeIconCount; place++)
+                {
+                    if (definition.EdgeSymbol((CardIconPlace)place) != symbol)
+                    {
+                        continue;
+                    }
+
+                    float score = Vector3.Dot(relative * CardIconDirections[place], outward);
+                    if (score > bestScore + 0.001f)
+                    {
+                        bestScore = score;
+                        bestTurn = turns[t];
+                    }
+                }
+            }
+
+            return float.IsNegativeInfinity(bestScore) ? 0f : bestTurn;
+        }
+
+        private bool TryGetSlotLayout(ConsoleSlotView slot, out ConsoleLayoutSlotData data)
+        {
+            data = null;
+            if (slot == null)
+            {
+                return false;
+            }
+
+            ConsoleLayoutData layout = GetConsoleLayout();
+            for (int i = 0; i < Registry.runtimeConsoleInstances.Count; i++)
+            {
+                ConsoleSlotView[] slotViews = Registry.runtimeConsoleInstances[i].SlotViews;
+                for (int s = 0; s < slotViews.Length && s < layout.CardSlots.Count; s++)
+                {
+                    if (ReferenceEquals(slotViews[s], slot))
+                    {
+                        data = layout.CardSlots[s];
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        // Console-local direction from the mat's middle out through the slot: corner slots ("Corners" group) point
+        // diagonally, other slots across the nearest mat edge (positions measured against the farthest slot each way).
+        private bool TryGetSlotOutward(ConsoleLayoutSlotData data, out Vector3 outward)
+        {
+            outward = Vector3.zero;
+            float x = data.X;
+            float z = data.Z;
+            if (Mathf.Abs(x) < 0.0001f && Mathf.Abs(z) < 0.0001f)
+            {
+                return false;
+            }
+
+            if (string.Equals(data.Group, "Corners", StringComparison.OrdinalIgnoreCase))
+            {
+                outward = new Vector3(Mathf.Sign(x), 0f, Mathf.Sign(z)).normalized;
+                return true;
+            }
+
+            ConsoleLayoutData layout = GetConsoleLayout();
+            float reachX = 0.0001f;
+            float reachZ = 0.0001f;
+            for (int i = 0; i < layout.CardSlots.Count; i++)
+            {
+                reachX = Mathf.Max(reachX, Mathf.Abs(layout.CardSlots[i].X));
+                reachZ = Mathf.Max(reachZ, Mathf.Abs(layout.CardSlots[i].Z));
+            }
+
+            outward = Mathf.Abs(x) / reachX >= Mathf.Abs(z) / reachZ
+                ? new Vector3(Mathf.Sign(x), 0f, 0f)
+                : new Vector3(0f, 0f, Mathf.Sign(z));
+            return true;
+        }
+
+        private static bool IsSquareSlot(ConsoleLayoutSlotData data) =>
+            data.FootprintWidth > 0f
+            && Mathf.Abs(data.FootprintWidth - data.FootprintDepth) <= 0.05f * data.FootprintWidth;
 
         // ---- Dice on the D-pad (back side) ----
 

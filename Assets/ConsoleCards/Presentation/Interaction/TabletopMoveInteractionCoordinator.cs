@@ -905,7 +905,7 @@ namespace ConsoleCards.Presentation.Interaction
             {
                 Quaternion slotOrientation = Quaternion.Euler(
                     0f,
-                    consoleSlotView.CardRotationDegrees ?? view.transform.eulerAngles.y,
+                    consoleSlotView.CardRotationFor(view) ?? view.transform.eulerAngles.y,
                     0f);
                 return view.PhysicalObject.SnapHeldPreview(
                     consoleSlotView.PlacementPreviewWorldPosition(),

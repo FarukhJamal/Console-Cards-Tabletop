@@ -88,6 +88,27 @@ namespace ConsoleCards.Presentation.UI
         public string ResetText = "Reset";
         public bool CanDelete;
         public string Status = string.Empty;
+
+        /// <summary>
+        /// The card's 8 icon places (ICON-1), in Top, Right, Bottom, Left, Top right, Bottom right, Bottom left, Top left
+        /// order: one picture holds every icon and each place shows its cell of it. Null atlas: no icon buttons.
+        /// </summary>
+        public Texture IconAtlas;
+        public Rect[] IconCells = Array.Empty<Rect>();
+        public bool CanChangeIcons;
+
+        /// <summary>
+        /// The card's frame (FRAME-1): the game's frame picture and tab pictures with the chosen variant's colours,
+        /// and which icon places have a tab (same order as <see cref="IconCells"/>). Null frame: no frame shown.
+        /// </summary>
+        public Texture FrameTexture;
+        public Color FrameColor = Color.white;
+        public Texture SideTabTexture;
+        public Texture CornerTabTexture;
+        public Color TabColor = Color.white;
+        public bool[] TabShown = Array.Empty<bool>();
+        public string FrameName = string.Empty;
+        public bool CanChangeFrame;
     }
 
     /// <summary>The card editor's actions, supplied by the game. Each carries what is typed now.</summary>
@@ -102,6 +123,10 @@ namespace ConsoleCards.Presentation.UI
         public Action<CardEditorTyped> NewDeck;
         public Action<bool, CardEditorTyped> ChoosePicture;
         public Action<bool, CardEditorTyped> ClearPicture;
+        /// <summary>An icon place was clicked (0-7, the order of <see cref="CardEditorModel.IconCells"/>): next icon.</summary>
+        public Action<int, CardEditorTyped> CycleIcon;
+        /// <summary>The frame variant picker: -1 previous, +1 next (FRAME-1).</summary>
+        public Action<int, CardEditorTyped> CycleFrame;
         public Action<CardEditorTyped> Save;
         public Action Reset;
         public Action Delete;
@@ -139,6 +164,16 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Text previewName;
         [SerializeField] private Text previewCost;
         [SerializeField] private Text previewDescription;
+        [Tooltip("Optional (ICON-1): 8 buttons on the front preview, in Top, Right, Bottom, Left, Top right, Bottom right, "
+            + "Bottom left, Top left order. A click shows the next icon at that place.")]
+        [SerializeField] private Button[] iconButtons = Array.Empty<Button>();
+        [SerializeField] private RawImage[] iconImages = Array.Empty<RawImage>();
+        [Tooltip("Optional (FRAME-1): the frame over the front preview, and a tab under each icon place (same order).")]
+        [SerializeField] private RawImage framePreview;
+        [SerializeField] private RawImage[] tabImages = Array.Empty<RawImage>();
+        [SerializeField] private Button framePrevious;
+        [SerializeField] private Button frameNext;
+        [SerializeField] private Text frameLabel;
 
         [Header("Fields")]
         [SerializeField] private Text headingLabel;
@@ -232,6 +267,8 @@ namespace ConsoleCards.Presentation.UI
             deleteButton.gameObject.SetActive(model.CanDelete);
             statusLabel.text = model.Status;
             RefreshPreviewWords();
+            BindIcons(model);
+            BindFrame(model);
 
             dismissOverlayButton.onClick.AddListener(HandleClose);
             closeButton.onClick.AddListener(HandleClose);
@@ -248,6 +285,15 @@ namespace ConsoleCards.Presentation.UI
             deleteButton.onClick.AddListener(HandleDelete);
             resetButton.onClick.AddListener(HandleReset);
             saveButton.onClick.AddListener(HandleSave);
+            if (framePrevious != null) framePrevious.onClick.AddListener(HandlePreviousFrame);
+            if (frameNext != null) frameNext.onClick.AddListener(HandleNextFrame);
+            for (int i = 0; iconButtons != null && i < iconButtons.Length; i++)
+            {
+                if (iconButtons[i] == null) continue;
+                int place = i;
+                iconButtons[i].onClick.AddListener(() => HandleIcon(place));
+            }
+
             nameInput.onValueChanged.AddListener(HandleTyping);
             descriptionInput.onValueChanged.AddListener(HandleTyping);
             costInput.onValueChanged.AddListener(HandleTyping);
@@ -282,6 +328,18 @@ namespace ConsoleCards.Presentation.UI
             ReleaseRows();
             if (frontPreview != null) frontPreview.texture = null;
             if (backPreview != null) backPreview.texture = null;
+            for (int i = 0; iconImages != null && i < iconImages.Length; i++)
+            {
+                if (iconImages[i] != null) iconImages[i].texture = null;
+            }
+
+            for (int i = 0; tabImages != null && i < tabImages.Length; i++)
+            {
+                if (tabImages[i] != null) tabImages[i].texture = null;
+            }
+
+            if (framePreview != null) framePreview.texture = null;
+
             actions = null;
         }
 
@@ -296,6 +354,53 @@ namespace ConsoleCards.Presentation.UI
             frontBlankName.text = name;
             previewCost.text = string.IsNullOrWhiteSpace(costInput.text) ? "No cost" : "Cost: " + costInput.text.Trim();
             previewDescription.text = descriptionInput.text;
+        }
+
+        // The icon places on the front preview: each shows its cell of the icon picture (the faint ring when empty).
+        // A panel made before ICON-1 has no icon buttons; it works without them.
+        private void BindIcons(CardEditorModel model)
+        {
+            bool show = model.IconAtlas != null && model.IconCells != null;
+            for (int i = 0; iconButtons != null && i < iconButtons.Length; i++)
+            {
+                Button button = iconButtons[i];
+                if (button == null) continue;
+                bool placeShown = show && i < model.IconCells.Length;
+                if (button.gameObject.activeSelf != placeShown) button.gameObject.SetActive(placeShown);
+                button.interactable = model.CanChangeIcons;
+                RawImage image = iconImages != null && i < iconImages.Length ? iconImages[i] : null;
+                if (image == null) continue;
+                image.texture = placeShown ? model.IconAtlas : null;
+                if (placeShown) image.uvRect = model.IconCells[i];
+            }
+        }
+
+        // The frame over the front preview and a tab under each icon place that has an icon (FRAME-1). A panel made
+        // before FRAME-1 has none of these; it works without them.
+        private void BindFrame(CardEditorModel model)
+        {
+            if (framePreview != null)
+            {
+                bool shown = model.FrameTexture != null;
+                if (framePreview.gameObject.activeSelf != shown) framePreview.gameObject.SetActive(shown);
+                framePreview.texture = model.FrameTexture;
+                framePreview.color = model.FrameColor;
+            }
+
+            for (int i = 0; tabImages != null && i < tabImages.Length; i++)
+            {
+                RawImage tab = tabImages[i];
+                if (tab == null) continue;
+                Texture picture = i < 4 ? model.SideTabTexture : model.CornerTabTexture;
+                bool shown = picture != null && model.TabShown != null && i < model.TabShown.Length && model.TabShown[i];
+                if (tab.gameObject.activeSelf != shown) tab.gameObject.SetActive(shown);
+                tab.texture = shown ? picture : null;
+                tab.color = model.TabColor;
+            }
+
+            if (frameLabel != null) frameLabel.text = model.FrameName;
+            if (framePrevious != null) framePrevious.interactable = model.CanChangeFrame;
+            if (frameNext != null) frameNext.interactable = model.CanChangeFrame;
         }
 
         private void ReleaseRows()
@@ -331,6 +436,9 @@ namespace ConsoleCards.Presentation.UI
             Clear(deleteButton);
             Clear(resetButton);
             Clear(saveButton);
+            for (int i = 0; iconButtons != null && i < iconButtons.Length; i++) Clear(iconButtons[i]);
+            Clear(framePrevious);
+            Clear(frameNext);
             if (nameInput != null) nameInput.onValueChanged.RemoveAllListeners();
             if (descriptionInput != null) descriptionInput.onValueChanged.RemoveAllListeners();
             if (costInput != null) costInput.onValueChanged.RemoveAllListeners();
@@ -359,5 +467,8 @@ namespace ConsoleCards.Presentation.UI
         private void HandleSave() => actions?.Save?.Invoke(Typed());
         private void HandleReset() => actions?.Reset?.Invoke();
         private void HandleDelete() => actions?.Delete?.Invoke();
+        private void HandleIcon(int place) => actions?.CycleIcon?.Invoke(place, Typed());
+        private void HandlePreviousFrame() => actions?.CycleFrame?.Invoke(-1, Typed());
+        private void HandleNextFrame() => actions?.CycleFrame?.Invoke(1, Typed());
     }
 }

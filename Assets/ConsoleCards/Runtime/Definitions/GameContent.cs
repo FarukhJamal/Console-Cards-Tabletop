@@ -221,7 +221,7 @@ namespace ConsoleCards.Definitions
 
         private static CardDefinition WithQuantity(CardDefinition card, int quantity) =>
             CardDefinition.CreateRuntime(card, card.StableId, card.DisplayName, card.Description, quantity, null,
-                card.FrontArtworkReference, card.BackArtworkReference);
+                card.FrontArtworkReference, card.BackArtworkReference); // icons come from the card itself
 
         private void ApplyChanges(Dictionary<string, CardDefinition> builtIn)
         {
@@ -246,8 +246,17 @@ namespace ConsoleCards.Definitions
                     change.changeQuantity ? change.quantity : model.Quantity,
                     cost,
                     change.changeFrontArt && !string.IsNullOrWhiteSpace(change.frontArtKey) ? change.frontArtKey.Trim() : model.FrontArtworkReference,
-                    change.changeBackArt && !string.IsNullOrWhiteSpace(change.backArtKey) ? change.backArtKey.Trim() : model.BackArtworkReference));
+                    change.changeBackArt && !string.IsNullOrWhiteSpace(change.backArtKey) ? change.backArtKey.Trim() : model.BackArtworkReference,
+                    change.changeIcons ? ReadIcons(change.icons) : null,
+                    change.changeFrame ? (change.frame ?? string.Empty).Trim() : null));
             }
+        }
+
+        // Saved icon text into 8 places; empty text is 8 Nones (a new card starts without icons, a change clears them).
+        private static ConsoleSymbol[] ReadIcons(string text)
+        {
+            CardDefinition.TryParseEdgeSymbols(text, out ConsoleSymbol[] icons);
+            return icons;
         }
 
         private void AddNewCards(Dictionary<string, CardDefinition> builtIn)
@@ -287,7 +296,9 @@ namespace ConsoleCards.Definitions
                     record.quantity,
                     cost,
                     string.IsNullOrWhiteSpace(record.frontArtKey) ? PlayerContent.DefaultArtKey(artFolder, id, true) : record.frontArtKey.Trim(),
-                    string.IsNullOrWhiteSpace(record.backArtKey) ? model.BackArtworkReference : record.backArtKey.Trim());
+                    string.IsNullOrWhiteSpace(record.backArtKey) ? model.BackArtworkReference : record.backArtKey.Trim(),
+                    ReadIcons(record.icons),
+                    (record.frame ?? string.Empty).Trim());
                 newCards.Add(card);
                 newCardModel.Add(id, model.StableId);
             }

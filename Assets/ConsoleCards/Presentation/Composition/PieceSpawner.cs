@@ -557,6 +557,9 @@ namespace ConsoleCards.Presentation.Composition
             {
                 SetLabelRendererVisible(visualReferences.BackLabel, false);
             }
+
+            // ICON-1, FRAME-1: the game's frame on the card front, with a tab and symbol at each icon place.
+            host.ApplyCardIcons(visualReferences, isFloorCard ? null : authoredDefinition, card.BaseState.DefinitionId);
         }
 
         internal static void SetLabelRendererVisible(TextMesh label, bool visible)

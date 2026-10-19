@@ -199,6 +199,8 @@ namespace ConsoleCards.Presentation.Composition
                     NewDeck = NewEditorDeck,
                     ChoosePicture = ChooseEditorPicture,
                     ClearPicture = ClearEditorPicture,
+                    CycleIcon = CycleEditorIcon,
+                    CycleFrame = CycleEditorFrame,
                     Save = SaveEditorCard,
                     Reset = ResetEditorCard,
                     Delete = DeleteEditorCard,
@@ -244,6 +246,11 @@ namespace ConsoleCards.Presentation.Composition
                 model.ResetText = draft.IsNew ? "Undo edits" : "Reset to the game's card";
                 model.CanDelete = draft.IsNew;
                 model.Decks = BuildEditorDeckRows(draft, gameName);
+                CardFrameStyle frameStyle = EditorFrameStyle;
+                model.IconAtlas = frameStyle != null && frameStyle.SymbolAtlas != null ? frameStyle.SymbolAtlas : CardIconAtlas.Texture;
+                model.IconCells = EditorIconCells(draft);
+                model.CanChangeIcons = true;
+                FillEditorFrame(model, frameStyle, draft);
             }
 
             if (!host.runtimeUi.ShowCardEditor(model, cardEditorActions))
@@ -327,6 +334,8 @@ namespace ConsoleCards.Presentation.Composition
                 WorksLikeId = model.StableId,
                 BackKey = model.BackArtworkReference ?? string.Empty,
             };
+            CopyIcons(model, editorDraft.Icons); // a new card starts with the icons of the card it works like
+            editorDraft.Frame = model.FrameVariant; // and its frame
             ShowCardEditor("A new card. Give it a name, pick the card it works like and its pictures, then Save.");
         }
 
@@ -440,6 +449,97 @@ namespace ConsoleCards.Presentation.Composition
             ShowCardEditor(editorDraft.IsNew
                 ? "Picture cleared. Press Save to keep the change."
                 : "The game's picture is back. Press Save to keep the change.");
+        }
+
+        // ICON-1: a click on an icon place shows the next icon there (None, Square ... Minus, None).
+        internal void CycleEditorIcon(int place, CardEditorTyped typed)
+        {
+            if (editorDraft == null || place < 0 || place >= CardDefinition.EdgeIconCount) return;
+            ApplyTyped(typed);
+            ConsoleSymbol next = (ConsoleSymbol)(((int)editorDraft.Icons[place] + 1) % IconChoiceCount);
+            editorDraft.Icons[place] = next;
+            string where = IconPlaceName((CardIconPlace)place);
+            ShowCardEditor(next == ConsoleSymbol.None
+                ? $"No icon at the {where}. Press Save to keep it."
+                : $"{next} at the {where}: the card fits Console slots marked {next} and turns so this icon points outward. Press Save to keep it.");
+        }
+
+        // ---------- frame (FRAME-1) ----------
+
+        // The frame style of the game being edited (its own, else the platform's default).
+        internal CardFrameStyle EditorFrameStyle => editorGame != null ? editorGame.CardFrameStyle : CardFrameStyle.Default;
+
+        internal void FillEditorFrame(CardEditorModel model, CardFrameStyle style, CardEditorDraft draft)
+        {
+            CardFrameVariant variant = style != null ? style.Variant(draft.Frame) : null;
+            bool framed = variant != null && variant.ShowFrame;
+            model.FrameTexture = framed ? style.FrameTextureOf(variant) : null;
+            model.FrameColor = framed ? variant.FrameColor : Color.white;
+            model.SideTabTexture = framed ? style.SideTabTexture : null;
+            model.CornerTabTexture = framed ? style.CornerTabTexture : null;
+            model.TabColor = framed ? variant.TabColor : Color.white;
+            bool[] tabs = new bool[CardDefinition.EdgeIconCount];
+            for (int i = 0; i < tabs.Length; i++) tabs[i] = draft.Icons[i] != ConsoleSymbol.None;
+            model.TabShown = tabs;
+            model.FrameName = EditorFrameName(style, draft.Frame);
+            model.CanChangeFrame = style != null && style.Variants.Count > 0;
+        }
+
+        internal static string EditorFrameName(CardFrameStyle style, string frame)
+        {
+            if (style == null) return "No frame style yet (Console Cards > Cards > Create Missing Card Frame Style)";
+            CardFrameVariant variant = style.Variant(frame);
+            if (variant == null) return "This game's frame style has no frames";
+            if (string.IsNullOrEmpty(frame)) return $"Game default ({variant.DisplayName})";
+            return style.IndexOf(frame) >= 0 ? variant.DisplayName : $"{frame} (not found: game default)";
+        }
+
+        // Game default, then each frame of the game's style, round and round.
+        internal void CycleEditorFrame(int step, CardEditorTyped typed)
+        {
+            CardFrameStyle style = EditorFrameStyle;
+            if (editorDraft == null || style == null || style.Variants.Count == 0) return;
+            ApplyTyped(typed);
+            int count = style.Variants.Count + 1;
+            int index = string.IsNullOrEmpty(editorDraft.Frame) ? 0 : style.IndexOf(editorDraft.Frame) + 1;
+            index = (((index + step) % count) + count) % count;
+            editorDraft.Frame = index == 0 ? string.Empty : style.Variants[index - 1].Id;
+            ShowCardEditor($"Frame: {EditorFrameName(style, editorDraft.Frame)}. Press Save to keep it.");
+        }
+
+        // None plus the 8 symbols.
+        internal const int IconChoiceCount = 9;
+
+        internal Rect[] EditorIconCells(CardEditorDraft draft)
+        {
+            Rect[] cells = new Rect[CardDefinition.EdgeIconCount];
+            for (int i = 0; i < cells.Length; i++) cells[i] = CardIconAtlas.Cell(draft.Icons[i]);
+            return cells;
+        }
+
+        internal static string IconPlaceName(CardIconPlace place)
+        {
+            switch (place)
+            {
+                case CardIconPlace.Top: return "top";
+                case CardIconPlace.Right: return "right side";
+                case CardIconPlace.Bottom: return "bottom";
+                case CardIconPlace.Left: return "left side";
+                case CardIconPlace.TopRight: return "top right corner";
+                case CardIconPlace.BottomRight: return "bottom right corner";
+                case CardIconPlace.BottomLeft: return "bottom left corner";
+                default: return "top left corner";
+            }
+        }
+
+        internal static void CopyIcons(ConsoleSymbol[] from, ConsoleSymbol[] into)
+        {
+            for (int i = 0; i < into.Length; i++) into[i] = from != null && i < from.Length ? from[i] : ConsoleSymbol.None;
+        }
+
+        internal static void CopyIcons(CardDefinition card, ConsoleSymbol[] into)
+        {
+            for (int i = 0; i < into.Length; i++) into[i] = card != null ? card.EdgeSymbol((CardIconPlace)i) : ConsoleSymbol.None;
         }
 
         internal void SaveEditorCard(CardEditorTyped typed)
@@ -567,6 +667,8 @@ namespace ConsoleCards.Presentation.Composition
             record.cost = draft.Cost;
             record.frontArtKey = draft.FrontKey;
             record.backArtKey = SameArtKey(draft.BackKey, model?.BackArtworkReference) ? string.Empty : draft.BackKey;
+            record.icons = CardDefinition.FormatEdgeSymbols(draft.Icons);
+            record.frame = draft.Frame ?? string.Empty;
         }
 
         // Only what differs from the game's card is kept; with nothing different the change is removed.
@@ -609,6 +711,19 @@ namespace ConsoleCards.Presentation.Composition
             {
                 change.changeBackArt = true;
                 change.backArtKey = draft.BackKey;
+            }
+
+            string icons = CardDefinition.FormatEdgeSymbols(draft.Icons);
+            if (!string.Equals(icons, card.EdgeSymbolsText, StringComparison.Ordinal))
+            {
+                change.changeIcons = true;
+                change.icons = icons;
+            }
+
+            if (!string.Equals(draft.Frame ?? string.Empty, card.FrameVariant, StringComparison.OrdinalIgnoreCase))
+            {
+                change.changeFrame = true;
+                change.frame = draft.Frame ?? string.Empty;
             }
 
             CardChangeRecord existing = FindEditorChange(card.StableId);
@@ -812,6 +927,18 @@ namespace ConsoleCards.Presentation.Composition
                 FrontKey = change != null && change.changeFrontArt ? change.frontArtKey : card.FrontArtworkReference ?? string.Empty,
                 BackKey = change != null && change.changeBackArt ? change.backArtKey : card.BackArtworkReference ?? string.Empty,
             };
+            if (change != null && change.changeIcons)
+            {
+                CardDefinition.TryParseEdgeSymbols(change.icons, out ConsoleSymbol[] icons);
+                CopyIcons(icons, draft.Icons);
+            }
+            else
+            {
+                CopyIcons(card, draft.Icons);
+            }
+
+            draft.Frame = change != null && change.changeFrame ? change.frame ?? string.Empty : card.FrameVariant;
+
             FillDeckCopies(draft);
             return draft;
         }
@@ -835,6 +962,9 @@ namespace ConsoleCards.Presentation.Composition
                     ? model?.BackArtworkReference ?? string.Empty
                     : record.backArtKey,
             };
+            CardDefinition.TryParseEdgeSymbols(record.icons, out ConsoleSymbol[] icons);
+            CopyIcons(icons, draft.Icons);
+            draft.Frame = record.frame ?? string.Empty;
             FillDeckCopies(draft);
             return draft;
         }

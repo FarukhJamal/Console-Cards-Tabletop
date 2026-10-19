@@ -345,6 +345,7 @@ namespace ConsoleCards.Presentation.Composition
                     slotView.ConfigureCardOrientation(
                         targetConsole.transform,
                         layout.CardSlots[i].DefaultOrientation == ConsoleSlotOrientation.Landscape ? 90f : 0f);
+                    slotView.SetCardTurn(ConsoleCardTurn); // ICON-1: a card turns its matching icon outward
                 }
 
                 slotView.Bind(slot, slotVisual.LayoutAnchor, coordinateConverter, Registry.cardViews);

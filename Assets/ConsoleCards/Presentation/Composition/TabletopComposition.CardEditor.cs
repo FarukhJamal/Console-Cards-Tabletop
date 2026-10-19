@@ -36,6 +36,10 @@ namespace ConsoleCards.Presentation.Composition
             // The art keys in use. Empty front on a new card: no picture (the blank base card).
             public string FrontKey = string.Empty;
             public string BackKey = string.Empty;
+            // The icons on the card front (ICON-1), one per place (CardIconPlace order).
+            public readonly ConsoleSymbol[] Icons = new ConsoleSymbol[CardDefinition.EdgeIconCount];
+            // The frame variant ID (FRAME-1); empty: the game's default frame.
+            public string Frame = string.Empty;
             // Copies in each of the player's decks, by deck ID (0 or missing: not in that deck).
             public readonly Dictionary<string, int> DeckCopies = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         }

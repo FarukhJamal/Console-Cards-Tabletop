@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.28 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.31 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1676,3 +1676,67 @@ Sound).
 5. **Shuffle has its own sound**: a riffle (`TableSounds/Riffle.wav`) timed to the riffle animation.
 - Shuffle **styles** (choose Riffle, Overhand, Hindu, Pile, Wash or Cut, a default per player) are SHUF-1, not built
   yet.
+
+**Selection outline fix (owner, 2026-10-19: "cant see any highlights under components when multi selected").** The
+outlines under selected pieces now lie at the top of a card (the base of other pieces) and take their size from the
+piece itself, so they show around cards, pawns, tokens and dice; a selected pile shows one outline around its top
+card. Two errors when leaving Play mode are fixed (a Fixed Container highlight and the table pop-up layer).
+
+**ICON-1 record (written 2026-10-19, to be checked).** Owner's choices: icons are set in the card editor (4 sides and
+4 corners, drawn small on the card); cards connect to Console slots only; when several slots match, the nearest wins.
+- **Card editor:** the front preview has 8 round icon places (top, right, bottom, left and the 4 corners). Click a
+  place to show the next icon there (none, Square, Circle, Star, Cross, Diamond, Triangle, Plus, Minus); Save keeps
+  them. A new card starts with the icons of the card it works like. Icons are saved with your cards and with changes
+  to the game's cards; Reset brings back the game's icons. Rebuild the panel: delete
+  `Prefabs/Final/UI/CardEditorPanel.prefab` and run Console Cards > UI > Create Missing Gameplay UI Prefabs (an old
+  panel still works, without the icon places).
+- **On the card:** the icons are drawn small on the front face, at the side or corner they belong to (dark round
+  badges with a white symbol), and hide with the card's words when the card is hidden or face down. The icon picture
+  is `Content/Resources/CardIcons/CardIconAtlas.png` (3 × 3 cells: an empty ring, then the 8 symbols in order);
+  replace it with the same layout to restyle them.
+- **On the Console:** a card fits every slot whose symbol is one of its icons and is pulled into the nearest one
+  (within the symbol magnet distance); a slot with another symbol refuses it. In the slot it turns so the matching
+  icon points outward: across the mat edge for the top, bottom and side slots (half turns in a long slot, quarter
+  turns in a square one), out through the corner for a corner slot. The drop preview shows the turn before you let go.
+- **Code:** `CardDefinition` (8 icon places, saved as text), `PlayerCardRecord.icons` / `CardChangeRecord.icons`,
+  `ConsoleSlotView.CardRotationFor` (slot orientation plus the card's turn), `TabletopComposition.Consoles.cs`
+  (magnet by icon set, turn), `TabletopComposition.CardIcons.cs` (the icons on the face), `CardIconAtlas`.
+- Not compiled here; the owner checks in Unity.
+
+**FRAME-1 plan (owner, 2026-10-19, after seeing ICON-1; agreed, not built).** The owner's card designs have a
+border, and the icon sits in a tab on that border, so a card snaps from that side. Borders differ per game; the symbol
+style is the same everywhere. The card face is built in three layers:
+1. **Picture**: the card's own art, the picture only.
+2. **Frame** (per game): a **Card Frame Style** asset with the frame picture (a border with a clear middle), frame
+   and tab colours, tick marks, a side-tab shape and a corner-tab shape, and how far a tab sticks out. A game has a
+   **default frame plus named variants** (for example dark and orange); each card picks one in the card editor.
+   Player-made games choose a style or upload their own frame picture and colours.
+3. **Symbol** (shared): the ICON-1 badges, drawn inside the tabs.
+- Owner's choices: **the platform draws the border** (not baked into the art); **variants per card**; **tabs stick out
+  past the card edge**, as a connector, drawn only where the card has an icon.
+- Snapping is unchanged: the icon's place decides the side that connects to the slot. The tab is drawn only; picking
+  up, stacking and piles use the plain card rectangle.
+- The card editor preview shows the frame and tabs live, with a frame variant picker.
+
+**FRAME-1 record (owner: "Start Frame1", 2026-10-19; written, to be checked).** The owner has no frame pictures yet,
+so the build uses stand-in pictures and keeps both frames and symbols replaceable without code.
+- **Card Frame Style** (new asset, Create > Console Cards > Definitions > Card Frame Style): the frame picture (border
+  with a clear middle, 1 : 1.4), a side-tab picture (pointing up) and a corner-tab picture (top right corner), all
+  white or grey so colours tint them; tab sizes and how far they stick out; an optional symbol picture; and the
+  **frame variants** (ID, name, frame colour, tab colour, an optional own frame picture, frame on or off). The first
+  variant is the game's default.
+- **Where it comes from:** a game's `Card Frame Style` field (Game Definition); empty uses the platform's default,
+  `Resources/CardFrames/DefaultCardFrameStyle`, made by **Console Cards > Cards > Create Missing Card Frame Style**
+  with three frames: **Dark**, **Orange** and **No frame**. Stand-in pictures: `Content/Art/CardFrames/CardFrame.png`,
+  `CardTabSide.png`, `CardTabCorner.png`; replace them with the same names and layout to restyle every card.
+- **On the table:** every card of a game gets its frame over its picture; at each side or corner with an icon a tab
+  sticks out past the edge in the frame's tab colour, with the symbol upright in its middle. Floor tiles and avatars
+  have no frame. One mesh per card with shared materials; nothing is made per frame.
+- **Per card:** each card has a frame variant (Card Definition › Frame Variant, or the card editor). The card editor
+  preview shows the frame and the tabs, and a **< frame >** picker under the pictures goes through "Game default" and
+  each frame of the game's style; Save keeps it (your cards and changes to the game's cards).
+- **Symbols:** the shared symbol picture (`Resources/CardIcons/CardIconAtlas.png`) can be replaced; a frame style can
+  also name its own symbol picture with the same 3 × 3 layout.
+- **Builders to run:** Console Cards > Cards > Create Missing Card Frame Style; then delete
+  `Prefabs/Final/UI/CardEditorPanel.prefab` and run Console Cards > UI > Create Missing Gameplay UI Prefabs.
+- Not compiled here; the owner checks in Unity.

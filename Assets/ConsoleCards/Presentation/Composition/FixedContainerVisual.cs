@@ -145,6 +145,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            if (feedbackRenderer == null) return; // not authored on this pile, or already gone when the table closes
             feedbackRenderer.sharedMaterial = material;
             feedbackRenderer.enabled = !basePlateHidden || state != PileBayFeedback.None;
         }

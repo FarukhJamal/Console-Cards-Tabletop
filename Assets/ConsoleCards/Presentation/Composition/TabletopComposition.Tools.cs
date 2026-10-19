@@ -526,19 +526,17 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < toolSelection.Count; i++)
             {
                 ToolPick pick = toolSelection[i];
-                if (pick.IsPile)
-                {
-                    if (!TryGetPileWorldPose(pick.Pile, out Vector3 position, out float yaw)) continue;
-                    toolSelectionPositions.Add(position);
-                    toolSelectionYaws.Add(yaw);
-                    toolSelectionSizes.Add(1f);
-                }
-                else
-                {
-                    toolSelectionPositions.Add(PieceRestPosition(pick.View));
-                    toolSelectionYaws.Add(pick.View.transform.eulerAngles.y);
-                    toolSelectionSizes.Add(SizeOf(pick.View)); // POL-7: an outline sized to the piece
-                }
+                // On top of a card or pile, around the base of a pawn, token or die, sized to the piece.
+                Vector3 position;
+                float yaw;
+                float size;
+                bool found = pick.IsPile
+                    ? TryPileOutline(pick.Pile, out position, out yaw, out size)
+                    : TryOutlineOf(pick.View, out position, out yaw, out size);
+                if (!found) continue;
+                toolSelectionPositions.Add(position);
+                toolSelectionYaws.Add(yaw);
+                toolSelectionSizes.Add(size);
             }
 
             boardFeedback.ShowSelection(toolSelectionPositions, toolSelectionYaws, toolSelectionSizes, SelectionColour);

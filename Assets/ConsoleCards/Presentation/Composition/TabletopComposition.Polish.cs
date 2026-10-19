@@ -85,7 +85,6 @@ namespace ConsoleCards.Presentation.Composition
         private float impactsMutedUntil;
         private bool overlayShown;
         private bool presetSuppressionSet;
-        private float cardWorldExtent;
 
         // Hover
         private TabletopObjectView hoverView;
@@ -119,7 +118,6 @@ namespace ConsoleCards.Presentation.Composition
                 // A new table, Undo or Redo: pieces are placed again; no clatter for that.
                 polishMatch = matchState;
                 impactsMutedUntil = Time.unscaledTime + ImpactMuteAfterTableSeconds;
-                cardWorldExtent = 0f;
             }
 
             UpdateStackCarryMotion(); // POL-4
@@ -332,35 +330,69 @@ namespace ConsoleCards.Presentation.Composition
             return false;
         }
 
-        // A piece's footprint against a card's, for outlines sized to the piece (a card is 1).
-        private float SizeOf(TabletopObjectView view)
-        {
-            if (view == null || view.PhysicalObject == null || view.PhysicalObject.PhysicalCollider == null) return 1f;
-            if (view is CardView) return 1f;
-            float card = CardWorldExtent();
-            if (card <= 0f) return 1f;
-            Bounds bounds = view.PhysicalObject.PhysicalCollider.bounds;
-            float extent = Mathf.Max(bounds.size.x, bounds.size.z);
-            return Mathf.Clamp(extent / card * 1.15f, 0.25f, 1.5f);
-        }
+        // The outline marker's long side as authored (BoardFeedbackBuilder's MoveTarget quad: 0.72 x 0.98).
+        private const float OutlineNominalExtent = 0.98f;
 
-        private float CardWorldExtent()
+        // Owner, 2026-10-19 ("can't see any highlights"): the outline sits just above a card's face, or around the
+        // base of anything else (it used to sit at the piece's centre, inside pawns and dice), and is sized from the
+        // piece's real collider (it used to assume the authored tile size).
+        private bool TryOutlineOf(TabletopObjectView view, out Vector3 position, out float yaw, out float size)
         {
-            if (cardWorldExtent > 0f) return cardWorldExtent;
-            for (int i = 0; i < Registry.cardViews.Count; i++)
+            position = Vector3.zero;
+            yaw = 0f;
+            size = 1f;
+            if (view == null || !view.IsBound) return false;
+            yaw = view.transform.eulerAngles.y;
+            Collider collider = view.PhysicalObject != null ? view.PhysicalObject.PhysicalCollider : null;
+            if (collider == null)
             {
-                CardView card = Registry.cardViews[i];
-                if (card == null || card.PhysicalObject == null || card.PhysicalObject.PhysicalCollider == null) continue;
-                Bounds bounds = card.PhysicalObject.PhysicalCollider.bounds;
-                float extent = Mathf.Max(bounds.size.x, bounds.size.z);
-                if (extent > 0.0001f)
-                {
-                    cardWorldExtent = extent;
-                    break;
-                }
+                position = PieceRestPosition(view);
+                return true;
             }
 
-            return cardWorldExtent;
+            Bounds bounds = collider.bounds;
+            bool card = view is CardView;
+            float extent = card ? LongestSide(collider) : Mathf.Max(bounds.size.x, bounds.size.z);
+            size = Mathf.Max(0.05f, extent * (card ? 1.08f : 1.45f) / OutlineNominalExtent);
+            position = new Vector3(
+                bounds.center.x,
+                card ? bounds.max.y + 0.002f : bounds.min.y + 0.002f,
+                bounds.center.z);
+            return true;
+        }
+
+        private static float LongestSide(Collider collider)
+        {
+            if (collider is BoxCollider box)
+            {
+                Vector3 s = Vector3.Scale(box.size, box.transform.lossyScale);
+                return Mathf.Max(Mathf.Abs(s.x), Mathf.Max(Mathf.Abs(s.y), Mathf.Abs(s.z)));
+            }
+
+            Bounds bounds = collider.bounds;
+            return Mathf.Max(bounds.size.x, bounds.size.z);
+        }
+
+        // A pile's outline: around its top card (so it shows on top of the pile), else at its place.
+        private bool TryPileOutline(ContainerId pileId, out Vector3 position, out float yaw, out float size)
+        {
+            if (matchState != null
+                && matchState.Containers.TryGetValue(pileId, out ContainerState pile)
+                && pile.TryPeekTop(out TabletopObjectId top)
+                && Registry.TryGetCardView(top, out CardView topCard)
+                && TryOutlineOf(topCard, out position, out yaw, out size))
+            {
+                size *= 1.04f;
+                return true;
+            }
+
+            size = 1.1f;
+            return TryGetPileWorldPose(pileId, out position, out yaw);
+        }
+
+        private float SizeOf(TabletopObjectView view)
+        {
+            return TryOutlineOf(view, out _, out _, out float size) ? size : 1f;
         }
 
         // ---------- Group carry (POL-7) ----------
@@ -557,13 +589,12 @@ namespace ConsoleCards.Presentation.Composition
             float size;
             if (!hoverPileId.IsEmpty)
             {
-                if (IndexOfPick(new ToolPick { Pile = hoverPileId }) >= 0 || !TryGetPileWorldPose(hoverPileId, out position, out yaw))
+                if (IndexOfPick(new ToolPick { Pile = hoverPileId }) >= 0
+                    || !TryPileOutline(hoverPileId, out position, out yaw, out size))
                 {
                     boardFeedback.HideHover();
                     return;
                 }
-
-                size = 1.06f;
             }
             else
             {
@@ -573,9 +604,11 @@ namespace ConsoleCards.Presentation.Composition
                     return;
                 }
 
-                position = PieceRestPosition(hoverView);
-                yaw = hoverView.transform.eulerAngles.y;
-                size = SizeOf(hoverView) * 1.06f;
+                if (!TryOutlineOf(hoverView, out position, out yaw, out size))
+                {
+                    boardFeedback.HideHover();
+                    return;
+                }
             }
 
             Color colour = FeedbackColour(localPlayerId);

@@ -317,7 +317,7 @@ namespace ConsoleCards.Presentation.Interaction
 
             // A Console slot sets the card to the slot's orientation as it enters (A1h).
             float? slotRotation = destinationLayoutView is ConsoleSlotView consoleSlotView
-                ? consoleSlotView.CardRotationDegrees
+                ? consoleSlotView.CardRotationFor(cardView)
                 : null;
             return TransferCardCommand.ToContainer(
                 context,

@@ -472,11 +472,12 @@ namespace ConsoleCards.Presentation.Composition
         private ConsoleView consoleView;
         private ConsoleLayoutData consoleLayout;
         // C3d (doc 22 §14): slots on a Console side facing down, the turn-over of flipped cards, dice on D-pad
-        // arrows, and each card definition's Console symbol.
+        // arrows, and each card definition with its Console symbol and icons (ICON-1).
         private readonly HashSet<ContainerId> hiddenConsoleSlotIds = new HashSet<ContainerId>();
         private readonly Dictionary<TabletopObjectId, string> diceOnConsoleSpots = new Dictionary<TabletopObjectId, string>();
-        private readonly Dictionary<ObjectDefinitionId, ConsoleSymbol> consoleSymbolsByDefinition =
-            new Dictionary<ObjectDefinitionId, ConsoleSymbol>();
+        private readonly Dictionary<ObjectDefinitionId, CardDefinition> consoleCardsByDefinition =
+            new Dictionary<ObjectDefinitionId, CardDefinition>();
+        private Func<CardView, ConsoleSlotView, float> consoleCardTurn;
         private CardFlipTurnPresenter cardFlipTurns;
         internal bool consoleDieCheckPending;
 
@@ -1066,6 +1067,7 @@ namespace ConsoleCards.Presentation.Composition
             boardFeedback?.Destroy();
             boardFeedback = null;
             ReleaseCardArtMaterials();
+            ReleaseCardIconAssets();
             contentArt?.Dispose(); // destroys the pictures the content service loaded
             CardEditorPanel.DisposeCardEditor(); // and those the card editor loaded for another game
             trapFloorContent?.Destroy(); // destroys the cards made from the player's content

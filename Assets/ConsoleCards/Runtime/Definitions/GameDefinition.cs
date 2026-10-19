@@ -85,6 +85,9 @@ namespace ConsoleCards.Definitions
         [SerializeField] private List<Texture2D> boardCardBacks = new List<Texture2D>();
         [Tooltip("Art keys for the board card backs (doc 24, A2), in the same order. A pack or upload can replace a back by its key.")]
         [SerializeField] private List<string> boardCardBackReferences = new List<string>();
+        [Tooltip("The border, icon tabs and frame variants drawn on this game's cards (FRAME-1). Empty uses the "
+            + "platform's default frame style (Resources/CardFrames).")]
+        [SerializeField] private CardFrameStyle cardFrameStyle;
 
         public string StableId => stableId;
         public string DisplayName => displayName;
@@ -98,6 +101,9 @@ namespace ConsoleCards.Definitions
         public IReadOnlyList<Texture2D> BoardCardBacks => boardCardBacks;
         public IReadOnlyList<string> BoardCardBackReferences => boardCardBackReferences;
         public IReadOnlyList<GameContentSet> ContentSets => contentSets;
+
+        /// <summary>The game's own frame style, else the platform's default (null when neither exists).</summary>
+        public CardFrameStyle CardFrameStyle => cardFrameStyle != null ? cardFrameStyle : CardFrameStyle.Default;
 
         public bool TryGetCard(ObjectDefinitionId id, out CardDefinition definition)
         {

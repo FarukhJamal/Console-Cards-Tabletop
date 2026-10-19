@@ -1215,7 +1215,7 @@ namespace ConsoleCards.Presentation.UI
         {
             ReleaseView(tabletopPopupView);
             ReleaseModalViews();
-            popupLayer?.SetActive(false);
+            if (popupLayer != null) popupLayer.SetActive(false); // Unity's null check: gone when Play mode ends
             SetModalLayerOffUnlessHandover();
         }
 

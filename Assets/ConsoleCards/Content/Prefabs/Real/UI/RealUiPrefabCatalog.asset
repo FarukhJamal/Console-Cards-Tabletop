@@ -114,7 +114,7 @@ MonoBehaviour:
     layer: 3
     retention: 1
   - id: platform.card-editor-panel
-    prefab: {fileID: 6686696103650483756, guid: 37e462bdfee38314a8b42d27570437fd, type: 3}
+    prefab: {fileID: 4867949631524467754, guid: 37e462bdfee38314a8b42d27570437fd, type: 3}
     layer: 3
     retention: 0
   - id: platform.card-editor-row

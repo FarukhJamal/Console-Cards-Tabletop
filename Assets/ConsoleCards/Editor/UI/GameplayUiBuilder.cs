@@ -753,11 +753,26 @@ namespace ConsoleCards.Editor.UI
             Row(pictures.gameObject, 0, 0, 0, 0, 10f, TextAnchor.UpperLeft);
             Size(pictures.gameObject, 300f, 252f);
             RawImage front = CardPicture(pictures, "Front", 180f, 252f, true, out Text blankName);
+            CardFrameLayers(front, out RawImage framePreview, out RawImage[] tabImages);
+            CardIconPlaces((RectTransform)front.transform.parent, out Button[] iconButtons, out RawImage[] iconImages);
             RawImage back = CardPicture(pictures, "Back", 110f, 154f, false, out _);
+
+            // The card's frame (FRAME-1): the game's default or one of its frame variants.
+            RectTransform frameRow = ButtonRow(previewColumn, TextAnchor.MiddleLeft);
+            frameRow.name = "FrameRow";
+            Button framePrevious = PlainButton(frameRow, "PreviousFrameButton", "<", 44f, out _);
+            RectTransform frameLabelRect = Child("FrameName", frameRow);
+            Text frameName = Label(frameLabelRect, boldFont, 15, Ink, TextAnchor.MiddleCenter, "Frame");
+            frameName.resizeTextForBestFit = true;
+            frameName.resizeTextMinSize = 10;
+            frameName.resizeTextMaxSize = 15;
+            Size(frameLabelRect.gameObject, 192f, 52f, 192f);
+            Button frameNext = PlainButton(frameRow, "NextFrameButton", ">", 44f, out _);
+
             RectTransform words = Child("Words", previewColumn);
             Img(words, "ButtonOutlined", CreamDark).raycastTarget = false;
             Column(words.gameObject, 14, 14, 12, 12, 6f);
-            Size(words.gameObject, 300f, 400f, 300f);
+            Size(words.gameObject, 300f, 338f, 300f);
             Text previewName = Label(Child("Name", words), boldFont, 20, Ink, TextAnchor.UpperLeft, "Card name");
             Text previewCost = Label(Child("Cost", words), boldFont, 16, Orange, TextAnchor.UpperLeft, "No cost");
             Text previewDescription = Label(Child("Description", words), bodyFont, 16, Ink, TextAnchor.UpperLeft, string.Empty);
@@ -832,6 +847,13 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("previewName").objectReferenceValue = previewName;
             so.FindProperty("previewCost").objectReferenceValue = previewCost;
             so.FindProperty("previewDescription").objectReferenceValue = previewDescription;
+            AssignArray(so.FindProperty("iconButtons"), iconButtons);
+            AssignArray(so.FindProperty("iconImages"), iconImages);
+            so.FindProperty("framePreview").objectReferenceValue = framePreview;
+            AssignArray(so.FindProperty("tabImages"), tabImages);
+            so.FindProperty("framePrevious").objectReferenceValue = framePrevious;
+            so.FindProperty("frameNext").objectReferenceValue = frameNext;
+            so.FindProperty("frameLabel").objectReferenceValue = frameName;
             so.FindProperty("headingLabel").objectReferenceValue = heading;
             so.FindProperty("idLabel").objectReferenceValue = id;
             so.FindProperty("codeInput").objectReferenceValue = code;
@@ -1399,6 +1421,88 @@ namespace ConsoleCards.Editor.UI
                     new Vector2(-24f, -24f)), boldFont, 17, Ink, TextAnchor.MiddleCenter, "Card name")
                 : null;
             return picture;
+        }
+
+        // ICON-1: the card's 8 icon places, set on the front preview where they print on the card: the 4 sides, then
+        // the 4 corners (CardIconPlace order). Each is a small round button showing its icon (a faint ring when empty).
+        private static readonly Vector2[] CardIconAnchors =
+        {
+            new Vector2(0.5f, 1f), new Vector2(1f, 0.5f), new Vector2(0.5f, 0f), new Vector2(0f, 0.5f),
+            new Vector2(1f, 1f), new Vector2(1f, 0f), new Vector2(0f, 0f), new Vector2(0f, 1f),
+        };
+
+        private static readonly string[] CardIconPlaceNames =
+        {
+            "Top", "Right", "Bottom", "Left", "TopRight", "BottomRight", "BottomLeft", "TopLeft",
+        };
+
+        // FRAME-1 preview sizes, from the default Card Frame Style's numbers on the 170-pixel-wide front picture: a
+        // side tab 36% × 20% of the width with 55% outside the edge; a corner tab 26% with 30% outside each way. The
+        // preview only shows the look; the table uses the game's own style numbers.
+        private const float PreviewCardWidth = 170f;
+        private const float PreviewPictureInset = 5f;
+        private const float PreviewSideTabWidth = 0.36f * PreviewCardWidth;
+        private const float PreviewSideTabHeight = 0.2f * PreviewCardWidth;
+        private const float PreviewSideTabOutside = 0.55f;
+        private const float PreviewCornerTabSize = 0.26f * PreviewCardWidth;
+        private const float PreviewCornerTabOutside = 0.3f;
+
+        private static readonly float[] CardTabTurns = { 0f, -90f, 180f, 90f, 0f, -90f, 180f, 90f };
+
+        // The frame over the front picture and a tab under each icon place (shown when the place has an icon). The
+        // side tab picture points up and the corner one is for the top right; the others are turned.
+        private static void CardFrameLayers(RawImage picture, out RawImage framePreview, out RawImage[] tabs)
+        {
+            RectTransform pictureRect = picture.rectTransform;
+            framePreview = Rect("Frame", pictureRect, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+                Vector2.zero).gameObject.AddComponent<RawImage>();
+            framePreview.raycastTarget = false;
+            tabs = new RawImage[CardIconAnchors.Length];
+            for (int i = 0; i < CardIconAnchors.Length; i++)
+            {
+                Vector2 anchor = CardIconAnchors[i];
+                bool corner = i >= 4;
+                Vector2 size = corner
+                    ? new Vector2(PreviewCornerTabSize, PreviewCornerTabSize)
+                    : new Vector2(PreviewSideTabWidth, PreviewSideTabHeight);
+                // The pivot is the card's edge (or corner) point inside the tab picture.
+                Vector2 pivot = corner
+                    ? new Vector2(1f - PreviewCornerTabOutside, 1f - PreviewCornerTabOutside)
+                    : new Vector2(0.5f, 1f - PreviewSideTabOutside);
+                RectTransform tab = Rect("Tab" + CardIconPlaceNames[i], pictureRect, anchor, anchor, pivot, Vector2.zero, size);
+                tab.localEulerAngles = new Vector3(0f, 0f, CardTabTurns[i]);
+                RawImage image = tab.gameObject.AddComponent<RawImage>();
+                image.raycastTarget = false;
+                tabs[i] = image;
+            }
+        }
+
+        private static void CardIconPlaces(RectTransform frame, out Button[] buttons, out RawImage[] images)
+        {
+            const float size = 28f;
+            // Each place sits in the middle of its tab (FRAME-1), measured from the white card frame's edge.
+            float sideInward = PreviewPictureInset - ((PreviewSideTabOutside - 0.5f) * PreviewSideTabHeight);
+            float cornerInward = PreviewPictureInset + ((PreviewCornerTabOutside - 0.5f) * -PreviewCornerTabSize);
+            buttons = new Button[CardIconAnchors.Length];
+            images = new RawImage[CardIconAnchors.Length];
+            for (int i = 0; i < CardIconAnchors.Length; i++)
+            {
+                Vector2 anchor = CardIconAnchors[i];
+                float inset = i >= 4 ? cornerInward : sideInward;
+                Vector2 inward = new Vector2((0.5f - anchor.x) * 2f * inset, (0.5f - anchor.y) * 2f * inset);
+                RectTransform place = Rect("Icon" + CardIconPlaceNames[i], frame, anchor, anchor, new Vector2(0.5f, 0.5f),
+                    inward, new Vector2(size, size));
+                RawImage image = place.gameObject.AddComponent<RawImage>();
+                image.color = Color.white;
+                Button button = place.gameObject.AddComponent<Button>();
+                button.targetGraphic = image;
+                ColorBlock colors = button.colors;
+                colors.highlightedColor = new Color(1f, 0.9f, 0.7f, 1f);
+                colors.pressedColor = new Color(0.85f, 0.75f, 0.55f, 1f);
+                button.colors = colors;
+                buttons[i] = button;
+                images[i] = image;
+            }
         }
 
         private static void FieldTitle(Transform parent, string name, string text) =>

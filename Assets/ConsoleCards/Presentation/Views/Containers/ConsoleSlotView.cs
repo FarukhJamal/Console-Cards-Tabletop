@@ -23,6 +23,7 @@ namespace ConsoleCards.Presentation.Views.Containers
         private Transform orientationReference;
         private float orientationOffsetDegrees;
         private float hiddenDepth;
+        private Func<CardView, ConsoleSlotView, float> cardTurn;
 
         public bool IsBound => isBound;
 
@@ -33,6 +34,30 @@ namespace ConsoleCards.Presentation.Views.Containers
         public float? CardRotationDegrees => orientationReference != null
             ? Mathf.Repeat(orientationReference.eulerAngles.y + orientationOffsetDegrees, 360f)
             : (float?)null;
+
+        /// <summary>The slot's layout default orientation relative to its Console (0 Portrait, 90 Landscape).</summary>
+        public float OrientationOffsetDegrees => orientationOffsetDegrees;
+
+        /// <summary>
+        /// The table rotation <paramref name="card"/> takes in this slot: <see cref="CardRotationDegrees"/> plus the
+        /// card's own turn (ICON-1: a card with icons turns so its matching icon points outward). Null as above.
+        /// </summary>
+        public float? CardRotationFor(CardView card)
+        {
+            float? slotRotation = CardRotationDegrees;
+            if (!slotRotation.HasValue || cardTurn == null || card == null)
+            {
+                return slotRotation;
+            }
+
+            return Mathf.Repeat(slotRotation.Value + cardTurn(card, this), 360f);
+        }
+
+        /// <summary>Sets how far a card turns in this slot on top of the slot orientation (null: no turn).</summary>
+        public void SetCardTurn(Func<CardView, ConsoleSlotView, float> turn)
+        {
+            cardTurn = turn;
+        }
 
         /// <summary>Sets the slot's card orientation from its Console root and the layout default (Presentation-only).</summary>
         public void ConfigureCardOrientation(Transform consoleRoot, float offsetDegrees)
@@ -149,7 +174,7 @@ namespace ConsoleCards.Presentation.Views.Containers
             TabletopPose currentPose = cardView.BoundState.Pose;
             return ContainerViewBinding.CreatePose(
                 converter.ToTableCoordinate(layoutAnchor.position),
-                CardRotationDegrees ?? cardView.transform.eulerAngles.y,
+                CardRotationFor(cardView) ?? cardView.transform.eulerAngles.y,
                 currentPose);
         }
 
@@ -180,10 +205,10 @@ namespace ConsoleCards.Presentation.Views.Containers
             float physicalStep = PhysicalStackSeparation();
             TableCoordinate anchorCoordinate = coordinateConverter.ToTableCoordinate(anchor.position);
             float anchorWorldUpOffset = anchor.position.y - coordinateConverter.ToWorldPosition(anchorCoordinate).y;
-            float? slotRotation = CardRotationDegrees;
             for (int i = 0; i < orderedCards.Count; i++)
             {
                 TabletopPose currentPose = orderedCards[i].BoundState.Pose;
+                float? slotRotation = CardRotationFor(orderedCards[i]);
                 plan.Add(new CardLayoutPlan(
                     orderedCards[i],
                     ContainerViewBinding.CreatePose(
