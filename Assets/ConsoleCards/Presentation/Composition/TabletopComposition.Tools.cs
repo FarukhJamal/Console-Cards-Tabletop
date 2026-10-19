@@ -109,6 +109,7 @@ namespace ConsoleCards.Presentation.Composition
         private string keysSelected;
         private string keysPing;
         private string keysFlick;
+        private string keysPile;
 
         internal TableToolKind ActiveTool => activeTool;
 
@@ -157,15 +158,23 @@ namespace ConsoleCards.Presentation.Composition
             string action = Keys.ActionModifierName;
             string select = Keys.SelectModifierName;
             string group = Keys.GroupSelectionName;
-            keysGrab = KeyName("Drag") + " move   " + KeyName("Wheel") + " rotate   " + KeyName("F") + " flip   "
-                + KeyName("Right-click") + " menu   " + KeyName(action + "+drag") + " flick   "
-                + KeyName(ping + "+click") + " ping   " + KeyName(select + "+click") + " select";
-            keysCarry = KeyName("Wheel") + " rotate   " + KeyName("Esc") + " cancel   drop on a pile to put it there";
-            keysDie = KeyName("Hold " + action) + " shake   let go to roll   " + KeyName("Esc") + " cancel";
+            string turn = Keys.RotateLeftName + "/" + Keys.RotateRightName;
+            string roll = Keys.RollName;
+            keysGrab = KeyName("Drag") + " move   " + KeyName(turn) + " turn   " + KeyName("F") + " flip   "
+                + KeyName(roll) + " roll   " + KeyName("Right-click") + " menu   " + KeyName(action + "+drag") + " flick   "
+                + KeyName(ping + "+click") + " ping   " + KeyName("Hold " + ping) + " peek   "
+                + KeyName(select + "+click") + " select";
+            keysCarry = KeyName("Wheel") + " raise   " + KeyName(turn) + " turn   " + KeyName("Esc") + " cancel   "
+                + "drop on a pile to put it there";
+            keysDie = KeyName("Hold " + action) + " or shake the mouse: shake   let go to roll   " + KeyName("Wheel") + " raise   "
+                + KeyName("Esc") + " cancel";
+            keysPile = KeyName("1–9") + " draw   " + KeyName(roll) + " shuffle   " + KeyName("Hold") + " carry the stack   "
+                + KeyName("Hold " + ping) + " peek   " + KeyName("Right-click") + " menu";
             keysSelect = KeyName("Click") + " add or remove a piece   " + KeyName("Drag") + " box   "
                 + KeyName("Click table") + " clear   " + KeyName("Esc") + " back to Grab";
-            keysSelected = KeyName(group) + " group cards into a deck   " + KeyName("Click") + " add or remove   "
-                + KeyName("Drag") + " box   " + KeyName("Esc") + " clear";
+            keysSelected = KeyName(group) + " group cards into a deck   " + KeyName("Drag one") + " move them all   "
+                + KeyName("F") + " flip   " + KeyName(turn) + " turn   " + KeyName(Keys.DeleteName) + " delete   "
+                + KeyName("Esc") + " clear";
             keysPing = KeyName("Click") + " ping   " + KeyName("Middle tap") + " ping   " + KeyName("Esc") + " back to Grab";
             keysFlick = KeyName("Press a piece, pull back, let go") + " flick   " + KeyName("Esc") + " back to Grab";
         }
@@ -225,7 +234,9 @@ namespace ConsoleCards.Presentation.Composition
                 case TableToolKind.Select: return keysSelect;
                 case TableToolKind.Ping: return keysPing;
                 case TableToolKind.Flick: return keysFlick;
-                default: return Keys.SelectModifierHeld ? keysSelect : keysGrab;
+                default:
+                    if (Keys.SelectModifierHeld) return keysSelect;
+                    return IsPointerOnDrawablePile() ? keysPile : keysGrab; // POL-4: over a deck or stack
             }
         }
 
@@ -476,6 +487,7 @@ namespace ConsoleCards.Presentation.Composition
             if (!EnsureBoardFeedback()) return;
             toolSelectionPositions.Clear();
             toolSelectionYaws.Clear();
+            toolSelectionSizes.Clear();
             for (int i = 0; i < toolSelection.Count; i++)
             {
                 ToolPick pick = toolSelection[i];
@@ -484,15 +496,17 @@ namespace ConsoleCards.Presentation.Composition
                     if (!TryGetPileWorldPose(pick.Pile, out Vector3 position, out float yaw)) continue;
                     toolSelectionPositions.Add(position);
                     toolSelectionYaws.Add(yaw);
+                    toolSelectionSizes.Add(1f);
                 }
                 else
                 {
                     toolSelectionPositions.Add(PieceRestPosition(pick.View));
                     toolSelectionYaws.Add(pick.View.transform.eulerAngles.y);
+                    toolSelectionSizes.Add(SizeOf(pick.View)); // POL-7: an outline sized to the piece
                 }
             }
 
-            boardFeedback.ShowSelection(toolSelectionPositions, toolSelectionYaws, SelectionColour);
+            boardFeedback.ShowSelection(toolSelectionPositions, toolSelectionYaws, toolSelectionSizes, SelectionColour);
             shownToolSelectionCount = toolSelection.Count;
         }
 

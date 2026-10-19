@@ -305,6 +305,7 @@ namespace ConsoleCards.Presentation.Composition
             host.RulesCardPanel.RefreshGameHints();
             host.TrapFloorGame.RefreshShopEntry();
             host.RefreshToolBar(); // TOOLS-1: the tool bar and its keys strip (after the Hints switch is applied)
+            host.RefreshTableOverlay(); // POL-3 / POL-5: tooltips, the card peek and die results
             host.RulesCardPanel.RaiseHint(HintTriggers.TableReady, isGameSession ? "game" : "empty");
         }
 

@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.26 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.27 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1527,7 +1527,7 @@ and Swivel cut, as short show-off animations from a deck's menu that leave the o
 | 1 | POL-0 | Editable keys, cursor set and feel numbers, plus a missed-click log (below). Written 2026-10-19. |
 | 2 | TOOLS-1 | Written 2026-10-19 (record below). **Tool bar** (owner's point 4, absorbing POL-9): a slim bar in our look with only the tools we need: **Grab** (normal), **Select** (box-select and group into deck, POL-7), **Ping** (click to ping: the simple way, owner's point 1), **Flick**, and **Draw** greyed until T5; next to it the hideable **keys strip** for what you are doing. A new ping ring (its own prefab, made by the UI builder) and a new ping cursor. |
 | 3 | SMOOTH-1 | Written 2026-10-19 (record below). **Smooth shuffle and split, no missed clicks** (owner's points 2 and 3): fix what the missed-click log finds; cards move along short arcs with a stagger in split, Split into… and draw; Shuffle plays a quick riffle (the first SHUF-1 animation); no snapping at the end of an animation. |
-| 4 | POL-1, POL-2 | Pick up and carry; drop and settle (piece snap included). |
+| 4 | POL-1, POL-2 | Written 2026-10-19 with POL-3 to POL-8 (record below). Pick up and carry; drop and settle (piece snap included). |
 | 5 | ICON-1 | Icons on card sides and corners connect to the Console at any rotation. |
 | 6 | POL-3 to POL-8, SHUF-1 (styles and flourishes), DEAL-1 | In this order unless the owner says otherwise. |
 
@@ -1612,4 +1612,50 @@ go away (the game's own piles stay). Pawns, tokens, dice and bags stay put. One 
 - **Feel Settings › Shuffle / Cards moving between piles:** split and drop times, stagger, spread, lift, tilt; glide
   time, stagger, arc; draw time and arc.
 - **Fix:** an error when leaving Play mode (a pile's drop highlight cleared after the pile was gone).
+- Not compiled here; the owner checks in Unity.
+
+**POL-1 to POL-8 record (owner: "do all polishes in one go", 2026-10-19; written, to be checked).** POL-9 was
+done as TOOLS-1. ICON-1, SHUF-1 (styles and flourishes) and DEAL-1 are separate stages and still to come. Every
+number below is in Feel Settings (new sections Carry, Drop and settle, Hover and information, Piles, Dice and flick,
+Sound).
+- **POL-1 Pick up and carry.** The carried piece leans into the movement (it used to be switched off; up to 7°).
+  The **mouse wheel raises or lowers** the carried piece (up to 1.5 units). A **landing ghost** (an outline in your
+  colour) lies straight below it, or on the board space it will snap to, squared to the board for a card. The lift,
+  steady carry height and collisions were already there.
+- **POL-2 Drop and settle.** **Q / E** turn the carried piece, the selection, the piece under the pointer or the
+  selected piece by 15° (45° with Shift). Cards set on a board space now **glide there with a small spring** instead
+  of jumping. **Piece snap**: a pawn or token at rest on a board space, or on a loose card, glides onto its centre
+  (not when another piece already stands there). **Impact sounds** by material (cards, wooden pawns, plastic tokens,
+  dice) and speed, and a small **puff** where a piece lands hard. No clatter for a second after a table is built,
+  undone or redone.
+- **POL-3 Hover and information.** An **outline in your colour** on the piece or pile under the pointer (sized to the
+  piece). After 0.6 s a **tooltip**: a card's name as it lies (a face-down card shows its back's name), a pile's kind
+  and card count, a die's value, a pawn's owner. **Alt held** over a card (loose, the top of a pile, or in your hand)
+  shows it **large** (the peek) on the right. Hand cards already rise and grow on hover. New Final UI prefab
+  `TableOverlay` (tooltip, peek, floating labels; never takes a click), made by Console Cards > UI > Create Missing
+  Gameplay UI Prefabs.
+- **POL-4 Piles.** **Number keys 1–9** over a deck or stack draw that many (elsewhere 1–4 still change the view);
+  **R** over it shuffles. Cards dropped onto a pile or into the hand **slide in** (0.22 s). A carried stack **lifts
+  with an ease, follows the pointer smoothly and is pulled toward** the stack it will merge onto. **Spread** in the
+  deck, stack and discard-pile menus lays the cards out in rows beside the pile (one Undo step); gather them again
+  with a Select box and Group into deck. (Riffle and arcs: SMOOTH-1.)
+- **POL-5 Dice and flick.** **R** over a die rolls it (or rolls every selected die). **Swinging the mouse back and
+  forth** while carrying a die shakes it, as well as Shift; the harder the shake, the bigger the wobble and the
+  louder and faster the rattle. When a rolled or thrown die rests, its **result floats up** above it for 1.6 s. The
+  flick has a **power curve** (gentle short pulls, strong long ones), a **charge sound** that rises with the pull and
+  a **snap** on release.
+- **POL-6 Hand.** The tray hand is a **curved fan**: the outer cards turn outward and sit a little lower; the card
+  under the pointer stands straight, rises and grows (already there). Drawn cards already fly in one by one
+  (SMOOTH-1). HandView › Tray Fan Degrees / Tray Fan Drop (a negative angle turns the fan the other way).
+- **POL-7 Select several.** **Drag a selected piece and the other selected pieces come along** (selected piles move
+  when it is let go); **F** flips every selected card, **Q / E** turn the selection, **Delete** removes the selected
+  Toolbox pieces (the game's own stay). Grabbing a piece that is not selected drops the selection, as in Tabletop
+  Simulator. Each piece's settle is its own Undo step.
+- **POL-8 Sound pass.** One sound player: eight voices (each with its own pitch), sounds per material picked at random
+  with a small random pitch, volume from the impact speed, and quieter sounds when many play at once. New WAVs made
+  for the game in `Content/Resources/TableSounds` (Wood, Chip, Die, Soft, FlickCharge, FlickSnap); replace them with
+  the same names.
+- **New keys** (in the Input Actions asset): RotateLeft (Q), RotateRight (E), Roll (R), DeleteSelection (Delete).
+  The keys strip shows them, including a strip for a pile under the pointer.
+- **Builders to run:** Console Cards > UI > Create Missing Gameplay UI Prefabs (adds TableOverlay).
 - Not compiled here; the owner checks in Unity.

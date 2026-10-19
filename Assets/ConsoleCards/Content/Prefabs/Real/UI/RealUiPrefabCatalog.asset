@@ -149,3 +149,7 @@ MonoBehaviour:
     prefab: {fileID: 225179118365923663, guid: 38172d2eb19fee441ac1f7cb0c201604, type: 3}
     layer: 1
     retention: 0
+  - id: platform.table-overlay
+    prefab: {fileID: 7344100794832164039, guid: 268afb75e67f7194eadc80e1ff2d7624, type: 3}
+    layer: 1
+    retention: 0

@@ -40,6 +40,10 @@ namespace ConsoleCards.Presentation.Views.Containers
         [SerializeField] private float trayResponse = 14f;
         [SerializeField] private float trayDragResponse = 30f;
         [SerializeField] private float trayHandoffDuration = 0.28f;
+        // POL-6: the tray hand is held as a curved fan: the outer cards turn outward and sit a little lower. The
+        // card under the pointer stands straight. A negative angle turns the fan the other way.
+        [SerializeField, Range(-30f, 30f)] private float trayFanDegrees = 9f;
+        [SerializeField, Range(0f, 1f)] private float trayFanDrop = 0.14f;
 
         private readonly List<CardView> suppliedCardViews = new List<CardView>();
         private readonly List<CardView> layoutAppliedCards = new List<CardView>();
@@ -897,13 +901,17 @@ namespace ConsoleCards.Presentation.Views.Containers
                         * Mathf.Max(0f, 1f - ((distance - 1) * 0.35f));
                 }
 
+                // POL-6: place along the fan (-1 at the left end, +1 at the right end).
+                float fan = center > 0f ? Mathf.Clamp((i - center) / center, -1f, 1f) : 0f;
+                bool straight = selected || hovered;
                 Vector3 targetPosition = new Vector3(
                     ((i - center) * layoutPitch) + spread,
                     (i * trayCardStep) + (selected ? traySelectedLift : hovered ? trayHoverLift : 0f),
-                    selected ? traySelectedRise : hovered ? trayHoverRise : 0f);
+                    (selected ? traySelectedRise : hovered ? trayHoverRise : 0f) - (straight ? 0f : trayFanDrop * fan * fan));
                 float targetScale = selected ? traySelectedScale : hovered ? trayHoverScale : 1f;
+                Quaternion targetRotation = straight ? Quaternion.identity : Quaternion.AngleAxis(trayFanDegrees * fan, Vector3.up);
                 motion.Position = Vector3.Lerp(motion.Position, targetPosition, settle);
-                motion.Rotation = Quaternion.Slerp(motion.Rotation, Quaternion.identity, settle);
+                motion.Rotation = Quaternion.Slerp(motion.Rotation, targetRotation, settle);
                 motion.Scale = Mathf.Lerp(motion.Scale, targetScale, settle);
                 trayMotions[cardId] = motion;
                 ApplyTrayMotion(card, motion);

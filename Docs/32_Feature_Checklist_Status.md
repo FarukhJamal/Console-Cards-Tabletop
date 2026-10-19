@@ -1,6 +1,6 @@
 # 32 — Feature Checklist Status
 
-Version 0.4 · 2026-10-19 · Status: checked against the build by Claude; owner to confirm
+Version 0.5 · 2026-10-19 · Status: checked against the build by Claude; owner to confirm
 
 The owner's client checklist "Console Cards — Feature Checklist" (received again 2026-10-19) lists what the virtual
 game must support. This doc checks each item against what the platform has today (doc 31, the code) and says what
@@ -29,11 +29,11 @@ abilities; they have dice mapped to them (for example Right Arrow = 2d6, so play
 | 1 | **Console slot icons** (top 3 Square, top-right Triangle, top-left Circle, bottom-right Minus, bottom-left Plus, bottom 3 Diamond) | **Done** | The Console front has exactly these, plus Star left and Cross right (P-CONSOLE). | — |
 | 1 | **Cards with icons on any side or corner snap and connect to a matching slot icon, at any rotation** | **Partly** | A card with one symbol snaps magnetically to a slot with the same symbol (symbol magnet). | Cards can carry icons on each side and corner (data per card side/corner); when a card is brought near the Console, the matching icon is found on whichever side it is, the card turns so that side faces the slot and clicks into place (the edge-to-edge connections in the client's picture). Planned: **ICON-1**. |
 | 2 | **Grid snapping**: a card taken out of the grid and put back snaps neatly into its space | **Done** | A loose card that comes to rest on a board space snaps to its centre, squared to the board; Trap Floor's floor is such a board (P-BOARD). | Polish: snap while still carried (ghost of where it lands), POL-2. |
-| 3 | **Piece snapping**: pawns snap onto the grid cards as they move tile to tile | **Partly** | Pawns moved by the turn helper land on the tile; a pawn dropped by hand does not snap. | A pawn (or token) let go over a grid card snaps to the card's centre (or the nearest free spot when several share it). Planned: **POL-2** (piece snap). |
+| 3 | **Piece snapping**: pawns snap onto the grid cards as they move tile to tile | **Done** (to be checked) | Pawns moved by the turn helper land on the tile; a pawn or token let go on a board space or a loose card glides onto its centre (POL-2), unless another piece already stands there. | — |
 | 4 | **Multiplayer** (lobby, 2+ players taking turns) | **Partly** | Hot-seat turns for 2+ players on one computer; the code is ready for networking (one command door, changes announced, doc 30 A6, R1–R2). | MP-1 to MP-5 (doc 30 A6), only when the owner asks. |
 | 5 | **Drawing tool** on the table, to label things | **Not yet** | — | A pen, highlighter, text label and eraser on the table, in your colour, saved with the table; part of **T5** (paint layer), moved up if the owner wants it sooner. |
-| 6 | **Deck building**: Ctrl-click cards one at a time, then a button groups them into a deck | **Done** (to be checked) | TOOLS-1: Ctrl-click (or the Select tool) adds or removes any component but boards and Consoles (a card in a pile picks the pile), a drag draws a selection box, and **Group into deck** (button or G) gathers the selected cards and piles into one deck; one Undo step. Decks can also be built in the deck editor. | Moving the whole selection together: **POL-7**. |
-| 7 | **Split and spread the deck** (as in Tabletop Simulator) | **Partly** | Split Stack (in half) and Split into 2–6 piles are built (P-PILES). | **Spread**: lay a deck out in a row or fan to see every card, and gather it back. Planned: **POL-4**. |
+| 6 | **Deck building**: Ctrl-click cards one at a time, then a button groups them into a deck | **Done** (to be checked) | TOOLS-1: Ctrl-click (or the Select tool) adds or removes any component but boards and Consoles (a card in a pile picks the pile), a drag draws a selection box, and **Group into deck** (button or G) gathers the selected cards and piles into one deck; one Undo step. Decks can also be built in the deck editor. Dragging one selected piece moves the others with it (POL-7). | — |
+| 7 | **Split and spread the deck** (as in Tabletop Simulator) | **Done** (to be checked) | Split Stack, Split into 2–6 piles, and **Spread** (POL-4: the cards laid out in rows beside the pile); gather them back with a Select box and Group into deck. | — |
 | 8 | **Camera movement** (move, look, zoom) | **Done** | Wheel zoom, WASD / arrows / middle-drag pan, views 1–4, camera follows a seat switch (P-CAMERA). | Polish if wanted (smoothing) in POL. |
 
 ## Questions for the owner

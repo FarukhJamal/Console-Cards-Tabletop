@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.13 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.14 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -551,6 +551,29 @@ Change: …
     roll).
 - **Source:** doc 30 §A1, §A2
 - **Changes:** 2026-10-19 built (UX-1); 2026-10-19 the Flick tool flicks without Shift (TOOLS-1).
+
+### P-FEEL · Carry, drop, hover, keys and sound (POL-1 to POL-8)
+- **Status:** Built, to be checked (POL-1 to POL-8)
+- **Rule now:**
+  - **Carry:** the carried piece leans into the movement; the wheel raises or lowers it; an outline below shows
+    where it will land (on the board space it snaps to).
+  - **Turn:** Q / E turn the carried piece, the selection, the piece under the pointer or the selected piece by 15°
+    (45° with Shift).
+  - **Settle:** a card set on a board space glides there with a small spring; a pawn or token at rest on a board
+    space or a loose card glides onto its centre unless another piece stands there.
+  - **Hover:** an outline in your colour; after a moment a tooltip (name as it lies, a pile's count, a die's value,
+    a pawn's owner); Alt held over a card shows it large.
+  - **Piles:** 1–9 over a deck or stack draw that many (elsewhere 1–4 change the view); R shuffles; drops slide
+    in; a carried stack follows smoothly and is pulled toward its merge target; Spread lays a pile out in rows.
+  - **Dice:** R over a die rolls it (or the selected dice); shaking the mouse while carrying a die shakes it; the
+    result floats up when it rests.
+  - **Flick:** power curve, a charge sound that rises with the pull, a snap on release.
+  - **Hand:** the tray hand is a curved fan.
+  - **Selection:** drag one selected piece and the others come along; F flips, Q / E turn, Delete removes the
+    Toolbox ones; grabbing an unselected piece drops the selection.
+  - **Sound:** impacts by material and speed with random pitch; quieter when many play at once.
+- **Source:** doc 30 Part H (POL-1 to POL-8)
+- **Changes:** 2026-10-19 built (owner: all polishes in one go).
 
 ### P-TOOLS · Tool bar, keys strip and selecting cards
 - **Status:** Tool bar accepted (owner, 2026-10-19); selecting every component to be checked (TOOLS-1b)

@@ -3,6 +3,7 @@ using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Identifiers;
+using ConsoleCards.Presentation.Settings;
 using ConsoleCards.Presentation.Views;
 using UnityEngine;
 
@@ -132,7 +133,42 @@ namespace ConsoleCards.Presentation.Interaction
         private Quaternion heldRotation;
         private bool missingRecoveryPoseReported;
 
+        // POL-1: the wheel raises a carried piece above its carry height.
+        private float carryRaise;
+        // POL-5: how hard a held die is being shaken (0..1), from Shift or from swinging the mouse.
+        private float shakeStrength = 1f;
+        // POL-2: a short kinematic glide onto a board space or a card centre (springy settle).
+        private bool gliding;
+        private bool glideRestoreKinematic;
+        private Vector3 glideFromPosition;
+        private Quaternion glideFromRotation;
+        private Vector3 glideToPosition;
+        private Quaternion glideToRotation;
+        private float glideStartTime;
+        private float glideSeconds;
+        private float glideOvershoot;
+
+        /// <summary>
+        /// POL-2 / POL-8: a loose piece hit something (the table or another piece) at this speed (world units a second)
+        /// at this point. Each pair of pieces is reported once. Used for impact sounds and the landing puff.
+        /// </summary>
+        public static event Action<PhysicalLooseObject, float, Vector3> Impact;
+
+        /// <summary>POL-5: a die a player rolled, threw or let go came to rest showing this value.</summary>
+        public static event Action<PhysicalLooseObject, int> DieSettled;
+
+        public TabletopObjectView View => view;
+
         public bool IsHeld => held;
+
+        public bool IsGliding => gliding;
+
+        /// <summary>POL-5: 0..1, how hard a shaken die wobbles (Shift held = 1).</summary>
+        public float ShakeStrength
+        {
+            get => shakeStrength;
+            set => shakeStrength = Mathf.Clamp01(value);
+        }
 
         /// <summary>
         /// UX-1, dice shake: while a held die is shaken it rattles in the hand (a quick wobble on top of the carry
@@ -216,6 +252,7 @@ namespace ConsoleCards.Presentation.Interaction
             bool preserveHeldAnchor = held && hasPointerAnchor;
             Vector3 heldAnchorWorld = preserveHeldAnchor ? GrabAnchorWorld() : Vector3.zero;
             applied = state;
+            gliding = false; // a newly accepted pose wins over a running glide
             actor = state.ControllingPlayerId;
             if (state.Mode != PhysicalObjectMode.Sleeping && state.Mode != PhysicalObjectMode.SleepingUnresolved)
                 frozenAfterRecovery = false;
@@ -300,6 +337,8 @@ namespace ConsoleCards.Presentation.Interaction
         public bool BeginHold()
         {
             if (held) return true;
+            if (gliding) EndGlide();
+            carryRaise = 0f;
             actor = authority.Actor;
             grabOrigin = view.BoundState.PhysicalState;
             userActionActive = true;
@@ -429,6 +468,7 @@ namespace ConsoleCards.Presentation.Interaction
                 target.y += containedPickupLift * Mathf.SmoothStep(0f, 1f, PickupProgress());
             }
 
+            target.y += carryRaise; // POL-1: raised with the wheel
             Vector3 next = ResolveDirectCarryPosition(target, deltaTime);
             lastAnchorHeight = next.y + RotatedGrabAnchor(body.rotation).y;
             heldTargetPosition = next;
@@ -438,6 +478,12 @@ namespace ConsoleCards.Presentation.Interaction
         /// <summary>TTS-FEEL: velocity-driven chase. Collisions are real; the body can shove and be blocked.</summary>
         private void FixedUpdate()
         {
+            if (gliding)
+            {
+                StepGlide();
+                return;
+            }
+
             if (!held || body == null || body.isKinematic || !hasHeldTarget) return;
             if (body.IsSleeping()) body.WakeUp();
 
@@ -458,7 +504,9 @@ namespace ConsoleCards.Presentation.Interaction
             Quaternion lean = Quaternion.identity;
             if (planarSpeed > 0.05f)
             {
-                float tilt = Mathf.Min(planarSpeed * Tune.TiltDegreesPerSpeed, Tune.MaxTiltDegrees);
+                // POL-1: the lean comes from Feel Settings (it used to be switched off).
+                FeelSettings feel = FeelSettings.Current;
+                float tilt = Mathf.Min(planarSpeed * feel.CarryLeanPerSpeed, feel.CarryLeanMax);
                 // Leading edge dips (top leans forward). Negate tilt to lean the other way.
                 lean = Quaternion.AngleAxis(tilt, Vector3.Cross(Vector3.up, planar / planarSpeed));
             }
@@ -468,10 +516,11 @@ namespace ConsoleCards.Presentation.Interaction
             {
                 // A fast wobble (no garbage, no random state): three out-of-step waves.
                 float t = Time.fixedUnscaledTime;
+                float wobble = 28f * Mathf.Lerp(0.35f, 1f, shakeStrength); // POL-5: harder shake, bigger wobble
                 targetRotation = targetRotation * Quaternion.Euler(
-                    Mathf.Sin(t * 47f) * 28f,
-                    Mathf.Sin((t * 53f) + 1f) * 28f,
-                    Mathf.Sin((t * 41f) + 2f) * 28f);
+                    Mathf.Sin(t * 47f) * wobble,
+                    Mathf.Sin((t * 53f) + 1f) * wobble,
+                    Mathf.Sin((t * 41f) + 2f) * wobble);
             }
 
             body.angularVelocity = Vector3.Lerp(
@@ -511,6 +560,118 @@ namespace ConsoleCards.Presentation.Interaction
             return true;
         }
 
+        /// <summary>POL-1: raises (or lowers) the carried piece by this much, between its carry height and the maximum.</summary>
+        internal void RaiseCarry(float delta, float maximum)
+        {
+            if (!held) return;
+            carryRaise = Mathf.Clamp(carryRaise + delta, 0f, Mathf.Max(0f, maximum));
+        }
+
+        /// <summary>POL-2: turns the carried piece about the vertical by this many degrees (Q / E while carrying).</summary>
+        internal void RotateHeld(float degrees)
+        {
+            if (!held || degrees == 0f) return;
+            Quaternion turn = Quaternion.AngleAxis(degrees, Vector3.up);
+            carryOrientationTarget = turn * carryOrientationTarget;
+            heldBaseRotation = turn * heldBaseRotation;
+        }
+
+        /// <summary>
+        /// POL-7: carried along with another piece (a group move): the piece is held and chases this world position,
+        /// with the same lean and collisions as a piece carried by the pointer. Let go with Release (or Cancel).
+        /// </summary>
+        internal bool FollowWorld(Vector3 target)
+        {
+            if (!held && !BeginHold()) return false;
+            UpdateHeldBaseRotation(Time.unscaledDeltaTime);
+            heldTargetPosition = target;
+            hasHeldTarget = true;
+            return true;
+        }
+
+        /// <summary>
+        /// POL-2: the accepted pose is already applied; the piece is shown gliding there from where it was, with a
+        /// small springy overshoot, then rests. Purely visual: nothing is committed while it glides.
+        /// </summary>
+        internal void GlideFrom(Vector3 fromPosition, Quaternion fromRotation, float seconds, float overshoot)
+        {
+            if (body == null || held || seconds <= 0f) return;
+            Vector3 toPosition = body.position;
+            Quaternion toRotation = body.rotation;
+            if ((toPosition - fromPosition).sqrMagnitude < 0.000001f && Quaternion.Angle(toRotation, fromRotation) < 0.1f)
+            {
+                return;
+            }
+
+            if (!gliding) glideRestoreKinematic = body.isKinematic;
+            glideFromPosition = fromPosition;
+            glideFromRotation = fromRotation;
+            glideToPosition = toPosition;
+            glideToRotation = toRotation;
+            glideStartTime = Time.unscaledTime;
+            glideSeconds = seconds;
+            glideOvershoot = Mathf.Max(0f, overshoot);
+            gliding = true;
+            body.isKinematic = true;
+            body.position = fromPosition;
+            body.rotation = fromRotation;
+            transform.SetPositionAndRotation(fromPosition, fromRotation);
+        }
+
+        private void StepGlide()
+        {
+            float t = Mathf.Clamp01((Time.unscaledTime - glideStartTime) / Mathf.Max(0.0001f, glideSeconds));
+            if (t >= 1f)
+            {
+                EndGlide();
+                return;
+            }
+
+            // Back-out ease: past the target a little, then back (the spring), level height without overshoot.
+            float s = glideOvershoot;
+            float u = t - 1f;
+            float e = 1f + ((s + 1f) * u * u * u) + (s * u * u);
+            Vector3 position = Vector3.LerpUnclamped(glideFromPosition, glideToPosition, e);
+            position.y = Mathf.Lerp(glideFromPosition.y, glideToPosition.y, t * t * (3f - (2f * t)));
+            body.MovePosition(position);
+            body.MoveRotation(Quaternion.SlerpUnclamped(glideFromRotation, glideToRotation, e));
+        }
+
+        private void EndGlide()
+        {
+            if (!gliding) return;
+            gliding = false;
+            if (body == null) return;
+            body.position = glideToPosition;
+            body.rotation = glideToRotation;
+            transform.SetPositionAndRotation(glideToPosition, glideToRotation);
+            body.isKinematic = glideRestoreKinematic;
+            if (!body.isKinematic)
+            {
+                body.linearVelocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+                body.Sleep();
+            }
+        }
+
+        // POL-2 / POL-8: impacts for sounds and the landing puff (each pair of loose pieces reported once).
+        private void OnCollisionEnter(Collision collision)
+        {
+            if (Impact == null || gliding || view == null || !view.IsBound || !OwnsLooseTransform || body == null) return;
+            float speed = collision.relativeVelocity.magnitude;
+            if (speed <= 0.01f) return;
+            Rigidbody other = collision.rigidbody;
+            if (other != null
+                && other.GetHashCode() < body.GetHashCode() // one report per pair (GetInstanceID is obsolete in Unity 6.5)
+                && other.TryGetComponent(out PhysicalLooseObject _))
+            {
+                return;
+            }
+
+            Vector3 point = collision.contactCount > 0 ? collision.GetContact(0).point : body.position;
+            Impact(this, speed, point);
+        }
+
         public PhysicalObjectState ReleaseState()
         {
             Vector3 velocity = releaseMotion.GetLinearRelease(Time.unscaledTime);
@@ -540,6 +701,7 @@ namespace ConsoleCards.Presentation.Interaction
         public bool Release()
         {
             if (!OwnsLooseTransform) return false;
+            carryRaise = 0f;
             if (!Commit(ReleaseState(), null, AuthoritativeActionRecordMode.Intermediate)) { Cancel(); return false; }
             RestoreContainedSmoothing();
             held = false;
@@ -624,6 +786,8 @@ namespace ConsoleCards.Presentation.Interaction
         public void Cancel()
         {
             shaking = false;
+            carryRaise = 0f;
+            if (gliding) EndGlide();
             if (held && OwnsLooseTransform && grabOrigin != null)
                 Commit(State(Vector(grabOrigin.Position), Rotation(grabOrigin.Rotation), Vector(grabOrigin.Velocity),
                     Vector(grabOrigin.AngularVelocity), PhysicalObjectMode.Dynamic, actor), null,
@@ -725,7 +889,8 @@ namespace ConsoleCards.Presentation.Interaction
                 }
 
                 FreezeBody();
-                Commit(State(body.position, body.rotation, Vector3.zero, Vector3.zero,
+                bool playerAction = userActionActive || compoundActionActive;
+                bool settledAccepted = Commit(State(body.position, body.rotation, Vector3.zero, Vector3.zero,
                     PhysicalObjectMode.Sleeping, actor), value,
                     userActionActive
                         ? AuthoritativeActionRecordMode.Transaction
@@ -734,6 +899,7 @@ namespace ConsoleCards.Presentation.Interaction
                             : AuthoritativeActionRecordMode.None);
                 userActionActive = false;
                 compoundActionActive = false;
+                if (settledAccepted && playerAction && value.HasValue) DieSettled?.Invoke(this, value.Value);
             }
             else if (Time.unscaledTime >= nextCheckpoint)
             {

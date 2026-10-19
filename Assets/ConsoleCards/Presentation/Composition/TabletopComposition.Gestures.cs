@@ -91,6 +91,10 @@ namespace ConsoleCards.Presentation.Composition
 
         private DieView shakingDie;
         private float nextDiceRattleAt;
+        // POL-5: swinging the mouse back and forth while carrying a die shakes it too.
+        private float mouseShakeEnergy;
+        private float lastShakeDirection;
+        private float flickStrength;
 
         // ---------- Table ping ----------
 
@@ -113,11 +117,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             EnsureCardSounds();
-            if (tablePingClip != null && cardSoundSource != null)
-            {
-                cardSoundSource.pitch = 1f;
-                cardSoundSource.PlayOneShot(tablePingClip, TablePingVolume);
-            }
+            if (tablePingClip != null) PlayTableSound(tablePingClip, TablePingVolume, 1f); // POL-8: through the sound player
 
             return true;
         }
@@ -178,6 +178,8 @@ namespace ConsoleCards.Presentation.Composition
                     coordinateConverter.ToWorldPosition(new TableCoordinate(0d, 0d)),
                     coordinateConverter.ToWorldPosition(new TableCoordinate(1d, 0d))));
             if (boardFeedback != null) boardFeedback.HideAim();
+            flickStrength = 0f;
+            StartFlickChargeSound(); // POL-5: a charge that rises with the pull
             return true;
         }
 
@@ -196,13 +198,20 @@ namespace ConsoleCards.Presentation.Composition
             Vector3 pull = flickAnchorWorld - pointer;
             pull.y = 0f;
             float fullPull = FlickFullPullTableUnits * flickWorldPerTableUnit;
-            float strength = Mathf.Clamp01(pull.magnitude / fullPull);
-            if (strength < FlickDeadZone)
+            float linear = Mathf.Clamp01(pull.magnitude / fullPull);
+            if (linear < FlickDeadZone)
             {
                 flickVelocity = Vector3.zero;
+                flickStrength = 0f;
+                SetFlickChargeSound(0f);
                 if (boardFeedback != null) boardFeedback.HideAim();
                 return;
             }
+
+            // POL-5: a power curve, so short pulls stay gentle and long ones really go.
+            float strength = Mathf.Pow(linear, Mathf.Max(0.1f, Feel.FlickCurve));
+            flickStrength = strength;
+            SetFlickChargeSound(strength);
 
             Vector3 direction = pull.normalized;
             flickVelocity = direction
@@ -220,21 +229,27 @@ namespace ConsoleCards.Presentation.Composition
             if (boardFeedback != null) boardFeedback.HideAim();
             TabletopObjectView view = flickView;
             Vector3 velocity = flickVelocity;
+            float strength = flickStrength;
             flickView = null;
             flickVelocity = Vector3.zero;
+            flickStrength = 0f;
             if (view == null || !view.IsBound || view.PhysicalObject == null || velocity == Vector3.zero)
             {
+                StopFlickChargeSound(false, 0f);
                 return;
             }
 
-            if (view.PhysicalObject.Flick(velocity)) PlayCardSound(false);
-            else ShowMessage("Flick rejected.");
+            bool flicked = view.PhysicalObject.Flick(velocity);
+            StopFlickChargeSound(flicked, strength); // POL-5: a snap on release
+            if (!flicked) ShowMessage("Flick rejected.");
         }
 
         void ITabletopFlickHandler.CancelFlick()
         {
             flickView = null;
             flickVelocity = Vector3.zero;
+            flickStrength = 0f;
+            StopFlickChargeSound(false, 0f);
             if (boardFeedback != null) boardFeedback.HideAim();
         }
 
@@ -255,6 +270,7 @@ namespace ConsoleCards.Presentation.Composition
         private void UpdateGestures()
         {
             UpdateTools(); // TOOLS-1: G, Esc, the selection outlines and the keys strip
+            UpdatePolish(); // POL-1 to POL-8: carry height and ghost, group carry, hover, Q/E, R, numbers, Delete
             UpdateDiceShake();
             UpdateTableCursor();
         }
@@ -265,6 +281,7 @@ namespace ConsoleCards.Presentation.Composition
             if (die == null || die.PhysicalObject == null || !die.PhysicalObject.IsHeld)
             {
                 shakingDie = null;
+                mouseShakeEnergy = 0f;
                 return;
             }
 
@@ -272,16 +289,34 @@ namespace ConsoleCards.Presentation.Composition
             {
                 shakingDie = die;
                 nextDiceRattleAt = 0f;
+                mouseShakeEnergy = 0f;
+                lastShakeDirection = 0f;
             }
 
-            bool shake = Keys.ActionModifierHeld;
+            // POL-5: each fast change of direction of the mouse adds to the shake; it dies away when the mouse calms.
+            float deltaTime = Mathf.Max(0.0001f, Time.unscaledDeltaTime);
+            Mouse mouse = Mouse.current;
+            Vector2 delta = mouse != null ? mouse.delta.ReadValue() : Vector2.zero;
+            float speed = delta.magnitude / deltaTime;
+            float direction = Mathf.Abs(delta.x) >= Mathf.Abs(delta.y) ? Mathf.Sign(delta.x) : Mathf.Sign(delta.y) * 2f;
+            if (speed >= Feel.MouseShakeSpeed && direction != 0f)
+            {
+                if (lastShakeDirection != 0f && direction != lastShakeDirection) mouseShakeEnergy += 0.35f;
+                lastShakeDirection = direction;
+            }
+
+            mouseShakeEnergy = Mathf.Clamp01(mouseShakeEnergy - (deltaTime * 1.2f));
+            bool modifier = Keys.ActionModifierHeld;
+            bool shake = modifier || mouseShakeEnergy > 0.2f;
+            float strength = modifier ? 1f : mouseShakeEnergy;
             die.PhysicalObject.Shaking = shake;
+            die.PhysicalObject.ShakeStrength = strength;
             if (!shake || Time.unscaledTime < nextDiceRattleAt) return;
-            nextDiceRattleAt = Time.unscaledTime + DiceRattleInterval;
+            // A harder shake rattles faster and louder.
+            nextDiceRattleAt = Time.unscaledTime + (DiceRattleInterval * Mathf.Lerp(1.5f, 0.75f, strength));
             EnsureCardSounds();
-            if (diceShakeClip == null || cardSoundSource == null) return;
-            cardSoundSource.pitch = UnityEngine.Random.Range(0.9f, 1.15f);
-            cardSoundSource.PlayOneShot(diceShakeClip, DiceRattleVolume);
+            if (diceShakeClip == null) return;
+            PlayTableSound(diceShakeClip, DiceRattleVolume * Mathf.Lerp(0.5f, 1f, strength), UnityEngine.Random.Range(0.9f, 1.15f));
         }
 
         private void ClearGestures()
@@ -291,7 +326,9 @@ namespace ConsoleCards.Presentation.Composition
             if (boardFeedback != null) boardFeedback.HideAim();
             if (shakingDie != null && shakingDie.PhysicalObject != null) shakingDie.PhysicalObject.Shaking = false;
             shakingDie = null;
+            mouseShakeEnergy = 0f;
             ClearTools(); // TOOLS-1: no selection carries over to a rebuilt table
+            ClearPolish(); // POL-1 to POL-8: no group carry, hover or charge sound carries over
         }
 
         // ---------- Cursor ----------

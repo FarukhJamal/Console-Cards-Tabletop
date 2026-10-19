@@ -59,6 +59,8 @@ namespace ConsoleCards.Presentation.UI
         private bool hintStripWarned;
         private ToolBarView toolBarView;
         private bool toolBarWarned;
+        private TableOverlayView tableOverlayView;
+        private bool tableOverlayWarned;
         private bool hintsVisible = true;
         private bool tipsSettingWarned;
         private bool cardArtWarned;
@@ -720,6 +722,53 @@ namespace ConsoleCards.Presentation.UI
 
         private ToolBarView VisibleToolBar() => IsVisible(toolBarView) ? toolBarView : null;
 
+        /// <summary>
+        /// POL-3 / POL-5: the table's information layer (tooltip, card peek, floating labels). False when its prefab is
+        /// missing (warned once); then those simply do not show.
+        /// </summary>
+        public bool ShowTableOverlay(UnityEngine.Camera worldCamera)
+        {
+            try
+            {
+                EnsureService();
+                if (tableOverlayView == null || !tableOverlayView.IsAcquired)
+                {
+                    tableOverlayView = uiService.AcquireCached<TableOverlayView>(UiPrefabIds.TableOverlay);
+                }
+
+                tableOverlayView.Bind(worldCamera);
+                tableOverlayView.Show();
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                if (!tableOverlayWarned)
+                {
+                    tableOverlayWarned = true;
+                    Debug.LogWarning(
+                        "The table overlay (tooltips, card peek, die results) is missing: run Console Cards > UI > "
+                        + "Create Missing Gameplay UI Prefabs (Final UI). " + exception.Message);
+                }
+
+                return false;
+            }
+        }
+
+        public void ShowTooltip(Vector2 screenPosition, string title, string detail) =>
+            VisibleOverlay()?.ShowTooltip(screenPosition, title, detail);
+
+        public void HideTooltip() => VisibleOverlay()?.HideTooltip();
+
+        public void ShowPeek(string title, string body, Sprite artwork, Color surface, Color text) =>
+            VisibleOverlay()?.ShowPeek(title, body, artwork, surface, text);
+
+        public void HidePeek() => VisibleOverlay()?.HidePeek();
+
+        public void ShowFloatLabel(Vector3 worldPosition, string text, Color colour, float seconds) =>
+            VisibleOverlay()?.ShowFloat(worldPosition, text, colour, seconds);
+
+        private TableOverlayView VisibleOverlay() => IsVisible(tableOverlayView) ? tableOverlayView : null;
+
         public void HideHint()
         {
             ReleaseView(hintStripView);
@@ -1198,6 +1247,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(tablePanelView);
             ReleaseView(hintStripView);
             ReleaseView(toolBarView);
+            ReleaseView(tableOverlayView);
             CloseTabletopPopup();
         }
 

@@ -139,10 +139,16 @@ namespace ConsoleCards.Presentation.Input
                 Time.unscaledDeltaTime);
         }
 
+        /// <summary>
+        /// POL-4: true while the number keys mean something else (the pointer rests on a deck or stack, where they draw
+        /// that many cards); then 1–4 do not change the camera view.
+        /// </summary>
+        internal Func<bool> PresetKeysSuppressed { get; set; }
+
         private void ApplyPresetKeyboardShortcuts()
         {
             Keyboard keyboard = Keyboard.current;
-            if (keyboard == null)
+            if (keyboard == null || (PresetKeysSuppressed != null && PresetKeysSuppressed()))
             {
                 return;
             }

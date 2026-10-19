@@ -511,6 +511,7 @@ namespace ConsoleCards.Presentation.Composition
                     }
                 }));
             host.AddSplitIntoPilesAction(actions, targetDeckId);
+            host.AddSpreadAction(actions, targetDeckId); // POL-4
             host.AddPileDuplicateAction(actions, targetDeckId);
             actions.Add(new PopupActionOption(
                 "Move",
@@ -537,6 +538,7 @@ namespace ConsoleCards.Presentation.Composition
                 AddInspectAction(actions, host.contextMenuCardId);
             }
 
+            host.AddSpreadAction(actions, targetPileId); // POL-4
             host.AddPileDuplicateAction(actions, targetPileId);
             actions.Add(new PopupActionOption(
                 "Move",
@@ -916,6 +918,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             host.AddSplitIntoPilesAction(actions, sourceStackId);
+            host.AddSpreadAction(actions, sourceStackId); // POL-4
 
             // Merging is done by hand (owner, 2026-10-18): press and hold the stack, carry it onto another stack.
             host.AddPileDuplicateAction(actions, sourceStackId);

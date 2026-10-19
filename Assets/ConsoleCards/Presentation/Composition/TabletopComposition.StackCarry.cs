@@ -66,6 +66,9 @@ namespace ConsoleCards.Presentation.Composition
         private Vector3 carriedRootStart;
         private Vector3 carryGrabWorld;
         private Vector3 carryHorizontalOffset;
+        // POL-4: what is shown follows the pointer smoothly, lifts with an ease and leans toward the merge target.
+        private Vector3 carryShownOffset;
+        private float carryStartedAt;
         private ContainerId carryTargetId;
         private bool carryDropPending;
         private ContainerId carryDropTargetId;
@@ -104,6 +107,8 @@ namespace ConsoleCards.Presentation.Composition
 
             carryGrabWorld = coordinateConverter.ToWorldPosition(grab);
             carryHorizontalOffset = Vector3.zero;
+            carryShownOffset = Vector3.zero;
+            carryStartedAt = Time.unscaledTime;
             carryTargetId = ContainerId.Empty;
             ApplyCarryOffset();
             PlayCardSound(false);
@@ -127,8 +132,7 @@ namespace ConsoleCards.Presentation.Composition
             Vector3 offset = coordinateConverter.ToWorldPosition(point) - carryGrabWorld;
             offset.y = 0f;
             carryHorizontalOffset = offset;
-            ApplyCarryOffset();
-            SetCarryTarget(FindCarryMergeTarget());
+            SetCarryTarget(FindCarryMergeTarget()); // POL-4: the shown stack follows in UpdateStackCarryMotion
         }
 
         void ITabletopCarryHandler.ReleaseCarry(Vector2 screenPosition)
@@ -186,7 +190,7 @@ namespace ConsoleCards.Presentation.Composition
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts = CaptureContainerCardTransforms(stackId);
             bool moved = CommitContainerMove(stackId, pose);
             if (!moved) ViewSync.SyncContainer(stackId);
-            presentationTransitions.AnimateCardsFromCurrentResults(starts, moved ? settleDuration : returnDuration);
+            presentationTransitions.AnimateCardsFromCurrentResults(starts, moved ? Feel.DropSettleSeconds : returnDuration);
             if (moved) ScheduleLandingFeedback(stackId, false);
             Physics.SyncTransforms();
         }
@@ -210,9 +214,36 @@ namespace ConsoleCards.Presentation.Composition
                 && !MoveContainerUseCase.IsMoveBlockedByOwner(matchState, stack, localPlayerId);
         }
 
+        // POL-4, every frame while a stack is carried: it follows the pointer smoothly and, over a stack it will merge
+        // onto, is pulled part of the way toward it.
+        private void UpdateStackCarryMotion()
+        {
+            if (carriedStackId.IsEmpty || carryDropPending) return;
+            Vector3 desired = carryHorizontalOffset;
+            float pull = Feel.StackMagnetPull;
+            if (pull > 0f
+                && !carryTargetId.IsEmpty
+                && matchState != null
+                && matchState.TryGetContainerPlacement(carryTargetId, out ContainerPlacementState target)
+                && matchState.TryGetContainerPlacement(carriedStackId, out ContainerPlacementState carried))
+            {
+                Vector3 toTarget = coordinateConverter.ToWorldPosition(target.Pose)
+                    - (coordinateConverter.ToWorldPosition(carried.Pose) + carryHorizontalOffset);
+                toTarget.y = 0f;
+                desired += toTarget * pull;
+            }
+
+            float follow = 1f - Mathf.Exp(-Feel.StackFollow * Mathf.Max(0f, Time.unscaledDeltaTime));
+            carryShownOffset = Vector3.Lerp(carryShownOffset, desired, follow);
+            ApplyCarryOffset();
+        }
+
         private void ApplyCarryOffset()
         {
-            Vector3 offset = carryHorizontalOffset + (Vector3.up * StackCarryLift);
+            float liftSeconds = Feel.StackLiftSeconds;
+            float lift = liftSeconds <= 0f ? 1f : Mathf.Clamp01((Time.unscaledTime - carryStartedAt) / liftSeconds);
+            lift = 1f - ((1f - lift) * (1f - lift)); // fast up, eased at the top
+            Vector3 offset = carryShownOffset + (Vector3.up * (StackCarryLift * lift));
             if (carriedRoot != null) carriedRoot.position = carriedRootStart + offset;
             for (int i = 0; i < carriedCards.Count; i++)
             {
@@ -288,6 +319,7 @@ namespace ConsoleCards.Presentation.Composition
             carriedCards.Clear();
             carriedCardStarts.Clear();
             carryHorizontalOffset = Vector3.zero;
+            carryShownOffset = Vector3.zero;
             carryTargetId = ContainerId.Empty;
         }
     }

@@ -31,6 +31,7 @@ namespace ConsoleCards.Presentation.Feedback
         private float startedAt;
         private bool scaleCaptured;
         private float lifetime; // > 0: a timed show (the table ping) that fades out at the end
+        private float size = 1f; // POL-3: a marker sized to the piece (1 = as authored, card sized)
 
         private const float TimedFadeSeconds = 0.5f;
 
@@ -74,6 +75,13 @@ namespace ConsoleCards.Presentation.Feedback
         /// <summary>TOOLS-1: shown turned to a yaw (degrees about up), as for the outline around a selected card.</summary>
         public void ShowAt(Vector3 position, float yawDegrees, Color tint)
         {
+            ShowAt(position, yawDegrees, tint, 1f);
+        }
+
+        /// <summary>POL-3: shown turned to a yaw and scaled to a piece (1 = card sized, as authored).</summary>
+        public void ShowAt(Vector3 position, float yawDegrees, Color tint, float sizeMultiplier)
+        {
+            size = Mathf.Max(0.05f, sizeMultiplier);
             transform.rotation = Quaternion.Euler(0f, yawDegrees, 0f);
             Show(position, tint);
         }
@@ -124,7 +132,7 @@ namespace ConsoleCards.Presentation.Feedback
                 alpha *= Mathf.Clamp01((lifetime - t) / TimedFadeSeconds);
             }
 
-            transform.localScale = baseScale * scale;
+            transform.localScale = baseScale * (scale * size);
             Vector3 position = basePosition;
             if (bobHeight != 0f) position += Vector3.up * (bobHeight * (0.5f + (0.5f * Mathf.Sin(t * bobSpeed))));
             transform.position = position;

@@ -516,10 +516,9 @@ namespace ConsoleCards.Presentation.Composition
             EnsureCardSounds();
 
             AudioClip clip = stacked ? cardStackClip : cardTapClip;
-            if (clip == null || cardSoundSource == null) return;
+            if (clip == null) return;
             lastCardSoundAt = Time.unscaledTime;
-            cardSoundSource.pitch = UnityEngine.Random.Range(0.94f, 1.06f); // no two taps quite alike
-            cardSoundSource.PlayOneShot(clip, CardSoundVolume);
+            PlayTableSound(clip, CardSoundVolume, 1f); // POL-8: its own voice and a small random pitch
         }
     }
 }

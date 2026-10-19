@@ -48,6 +48,7 @@ namespace ConsoleCards.Editor.UI
         public const string GameSavePanelPath = Folder + "GameSavePanel.prefab";
         public const string TablePanelPath = Folder + "TablePanel.prefab";
         public const string ToolBarPath = Folder + "ToolBar.prefab";
+        public const string TableOverlayPath = Folder + "TableOverlay.prefab";
         private const string ToolBarIconPath = "Assets/ConsoleCards/Content/UI/ToolBar/Icons/";
         private const string FeedbackAudioPath = "Assets/ConsoleCards/Content/Audio/Feedback/";
         private const string SessionIconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
@@ -137,6 +138,7 @@ namespace ConsoleCards.Editor.UI
             Save<CardEditorPanelView>(CardEditorPanelPath, "CardEditorPanel", BuildCardEditorPanel, stretch: true);
             Save<TablePanelView>(TablePanelPath, "TablePanel", BuildTablePanel, stretch: true);
             Save<ToolBarView>(ToolBarPath, "ToolBar", BuildToolBar, stretch: true);
+            Save<TableOverlayView>(TableOverlayPath, "TableOverlay", BuildTableOverlay, stretch: true);
             AddMissingRuleControls();
             AddMissingShopLabels();
             AddMissingDeckPicker();
@@ -226,6 +228,9 @@ namespace ConsoleCards.Editor.UI
                 UiRetention.CachedSingleInstance);
             AssignCatalogEntry(UiPrefabIds.ToolBar,
                 AssetDatabase.LoadAssetAtPath<ToolBarView>(ToolBarPath), UiLayer.Hud,
+                UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(UiPrefabIds.TableOverlay,
+                AssetDatabase.LoadAssetAtPath<TableOverlayView>(TableOverlayPath), UiLayer.Hud,
                 UiRetention.CachedSingleInstance);
             AssetDatabase.SaveAssets();
             Debug.Log("[Gameplay UI] Created any missing Final UI gameplay prefabs and pointed the UI prefab catalog at them.");
@@ -1839,6 +1844,89 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("groupButton").objectReferenceValue = group;
             so.FindProperty("clearButton").objectReferenceValue = clear;
             so.FindProperty("selectionBox").objectReferenceValue = box;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // ---------- table overlay (POL-3 / POL-5): tooltip, card peek, floating labels; never takes a click ----------
+
+        private const int OverlayFloatCount = 6;
+
+        private static void BuildTableOverlay(RectTransform root, TableOverlayView view)
+        {
+            // Tooltip: a small cream card by the pointer (the code places it).
+            RectTransform tooltip = Rect("Tooltip", root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 1f), Vector2.zero, new Vector2(260f, 60f));
+            Backdrop(tooltip, ShadowOffset - 3f);
+            Column(tooltip.gameObject, 14, 14, 8, 10, 2f);
+            Fit(tooltip.gameObject, true, true);
+            Text tooltipTitle = FitLabel(Child("Title", tooltip), boldFont, 17, Ink, "Card name");
+            Text tooltipDetail = FitLabel(Child("Detail", tooltip), bodyFont, 15, Muted, "Owner · 12 cards");
+            tooltip.gameObject.SetActive(false);
+
+            // Peek: the card large, right of centre.
+            RectTransform peek = Rect("Peek", root, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                new Vector2(-(Margin + 40f), 0f), new Vector2(400f, 560f));
+            Backdrop(peek, ShadowOffset);
+            RectTransform surfaceRect = Rect("Surface", peek, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                Vector2.zero, new Vector2(-24f, -24f));
+            Image surface = Img(surfaceRect, "Solid", Cream);
+            RectTransform artRect = Rect("Artwork", surfaceRect, new Vector2(0f, 1f), new Vector2(1f, 1f),
+                new Vector2(0.5f, 1f), new Vector2(0f, -70f), new Vector2(-40f, 260f));
+            Image artwork = Img(artRect, null, Color.white);
+            artwork.preserveAspect = true;
+            Text peekTitle = Label(Rect("Title", surfaceRect, new Vector2(0f, 1f), new Vector2(1f, 1f),
+                new Vector2(0.5f, 1f), new Vector2(0f, -16f), new Vector2(-32f, 48f)), titleFont, 22, Ink,
+                TextAnchor.MiddleCenter, "CARD");
+            Text peekBody = Label(Rect("Body", surfaceRect, new Vector2(0f, 0f), new Vector2(1f, 0f),
+                new Vector2(0.5f, 0f), new Vector2(0f, 20f), new Vector2(-40f, 180f)), bodyFont, 18, Ink,
+                TextAnchor.UpperLeft, "What the card says.");
+            peek.gameObject.SetActive(false);
+
+            // Floating labels (a die's result): ink chips with a big number.
+            RectTransform[] labels = new RectTransform[OverlayFloatCount];
+            Text[] texts = new Text[OverlayFloatCount];
+            CanvasGroup[] groups = new CanvasGroup[OverlayFloatCount];
+            for (int i = 0; i < OverlayFloatCount; i++)
+            {
+                RectTransform chip = Rect("Float" + (i + 1), root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0f), Vector2.zero, new Vector2(64f, 52f));
+                Img(chip, "ButtonOutlined", Ink);
+                Row(chip.gameObject, 14, 14, 4, 4, 0f, TextAnchor.MiddleCenter);
+                Fit(chip.gameObject, true, false);
+                texts[i] = FitLabel(Child("Text", chip), titleFont, 26, Mustard, "6");
+                texts[i].alignment = TextAnchor.MiddleCenter;
+                groups[i] = chip.gameObject.AddComponent<CanvasGroup>();
+                groups[i].blocksRaycasts = false;
+                groups[i].interactable = false;
+                labels[i] = chip;
+                chip.gameObject.SetActive(false);
+            }
+
+            // Nothing here takes a click.
+            foreach (Graphic graphic in root.GetComponentsInChildren<Graphic>(true)) graphic.raycastTarget = false;
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("tooltipPanel").objectReferenceValue = tooltip;
+            so.FindProperty("tooltipTitle").objectReferenceValue = tooltipTitle;
+            so.FindProperty("tooltipDetail").objectReferenceValue = tooltipDetail;
+            so.FindProperty("peekPanel").objectReferenceValue = peek;
+            so.FindProperty("peekSurface").objectReferenceValue = surface;
+            so.FindProperty("peekArtwork").objectReferenceValue = artwork;
+            so.FindProperty("peekTitle").objectReferenceValue = peekTitle;
+            so.FindProperty("peekBody").objectReferenceValue = peekBody;
+            SerializedProperty labelArray = so.FindProperty("floatLabels");
+            SerializedProperty textArray = so.FindProperty("floatTexts");
+            SerializedProperty groupArray = so.FindProperty("floatGroups");
+            labelArray.arraySize = OverlayFloatCount;
+            textArray.arraySize = OverlayFloatCount;
+            groupArray.arraySize = OverlayFloatCount;
+            for (int i = 0; i < OverlayFloatCount; i++)
+            {
+                labelArray.GetArrayElementAtIndex(i).objectReferenceValue = labels[i];
+                textArray.GetArrayElementAtIndex(i).objectReferenceValue = texts[i];
+                groupArray.GetArrayElementAtIndex(i).objectReferenceValue = groups[i];
+            }
+
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

@@ -444,7 +444,12 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!boardSnapCheckPending || !IsInitialized || matchState == null) return;
             boardSnapCheckPending = false;
-            if (boardViews.Count == 0 && templateBoardMat == null) return;
+            if (boardViews.Count == 0 && templateBoardMat == null)
+            {
+                SnapRestingPieces(); // POL-2: pieces still settle on the cards they stand on
+                return;
+            }
+
             for (int i = 0; i < Registry.cardViews.Count; i++)
             {
                 CardView card = Registry.cardViews[i];
@@ -475,6 +480,119 @@ namespace ConsoleCards.Presentation.Composition
 
                 if (SetCardOnSpace(card, board, centre)) cardsSetOnBoardSpaces[state.Id] = centre;
             }
+
+            SnapRestingPieces(); // POL-2: pawns and tokens settle on the centre of a board space or a card
+        }
+
+        // ---- POL-2: piece snap ----
+
+        private readonly RaycastHit[] pieceSnapHits = new RaycastHit[8];
+
+        private void SnapRestingPieces()
+        {
+            if (!Feel.PieceSnap) return;
+            for (int i = 0; i < Registry.pawnViews.Count; i++) TrySnapPiece(Registry.pawnViews[i]);
+            for (int i = 0; i < Registry.tokenViews.Count; i++) TrySnapPiece(Registry.tokenViews[i]);
+        }
+
+        // A pawn or token at rest on a board space (or on a loose card) is set on its centre, once.
+        private void TrySnapPiece(TabletopObjectView piece)
+        {
+            if (piece == null || !piece.IsBound || piece.BoundState == null || piece.PhysicalObject == null) return;
+            TabletopObjectState state = piece.BoundState;
+            if (!state.ContainerId.IsEmpty || state.IsUserLocked) return;
+            PhysicalLooseObject body = piece.PhysicalObject;
+            if (body.IsHeld || body.IsGliding || body.Body == null
+                || state.PhysicalState == null || state.PhysicalState.Mode != PhysicalObjectMode.Sleeping)
+            {
+                return;
+            }
+
+            Vector3 position = body.Body.position;
+            if (!TryFindPieceSpot(piece, position, out Vector3 centre)) return;
+            float dx = centre.x - position.x;
+            float dz = centre.z - position.z;
+            if ((dx * dx) + (dz * dz) <= BoardSnapTolerance * BoardSnapTolerance) return;
+            if (cardsSetOnBoardSpaces.TryGetValue(state.Id, out Vector3 last) && (last - centre).sqrMagnitude < 0.0001f) return;
+            if (IsSpotTaken(piece, centre)) return; // someone already stands there: leave it where it is
+
+            PhysicalObjectState current = state.PhysicalState;
+            Quaternion fromRotation = body.Body.rotation;
+            PhysicalObjectState placed = new PhysicalObjectState(
+                new PhysicalVector3(centre.x, current.Position.Y, centre.z),
+                current.Rotation,
+                new PhysicalVector3(0f, 0f, 0f),
+                new PhysicalVector3(0f, 0f, 0f),
+                PhysicalObjectMode.Sleeping,
+                current.ControllingPlayerId);
+            CommandResult result = TableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(
+                new CommitPhysicalObjectCommand(
+                    CreateCommandContext(),
+                    state.Id,
+                    placed,
+                    state.PhysicalRevision,
+                    null,
+                    AuthoritativeActionRecordMode.None));
+            if (!result.Succeeded) return;
+            cardsSetOnBoardSpaces[state.Id] = centre;
+            piece.ApplyAcceptedState();
+            body.GlideFrom(position, fromRotation, Feel.SnapGlideSeconds, Feel.SnapOvershoot);
+        }
+
+        // The board space under the piece, or else the centre of a loose card it stands on.
+        private bool TryFindPieceSpot(TabletopObjectView piece, Vector3 position, out Vector3 centre)
+        {
+            if (TryFindBoardSpace(position, out _, out centre)) return true;
+            int count = Physics.RaycastNonAlloc(
+                new Ray(position + (Vector3.up * 0.05f), Vector3.down),
+                pieceSnapHits,
+                2f,
+                ~0,
+                QueryTriggerInteraction.Ignore);
+            float best = float.MaxValue;
+            CardView under = null;
+            for (int i = 0; i < count; i++)
+            {
+                Rigidbody hitBody = pieceSnapHits[i].rigidbody;
+                if (hitBody == null || hitBody == piece.PhysicalObject.Body) continue;
+                if (!hitBody.TryGetComponent(out CardView card) || !card.IsBound || card.BoundState == null) continue;
+                if (!card.BoundState.ContainerId.IsEmpty || pieceSnapHits[i].distance >= best) continue;
+                best = pieceSnapHits[i].distance;
+                under = card;
+            }
+
+            if (under == null)
+            {
+                centre = Vector3.zero;
+                return false;
+            }
+
+            centre = RestPosition(under);
+            return true;
+        }
+
+        private bool IsSpotTaken(TabletopObjectView piece, Vector3 centre)
+        {
+            return IsSpotTakenIn(Registry.pawnViews, piece, centre) || IsSpotTakenIn(Registry.tokenViews, piece, centre);
+        }
+
+        private static bool IsSpotTakenIn<TView>(List<TView> views, TabletopObjectView piece, Vector3 centre)
+            where TView : TabletopObjectView
+        {
+            for (int i = 0; i < views.Count; i++)
+            {
+                TView other = views[i];
+                if (other == null || ReferenceEquals(other, piece) || !other.IsBound || other.BoundState == null) continue;
+                if (!other.BoundState.ContainerId.IsEmpty) continue;
+                Vector3 p = other.PhysicalObject != null && other.PhysicalObject.Body != null
+                    ? other.PhysicalObject.Body.position
+                    : other.transform.position;
+                float dx = p.x - centre.x;
+                float dz = p.z - centre.z;
+                if ((dx * dx) + (dz * dz) <= BoardSnapTolerance * BoardSnapTolerance * 4f) return true;
+            }
+
+            return false;
         }
 
         private bool TryFindBoardSpace(Vector3 position, out GameBoardMatView board, out Vector3 centre)
@@ -528,6 +646,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             Quaternion current = card.PhysicalObject.Body != null ? card.PhysicalObject.Body.rotation : card.transform.rotation;
+            Vector3 fromPosition = card.PhysicalObject.Body != null ? card.PhysicalObject.Body.position : card.transform.position;
             Vector3 forward = Vector3.ProjectOnPlane(current * Vector3.forward, Vector3.up);
             Vector3 boardForward = Vector3.ProjectOnPlane(board.transform.forward, Vector3.up);
             float angle = forward.sqrMagnitude > 0.0001f ? Vector3.SignedAngle(boardForward, forward, Vector3.up) : 0f;
@@ -542,7 +661,10 @@ namespace ConsoleCards.Presentation.Composition
                     state.PhysicalRevision,
                     null,
                     AuthoritativeActionRecordMode.None));
-            return result.Succeeded && ApplyAcceptedCard(card);
+            if (!result.Succeeded || !ApplyAcceptedCard(card)) return false;
+            // POL-2: it glides onto the space with a small spring instead of jumping there.
+            card.PhysicalObject.GlideFrom(fromPosition, current, Feel.SnapGlideSeconds, Feel.SnapOvershoot);
+            return true;
         }
 
         private static bool ApplyAcceptedCard(CardView card)

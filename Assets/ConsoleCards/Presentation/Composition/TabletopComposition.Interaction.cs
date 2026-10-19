@@ -216,7 +216,7 @@ namespace ConsoleCards.Presentation.Composition
                 Registry.layoutViews,
                 Registry.cardViews,
                 presentationTransitions,
-                settleDuration,
+                Mathf.Max(settleDuration, Feel.DropSettleSeconds), // POL-4: drops slide into a pile, not snap
                 returnDuration,
                 handReflowDuration,
                 HandleConsoleCardInteractionAccepted);

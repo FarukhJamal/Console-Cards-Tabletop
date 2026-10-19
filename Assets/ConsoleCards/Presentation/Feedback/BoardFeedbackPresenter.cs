@@ -16,6 +16,7 @@ namespace ConsoleCards.Presentation.Feedback
         private const int ReachPool = 16;
         private const int PingPool = 6;
         private const int SelectionPool = 40;
+        private const int PuffPool = 4;
 
         private readonly BoardFeedbackSet set;
         private readonly BoardFeedbackMarker ring;
@@ -30,6 +31,10 @@ namespace ConsoleCards.Presentation.Feedback
         private readonly BoardFeedbackMarker[] pingRipples;
         private readonly BoardFeedbackMarker[] selection;
         private readonly BoardFeedbackArrow aimArrow;
+        private readonly BoardFeedbackMarker hover;    // POL-3: the outline on the piece under the pointer
+        private readonly BoardFeedbackMarker landing;  // POL-1/2: where a carried piece will land
+        private readonly BoardFeedbackMarker[] puffs;  // POL-2: a small puff where a piece lands hard
+        private int nextPuff;
         private int nextPing;
         private readonly List<GameObject> owned = new List<GameObject>();
         private int nextFlash;
@@ -64,6 +69,52 @@ namespace ConsoleCards.Presentation.Feedback
             // from the game's markers so HideAll never hides them.
             pingRipples = MakePool(set.CollapseBurst, parent, PingPool);
             selection = MakePool(set.MoveTarget, parent, SelectionPool);
+            // POL-1 to POL-3: the hover outline, the landing ghost and the landing puffs, also apart from HideAll.
+            hover = Make(set.MoveTarget, parent);
+            landing = Make(set.MoveTarget, parent);
+            puffs = MakePool(set.CollapseBurst, parent, PuffPool);
+        }
+
+        /// <summary>POL-7: the selection outlines, each sized to its piece (1 = card sized).</summary>
+        public void ShowSelection(List<Vector3> positions, List<float> yaws, List<float> sizes, Color colour)
+        {
+            int shown = Mathf.Min(selection.Length, Mathf.Min(positions.Count, Mathf.Min(yaws.Count, sizes.Count)));
+            for (int i = 0; i < shown; i++)
+            {
+                selection[i].ShowAt(positions[i] + (Vector3.up * set.TileMarkerLift), yaws[i], colour, sizes[i]);
+            }
+
+            HideRange(selection, shown);
+        }
+
+        /// <summary>POL-3: an outline in the player's colour on the piece under the pointer.</summary>
+        public void ShowHover(Vector3 position, float yawDegrees, Color colour, float size)
+        {
+            hover?.ShowAt(position + (Vector3.up * set.TileMarkerLift), yawDegrees, colour, size);
+        }
+
+        public void HideHover()
+        {
+            hover?.Hide();
+        }
+
+        /// <summary>POL-1/2: the ghost straight below a carried piece (or on the board space it will snap to).</summary>
+        public void ShowLanding(Vector3 position, float yawDegrees, Color colour, float size)
+        {
+            landing?.ShowAt(position + (Vector3.up * set.TileMarkerLift), yawDegrees, colour, size);
+        }
+
+        public void HideLanding()
+        {
+            landing?.Hide();
+        }
+
+        /// <summary>POL-2: a small puff where a piece lands hard.</summary>
+        public void Puff(Vector3 position, Color colour)
+        {
+            if (puffs.Length == 0) return;
+            puffs[nextPuff].ShowAt(position + (Vector3.up * set.TileMarkerLift), 0f, colour, 0.45f);
+            nextPuff = (nextPuff + 1) % puffs.Length;
         }
 
         /// <summary>
