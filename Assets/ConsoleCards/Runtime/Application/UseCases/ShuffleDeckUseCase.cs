@@ -74,7 +74,11 @@ namespace ConsoleCards.Application.UseCases
             }
 
             List<TabletopObjectId> shuffledObjectIds = new List<TabletopObjectId>(deck.ObjectIds);
-            if (command.Seed.HasValue)
+            if (command.CutOnly)
+            {
+                CutOnce(shuffledObjectIds, command.Seed, randomValueSource);
+            }
+            else if (command.Seed.HasValue)
             {
                 ShuffleDeterministically(shuffledObjectIds, command.Seed.Value);
             }
@@ -88,6 +92,25 @@ namespace ConsoleCards.Application.UseCases
                 command.Context.Id, command.Context.RequestedByPlayerId, AuthoritativeActionKind.ShuffleDeck);
 
             return ShuffleDeckResult.Accepted(revision);
+        }
+
+        // SHUF-1: one cut. The order is bottom-to-top; the top part (from the cut point up) goes under the rest.
+        private static void CutOnce(List<TabletopObjectId> objectIds, int? seed, IRandomValueSource randomValueSource)
+        {
+            int count = objectIds.Count;
+            if (count < 2)
+            {
+                return;
+            }
+
+            int cutPoint = seed.HasValue
+                ? 1 + new StableShuffleRandom(seed.Value).NextInclusiveUpperExclusive(count - 1)
+                : randomValueSource.NextInt(1, count);
+            List<TabletopObjectId> cut = new List<TabletopObjectId>(count);
+            for (int index = cutPoint; index < count; index++) cut.Add(objectIds[index]);
+            for (int index = 0; index < cutPoint; index++) cut.Add(objectIds[index]);
+            objectIds.Clear();
+            objectIds.AddRange(cut);
         }
 
         private static void ShuffleDeterministically(List<TabletopObjectId> objectIds, int seed)

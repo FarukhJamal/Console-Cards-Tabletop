@@ -256,6 +256,56 @@ namespace ConsoleCards.Presentation.Interaction
             orderedDestinations.Clear();
         }
 
+        /// <summary>
+        /// SHUF-1: one card's part in a shuffle or flourish. The card's accepted place is already applied (it is the
+        /// destination); the card starts at <paramref name="start"/>, waits <paramref name="leaveDelay"/>, moves to
+        /// <paramref name="waypoint"/> along an arc of <paramref name="moveArc"/>, stays there (circling
+        /// <paramref name="swirlCentre"/> at <paramref name="swirlDegreesPerSecond"/> while it waits, for a wash) and,
+        /// <paramref name="dropAt"/> seconds after the start, goes to its place along an arc of
+        /// <paramref name="dropArc"/>. Times are clamped so the card never leaves before it arrives.
+        /// </summary>
+        public void AnimateThrough(
+            Transform target,
+            TabletopTransformSnapshot start,
+            Vector3 waypointPosition,
+            Quaternion waypointRotation,
+            float leaveDelay,
+            float moveDuration,
+            float moveArc,
+            float dropAt,
+            float dropDuration,
+            float dropArc,
+            Vector3 swirlCentre = default,
+            float swirlDegreesPerSecond = 0f)
+        {
+            if (target == null || PhysicalOwns(target))
+            {
+                return;
+            }
+
+            RememberRestingScale(target);
+            TabletopTransformSnapshot destination = Capture(target);
+            destination = new TabletopTransformSnapshot(destination.Position, destination.Rotation, restingScales[target]);
+            leaveDelay = Mathf.Max(0f, leaveDelay);
+            moveDuration = Mathf.Max(moveDuration, MinimumDuration);
+            float wait = Mathf.Max(0f, dropAt - leaveDelay - moveDuration);
+            motions.Remove(target);
+            Apply(target, start);
+            Motion motion = Motion.Riffle(
+                start,
+                new TabletopTransformSnapshot(waypointPosition, waypointRotation, restingScales[target]),
+                destination,
+                moveDuration,
+                wait,
+                Mathf.Max(dropDuration, MinimumDuration),
+                Mathf.Max(0f, dropArc));
+            motion.LeaveDelay = leaveDelay;
+            motion.MoveArc = Mathf.Max(0f, moveArc);
+            motion.SwirlCentre = swirlCentre;
+            motion.SwirlSpeed = swirlDegreesPerSecond;
+            motions[target] = motion;
+        }
+
         private void FillOrderedStarts(IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts)
         {
             orderedStarts.Clear();
@@ -465,15 +515,24 @@ namespace ConsoleCards.Presentation.Interaction
             }
         }
 
-        // Split (all cards together), wait for the card's turn, drop onto its place. True when it has landed.
+        // Wait to leave, go to the waypoint (all cards together in a riffle), wait there for the card's turn (circling for
+        // a wash), drop onto its place. True when it has landed.
         private static bool TickRiffle(Transform target, Motion motion)
         {
-            float elapsed = motion.Elapsed;
+            float elapsed = motion.Elapsed - motion.LeaveDelay;
+            if (elapsed < 0f)
+            {
+                target.SetPositionAndRotation(motion.Start.Position, motion.Start.Rotation);
+                return false;
+            }
+
             if (elapsed < motion.Duration)
             {
-                float t = Smooth(elapsed / motion.Duration);
+                float m = elapsed / motion.Duration;
+                float t = Smooth(m);
                 target.SetPositionAndRotation(
-                    Vector3.Lerp(motion.Start.Position, motion.Waypoint.Position, t),
+                    Vector3.Lerp(motion.Start.Position, motion.Waypoint.Position, t)
+                        + (Vector3.up * (Mathf.Sin(m * Mathf.PI) * motion.MoveArc)),
                     Quaternion.Slerp(motion.Start.Rotation, motion.Waypoint.Rotation, t));
                 return false;
             }
@@ -481,15 +540,17 @@ namespace ConsoleCards.Presentation.Interaction
             float dropStart = motion.Duration + motion.Delay;
             if (elapsed < dropStart)
             {
-                target.SetPositionAndRotation(motion.Waypoint.Position, motion.Waypoint.Rotation);
+                WaypointAt(motion, elapsed - motion.Duration, out Vector3 holdPosition, out Quaternion holdRotation);
+                target.SetPositionAndRotation(holdPosition, holdRotation);
                 return false;
             }
 
+            WaypointAt(motion, motion.Delay, out Vector3 fromPosition, out Quaternion fromRotation);
             float n = Mathf.Clamp01((elapsed - dropStart) / motion.DropDuration);
             float e = Smooth(n);
-            Vector3 position = Vector3.Lerp(motion.Waypoint.Position, motion.Destination.Position, e)
+            Vector3 position = Vector3.Lerp(fromPosition, motion.Destination.Position, e)
                 + (Vector3.up * (Mathf.Sin(n * Mathf.PI) * motion.ArcHeight));
-            target.SetPositionAndRotation(position, Quaternion.Slerp(motion.Waypoint.Rotation, motion.Destination.Rotation, e));
+            target.SetPositionAndRotation(position, Quaternion.Slerp(fromRotation, motion.Destination.Rotation, e));
             if (n < 1f)
             {
                 return false;
@@ -497,6 +558,21 @@ namespace ConsoleCards.Presentation.Interaction
 
             Apply(target, motion.Destination);
             return true;
+        }
+
+        // The waypoint after waiting there for holdTime: turned about the swirl centre when the card swirls (a wash).
+        private static void WaypointAt(Motion motion, float holdTime, out Vector3 position, out Quaternion rotation)
+        {
+            position = motion.Waypoint.Position;
+            rotation = motion.Waypoint.Rotation;
+            if (motion.SwirlSpeed == 0f || holdTime <= 0f)
+            {
+                return;
+            }
+
+            Quaternion turn = Quaternion.AngleAxis(motion.SwirlSpeed * holdTime, Vector3.up);
+            position = motion.SwirlCentre + (turn * (position - motion.SwirlCentre));
+            rotation = turn * rotation;
         }
 
         private static float Smooth(float t)
@@ -600,6 +676,11 @@ namespace ConsoleCards.Presentation.Interaction
             public bool IsRiffle;
             public TabletopTransformSnapshot Waypoint;
             public float DropDuration;
+            // SHUF-1: wait before leaving for the waypoint, arc on the way there, and circling while waiting there.
+            public float LeaveDelay;
+            public float MoveArc;
+            public Vector3 SwirlCentre;
+            public float SwirlSpeed;
 
             public static Motion Follow(TabletopTransformSnapshot destination, float smoothingDuration)
             {

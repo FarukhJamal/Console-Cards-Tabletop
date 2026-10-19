@@ -460,6 +460,15 @@ namespace ConsoleCards.Presentation.Composition
                 case ContextMenuMode.DiscardPile:
                     ShowDiscardPileContextMenu();
                     break;
+                case ContextMenuMode.ShuffleStyles:
+                    host.ShowShuffleStylesMenu();
+                    break;
+                case ContextMenuMode.ShuffleDefault:
+                    host.ShowShuffleDefaultMenu();
+                    break;
+                case ContextMenuMode.Flourishes:
+                    host.ShowFlourishMenu();
+                    break;
                 default:
                     CloseContextMenu();
                     return;
@@ -499,17 +508,7 @@ namespace ConsoleCards.Presentation.Composition
                     }));
             }
 
-            actions.Add(new PopupActionOption(
-                "Shuffle",
-                true,
-                () =>
-                {
-                    ShuffleDeckResult result = host.ShuffleDeck(targetDeckId);
-                    if (result.Succeeded)
-                    {
-                        CloseContextMenu();
-                    }
-                }));
+            host.AddShuffleActions(actions, targetDeckId); // SHUF-1: your style, Shuffle as..., Flourish...
             host.AddSplitIntoPilesAction(actions, targetDeckId);
             host.AddSpreadAction(actions, targetDeckId); // POL-4
             host.AddPileDuplicateAction(actions, targetDeckId);
@@ -889,17 +888,7 @@ namespace ConsoleCards.Presentation.Composition
 
             if (stack.Count >= 2)
             {
-                actions.Add(new PopupActionOption(
-                    "Shuffle",
-                    true,
-                    () =>
-                    {
-                        ShuffleDeckResult result = host.ShuffleDeck(sourceStackId);
-                        if (result.Succeeded)
-                        {
-                            CloseContextMenu();
-                        }
-                    }));
+                host.AddShuffleActions(actions, sourceStackId); // SHUF-1
             }
 
             if (stack.Count >= 2)
@@ -1304,6 +1293,10 @@ namespace ConsoleCards.Presentation.Composition
                                 && host.Registry.TryGetCardView(host.contextMenuCardId, out _)));
                 case ContextMenuMode.SplitPile:
                     return host.CanSplitIntoPiles(host.contextMenuContainerId);
+                case ContextMenuMode.ShuffleStyles:
+                case ContextMenuMode.ShuffleDefault:
+                case ContextMenuMode.Flourishes:
+                    return host.CanShuffleInStyles(host.contextMenuContainerId);
                 case ContextMenuMode.DiscardPile:
                     return !host.contextMenuContainerId.IsEmpty
                         && host.matchState.Containers.TryGetValue(host.contextMenuContainerId, out ContainerState discardPile)

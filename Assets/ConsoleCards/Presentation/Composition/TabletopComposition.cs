@@ -1487,6 +1487,9 @@ namespace ConsoleCards.Presentation.Composition
             Console,
             DiscardPile,
             SplitPile,
+            ShuffleStyles, // SHUF-1: Shuffle as...
+            ShuffleDefault, // SHUF-1: Set my default...
+            Flourishes, // SHUF-1: Flourish...
         }
 
         internal enum StackViewOwnership

@@ -48,8 +48,13 @@ namespace ConsoleCards.Presentation.Composition
     /// <summary>Decks, stacks and hands: shuffle, draw, split, merge, reorder and lay out the cards in a container. (R1a: moved here unchanged from TabletopComposition.cs.)</summary>
     public sealed partial class TabletopComposition
     {
-        // Shuffles a Deck or a Stack (a stack works like a deck, owner 2026-10-18).
-        public ShuffleDeckResult ShuffleDeck(ContainerId targetDeckContainerId)
+        // Shuffles a Deck or a Stack (a stack works like a deck, owner 2026-10-18) with the quick riffle.
+        public ShuffleDeckResult ShuffleDeck(ContainerId targetDeckContainerId) =>
+            ShuffleDeck(targetDeckContainerId, ShuffleStyle.Riffle);
+
+        // SHUF-1: shuffles in a style (Cut cuts once instead). The order always comes from the table's random source;
+        // the style only decides the animation and the sound.
+        public ShuffleDeckResult ShuffleDeck(ContainerId targetDeckContainerId, ShuffleStyle style)
         {
             EnsureInitialized();
             bool isDeck = Registry.TryGetDeckPresentation(
@@ -68,14 +73,29 @@ namespace ConsoleCards.Presentation.Composition
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(targetDeckContainerId);
             ShuffleDeckResult result = TableAuthority.Submit<ShuffleDeckCommand, ShuffleDeckResult>(
-                new ShuffleDeckCommand(CreateCommandContext(), targetDeckContainerId));
+                style == ShuffleStyle.Cut
+                    ? ShuffleDeckCommand.Cut(CreateCommandContext(), targetDeckContainerId)
+                    : new ShuffleDeckCommand(CreateCommandContext(), targetDeckContainerId));
             if (result.Succeeded)
             {
                 // R2: the deck or stack was laid out again by the table's view sync when the shuffle was accepted.
-                // SMOOTH-1: a quick riffle from the old order into the new one.
-                AnimateRiffle(transitionStarts, isDeck ? targetDeckVisual.transform : targetStack.Root.transform);
-                PlayShuffleSound();
-                ShowMessage(isDeck ? "Deck shuffled." : "Stack shuffled.");
+                // SMOOTH-1 / SHUF-1: the cards move from the old order into the new one in the chosen style.
+                Transform pile = isDeck ? targetDeckVisual.transform : targetStack.Root.transform;
+                if (style == ShuffleStyle.Riffle)
+                {
+                    AnimateRiffle(transitionStarts, pile);
+                    PlayShuffleSound();
+                }
+                else
+                {
+                    AnimateShuffleStyle(style, transitionStarts, pile);
+                    PlayShuffleStyleSound(style);
+                }
+
+                string what = isDeck ? "Deck" : "Stack";
+                ShowMessage(style == ShuffleStyle.Cut
+                    ? $"{what} cut."
+                    : style == ShuffleStyle.Riffle ? $"{what} shuffled." : $"{what} shuffled ({ShuffleStyleName(style)}).");
             }
             else
             {

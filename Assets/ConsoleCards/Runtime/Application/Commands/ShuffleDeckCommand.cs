@@ -23,7 +23,8 @@ namespace ConsoleCards.Application.Commands
         private ShuffleDeckCommand(
             CommandContext context,
             ContainerId deckContainerId,
-            int? seed)
+            int? seed,
+            bool cutOnly = false)
         {
             if (deckContainerId.IsEmpty)
             {
@@ -33,7 +34,15 @@ namespace ConsoleCards.Application.Commands
             Context = context;
             DeckContainerId = deckContainerId;
             Seed = seed;
+            CutOnly = cutOnly;
         }
+
+        /// <summary>
+        /// SHUF-1: one cut instead of a shuffle. The cut point (at least one card each side) comes from the same
+        /// authoritative random source; the top part goes under the rest.
+        /// </summary>
+        public static ShuffleDeckCommand Cut(CommandContext context, ContainerId deckContainerId) =>
+            new ShuffleDeckCommand(context, deckContainerId, null, true);
 
         public CommandContext Context { get; }
 
@@ -44,5 +53,8 @@ namespace ConsoleCards.Application.Commands
         /// shuffles omit this value and obtain decisions from the injected authoritative random source.
         /// </summary>
         public int? Seed { get; }
+
+        /// <summary>True for a cut (<see cref="Cut"/>) instead of a full shuffle.</summary>
+        public bool CutOnly { get; }
     }
 }

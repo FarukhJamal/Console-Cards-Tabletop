@@ -72,6 +72,9 @@ namespace ConsoleCards.Presentation.Settings
         [SerializeField, Range(0f, 1f)] private float shuffleLift = 0.12f;
         [Tooltip("How far the halves tip toward each other, in degrees.")]
         [SerializeField, Range(0f, 30f)] private float shuffleTilt = 9f;
+        [Tooltip("SHUF-1: speed of the shuffle styles (Overhand, Hindu, Pile, Wash, Cut) and the flourishes; 2 is twice as "
+            + "fast. The quick riffle uses the numbers above.")]
+        [SerializeField, Range(0.25f, 3f)] private float shuffleStyleSpeed = 1f;
 
         [Header("Cards moving between piles (SMOOTH-1: split, Split into, merge, draw)")]
         [Tooltip("Seconds a card takes to glide to its new pile.")]
@@ -188,6 +191,7 @@ namespace ConsoleCards.Presentation.Settings
         public float ShuffleSpread => shuffleSpread;
         public float ShuffleLift => shuffleLift;
         public float ShuffleTilt => shuffleTilt;
+        public float ShuffleStyleSpeed => shuffleStyleSpeed;
         public float PileMoveSeconds => pileMoveSeconds;
         public float PileMoveStagger => pileMoveStagger;
         public float PileMoveMaxStagger => pileMoveMaxStagger;

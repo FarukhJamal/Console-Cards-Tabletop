@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.31 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.32 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1740,3 +1740,28 @@ so the build uses stand-in pictures and keeps both frames and symbols replaceabl
 - **Builders to run:** Console Cards > Cards > Create Missing Card Frame Style; then delete
   `Prefabs/Final/UI/CardEditorPanel.prefab` and run Console Cards > UI > Create Missing Gameplay UI Prefabs.
 - Not compiled here; the owner checks in Unity.
+
+**SHUF-1 record (owner: "approved next" after FRAME-1, 2026-10-19; written, to be checked).**
+- **Deck and stack menus:** **Shuffle** shuffles in your style (the label names it when it is not Riffle);
+  **Shuffle as...** lists Riffle, Overhand, Hindu, Pile, Wash and Cut (your default marked) plus **Set my default...**;
+  **Flourish...** lists Fan, Spring, Ribbon spread, Cascade and Swivel cut. Your default is kept for your profile.
+- **Fair order:** every style uses the same shuffle command and the table's one random source; the animation never
+  decides the order. **Cut** is a real cut: the cut point comes from the same random source (at least one card on
+  each side) and the top part goes under. Each is one Undo step.
+- **The styles:** Riffle (the quick riffle, also R); **Overhand** (the pile lifts beside its place, tipped on its
+  edge, and drops back in 6 packets); **Hindu** (held in front, tipped toward you, 8 smaller packets); **Pile** (dealt
+  from the top into 2–4 piles in front, then the piles are stacked back one by one); **Wash** (the cards spread out
+  around the pile, swirl, and are gathered); **Cut** (the top part sets down beside, the rest goes on top of it).
+- **Flourishes** (the order never changes): **Fan** (a thumb fan about the pile's near end), **Spring** (cards spring
+  one by one to the other hand beside the pile and back), **Ribbon spread** (an even ribbon across the table, swept
+  back), **Cascade** (the pile rises, tipped, and the cards fall back one after another), **Swivel cut** (the top
+  half swings out about a corner and back).
+- **Sounds:** new WAVs made for the game in `Content/Resources/TableSounds`: ShuffleOverhand, ShuffleHindu,
+  ShufflePile, ShuffleWash, ShuffleCut, FlourishFan, FlourishSpring, FlourishRibbonSpread, FlourishCascade,
+  FlourishSwivelCut; replace them with the same names.
+- **Feel Settings › Shuffle Style Speed** (1 normal, 2 twice as fast) times every style and flourish; the quick
+  riffle keeps its own numbers.
+- **Code:** `TabletopComposition.Shuffle.cs` (menus, default, choreography, sounds); `AnimateThrough` in the
+  transition controller (leave delay, arc, wait, a swirl for the wash); `ShuffleDeckCommand.Cut` and the cut in
+  `ShuffleDeckUseCase`.
+- No prefab to rebuild. Not compiled here; the owner checks in Unity.

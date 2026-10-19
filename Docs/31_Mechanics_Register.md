@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.18 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.19 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -602,9 +602,12 @@ Change: …
 ## Part 3 — Planned mechanics (not built yet)
 
 ### PL-SHUFFLE · Shuffle animations and styles
-- **Status:** Planned (SHUF-1)
-- **Rule now:** shuffling is shown, in the player's chosen style: riffle, overhand, Hindu, pile, wash or cut; the
-  order always comes from the table's random source.
+- **Status:** Built (SHUF-1, 2026-10-19), to be checked
+- **Rule now:** a deck's or stack's menu has **Shuffle** (in your style), **Shuffle as...** (Riffle, Overhand, Hindu,
+  Pile, Wash or Cut once, or **Set my default...**, kept per profile) and **Flourish...** (Fan, Spring, Ribbon
+  spread, Cascade, Swivel cut: show only, the order stays). Each style is its own animation and sound; the new order
+  always comes from the table's random source; **Cut** cuts once at a random point (at least one card each side), top
+  part under. One Undo step. Quick Shuffle (R) stays the short riffle. Speed: Feel Settings › Shuffle Style Speed.
 - **Source:** doc 30 Part H
 
 ### PL-DEAL · Dealing by the game's rules
