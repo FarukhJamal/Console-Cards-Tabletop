@@ -35,6 +35,8 @@ namespace ConsoleCards.Presentation.UI
         private Action<Vector2> secondaryDismiss;
         private Vector2 anchorScreenPosition;
         private IRuntimeUiService uiManager;
+        private int preparedFrame = -1;
+        private Canvas canvas;
 
         public void Initialize(IRuntimeUiService manager)
         {
@@ -211,7 +213,47 @@ namespace ConsoleCards.Presentation.UI
             if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
             {
                 dismiss?.Invoke();
+                return;
             }
+
+            // SMOOTH-1: a press anywhere outside the open panel closes it and still reaches the table (or the other
+            // button) underneath, so the press after a menu never needs a second try. Not in the frame the popup opened
+            // (the right-click that opened it).
+            Mouse mouse = Mouse.current;
+            if (dismiss == null || mouse == null || Time.frameCount == preparedFrame) return;
+            if (!mouse.leftButton.wasPressedThisFrame
+                && !mouse.rightButton.wasPressedThisFrame
+                && !mouse.middleButton.wasPressedThisFrame)
+            {
+                return;
+            }
+
+            if (!IsOverOpenPanel(mouse.position.ReadValue())) dismiss.Invoke();
+        }
+
+        private bool IsOverOpenPanel(Vector2 screenPosition)
+        {
+            if (canvas == null) canvas = GetComponentInParent<Canvas>();
+            UnityEngine.Camera eventCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
+                ? canvas.worldCamera
+                : null;
+            return IsOver(contextPanel, screenPosition, eventCamera)
+                || IsOver(drawCountPanel, screenPosition, eventCamera)
+                || IsOver(mergePanel, screenPosition, eventCamera);
+        }
+
+        private static bool IsOver(RectTransform panel, Vector2 screenPosition, UnityEngine.Camera eventCamera)
+        {
+            return panel != null
+                && panel.gameObject.activeInHierarchy
+                && RectTransformUtility.RectangleContainsScreenPoint(panel, screenPosition, eventCamera);
+        }
+
+        // SMOOTH-1: the full-screen click catcher no longer eats the press (the press closes the popup in Update).
+        private void LetPressesThrough()
+        {
+            Graphic catcher = GetComponent<Graphic>();
+            if (catcher != null && catcher.raycastTarget) catcher.raycastTarget = false;
         }
 
         private void Prepare(
@@ -230,6 +272,8 @@ namespace ConsoleCards.Presentation.UI
             dismiss = dismissPopup;
             secondaryDismiss = secondaryDismissPopup;
             anchorScreenPosition = screenPosition;
+            preparedFrame = Time.frameCount;
+            LetPressesThrough();
             contextPanel.gameObject.SetActive(false);
             drawCountPanel.gameObject.SetActive(false);
             mergePanel.gameObject.SetActive(false);

@@ -536,6 +536,9 @@ namespace ConsoleCards.Presentation.Input
             if (IsPointerOverScreenUi(screenPosition) && screenUiRaycastResults.Count > 0)
             {
                 GameObject top = screenUiRaycastResults[0].gameObject;
+                // SMOOTH-1: a press on a button, switch or scroll bar was meant for it; only log the rest (panels,
+                // backgrounds, strips), which is where a click meant for the table gets lost.
+                if (top != null && top.GetComponentInParent<UnityEngine.UI.Selectable>() != null) return;
                 Transform parent = top != null ? top.transform.parent : null;
                 taker = top == null
                     ? "a menu"

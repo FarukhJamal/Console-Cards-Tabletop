@@ -579,11 +579,13 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
+#if CONSOLECARDS_LOG_UNDO
             Debug.Log(
                 $"[Undo] Selecting state index {host.undoHistory.CurrentStateIndex - 1} "
                 + $"from {host.undoHistory.TransactionCount} transactions: {transaction.Description}; "
                 + $"objects={snapshot.Match.ObjectCount}; ids={FormatUndoObjectIds(snapshot.Match)}.",
                 host);
+#endif
 
             long undoRevision;
             try
@@ -853,6 +855,9 @@ namespace ConsoleCards.Presentation.Composition
                         afterState,
                         acceptance,
                         DescribeUndoAction(acceptance));
+#if CONSOLECARDS_LOG_UNDO
+                    // SMOOTH-1: off by default. Building this line (every object id on the table) and logging it with a
+                    // stack trace on every accepted action cost a few milliseconds per drop on a full table.
                     Debug.Log(
                         $"[Undo] Recorded state index {host.undoHistory.CurrentStateIndex}; "
                         + $"transactions={host.undoHistory.TransactionCount}; "
@@ -861,6 +866,7 @@ namespace ConsoleCards.Presentation.Composition
                         + $"afterObjects={afterState.Match.ObjectCount}; "
                         + $"afterIds={FormatUndoObjectIds(afterState.Match)}.",
                         host);
+#endif
                     host.undoTransactionInProgress = false;
                     RefreshUndoUi();
                     host.RulesCardPanel.RaiseHint(RulesCardPresenter.ActionHintTrigger(acceptance.Kind));

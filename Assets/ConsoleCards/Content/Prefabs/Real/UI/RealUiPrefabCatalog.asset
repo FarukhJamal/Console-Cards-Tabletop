@@ -146,6 +146,6 @@ MonoBehaviour:
     layer: 3
     retention: 0
   - id: platform.tool-bar
-    prefab: {fileID: 2091470120920749785, guid: 38172d2eb19fee441ac1f7cb0c201604, type: 3}
+    prefab: {fileID: 225179118365923663, guid: 38172d2eb19fee441ac1f7cb0c201604, type: 3}
     layer: 1
     retention: 0

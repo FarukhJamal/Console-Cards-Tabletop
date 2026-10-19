@@ -51,6 +51,9 @@ namespace ConsoleCards.Presentation.Composition
 
         private void LateUpdate()
         {
+            // SMOOTH-1: card motion (piles, draws, the riffle) ticks here, after every layout of the frame; card flips
+            // still come after it and win.
+            presentationTransitions?.Tick(Time.unscaledDeltaTime);
             cardFlipTurns?.Tick(Time.unscaledTime);
             if (pawnHops.Count == 0) return;
             float now = Time.unscaledTime;

@@ -62,6 +62,7 @@ namespace ConsoleCards.Editor.UI
         private const float StripHeight = 60f;
         private const float RowHeight = 50f;
         private const float MenuWidth = 400f;
+        private const float ActivityTabWidth = 240f; // the What Happened tab, bottom right above the tool bar
         // Rules card: left column below the session bar, + TOOLBOX and the Placing card (which ends at 226).
         private const float RulesCardTop = 250f;
         private const float RulesCardWidth = 440f;
@@ -357,7 +358,7 @@ namespace ConsoleCards.Editor.UI
         {
             Vector2 bottomRight = new Vector2(1f, 0f);
             RectTransform tab = Rect("Tab", root, bottomRight, bottomRight, bottomRight,
-                new Vector2(-Margin, 104f), new Vector2(240f, 46f));
+                new Vector2(-Margin, 104f), new Vector2(ActivityTabWidth, 46f));
             Image tabFill = Img(tab, "ButtonOutlined", Ink);
             Button toggle = tab.gameObject.AddComponent<Button>();
             toggle.targetGraphic = tabFill;
@@ -1787,9 +1788,11 @@ namespace ConsoleCards.Editor.UI
                 ToolWidth, ToolHeight, out _, out _, out _);
             Button help = TextButton(panel, "HelpButton", "?", titleFont, 22, Mustard, Ink, 50f, ToolHeight, out _);
 
-            // Selection actions, above the bar (hidden until something is selected).
+            // Selection actions, above the bar and left of the What Happened tab (SMOOTH-1: they overlapped it, so a
+            // click on Clear could open the log instead). Hidden until something is selected.
             RectTransform selection = Rect("SelectionActions", root, new Vector2(1f, 0f), new Vector2(1f, 0f),
-                new Vector2(1f, 0f), new Vector2(-Margin, Margin + StripHeight + 18f), new Vector2(420f, 58f));
+                new Vector2(1f, 0f), new Vector2(-(Margin + ActivityTabWidth + 18f), Margin + StripHeight + 18f),
+                new Vector2(420f, 58f));
             Backdrop(selection, ShadowOffset - 2f);
             Row(selection.gameObject, 16, 8, 7, 7, 10f);
             Fit(selection.gameObject, true, false);

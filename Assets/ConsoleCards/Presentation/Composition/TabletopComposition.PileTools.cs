@@ -273,10 +273,10 @@ namespace ConsoleCards.Presentation.Composition
                 SessionService.EndUndoBatch();
             }
 
-            presentationTransitions.AnimateCardsFromCurrentResults(transitionStarts, settleDuration, 0.035f);
+            AnimatePileCards(transitionStarts, true); // SMOOTH-1: card by card, the top shares first
             for (int i = 0; i < made.Count; i++)
             {
-                presentationTransitions.Appear(made[i].Root.transform, settleDuration);
+                presentationTransitions.Appear(made[i].Root.transform, Feel.PileMoveSeconds);
             }
 
             for (int i = 0; i < made.Count; i++)

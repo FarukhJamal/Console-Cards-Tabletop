@@ -1135,7 +1135,8 @@ namespace ConsoleCards.Presentation.Composition
             UpdateCardStackDrops(); // before the board snap: a card dropped on a card stacks
             CompletePendingStackCarry(); // a stack carried by press-and-hold is merged or put down
             CompleteBoardCardSnaps();
-            presentationTransitions?.Tick(Time.unscaledDeltaTime);
+            // SMOOTH-1: card motion now ticks in LateUpdate (TabletopComposition.TrapFloor.cs), after every layout of
+            // the frame, so a layout applied later in the frame can no longer flash a moving card at its end place.
             RefreshHandInteractionPresentation();
             RefreshHandTrayDropTarget();
             RefreshCardContentVisibility();
@@ -1824,7 +1825,7 @@ namespace ConsoleCards.Presentation.Composition
                     return;
                 }
 
-                authoredFixedContainerVisual.ShowValidTarget();
+                if (authoredFixedContainerVisual != null) authoredFixedContainerVisual.ShowValidTarget(); // gone when the table is torn down
             }
 
             public void SetSource()
@@ -1841,7 +1842,7 @@ namespace ConsoleCards.Presentation.Composition
                     return;
                 }
 
-                authoredFixedContainerVisual.ShowSourceTarget();
+                if (authoredFixedContainerVisual != null) authoredFixedContainerVisual.ShowSourceTarget(); // gone when the table is torn down
             }
 
             public void SetInvalid()
@@ -1858,7 +1859,7 @@ namespace ConsoleCards.Presentation.Composition
                     return;
                 }
 
-                authoredFixedContainerVisual.ShowInvalidTarget();
+                if (authoredFixedContainerVisual != null) authoredFixedContainerVisual.ShowInvalidTarget(); // gone when the table is torn down
             }
 
             public void Clear()
@@ -1875,7 +1876,7 @@ namespace ConsoleCards.Presentation.Composition
                     return;
                 }
 
-                authoredFixedContainerVisual.ClearFeedback();
+                if (authoredFixedContainerVisual != null) authoredFixedContainerVisual.ClearFeedback(); // gone when the table is torn down
             }
         }
     }

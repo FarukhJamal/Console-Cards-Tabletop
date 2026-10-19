@@ -33,6 +33,13 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly Dictionary<Transform, PulseState> pulses = new Dictionary<Transform, PulseState>();
         private readonly Dictionary<Transform, Vector3> restingScales = new Dictionary<Transform, Vector3>();
         private readonly List<Transform> completedTransforms = new List<Transform>();
+        // SMOOTH-1: reused when cards are ordered for a staggered move or a riffle (no allocation per call).
+        private readonly List<KeyValuePair<Transform, TabletopTransformSnapshot>> orderedStarts =
+            new List<KeyValuePair<Transform, TabletopTransformSnapshot>>();
+        private readonly List<Transform> orderedDestinations = new List<Transform>();
+        private static readonly IComparer<KeyValuePair<Transform, TabletopTransformSnapshot>> LowestStartFirst =
+            new StartHeightComparer();
+        private static readonly IComparer<Transform> LowestDestinationFirst = new DestinationHeightComparer();
 
         private static bool PhysicalOwns(Transform target)
         {
@@ -137,6 +144,127 @@ namespace ConsoleCards.Presentation.Interaction
                     AnimateFromCurrentResult(pair.Key, pair.Value, duration, arcHeight);
                 }
             }
+        }
+
+        /// <summary>
+        /// SMOOTH-1: the cards glide to their accepted places along a small arc, one after another (the top of the pile
+        /// first, or the bottom first), so a split, a draw or a merge reads as cards moving rather than a jump. The
+        /// whole stagger never takes longer than <paramref name="maximumStagger"/>.
+        /// </summary>
+        public void AnimateCardsStaggered(
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts,
+            float duration,
+            float arcHeight,
+            float staggerPerCard,
+            float maximumStagger,
+            bool topFirst)
+        {
+            if (starts == null)
+            {
+                throw new ArgumentNullException(nameof(starts));
+            }
+
+            FillOrderedStarts(starts);
+            int count = orderedStarts.Count;
+            float step = count > 1 ? Mathf.Min(Mathf.Max(0f, staggerPerCard), Mathf.Max(0f, maximumStagger) / (count - 1)) : 0f;
+            for (int i = 0; i < count; i++)
+            {
+                KeyValuePair<Transform, TabletopTransformSnapshot> pair = orderedStarts[topFirst ? count - 1 - i : i];
+                AnimateFromCurrentResult(pair.Key, pair.Value, duration, arcHeight, i * step);
+            }
+
+            orderedStarts.Clear();
+        }
+
+        /// <summary>
+        /// SMOOTH-1: a riffle shuffle. The accepted (shuffled) layout is already applied; the cards start where they
+        /// were. The pile splits in two halves that slide apart along <paramref name="sideAxis"/> and tip a little, then
+        /// the cards drop back one by one, bottom of the new order first, so the halves interleave; the last card lands
+        /// on its place with no jump.
+        /// </summary>
+        public void AnimateRiffle(
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts,
+            Vector3 sideAxis,
+            float spread,
+            float lift,
+            float tiltDegrees,
+            float splitDuration,
+            float dropDuration,
+            float staggerPerCard,
+            float maximumStagger)
+        {
+            if (starts == null)
+            {
+                throw new ArgumentNullException(nameof(starts));
+            }
+
+            FillOrderedStarts(starts);
+            int count = orderedStarts.Count;
+            if (count == 0)
+            {
+                return;
+            }
+
+            Vector3 side = sideAxis.sqrMagnitude > 0.0001f ? sideAxis.normalized : Vector3.right;
+            Vector3 tiltAxis = Vector3.Cross(side, Vector3.up);
+            if (tiltAxis.sqrMagnitude < 0.0001f) tiltAxis = Vector3.forward;
+            tiltAxis.Normalize();
+            int half = count / 2;
+            // The upper half comes down beside the lower one, so both halves sit on the table.
+            float upperDrop = count > 1 ? orderedStarts[half].Value.Position.y - orderedStarts[0].Value.Position.y : 0f;
+
+            // Drop order: by where each card ends up, lowest first.
+            orderedDestinations.Clear();
+            for (int i = 0; i < count; i++)
+            {
+                if (orderedStarts[i].Key != null) orderedDestinations.Add(orderedStarts[i].Key);
+            }
+
+            orderedDestinations.Sort(LowestDestinationFirst);
+            float step = count > 1 ? Mathf.Min(Mathf.Max(0f, staggerPerCard), Mathf.Max(0f, maximumStagger) / (count - 1)) : 0f;
+            for (int i = 0; i < count; i++)
+            {
+                Transform target = orderedStarts[i].Key;
+                if (target == null || PhysicalOwns(target))
+                {
+                    continue;
+                }
+
+                bool upper = i >= half;
+                float sign = upper ? 1f : -1f;
+                TabletopTransformSnapshot start = orderedStarts[i].Value;
+                Vector3 waypoint = start.Position + (side * (spread * sign)) + (Vector3.up * lift);
+                if (upper) waypoint.y -= upperDrop;
+                Quaternion waypointRotation = Quaternion.AngleAxis(tiltDegrees * sign, tiltAxis) * start.Rotation;
+                int rank = orderedDestinations.IndexOf(target);
+                RememberRestingScale(target);
+                TabletopTransformSnapshot destination = Capture(target);
+                destination = new TabletopTransformSnapshot(destination.Position, destination.Rotation, restingScales[target]);
+                motions.Remove(target);
+                Apply(target, start);
+                motions[target] = Motion.Riffle(
+                    start,
+                    new TabletopTransformSnapshot(waypoint, waypointRotation, restingScales[target]),
+                    destination,
+                    Mathf.Max(splitDuration, MinimumDuration),
+                    Mathf.Max(0f, rank) * step,
+                    Mathf.Max(dropDuration, MinimumDuration),
+                    lift * 0.5f);
+            }
+
+            orderedStarts.Clear();
+            orderedDestinations.Clear();
+        }
+
+        private void FillOrderedStarts(IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts)
+        {
+            orderedStarts.Clear();
+            foreach (KeyValuePair<Transform, TabletopTransformSnapshot> pair in starts)
+            {
+                if (pair.Key != null) orderedStarts.Add(pair);
+            }
+
+            orderedStarts.Sort(LowestStartFirst);
         }
 
         public void Appear(Transform target, float duration)
@@ -287,6 +415,22 @@ namespace ConsoleCards.Presentation.Interaction
                     continue;
                 }
 
+                if (motion.IsRiffle)
+                {
+                    motion.Elapsed += deltaTime;
+                    if (TickRiffle(target, motion))
+                    {
+                        completedTransforms.Add(target);
+                    }
+                    else
+                    {
+                        motions[target] = motion;
+                        completedTransforms.RemoveAt(i);
+                    }
+
+                    continue;
+                }
+
                 motion.Elapsed += deltaTime;
                 if (motion.Elapsed < motion.Delay)
                 {
@@ -319,6 +463,46 @@ namespace ConsoleCards.Presentation.Interaction
             {
                 motions.Remove(completedTransforms[i]);
             }
+        }
+
+        // Split (all cards together), wait for the card's turn, drop onto its place. True when it has landed.
+        private static bool TickRiffle(Transform target, Motion motion)
+        {
+            float elapsed = motion.Elapsed;
+            if (elapsed < motion.Duration)
+            {
+                float t = Smooth(elapsed / motion.Duration);
+                target.SetPositionAndRotation(
+                    Vector3.Lerp(motion.Start.Position, motion.Waypoint.Position, t),
+                    Quaternion.Slerp(motion.Start.Rotation, motion.Waypoint.Rotation, t));
+                return false;
+            }
+
+            float dropStart = motion.Duration + motion.Delay;
+            if (elapsed < dropStart)
+            {
+                target.SetPositionAndRotation(motion.Waypoint.Position, motion.Waypoint.Rotation);
+                return false;
+            }
+
+            float n = Mathf.Clamp01((elapsed - dropStart) / motion.DropDuration);
+            float e = Smooth(n);
+            Vector3 position = Vector3.Lerp(motion.Waypoint.Position, motion.Destination.Position, e)
+                + (Vector3.up * (Mathf.Sin(n * Mathf.PI) * motion.ArcHeight));
+            target.SetPositionAndRotation(position, Quaternion.Slerp(motion.Waypoint.Rotation, motion.Destination.Rotation, e));
+            if (n < 1f)
+            {
+                return false;
+            }
+
+            Apply(target, motion.Destination);
+            return true;
+        }
+
+        private static float Smooth(float t)
+        {
+            t = Mathf.Clamp01(t);
+            return t * t * (3f - (2f * t));
         }
 
         private void TickPulses(float deltaTime)
@@ -413,6 +597,9 @@ namespace ConsoleCards.Presentation.Interaction
             public float ArcHeight;
             public float Elapsed;
             public bool IsFollowing;
+            public bool IsRiffle;
+            public TabletopTransformSnapshot Waypoint;
+            public float DropDuration;
 
             public static Motion Follow(TabletopTransformSnapshot destination, float smoothingDuration)
             {
@@ -421,6 +608,31 @@ namespace ConsoleCards.Presentation.Interaction
                     Destination = destination,
                     Duration = Mathf.Max(smoothingDuration, MinimumDuration),
                     IsFollowing = true
+                };
+            }
+
+            // Riffle: Duration is the split time, Delay the wait at the waypoint, DropDuration the fall onto the place.
+            public static Motion Riffle(
+                TabletopTransformSnapshot start,
+                TabletopTransformSnapshot waypoint,
+                TabletopTransformSnapshot destination,
+                float splitDuration,
+                float wait,
+                float dropDuration,
+                float arcHeight)
+            {
+                return new Motion
+                {
+                    Start = start,
+                    Waypoint = waypoint,
+                    Destination = destination,
+                    Duration = splitDuration,
+                    Delay = wait,
+                    DropDuration = dropDuration,
+                    ArcHeight = arcHeight,
+                    Elapsed = 0f,
+                    IsFollowing = false,
+                    IsRiffle = true
                 };
             }
 
@@ -441,6 +653,24 @@ namespace ConsoleCards.Presentation.Interaction
                     Elapsed = 0f,
                     IsFollowing = false
                 };
+            }
+        }
+
+        private sealed class StartHeightComparer : IComparer<KeyValuePair<Transform, TabletopTransformSnapshot>>
+        {
+            public int Compare(
+                KeyValuePair<Transform, TabletopTransformSnapshot> x,
+                KeyValuePair<Transform, TabletopTransformSnapshot> y)
+            {
+                return x.Value.Position.y.CompareTo(y.Value.Position.y);
+            }
+        }
+
+        private sealed class DestinationHeightComparer : IComparer<Transform>
+        {
+            public int Compare(Transform x, Transform y)
+            {
+                return x.position.y.CompareTo(y.position.y);
             }
         }
 

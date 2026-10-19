@@ -72,13 +72,9 @@ namespace ConsoleCards.Presentation.Composition
             if (result.Succeeded)
             {
                 // R2: the deck or stack was laid out again by the table's view sync when the shuffle was accepted.
-                presentationTransitions.AnimateCardsFromCurrentResults(
-                    transitionStarts,
-                    settleDuration);
-                presentationTransitions.Pulse(
-                    isDeck ? targetDeckVisual.transform : targetStack.Root.transform,
-                    shuffleCompression,
-                    feedbackDuration);
+                // SMOOTH-1: a quick riffle from the old order into the new one.
+                AnimateRiffle(transitionStarts, isDeck ? targetDeckVisual.transform : targetStack.Root.transform);
+                PlayCardSound(true);
                 ShowMessage(isDeck ? "Deck shuffled." : "Stack shuffled.");
             }
             else
@@ -113,10 +109,8 @@ namespace ConsoleCards.Presentation.Composition
                 CreateCommandContext(trapFloorTurnState.ActivePlayerId));
             ApplyLayout(player.ControllerDeckId);
             ApplyLayout(player.HandContainerId);
-            presentationTransitions.AnimateCardsFromCurrentResults(
-                transitionStarts,
-                result.Succeeded ? handReflowDuration : returnDuration,
-                0.035f);
+            if (result.Succeeded) AnimateDrawnCards(transitionStarts); // SMOOTH-1
+            else presentationTransitions.AnimateCardsFromCurrentResults(transitionStarts, returnDuration);
             ShowMessage(result.Succeeded
                 ? result.Changed
                     ? $"Drew {result.DrawnCount} Controller Card{(result.DrawnCount == 1 ? string.Empty : "s")}."
@@ -148,10 +142,7 @@ namespace ConsoleCards.Presentation.Composition
             if (result.Succeeded)
             {
                 // R2: the deck (or stack) and the hand were laid out again by the table's view sync.
-                presentationTransitions.AnimateCardsFromCurrentResults(
-                    transitionStarts,
-                    handReflowDuration,
-                    0.035f);
+                AnimateDrawnCards(transitionStarts); // SMOOTH-1: one after another, along an arc
                 string whose = targetHandId == handContainerId ? "Hand" : $"{HandOwnerName(targetHandId)}'s hand";
                 if (targetHandId != handContainerId
                     && trapFloorTurnState != null
@@ -253,11 +244,8 @@ namespace ConsoleCards.Presentation.Composition
                 // R2: the table's view sync made the new stack's view and laid both stacks out.
                 StackRuntimeView newStackView = Registry.stackViewsByContainerId[newStackId];
                 primaryStackContainerId = newStackId;
-                presentationTransitions.AnimateCardsFromCurrentResults(
-                    transitionStarts,
-                    settleDuration,
-                    0.035f);
-                presentationTransitions.Appear(newStackView.Root.transform, settleDuration);
+                AnimatePileCards(transitionStarts, true); // SMOOTH-1: the top half glides off card by card
+                presentationTransitions.Appear(newStackView.Root.transform, Feel.PileMoveSeconds);
                 if (matchState.GetContainer(newStackId).Count == 1) WatchStackForCollapse(newStackId); // a single card goes back to being a card
                 ShowMessage("Stack split.");
             }
@@ -411,10 +399,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 // R2: the table's view sync removed the merged stack's view and laid the destination out.
                 StackRuntimeView destinationView = Registry.stackViewsByContainerId[destinationId];
-                presentationTransitions.AnimateCardsFromCurrentResults(
-                    transitionStarts,
-                    settleDuration,
-                    0.04f);
+                AnimatePileCards(transitionStarts, false); // SMOOTH-1: the bottom card lands first
                 presentationTransitions.Pulse(destinationView.Root.transform, shuffleCompression, feedbackDuration);
                 primaryStackContainerId = destinationId;
                 ShowMessage("Stacks merged.");
@@ -602,6 +587,64 @@ namespace ConsoleCards.Presentation.Composition
             return kind == ContainerKind.Deck
                 || kind == ContainerKind.Stack
                 || kind == ContainerKind.DiscardPile;
+        }
+
+        // ---------- SMOOTH-1: card motion between piles ----------
+
+        // World units per table unit (about one card width), so the feel numbers can be given in card widths.
+        private float WorldPerCardWidth()
+        {
+            if (coordinateConverter == null) return 1f;
+            return Mathf.Max(
+                0.0001f,
+                Vector3.Distance(
+                    coordinateConverter.ToWorldPosition(new TableCoordinate(0d, 0d)),
+                    coordinateConverter.ToWorldPosition(new TableCoordinate(1d, 0d))));
+        }
+
+        // Split, Split into, merge: the cards glide one after another along a small arc.
+        internal void AnimatePileCards(IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts, bool topFirst)
+        {
+            FeelSettings feel = Feel;
+            presentationTransitions.AnimateCardsStaggered(
+                starts,
+                feel.PileMoveSeconds,
+                feel.PileMoveArc * WorldPerCardWidth(),
+                feel.PileMoveStagger,
+                feel.PileMoveMaxStagger,
+                topFirst);
+        }
+
+        // Draw: the top card flies to the hand first.
+        private void AnimateDrawnCards(IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts)
+        {
+            FeelSettings feel = Feel;
+            presentationTransitions.AnimateCardsStaggered(
+                starts,
+                feel.DrawSeconds,
+                feel.DrawArc * WorldPerCardWidth(),
+                feel.PileMoveStagger,
+                feel.PileMoveMaxStagger,
+                true);
+        }
+
+        // Shuffle: the halves slide apart along the pile's width and drop back interleaved.
+        private void AnimateRiffle(IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts, Transform pile)
+        {
+            FeelSettings feel = Feel;
+            float card = WorldPerCardWidth();
+            Vector3 side = pile != null ? pile.right : Vector3.right;
+            side.y = 0f;
+            presentationTransitions.AnimateRiffle(
+                starts,
+                side,
+                feel.ShuffleSpread * card,
+                feel.ShuffleLift * card,
+                feel.ShuffleTilt,
+                feel.ShuffleSplitSeconds,
+                feel.ShuffleDropSeconds,
+                feel.ShuffleStagger,
+                feel.ShuffleMaxStagger);
         }
 
         internal IReadOnlyDictionary<Transform, TabletopTransformSnapshot> CaptureContainerCardTransforms(

@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.25 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.26 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1526,7 +1526,7 @@ and Swivel cut, as short show-off animations from a deck's menu that leave the o
 |---|---|---|
 | 1 | POL-0 | Editable keys, cursor set and feel numbers, plus a missed-click log (below). Written 2026-10-19. |
 | 2 | TOOLS-1 | Written 2026-10-19 (record below). **Tool bar** (owner's point 4, absorbing POL-9): a slim bar in our look with only the tools we need: **Grab** (normal), **Select** (box-select and group into deck, POL-7), **Ping** (click to ping: the simple way, owner's point 1), **Flick**, and **Draw** greyed until T5; next to it the hideable **keys strip** for what you are doing. A new ping ring (its own prefab, made by the UI builder) and a new ping cursor. |
-| 3 | SMOOTH-1 | **Smooth shuffle and split, no missed clicks** (owner's points 2 and 3): fix what the missed-click log finds; cards move along short arcs with a stagger in split, Split into… and draw; Shuffle plays a quick riffle (the first SHUF-1 animation); no snapping at the end of an animation. |
+| 3 | SMOOTH-1 | Written 2026-10-19 (record below). **Smooth shuffle and split, no missed clicks** (owner's points 2 and 3): fix what the missed-click log finds; cards move along short arcs with a stagger in split, Split into… and draw; Shuffle plays a quick riffle (the first SHUF-1 animation); no snapping at the end of an animation. |
 | 4 | POL-1, POL-2 | Pick up and carry; drop and settle (piece snap included). |
 | 5 | ICON-1 | Icons on card sides and corners connect to the Console at any rotation. |
 | 6 | POL-3 to POL-8, SHUF-1 (styles and flourishes), DEAL-1 | In this order unless the owner says otherwise. |
@@ -1585,3 +1585,31 @@ and the cards of the selected decks, stacks and discard piles into one deck: int
 one (as TTS adds cards to a deck), otherwise a new deck where the first selected card or pile lay. Piles left empty
 go away (the game's own piles stay). Pawns, tokens, dice and bags stay put. One Undo step. The panel reads
 "N selected". Code: `TabletopComposition.Tools.cs`.
+
+**SMOOTH-1 record (2026-10-19, written, to be checked).**
+- **What the missed-click log showed** (Logs/Editor.log, the owner's play after TOOLS-1): no press failed on a locked
+  or busy piece and none was dropped because an earlier action was still running. The clicks that needed a second
+  try had two causes:
+  1. **An open menu ate the next click.** The right-click menu, the draw-count and merge panels sit on an invisible
+     full-screen catcher: the first click outside only closed the menu, so picking up a piece or opening another
+     menu took a second click. Now a press outside the open panel closes it *and* reaches the table (or the other
+     button) in the same click (`TabletopPopupView`; the catcher no longer takes clicks).
+  2. **The selection panel lay over the What Happened tab**, so Clear could open the log instead. The panel now sits
+     left of the tab (`GameplayUiBuilder`; delete `Prefabs/Final/UI/ToolBar.prefab` and run Console Cards > UI >
+     Create Missing Gameplay UI Prefabs to get the new spot).
+  The log now skips presses on buttons and switches (they were meant for them) and only names panels and
+  backgrounds that took a table click.
+- **Less work per drop:** the Undo history wrote a long line (every object id on the table) with a stack trace on
+  every accepted action. It is now off unless the `CONSOLECARDS_LOG_UNDO` scripting symbol is set.
+- **Shuffle is a quick riffle:** the deck or stack splits into two halves that slide apart and tip a little, then
+  the cards drop back one by one into the new order (big decks drop faster; about half a second in all), with the
+  stack sound. The order still comes from the table's random source; the animation only shows it.
+- **Cards glide between piles:** Split, Split into…, merging a carried stack and drawing move the cards one after
+  another along a small arc (top card first; a merge lands bottom card first) instead of all at once in a tenth of
+  a second. Drawn cards fly to the hand the same way.
+- **No end-of-move jumps:** card motion now runs at the very end of the frame (LateUpdate), after every layout, so a
+  pile laid out again during a move can no longer flash a card at its end place for a frame.
+- **Feel Settings › Shuffle / Cards moving between piles:** split and drop times, stagger, spread, lift, tilt; glide
+  time, stagger, arc; draw time and arc.
+- **Fix:** an error when leaving Play mode (a pile's drop highlight cleared after the pile was gone).
+- Not compiled here; the owner checks in Unity.

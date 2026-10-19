@@ -40,6 +40,36 @@ namespace ConsoleCards.Presentation.Settings
         [SerializeField, Range(0.04f, 0.4f)] private float diceRattleInterval = 0.11f;
         [SerializeField, Range(0f, 1f)] private float diceRattleVolume = 0.4f;
 
+        [Header("Shuffle (SMOOTH-1: a quick riffle)")]
+        [Tooltip("Seconds the two halves take to slide apart.")]
+        [SerializeField, Range(0.05f, 0.6f)] private float shuffleSplitSeconds = 0.16f;
+        [Tooltip("Seconds each card takes to drop back onto the pile.")]
+        [SerializeField, Range(0.05f, 0.6f)] private float shuffleDropSeconds = 0.14f;
+        [Tooltip("Seconds between one card dropping and the next.")]
+        [SerializeField, Range(0f, 0.08f)] private float shuffleStagger = 0.018f;
+        [Tooltip("The drops never take longer than this in all (big decks drop faster).")]
+        [SerializeField, Range(0.1f, 1.5f)] private float shuffleMaxStagger = 0.4f;
+        [Tooltip("How far each half slides out, in card widths.")]
+        [SerializeField, Range(0f, 1.5f)] private float shuffleSpread = 0.6f;
+        [Tooltip("How high the halves lift, in card widths.")]
+        [SerializeField, Range(0f, 1f)] private float shuffleLift = 0.12f;
+        [Tooltip("How far the halves tip toward each other, in degrees.")]
+        [SerializeField, Range(0f, 30f)] private float shuffleTilt = 9f;
+
+        [Header("Cards moving between piles (SMOOTH-1: split, Split into, merge, draw)")]
+        [Tooltip("Seconds a card takes to glide to its new pile.")]
+        [SerializeField, Range(0.05f, 1f)] private float pileMoveSeconds = 0.3f;
+        [Tooltip("Seconds between one card leaving and the next.")]
+        [SerializeField, Range(0f, 0.1f)] private float pileMoveStagger = 0.022f;
+        [Tooltip("The staggering never takes longer than this in all.")]
+        [SerializeField, Range(0f, 1f)] private float pileMoveMaxStagger = 0.3f;
+        [Tooltip("How high a card arcs on the way, in card widths.")]
+        [SerializeField, Range(0f, 1.5f)] private float pileMoveArc = 0.3f;
+        [Tooltip("Seconds a drawn card takes to fly to the hand.")]
+        [SerializeField, Range(0.05f, 1f)] private float drawSeconds = 0.32f;
+        [Tooltip("How high a drawn card arcs, in card widths.")]
+        [SerializeField, Range(0f, 1.5f)] private float drawArc = 0.4f;
+
         [Header("Sound")]
         [SerializeField, Range(0f, 1f)] private float cardSoundVolume = 0.5f;
 
@@ -61,6 +91,19 @@ namespace ConsoleCards.Presentation.Settings
         public float DiceRattleInterval => diceRattleInterval;
         public float DiceRattleVolume => diceRattleVolume;
         public float CardSoundVolume => cardSoundVolume;
+        public float ShuffleSplitSeconds => shuffleSplitSeconds;
+        public float ShuffleDropSeconds => shuffleDropSeconds;
+        public float ShuffleStagger => shuffleStagger;
+        public float ShuffleMaxStagger => shuffleMaxStagger;
+        public float ShuffleSpread => shuffleSpread;
+        public float ShuffleLift => shuffleLift;
+        public float ShuffleTilt => shuffleTilt;
+        public float PileMoveSeconds => pileMoveSeconds;
+        public float PileMoveStagger => pileMoveStagger;
+        public float PileMoveMaxStagger => pileMoveMaxStagger;
+        public float PileMoveArc => pileMoveArc;
+        public float DrawSeconds => drawSeconds;
+        public float DrawArc => drawArc;
         public bool LogMissedClicks => logMissedClicks;
     }
 }

@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.12 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.13 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -347,7 +347,9 @@ Change: …
 - **Status:** Built
 - **Rule now:** decks shuffle and draw; a discard pile turns arriving cards face down; piles move and, when
   Toolbox-made and empty, delete. **Draw to Hand** with a count from a deck's menu. The Empty Table starts with a
-  hand (switch in the Toolbox footer). As in Tabletop Simulator (owner, 2026-10-18):
+  hand (switch in the Toolbox footer). **Shuffle** shows a quick riffle (two halves slide apart and drop back
+  interleaved); **split, Split into, merge and draw** move the cards one after another along a small arc (SMOOTH-1).
+  As in Tabletop Simulator (owner, 2026-10-18):
   - **Card on card:** while a card is carried over a loose card, a green stack outline shows under that card; let
     go and they become a stack at once where the bottom card lies (the cards glide together, a soft double tap, a
     green flash). Each card keeps its face. One Undo step. Trap Floor's floor tiles never stack.
