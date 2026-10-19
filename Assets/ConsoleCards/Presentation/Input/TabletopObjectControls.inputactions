@@ -151,6 +151,15 @@
                     "initialStateCheck": false
                 },
                 {
+                    "name": "Deal",
+                    "type": "Button",
+                    "id": "d526f98f-7072-4581-b697-9c990bae3694",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "DeleteSelection",
                     "type": "Button",
                     "id": "acb35c4c-c7c1-4cc3-85a6-a0eca654ab7e",
@@ -422,6 +431,17 @@
                     "processors": "",
                     "groups": "",
                     "action": "Roll",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "05e0fa12-1578-4c57-812d-54824dfe402a",
+                    "path": "<Keyboard>/t",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Deal",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

@@ -188,7 +188,8 @@ namespace ConsoleCards.Presentation.Composition
                 + "drop on a pile to put it there";
             keysDie = KeyName("Hold " + action) + " or shake the mouse: shake   let go to roll   " + KeyName("Wheel") + " raise   "
                 + KeyName("Esc") + " cancel";
-            keysPile = KeyName("1–9") + " draw   " + KeyName(roll) + " shuffle   " + KeyName("Hold") + " carry the stack   "
+            keysPile = KeyName("1–9") + " draw   " + KeyName(roll) + " shuffle   " + KeyName(Keys.DealName) + " deal   "
+                + KeyName("Hold") + " carry the stack   "
                 + KeyName("Hold " + ping) + " peek   " + KeyName("Right-click") + " menu";
             keysSelect = KeyName("Click") + " add or remove a piece   " + KeyName("Drag") + " box   "
                 + KeyName("Click table") + " clear   " + KeyName("Esc") + " back to Grab";

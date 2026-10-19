@@ -144,6 +144,7 @@ namespace ConsoleCards.Editor.UI
             AddMissingDeckPicker();
             AddMissingDeleteGameButton();
             AddMissingGameSaveSteps();
+            AddMissingGameSaveDealStep();
             AddMissingTableHandles();
 
             AssignCatalogEntry(UiPrefabIds.PopupActionRow,
@@ -1170,10 +1171,10 @@ namespace ConsoleCards.Editor.UI
                 RectTransform steps = ButtonRow(body, TextAnchor.MiddleLeft);
                 steps.name = "StepsRow";
                 steps.SetSiblingIndex(summary.transform.GetSiblingIndex() + 1);
-                Button[] stepButtons = new Button[3];
-                Text[] stepLabels = new Text[3];
-                string[] names = { "1 · Deck", "2 · Cards", "3 · Save" };
-                for (int i = 0; i < 3; i++)
+                string[] names = { "1 · Deck", "2 · Cards", "3 · Deal", "4 · Save" };
+                Button[] stepButtons = new Button[names.Length];
+                Text[] stepLabels = new Text[names.Length];
+                for (int i = 0; i < names.Length; i++)
                 {
                     stepButtons[i] = PlainButton(steps, $"Step{i + 1}Button", names[i], 200f, out stepLabels[i]);
                 }
@@ -1227,7 +1228,52 @@ namespace ConsoleCards.Editor.UI
                 so.FindProperty("nextButton").objectReferenceValue = forward;
                 so.ApplyModifiedPropertiesWithoutUndo();
                 PrefabUtility.SaveAsPrefabAsset(root, GameSavePanelPath);
-                Debug.Log($"[Gameplay UI] Added the Deck, Cards and Save steps to {GameSavePanelPath}.");
+                Debug.Log($"[Gameplay UI] Added the Deck, Cards, Deal and Save steps to {GameSavePanelPath}.");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+        }
+
+        // DEAL-1: a save panel made with three steps (Deck, Cards, Save) gets the Deal step button before Save; the step
+        // section is shared, so nothing else changes.
+        private static void AddMissingGameSaveDealStep()
+        {
+            if (!File.Exists(GameSavePanelPath)) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(GameSavePanelPath);
+            try
+            {
+                GameSavePanelView view = root.GetComponent<GameSavePanelView>();
+                if (view == null) return;
+                SerializedObject so = new SerializedObject(view);
+                SerializedProperty buttons = so.FindProperty("stepButtons");
+                SerializedProperty labels = so.FindProperty("stepLabels");
+                if (buttons == null || labels == null || buttons.arraySize != 3 || labels.arraySize != 3) return;
+                Button save = buttons.GetArrayElementAtIndex(2).objectReferenceValue as Button;
+                if (save == null || save.transform.parent == null) return;
+                Button deal = PlainButton(save.transform.parent, "Step3DealButton", "3 · Deal", 200f, out Text dealLabel);
+                deal.transform.SetSiblingIndex(save.transform.GetSiblingIndex());
+                Object[] newButtons =
+                {
+                    buttons.GetArrayElementAtIndex(0).objectReferenceValue,
+                    buttons.GetArrayElementAtIndex(1).objectReferenceValue,
+                    deal,
+                    save,
+                };
+                Object[] newLabels =
+                {
+                    labels.GetArrayElementAtIndex(0).objectReferenceValue,
+                    labels.GetArrayElementAtIndex(1).objectReferenceValue,
+                    dealLabel,
+                    labels.GetArrayElementAtIndex(2).objectReferenceValue,
+                };
+                if (newLabels[3] is Text saveLabel) saveLabel.text = "4 · Save";
+                AssignArray(buttons, newButtons);
+                AssignArray(labels, newLabels);
+                so.ApplyModifiedPropertiesWithoutUndo();
+                PrefabUtility.SaveAsPrefabAsset(root, GameSavePanelPath);
+                Debug.Log($"[Gameplay UI] Added the Deal step to {GameSavePanelPath}.");
             }
             finally
             {

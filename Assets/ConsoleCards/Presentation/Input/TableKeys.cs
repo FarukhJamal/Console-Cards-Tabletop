@@ -26,6 +26,7 @@ namespace ConsoleCards.Presentation.Input
         private InputAction roll;
         private InputAction deleteSelection;
         private InputAction flip;
+        private InputAction deal;
 
         /// <summary>Finds and enables the actions in the map (the map the object input adapter reads from).</summary>
         public void Bind(InputActionMap map)
@@ -44,6 +45,7 @@ namespace ConsoleCards.Presentation.Input
             roll = Find(map, "Roll");
             deleteSelection = Find(map, "DeleteSelection");
             flip = Find(map, "Flip");
+            deal = Find(map, "Deal");
         }
 
         /// <summary>POL-2: Q turns the piece under the pointer, the selection or the carried piece left.</summary>
@@ -109,6 +111,13 @@ namespace ConsoleCards.Presentation.Input
         public string RotateLeftName => NameOf(rotateLeft, "Q");
         public string RotateRightName => NameOf(rotateRight, "E");
         public string RollName => NameOf(roll, "R");
+
+        /// <summary>DEAL-1: T over a deck or stack deals it (by the game's rule, or asks).</summary>
+        public bool DealPressedThisFrame => deal != null
+            ? deal.WasPressedThisFrame() && !ControlHeld
+            : Keyboard.current != null && Keyboard.current.tKey.wasPressedThisFrame && !ControlHeld;
+
+        public string DealName => NameOf(deal, "T");
         public string DeleteName => NameOf(deleteSelection, "Del");
 
         /// <summary>TOOLS-1: Esc (the map's Cancel): with nothing in progress it clears the selection, then picks Grab.</summary>

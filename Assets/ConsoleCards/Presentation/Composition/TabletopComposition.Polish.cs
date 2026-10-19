@@ -764,6 +764,7 @@ namespace ConsoleCards.Presentation.Composition
             if (interacting || carried != null) return;
 
             if (keys.RollPressedThisFrame) RollOrShuffleByKey();
+            if (keys.DealPressedThisFrame) DealByKey(); // DEAL-1
 
             int number = keys.NumberPressedThisFrame;
             if (number > 0 && IsPointerOnDrawablePile()) DrawCards(hoverPileId, number);

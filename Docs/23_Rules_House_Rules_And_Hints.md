@@ -1,7 +1,7 @@
 # Console Cards — Rules, House Rules and Hints
 
 **Document ID:** 23_Rules_House_Rules_And_Hints
-**Version:** 0.11
+**Version:** 0.12
 **Status:** Approved direction (owner, 2026-10-09). R1, R2a, R2b, C1, R3 and R4 implemented (Trap Floor G2a applies the revised turn); hint system H1, H2 and H3 implemented and approved (§10). Pings wait for multiplayer.
 
 > **Contract note:** type names and field lists here are illustrative unless labelled **Approved Contract**. They describe the direction agreed with the owner, not fixed public APIs.
@@ -76,6 +76,11 @@ Each game supplies its own entries and setting keys. The platform only knows how
 | `move.tiles` | Number | all modes or per mode | How many tiles a player may move on their turn, in one straight line (R4; Trap Floor default 2). Passed through; the hints read it |
 | `move.tiles.avatar.<Avatar stable ID>` | Number | all modes or per mode | That Avatar's own move count in place of `move.tiles` (Trap Floor: the Athlete, 3). An Avatar the game does not have is skipped with a warning |
 | `card.cost.<card stable ID>` | Text, in card cost notation | game | That card's input cost (C1). Replaces the authored cost in the game data, so the purchase popup, payment check and inspect text all use it. Empty means no cost yet |
+| `deal.count` | Number, or `all` | all modes or per mode | DEAL-1: cards dealt to each player (`all`: every card, evenly). A rule set without it has no deal rule and Deal asks |
+| `deal.packet` | Number (1–5) | all modes or per mode | DEAL-1: cards given at a time (default 1) |
+| `deal.face` | Choice: down / up | all modes or per mode | DEAL-1: which way up cards dealt to the table lie (default down) |
+| `deal.to` | Choice: hand / table | all modes or per mode | DEAL-1: into the players' hands or onto the table in front of them (default hand) |
+| `deal.when` | Choice: manual / setup | all modes or per mode | DEAL-1: `setup` also deals when the game starts (player-made games today); `manual` only from Deal |
 | `shop.enabled` | Toggle: on / off | all modes or per mode | Whether the game's Shop is open (Trap Floor, doc 18 §15.4; default on). Passed through. **Applies at once** when the table agrees to a change (the game reads the rule set in play), so it never asks for a restart |
 
 **Card cost notation (C1).** Parts are joined with `+`. A part lists one or more inputs separated by `/`, and any one of them pays it. `x2` after a part repeats it. Examples: `Up + A/B/X/Y` (an Up card and one of A, B, X or Y), `Left/Right + A/B/X/Y`, `A + B + X + Y`, `Right x2 + A`. Input names are Up, Down, Left, Right, A, B, X and Y, in any letter case. A cost that cannot be read is skipped with a warning and the card keeps its authored cost. Card assets store the same thing: each requirement has an input, optional `alsoAccepts` inputs and a count.

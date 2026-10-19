@@ -398,7 +398,9 @@ namespace ConsoleCards.Presentation.Composition
             // Physics checkpoints advance the Match even while a uGUI Button owns a press.
             // Keep the Die menu and its Button instance alive until click/acceptance; Roll validates
             // current state through the physical authority. Other menus retain their existing policy.
+            // DEAL-1: the "how many players?" question after a game starts waits for an answer too.
             if (host.contextMenuMode != ContextMenuMode.Die
+                && host.contextMenuMode != ContextMenuMode.DealPlayers
                 && host.matchState != null && host.contextMenuRenderedRevision != host.matchState.Revision)
             {
                 CloseContextMenu();
@@ -469,6 +471,12 @@ namespace ConsoleCards.Presentation.Composition
                 case ContextMenuMode.Flourishes:
                     host.ShowFlourishMenu();
                     break;
+                case ContextMenuMode.DealForm:
+                    host.ShowDealForm();
+                    break;
+                case ContextMenuMode.DealPlayers:
+                    host.ShowDealPlayersMenu();
+                    break;
                 default:
                     CloseContextMenu();
                     return;
@@ -509,6 +517,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             host.AddShuffleActions(actions, targetDeckId); // SHUF-1: your style, Shuffle as..., Flourish...
+            host.AddDealActions(actions, targetDeckId); // DEAL-1
             host.AddSplitIntoPilesAction(actions, targetDeckId);
             host.AddSpreadAction(actions, targetDeckId); // POL-4
             host.AddPileDuplicateAction(actions, targetDeckId);
@@ -890,6 +899,8 @@ namespace ConsoleCards.Presentation.Composition
             {
                 host.AddShuffleActions(actions, sourceStackId); // SHUF-1
             }
+
+            host.AddDealActions(actions, sourceStackId); // DEAL-1
 
             if (stack.Count >= 2)
             {
@@ -1297,6 +1308,10 @@ namespace ConsoleCards.Presentation.Composition
                 case ContextMenuMode.ShuffleDefault:
                 case ContextMenuMode.Flourishes:
                     return host.CanShuffleInStyles(host.contextMenuContainerId);
+                case ContextMenuMode.DealForm:
+                    return host.CanDealFrom(host.contextMenuContainerId);
+                case ContextMenuMode.DealPlayers:
+                    return host.IsDealPlayersMenuAvailable();
                 case ContextMenuMode.DiscardPile:
                     return !host.contextMenuContainerId.IsEmpty
                         && host.matchState.Containers.TryGetValue(host.contextMenuContainerId, out ContainerState discardPile)

@@ -41,6 +41,12 @@ namespace ConsoleCards.Presentation.Saving
         /// </summary>
         public SavedGameDeck deck = new SavedGameDeck();
 
+        /// <summary>
+        /// How the game deals (DEAL-1), as <see cref="ConsoleCards.Definitions.DealRule"/> text
+        /// ("count=5;packet=1;face=down;to=hand;when=setup"); empty: no dealing. Set in the Deal step.
+        /// </summary>
+        public string deal = string.Empty;
+
         public PlayerGameFile Normalised()
         {
             if (table == null) table = new SavedTable();

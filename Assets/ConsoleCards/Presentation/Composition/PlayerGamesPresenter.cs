@@ -85,6 +85,8 @@ namespace ConsoleCards.Presentation.Composition
         internal bool returnToGameSave;
         internal HashSet<string> saveKnownDeckKeys;
         internal const int SaveDeckLinesShown = 12;
+        // DEAL-1: the game's deal rule in the save panel (null: the game does not deal).
+        internal DealRule saveDeal;
 
         internal PlayerGameStore PlayerGames() => PlayerGameStore.ForProfile(host.EnsureProfile());
 
@@ -105,6 +107,7 @@ namespace ConsoleCards.Presentation.Composition
             saveMinimumPlayers = from != null ? from.minimumPlayers : 2;
             saveMaximumPlayers = from != null ? from.maximumPlayers : 4;
             saveStep = GameSaveModel.DeckStep;
+            saveDeal = from != null && DealRule.TryParse(from.deal, out DealRule deal) ? deal : null;
             ShowGameSave(string.Empty);
         }
 
@@ -224,6 +227,7 @@ namespace ConsoleCards.Presentation.Composition
                 rulesText = saveRules,
                 table = table,
                 deck = gameDeck,
+                deal = saveDeal != null ? saveDeal.ToNotation() : string.Empty,
             };
             if (!PlayerGames().Save(game, out string error))
             {
@@ -257,7 +261,7 @@ namespace ConsoleCards.Presentation.Composition
             int count = hasDeck ? SaveDeckCards(deck, out lines, out different).Count : 0;
             if (saveStep == GameSaveModel.DeckStep)
             {
-                model.StepTitle = "STEP 1 OF 3 · YOUR GAME'S DECK";
+                model.StepTitle = "STEP 1 OF 4 · YOUR GAME'S DECK";
                 model.ShowPicker = true;
                 model.PickText = hasDeck ? $"{deck.Name} · {CountText(count, "card")}" : "No deck";
                 model.ActionAText = "New deck…";
@@ -289,12 +293,18 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            model.StepTitle = "STEP 2 OF 3 · CARDS";
+            if (saveStep == GameSaveModel.DealStep)
+            {
+                FillDealStep(model, deck, hasDeck);
+                return;
+            }
+
+            model.StepTitle = "STEP 2 OF 4 · CARDS";
             model.ShowPicker = false;
             if (!hasDeck)
             {
                 model.StepText = "Choose your game's deck in step 1 first; its cards are made and picked here.\n\n"
-                    + "Without a deck, Next goes on to saving.";
+                    + "Without a deck, Next goes on to dealing and saving.";
                 return;
             }
 
@@ -316,9 +326,62 @@ namespace ConsoleCards.Presentation.Composition
             ShowGameSave(string.Empty);
         }
 
+        // ---------- the Deal step (DEAL-1) ----------
+
+        // < > choose how many each (no dealing, 1 to 13, all); A: hands or table; B: face on the table, or how many at
+        // a time into hands. The game deals this way when it starts, and Deal on its deck follows it.
+        internal void FillDealStep(GameSaveModel model, DeckChoice deck, bool hasDeck)
+        {
+            model.StepTitle = "STEP 3 OF 4 · DEALING";
+            model.ShowPicker = true;
+            DealRule deal = saveDeal;
+            model.PickText = deal == null
+                ? "No dealing"
+                : deal.DealsAll ? "Deal all the cards, evenly" : deal.CountEach == 1 ? "Deal 1 card to each player" : $"Deal {deal.CountEach} cards to each player";
+            if (deal == null)
+            {
+                model.StepText = "Your game does not deal: players take cards themselves.\n\n"
+                    + "Use < and > to choose how many cards each player is dealt when the game starts.";
+                return;
+            }
+
+            model.ActionAText = deal.To == DealDestination.Hand ? "To: their hands" : "To: the table";
+            model.ActionBText = deal.To == DealDestination.Table
+                ? deal.Face == DealFace.Down ? "Face: down" : "Face: up"
+                : deal.Packet == 1 ? "At a time: one card" : $"At a time: {deal.Packet} cards";
+            model.StepText = deal.Describe()
+                + (hasDeck ? $"\n\nFrom {deck.Name}, in turn order from the left of the dealer." : "\n\nChoose your game's deck in step 1: the game deals from it.")
+                + "\n\nWhen the game allows several numbers of players, starting it asks how many play. Deal on the deck's menu (or T) deals this way again; the rules card shows it.";
+        }
+
+        internal void CycleSaveDeal(int step)
+        {
+            int index = saveDeal == null ? 0 : saveDeal.DealsAll ? DealRuleChoices - 1 : Mathf.Clamp(saveDeal.CountEach, 1, DealRuleChoices - 2);
+            index = (((index + step) % DealRuleChoices) + DealRuleChoices) % DealRuleChoices;
+            if (index == 0)
+            {
+                saveDeal = null;
+                return;
+            }
+
+            if (saveDeal == null) saveDeal = new DealRule { When = DealTiming.Setup };
+            saveDeal.CountEach = index == DealRuleChoices - 1 ? 0 : index;
+            saveDeal.When = DealTiming.Setup;
+        }
+
+        // No dealing, 1 to 13 each, all.
+        internal const int DealRuleChoices = 15;
+
         internal void CycleSaveDeck(int step, GameSaveTyped typed)
         {
             KeepTyped(typed);
+            if (saveStep == GameSaveModel.DealStep)
+            {
+                CycleSaveDeal(step);
+                ShowGameSave(string.Empty);
+                return;
+            }
+
             List<DeckChoice> choices = SaveDeckChoices();
             int index = choices.IndexOf(ChosenSaveDeck(choices));
             DeckChoice next = choices[((index + step) % choices.Count + choices.Count) % choices.Count];
@@ -331,6 +394,13 @@ namespace ConsoleCards.Presentation.Composition
         internal void SaveStepActionA(GameSaveTyped typed)
         {
             KeepTyped(typed);
+            if (saveStep == GameSaveModel.DealStep)
+            {
+                if (saveDeal != null) saveDeal.To = saveDeal.To == DealDestination.Hand ? DealDestination.Table : DealDestination.Hand;
+                ShowGameSave(string.Empty);
+                return;
+            }
+
             DeckChoice deck = ChosenSaveDeck(SaveDeckChoices());
             if (saveStep == GameSaveModel.DeckStep) NewDeckFromSave(deck);
             else if (saveStep == GameSaveModel.CardsStep && deck.Game != null) CreateCardFromSave(deck);
@@ -339,6 +409,14 @@ namespace ConsoleCards.Presentation.Composition
         internal void SaveStepActionB(GameSaveTyped typed)
         {
             KeepTyped(typed);
+            if (saveStep == GameSaveModel.DealStep)
+            {
+                if (saveDeal != null && saveDeal.To == DealDestination.Table) saveDeal.Face = saveDeal.Face == DealFace.Down ? DealFace.Up : DealFace.Down;
+                else if (saveDeal != null) saveDeal.Packet = saveDeal.Packet >= 3 ? 1 : saveDeal.Packet + 1;
+                ShowGameSave(string.Empty);
+                return;
+            }
+
             DeckChoice deck = ChosenSaveDeck(SaveDeckChoices());
             if (deck.Game == null) return;
             if (saveStep == GameSaveModel.DeckStep) PutSaveDeckOnTable(deck);
@@ -752,6 +830,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             host.SessionService.ShowActiveSessionUi(); // the chip shows the game's name and the rules card its rules
+            host.DealAtGameStart(game, gameDeckContainerId); // DEAL-1: a game that deals when it starts
             host.ShowMessage(failed == 0
                 ? $"{game.name} is ready. Its rules are on the rules card."
                 : $"{game.name} is ready, but {failed} piece{(failed == 1 ? string.Empty : "s")} could not be laid out.");
@@ -846,6 +925,13 @@ namespace ConsoleCards.Presentation.Composition
             if (lines.Count == 0)
             {
                 lines.Add(new RulesCardLine(RulesCardLineKind.Rule, "•", "No rules written yet: Save table as a game… to write them.", false));
+            }
+
+            // DEAL-1: the game's deal rule (set in the Deal step).
+            if (DealRule.TryParse(activePlayerGame.deal, out DealRule deal))
+            {
+                lines.Add(new RulesCardLine(RulesCardLineKind.Heading, string.Empty, "Dealing", false));
+                lines.Add(new RulesCardLine(RulesCardLineKind.Rule, "1", deal.Describe(), false));
             }
 
             return new RulesCardModel(activePlayerGame.name, false, lines);

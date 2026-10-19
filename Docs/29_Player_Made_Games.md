@@ -1,6 +1,6 @@
 # 29 — Player-Made Games
 
-Version 0.2 · 2026-10-16 · Status: L2-6 written; L2-6b polish approved by the owner (2026-10-16)
+Version 0.3 · 2026-10-19 · Status: L2-6 written; L2-6b polish approved by the owner (2026-10-16); Deal step added (DEAL-1, 2026-10-19)
 
 ## The owner's direction (2026-10-16)
 
@@ -52,6 +52,21 @@ Notes:
   are refreshed at Start).
 - The steps are added to an existing GameSavePanel by *Create Missing Gameplay UI Prefabs*; without them the
   panel shows the Save step only, with a line saying so.
+
+## The Deal step (DEAL-1, 2026-10-19)
+
+The save panel's steps are now **1 · Deck**, **2 · Cards**, **3 · Deal**, **4 · Save** (a panel made with three steps
+gets the Deal button from *Create Missing Gameplay UI Prefabs*).
+
+- `<` `>` choose **No dealing**, **Deal 1 to 13 cards to each player**, or **Deal all the cards, evenly**.
+- The first button switches **To: their hands** / **To: the table**; the second switches **Face: down / up** (on the
+  table) or **At a time: one card / 2 / 3** (into hands).
+- Saved with the game as `deal` (for example `count=5;packet=1;face=down;to=hand;when=setup`). The rules card shows it
+  under **Dealing**.
+- **Start** deals from the game's deck after laying the table out; when the game allows several numbers of players
+  it first asks how many play. Deal on the deck's menu (or T) deals the same way again.
+- An Empty Table has no players' hands, so each player's cards are laid in front of the deck, one stack per player
+  (with one player and the Hand on, into your hand).
 
 ## Playing and changing a game
 

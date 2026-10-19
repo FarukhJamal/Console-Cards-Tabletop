@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.19 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.20 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -611,9 +611,19 @@ Change: …
 - **Source:** doc 30 Part H
 
 ### PL-DEAL · Dealing by the game's rules
-- **Status:** Planned (DEAL-1)
-- **Rule now:** a game's rules say how cards are dealt (deck, how many, face, to hand or table, order, when); Deal
-  follows them, or asks on an Empty Table. Player-made games set it in Save table as a game; house rules can change it.
+- **Status:** Built (DEAL-1, 2026-10-19), to be checked
+- **Rule now:** a deck's or stack's menu has **Deal (the rule)** and **Deal another way...**, or **Deal...** when the
+  game has no deal rule (an Empty Table never has one); **T** over a pile deals too. The rule says how many each
+  (or all, evenly), how many at a time, to their hands or the table, face up or down, and whether the game deals when
+  it starts. Without a rule a small form asks (players, each, at a time, hands or table, face; a click on a line
+  changes it). Players are dealt in turn order from the left of the dealer (this screen's seat). Cards on the table go
+  into one stack per player (a third of the way from the seat toward the pile, or in a row in front of the pile on a
+  table without seats); a table without players' hands lays each player's cards there. The cards fly out one after
+  another, with a deal sound. One Undo step. A game's rules carry it as typed settings (`deal.count`, `deal.packet`,
+  `deal.face`, `deal.to`, `deal.when`, doc 23 §5), so the rules card shows it and a house rule changes it; a game a
+  player made sets it in the **Deal** step of Save table as a game (doc 29) and deals when it starts (asking how many
+  play when it allows several).
+- **Not covered:** dealing each round by itself (a game's turn helper would ask for that).
 - **Source:** doc 30 Part H
 
 ### PL-ICONS · Icons on card sides and corners

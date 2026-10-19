@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.32 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.35 · 2026-10-20 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1765,3 +1765,38 @@ so the build uses stand-in pictures and keeps both frames and symbols replaceabl
   transition controller (leave delay, arc, wait, a swirl for the wash); `ShuffleDeckCommand.Cut` and the cut in
   `ShuffleDeckUseCase`.
 - No prefab to rebuild. Not compiled here; the owner checks in Unity.
+
+**DEAL-1 record (owner: "Approved next" after SHUF-1, 2026-10-19; written, to be checked).**
+- **The rule** (`DealRule`): how many each (or all, evenly), how many at a time, hands or table, face up or down, and
+  whether the game deals when it starts. A game's rules carry it as typed settings `deal.count`, `deal.packet`,
+  `deal.face`, `deal.to`, `deal.when` (doc 23 §5): the rules card shows them and a house rule changes them with the
+  usual agreement. A game a player made saves it in the new **Deal** step of Save table as a game (doc 29).
+- **Deal** on a deck's or stack's menu: **Deal (5 each, to hands)** follows the rule, **Deal another way...** opens the
+  form; without a rule (an Empty Table never follows a game's rules) **Deal...** opens the form. **T** over a pile
+  deals by the rule or opens the form there. The form is a small menu: Players (only without seats), Each, At a time,
+  To, Face (on the table); a click on a line changes it; **Deal** deals.
+- **Who:** the seats with hands, in turn order starting left of the dealer (this screen's seat). Without seats, one
+  place per player in a row in front of the pile (with one player and the Hand on, your hand).
+- **Where:** hands through the table's draw (one card at a time, so each hand's own rules apply); the table into one
+  stack per player, a third of the way from the seat toward the pile, turned face up or down as the rule says.
+- **Feel:** the cards fly out one after another (Feel Settings › draw time and arc, Shuffle Style Speed) with
+  `TableSounds/Deal.wav`. The whole deal is one Undo step. A pile that runs out stops the deal and says so.
+- **At the start:** a player's game with a deal rule deals from its deck once the table is laid out; when it allows
+  several numbers of players, a "How many players?" question comes first (or Don't deal now).
+- **Builders to run:** Console Cards > UI > Create Missing Gameplay UI Prefabs (adds the Deal step to the save panel).
+- **New key:** Deal (T) in the Input Actions asset; the keys strip over a pile shows it.
+- Not covered: dealing each round by itself. Trap Floor has no deal rule in its rules (its controller draw stays);
+  add `deal.*` entries to a rule set to give a game one.
+- Not compiled here; the owner checks in Unity.
+
+**DEAL-1 fix (owner, 2026-10-19: "on the table none landed on stacks, and to hands it threw them randomly").** Each
+card was moved with the drag-and-drop mover, which starts its own glide from where the card was; the deal's flight
+then read that starting point as the card's place, so cards stayed near the deck or flew to odd places. Now the deal
+moves cards with the table's own commands (a transfer into the player's stack, a draw into a hand), finishes any move
+already running, and only then flies each card from the deck to its real place. A card for a hand this screen does not
+show flies toward that player's seat and is put away there.
+
+**DEAL-1 fix 2 (owner, 2026-10-20: "deal to 2 players, then to 1 player: the stacks overlap").** Before dealing to the
+table, the deal looks for free places: on a table without seats it skips a row where any deck, stack, discard pile or
+loose card already lies and uses the next row out (up to 8 rows); at a seat it moves the player's place sideways until
+it is free. Piles from an earlier deal stay where they are and the new ones never land on them.

@@ -18,11 +18,14 @@ namespace ConsoleCards.Presentation.UI
         public string SaveOverText = "Save over";
         public string Status = string.Empty;
 
-        // The steps (L2-6b): 0 Deck, 1 Cards, 2 Save. The Deck and Cards steps show a title, a text, an optional
-        // < choice > line and up to two action buttons (empty text hides one); the Save step shows the details.
+        // The steps (L2-6b, DEAL-1): 0 Deck, 1 Cards, 2 Deal, 3 Save. The Deck, Cards and Deal steps show a title, a
+        // text, an optional < choice > line and up to two action buttons (empty text hides one); the Save step shows
+        // the details.
         public const int DeckStep = 0;
         public const int CardsStep = 1;
-        public const int SaveStep = 2;
+        public const int DealStep = 2;
+        public const int SaveStep = 3;
+        public const int StepCount = 4;
         public int Step = SaveStep;
         public string StepTitle = string.Empty;
         public string StepText = string.Empty;
@@ -64,7 +67,7 @@ namespace ConsoleCards.Presentation.UI
     /// Save table as a game (doc 29): the game's name, players (fewest and most), description and written rules
     /// (a line starting with "#" is a heading), with what of the table will be saved. Save as a new game, or over
     /// the game this table was started from. An authored Final UI prefab.
-    /// In steps (L2-6b, added to the prefab by Create Missing Gameplay UI Prefabs): 1 Deck, 2 Cards, 3 Save, with
+    /// In steps (L2-6b, DEAL-1; added to the prefab by Create Missing Gameplay UI Prefabs): 1 Deck, 2 Cards, 3 Deal, 4 Save, with
     /// Back and Next. A prefab without the steps shows the Save step only.
     /// </summary>
     public sealed class GameSavePanelView : ReusableUiView
@@ -109,11 +112,11 @@ namespace ConsoleCards.Presentation.UI
         private GameSaveActions actions;
         private int step = GameSaveModel.SaveStep;
 
-        private static readonly string[] StepNames = { "1 · Deck", "2 · Cards", "3 · Save" };
+        private static readonly string[] StepNames = { "1 · Deck", "2 · Cards", "3 · Deal", "4 · Save" };
 
         /// <summary>True when the prefab has the steps (Deck, Cards, Save).</summary>
         public bool HasSteps =>
-            stepButtons != null && stepButtons.Length == 3 && stepSection != null && stepTitleLabel != null
+            stepButtons != null && stepButtons.Length == GameSaveModel.StepCount && stepSection != null && stepTitleLabel != null
             && stepTextLabel != null && pickerRow != null && previousPickButton != null && pickLabel != null
             && nextPickButton != null && actionAButton != null && actionALabel != null && actionBButton != null
             && actionBLabel != null && detailsSection != null && backButton != null && nextButton != null;
@@ -174,14 +177,14 @@ namespace ConsoleCards.Presentation.UI
             actionBButton.onClick.AddListener(() => actions?.ActionB?.Invoke(Typed()));
         }
 
-        // The Deck and Cards steps show the step section; the Save step shows the details and the save buttons.
+        // The Deck, Cards and Deal steps show the step section; the Save step shows the details and the save buttons.
         private void BindSteps(GameSaveModel model)
         {
             if (!HasSteps)
             {
                 if (model.Step != GameSaveModel.SaveStep)
                 {
-                    statusLabel.text = "For the Deck and Cards steps, run Console Cards > UI > Create Missing Gameplay UI Prefabs.";
+                    statusLabel.text = "For the Deck, Cards and Deal steps, run Console Cards > UI > Create Missing Gameplay UI Prefabs.";
                 }
 
                 return;
