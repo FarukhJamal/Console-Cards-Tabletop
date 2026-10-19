@@ -125,6 +125,9 @@ namespace ConsoleCards.Presentation.Composition
         internal void ShowMessage(string message)
         {
             RecordHandoverLine(message);
+            // Owner, 2026-10-19: ordinary action messages no longer pop up (Feel Settings › Show Action Messages);
+            // warnings still do.
+            if (!Feel.ShowActionMessages && SeverityOf(message) == FeedbackSeverity.Info) return;
             // With the message stack, messages go there and the status strip keeps only the standing status.
             if (playerFeedback
                 && runtimeUi != null

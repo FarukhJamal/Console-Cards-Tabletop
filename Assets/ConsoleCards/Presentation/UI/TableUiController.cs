@@ -674,7 +674,8 @@ namespace ConsoleCards.Presentation.UI
             Action<TableToolKind> chooseTool,
             Action toggleKeysStrip,
             Action groupSelection,
-            Action clearSelection)
+            Action clearSelection,
+            Action toggleHandStyle = null)
         {
             try
             {
@@ -684,7 +685,7 @@ namespace ConsoleCards.Presentation.UI
                     toolBarView = uiService.AcquireCached<ToolBarView>(UiPrefabIds.ToolBar);
                 }
 
-                toolBarView.Bind(chooseTool, toggleKeysStrip, OpenHelp, groupSelection, clearSelection);
+                toolBarView.Bind(chooseTool, toggleKeysStrip, OpenHelp, groupSelection, clearSelection, toggleHandStyle);
                 toolBarView.SetKeysAllowed(hintsVisible);
                 toolBarView.Show();
                 interactionGuideView?.SetStripVisible(false);
@@ -715,6 +716,8 @@ namespace ConsoleCards.Presentation.UI
         public void SetToolKeysWanted(bool wanted) => VisibleToolBar()?.SetKeysWanted(wanted);
 
         public void SetSelectionCount(int count) => VisibleToolBar()?.SetSelectionCount(count);
+
+        public void SetHandStyle(bool fan) => VisibleToolBar()?.SetHandStyle(fan);
 
         public void ShowSelectionBox(Vector2 screenA, Vector2 screenB) => VisibleToolBar()?.ShowSelectionBox(screenA, screenB);
 

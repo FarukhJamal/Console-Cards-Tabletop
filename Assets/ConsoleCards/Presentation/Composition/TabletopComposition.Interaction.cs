@@ -198,6 +198,7 @@ namespace ConsoleCards.Presentation.Composition
                 CommitToolboxPlacement,
                 HandlePlacementRotationChanged);
             componentPlacementController.PhysicalSurfaces = physicalSurfaceQuery;
+            componentPlacementController.Placed = PlayPlacementSound; // owner, 2026-10-19: placement has a sound
             inputFrameCoordinator.ConfigureComponentPlacement(componentPlacementController);
             componentPlacementInputConfiguredByComposition = true;
         }

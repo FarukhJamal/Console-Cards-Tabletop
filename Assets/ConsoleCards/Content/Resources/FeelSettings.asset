@@ -25,4 +25,4 @@ MonoBehaviour:
   diceRattleInterval: 0.11
   diceRattleVolume: 0.4
   cardSoundVolume: 0.5
-  logMissedClicks: 1
+  logMissedClicks: 0

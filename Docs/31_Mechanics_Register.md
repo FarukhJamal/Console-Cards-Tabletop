@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.14 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.15 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -568,7 +568,9 @@ Change: …
   - **Dice:** R over a die rolls it (or the selected dice); shaking the mouse while carrying a die shakes it; the
     result floats up when it rests.
   - **Flick:** power curve, a charge sound that rises with the pull, a snap on release.
-  - **Hand:** the tray hand is a curved fan.
+  - **Hand:** the tray hand is a curved fan or a straight row (FAN / ROW on the tool bar).
+  - **Placing:** a placed piece makes the sound of its material; Shuffle plays a riffle sound.
+  - **Messages:** ordinary action messages do not pop up (warnings and game news do).
   - **Selection:** drag one selected piece and the others come along; F flips, Q / E turn, Delete removes the
     Toolbox ones; grabbing an unselected piece drops the selection.
   - **Sound:** impacts by material and speed with random pitch; quieter when many play at once.
@@ -581,6 +583,7 @@ Change: …
   - **Tool bar** (bottom right): Grab (normal), Select, Ping, Flick, Draw (greyed until T5), Keys (show or hide the
     keys strip) and ? (help).
   - **Keys strip:** the keys for what you are doing right now; hidden with Keys or with Hints off.
+  - **Box select with Grab:** a drag on the empty table draws the selection box (new box = new selection, Ctrl adds).
   - **Select** (or Ctrl held), as in Tabletop Simulator: every component except game boards and Consoles. Click a
     loose card, pawn, token or die to add or remove it; click a card in a deck, stack or discard pile to pick the whole
     pile; click the table to clear; drag a box to select everything inside (bags too). Never selected: boards and floor

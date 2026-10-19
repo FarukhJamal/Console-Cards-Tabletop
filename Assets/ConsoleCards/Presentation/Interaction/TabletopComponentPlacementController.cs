@@ -58,6 +58,9 @@ namespace ConsoleCards.Presentation.Interaction
 
         public bool IsActive => previewRoot != null;
 
+        /// <summary>Owner, 2026-10-19: called after each accepted placement (for its sound).</summary>
+        public Action<TabletopComponentKind> Placed { get; set; }
+
         public TabletopComponentKind ComponentKind => componentKind;
 
         public int DieSideCount => dieSideCount;
@@ -233,6 +236,7 @@ namespace ConsoleCards.Presentation.Interaction
                 && activeCommitPlacement != null
                 && activeCommitPlacement(previewPose))
             {
+                Placed?.Invoke(componentKind);
                 if (keepPlacing && previewRoot != null)
                 {
                     if (nextLocalOrder != null) localOrder = nextLocalOrder();

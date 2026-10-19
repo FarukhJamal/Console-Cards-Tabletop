@@ -74,7 +74,7 @@ namespace ConsoleCards.Presentation.Composition
                 // R2: the deck or stack was laid out again by the table's view sync when the shuffle was accepted.
                 // SMOOTH-1: a quick riffle from the old order into the new one.
                 AnimateRiffle(transitionStarts, isDeck ? targetDeckVisual.transform : targetStack.Root.transform);
-                PlayCardSound(true);
+                PlayShuffleSound();
                 ShowMessage(isDeck ? "Deck shuffled." : "Stack shuffled.");
             }
             else

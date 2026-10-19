@@ -13,6 +13,12 @@ namespace ConsoleCards.Presentation.Interaction
         /// <summary>True while the Select tool is chosen or the select key is held.</summary>
         bool WantsSelect();
 
+        /// <summary>
+        /// True when a press on the empty table should draw a selection box even without the Select tool (as in
+        /// Tabletop Simulator: drag on the empty table to select several pieces).
+        /// </summary>
+        bool WantsBoxOnEmptyTable();
+
         /// <summary>A press: the piece under the pointer (or null for the table).</summary>
         bool TryBeginSelect(TabletopObjectView viewUnderPointer, Vector2 screenPosition);
 

@@ -45,6 +45,9 @@ namespace ConsoleCards.Presentation.Views.Containers
         [SerializeField, Range(-30f, 30f)] private float trayFanDegrees = 9f;
         [SerializeField, Range(0f, 1f)] private float trayFanDrop = 0.14f;
 
+        /// <summary>Owner, 2026-10-19: the tray hand as a fan (true) or a straight row (false), switched on the tool bar.</summary>
+        public bool TrayFan { get; set; } = true;
+
         private readonly List<CardView> suppliedCardViews = new List<CardView>();
         private readonly List<CardView> layoutAppliedCards = new List<CardView>();
         private readonly Dictionary<TabletopObjectId, HandInteractionPose> interactionPoses =
@@ -902,7 +905,7 @@ namespace ConsoleCards.Presentation.Views.Containers
                 }
 
                 // POL-6: place along the fan (-1 at the left end, +1 at the right end).
-                float fan = center > 0f ? Mathf.Clamp((i - center) / center, -1f, 1f) : 0f;
+                float fan = TrayFan && center > 0f ? Mathf.Clamp((i - center) / center, -1f, 1f) : 0f;
                 bool straight = selected || hovered;
                 Vector3 targetPosition = new Vector3(
                     ((i - center) * layoutPitch) + spread,

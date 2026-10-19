@@ -43,6 +43,9 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Text keysLabel;
         [SerializeField] private Button keysToggle;
         [SerializeField] private Button helpButton;
+        [Tooltip("Optional (owner, 2026-10-19): switches the hand tray between a fan and a straight row.")]
+        [SerializeField] private Button handStyleButton;
+        [SerializeField] private Text handStyleLabel;
         [Header("Selection")]
         [SerializeField] private GameObject selectionActions;
         [SerializeField] private Text selectionCountLabel;
@@ -54,6 +57,7 @@ namespace ConsoleCards.Presentation.UI
         private Action toggleKeys;
         private Action openHelp;
         private Action groupSelection;
+        private Action toggleHandStyle;
         private Action clearSelection;
         private string shownKeys;
         private bool keysWanted = true;
@@ -77,7 +81,8 @@ namespace ConsoleCards.Presentation.UI
             Action toggleKeysStrip,
             Action help,
             Action group,
-            Action clear)
+            Action clear,
+            Action handStyle = null)
         {
             RequireAcquired();
             ValidateReferences();
@@ -87,6 +92,7 @@ namespace ConsoleCards.Presentation.UI
             openHelp = help;
             groupSelection = group;
             clearSelection = clear;
+            toggleHandStyle = handStyle;
             for (int i = 0; i < tools.Length; i++)
             {
                 ToolButton tool = tools[i];
@@ -99,6 +105,11 @@ namespace ConsoleCards.Presentation.UI
             helpButton.onClick.AddListener(() => openHelp?.Invoke());
             groupButton.onClick.AddListener(() => groupSelection?.Invoke());
             clearButton.onClick.AddListener(() => clearSelection?.Invoke());
+            if (handStyleButton != null)
+            {
+                handStyleButton.gameObject.SetActive(handStyle != null);
+                handStyleButton.onClick.AddListener(() => toggleHandStyle?.Invoke());
+            }
             shownKeys = null;
             shownCount = -1;
             SetSelectionCount(0);
@@ -116,6 +127,12 @@ namespace ConsoleCards.Presentation.UI
                 if (tool.fill != null) tool.fill.color = active ? activeFill : idleFill;
                 if (tool.icon != null) tool.icon.color = active ? activeIcon : idleIcon;
             }
+        }
+
+        /// <summary>The hand-style button's name: FAN when the tray is a fan, ROW when it is straight.</summary>
+        public void SetHandStyle(bool fan)
+        {
+            if (handStyleLabel != null) handStyleLabel.text = fan ? "FAN" : "ROW";
         }
 
         /// <summary>Greys out a tool that is not ready yet (Draw until T5).</summary>
@@ -193,6 +210,7 @@ namespace ConsoleCards.Presentation.UI
             if (helpButton != null) helpButton.onClick.RemoveAllListeners();
             if (groupButton != null) groupButton.onClick.RemoveAllListeners();
             if (clearButton != null) clearButton.onClick.RemoveAllListeners();
+            if (handStyleButton != null) handStyleButton.onClick.RemoveAllListeners();
         }
     }
 }

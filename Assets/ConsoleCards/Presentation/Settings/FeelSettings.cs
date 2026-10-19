@@ -161,7 +161,12 @@ namespace ConsoleCards.Presentation.Settings
         [Header("Diagnostics")]
         [Tooltip("Writes a line to the Console (and Editor.log) when a click on the table did not pick anything up, "
             + "and why. Helps find clicks that need a second try.")]
-        [SerializeField] private bool logMissedClicks = true;
+        [SerializeField] private bool logMissedClicks = false;
+
+        [Header("Messages")]
+        [Tooltip("Show a message for every ordinary action (\"Container moved.\", \"Deck shuffled.\"). Off: only warnings "
+            + "and game news pop up; everything still goes to the What Happened log.")]
+        [SerializeField] private bool showActionMessages = false;
 
         public float StackHoldSeconds => stackHoldSeconds;
         public float StackCarryLift => stackCarryLift;
@@ -220,5 +225,6 @@ namespace ConsoleCards.Presentation.Settings
         public float PitchJitter => pitchJitter;
         public float CrowdDamping => crowdDamping;
         public bool LogMissedClicks => logMissedClicks;
+        public bool ShowActionMessages => showActionMessages;
     }
 }

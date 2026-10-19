@@ -71,6 +71,7 @@ namespace ConsoleCards.Presentation.Composition
     {
         private const string FlickChargeSoundPath = "TableSounds/FlickCharge";
         private const string FlickSnapSoundPath = "TableSounds/FlickSnap";
+        private const string RiffleSoundPath = "TableSounds/Riffle";
         private const float ImpactMuteAfterTableSeconds = 1.2f;
         private const float GroupCancelDistance = 0.02f;
         private static readonly Color DieResultColour = new Color(0.949f, 0.659f, 0.114f, 1f); // mustard
@@ -78,6 +79,7 @@ namespace ConsoleCards.Presentation.Composition
         private TableSoundPlayer tableSounds;
         private AudioClip flickChargeClip;
         private AudioClip flickSnapClip;
+        private AudioClip riffleClip;
         private bool polishHooked;
         private MatchState polishMatch;
         private float impactsMutedUntil;
@@ -175,6 +177,44 @@ namespace ConsoleCards.Presentation.Composition
             tableSounds = new TableSoundPlayer(transform);
             flickChargeClip = Resources.Load<AudioClip>(FlickChargeSoundPath);
             flickSnapClip = Resources.Load<AudioClip>(FlickSnapSoundPath);
+            riffleClip = Resources.Load<AudioClip>(RiffleSoundPath);
+        }
+
+        // Owner, 2026-10-19: a placed piece makes the sound of its material landing.
+        private void PlayPlacementSound(TabletopComponentKind kind)
+        {
+            EnsureTableSounds();
+            switch (kind)
+            {
+                case TabletopComponentKind.Card:
+                    PlayCardSound(false);
+                    break;
+                case TabletopComponentKind.Deck:
+                case TabletopComponentKind.Stack:
+                case TabletopComponentKind.DiscardPile:
+                    PlayCardSound(true);
+                    break;
+                case TabletopComponentKind.Die:
+                    tableSounds.PlayImpact(TableSoundMaterial.Die, Feel.ImpactFullSpeed * 0.6f);
+                    break;
+                case TabletopComponentKind.Pawn:
+                    tableSounds.PlayImpact(TableSoundMaterial.Wood, Feel.ImpactFullSpeed * 0.6f);
+                    break;
+                case TabletopComponentKind.Token:
+                    tableSounds.PlayImpact(TableSoundMaterial.Chip, Feel.ImpactFullSpeed * 0.6f);
+                    break;
+                default:
+                    tableSounds.PlayImpact(TableSoundMaterial.Soft, Feel.ImpactFullSpeed * 0.8f);
+                    break;
+            }
+        }
+
+        // Owner, 2026-10-19: the riffle has its own sound, timed to the animation.
+        private void PlayShuffleSound()
+        {
+            EnsureTableSounds();
+            if (riffleClip != null) tableSounds.Play(riffleClip, Feel.CardSoundVolume * 1.4f, 1f);
+            else PlayCardSound(true);
         }
 
         // ---------- Sound (POL-8) and the landing puff (POL-2) ----------

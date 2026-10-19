@@ -69,6 +69,7 @@ namespace ConsoleCards.Presentation.Composition
     public sealed partial class TabletopComposition : ITabletopSelectHandler
     {
         private const string KeysStripHiddenPref = "ConsoleCards.KeysStripHidden";
+        private const string HandFanPref = "ConsoleCards.HandFan";
         private const float SelectBoxThresholdPixels = 8f;
         private static readonly Color SelectionColour = new Color(0.18f, 0.65f, 0.54f, 1f); // teal, like the box
 
@@ -76,6 +77,7 @@ namespace ConsoleCards.Presentation.Composition
         private bool toolBarShown;
         private bool keysStripHidden;
         private bool keysStripPrefLoaded;
+        private bool handFan = true;
         private bool toolsHadInteraction;
 
         // One selected component: a loose piece (card, pawn, token, die) or a pile (deck, stack, discard pile, bag).
@@ -123,11 +125,20 @@ namespace ConsoleCards.Presentation.Composition
             {
                 keysStripPrefLoaded = true;
                 keysStripHidden = PlayerPrefs.GetInt(KeysStripHiddenPref, 0) == 1;
+                handFan = PlayerPrefs.GetInt(HandFanPref, 1) == 1;
             }
 
             BuildToolKeyTexts();
-            toolBarShown = runtimeUi.ShowToolBar(ChooseTool, ToggleKeysStrip, GroupToolSelection, ClearToolSelection);
+            if (handView != null) handView.TrayFan = handFan;
+            bool hasTray = handView != null && handView.IsTrayMode;
+            toolBarShown = runtimeUi.ShowToolBar(
+                ChooseTool,
+                ToggleKeysStrip,
+                GroupToolSelection,
+                ClearToolSelection,
+                hasTray ? ToggleHandStyle : (Action)null);
             if (!toolBarShown) return;
+            runtimeUi.SetHandStyle(handFan);
             runtimeUi.SetToolEnabled(TableToolKind.Draw, false); // T5
             runtimeUi.SetActiveTool(activeTool);
             runtimeUi.SetToolKeysWanted(!keysStripHidden);
@@ -142,6 +153,15 @@ namespace ConsoleCards.Presentation.Composition
             if (kind != TableToolKind.Select && !Keys.SelectModifierHeld) CancelSelectPress();
             if (toolBarShown) runtimeUi.SetActiveTool(kind);
             RefreshToolBarState();
+        }
+
+        // Owner, 2026-10-19: the hand tray as a fan or a straight row (remembered).
+        private void ToggleHandStyle()
+        {
+            handFan = !handFan;
+            PlayerPrefs.SetInt(HandFanPref, handFan ? 1 : 0);
+            if (handView != null) handView.TrayFan = handFan;
+            if (toolBarShown) runtimeUi.SetHandStyle(handFan);
         }
 
         private void ToggleKeysStrip()
@@ -163,7 +183,7 @@ namespace ConsoleCards.Presentation.Composition
             keysGrab = KeyName("Drag") + " move   " + KeyName(turn) + " turn   " + KeyName("F") + " flip   "
                 + KeyName(roll) + " roll   " + KeyName("Right-click") + " menu   " + KeyName(action + "+drag") + " flick   "
                 + KeyName(ping + "+click") + " ping   " + KeyName("Hold " + ping) + " peek   "
-                + KeyName(select + "+click") + " select";
+                + KeyName("Drag table") + " select   " + KeyName(select + "+click") + " add";
             keysCarry = KeyName("Wheel") + " raise   " + KeyName(turn) + " turn   " + KeyName("Esc") + " cancel   "
                 + "drop on a pile to put it there";
             keysDie = KeyName("Hold " + action) + " or shake the mouse: shake   let go to roll   " + KeyName("Wheel") + " raise   "
@@ -259,6 +279,18 @@ namespace ConsoleCards.Presentation.Composition
                 && (activeTool == TableToolKind.Select || Keys.SelectModifierHeld);
         }
 
+        // Owner, 2026-10-19: as in Tabletop Simulator, a drag on the empty table draws a selection box with Grab too
+        // (no need to switch tools). Not while Alt (ping) or Shift (flick) is held.
+        bool ITabletopSelectHandler.WantsBoxOnEmptyTable()
+        {
+            return IsInitialized
+                && tableModeStart == null
+                && (componentPlacementController == null || !componentPlacementController.IsActive)
+                && (activeTool == TableToolKind.Grab || activeTool == TableToolKind.Select)
+                && !Keys.PingModifierHeld
+                && !Keys.ActionModifierHeld;
+        }
+
         bool ITabletopSelectHandler.TryBeginSelect(TabletopObjectView viewUnderPointer, Vector2 screenPosition)
         {
             selectPressHasPick = TryPickFromView(viewUnderPointer, out selectPressPick);
@@ -291,6 +323,8 @@ namespace ConsoleCards.Presentation.Composition
             CancelSelectPress();
             if (box)
             {
+                // With Grab a new box starts a new selection (Ctrl keeps adding); the Select tool always adds.
+                if (activeTool != TableToolKind.Select && !Keys.SelectModifierHeld) toolSelection.Clear();
                 SelectInBox(selectPressScreen, screenPosition);
             }
             else if (hasPick)
@@ -303,6 +337,7 @@ namespace ConsoleCards.Presentation.Composition
             else
             {
                 toolSelection.Clear();
+                selectionState?.ClearSelection(); // a click on the empty table clears everything, as before
             }
 
             DrawToolSelection();

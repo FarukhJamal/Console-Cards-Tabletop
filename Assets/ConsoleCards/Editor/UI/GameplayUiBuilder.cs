@@ -1745,7 +1745,7 @@ namespace ConsoleCards.Editor.UI
 
         private static readonly string[] ToolBarIcons =
         {
-            "ToolGrab", "ToolSelect", "ToolPing", "ToolFlick", "ToolDraw", "ToolKeys",
+            "ToolGrab", "ToolSelect", "ToolPing", "ToolFlick", "ToolDraw", "ToolKeys", "ToolFan",
         };
 
         // One slim row, bottom right: the keys strip (ink, what the keys do right now) and the tools panel (cream,
@@ -1789,6 +1789,9 @@ namespace ConsoleCards.Editor.UI
             RectTransform divider = Child("Divider", panel);
             Img(divider, "Solid", Rule).raycastTarget = false;
             Size(divider.gameObject, 3f, ToolHeight - 10f, 3f);
+            // Owner, 2026-10-19: the hand tray as a fan or a straight row.
+            Button handStyle = ToolButton(panel, "HandButton", "FAN", ToolBarIconPath + "ToolFan.png", Cream,
+                ToolWidth, ToolHeight, out _, out _, out Text handStyleLabel);
             Button keysToggle = ToolButton(panel, "KeysButton", "KEYS", ToolBarIconPath + "ToolKeys.png", Cream,
                 ToolWidth, ToolHeight, out _, out _, out _);
             Button help = TextButton(panel, "HelpButton", "?", titleFont, 22, Mustard, Ink, 50f, ToolHeight, out _);
@@ -1839,6 +1842,8 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("keysLabel").objectReferenceValue = keysLabel;
             so.FindProperty("keysToggle").objectReferenceValue = keysToggle;
             so.FindProperty("helpButton").objectReferenceValue = help;
+            so.FindProperty("handStyleButton").objectReferenceValue = handStyle;
+            so.FindProperty("handStyleLabel").objectReferenceValue = handStyleLabel;
             so.FindProperty("selectionActions").objectReferenceValue = selection.gameObject;
             so.FindProperty("selectionCountLabel").objectReferenceValue = count;
             so.FindProperty("groupButton").objectReferenceValue = group;

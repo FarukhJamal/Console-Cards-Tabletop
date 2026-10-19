@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.27 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.28 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1659,3 +1659,20 @@ Sound).
   The keys strip shows them, including a strip for a pile under the pointer.
 - **Builders to run:** Console Cards > UI > Create Missing Gameplay UI Prefabs (adds TableOverlay).
 - Not compiled here; the owner checks in Unity.
+
+**POL follow-up (owner, 2026-10-19: "Approved", with five points).**
+1. **Placement has a sound**: every accepted Toolbox placement plays its material (card tap, pile stack, die,
+   wooden pawn, plastic token, a soft thud for Consoles and boards).
+2. **No more action pop-ups**: ordinary action messages ("Container moved.", "Deck shuffled.") no longer pop up;
+   warnings and game news still do, and everything still goes to the What Happened log (Feel Settings › Show Action
+   Messages to bring them back). The missed-click lines in the Console are off too (Feel Settings › Log Missed
+   Clicks).
+3. **Hand style switch**: a **FAN / ROW** button on the tool bar switches the hand tray between the curved fan and a
+   straight row (remembered). Rebuild the tool bar: delete `Prefabs/Final/UI/ToolBar.prefab` and run Console Cards >
+   UI > Create Missing Gameplay UI Prefabs.
+4. **Select without switching tools**, as in Tabletop Simulator: with Grab, a drag on the empty table draws the
+   selection box (a new box starts a new selection; Ctrl keeps adding); Ctrl-click adds or removes a piece. The
+   Select tool stays for those who prefer it.
+5. **Shuffle has its own sound**: a riffle (`TableSounds/Riffle.wav`) timed to the riffle animation.
+- Shuffle **styles** (choose Riffle, Overhand, Hindu, Pile, Wash or Cut, a default per player) are SHUF-1, not built
+  yet.

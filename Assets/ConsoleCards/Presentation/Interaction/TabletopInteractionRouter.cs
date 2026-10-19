@@ -72,10 +72,13 @@ namespace ConsoleCards.Presentation.Interaction
                 throw new InvalidOperationException("An interaction lifecycle is already active.");
             }
 
-            if (SelectHandler != null && SelectHandler.WantsSelect())
+            if (SelectHandler != null)
             {
                 hitResolver.TryResolve(screenPosition, out TabletopObjectView selectView);
-                if (SelectHandler.TryBeginSelect(selectView, screenPosition))
+                // The Select tool or Ctrl, or (owner, 2026-10-19, as in Tabletop Simulator) a press on the empty table.
+                bool wantsSelect = SelectHandler.WantsSelect()
+                    || (selectView == null && SelectHandler.WantsBoxOnEmptyTable());
+                if (wantsSelect && SelectHandler.TryBeginSelect(selectView, screenPosition))
                 {
                     selectionState.ClearHovered();
                     activeRoute = TabletopInteractionRoute.Select;
