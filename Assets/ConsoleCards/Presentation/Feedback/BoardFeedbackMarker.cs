@@ -71,6 +71,13 @@ namespace ConsoleCards.Presentation.Feedback
             startedAt = Time.unscaledTime;
         }
 
+        /// <summary>TOOLS-1: shown turned to a yaw (degrees about up), as for the outline around a selected card.</summary>
+        public void ShowAt(Vector3 position, float yawDegrees, Color tint)
+        {
+            transform.rotation = Quaternion.Euler(0f, yawDegrees, 0f);
+            Show(position, tint);
+        }
+
         public void Hide()
         {
             lifetime = 0f;

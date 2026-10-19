@@ -640,7 +640,11 @@ namespace ConsoleCards.Presentation.Composition
                 inputFrameCoordinator.ConfigureUiInput(
                     ContextMenus.HandleSecondaryPointerPressed,
                     ContextMenus.CanBeginCameraOrbit);
-                inputFrameCoordinator.ConfigureTablePing(TryPingTable, Keys, Feel.PingTapSeconds); // UX-1, POL-0 keys
+                inputFrameCoordinator.ConfigureTablePing(
+                    TryPingTable,
+                    Keys,
+                    Feel.PingTapSeconds,
+                    () => activeTool == TableToolKind.Ping); // UX-1, POL-0 keys, TOOLS-1 Ping tool
                 uiInputConfiguredByComposition = true;
                 ConfigureDeveloperControlsInputBlockIfNeeded();
 
@@ -719,7 +723,11 @@ namespace ConsoleCards.Presentation.Composition
                 inputFrameCoordinator.ConfigureUiInput(
                     ContextMenus.HandleSecondaryPointerPressed,
                     ContextMenus.CanBeginCameraOrbit);
-                inputFrameCoordinator.ConfigureTablePing(TryPingTable, Keys, Feel.PingTapSeconds); // UX-1, POL-0 keys
+                inputFrameCoordinator.ConfigureTablePing(
+                    TryPingTable,
+                    Keys,
+                    Feel.PingTapSeconds,
+                    () => activeTool == TableToolKind.Ping); // UX-1, POL-0 keys, TOOLS-1 Ping tool
                 uiInputConfiguredByComposition = true;
                 ConfigureDeveloperControlsInputBlockIfNeeded();
                 inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);

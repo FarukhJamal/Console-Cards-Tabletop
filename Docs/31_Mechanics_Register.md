@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.10 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.11 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -528,10 +528,12 @@ Change: …
 - **Rule now:** Alt + left click, or a quick tap of the middle mouse button, anywhere on the table: a ring pulses at
   that spot in your colour for two seconds with a short beep, then fades. It only marks a spot: it never selects,
   moves or points at a piece, it is not saved, not in Undo and not in the activity log, and no game system reads it.
-  Up to six rings at once. Not in Table mode. With multiplayer it becomes a small message to the others.
-- **Source:** doc 30 §A2
+  Up to six rings at once. Not in Table mode. With multiplayer it becomes a small message to the others. With the
+  **Ping tool** (tool bar) a plain click pings. The ring is a notched ring with a soft glow and a ripple when it lands;
+  the cursor is a pin.
+- **Source:** doc 30 §A2, Part H (TOOLS-1)
 - **Open:** the optional A/B/X/Y picture on the ring (left out: keys 1–4 already change the camera view).
-- **Changes:** 2026-10-19 built (UX-1).
+- **Changes:** 2026-10-19 built (UX-1); 2026-10-19 Ping tool, new ring and pin cursor (TOOLS-1).
 
 ### P-GESTURES · Cursor, flick and dice shake
 - **Status:** Built, to be checked (UX-1)
@@ -546,7 +548,22 @@ Change: …
   - **Dice shake:** while carrying a die, hold Shift: it rattles in the hand; let go and it leaves tumbling (a real
     roll).
 - **Source:** doc 30 §A1, §A2
-- **Changes:** 2026-10-19 built (UX-1).
+- **Changes:** 2026-10-19 built (UX-1); 2026-10-19 the Flick tool flicks without Shift (TOOLS-1).
+
+### P-TOOLS · Tool bar, keys strip and selecting cards
+- **Status:** Built, to be checked (TOOLS-1)
+- **Rule now:**
+  - **Tool bar** (bottom right): Grab (normal), Select, Ping, Flick, Draw (greyed until T5), Keys (show or hide the
+    keys strip) and ? (help).
+  - **Keys strip:** the keys for what you are doing right now; hidden with Keys or with Hints off.
+  - **Select** (or Ctrl held): click a loose card to add or remove it, click the table to clear, drag a box to select
+    every loose card inside. Floor tiles, locked cards and cards in piles are never selected.
+  - **Group into deck** (button or G, two or more cards): one deck where the first selected card lay, cards in the
+    order picked; one Undo step. The selection itself is not saved and not in Undo.
+  - **Esc** with nothing in progress clears the selection, then goes back to Grab.
+- **Source:** doc 30 Part H (TOOLS-1); client checklist item 6 (doc 32)
+- **Open:** moving the whole selection together (POL-7).
+- **Changes:** 2026-10-19 built (TOOLS-1).
 
 ---
 

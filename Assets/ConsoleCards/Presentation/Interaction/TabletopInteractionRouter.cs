@@ -47,6 +47,9 @@ namespace ConsoleCards.Presentation.Interaction
         /// </summary>
         public ITabletopCarryHandler CarryHandler { get; set; }
 
+        /// <summary>Optional: with the Select tool or Ctrl held, presses select cards instead of moving them (TOOLS-1).</summary>
+        public ITabletopSelectHandler SelectHandler { get; set; }
+
         /// <summary>Optional: Shift-press on a loose piece aims a flick instead of picking it up (UX-1).</summary>
         public ITabletopFlickHandler FlickHandler { get; set; }
 
@@ -67,6 +70,17 @@ namespace ConsoleCards.Presentation.Interaction
             if (moveCoordinator.HasActiveInteraction || containedCardDragCoordinator.HasActiveInteraction)
             {
                 throw new InvalidOperationException("An interaction lifecycle is already active.");
+            }
+
+            if (SelectHandler != null && SelectHandler.WantsSelect())
+            {
+                hitResolver.TryResolve(screenPosition, out TabletopObjectView selectView);
+                if (SelectHandler.TryBeginSelect(selectView, screenPosition))
+                {
+                    selectionState.ClearHovered();
+                    activeRoute = TabletopInteractionRoute.Select;
+                    return true;
+                }
             }
 
             if (FlickHandler != null
@@ -141,6 +155,9 @@ namespace ConsoleCards.Presentation.Interaction
                 case TabletopInteractionRoute.Flick:
                     FlickHandler.UpdateFlick(screenPosition);
                     return;
+                case TabletopInteractionRoute.Select:
+                    SelectHandler.UpdateSelect(screenPosition);
+                    return;
                 case TabletopInteractionRoute.None:
                     throw new InvalidOperationException("No tabletop interaction route is active.");
                 default:
@@ -187,6 +204,10 @@ namespace ConsoleCards.Presentation.Interaction
                     activeRoute = TabletopInteractionRoute.None;
                     FlickHandler.ReleaseFlick(screenPosition);
                     return TabletopInteractionReleaseResult.FromFlick();
+                case TabletopInteractionRoute.Select:
+                    activeRoute = TabletopInteractionRoute.None;
+                    SelectHandler.ReleaseSelect(screenPosition);
+                    return TabletopInteractionReleaseResult.FromSelect();
                 case TabletopInteractionRoute.None:
                     return TabletopInteractionReleaseResult.NoActiveInteraction();
                 default:
@@ -283,6 +304,10 @@ namespace ConsoleCards.Presentation.Interaction
                     activeRoute = TabletopInteractionRoute.None;
                     FlickHandler?.CancelFlick();
                     return;
+                case TabletopInteractionRoute.Select:
+                    activeRoute = TabletopInteractionRoute.None;
+                    SelectHandler?.CancelSelect();
+                    return;
                 case TabletopInteractionRoute.None:
                     return;
                 default:
@@ -303,6 +328,11 @@ namespace ConsoleCards.Presentation.Interaction
             {
                 activeRoute = TabletopInteractionRoute.None;
                 FlickHandler?.CancelFlick();
+            }
+            else if (activeRoute == TabletopInteractionRoute.Select)
+            {
+                activeRoute = TabletopInteractionRoute.None;
+                SelectHandler?.CancelSelect();
             }
 
             try

@@ -25,7 +25,7 @@ namespace ConsoleCards.Presentation.Settings
         [SerializeField] private Vector2 noHotspot = new Vector2(16f, 16f);
         [Tooltip("Pinging (the ping key held, or the Ping tool).")]
         [SerializeField] private Texture2D ping;
-        [SerializeField] private Vector2 pingHotspot = new Vector2(16f, 16f);
+        [SerializeField] private Vector2 pingHotspot = new Vector2(16f, 27f); // TOOLS-1: the tip of the map pin
         [Tooltip("Aiming a flick.")]
         [SerializeField] private Texture2D aim;
         [SerializeField] private Vector2 aimHotspot = new Vector2(16f, 16f);

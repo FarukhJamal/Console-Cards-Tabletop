@@ -21,6 +21,6 @@ MonoBehaviour:
   no: {fileID: 2800000, guid: 15dd3e73ca744bd0af8f61f0f87162d0, type: 3}
   noHotspot: {x: 16, y: 16}
   ping: {fileID: 2800000, guid: 42aa7ba36b0b40b494d49ce28d6210e2, type: 3}
-  pingHotspot: {x: 16, y: 16}
+  pingHotspot: {x: 16, y: 27}
   aim: {fileID: 2800000, guid: d9ce1eaaebf04e0aa8be0dc75d63c6fd, type: 3}
   aimHotspot: {x: 16, y: 16}

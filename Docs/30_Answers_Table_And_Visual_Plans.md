@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.23 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.24 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1525,7 +1525,7 @@ and Swivel cut, as short show-off animations from a deck's menu that leave the o
 | Order | Stage | What |
 |---|---|---|
 | 1 | POL-0 | Editable keys, cursor set and feel numbers, plus a missed-click log (below). Written 2026-10-19. |
-| 2 | TOOLS-1 | **Tool bar** (owner's point 4, absorbing POL-9): a slim bar in our look with only the tools we need: **Grab** (normal), **Select** (box-select and group into deck, POL-7), **Ping** (click to ping: the simple way, owner's point 1), **Flick**, and **Draw** greyed until T5; next to it the hideable **keys strip** for what you are doing. A new ping ring (its own prefab, made by the UI builder) and a new ping cursor. |
+| 2 | TOOLS-1 | Written 2026-10-19 (record below). **Tool bar** (owner's point 4, absorbing POL-9): a slim bar in our look with only the tools we need: **Grab** (normal), **Select** (box-select and group into deck, POL-7), **Ping** (click to ping: the simple way, owner's point 1), **Flick**, and **Draw** greyed until T5; next to it the hideable **keys strip** for what you are doing. A new ping ring (its own prefab, made by the UI builder) and a new ping cursor. |
 | 3 | SMOOTH-1 | **Smooth shuffle and split, no missed clicks** (owner's points 2 and 3): fix what the missed-click log finds; cards move along short arcs with a stagger in split, Split into… and draw; Shuffle plays a quick riffle (the first SHUF-1 animation); no snapping at the end of an animation. |
 | 4 | POL-1, POL-2 | Pick up and carry; drop and settle (piece snap included). |
 | 5 | ICON-1 | Icons on card sides and corners connect to the Console at any rotation. |
@@ -1548,3 +1548,30 @@ and Swivel cut, as short show-off animations from a deck's menu that leave the o
   earlier action had not finished, or the table was rebuilding its controls in that frame. The owner plays until a
   click needs a second try; Claude reads the log and fixes the cause in SMOOTH-1.
 
+**TOOLS-1 record (2026-10-19, written, to be checked).**
+- **Tool bar**, bottom right where the controls strip was, in the Toolbox look: **Grab**, **Select**, **Ping**,
+  **Flick**, **Draw** (greyed until T5), then **Keys** (shows or hides the keys strip, remembered) and **?** (the help
+  card). The chosen tool is mustard. A Final UI prefab, `Prefabs/Final/UI/ToolBar.prefab`, made by Console Cards > UI >
+  Create Missing Gameplay UI Prefabs; script `Presentation/UI/ToolBarView.cs`; icons (48 px, made for the game) in
+  `Content/UI/ToolBar/Icons`. Without the prefab the old controls strip carries on (warned once).
+- **Keys strip** (left of the tools): the keys for what you are doing now: normal play, carrying, carrying a die,
+  selecting, cards selected, the Ping tool, the Flick tool. Key names come from the Input Actions asset (POL-0). Hints
+  off hides it too. The texts are built once per table and written only when they change.
+- **Grab** is normal play. **Ping**: a plain click pings (no Alt). **Flick**: press a piece, pull back, let go (no
+  Shift). The cursor shows the pin or cross-hair for those tools.
+- **Select** (or Ctrl held with any tool): a click on a loose card adds it to the selection or takes it out; a click
+  on the table clears; a drag draws a teal box and selects every loose card inside. Selected cards get a teal outline
+  (a pool of 40, from the board feedback's move-target marker). Floor tiles, locked cards and cards in piles are never
+  selected; a selected card that goes into a pile leaves the selection. While cards are selected a small panel above
+  the bar shows the count, **Group into deck** (or **G**, with two or more cards) and **Clear**. Grouping makes one
+  deck where the first selected card lay and moves every selected card in, in the order picked: one Undo step, with
+  the landing tap and flash. The selection is a view helper: not table state, not saved, not in Undo.
+- **Esc** with nothing in progress: first clears the selection, then goes back to Grab.
+- **Ping, cleaner** (owner's point 1): a new notched ring (`Content/Art/Feedback/PingRing.png`, own **Table Ping**
+  prefab and material, made by Console Cards > Feedback > Create Missing Board Feedback Prefabs) with a soft glow and a
+  slow turn, plus an expanding ripple when it lands. A new pin cursor (`Resources/Cursors/CursorPing.png`), hot spot at
+  the pin's tip (16, 27).
+- New input actions: SelectModifier (Ctrl) and GroupSelection (G); `TableKeys` also reads Cancel (Esc). New router
+  route `Select` with `ITabletopSelectHandler`; code in `TabletopComposition.Tools.cs`.
+- Not yet: moving the whole selection together (drag one, the others follow) is POL-7's second half.
+- Not compiled here; the owner checks in Unity.

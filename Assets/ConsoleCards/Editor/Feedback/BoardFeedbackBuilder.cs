@@ -29,6 +29,7 @@ namespace ConsoleCards.Editor.Feedback
             ConfigureTexture("Warning.png", TextureWrapMode.Clamp);
             ConfigureTexture("ArrowHead.png", TextureWrapMode.Clamp);
             ConfigureTexture("Dash.png", TextureWrapMode.Repeat);
+            ConfigureTexture("PingRing.png", TextureWrapMode.Clamp);
 
             Material ring = MaterialFor("Ring");
             Material glow = MaterialFor("Glow");
@@ -36,6 +37,7 @@ namespace ConsoleCards.Editor.Feedback
             Material warning = MaterialFor("Warning");
             Material head = MaterialFor("ArrowHead");
             Material dash = MaterialFor("Dash");
+            Material pingRing = MaterialFor("PingRing");
 
             BoardFeedbackMarker pawnRing = MarkerPrefab("ActivePawnRing", false, 0.6f, m =>
             {
@@ -80,6 +82,14 @@ namespace ConsoleCards.Editor.Feedback
                 return SetMarker(m, pulseSpeed: 6f, pulseScale: 0.06f, bobHeight: 0f, spin: 0f);
             });
 
+            // TOOLS-1: the table ping, a notched target ring with a bright centre that turns slowly and pulses.
+            BoardFeedbackMarker tablePing = MarkerPrefab("TablePing", false, 0.6f, m =>
+            {
+                Flat("Ring", m.transform, pingRing, new Vector2(1.05f, 1.05f), 0f);
+                Flat("Glow", m.transform, glow, new Vector2(0.55f, 0.55f), 0.004f);
+                return SetMarker(m, pulseSpeed: 6f, pulseScale: 0.1f, bobHeight: 0f, spin: 60f);
+            });
+
             if (!File.Exists(SetPath))
             {
                 BoardFeedbackSet set = ScriptableObject.CreateInstance<BoardFeedbackSet>();
@@ -93,6 +103,7 @@ namespace ConsoleCards.Editor.Feedback
                 so.FindProperty("moveArrow").objectReferenceValue = arrow;
                 so.FindProperty("reachTile").objectReferenceValue = reachTile;
                 so.FindProperty("collapseTarget").objectReferenceValue = collapseTarget;
+                so.FindProperty("tablePing").objectReferenceValue = tablePing;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
             else
@@ -101,7 +112,9 @@ namespace ConsoleCards.Editor.Feedback
                 // keep the rest.
                 BoardFeedbackSet existingSet = AssetDatabase.LoadAssetAtPath<BoardFeedbackSet>(SetPath);
                 SerializedObject so = existingSet != null ? new SerializedObject(existingSet) : null;
-                bool added = FillMissing(so, "reachTile", reachTile) | FillMissing(so, "collapseTarget", collapseTarget);
+                bool added = FillMissing(so, "reachTile", reachTile)
+                    | FillMissing(so, "collapseTarget", collapseTarget)
+                    | FillMissing(so, "tablePing", tablePing);
                 if (added)
                 {
                     so.ApplyModifiedPropertiesWithoutUndo();

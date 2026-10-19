@@ -47,6 +47,8 @@ namespace ConsoleCards.Editor.UI
         public const string GameSelectPanelPath = Folder + "GameSelectPanel.prefab";
         public const string GameSavePanelPath = Folder + "GameSavePanel.prefab";
         public const string TablePanelPath = Folder + "TablePanel.prefab";
+        public const string ToolBarPath = Folder + "ToolBar.prefab";
+        private const string ToolBarIconPath = "Assets/ConsoleCards/Content/UI/ToolBar/Icons/";
         private const string FeedbackAudioPath = "Assets/ConsoleCards/Content/Audio/Feedback/";
         private const string SessionIconPath = "Assets/ConsoleCards/Content/UI/Session/Icons/";
 
@@ -93,6 +95,11 @@ namespace ConsoleCards.Editor.UI
         {
             ConfigureTexture(ToolboxIconPath + "IconClose.png", Vector4.zero);
             ConfigureTexture(SessionIconPath + "IconChevron.png", Vector4.zero);
+            for (int i = 0; i < ToolBarIcons.Length; i++)
+            {
+                ConfigureTexture(ToolBarIconPath + ToolBarIcons[i] + ".png", Vector4.zero);
+            }
+
             titleFont = RequireFont("Silkscreen-Bold.ttf");
             bodyFont = RequireFont("ChakraPetch-Medium.ttf");
             boldFont = RequireFont("ChakraPetch-Bold.ttf");
@@ -128,6 +135,7 @@ namespace ConsoleCards.Editor.UI
             Save<GameSavePanelView>(GameSavePanelPath, "GameSavePanel", BuildGameSavePanel, stretch: true);
             Save<CardEditorPanelView>(CardEditorPanelPath, "CardEditorPanel", BuildCardEditorPanel, stretch: true);
             Save<TablePanelView>(TablePanelPath, "TablePanel", BuildTablePanel, stretch: true);
+            Save<ToolBarView>(ToolBarPath, "ToolBar", BuildToolBar, stretch: true);
             AddMissingRuleControls();
             AddMissingShopLabels();
             AddMissingDeckPicker();
@@ -214,6 +222,9 @@ namespace ConsoleCards.Editor.UI
                 UiRetention.CachedSingleInstance);
             AssignCatalogEntry(UiPrefabIds.TablePanel,
                 AssetDatabase.LoadAssetAtPath<TablePanelView>(TablePanelPath), UiLayer.Modal,
+                UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(UiPrefabIds.ToolBar,
+                AssetDatabase.LoadAssetAtPath<ToolBarView>(ToolBarPath), UiLayer.Hud,
                 UiRetention.CachedSingleInstance);
             AssetDatabase.SaveAssets();
             Debug.Log("[Gameplay UI] Created any missing Final UI gameplay prefabs and pointed the UI prefab catalog at them.");
@@ -1722,6 +1733,134 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("title").stringValue = "HOW TO PLAY";
             so.FindProperty("guideText").stringValue = GuideText;
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // ---------- tool bar (TOOLS-1): bottom right, where the controls strip was ----------
+
+        private static readonly string[] ToolBarIcons =
+        {
+            "ToolGrab", "ToolSelect", "ToolPing", "ToolFlick", "ToolDraw", "ToolKeys",
+        };
+
+        // One slim row, bottom right: the keys strip (ink, what the keys do right now) and the tools panel (cream,
+        // in the Toolbox look): Grab, Select, Ping, Flick, Draw (greyed until T5), then Keys (shows or hides the
+        // strip) and Help. Above it, while cards are selected: the count, Group into deck and Clear. The selection
+        // box is a full-screen child the code moves while dragging. Only the buttons take clicks.
+        private static void BuildToolBar(RectTransform root, ToolBarView view)
+        {
+            const float ToolWidth = 66f;
+            const float ToolHeight = 50f;
+            RectTransform bar = Rect("Bar", root, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f),
+                new Vector2(-Margin, Margin), new Vector2(600f, StripHeight + 4f));
+            Row(bar.gameObject, 0, 0, 0, 0, 12f, TextAnchor.LowerRight);
+            Fit(bar.gameObject, true, false);
+
+            // Keys strip.
+            RectTransform keys = Child("KeysStrip", bar);
+            Img(keys, "ButtonOutlined", Ink).raycastTarget = false;
+            Row(keys.gameObject, 20, 20, 8, 8, 0f);
+            Size(keys.gameObject, -1f, StripHeight);
+            Text keysLabel = FitLabel(Child("Keys", keys), bodyFont, 16, Cream,
+                Key("Drag") + " move    " + Key("Wheel") + " rotate    " + Key("F") + " flip    " + Key("Right-click") + " menu");
+
+            // Tools panel.
+            RectTransform panel = Child("Tools", bar);
+            Backdrop(panel, ShadowOffset - 2f);
+            Row(panel.gameObject, 7, 7, 5, 5, 5f);
+            Size(panel.gameObject, -1f, StripHeight + 4f);
+            string[] names = { "GRAB", "SELECT", "PING", "FLICK", "DRAW" };
+            Button[] buttons = new Button[names.Length];
+            Image[] fills = new Image[names.Length];
+            Image[] icons = new Image[names.Length];
+            Text[] labels = new Text[names.Length];
+            for (int i = 0; i < names.Length; i++)
+            {
+                buttons[i] = ToolButton(panel, "Tool" + ToolBarIcons[i].Substring(4), names[i],
+                    ToolBarIconPath + ToolBarIcons[i] + ".png", i == 0 ? Mustard : Cream, ToolWidth, ToolHeight,
+                    out fills[i], out icons[i], out labels[i]);
+            }
+
+            RectTransform divider = Child("Divider", panel);
+            Img(divider, "Solid", Rule).raycastTarget = false;
+            Size(divider.gameObject, 3f, ToolHeight - 10f, 3f);
+            Button keysToggle = ToolButton(panel, "KeysButton", "KEYS", ToolBarIconPath + "ToolKeys.png", Cream,
+                ToolWidth, ToolHeight, out _, out _, out _);
+            Button help = TextButton(panel, "HelpButton", "?", titleFont, 22, Mustard, Ink, 50f, ToolHeight, out _);
+
+            // Selection actions, above the bar (hidden until cards are selected).
+            RectTransform selection = Rect("SelectionActions", root, new Vector2(1f, 0f), new Vector2(1f, 0f),
+                new Vector2(1f, 0f), new Vector2(-Margin, Margin + StripHeight + 18f), new Vector2(420f, 58f));
+            Backdrop(selection, ShadowOffset - 2f);
+            Row(selection.gameObject, 16, 8, 7, 7, 10f);
+            Fit(selection.gameObject, true, false);
+            Text count = FitLabel(Child("Count", selection), boldFont, 16, Ink, "2 cards selected");
+            Button group = TextButton(selection, "GroupButton", "Group into deck  " + Key("G"), boldFont, 15, Go, Cream,
+                210f, 44f, out _);
+            Button clear = TextButton(selection, "ClearButton", "Clear", boldFont, 15, Cream, Ink, 84f, 44f, out _);
+            selection.gameObject.SetActive(false);
+
+            // Selection box (full screen parent; the code places it).
+            RectTransform box = Rect("SelectionBox", root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(100f, 100f));
+            Color teal = Teal;
+            Img(box, "Solid", new Color(teal.r, teal.g, teal.b, 0.16f)).raycastTarget = false;
+            BoxEdge(box, "Top", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 3f));
+            BoxEdge(box, "Bottom", new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 3f));
+            BoxEdge(box, "Left", new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(3f, 0f));
+            BoxEdge(box, "Right", new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(3f, 0f));
+            box.gameObject.SetActive(false);
+
+            SerializedObject so = new SerializedObject(view);
+            SerializedProperty tools = so.FindProperty("tools");
+            tools.arraySize = names.Length;
+            for (int i = 0; i < names.Length; i++)
+            {
+                SerializedProperty entry = tools.GetArrayElementAtIndex(i);
+                entry.FindPropertyRelative("kind").enumValueIndex = i;
+                entry.FindPropertyRelative("button").objectReferenceValue = buttons[i];
+                entry.FindPropertyRelative("fill").objectReferenceValue = fills[i];
+                entry.FindPropertyRelative("icon").objectReferenceValue = icons[i];
+                entry.FindPropertyRelative("label").objectReferenceValue = labels[i];
+            }
+
+            so.FindProperty("idleFill").colorValue = Cream;
+            so.FindProperty("activeFill").colorValue = Mustard;
+            so.FindProperty("idleIcon").colorValue = Ink;
+            so.FindProperty("activeIcon").colorValue = Ink;
+            so.FindProperty("keysStrip").objectReferenceValue = keys.gameObject;
+            so.FindProperty("keysLabel").objectReferenceValue = keysLabel;
+            so.FindProperty("keysToggle").objectReferenceValue = keysToggle;
+            so.FindProperty("helpButton").objectReferenceValue = help;
+            so.FindProperty("selectionActions").objectReferenceValue = selection.gameObject;
+            so.FindProperty("selectionCountLabel").objectReferenceValue = count;
+            so.FindProperty("groupButton").objectReferenceValue = group;
+            so.FindProperty("clearButton").objectReferenceValue = clear;
+            so.FindProperty("selectionBox").objectReferenceValue = box;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>A tool button: icon on top, a small Silkscreen name under it; the fill is the target graphic.</summary>
+        private static Button ToolButton(Transform parent, string name, string text, string iconPath, Color fill,
+            float width, float height, out Image fillImage, out Image icon, out Text label)
+        {
+            RectTransform rect = Child(name, parent);
+            fillImage = Img(rect, "ButtonOutlined", fill);
+            Button button = rect.gameObject.AddComponent<Button>();
+            button.targetGraphic = fillImage;
+            SetDisabledTint(button);
+            Size(rect.gameObject, width, height, width);
+            icon = Img(Rect("Icon", rect, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0f, -6f), new Vector2(24f, 24f)), null, Ink, iconPath);
+            icon.raycastTarget = false;
+            label = Label(Rect("Label", rect, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(0f, 4f), new Vector2(-6f, 16f)), titleFont, 10, Ink, TextAnchor.MiddleCenter, text);
+            return button;
+        }
+
+        private static void BoxEdge(RectTransform box, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 size)
+        {
+            RectTransform edge = Rect(name, box, anchorMin, anchorMax, new Vector2(0.5f, 0.5f), Vector2.zero, size);
+            Img(edge, "Solid", Teal).raycastTarget = false;
         }
 
         // ---------- Trap Floor: turn strip (top centre) and status card (top right) ----------

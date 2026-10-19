@@ -147,7 +147,10 @@ namespace ConsoleCards.Presentation.Composition
 
         bool ITabletopFlickHandler.WantsFlick()
         {
-            return IsInitialized && tableModeStart == null && Keys.ActionModifierHeld;
+            // TOOLS-1: the Flick tool flicks without Shift.
+            return IsInitialized
+                && tableModeStart == null
+                && (Keys.ActionModifierHeld || activeTool == TableToolKind.Flick);
         }
 
         bool ITabletopFlickHandler.TryBeginFlick(TabletopObjectView view, Vector2 screenPosition)
@@ -251,6 +254,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private void UpdateGestures()
         {
+            UpdateTools(); // TOOLS-1: G, Esc, the selection outlines and the keys strip
             UpdateDiceShake();
             UpdateTableCursor();
         }
@@ -287,6 +291,7 @@ namespace ConsoleCards.Presentation.Composition
             if (boardFeedback != null) boardFeedback.HideAim();
             if (shakingDie != null && shakingDie.PhysicalObject != null) shakingDie.PhysicalObject.Shaking = false;
             shakingDie = null;
+            ClearTools(); // TOOLS-1: no selection carries over to a rebuilt table
         }
 
         // ---------- Cursor ----------
@@ -334,8 +339,10 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (componentPlacementController != null && componentPlacementController.IsActive) return TableCursorKind.Default;
-            if (Keys.PingModifierHeld && tableModeStart == null) return TableCursorKind.Ping;
-            if (Keys.ActionModifierHeld && selectionState != null && !selectionState.HoveredObjectId.IsEmpty)
+            if ((Keys.PingModifierHeld || activeTool == TableToolKind.Ping) && tableModeStart == null) return TableCursorKind.Ping;
+            if ((Keys.ActionModifierHeld || activeTool == TableToolKind.Flick)
+                && selectionState != null
+                && !selectionState.HoveredObjectId.IsEmpty)
             {
                 return TableCursorKind.Aim;
             }

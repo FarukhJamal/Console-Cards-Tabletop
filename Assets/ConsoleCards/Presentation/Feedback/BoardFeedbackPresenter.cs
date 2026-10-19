@@ -15,6 +15,7 @@ namespace ConsoleCards.Presentation.Feedback
         private const int BurstPool = 3;
         private const int ReachPool = 16;
         private const int PingPool = 6;
+        private const int SelectionPool = 40;
 
         private readonly BoardFeedbackSet set;
         private readonly BoardFeedbackMarker ring;
@@ -26,6 +27,8 @@ namespace ConsoleCards.Presentation.Feedback
         private readonly BoardFeedbackMarker collapseTarget;
         private readonly BoardFeedbackArrow arrow;
         private readonly BoardFeedbackMarker[] pings;
+        private readonly BoardFeedbackMarker[] pingRipples;
+        private readonly BoardFeedbackMarker[] selection;
         private readonly BoardFeedbackArrow aimArrow;
         private int nextPing;
         private readonly List<GameObject> owned = new List<GameObject>();
@@ -57,6 +60,30 @@ namespace ConsoleCards.Presentation.Feedback
             }
 
             pings = MakePool(set.TablePing, parent, PingPool);
+            // TOOLS-1: an expanding ring when a ping lands, and the outlines around selected cards; both kept apart
+            // from the game's markers so HideAll never hides them.
+            pingRipples = MakePool(set.CollapseBurst, parent, PingPool);
+            selection = MakePool(set.MoveTarget, parent, SelectionPool);
+        }
+
+        /// <summary>
+        /// TOOLS-1: an outline around each selected card (position and yaw per card, in reused lists). Cards past the
+        /// pool size stay selected without an outline.
+        /// </summary>
+        public void ShowSelection(List<Vector3> positions, List<float> yaws, Color colour)
+        {
+            int shown = Mathf.Min(selection.Length, Mathf.Min(positions.Count, yaws.Count));
+            for (int i = 0; i < shown; i++)
+            {
+                selection[i].ShowAt(positions[i] + (Vector3.up * set.TileMarkerLift), yaws[i], colour);
+            }
+
+            HideRange(selection, shown);
+        }
+
+        public void HideSelection()
+        {
+            HideRange(selection, 0);
         }
 
         /// <summary>
@@ -67,6 +94,7 @@ namespace ConsoleCards.Presentation.Feedback
         {
             if (pings.Length == 0) return;
             pings[nextPing].ShowFor(position + (Vector3.up * set.TileMarkerLift), colour, seconds);
+            if (pingRipples.Length > nextPing) pingRipples[nextPing].Show(position + (Vector3.up * set.TileMarkerLift), colour);
             nextPing = (nextPing + 1) % pings.Length;
         }
 

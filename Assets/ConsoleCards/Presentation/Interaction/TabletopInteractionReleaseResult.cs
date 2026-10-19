@@ -69,6 +69,15 @@ namespace ConsoleCards.Presentation.Interaction
                 null);
         }
 
+        public static TabletopInteractionReleaseResult FromSelect()
+        {
+            return new TabletopInteractionReleaseResult(
+                TabletopInteractionRoute.Select,
+                true,
+                null,
+                null);
+        }
+
         public bool Equals(TabletopInteractionReleaseResult other)
         {
             return Route == other.Route

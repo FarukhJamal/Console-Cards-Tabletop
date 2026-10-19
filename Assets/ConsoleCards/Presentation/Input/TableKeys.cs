@@ -17,6 +17,9 @@ namespace ConsoleCards.Presentation.Input
         private InputAction handTray;
         private InputAction undo;
         private InputAction redo;
+        private InputAction selectModifier;
+        private InputAction groupSelection;
+        private InputAction cancel;
 
         /// <summary>Finds and enables the actions in the map (the map the object input adapter reads from).</summary>
         public void Bind(InputActionMap map)
@@ -27,6 +30,38 @@ namespace ConsoleCards.Presentation.Input
             handTray = Find(map, "HandTray");
             undo = Find(map, "Undo");
             redo = Find(map, "Redo");
+            selectModifier = Find(map, "SelectModifier");
+            groupSelection = Find(map, "GroupSelection");
+            cancel = Find(map, "Cancel");
+        }
+
+        /// <summary>TOOLS-1: Esc (the map's Cancel): with nothing in progress it clears the selection, then picks Grab.</summary>
+        public bool CancelPressedThisFrame => cancel != null
+            ? cancel.WasPressedThisFrame()
+            : Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame;
+
+        /// <summary>TOOLS-1: Ctrl held: a click adds a card to the selection, a drag draws a selection box.</summary>
+        public bool SelectModifierHeld => selectModifier != null
+            ? selectModifier.IsPressed()
+            : Keyboard.current != null && Keyboard.current.ctrlKey.isPressed;
+
+        /// <summary>TOOLS-1: G groups the selected cards into a deck.</summary>
+        public bool GroupSelectionPressedThisFrame => groupSelection != null
+            ? groupSelection.WasPressedThisFrame() && !ControlHeld
+            : Keyboard.current != null && Keyboard.current.gKey.wasPressedThisFrame && !ControlHeld;
+
+        /// <summary>The key names as bound now (for the keys strip); read once, not per frame.</summary>
+        public string PingModifierName => NameOf(pingModifier, "Alt");
+        public string ActionModifierName => NameOf(actionModifier, "Shift");
+        public string SelectModifierName => NameOf(selectModifier, "Ctrl");
+        public string GroupSelectionName => NameOf(groupSelection, "G");
+        public string HandTrayName => NameOf(handTray, "H");
+
+        private static string NameOf(InputAction action, string fallback)
+        {
+            if (action == null) return fallback;
+            string name = action.GetBindingDisplayString();
+            return string.IsNullOrEmpty(name) ? fallback : name;
         }
 
         public bool PingTapPressedThisFrame => ping != null

@@ -122,5 +122,6 @@ namespace ConsoleCards.Presentation.UI
         public const string GameSelectPanel = "platform.game-select-panel";
         public const string GameSavePanel = "platform.game-save-panel";
         public const string TablePanel = "platform.table-panel";
+        public const string ToolBar = "platform.tool-bar";
     }
 }

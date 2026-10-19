@@ -57,6 +57,9 @@ namespace ConsoleCards.Presentation.UI
         private bool tableToolsEntryWarned;
         private HintStripView hintStripView;
         private bool hintStripWarned;
+        private ToolBarView toolBarView;
+        private bool toolBarWarned;
+        private bool hintsVisible = true;
         private bool tipsSettingWarned;
         private bool cardArtWarned;
         private bool shopEntryWarned;
@@ -661,6 +664,62 @@ namespace ConsoleCards.Presentation.UI
 
         public bool IsHintShown => IsVisible(hintStripView);
 
+        /// <summary>
+        /// Shows the tool bar (TOOLS-1) with its keys strip; while it is shown the old controls strip stays hidden.
+        /// False when its prefab is missing (warned once): then the old controls strip carries on as before.
+        /// </summary>
+        public bool ShowToolBar(
+            Action<TableToolKind> chooseTool,
+            Action toggleKeysStrip,
+            Action groupSelection,
+            Action clearSelection)
+        {
+            try
+            {
+                EnsureService();
+                if (toolBarView == null || !toolBarView.IsAcquired)
+                {
+                    toolBarView = uiService.AcquireCached<ToolBarView>(UiPrefabIds.ToolBar);
+                }
+
+                toolBarView.Bind(chooseTool, toggleKeysStrip, OpenHelp, groupSelection, clearSelection);
+                toolBarView.SetKeysAllowed(hintsVisible);
+                toolBarView.Show();
+                interactionGuideView?.SetStripVisible(false);
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                if (!toolBarWarned)
+                {
+                    toolBarWarned = true;
+                    Debug.LogWarning(
+                        "The tool bar is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs (Final UI). "
+                        + exception.Message);
+                }
+
+                return false;
+            }
+        }
+
+        public bool IsToolBarShown => IsVisible(toolBarView);
+
+        public void SetActiveTool(TableToolKind kind) => VisibleToolBar()?.SetActiveTool(kind);
+
+        public void SetToolEnabled(TableToolKind kind, bool enabled) => VisibleToolBar()?.SetToolEnabled(kind, enabled);
+
+        public void SetToolKeys(string text) => VisibleToolBar()?.SetKeys(text);
+
+        public void SetToolKeysWanted(bool wanted) => VisibleToolBar()?.SetKeysWanted(wanted);
+
+        public void SetSelectionCount(int count) => VisibleToolBar()?.SetSelectionCount(count);
+
+        public void ShowSelectionBox(Vector2 screenA, Vector2 screenB) => VisibleToolBar()?.ShowSelectionBox(screenA, screenB);
+
+        public void HideSelectionBox() => VisibleToolBar()?.HideSelectionBox();
+
+        private ToolBarView VisibleToolBar() => IsVisible(toolBarView) ? toolBarView : null;
+
         public void HideHint()
         {
             ReleaseView(hintStripView);
@@ -798,7 +857,10 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>Hints switch: the controls strip and the Toolbox placing bar (guidance text only).</summary>
         public void SetHintsVisible(bool on)
         {
-            interactionGuideView?.SetStripVisible(on);
+            hintsVisible = on;
+            bool toolBarShown = IsVisible(toolBarView);
+            interactionGuideView?.SetStripVisible(on && !toolBarShown);
+            if (toolBarShown) toolBarView.SetKeysAllowed(on);
             componentToolboxView?.SetPlacingHintVisible(on);
         }
 
@@ -1135,6 +1197,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(gameSavePanelView);
             ReleaseView(tablePanelView);
             ReleaseView(hintStripView);
+            ReleaseView(toolBarView);
             CloseTabletopPopup();
         }
 

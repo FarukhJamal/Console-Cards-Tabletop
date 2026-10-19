@@ -33,6 +33,7 @@ namespace ConsoleCards.Presentation.Input
         // UX-1, the table ping: Alt + left click, or a quick middle-button tap, anywhere on the table.
         private float middleTapSeconds = 0.3f;
         private TableKeys tableKeys;
+        private Func<bool> pingToolActive;
         private Func<Vector2, bool> tablePingRequested;
         private bool middleTapPending;
         private Vector2 middleTapPressPosition;
@@ -92,8 +93,13 @@ namespace ConsoleCards.Presentation.Input
         /// UX-1: Alt + left click or a quick middle-button tap on the table asks the handler for a ping at that
         /// screen point. When the handler pings (returns true) after an Alt-click, the click does nothing else.
         /// </summary>
-        internal void ConfigureTablePing(Func<Vector2, bool> pingHandler, TableKeys keys, float tapSeconds)
+        internal void ConfigureTablePing(
+            Func<Vector2, bool> pingHandler,
+            TableKeys keys,
+            float tapSeconds,
+            Func<bool> pingToolIsActive = null)
         {
+            pingToolActive = pingToolIsActive; // TOOLS-1: with the Ping tool a plain click pings
             tablePingRequested = pingHandler;
             tableKeys = keys;
             middleTapSeconds = Mathf.Max(0.05f, tapSeconds);
@@ -109,6 +115,7 @@ namespace ConsoleCards.Presentation.Input
         internal void ClearUiInput()
         {
             tablePingRequested = null;
+            pingToolActive = null;
             middleTapPending = false;
             suppressObjectPointerUntilRelease = false;
             secondaryPointerPressed = null;
@@ -432,9 +439,10 @@ namespace ConsoleCards.Presentation.Input
             bool free = !pointerInsideBlockedUi
                 && !HasActiveObjectInteraction()
                 && (componentPlacementController == null || !componentPlacementController.IsActive);
-            bool pingModifierHeld = tableKeys != null
-                ? tableKeys.PingModifierHeld
-                : Keyboard.current != null && Keyboard.current.altKey.isPressed;
+            bool pingModifierHeld = (tableKeys != null
+                    ? tableKeys.PingModifierHeld
+                    : Keyboard.current != null && Keyboard.current.altKey.isPressed)
+                || (pingToolActive != null && pingToolActive());
             if (selectPressedThisFrame
                 && free
                 && pingModifierHeld
