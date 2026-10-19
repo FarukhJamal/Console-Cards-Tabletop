@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.24 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.25 · 2026-10-19 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1575,3 +1575,13 @@ and Swivel cut, as short show-off animations from a deck's menu that leave the o
   route `Select` with `ITabletopSelectHandler`; code in `TabletopComposition.Tools.cs`.
 - Not yet: moving the whole selection together (drag one, the others follow) is POL-7's second half.
 - Not compiled here; the owner checks in Unity.
+
+**TOOLS-1b (owner, 2026-10-19): Select picks every component, as in Tabletop Simulator.** The tool bar is accepted
+as it is (the UI and layouts get their own pass later). Select (or Ctrl) now picks any component except game boards
+and Consoles: loose cards, pawns, tokens and dice, and whole piles (decks, stacks, discard piles, token bags). A click
+on a card in a pile picks the pile; the box picks everything inside it. Not selectable: boards and Trap Floor's floor
+tiles, Consoles and what sits on them, hands, and locked pieces. **Group into deck** gathers the selected loose cards
+and the cards of the selected decks, stacks and discard piles into one deck: into the first selected deck if there is
+one (as TTS adds cards to a deck), otherwise a new deck where the first selected card or pile lay. Piles left empty
+go away (the game's own piles stay). Pawns, tokens, dice and bags stay put. One Undo step. The panel reads
+"N selected". Code: `TabletopComposition.Tools.cs`.

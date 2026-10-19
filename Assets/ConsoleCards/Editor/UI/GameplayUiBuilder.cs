@@ -1787,13 +1787,13 @@ namespace ConsoleCards.Editor.UI
                 ToolWidth, ToolHeight, out _, out _, out _);
             Button help = TextButton(panel, "HelpButton", "?", titleFont, 22, Mustard, Ink, 50f, ToolHeight, out _);
 
-            // Selection actions, above the bar (hidden until cards are selected).
+            // Selection actions, above the bar (hidden until something is selected).
             RectTransform selection = Rect("SelectionActions", root, new Vector2(1f, 0f), new Vector2(1f, 0f),
                 new Vector2(1f, 0f), new Vector2(-Margin, Margin + StripHeight + 18f), new Vector2(420f, 58f));
             Backdrop(selection, ShadowOffset - 2f);
             Row(selection.gameObject, 16, 8, 7, 7, 10f);
             Fit(selection.gameObject, true, false);
-            Text count = FitLabel(Child("Count", selection), boldFont, 16, Ink, "2 cards selected");
+            Text count = FitLabel(Child("Count", selection), boldFont, 16, Ink, "2 selected");
             Button group = TextButton(selection, "GroupButton", "Group into deck  " + Key("G"), boldFont, 15, Go, Cream,
                 210f, 44f, out _);
             Button clear = TextButton(selection, "ClearButton", "Clear", boldFont, 15, Cream, Ink, 84f, 44f, out _);

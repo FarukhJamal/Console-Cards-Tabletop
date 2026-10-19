@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.11 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.12 · 2026-10-19 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -551,19 +551,23 @@ Change: …
 - **Changes:** 2026-10-19 built (UX-1); 2026-10-19 the Flick tool flicks without Shift (TOOLS-1).
 
 ### P-TOOLS · Tool bar, keys strip and selecting cards
-- **Status:** Built, to be checked (TOOLS-1)
+- **Status:** Tool bar accepted (owner, 2026-10-19); selecting every component to be checked (TOOLS-1b)
 - **Rule now:**
   - **Tool bar** (bottom right): Grab (normal), Select, Ping, Flick, Draw (greyed until T5), Keys (show or hide the
     keys strip) and ? (help).
   - **Keys strip:** the keys for what you are doing right now; hidden with Keys or with Hints off.
-  - **Select** (or Ctrl held): click a loose card to add or remove it, click the table to clear, drag a box to select
-    every loose card inside. Floor tiles, locked cards and cards in piles are never selected.
-  - **Group into deck** (button or G, two or more cards): one deck where the first selected card lay, cards in the
-    order picked; one Undo step. The selection itself is not saved and not in Undo.
+  - **Select** (or Ctrl held), as in Tabletop Simulator: every component except game boards and Consoles. Click a
+    loose card, pawn, token or die to add or remove it; click a card in a deck, stack or discard pile to pick the whole
+    pile; click the table to clear; drag a box to select everything inside (bags too). Never selected: boards and floor
+    tiles, Consoles and what sits on them, hands, locked pieces.
+  - **Group into deck** (button or G, two or more cards or piles): the selected cards and the cards of the selected
+    piles go into the first selected deck, or a new deck where the first selected card or pile lay; emptied piles go
+    away (not the game's own); pawns, tokens, dice and bags stay. One Undo step. The selection itself is not saved
+    and not in Undo.
   - **Esc** with nothing in progress clears the selection, then goes back to Grab.
 - **Source:** doc 30 Part H (TOOLS-1); client checklist item 6 (doc 32)
 - **Open:** moving the whole selection together (POL-7).
-- **Changes:** 2026-10-19 built (TOOLS-1).
+- **Changes:** 2026-10-19 built (TOOLS-1); 2026-10-19 Select picks every component but boards and Consoles (owner, TOOLS-1b).
 
 ---
 

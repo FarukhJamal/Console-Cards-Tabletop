@@ -50,10 +50,13 @@ namespace ConsoleCards.Presentation.Composition
     /// TOOLS-1 (doc 30, Part H): the tool bar's tools, bottom right.
     /// <list type="bullet">
     /// <item><b>Grab</b>: the normal hand (drag, wheel, F, right-click, Shift-drag flick, Alt-click ping).</item>
-    /// <item><b>Select</b> (or Ctrl held with Grab): a click on a loose card adds it to the selection or takes it out,
-    /// a click on the table clears it, a drag draws a box and selects every loose card inside. With two or more
-    /// cards selected, <b>Group into deck</b> (or G) makes one deck of them where the first one lay: one Undo step.
-    /// Floor tiles and locked cards are never selected.</item>
+    /// <item><b>Select</b> (or Ctrl held), as in Tabletop Simulator: every component can be selected except game
+    /// boards and Consoles (and what sits on a Console, hands, floor tiles and locked pieces). A click on a piece adds
+    /// it or takes it out (a click on a card in a deck, stack or discard pile picks the whole pile), a click on the
+    /// table clears, a drag draws a box and selects everything inside. <b>Group into deck</b> (or G) gathers the
+    /// selected cards and the cards of the selected piles into one deck: into the first selected deck if there is
+    /// one, otherwise a new deck where the first selected card or pile lay; emptied piles go away. One Undo step.
+    /// Pawns, tokens, dice and bags stay where they are.</item>
     /// <item><b>Ping</b>: a plain click pings (no Alt needed).</item>
     /// <item><b>Flick</b>: a plain press-pull-release flicks (no Shift needed).</item>
     /// <item><b>Draw</b>: greyed until T5.</item>
@@ -75,7 +78,20 @@ namespace ConsoleCards.Presentation.Composition
         private bool keysStripPrefLoaded;
         private bool toolsHadInteraction;
 
-        private readonly List<CardView> toolSelection = new List<CardView>();
+        // One selected component: a loose piece (card, pawn, token, die) or a pile (deck, stack, discard pile, bag).
+        private struct ToolPick
+        {
+            public TabletopObjectView View;
+            public ContainerId Pile;
+
+            public bool IsPile => View == null;
+
+            public bool Same(ToolPick other) => IsPile ? !other.IsPile && other.Pile == Pile : ReferenceEquals(View, other.View);
+        }
+
+        private readonly List<ToolPick> toolSelection = new List<ToolPick>();
+        private readonly List<CardView> groupCards = new List<CardView>();
+        private readonly List<ContainerId> groupEmptied = new List<ContainerId>();
         private readonly List<Vector3> toolSelectionPositions = new List<Vector3>();
         private readonly List<float> toolSelectionYaws = new List<float>();
         private int shownToolSelectionCount = -1;
@@ -83,7 +99,8 @@ namespace ConsoleCards.Presentation.Composition
         private bool selectPressActive;
         private bool selectBoxShown;
         private Vector2 selectPressScreen;
-        private CardView selectPressCard;
+        private ToolPick selectPressPick;
+        private bool selectPressHasPick;
 
         private string keysGrab;
         private string keysCarry;
@@ -145,9 +162,9 @@ namespace ConsoleCards.Presentation.Composition
                 + KeyName(ping + "+click") + " ping   " + KeyName(select + "+click") + " select";
             keysCarry = KeyName("Wheel") + " rotate   " + KeyName("Esc") + " cancel   drop on a pile to put it there";
             keysDie = KeyName("Hold " + action) + " shake   let go to roll   " + KeyName("Esc") + " cancel";
-            keysSelect = KeyName("Click") + " add or remove a card   " + KeyName("Drag") + " box   "
+            keysSelect = KeyName("Click") + " add or remove a piece   " + KeyName("Drag") + " box   "
                 + KeyName("Click table") + " clear   " + KeyName("Esc") + " back to Grab";
-            keysSelected = KeyName(group) + " group into deck   " + KeyName("Click") + " add or remove   "
+            keysSelected = KeyName(group) + " group cards into a deck   " + KeyName("Click") + " add or remove   "
                 + KeyName("Drag") + " box   " + KeyName("Esc") + " clear";
             keysPing = KeyName("Click") + " ping   " + KeyName("Middle tap") + " ping   " + KeyName("Esc") + " back to Grab";
             keysFlick = KeyName("Press a piece, pull back, let go") + " flick   " + KeyName("Esc") + " back to Grab";
@@ -233,8 +250,7 @@ namespace ConsoleCards.Presentation.Composition
 
         bool ITabletopSelectHandler.TryBeginSelect(TabletopObjectView viewUnderPointer, Vector2 screenPosition)
         {
-            CardView card = viewUnderPointer as CardView;
-            selectPressCard = IsStackableLooseCard(card) ? card : null;
+            selectPressHasPick = TryPickFromView(viewUnderPointer, out selectPressPick);
             selectPressScreen = screenPosition;
             selectPressActive = true;
             selectBoxShown = false;
@@ -259,17 +275,18 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!selectPressActive) return;
             bool box = selectBoxShown;
-            CardView card = selectPressCard;
+            bool hasPick = selectPressHasPick;
+            ToolPick pick = selectPressPick;
             CancelSelectPress();
             if (box)
             {
-                SelectCardsInBox(selectPressScreen, screenPosition);
+                SelectInBox(selectPressScreen, screenPosition);
             }
-            else if (card != null)
+            else if (hasPick)
             {
-                int index = toolSelection.IndexOf(card);
+                int index = IndexOfPick(pick);
                 if (index >= 0) toolSelection.RemoveAt(index);
-                else toolSelection.Add(card);
+                else toolSelection.Add(pick);
                 PlayCardSound(false);
             }
             else
@@ -290,34 +307,160 @@ namespace ConsoleCards.Presentation.Composition
         {
             selectPressActive = false;
             selectBoxShown = false;
-            selectPressCard = null;
+            selectPressHasPick = false;
+            selectPressPick = default;
             if (toolBarShown && runtimeUi != null) runtimeUi.HideSelectionBox();
         }
 
-        private void SelectCardsInBox(Vector2 screenA, Vector2 screenB)
+        // What a click on this view selects: the piece itself when it lies loose, the whole pile when it is a card in a
+        // selectable pile. Nothing for boards, Consoles and what sits on them, hands, floor tiles and locked pieces.
+        private bool TryPickFromView(TabletopObjectView view, out ToolPick pick)
+        {
+            pick = default;
+            if (view == null || !view.IsBound || view.BoundState == null) return false;
+            if (IsSelectableLoosePiece(view))
+            {
+                pick.View = view;
+                return true;
+            }
+
+            ContainerId containerId = view.BoundState.ContainerId;
+            if (view is CardView && IsSelectablePile(containerId))
+            {
+                pick.Pile = containerId;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool IsSelectableLoosePiece(TabletopObjectView view)
+        {
+            if (view == null || !view.IsBound || view.BoundState == null || !view.gameObject.activeInHierarchy) return false;
+            TabletopObjectState state = view.BoundState;
+            if (!state.ContainerId.IsEmpty || state.IsUserLocked) return false;
+            if (view is CardView card)
+            {
+                return !card.IsOverlayPresentation
+                    && (trapFloorTemplate == null || !trapFloorTemplate.IsFloorCard(state.Id)); // floor tiles are the board
+            }
+
+            return view is PawnView || view is TokenView || view is DieView;
+        }
+
+        // Decks, stacks and discard piles lying on the table, and token bags. Not hands, Console slots or other
+        // containers that belong to a Console or a board.
+        private bool IsSelectablePile(ContainerId containerId)
+        {
+            if (containerId.IsEmpty
+                || matchState == null
+                || !matchState.Containers.TryGetValue(containerId, out ContainerState container)
+                || !matchState.TryGetContainerPlacement(containerId, out _))
+            {
+                return false;
+            }
+
+            switch (container.Kind)
+            {
+                case ContainerKind.Deck:
+                case ContainerKind.Stack:
+                case ContainerKind.DiscardPile:
+                    return true;
+                default:
+                    return IsTokenBag(containerId);
+            }
+        }
+
+        private bool IsTokenBag(ContainerId containerId)
+        {
+            List<TokenContainerView> bags = Registry.tokenContainerViews;
+            for (int i = 0; i < bags.Count; i++)
+            {
+                if (bags[i] != null && bags[i].IsBound && bags[i].ContainerId == containerId) return true;
+            }
+
+            return false;
+        }
+
+        private int IndexOfPick(ToolPick pick)
+        {
+            for (int i = 0; i < toolSelection.Count; i++)
+            {
+                if (toolSelection[i].Same(pick)) return i;
+            }
+
+            return -1;
+        }
+
+        private void AddPick(ToolPick pick)
+        {
+            if (IndexOfPick(pick) < 0) toolSelection.Add(pick);
+        }
+
+        private void SelectInBox(Vector2 screenA, Vector2 screenB)
         {
             UnityCamera camera = hitResolver != null ? hitResolver.TargetCamera : null;
             if (camera == null) return;
             Vector2 min = Vector2.Min(screenA, screenB);
             Vector2 max = Vector2.Max(screenA, screenB);
-            List<CardView> cards = Registry.cardViews;
-            for (int i = 0; i < cards.Count; i++)
+            BoxSelectViews(Registry.cardViews, camera, min, max);
+            BoxSelectViews(Registry.pawnViews, camera, min, max);
+            BoxSelectViews(Registry.tokenViews, camera, min, max);
+            BoxSelectViews(Registry.dieViews, camera, min, max);
+            foreach (KeyValuePair<ContainerId, ContainerState> pair in matchState.Containers)
             {
-                CardView card = cards[i];
-                if (card == null || !card.gameObject.activeInHierarchy || !IsStackableLooseCard(card)) continue;
-                Vector3 screen = camera.WorldToScreenPoint(RestPosition(card));
-                if (screen.z <= 0f || screen.x < min.x || screen.x > max.x || screen.y < min.y || screen.y > max.y) continue;
-                if (!toolSelection.Contains(card)) toolSelection.Add(card);
+                if (!IsSelectablePile(pair.Key) || !TryGetPileWorldPose(pair.Key, out Vector3 position, out _)) continue;
+                if (InScreenBox(camera, position, min, max)) AddPick(new ToolPick { Pile = pair.Key });
             }
         }
 
-        // A selected card that went into a pile, was locked or was rebuilt (Undo, a new table) leaves the selection.
+        private void BoxSelectViews<TView>(List<TView> views, UnityCamera camera, Vector2 min, Vector2 max)
+            where TView : TabletopObjectView
+        {
+            for (int i = 0; i < views.Count; i++)
+            {
+                TView view = views[i];
+                if (!IsSelectableLoosePiece(view)) continue;
+                if (InScreenBox(camera, PieceRestPosition(view), min, max)) AddPick(new ToolPick { View = view });
+            }
+        }
+
+        private static bool InScreenBox(UnityCamera camera, Vector3 world, Vector2 min, Vector2 max)
+        {
+            Vector3 screen = camera.WorldToScreenPoint(world);
+            return screen.z > 0f && screen.x >= min.x && screen.x <= max.x && screen.y >= min.y && screen.y <= max.y;
+        }
+
+        private static Vector3 PieceRestPosition(TabletopObjectView view)
+        {
+            return view.PhysicalObject != null && view.PhysicalObject.Body != null
+                ? view.PhysicalObject.Body.position
+                : view.transform.position;
+        }
+
+        private bool TryGetPileWorldPose(ContainerId pileId, out Vector3 position, out float yaw)
+        {
+            if (matchState != null && matchState.TryGetContainerPlacement(pileId, out ContainerPlacementState placement))
+            {
+                position = coordinateConverter.ToWorldPosition(placement.Pose);
+                yaw = coordinateConverter.ToWorldRotation(placement.Pose).eulerAngles.y;
+                return true;
+            }
+
+            position = Vector3.zero;
+            yaw = 0f;
+            return false;
+        }
+
+        // A selected piece that went into a pile or was locked, or a pile that was emptied away or rebuilt (Undo, a new
+        // table), leaves the selection.
         private void PruneToolSelection()
         {
             for (int i = toolSelection.Count - 1; i >= 0; i--)
             {
-                CardView card = toolSelection[i];
-                if (card == null || !card.gameObject.activeInHierarchy || !IsStackableLooseCard(card)) toolSelection.RemoveAt(i);
+                ToolPick pick = toolSelection[i];
+                bool keep = pick.IsPile ? IsSelectablePile(pick.Pile) : IsSelectableLoosePiece(pick.View);
+                if (!keep) toolSelection.RemoveAt(i);
             }
         }
 
@@ -335,9 +478,18 @@ namespace ConsoleCards.Presentation.Composition
             toolSelectionYaws.Clear();
             for (int i = 0; i < toolSelection.Count; i++)
             {
-                CardView card = toolSelection[i];
-                toolSelectionPositions.Add(RestPosition(card));
-                toolSelectionYaws.Add(card.transform.eulerAngles.y);
+                ToolPick pick = toolSelection[i];
+                if (pick.IsPile)
+                {
+                    if (!TryGetPileWorldPose(pick.Pile, out Vector3 position, out float yaw)) continue;
+                    toolSelectionPositions.Add(position);
+                    toolSelectionYaws.Add(yaw);
+                }
+                else
+                {
+                    toolSelectionPositions.Add(PieceRestPosition(pick.View));
+                    toolSelectionYaws.Add(pick.View.transform.eulerAngles.y);
+                }
             }
 
             boardFeedback.ShowSelection(toolSelectionPositions, toolSelectionYaws, SelectionColour);
@@ -353,44 +505,130 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- Group into deck ----------
 
-        // One deck where the first selected card lies; every selected card goes in, in the order they were picked.
-        // One Undo step. The cards glide in (the transfer's own animation), then the landing tap and flash.
+        // Gathers the selected loose cards and the cards of the selected decks, stacks and discard piles into one deck:
+        // the first selected deck, or a new deck where the first selected card or pile lay. Piles left empty go away
+        // (not the game's own piles). Pawns, tokens, dice and bags stay. One Undo step, then the landing tap and flash.
         private void GroupToolSelection()
         {
             PruneToolSelection();
-            if (toolSelection.Count < 2)
+            ContainerId deckId = ContainerId.Empty;
+            bool hasPose = false;
+            TabletopPose deckPose = TabletopPose.Default;
+            int cardSources = 0;
+            for (int i = 0; i < toolSelection.Count; i++)
             {
-                ShowMessage("Select two or more loose cards to group them.");
+                ToolPick pick = toolSelection[i];
+                if (pick.IsPile)
+                {
+                    if (!matchState.Containers.TryGetValue(pick.Pile, out ContainerState pile) || pile.Kind == ContainerKind.Generic
+                        || IsTokenBag(pick.Pile))
+                    {
+                        continue;
+                    }
+
+                    cardSources++;
+                    if (deckId.IsEmpty && pile.Kind == ContainerKind.Deck) deckId = pick.Pile;
+                    if (!hasPose && matchState.TryGetContainerPlacement(pick.Pile, out ContainerPlacementState placement))
+                    {
+                        deckPose = placement.Pose;
+                        hasPose = true;
+                    }
+                }
+                else if (pick.View is CardView card)
+                {
+                    cardSources++;
+                    if (!hasPose)
+                    {
+                        deckPose = RestPose(card);
+                        hasPose = true;
+                    }
+                }
+            }
+
+            if (cardSources < 2 || !hasPose)
+            {
+                ShowMessage("Select two or more cards or piles to group them into a deck.");
                 return;
             }
 
-            TabletopPose deckPose = RestPose(toolSelection[0]);
-            ContainerId deckId = ContainerId.Empty;
+            // The cards to move, collected first: moving changes the piles.
+            groupCards.Clear();
+            groupEmptied.Clear();
+            for (int i = 0; i < toolSelection.Count; i++)
+            {
+                ToolPick pick = toolSelection[i];
+                if (!pick.IsPile)
+                {
+                    if (pick.View is CardView card) groupCards.Add(card);
+                    continue;
+                }
+
+                if (pick.Pile == deckId
+                    || IsTokenBag(pick.Pile)
+                    || !matchState.Containers.TryGetValue(pick.Pile, out ContainerState pile)
+                    || pile.Kind == ContainerKind.Generic)
+                {
+                    continue;
+                }
+
+                IReadOnlyList<TabletopObjectId> ids = pile.ObjectIds;
+                for (int c = ids.Count - 1; c >= 0; c--) // top card first, so the pile keeps its order on top of the deck
+                {
+                    if (Registry.TryGetCardView(ids[c], out CardView contained)) groupCards.Add(contained);
+                }
+
+                groupEmptied.Add(pick.Pile);
+            }
+
             int moved = 0;
+            bool createdDeck = false;
             SessionService.BeginUndoBatch();
             try
             {
-                CreateTabletopComponentResult created = TableAuthority.Submit<CreateTabletopComponentRequest, CreateTabletopComponentResult>(
-                    new CreateTabletopComponentRequest(
-                        CreateCommandContext(),
-                        TabletopComponentKind.Deck,
-                        deckPose,
-                        containerArrivalFace: ToolboxArrivalFace(TabletopComponentKind.Deck)));
-                if (!created.Succeeded)
+                if (deckId.IsEmpty)
                 {
-                    ShowMessage($"Group rejected: {created.Error}.");
-                    return;
+                    CreateTabletopComponentResult created = TableAuthority.Submit<CreateTabletopComponentRequest, CreateTabletopComponentResult>(
+                        new CreateTabletopComponentRequest(
+                            CreateCommandContext(),
+                            TabletopComponentKind.Deck,
+                            deckPose,
+                            containerArrivalFace: ToolboxArrivalFace(TabletopComponentKind.Deck)));
+                    if (!created.Succeeded)
+                    {
+                        ShowMessage($"Group rejected: {created.Error}.");
+                        return;
+                    }
+
+                    deckId = created.ContainerId;
+                    createdDeck = true;
                 }
 
-                deckId = created.ContainerId;
-                // R2: the deck got its view from the table's view sync (which also rebuilt the transfer coordinator).
+                // R2: a new deck got its view from the table's view sync (which also rebuilt the transfer coordinator).
                 CardDropTarget target = CardDropTarget.ForContainer(deckId);
-                for (int i = 0; i < toolSelection.Count && transferCoordinator != null; i++)
+                for (int i = 0; i < groupCards.Count && transferCoordinator != null; i++)
                 {
-                    if (transferCoordinator.Transfer(toolSelection[i], target).Succeeded) moved++;
+                    CardView card = groupCards[i];
+                    if (card != null && card.IsBound && transferCoordinator.Transfer(card, target).Succeeded) moved++;
                 }
 
-                if (moved == 0 && matchState.Containers.TryGetValue(deckId, out ContainerState empty) && empty.Count == 0)
+                // Piles the group emptied go away, as in Tabletop Simulator; the game's own piles stay.
+                for (int i = 0; i < groupEmptied.Count; i++)
+                {
+                    ContainerId emptiedId = groupEmptied[i];
+                    if (matchState.IsTemplateContainer(emptiedId)
+                        || !matchState.Containers.TryGetValue(emptiedId, out ContainerState emptied)
+                        || emptied.Count != 0)
+                    {
+                        continue;
+                    }
+
+                    TableAuthority.Submit<DeleteTabletopComponentRequest, DeleteTabletopComponentResult>(
+                        new DeleteTabletopComponentRequest(
+                            CreateCommandContext(),
+                            TabletopComponentTarget.ForContainer(emptiedId)));
+                }
+
+                if (createdDeck && moved == 0 && matchState.Containers.TryGetValue(deckId, out ContainerState empty) && empty.Count == 0)
                 {
                     TableAuthority.Submit<DeleteTabletopComponentRequest, DeleteTabletopComponentResult>(
                         new DeleteTabletopComponentRequest(
@@ -403,7 +641,9 @@ namespace ConsoleCards.Presentation.Composition
                 SessionService.EndUndoBatch();
             }
 
-            int selected = toolSelection.Count;
+            int wanted = groupCards.Count;
+            groupCards.Clear();
+            groupEmptied.Clear();
             toolSelection.Clear();
             DrawToolSelection();
             RefreshToolBarState();
@@ -419,7 +659,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             ScheduleLandingFeedback(deckId, true);
-            ShowMessage(moved == selected ? $"Grouped {moved} cards into a deck." : $"Grouped {moved} of {selected} cards into a deck.");
+            ShowMessage(moved == wanted ? $"Grouped {moved} cards into a deck." : $"Grouped {moved} of {wanted} cards into a deck.");
         }
 
         // ---------- Reset ----------

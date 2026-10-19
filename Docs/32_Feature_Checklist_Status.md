@@ -1,6 +1,6 @@
 # 32 — Feature Checklist Status
 
-Version 0.3 · 2026-10-19 · Status: checked against the build by Claude; owner to confirm
+Version 0.4 · 2026-10-19 · Status: checked against the build by Claude; owner to confirm
 
 The owner's client checklist "Console Cards — Feature Checklist" (received again 2026-10-19) lists what the virtual
 game must support. This doc checks each item against what the platform has today (doc 31, the code) and says what
@@ -32,7 +32,7 @@ abilities; they have dice mapped to them (for example Right Arrow = 2d6, so play
 | 3 | **Piece snapping**: pawns snap onto the grid cards as they move tile to tile | **Partly** | Pawns moved by the turn helper land on the tile; a pawn dropped by hand does not snap. | A pawn (or token) let go over a grid card snaps to the card's centre (or the nearest free spot when several share it). Planned: **POL-2** (piece snap). |
 | 4 | **Multiplayer** (lobby, 2+ players taking turns) | **Partly** | Hot-seat turns for 2+ players on one computer; the code is ready for networking (one command door, changes announced, doc 30 A6, R1–R2). | MP-1 to MP-5 (doc 30 A6), only when the owner asks. |
 | 5 | **Drawing tool** on the table, to label things | **Not yet** | — | A pen, highlighter, text label and eraser on the table, in your colour, saved with the table; part of **T5** (paint layer), moved up if the owner wants it sooner. |
-| 6 | **Deck building**: Ctrl-click cards one at a time, then a button groups them into a deck | **Done** (to be checked) | TOOLS-1: Ctrl-click (or the Select tool) adds or removes cards, a drag draws a selection box, and **Group into deck** (button or G) makes one deck of them; one Undo step. Decks can also be built in the deck editor. | Moving the whole selection together: **POL-7**. |
+| 6 | **Deck building**: Ctrl-click cards one at a time, then a button groups them into a deck | **Done** (to be checked) | TOOLS-1: Ctrl-click (or the Select tool) adds or removes any component but boards and Consoles (a card in a pile picks the pile), a drag draws a selection box, and **Group into deck** (button or G) gathers the selected cards and piles into one deck; one Undo step. Decks can also be built in the deck editor. | Moving the whole selection together: **POL-7**. |
 | 7 | **Split and spread the deck** (as in Tabletop Simulator) | **Partly** | Split Stack (in half) and Split into 2–6 piles are built (P-PILES). | **Spread**: lay a deck out in a row or fan to see every card, and gather it back. Planned: **POL-4**. |
 | 8 | **Camera movement** (move, look, zoom) | **Done** | Wheel zoom, WASD / arrows / middle-drag pan, views 1–4, camera follows a seat switch (P-CAMERA). | Polish if wanted (smoothing) in POL. |
 

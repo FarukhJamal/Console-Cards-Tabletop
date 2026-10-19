@@ -149,14 +149,14 @@ namespace ConsoleCards.Presentation.UI
             keysStrip.SetActive(keysWanted && keysAllowed);
         }
 
-        /// <summary>Shows the selection buttons while cards are selected.</summary>
+        /// <summary>Shows the selection buttons while pieces are selected (TOOLS-1b: any component but boards and Consoles).</summary>
         public void SetSelectionCount(int count)
         {
             if (count == shownCount) return;
             shownCount = count;
             selectionActions.SetActive(count > 0);
             groupButton.interactable = count >= 2;
-            selectionCountLabel.text = count == 1 ? "1 card selected" : count + " cards selected";
+            selectionCountLabel.text = count + " selected";
         }
 
         /// <summary>The selection box between two screen points (pixels).</summary>

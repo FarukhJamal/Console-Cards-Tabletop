@@ -4,9 +4,9 @@ using ConsoleCards.Presentation.Views;
 namespace ConsoleCards.Presentation.Interaction
 {
     /// <summary>
-    /// TOOLS-1, selecting several cards (the client checklist's deck building, doc 32 item 6): with the Select tool,
-    /// or Ctrl held, a click on a card adds or removes it, a click on the table clears the selection, and a drag
-    /// draws a box that selects every loose card inside it. The router hands those presses to the table.
+    /// TOOLS-1, selecting several components as in Tabletop Simulator (everything but game boards and Consoles): with
+    /// the Select tool, or Ctrl held, a click on a piece adds or removes it, a click on the table clears the selection,
+    /// and a drag draws a box that selects everything inside. The router hands those presses to the table.
     /// </summary>
     public interface ITabletopSelectHandler
     {
