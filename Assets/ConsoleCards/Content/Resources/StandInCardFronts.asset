@@ -1,0 +1,57 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fb1afa967b85bff459dd7ab52c76a6f1, type: 3}
+  m_Name: StandInCardFronts
+  m_EditorClassIdentifier: ConsoleCards.Presentation::ConsoleCards.Presentation.Art.StandInCardFronts
+  entries:
+  - stableId: 54460015-4f4f-4000-8000-00150000002a
+    front: {fileID: 2800000, guid: 218d0304a05a163459b1163ccabafb12, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-00150000000e
+    front: {fileID: 2800000, guid: 44f6953dffbc9a948ab4b2db9d537f93, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-001500000028
+    front: {fileID: 2800000, guid: 6716ab980d3a1964b9a52c76f3bcc86d, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-00150000000b
+    front: {fileID: 2800000, guid: 64fc6005d8e257e459d036b708c9a533, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-001500000002
+    front: {fileID: 2800000, guid: 004c1d6a2ec27e64c816a105e52081d0, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-00150000000c
+    front: {fileID: 2800000, guid: ba6af5e2adcae274ebacd44eada561f6, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-001500000009
+    front: {fileID: 2800000, guid: ff4d8c27bc1121a4fbcafd1ce410be49, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-00150000000a
+    front: {fileID: 2800000, guid: 3890cb6b6acdb2c429a3db4076eecccb, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-001500000001
+    front: {fileID: 2800000, guid: b6c4c6de1e02ec642b7a178e1db95295, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-001500000029
+    front: {fileID: 2800000, guid: d4b5f1e2c893c4c4796bc7f4b9222a3e, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-001500000011
+    front: {fileID: 2800000, guid: 91ec81fcee85454429002fb1b54ecc63, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-00150000000d
+    front: {fileID: 2800000, guid: f71d3540fa1445944b891e744789d91e, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-00150000000f
+    front: {fileID: 2800000, guid: 39445f82d21621a4e8e2fa50784c61c1, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-001500000008
+    front: {fileID: 2800000, guid: 140069fc64641ff41807d12a78c37909, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-001500000003
+    front: {fileID: 2800000, guid: 00a9043dbbc86f1499ddf8af417d72cc, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-001500000025
+    front: {fileID: 2800000, guid: 9ac57c6f1daf04141a137bd4455e934c, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-001500000026
+    front: {fileID: 2800000, guid: 86a567683928a0c4a9b6685836b65629, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-001500000027
+    front: {fileID: 2800000, guid: 9156e2291b7dade4ab112b1f9b464f8c, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-001500000024
+    front: {fileID: 2800000, guid: 1209afff5ded10c4bb381baf77ef4a92, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-001500000004
+    front: {fileID: 2800000, guid: 18c4002249a69b4448752974cc2073f5, type: 3}
+  - stableId: 54460015-4f4f-4000-8000-001500000012
+    front: {fileID: 2800000, guid: b456315d1c19e4243a6c531a70bc3d3a, type: 3}

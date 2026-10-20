@@ -55,8 +55,14 @@ namespace ConsoleCards.Presentation.Composition
             return contentArt.Resolve(key, builtIn);
         }
 
-        internal Texture2D FrontArt(CardDefinition definition) =>
-            definition == null ? null : Art(definition.FrontArtworkReference, definition.FrontArtwork);
+        // A card with no front art of its own (built-in, a pack or your picture) shows its stand-in front, when one was
+        // made (Console Cards > Content > Create Stand-in Card Fronts; owner 2026-10-20).
+        internal Texture2D FrontArt(CardDefinition definition)
+        {
+            if (definition == null) return null;
+            Texture2D art = Art(definition.FrontArtworkReference, definition.FrontArtwork);
+            return art != null ? art : StandInCardFronts.FrontFor(definition.StableId);
+        }
 
         internal Texture2D BackArt(CardDefinition definition) =>
             definition == null ? null : Art(definition.BackArtworkReference, definition.BackArtwork);

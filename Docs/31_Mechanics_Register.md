@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.27 · 2026-10-20 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.28 · 2026-10-20 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -464,10 +464,13 @@ Change: …
 ### P-ART · Card art and content packs
 - **Status:** Built
 - **Rule now:** card pictures come from the game, game packs, or your own pictures, looked up in that order. Card
-  art is edited from the game selection menu (Make it yours).
-- **Source:** doc 24 (A1–A4)
+  art is edited from the game selection menu (Make it yours). A built-in card with no picture at all shows its
+  **stand-in front** (ART-0): name, type band, a type symbol and its rules text, drawn as a PNG by Console Cards >
+  Content > Create Stand-in Card Fronts (Content/Art/StandIn, listed in Resources/StandInCardFronts). Real art always
+  wins; a stand-in PNG can be edited, or deleted to be drawn again.
+- **Source:** doc 24 (A1–A4); owner's choices 2026-10-20 (ART-0)
 - **Open:** final art and correct PNG sizes (the art looks squished until then, doc 30 §C0).
-- **Changes:** 2026-10-14 A2–A4.
+- **Changes:** 2026-10-14 A2–A4; 2026-10-20 stand-in fronts (ART-0).
 
 ### P-CARD-EDITOR · Card editor
 - **Status:** Built
@@ -611,7 +614,7 @@ Change: …
   2026-10-20 Draw works (DRAW-1, P-DRAW).
 
 ### P-DRAW · Drawing on the table
-- **Status:** Written 2026-10-20 (DRAW-1), to be checked
+- **Status:** Built (DRAW-1), approved by the owner 2026-10-20
 - **Rule now:**
   - **Draw** on the tool bar opens a panel above it: **PEN**, **MARKER** (highlighter, half see-through, under pen
     lines), **LABEL**, **ERASE**, eight colours (the first is your seat's colour) and **Clear all**.
