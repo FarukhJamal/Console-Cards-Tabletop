@@ -725,6 +725,9 @@ namespace ConsoleCards.Presentation.UI
 
         private ToolBarView VisibleToolBar() => IsVisible(toolBarView) ? toolBarView : null;
 
+        /// <summary>The tool bar while it is shown (the Draw tool's panel is filled through it), or null.</summary>
+        public ToolBarView ShownToolBar => VisibleToolBar();
+
         /// <summary>
         /// POL-3 / POL-5: the table's information layer (tooltip, card peek, floating labels). False when its prefab is
         /// missing (warned once); then those simply do not show.

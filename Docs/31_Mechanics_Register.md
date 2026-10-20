@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.26 · 2026-10-20 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.27 · 2026-10-20 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -453,9 +453,13 @@ Change: …
 ### P-CAMERA · Camera
 - **Status:** Built
 - **Rule now:** the mouse wheel zooms (when nothing is selected); WASD, the arrow keys or a middle-button drag pan;
-  views 1 2 3 4 are close, mid, board and top-down. A seat switch moves the camera to that seat.
-- **Source:** in-game help card
-- **Changes:** —
+  views 1 2 3 4 are close, mid, board and top-down. A seat switch moves the camera to that seat. On a table without
+  a game (the Empty Table) 1 shows your near half of the table, 2 and 3 the whole table at an angle, 4 from above.
+  The camera rests on the measured table top. Table mode looks at the whole table from above wherever the camera was,
+  follows the table when its size changes, and Done goes back to the Board view. Over a deck or stack the number keys
+  draw cards instead (POL-4); while typing in a text box they type.
+- **Source:** in-game help card; owner, 2026-10-20 (CAM-1)
+- **Changes:** 2026-10-20 views 1–4 on the Empty Table, the real table height, Table mode framing (CAM-1).
 
 ### P-ART · Card art and content packs
 - **Status:** Built
@@ -588,8 +592,8 @@ Change: …
 ### P-TOOLS · Tool bar, keys strip and selecting cards
 - **Status:** Tool bar accepted (owner, 2026-10-19); selecting every component to be checked (TOOLS-1b)
 - **Rule now:**
-  - **Tool bar** (bottom right): Grab (normal), Select, Ping, Flick, Draw (greyed until T5), Keys (show or hide the
-    keys strip) and ? (help).
+  - **Tool bar** (bottom right): Grab (normal), Select, Ping, Flick, Draw (the drawing tool, P-DRAW), Keys (show or
+    hide the keys strip) and ? (help).
   - **Keys strip:** the keys for what you are doing right now; hidden with Keys or with Hints off.
   - **Box select with Grab:** a drag on the empty table draws the selection box (new box = new selection, Ctrl adds).
   - **Select** (or Ctrl held), as in Tabletop Simulator: every component except game boards and Consoles. Click a
@@ -603,7 +607,29 @@ Change: …
   - **Esc** with nothing in progress clears the selection, then goes back to Grab.
 - **Source:** doc 30 Part H (TOOLS-1); client checklist item 6 (doc 32)
 - **Open:** moving the whole selection together (POL-7).
-- **Changes:** 2026-10-19 built (TOOLS-1); 2026-10-19 Select picks every component but boards and Consoles (owner, TOOLS-1b).
+- **Changes:** 2026-10-19 built (TOOLS-1); 2026-10-19 Select picks every component but boards and Consoles (owner, TOOLS-1b);
+  2026-10-20 Draw works (DRAW-1, P-DRAW).
+
+### P-DRAW · Drawing on the table
+- **Status:** Written 2026-10-20 (DRAW-1), to be checked
+- **Rule now:**
+  - **Draw** on the tool bar opens a panel above it: **PEN**, **MARKER** (highlighter, half see-through, under pen
+    lines), **LABEL**, **ERASE**, eight colours (the first is your seat's colour) and **Clear all**.
+  - **Pen / Marker:** press and drag to draw; a click leaves a dot. Lines lie on whatever is under the pen: the table,
+    a mat, a game board, Trap Floor's floor tiles; never on cards, pawns, tokens, dice, piles, Consoles or the hand.
+    They stay where they were drawn when pieces move.
+  - **Label:** type the words in the box (up to 40 letters), then click the table: the label lies flat there, upright
+    for you.
+  - **Erase:** press or drag over drawings: each line or label touched goes, whole.
+  - **Undo:** each line, label, erase (one drag) and Clear all is one Undo step.
+  - **Kept:** with the table (Undo, a rebuilt table), and saved in "Save table as a game" (laid out again when the
+    game starts). A new table or Reset starts clean. Up to 400 drawings on a table.
+  - While typing in a text box the camera and table keys wait.
+- **Source:** client checklist item 5 (doc 32); owner's choices 2026-10-20 (whole-line eraser, seat colour and
+  palette, table and flat things, Undo and saved)
+- **Open:** sizes are in the board feedback set (pen 0.07, marker 0.4, label 0.45, eraser 0.3 table units); multiplayer
+  sends the drawings through the command door (MP stages).
+- **Changes:** 2026-10-20 built (DRAW-1).
 
 ---
 

@@ -30,6 +30,8 @@ namespace ConsoleCards.Core.Domain.Match
         FlipConsole = 22,
         MoveBoard = 23,
         ResizeBoardGrid = 24,
+        // A line, a label or an erase made with the Draw tool (one Undo step; the drawings are table-side data).
+        TableMark = 25,
     }
 
     public enum AuthoritativeActionRecordMode

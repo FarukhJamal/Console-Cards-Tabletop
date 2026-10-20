@@ -75,7 +75,10 @@ namespace ConsoleCards.Presentation.Saving
         public List<SavedConsole> consoles = new List<SavedConsole>();
         public List<SavedBoard> boards = new List<SavedBoard>();
 
-        public int Count => pieces.Count + piles.Count + consoles.Count + boards.Count;
+        /// <summary>The drawings on the table: pen and highlighter lines and labels (drawing tool).</summary>
+        public List<SavedMark> marks = new List<SavedMark>();
+
+        public int Count => pieces.Count + piles.Count + consoles.Count + boards.Count + marks.Count;
 
         public SavedTable Normalised()
         {
@@ -83,6 +86,12 @@ namespace ConsoleCards.Presentation.Saving
             if (piles == null) piles = new List<SavedPile>();
             if (consoles == null) consoles = new List<SavedConsole>();
             if (boards == null) boards = new List<SavedBoard>();
+            if (marks == null) marks = new List<SavedMark>();
+            for (int i = 0; i < marks.Count; i++)
+            {
+                if (marks[i] != null && marks[i].points == null) marks[i].points = new List<float>();
+            }
+
             for (int i = 0; i < piles.Count; i++)
             {
                 if (piles[i] != null && piles[i].cards == null) piles[i].cards = new List<string>();
@@ -90,6 +99,28 @@ namespace ConsoleCards.Presentation.Saving
 
             return this;
         }
+    }
+
+    /// <summary>
+    /// One drawing on the table (drawing tool): a pen or highlighter line, or a label. Its points are table
+    /// coordinates with a height above the table's top, three numbers per point (x, y, height); a label has one.
+    /// </summary>
+    [Serializable]
+    public sealed class SavedMark
+    {
+        public const string Pen = "pen";
+        public const string Highlighter = "highlighter";
+        public const string Label = "label";
+
+        public string kind = Pen;
+        public float r;
+        public float g;
+        public float b;
+        public float a = 1f;
+        public float width;
+        public string text = string.Empty;
+        public float yaw;
+        public List<float> points = new List<float>();
     }
 
     /// <summary>

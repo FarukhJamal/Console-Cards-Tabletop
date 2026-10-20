@@ -687,6 +687,7 @@ namespace ConsoleCards.Presentation.Composition
                 RebuildEmptyTableLooseObjectPresentation();
                 BuildEmptyTableHand();
                 ProjectUnprojectedPlacedComponents();
+                ConfigureTabletopCameraFraming(); // camera fix: views 1–4 work on the Empty Table too
 
                 BuildInteractionGraph();
                 inputFrameCoordinator.ConfigureUiInput(
@@ -998,6 +999,7 @@ namespace ConsoleCards.Presentation.Composition
         private void OnDestroy()
         {
             Shutdown();
+            DestroyTableMarks(); // drawing tool: the lines and labels go with the table
             ResetTableCursor();
             boardFeedback?.Destroy();
             boardFeedback = null;

@@ -24,6 +24,16 @@ namespace ConsoleCards.Presentation.Feedback
         [SerializeField] private BoardFeedbackMarker collapseTarget;
         [Tooltip("The table ping (UX-1): a ring at the spot a player pings. Empty: the active-pawn ring is used.")]
         [SerializeField] private BoardFeedbackMarker tablePing;
+        [Header("Drawing tool (Final World prefabs)")]
+        [Tooltip("A drawn line: a flat Line Renderer the drawing tool copies for each pen or highlighter line.")]
+        [SerializeField] private LineRenderer tableMarkLine;
+        [Tooltip("A label on the table: a Text Mesh the drawing tool copies for each label.")]
+        [SerializeField] private TextMesh tableMarkLabel;
+        [Tooltip("Sizes in table units (a card is about 2 wide): the pen, the highlighter, a label's letters, the eraser.")]
+        [SerializeField] private float penWidth = 0.07f;
+        [SerializeField] private float highlighterWidth = 0.4f;
+        [SerializeField] private float labelHeight = 0.45f;
+        [SerializeField] private float eraserRadius = 0.3f;
         [Header("Placement")]
         [SerializeField] private float tileMarkerLift = 0.03f;
         [SerializeField] private float trapWarningLift = 0.9f;
@@ -43,6 +53,12 @@ namespace ConsoleCards.Presentation.Feedback
         public BoardFeedbackMarker ReachTile => reachTile != null ? reachTile : moveTarget;
         public BoardFeedbackMarker CollapseTarget => collapseTarget != null ? collapseTarget : moveTarget;
         public BoardFeedbackMarker TablePing => tablePing != null ? tablePing : activePawnRing;
+        public LineRenderer TableMarkLine => tableMarkLine;
+        public TextMesh TableMarkLabel => tableMarkLabel;
+        public float PenWidth => penWidth;
+        public float HighlighterWidth => highlighterWidth;
+        public float LabelHeight => labelHeight;
+        public float EraserRadius => eraserRadius;
         public float TileMarkerLift => tileMarkerLift;
         public float TrapWarningLift => trapWarningLift;
         public float TrapKick => trapKick;

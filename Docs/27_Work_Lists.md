@@ -1,6 +1,6 @@
 # 27 — Work Lists
 
-Version 1.56 · 2026-10-20 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
+Version 1.57 · 2026-10-20 · Owner's order: finish List 1, then List 2 (and the owner's further lists).
 
 ## List 1 — current (in progress)
 
@@ -91,6 +91,8 @@ the list. The order that stays active:
 | 7 | CART-1 | Cartridge contract (what a game hands the platform, doc 30 A4), including seats along the table outline | In stages (owner, 2026-10-20): **1a** the contract, Trap Floor plugged in through it, data cartridges for an Empty Table and player-made games (approved); **1b** the rest of Trap Floor's state behind it, the table's own files no longer name Trap Floor, and **1c** seats along the table's edge on any shape (approved, owner 2026-10-20; doc 30 §A4 records; the Table menu now scrolls). The cartridge piece and boot moment come later with the visuals (owner) |
 | 8 | PAD-1 | Controller pad (doc 32): up to 3 real dice per arrow, the meaning of a controller card shown when it goes into a Console slot ("X = Heavy Kick", "Right = 2d6 (4 + 3)") | Owner's choices 2026-10-20; written and approved 2026-10-20 (cards without a front picture show the plain yellow plate; art comes later) |
 | 9 | HAND-1 | Smaller hand drop area: a card from the table goes into the hand only over the lower part of the hand strip (Feel › Hand Drop Height, 55 %) | Owner's choice 2026-10-20; written 2026-10-20, to be checked |
+| 10 | DRAW-1 | Drawing tool (client checklist item 5, moved up from T5 by the owner 2026-10-20): the Draw tool's panel with Pen, Highlighter (MARKER), Label, Eraser, 8 colours (the first is your seat's colour) and Clear all; lines on the table, mats, boards and Trap Floor's floor; the eraser takes a whole line or label; each line, label, erase or Clear is one Undo step; saved with "Save table as a game"; a new or reset table starts clean (doc 31 P-DRAW) | Owner's choices 2026-10-20 (all four recommended); written 2026-10-20, to be checked. Needs the two Editor menus run once (Create Missing Gameplay UI Prefabs; Create Missing Board Feedback Prefabs) |
+| 11 | CAM-1 | Camera fixes (owner, 2026-10-20: "some of keys 1–4 are not working; the Table tool zooms in too much; after a pan the tool starts from the wrong point"): views 1–4 work on the Empty Table (whole table, or your near half for 1); the camera rests on the measured table top; Table mode frames the whole table from above wherever the camera was, follows a size change, and Done goes back to the Board view; a size handle stays under the pointer at any angle; typing in a text box no longer moves the camera. Also fixed: seats along the edge followed the table one change behind | Written 2026-10-20, to be checked (doc 31 P-CAMERA) |
 
 **Pile tools (owner, 2026-10-18, found while checking R1b):** Duplicate was missing on decks, stacks and discard
 piles; there was no Split on decks; a card dropped on a card did not stack. Owner's choices: Duplicate copies all

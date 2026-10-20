@@ -360,6 +360,11 @@ namespace ConsoleCards.Presentation.Composition
             if (eventSystem != null && eventSystem.IsPointerOverGameObject()) return TableCursorKind.Default;
             if (flickView != null) return TableCursorKind.Aim;
             if (IsCarryingStack) return TableCursorKind.Grab;
+            if (interactionRouter != null && interactionRouter.ActiveRoute == TabletopInteractionRoute.Draw)
+            {
+                return TableCursorKind.Default; // drawing a line or erasing
+            }
+
             if (interactionRouter != null && interactionRouter.HasActiveInteraction)
             {
                 CardView pressed = containedCardDragCoordinator != null ? containedCardDragCoordinator.ActiveCardView : null;
@@ -375,6 +380,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (componentPlacementController != null && componentPlacementController.IsActive) return TableCursorKind.Default;
+            if (activeTool == TableToolKind.Draw && tableModeStart == null) return TableCursorKind.Default; // drawing
             if ((Keys.PingModifierHeld || activeTool == TableToolKind.Ping) && tableModeStart == null) return TableCursorKind.Ping;
             if ((Keys.ActionModifierHeld || activeTool == TableToolKind.Flick)
                 && selectionState != null

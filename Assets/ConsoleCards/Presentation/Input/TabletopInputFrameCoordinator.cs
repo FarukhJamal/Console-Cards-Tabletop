@@ -224,6 +224,15 @@ namespace ConsoleCards.Presentation.Input
                 out float rotateDelta,
                 out bool flipPressedThisFrame);
 
+            if (TableKeys.TypingInUi)
+            {
+                // Typing in a text box: the letters and Esc belong to the box, not to the camera or the pieces.
+                keyboardPan = Vector2.zero;
+                cancelPressedThisFrame = false;
+                rotateDelta = 0f;
+                flipPressedThisFrame = false;
+            }
+
             bool secondaryPressedThisFrame = Mouse.current != null
                 && Mouse.current.rightButton.wasPressedThisFrame;
             bool secondaryHeld = Mouse.current != null

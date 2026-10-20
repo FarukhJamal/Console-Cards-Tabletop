@@ -148,7 +148,7 @@ namespace ConsoleCards.Presentation.Input
         private void ApplyPresetKeyboardShortcuts()
         {
             Keyboard keyboard = Keyboard.current;
-            if (keyboard == null || (PresetKeysSuppressed != null && PresetKeysSuppressed()))
+            if (keyboard == null || TableKeys.TypingInUi || (PresetKeysSuppressed != null && PresetKeysSuppressed()))
             {
                 return;
             }

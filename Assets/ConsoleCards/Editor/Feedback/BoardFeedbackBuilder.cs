@@ -90,6 +90,11 @@ namespace ConsoleCards.Editor.Feedback
                 return SetMarker(m, pulseSpeed: 6f, pulseScale: 0.1f, bobHeight: 0f, spin: 60f);
             });
 
+            // The drawing tool: a plain line (tinted per line by its colour) and a flat label.
+            Material markLine = PlainMaterialFor("TableMarkLine");
+            LineRenderer tableMarkLine = MarkLinePrefab(markLine);
+            TextMesh tableMarkLabel = MarkLabelPrefab();
+
             if (!File.Exists(SetPath))
             {
                 BoardFeedbackSet set = ScriptableObject.CreateInstance<BoardFeedbackSet>();
@@ -104,6 +109,8 @@ namespace ConsoleCards.Editor.Feedback
                 so.FindProperty("reachTile").objectReferenceValue = reachTile;
                 so.FindProperty("collapseTarget").objectReferenceValue = collapseTarget;
                 so.FindProperty("tablePing").objectReferenceValue = tablePing;
+                so.FindProperty("tableMarkLine").objectReferenceValue = tableMarkLine;
+                so.FindProperty("tableMarkLabel").objectReferenceValue = tableMarkLabel;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
             else
@@ -114,7 +121,9 @@ namespace ConsoleCards.Editor.Feedback
                 SerializedObject so = existingSet != null ? new SerializedObject(existingSet) : null;
                 bool added = FillMissing(so, "reachTile", reachTile)
                     | FillMissing(so, "collapseTarget", collapseTarget)
-                    | FillMissing(so, "tablePing", tablePing);
+                    | FillMissing(so, "tablePing", tablePing)
+                    | FillMissing(so, "tableMarkLine", tableMarkLine)
+                    | FillMissing(so, "tableMarkLabel", tableMarkLabel);
                 if (added)
                 {
                     so.ApplyModifiedPropertiesWithoutUndo();
@@ -256,6 +265,100 @@ namespace ConsoleCards.Editor.Feedback
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
             return quad.transform;
+        }
+
+        // A see-through unlit material with no picture: the line's own colour shows (a highlighter is half clear).
+        private static Material PlainMaterialFor(string name)
+        {
+            string path = MaterialPath + name + ".mat";
+            Material existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (existing != null) return existing;
+
+            Shader shader = Shader.Find(ShaderName);
+            if (shader == null) throw new System.InvalidOperationException($"Shader '{ShaderName}' is missing.");
+            Material material = new Material(shader) { name = name };
+            material.SetColor("_BaseColor", Color.white);
+            material.SetFloat("_Surface", 1f);
+            material.SetFloat("_Blend", 0f);
+            material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            material.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.SetFloat("_ZWrite", 0f);
+            material.SetFloat("_Cull", 0f);
+            material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            material.SetOverrideTag("RenderType", "Transparent");
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            AssetDatabase.CreateAsset(material, path);
+            return material;
+        }
+
+        // A drawn line: lies flat on the table (the ribbon faces up), points in world space, round ends.
+        private static LineRenderer MarkLinePrefab(Material material)
+        {
+            string path = PrefabPath + "TableMarkLine.prefab";
+            LineRenderer existing = AssetDatabase.LoadAssetAtPath<LineRenderer>(path);
+            if (existing != null)
+            {
+                Debug.Log($"[Board Feedback] Kept {path} (already exists).");
+                return existing;
+            }
+
+            GameObject root = new GameObject("TableMarkLine");
+            try
+            {
+                root.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+                LineRenderer line = root.AddComponent<LineRenderer>();
+                line.sharedMaterial = material;
+                line.useWorldSpace = true;
+                line.alignment = LineAlignment.TransformZ;
+                line.textureMode = LineTextureMode.Stretch;
+                line.widthMultiplier = 0.07f;
+                line.numCapVertices = 4;
+                line.numCornerVertices = 3;
+                line.positionCount = 0;
+                line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                line.receiveShadows = false;
+                return PrefabUtility.SaveAsPrefabAsset(root, path).GetComponent<LineRenderer>();
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        // A label on the table: flat, facing up, centred on its spot.
+        private static TextMesh MarkLabelPrefab()
+        {
+            string path = PrefabPath + "TableMarkLabel.prefab";
+            TextMesh existing = AssetDatabase.LoadAssetAtPath<TextMesh>(path);
+            if (existing != null)
+            {
+                Debug.Log($"[Board Feedback] Kept {path} (already exists).");
+                return existing;
+            }
+
+            GameObject root = new GameObject("TableMarkLabel");
+            try
+            {
+                root.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+                TextMesh text = root.AddComponent<TextMesh>();
+                Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                text.font = font;
+                text.fontSize = 64;
+                text.characterSize = 0.1f;
+                text.anchor = TextAnchor.MiddleCenter;
+                text.alignment = TextAlignment.Center;
+                text.richText = false;
+                text.text = "Label";
+                MeshRenderer renderer = root.GetComponent<MeshRenderer>();
+                if (font != null) renderer.sharedMaterial = font.material;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+                return PrefabUtility.SaveAsPrefabAsset(root, path).GetComponent<TextMesh>();
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
         }
 
         private static BoardFeedbackArrow ArrowPrefab(Material dash, Material head)

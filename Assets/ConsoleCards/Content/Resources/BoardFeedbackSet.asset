@@ -21,6 +21,12 @@ MonoBehaviour:
   reachTile: {fileID: 38101117697629613, guid: a8cd28d9cebb51d4e9da287ab4ec4eb6, type: 3}
   collapseTarget: {fileID: 7698197071654375031, guid: d6b3c06323a07a244814a696f7b0491f, type: 3}
   tablePing: {fileID: 7057813581028574149, guid: 8a918c308f5c2d24a85e249b051108ad, type: 3}
+  tableMarkLine: {fileID: 2536089930738328914, guid: 46a650878cf8fa4458a00677519a35eb, type: 3}
+  tableMarkLabel: {fileID: 16438996261536252, guid: c07457b3ec1156f4398c7d7bdd025c54, type: 3}
+  penWidth: 0.07
+  highlighterWidth: 0.4
+  labelHeight: 0.45
+  eraserRadius: 0.3
   tileMarkerLift: 0.03
   trapWarningLift: 0.9
   trapKick: 0.06

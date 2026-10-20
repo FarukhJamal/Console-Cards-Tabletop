@@ -734,6 +734,7 @@ namespace ConsoleCards.Presentation.Composition
                 });
             }
 
+            host.SaveTableMarks(table.marks); // drawing tool: the drawings on the table
             return table;
         }
 
@@ -828,6 +829,7 @@ namespace ConsoleCards.Presentation.Composition
                 if (!laid) failed++;
             }
 
+            host.LoadTableMarks(table.marks); // drawing tool: the game's drawings, part of its start
             host.SessionService.ShowActiveSessionUi(); // the chip shows the game's name and the rules card its rules
             host.DealAtGameStart(game, gameDeckContainerId); // DEAL-1: a game that deals when it starts
             host.ShowMessage(failed == 0
@@ -887,6 +889,7 @@ namespace ConsoleCards.Presentation.Composition
             if (decks > 0) parts.Add($"{CountText(decks, "pile")} ({CountText(cards, "card")})");
             if (loose > 0) parts.Add(CountText(loose, "loose card"));
             if (others > 0) parts.Add(CountText(others, "pawn, token or die", "pawns, tokens and dice"));
+            if (table.marks.Count > 0) parts.Add(CountText(table.marks.Count, "drawing"));
             return "The table: " + string.Join(", ", parts) + ".";
         }
 

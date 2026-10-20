@@ -33,6 +33,7 @@ using ConsoleCards.Presentation.Input;
 using ConsoleCards.Presentation.Interaction;
 using ConsoleCards.Presentation.Saving;
 using ConsoleCards.Presentation.Settings;
+using ConsoleCards.Presentation.TableSurface;
 using ConsoleCards.Presentation.UI;
 using ConsoleCards.Presentation.UI.Toolbox;
 using ConsoleCards.Presentation.Views;
@@ -103,7 +104,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             Bounds? mappingBounds = null;
-            if (sceneControllerMappingArea != null)
+            bool showsMappingArea = sceneControllerMappingArea != null && templateContext != null; // not on the Empty Table
+            if (showsMappingArea)
             {
                 mappingBounds = CreatePresentationBounds(sceneControllerMappingArea, 0.5f);
             }
@@ -123,16 +125,61 @@ namespace ConsoleCards.Presentation.Composition
                     localSeatLayout.PlayerZonePose.Position);
             }
 
+            // The table itself, measured (camera fix, owner 2026-10-20): the camera rests on the real table top, and a
+            // table without a game (the Empty Table) or without a shared play area still gets its views: the whole
+            // table for Board and Top, the near half of it (your side) for Close and Mid.
+            if (TryGetTableWorldBounds(out Bounds tableBounds))
+            {
+                cameraInputAdapter.CameraController.SetTabletopHeight(classicFrame.Centre.y);
+                if (!sharedBounds.HasValue) sharedBounds = tableBounds;
+                if (!localBounds.HasValue && localSeatLayout == null) localBounds = NearSideOf(tableBounds);
+            }
+
             cameraInputAdapter.CameraController.ConfigureFramingTargets(
                 localBounds,
                 sharedBounds,
                 seatYawDegrees,
                 mappingBounds,
-                sceneControllerMappingArea != null
+                showsMappingArea
                     ? sceneControllerMappingArea.gameObject
                     : null,
                 localSeatAnchor,
                 surroundingPlayerBounds);
+        }
+
+        /// <summary>
+        /// The world area of the table as it is now (any shape, its edge included), flat on the table's top. False
+        /// before the table has been measured.
+        /// </summary>
+        private bool TryGetTableWorldBounds(out Bounds bounds)
+        {
+            bounds = default;
+            if (!FindClassicTable()) return false;
+            float unit = classicFrame.WorldPerTableUnit;
+            TableSpec spec = HoldSpecFor(tableSpec);
+            bool twoSizes = spec.shape == TableShape.Rectangle || spec.shape == TableShape.Oval;
+            float rim = IsBuiltShape(spec.shape) && spec.edge != TableEdge.None ? spec.edgeWidth * unit : 0f;
+            float halfWidth = (0.5f * spec.width * unit) + rim;
+            float halfDepth = (0.5f * (twoSizes ? spec.depth : spec.width) * unit) + rim;
+            Vector3 right = classicFrame.Rotation * new Vector3(halfWidth, 0f, 0f);
+            Vector3 forward = classicFrame.Rotation * new Vector3(0f, 0f, halfDepth);
+            Vector3 centre = classicFrame.Centre;
+            bounds = new Bounds(centre, new Vector3(0f, 0.1f, 0f));
+            bounds.Encapsulate(centre + right + forward);
+            bounds.Encapsulate(centre + right - forward);
+            bounds.Encapsulate(centre - right + forward);
+            bounds.Encapsulate(centre - right - forward);
+            return true;
+        }
+
+        // The half of the table nearest the default camera (the camera looks along +Z with no seat).
+        private static Bounds NearSideOf(Bounds table)
+        {
+            Vector3 size = table.size;
+            size.z *= 0.5f;
+            Vector3 centre = table.center;
+            centre.z -= 0.25f * table.size.z;
+            return new Bounds(centre, size);
         }
 
         private static void EncapsulateBounds(ref Bounds? aggregate, Bounds addition)

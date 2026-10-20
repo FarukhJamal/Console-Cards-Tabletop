@@ -16,7 +16,7 @@ namespace ConsoleCards.Presentation.UI
 
     /// <summary>
     /// The tool bar (TOOLS-1), bottom right, in the Toolbox look: the table tools (Grab, Select, Ping, Flick, and
-    /// Draw, which waits for T5), the keys strip that names the keys for what you are doing now (hideable, and off
+    /// Draw, with its panel of pen, highlighter, label, eraser, colours and Clear while it is chosen), the keys strip that names the keys for what you are doing now (hideable, and off
     /// with the Hints switch), Help, the selection buttons (count, Group into deck, Clear) while cards are selected,
     /// and the selection box drawn while dragging with the Select tool. An authored Final UI prefab (Console Cards >
     /// UI > Create Missing Gameplay UI Prefabs); code only fills texts, colours and the box position.
@@ -52,6 +52,16 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button groupButton;
         [SerializeField] private Button clearButton;
         [SerializeField] private RectTransform selectionBox;
+        [Header("Draw tool (added by Create Missing Gameplay UI Prefabs; Draw stays greyed without it)")]
+        [SerializeField] private GameObject drawActions;
+        [Tooltip("Pen, Highlighter, Label, Eraser, in that order.")]
+        [SerializeField] private Button[] drawModeButtons = new Button[0];
+        [SerializeField] private Image[] drawModeFills = new Image[0];
+        [Tooltip("The colour swatches; the first is your seat's colour.")]
+        [SerializeField] private Button[] drawSwatchButtons = new Button[0];
+        [SerializeField] private Image[] drawSwatchImages = new Image[0];
+        [SerializeField] private InputField drawLabelInput;
+        [SerializeField] private Button drawClearButton;
 
         private Action<TableToolKind> chooseTool;
         private Action toggleKeys;
@@ -64,6 +74,9 @@ namespace ConsoleCards.Presentation.UI
         private bool keysAllowed = true;
         private int shownCount = -1;
         private Canvas canvas;
+        private Action<int> chooseDrawMode;
+        private Action<int> chooseDrawColour;
+        private Action clearDrawing;
 
         public void ValidateReferences()
         {
@@ -116,6 +129,75 @@ namespace ConsoleCards.Presentation.UI
             HideSelectionBox();
         }
 
+        /// <summary>True when the prefab has the Draw tool's panel (made by the UI builder).</summary>
+        public bool HasDrawPanel => drawActions != null
+            && drawModeButtons != null
+            && drawModeButtons.Length >= 4
+            && drawSwatchButtons != null
+            && drawSwatchButtons.Length > 0
+            && drawLabelInput != null
+            && drawClearButton != null;
+
+        /// <summary>How many colour swatches the panel has.</summary>
+        public int DrawSwatchCount => drawSwatchButtons != null ? drawSwatchButtons.Length : 0;
+
+        /// <summary>The words typed for the next label.</summary>
+        public string DrawLabelText => drawLabelInput != null ? drawLabelInput.text : string.Empty;
+
+        /// <summary>The Draw panel's buttons (after <see cref="Bind"/>): a drawing mode, a colour, Clear.</summary>
+        public void BindDraw(Action<int> chooseMode, Action<int> chooseColour, Action clear)
+        {
+            if (!HasDrawPanel) return;
+            chooseDrawMode = chooseMode;
+            chooseDrawColour = chooseColour;
+            clearDrawing = clear;
+            for (int i = 0; i < drawModeButtons.Length; i++)
+            {
+                if (drawModeButtons[i] == null) continue;
+                int mode = i;
+                drawModeButtons[i].onClick.AddListener(() => chooseDrawMode?.Invoke(mode));
+            }
+
+            for (int i = 0; i < drawSwatchButtons.Length; i++)
+            {
+                if (drawSwatchButtons[i] == null) continue;
+                int colour = i;
+                drawSwatchButtons[i].onClick.AddListener(() => chooseDrawColour?.Invoke(colour));
+            }
+
+            drawClearButton.onClick.AddListener(() => clearDrawing?.Invoke());
+        }
+
+        /// <summary>Shows the Draw panel while the Draw tool is chosen.</summary>
+        public void ShowDraw(bool shown)
+        {
+            if (drawActions != null && drawActions.activeSelf != shown) drawActions.SetActive(shown);
+        }
+
+        /// <summary>Lights the drawing mode (0 pen, 1 highlighter, 2 label, 3 eraser); the words box shows for labels.</summary>
+        public void SetDrawMode(int mode)
+        {
+            for (int i = 0; drawModeFills != null && i < drawModeFills.Length; i++)
+            {
+                if (drawModeFills[i] != null) drawModeFills[i].color = i == mode ? activeFill : idleFill;
+            }
+
+            if (drawLabelInput != null) drawLabelInput.gameObject.SetActive(mode == 2);
+        }
+
+        /// <summary>The swatches' colours, and which one is chosen (it shows a little bigger).</summary>
+        public void SetDrawSwatches(Color[] colours, int chosen)
+        {
+            for (int i = 0; drawSwatchImages != null && i < drawSwatchImages.Length; i++)
+            {
+                Image swatch = drawSwatchImages[i];
+                if (swatch == null) continue;
+                if (colours != null && i < colours.Length) swatch.color = colours[i];
+                float scale = i == chosen ? 1.25f : 1f;
+                swatch.rectTransform.localScale = new Vector3(scale, scale, 1f);
+            }
+        }
+
         /// <summary>Lights the chosen tool.</summary>
         public void SetActiveTool(TableToolKind kind)
         {
@@ -135,7 +217,7 @@ namespace ConsoleCards.Presentation.UI
             if (handStyleLabel != null) handStyleLabel.text = fan ? "FAN" : "ROW";
         }
 
-        /// <summary>Greys out a tool that is not ready yet (Draw until T5).</summary>
+        /// <summary>Greys out a tool that cannot be used (Draw without its panel or its line prefabs).</summary>
         public void SetToolEnabled(TableToolKind kind, bool enabled)
         {
             for (int i = 0; i < tools.Length; i++)
@@ -211,6 +293,20 @@ namespace ConsoleCards.Presentation.UI
             if (groupButton != null) groupButton.onClick.RemoveAllListeners();
             if (clearButton != null) clearButton.onClick.RemoveAllListeners();
             if (handStyleButton != null) handStyleButton.onClick.RemoveAllListeners();
+            for (int i = 0; drawModeButtons != null && i < drawModeButtons.Length; i++)
+            {
+                if (drawModeButtons[i] != null) drawModeButtons[i].onClick.RemoveAllListeners();
+            }
+
+            for (int i = 0; drawSwatchButtons != null && i < drawSwatchButtons.Length; i++)
+            {
+                if (drawSwatchButtons[i] != null) drawSwatchButtons[i].onClick.RemoveAllListeners();
+            }
+
+            if (drawClearButton != null) drawClearButton.onClick.RemoveAllListeners();
+            chooseDrawMode = null;
+            chooseDrawColour = null;
+            clearDrawing = null;
         }
     }
 }

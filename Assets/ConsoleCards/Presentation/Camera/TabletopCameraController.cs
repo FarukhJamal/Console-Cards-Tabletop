@@ -525,6 +525,49 @@ namespace ConsoleCards.Presentation.Camera
                 return false;
             }
 
+            FramePreset(preset, tuning, framingBounds, immediate, framingDistanceMultiplier, transitionSeconds);
+            return true;
+        }
+
+        /// <summary>
+        /// The top view framing the given world area (for example the whole table in Table mode), whatever the game's
+        /// own areas are.
+        /// </summary>
+        public void ShowTopDownView(Bounds framingBounds, bool immediate = false)
+        {
+            EnsureInitialized();
+            ValidateBounds(framingBounds, nameof(framingBounds));
+            FramePreset(
+                TabletopCameraPreset.TopDown,
+                ResolvePreset(TabletopCameraPreset.TopDown),
+                framingBounds,
+                immediate,
+                1f,
+                -1f);
+        }
+
+        /// <summary>
+        /// The height of the table's top in the world (the scene's authored value can be stale once the table is
+        /// measured). The camera's pivot rests on it, so panning and the views stay on the table.
+        /// </summary>
+        public void SetTabletopHeight(float height)
+        {
+            EnsureInitialized();
+            ValidateFinite(height, nameof(height));
+            tabletopHeight = height;
+            targetPivot.y = height;
+            currentPivot.y = height;
+            transitionStartPivot.y = height;
+        }
+
+        private void FramePreset(
+            TabletopCameraPreset preset,
+            TabletopCameraPresetTuning tuning,
+            Bounds framingBounds,
+            bool immediate,
+            float framingDistanceMultiplier,
+            float transitionSeconds)
+        {
             float pitch = ClampPitch(tuning.PitchDegrees);
             float yaw = NormalizeYaw(localSeatYawDegrees + tuning.YawOffsetDegrees);
             Quaternion rotation = Quaternion.Euler(pitch, yaw, 0f);
@@ -563,8 +606,6 @@ namespace ConsoleCards.Presentation.Camera
                 controllerMappingAreaRoot.SetActive(
                     tuning.ShowControllerMappingArea && hasControllerMappingBounds);
             }
-
-            return true;
         }
 
         public bool ShowCloseView(bool immediate = false)

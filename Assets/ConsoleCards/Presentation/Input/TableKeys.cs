@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
 namespace ConsoleCards.Presentation.Input
@@ -27,6 +28,22 @@ namespace ConsoleCards.Presentation.Input
         private InputAction deleteSelection;
         private InputAction flip;
         private InputAction deal;
+
+        /// <summary>
+        /// True while the player types in a text box on the screen (the Draw tool's label words, a name in a panel):
+        /// then the table's keys and the camera keys wait, so typing "w" or "1" does not move the camera. No allocation.
+        /// </summary>
+        public static bool TypingInUi
+        {
+            get
+            {
+                EventSystem eventSystem = EventSystem.current;
+                GameObject selected = eventSystem != null ? eventSystem.currentSelectedGameObject : null;
+                return selected != null
+                    && selected.TryGetComponent(out UnityEngine.UI.InputField field)
+                    && field.isFocused;
+            }
+        }
 
         /// <summary>Finds and enables the actions in the map (the map the object input adapter reads from).</summary>
         public void Bind(InputActionMap map)

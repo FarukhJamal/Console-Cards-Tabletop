@@ -289,6 +289,7 @@ namespace ConsoleCards.Presentation.Composition
             interactionRouter.CarryHandler = this; // press and hold a stack to carry it whole (owner, 2026-10-18)
             interactionRouter.FlickHandler = this; // UX-1: Shift-press a loose piece, pull back, let go
             interactionRouter.SelectHandler = this; // TOOLS-1: the Select tool, or Ctrl held: click or box-select cards
+            interactionRouter.DrawHandler = this; // drawing tool: with Draw chosen a press draws, labels or erases
             interactionRouter.LongPressSeconds = Feel.StackHoldSeconds; // POL-0: from Resources/FeelSettings
             interactionRouter.LogMissedPresses = Feel.LogMissedClicks;
             inputFrameCoordinator.LogMissedPresses = Feel.LogMissedClicks;

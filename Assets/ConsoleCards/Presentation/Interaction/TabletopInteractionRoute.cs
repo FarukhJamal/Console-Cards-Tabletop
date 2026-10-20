@@ -10,6 +10,8 @@ namespace ConsoleCards.Presentation.Interaction
         // A loose piece aimed and flicked with Shift (UX-1).
         Flick = 4,
         // A click or box that selects cards (TOOLS-1).
-        Select = 5
+        Select = 5,
+        // A line drawn, a label placed or marks erased with the Draw tool.
+        Draw = 6
     }
 }

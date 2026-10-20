@@ -383,6 +383,7 @@ namespace ConsoleCards.Presentation.Composition
 
             TabletopSession previousSession = host.activeSession;
             TemplateContext previousContext = host.templateContext;
+            TableMarkSet previousMarks = host.TableMarks;
             bool hadActivePresentation = host.IsInitialized;
 
             try
@@ -395,6 +396,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.activeSession = result.Session;
                 host.emptyTableHandEnabled = true;
                 host.templateContext = candidateContext;
+                host.ShowTableMarks(TableMarkSet.Empty); // drawing tool: a new table starts clean
                 host.InitializeActiveSession(false);
                 host.gameTemplatesPanelError = null;
                 host.gameTemplatesPanelVisible = false;
@@ -408,6 +410,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.Shutdown();
                 host.activeSession = previousSession;
                 host.templateContext = previousContext;
+                host.ShowTableMarks(previousMarks);
                 host.gameTemplatesPanelError = $"Table replacement failed: {exception.Message}";
                 Debug.LogError(host.gameTemplatesPanelError, host);
 
@@ -505,11 +508,13 @@ namespace ConsoleCards.Presentation.Composition
                 // Reset returns the table to its start, Empty Table Hand switched on included (H-E).
                 host.emptyTableHandEnabled = true;
                 host.Shutdown(true);
+                host.ShowTableMarks(TableMarkSet.Empty); // drawing tool: the table's start has no drawings
                 host.InitializeActiveSession(true);
                 ShowActiveSessionUi();
             }
             catch (Exception exception)
             {
+                host.ShowTableMarks(previousSnapshot.TableMarks);
                 host.RestorePresentationAfterFailedRebuild(previousMatch, previousSnapshot, "Reset");
                 Debug.LogError($"Reset Presentation rebuild failed: {exception.Message}", host);
                 throw;
@@ -578,6 +583,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.activeSession.ReplaceCurrentMatch(replacement);
                 host.pendingRestoredGameState = restoredGameState;
                 host.pendingRestoredControllerPurchaseState = restoredPurchase;
+                host.ShowTableMarks(snapshot.TableMarks); // drawing tool: the drawings as they were at that step
                 host.InitializeActiveSession(false);
                 host.undoHistory.CommitUndo();
                 host.undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
@@ -592,6 +598,7 @@ namespace ConsoleCards.Presentation.Composition
             }
             catch (Exception exception)
             {
+                host.ShowTableMarks(previousSnapshot.TableMarks);
                 host.RestorePresentationAfterFailedRebuild(previousMatch, previousSnapshot, "Undo");
                 Debug.LogError($"Undo Presentation rebuild failed: {exception.Message}", host);
                 throw;
@@ -656,6 +663,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.activeSession.ReplaceCurrentMatch(replacement);
                 host.pendingRestoredGameState = restoredGameState;
                 host.pendingRestoredControllerPurchaseState = restoredPurchase;
+                host.ShowTableMarks(snapshot.TableMarks); // drawing tool: the drawings as they were at that step
                 host.InitializeActiveSession(false);
                 host.undoHistory.CommitRedo();
                 host.undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
@@ -665,6 +673,7 @@ namespace ConsoleCards.Presentation.Composition
             }
             catch (Exception exception)
             {
+                host.ShowTableMarks(previousSnapshot.TableMarks);
                 host.RestorePresentationAfterFailedRebuild(previousMatch, previousSnapshot, "Redo");
                 Debug.LogError($"Redo Presentation rebuild failed: {exception.Message}", host);
                 throw;
@@ -690,7 +699,7 @@ namespace ConsoleCards.Presentation.Composition
         // POL-0: the keys come from the Input Actions asset (Undo: Ctrl+Z).
         internal bool HandleUndoShortcut()
         {
-            if (!host.IsInitialized || !host.Keys.UndoPressedThisFrame)
+            if (!host.IsInitialized || !host.Keys.UndoPressedThisFrame || TableKeys.TypingInUi)
             {
                 return false;
             }
@@ -702,7 +711,7 @@ namespace ConsoleCards.Presentation.Composition
         // POL-0: the keys come from the Input Actions asset (Redo: Ctrl+Y or Ctrl+Shift+Z).
         internal bool HandleRedoShortcut()
         {
-            if (!host.IsInitialized || !host.Keys.RedoPressedThisFrame)
+            if (!host.IsInitialized || !host.Keys.RedoPressedThisFrame || TableKeys.TypingInUi)
             {
                 return false;
             }
@@ -876,7 +885,59 @@ namespace ConsoleCards.Presentation.Composition
             return SessionUndoSnapshot.Capture(
                 host.matchState,
                 host.ActiveCartridge.CaptureUndoState(), // CART-1b: the game's own part of the step
-                host.pendingControllerPurchaseState);
+                host.pendingControllerPurchaseState,
+                host.TableMarks); // drawing tool: the drawings at this step
+        }
+
+        /// <summary>
+        /// Drawing tool: a line drawn, a label placed or drawings erased becomes one Undo step. The drawings are the
+        /// table's own data (not part of the match), so the step is recorded here with the table's newest state. While
+        /// another step is still being made (a die still rolling) nothing is recorded; that step takes the drawings
+        /// with it when it lands. False when no step was recorded.
+        /// </summary>
+        internal bool RecordTableMarkStep(string description)
+        {
+            if (!host.IsInitialized
+                || host.rebuildingFromUndo
+                || host.undoBatchActive
+                || host.undoTransactionInProgress
+                || host.undoTrackedMatch != host.matchState
+                || host.undoHistory.CurrentStateIndex < 0)
+            {
+                return false;
+            }
+
+            PlayerId actor = host.localPlayerId.IsEmpty ? tableActionActorId : host.localPlayerId;
+            if (actor.IsEmpty) return false;
+            AuthoritativeActionAcceptance acceptance = new AuthoritativeActionAcceptance(
+                Math.Max(1L, host.matchState.Revision),
+                CommandId.New(),
+                actor,
+                AuthoritativeActionKind.TableMark,
+                AuthoritativeActionRecordMode.Transaction);
+            host.undoHistory.RecordAccepted(
+                host.undoHistory.CurrentState,
+                CaptureUndoSnapshot(),
+                acceptance,
+                $"{FormatUndoActor(actor)} {description}");
+            RefreshUndoUi();
+            host.RulesCardPanel.RaiseHint(HintTriggers.UndoAvailable);
+            return true;
+        }
+
+        /// <summary>Drawing tool: drawings put on the table without a step of their own (a saved game laid out).</summary>
+        internal void FoldTableMarksIntoCurrentStep()
+        {
+            if (!host.IsInitialized
+                || host.undoBatchActive
+                || host.undoTransactionInProgress
+                || host.undoTrackedMatch != host.matchState
+                || host.undoHistory.CurrentStateIndex < 0)
+            {
+                return;
+            }
+
+            host.undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
         }
 
         internal static string FormatUndoObjectIds(GameTemplateInitialSnapshot snapshot)
@@ -913,6 +974,7 @@ namespace ConsoleCards.Presentation.Composition
                 case AuthoritativeActionKind.FlipConsole: return $"{actor} turned a Console over";
                 case AuthoritativeActionKind.MoveBoard: return $"{actor} moved a Board";
                 case AuthoritativeActionKind.ResizeBoardGrid: return $"{actor} changed a Board's grid";
+                case AuthoritativeActionKind.TableMark: return $"{actor} drew on the table";
                 default:
                     // CART-1b: a game names its own actions; anything else is a table action.
                     return host.ActiveCartridge.DescribeAction(acceptance, actor) ?? $"{actor} performed a table action";

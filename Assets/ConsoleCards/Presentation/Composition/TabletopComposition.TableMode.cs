@@ -87,7 +87,7 @@ namespace ConsoleCards.Presentation.Composition
             tableRedo.Clear();
             handleSpec = null;
             activeHandle = -1;
-            cameraInputAdapter?.CameraController?.ShowPreset(TabletopCameraPreset.TopDown);
+            FrameWholeTable(); // camera fix (owner, 2026-10-20): the whole table from above, wherever the camera was
             RefreshTablePanel("Changes show on the table at once. Drag the dots to resize. Done keeps them; Cancel or Esc "
                 + "puts the table back.");
         }
@@ -173,8 +173,8 @@ namespace ConsoleCards.Presentation.Composition
 
         /// <summary>
         /// Shows the table for <paramref name="to"/>, keeping everything on it: the game's room is kept, fixed pieces
-        /// are moved in with everything else at the new edge (only another player's pile stops it). Does not change
-        /// <see cref="tableSpec"/>; the caller does on success. <paramref name="message"/> says why it stopped, or
+        /// are moved in with everything else at the new edge (only another player's pile stops it). On success
+        /// <see cref="tableSpec"/> becomes <paramref name="to"/> (the callers set it too). <paramref name="message"/> says why it stopped, or
         /// how many pieces were moved.
         /// </summary>
         private bool TryChangeTable(TableSpec to, out string message)
@@ -192,7 +192,19 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             int moved = MovePiecesIn();
+            Vector3 sizeBefore = TryGetTableWorldBounds(out Bounds before) ? before.size : Vector3.zero;
+            // The table is now this one (the callers set it too): the seats and the camera measure the new table, not
+            // the one before (fix 2026-10-20: the seats used to follow one change behind).
+            tableSpec = to;
             int seatsMoved = ArrangeSeatsAlongEdge(false); // CART-1c: a game's seats follow the edge
+            ConfigureTabletopCameraFraming(); // the views 1–4 frame the table as it is now
+            if (tableModeStart != null
+                && TryGetTableWorldBounds(out Bounds after)
+                && (after.size - sizeBefore).sqrMagnitude > 0.0001f)
+            {
+                FrameWholeTable(); // a bigger or smaller table: the top view follows it
+            }
+
             message = moved > 0
                 ? $" Moved {moved} {(moved == 1 ? "piece" : "pieces")} in from the edge (Undo puts {(moved == 1 ? "it" : "them")} back)."
                 : string.Empty;
@@ -364,9 +376,19 @@ namespace ConsoleCards.Presentation.Composition
             tableUndo.Clear();
             tableRedo.Clear();
             runtimeUi?.CloseTablePanel();
-            cameraInputAdapter?.CameraController?.ShowDefaultView();
+            TabletopCameraController cameraController = cameraInputAdapter?.CameraController;
+            if (cameraController != null && !cameraController.ShowBoardView()) cameraController.ShowDefaultView();
             RefreshTableShapeEntry();
             ShowMessage(message);
+        }
+
+        // The whole table from above (Table mode), wherever the camera was panned or turned.
+        private void FrameWholeTable()
+        {
+            TabletopCameraController cameraController = cameraInputAdapter?.CameraController;
+            if (cameraController == null) return;
+            if (TryGetTableWorldBounds(out Bounds table)) cameraController.ShowTopDownView(table);
+            else cameraController.ShowPreset(TabletopCameraPreset.TopDown);
         }
 
         // A new shape keeps the chosen edge, its size and the star settings.
@@ -438,7 +460,11 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (index != activeHandle || handleSpec == null || targetCamera == null) return;
             Ray ray = targetCamera.ScreenPointToRay(screen);
-            Plane top = new Plane(classicFrame.Rotation * Vector3.up, classicFrame.Centre);
+            // The plane the handles stand on (lifted to the edge's top), so the handle stays under the pointer from
+            // any camera angle.
+            float lift = handleSpec.edge == TableEdge.None ? 0.05f : handleSpec.edgeHeight * classicFrame.WorldPerTableUnit;
+            Vector3 up = classicFrame.Rotation * Vector3.up;
+            Plane top = new Plane(up, classicFrame.Centre + (up * lift));
             if (!top.Raycast(ray, out float distance)) return;
             Vector3 local = Quaternion.Inverse(classicFrame.Rotation) * (ray.GetPoint(distance) - classicFrame.Centre);
             Vector2 flat = new Vector2(local.x, local.z);

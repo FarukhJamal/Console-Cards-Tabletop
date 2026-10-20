@@ -53,6 +53,9 @@ namespace ConsoleCards.Presentation.Interaction
         /// <summary>Optional: Shift-press on a loose piece aims a flick instead of picking it up (UX-1).</summary>
         public ITabletopFlickHandler FlickHandler { get; set; }
 
+        /// <summary>Optional: with the Draw tool a press draws, places a label or erases instead (drawing tool).</summary>
+        public ITabletopDrawHandler DrawHandler { get; set; }
+
         /// <summary>
         /// POL-0 diagnostics: when true, a press on a piece that could not start (and why) is written to the Console
         /// (and Editor.log). Pressing empty table is not logged.
@@ -70,6 +73,13 @@ namespace ConsoleCards.Presentation.Interaction
             if (moveCoordinator.HasActiveInteraction || containedCardDragCoordinator.HasActiveInteraction)
             {
                 throw new InvalidOperationException("An interaction lifecycle is already active.");
+            }
+
+            if (DrawHandler != null && DrawHandler.WantsDraw() && DrawHandler.TryBeginDraw(screenPosition))
+            {
+                selectionState.ClearHovered();
+                activeRoute = TabletopInteractionRoute.Draw;
+                return true;
             }
 
             if (SelectHandler != null)
@@ -161,6 +171,9 @@ namespace ConsoleCards.Presentation.Interaction
                 case TabletopInteractionRoute.Select:
                     SelectHandler.UpdateSelect(screenPosition);
                     return;
+                case TabletopInteractionRoute.Draw:
+                    DrawHandler.UpdateDraw(screenPosition);
+                    return;
                 case TabletopInteractionRoute.None:
                     throw new InvalidOperationException("No tabletop interaction route is active.");
                 default:
@@ -211,6 +224,11 @@ namespace ConsoleCards.Presentation.Interaction
                     activeRoute = TabletopInteractionRoute.None;
                     SelectHandler.ReleaseSelect(screenPosition);
                     return TabletopInteractionReleaseResult.FromSelect();
+                case TabletopInteractionRoute.Draw:
+                    // The route ends first: keeping a line records an Undo step.
+                    activeRoute = TabletopInteractionRoute.None;
+                    DrawHandler.ReleaseDraw(screenPosition);
+                    return TabletopInteractionReleaseResult.FromDraw();
                 case TabletopInteractionRoute.None:
                     return TabletopInteractionReleaseResult.NoActiveInteraction();
                 default:
@@ -311,6 +329,10 @@ namespace ConsoleCards.Presentation.Interaction
                     activeRoute = TabletopInteractionRoute.None;
                     SelectHandler?.CancelSelect();
                     return;
+                case TabletopInteractionRoute.Draw:
+                    activeRoute = TabletopInteractionRoute.None;
+                    DrawHandler?.CancelDraw();
+                    return;
                 case TabletopInteractionRoute.None:
                     return;
                 default:
@@ -336,6 +358,11 @@ namespace ConsoleCards.Presentation.Interaction
             {
                 activeRoute = TabletopInteractionRoute.None;
                 SelectHandler?.CancelSelect();
+            }
+            else if (activeRoute == TabletopInteractionRoute.Draw)
+            {
+                activeRoute = TabletopInteractionRoute.None;
+                DrawHandler?.CancelDraw();
             }
 
             try

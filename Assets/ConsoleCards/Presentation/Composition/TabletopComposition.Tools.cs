@@ -58,7 +58,8 @@ namespace ConsoleCards.Presentation.Composition
     /// Pawns, tokens, dice and bags stay where they are.</item>
     /// <item><b>Ping</b>: a plain click pings (no Alt needed).</item>
     /// <item><b>Flick</b>: a plain press-pull-release flicks (no Shift needed).</item>
-    /// <item><b>Draw</b>: greyed until T5.</item>
+    /// <item><b>Draw</b>: the drawing tool (pen, highlighter, labels, eraser; TabletopComposition.Marks.cs). Greyed
+    /// until its panel and line prefabs exist (Create Missing Gameplay UI Prefabs and Board Feedback Prefabs).</item>
     /// </list>
     /// The keys strip names the keys for what you are doing right now; Keys hides it (remembered), Hints off hides
     /// it too. Esc with nothing in progress clears the selection, then goes back to Grab. The selection is a view
@@ -138,7 +139,10 @@ namespace ConsoleCards.Presentation.Composition
                 hasTray ? ToggleHandStyle : (Action)null);
             if (!toolBarShown) return;
             runtimeUi.SetHandStyle(handFan);
-            runtimeUi.SetToolEnabled(TableToolKind.Draw, false); // T5
+            bool drawReady = DrawToolReady();
+            runtimeUi.SetToolEnabled(TableToolKind.Draw, drawReady);
+            if (!drawReady && activeTool == TableToolKind.Draw) activeTool = TableToolKind.Grab;
+            RefreshDrawPanel();
             runtimeUi.SetActiveTool(activeTool);
             runtimeUi.SetToolKeysWanted(!keysStripHidden);
             shownToolSelectionCount = -1;
@@ -147,10 +151,19 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ChooseTool(TableToolKind kind)
         {
-            if (kind == TableToolKind.Draw) return; // T5
+            if (kind == TableToolKind.Draw && !DrawToolReady())
+            {
+                ShowMessage("The Draw tool needs its panel and lines: run Console Cards > UI > Create Missing Gameplay UI "
+                    + "Prefabs and Console Cards > Feedback > Create Missing Board Feedback Prefabs.");
+                return;
+            }
+
+            if (activeTool == TableToolKind.Draw && kind != TableToolKind.Draw) CancelDraw();
             activeTool = kind;
             if (kind != TableToolKind.Select && !Keys.SelectModifierHeld) CancelSelectPress();
+            if (kind == TableToolKind.Draw && toolSelection.Count > 0) ClearToolSelection(); // the panel sits where the selection buttons do
             if (toolBarShown) runtimeUi.SetActiveTool(kind);
+            ShowDrawPanel(kind == TableToolKind.Draw);
             RefreshToolBarState();
         }
 
@@ -197,6 +210,9 @@ namespace ConsoleCards.Presentation.Composition
                 + KeyName("Esc") + " clear";
             keysPing = KeyName("Click") + " ping   " + KeyName("Middle tap") + " ping   " + KeyName("Esc") + " back to Grab";
             keysFlick = KeyName("Press a piece, pull back, let go") + " flick   " + KeyName("Esc") + " back to Grab";
+            keysDraw = KeyName("Drag") + " draw (Pen, Marker)   " + KeyName("Click") + " place a label (Label)   "
+                + KeyName("Drag over a drawing") + " erase (Erase)   " + KeyName("Ctrl+Z") + " undo   "
+                + KeyName("Esc") + " back to Grab";
         }
 
         private static string KeyName(string key) => "<b><color=#F2A81D>" + key + "</color></b>";
@@ -245,6 +261,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 if (interactionRouter.ActiveRoute == TabletopInteractionRoute.Select) return keysSelect;
                 if (interactionRouter.ActiveRoute == TabletopInteractionRoute.Flick) return keysFlick;
+                if (interactionRouter.ActiveRoute == TabletopInteractionRoute.Draw) return keysDraw;
                 return moveCoordinator != null && moveCoordinator.ActiveView is DieView ? keysDie : keysCarry;
             }
 
@@ -254,6 +271,7 @@ namespace ConsoleCards.Presentation.Composition
                 case TableToolKind.Select: return keysSelect;
                 case TableToolKind.Ping: return keysPing;
                 case TableToolKind.Flick: return keysFlick;
+                case TableToolKind.Draw: return keysDraw;
                 default:
                     if (Keys.SelectModifierHeld) return keysSelect;
                     return IsPointerOnDrawablePile() ? keysPile : keysGrab; // POL-4: over a deck or stack
@@ -713,6 +731,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ClearTools()
         {
+            CancelDraw(); // a line being drawn does not carry over to a rebuilt table (the drawings themselves stay)
             CancelSelectPress();
             toolSelection.Clear();
             shownToolSelectionCount = -1;

@@ -146,6 +146,7 @@ namespace ConsoleCards.Editor.UI
             AddMissingGameSaveSteps();
             AddMissingGameSaveDealStep();
             AddMissingTableHandles();
+            AddMissingDrawPanel();
 
             AssignCatalogEntry(UiPrefabIds.PopupActionRow,
                 AssetDatabase.LoadAssetAtPath<PopupActionRowView>(ActionRowPath), UiLayer.Popup, UiRetention.Pooled);
@@ -1899,7 +1900,7 @@ namespace ConsoleCards.Editor.UI
         };
 
         // One slim row, bottom right: the keys strip (ink, what the keys do right now) and the tools panel (cream,
-        // in the Toolbox look): Grab, Select, Ping, Flick, Draw (greyed until T5), then Keys (shows or hides the
+        // in the Toolbox look): Grab, Select, Ping, Flick, Draw (with its panel above), then Keys (shows or hides the
         // strip) and Help. Above it, while cards are selected: the count, Group into deck and Clear. The selection
         // box is a full-screen child the code moves while dragging. Only the buttons take clicks.
         private static void BuildToolBar(RectTransform root, ToolBarView view)
@@ -1999,7 +2000,81 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("groupButton").objectReferenceValue = group;
             so.FindProperty("clearButton").objectReferenceValue = clear;
             so.FindProperty("selectionBox").objectReferenceValue = box;
+            AddDrawPanel(root, so);
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // The Draw tool's panel (drawing tool), above the bar where the selection buttons sit (they never show together):
+        // Pen, Highlighter, Label, Eraser, eight colour swatches (the first is filled with the seat's colour by the
+        // code), the words box for a label (shown in Label mode) and Clear. Hidden until Draw is chosen.
+        private static readonly string[] DrawModeNames = { "PEN", "MARKER", "LABEL", "ERASE" };
+        private const int DrawSwatchCount = 8;
+
+        private static void AddDrawPanel(RectTransform root, SerializedObject so)
+        {
+            RectTransform panel = Rect("DrawActions", root, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f),
+                new Vector2(-(Margin + ActivityTabWidth + 18f), Margin + StripHeight + 18f), new Vector2(760f, 58f));
+            Backdrop(panel, ShadowOffset - 2f);
+            Row(panel.gameObject, 12, 10, 7, 7, 8f);
+            Fit(panel.gameObject, true, false);
+            Button[] modes = new Button[DrawModeNames.Length];
+            Image[] fills = new Image[DrawModeNames.Length];
+            for (int i = 0; i < DrawModeNames.Length; i++)
+            {
+                modes[i] = TextButton(panel, "Draw" + DrawModeNames[i], DrawModeNames[i], titleFont, 11, i == 0 ? Mustard : Cream,
+                    Ink, 74f, 44f, out _);
+                fills[i] = modes[i].GetComponent<Image>();
+            }
+
+            RectTransform divider = Child("Divider", panel);
+            Img(divider, "Solid", Rule).raycastTarget = false;
+            Size(divider.gameObject, 3f, 34f, 3f);
+            Button[] swatches = new Button[DrawSwatchCount];
+            Image[] swatchImages = new Image[DrawSwatchCount];
+            for (int i = 0; i < DrawSwatchCount; i++)
+            {
+                RectTransform cell = Child("Swatch" + (i + 1), panel);
+                Size(cell.gameObject, 30f, 30f, 30f);
+                swatchImages[i] = Img(cell, "ButtonOutlined", i == 0 ? Mustard : Cream);
+                swatches[i] = cell.gameObject.AddComponent<Button>();
+                swatches[i].targetGraphic = swatchImages[i];
+            }
+
+            InputField words = SingleLineInput(panel, "LabelWords", "Label words…", 40);
+            Size(words.gameObject, 200f, 44f, 200f);
+            words.gameObject.SetActive(false);
+            Button clear = TextButton(panel, "DrawClearButton", "Clear all", boldFont, 15, Cream, Ink, 104f, 44f, out _);
+            panel.gameObject.SetActive(false);
+
+            so.FindProperty("drawActions").objectReferenceValue = panel.gameObject;
+            AssignArray(so.FindProperty("drawModeButtons"), modes);
+            AssignArray(so.FindProperty("drawModeFills"), fills);
+            AssignArray(so.FindProperty("drawSwatchButtons"), swatches);
+            AssignArray(so.FindProperty("drawSwatchImages"), swatchImages);
+            so.FindProperty("drawLabelInput").objectReferenceValue = words;
+            so.FindProperty("drawClearButton").objectReferenceValue = clear;
+        }
+
+        // Adds the Draw tool's panel to a tool bar made before it existed. Nothing else in the prefab changes.
+        private static void AddMissingDrawPanel()
+        {
+            if (!File.Exists(ToolBarPath)) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(ToolBarPath);
+            try
+            {
+                ToolBarView view = root.GetComponent<ToolBarView>();
+                if (view == null) return;
+                SerializedObject so = new SerializedObject(view);
+                if (so.FindProperty("drawActions").objectReferenceValue != null) return;
+                AddDrawPanel(root.GetComponent<RectTransform>(), so);
+                so.ApplyModifiedPropertiesWithoutUndo();
+                PrefabUtility.SaveAsPrefabAsset(root, ToolBarPath);
+                Debug.Log($"[Gameplay UI] Added the Draw tool's panel to {ToolBarPath}.");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
         }
 
         // ---------- table overlay (POL-3 / POL-5): tooltip, card peek, floating labels; never takes a click ----------
