@@ -615,7 +615,11 @@ Change: …
 - **Rule now:**
   - **Draw** on the tool bar opens a panel above it: **PEN**, **MARKER** (highlighter, half see-through, under pen
     lines), **LABEL**, **ERASE**, eight colours (the first is your seat's colour) and **Clear all**.
-  - **Pen / Marker:** press and drag to draw; a click leaves a dot. Lines lie on whatever is under the pen: the table,
+  - **Pen / Marker:** press and drag to draw freehand (curves, swirls); a click leaves a dot; with **Shift** held the
+    line is straight, from where the press started to the pointer (owner, 2026-10-20).
+  - **STYLE** (one button, each press the next; owner 2026-10-20): **Plain**, **Brush** (thick, thin at both ends),
+    **Swirl** (little loops along the path), **Wavy** (a wave along it), **Dashed**, **Dotted**. Works with Pen and
+    Marker; a style picked while erasing or labelling goes back to the pen. Each line keeps its style (Undo, saved). Lines lie on whatever is under the pen: the table,
     a mat, a game board, Trap Floor's floor tiles; never on cards, pawns, tokens, dice, piles, Consoles or the hand.
     They stay where they were drawn when pieces move.
   - **Label:** type the words in the box (up to 40 letters), then click the table: the label lies flat there, upright

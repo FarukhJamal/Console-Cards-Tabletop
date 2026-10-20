@@ -62,6 +62,9 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Image[] drawSwatchImages = new Image[0];
         [SerializeField] private InputField drawLabelInput;
         [SerializeField] private Button drawClearButton;
+        [Tooltip("Optional: cycles the line style (Plain, Brush, Swirl, Wavy, Dashed, Dotted); its label shows the style.")]
+        [SerializeField] private Button drawStyleButton;
+        [SerializeField] private Text drawStyleLabel;
 
         private Action<TableToolKind> chooseTool;
         private Action toggleKeys;
@@ -77,6 +80,7 @@ namespace ConsoleCards.Presentation.UI
         private Action<int> chooseDrawMode;
         private Action<int> chooseDrawColour;
         private Action clearDrawing;
+        private Action cycleDrawStyle;
 
         public void ValidateReferences()
         {
@@ -144,13 +148,15 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>The words typed for the next label.</summary>
         public string DrawLabelText => drawLabelInput != null ? drawLabelInput.text : string.Empty;
 
-        /// <summary>The Draw panel's buttons (after <see cref="Bind"/>): a drawing mode, a colour, Clear.</summary>
-        public void BindDraw(Action<int> chooseMode, Action<int> chooseColour, Action clear)
+        /// <summary>The Draw panel's buttons (after <see cref="Bind"/>): a drawing mode, a colour, Clear, the style.</summary>
+        public void BindDraw(Action<int> chooseMode, Action<int> chooseColour, Action clear, Action cycleStyle = null)
         {
             if (!HasDrawPanel) return;
             chooseDrawMode = chooseMode;
             chooseDrawColour = chooseColour;
             clearDrawing = clear;
+            cycleDrawStyle = cycleStyle;
+            if (drawStyleButton != null) drawStyleButton.onClick.AddListener(() => cycleDrawStyle?.Invoke());
             for (int i = 0; i < drawModeButtons.Length; i++)
             {
                 if (drawModeButtons[i] == null) continue;
@@ -183,6 +189,12 @@ namespace ConsoleCards.Presentation.UI
             }
 
             if (drawLabelInput != null) drawLabelInput.gameObject.SetActive(mode == 2);
+        }
+
+        /// <summary>The style button's name (PLAIN, BRUSH, SWIRL, WAVY, DASHED, DOTTED).</summary>
+        public void SetDrawStyle(string name)
+        {
+            if (drawStyleLabel != null) drawStyleLabel.text = name;
         }
 
         /// <summary>The swatches' colours, and which one is chosen (it shows a little bigger).</summary>
@@ -304,6 +316,8 @@ namespace ConsoleCards.Presentation.UI
             }
 
             if (drawClearButton != null) drawClearButton.onClick.RemoveAllListeners();
+            if (drawStyleButton != null) drawStyleButton.onClick.RemoveAllListeners();
+            cycleDrawStyle = null;
             chooseDrawMode = null;
             chooseDrawColour = null;
             clearDrawing = null;

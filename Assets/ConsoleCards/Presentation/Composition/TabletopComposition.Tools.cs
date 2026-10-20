@@ -210,7 +210,9 @@ namespace ConsoleCards.Presentation.Composition
                 + KeyName("Esc") + " clear";
             keysPing = KeyName("Click") + " ping   " + KeyName("Middle tap") + " ping   " + KeyName("Esc") + " back to Grab";
             keysFlick = KeyName("Press a piece, pull back, let go") + " flick   " + KeyName("Esc") + " back to Grab";
-            keysDraw = KeyName("Drag") + " draw (Pen, Marker)   " + KeyName("Click") + " place a label (Label)   "
+            keysDraw = KeyName("Drag") + " draw (Pen, Marker)   " + KeyName(Keys.ActionModifierName + "+drag") + " straight line   "
+                + KeyName("STYLE") + " plain, brush, swirl, wavy, dashed, dotted   "
+                + KeyName("Click") + " place a label (Label)   "
                 + KeyName("Drag over a drawing") + " erase (Erase)   " + KeyName("Ctrl+Z") + " undo   "
                 + KeyName("Esc") + " back to Grab";
         }

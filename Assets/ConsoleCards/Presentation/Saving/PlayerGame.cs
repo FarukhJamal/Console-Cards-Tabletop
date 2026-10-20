@@ -113,6 +113,7 @@ namespace ConsoleCards.Presentation.Saving
         public const string Label = "label";
 
         public string kind = Pen;
+        public int style; // 0 plain, 1 brush, 2 swirl, 3 wavy, 4 dashed, 5 dotted
         public float r;
         public float g;
         public float b;

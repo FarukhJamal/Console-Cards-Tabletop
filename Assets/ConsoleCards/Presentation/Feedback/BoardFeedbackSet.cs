@@ -29,6 +29,9 @@ namespace ConsoleCards.Presentation.Feedback
         [SerializeField] private LineRenderer tableMarkLine;
         [Tooltip("A label on the table: a Text Mesh the drawing tool copies for each label.")]
         [SerializeField] private TextMesh tableMarkLabel;
+        [Tooltip("The repeating pictures of the Dashed and Dotted line styles (empty: those lines are plain).")]
+        [SerializeField] private Material tableMarkDashMaterial;
+        [SerializeField] private Material tableMarkDotMaterial;
         [Tooltip("Sizes in table units (a card is about 2 wide): the pen, the highlighter, a label's letters, the eraser.")]
         [SerializeField] private float penWidth = 0.07f;
         [SerializeField] private float highlighterWidth = 0.4f;
@@ -55,6 +58,8 @@ namespace ConsoleCards.Presentation.Feedback
         public BoardFeedbackMarker TablePing => tablePing != null ? tablePing : activePawnRing;
         public LineRenderer TableMarkLine => tableMarkLine;
         public TextMesh TableMarkLabel => tableMarkLabel;
+        public Material TableMarkDashMaterial => tableMarkDashMaterial;
+        public Material TableMarkDotMaterial => tableMarkDotMaterial;
         public float PenWidth => penWidth;
         public float HighlighterWidth => highlighterWidth;
         public float LabelHeight => labelHeight;

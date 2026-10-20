@@ -92,6 +92,11 @@ namespace ConsoleCards.Editor.Feedback
 
             // The drawing tool: a plain line (tinted per line by its colour) and a flat label.
             Material markLine = PlainMaterialFor("TableMarkLine");
+            // The Dashed and Dotted line styles: small repeating pictures made here (white, tinted by each line).
+            MakePatternTexture("MarkDash.png", 64, 16, false);
+            MakePatternTexture("MarkDot.png", 64, 32, true);
+            Material markDash = MaterialFor("MarkDash");
+            Material markDot = MaterialFor("MarkDot");
             LineRenderer tableMarkLine = MarkLinePrefab(markLine);
             TextMesh tableMarkLabel = MarkLabelPrefab();
 
@@ -111,6 +116,8 @@ namespace ConsoleCards.Editor.Feedback
                 so.FindProperty("tablePing").objectReferenceValue = tablePing;
                 so.FindProperty("tableMarkLine").objectReferenceValue = tableMarkLine;
                 so.FindProperty("tableMarkLabel").objectReferenceValue = tableMarkLabel;
+                so.FindProperty("tableMarkDashMaterial").objectReferenceValue = markDash;
+                so.FindProperty("tableMarkDotMaterial").objectReferenceValue = markDot;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
             else
@@ -123,7 +130,9 @@ namespace ConsoleCards.Editor.Feedback
                     | FillMissing(so, "collapseTarget", collapseTarget)
                     | FillMissing(so, "tablePing", tablePing)
                     | FillMissing(so, "tableMarkLine", tableMarkLine)
-                    | FillMissing(so, "tableMarkLabel", tableMarkLabel);
+                    | FillMissing(so, "tableMarkLabel", tableMarkLabel)
+                    | FillMissing(so, "tableMarkDashMaterial", markDash)
+                    | FillMissing(so, "tableMarkDotMaterial", markDot);
                 if (added)
                 {
                     so.ApplyModifiedPropertiesWithoutUndo();
@@ -265,6 +274,47 @@ namespace ConsoleCards.Editor.Feedback
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
             return quad.transform;
+        }
+
+        // A repeating picture for a line style, made once: a dash (left part of the tile) or a round dot. White with
+        // see-through gaps; the line's colour tints it. An existing picture is kept.
+        private static void MakePatternTexture(string file, int width, int height, bool dot)
+        {
+            string path = TexturePath + file;
+            if (!File.Exists(path))
+            {
+                Directory.CreateDirectory(TexturePath);
+                Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+                Color32[] pixels = new Color32[width * height];
+                for (int y = 0; y < height; y++)
+                {
+                    for (int x = 0; x < width; x++)
+                    {
+                        float alpha;
+                        if (dot)
+                        {
+                            float dx = x + 0.5f - (height * 0.5f);
+                            float dy = y + 0.5f - (height * 0.5f);
+                            alpha = Mathf.Clamp01((height * 0.45f) - Mathf.Sqrt((dx * dx) + (dy * dy)) + 0.5f);
+                        }
+                        else
+                        {
+                            float end = width * 0.62f;
+                            alpha = Mathf.Clamp01(Mathf.Min(x + 0.5f, end - x + 0.5f));
+                        }
+
+                        pixels[(y * width) + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(alpha * 255f));
+                    }
+                }
+
+                texture.SetPixels32(pixels);
+                texture.Apply();
+                File.WriteAllBytes(path, texture.EncodeToPNG());
+                Object.DestroyImmediate(texture);
+                AssetDatabase.ImportAsset(path);
+            }
+
+            ConfigureTexture(file, TextureWrapMode.Repeat);
         }
 
         // A see-through unlit material with no picture: the line's own colour shows (a highlighter is half clear).

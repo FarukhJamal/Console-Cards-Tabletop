@@ -147,6 +147,7 @@ namespace ConsoleCards.Editor.UI
             AddMissingGameSaveDealStep();
             AddMissingTableHandles();
             AddMissingDrawPanel();
+            AddMissingDrawStyleButton();
 
             AssignCatalogEntry(UiPrefabIds.PopupActionRow,
                 AssetDatabase.LoadAssetAtPath<PopupActionRowView>(ActionRowPath), UiLayer.Popup, UiRetention.Pooled);
@@ -2026,6 +2027,7 @@ namespace ConsoleCards.Editor.UI
                 fills[i] = modes[i].GetComponent<Image>();
             }
 
+            AddDrawStyleButton(panel, so);
             RectTransform divider = Child("Divider", panel);
             Img(divider, "Solid", Rule).raycastTarget = false;
             Size(divider.gameObject, 3f, 34f, 3f);
@@ -2053,6 +2055,39 @@ namespace ConsoleCards.Editor.UI
             AssignArray(so.FindProperty("drawSwatchImages"), swatchImages);
             so.FindProperty("drawLabelInput").objectReferenceValue = words;
             so.FindProperty("drawClearButton").objectReferenceValue = clear;
+        }
+
+        // STYLE (owner, 2026-10-20): one button after the four modes; each press cycles the line style and its label
+        // shows the style's name.
+        private static void AddDrawStyleButton(RectTransform panel, SerializedObject so)
+        {
+            Button style = TextButton(panel, "DrawSTYLE", "PLAIN", titleFont, 11, Teal, Cream, 86f, 44f, out Text label);
+            style.transform.SetSiblingIndex(DrawModeNames.Length); // right after PEN, MARKER, LABEL, ERASE
+            so.FindProperty("drawStyleButton").objectReferenceValue = style;
+            so.FindProperty("drawStyleLabel").objectReferenceValue = label;
+        }
+
+        // Adds the STYLE button to a Draw panel made before it existed. Nothing else in the prefab changes.
+        private static void AddMissingDrawStyleButton()
+        {
+            if (!File.Exists(ToolBarPath)) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(ToolBarPath);
+            try
+            {
+                ToolBarView view = root.GetComponent<ToolBarView>();
+                if (view == null) return;
+                SerializedObject so = new SerializedObject(view);
+                GameObject panel = so.FindProperty("drawActions").objectReferenceValue as GameObject;
+                if (panel == null || so.FindProperty("drawStyleButton").objectReferenceValue != null) return;
+                AddDrawStyleButton(panel.GetComponent<RectTransform>(), so);
+                so.ApplyModifiedPropertiesWithoutUndo();
+                PrefabUtility.SaveAsPrefabAsset(root, ToolBarPath);
+                Debug.Log($"[Gameplay UI] Added the Draw panel's STYLE button to {ToolBarPath}.");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
         }
 
         // Adds the Draw tool's panel to a tool bar made before it existed. Nothing else in the prefab changes.

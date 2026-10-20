@@ -23,6 +23,8 @@ MonoBehaviour:
   tablePing: {fileID: 7057813581028574149, guid: 8a918c308f5c2d24a85e249b051108ad, type: 3}
   tableMarkLine: {fileID: 2536089930738328914, guid: 46a650878cf8fa4458a00677519a35eb, type: 3}
   tableMarkLabel: {fileID: 16438996261536252, guid: c07457b3ec1156f4398c7d7bdd025c54, type: 3}
+  tableMarkDashMaterial: {fileID: 2100000, guid: 1da9405cd0d44ed42aef1a63e2728ef4, type: 2}
+  tableMarkDotMaterial: {fileID: 2100000, guid: 0611c1c5a8332da47bdda49da1385d5c, type: 2}
   penWidth: 0.07
   highlighterWidth: 0.4
   labelHeight: 0.45

@@ -21,16 +21,29 @@ namespace ConsoleCards.Presentation.Composition
         Label = 2,
     }
 
+    /// <summary>How a pen or highlighter line looks (the STYLE button cycles them, owner 2026-10-20).</summary>
+    internal enum TableMarkStyle
+    {
+        Plain = 0,
+        Brush = 1,
+        Swirl = 2,
+        Wavy = 3,
+        Dashed = 4,
+        Dotted = 5,
+    }
+
     /// <summary>
-    /// One drawing on the table: a pen or highlighter line (its points), or a label (one point, its words and the way
+    /// One drawing on the table: a pen or highlighter line (the path drawn, and its style), or a label (one point, its words and the way
     /// it faces). Points are world positions on the surface it was drawn on (the table, a mat, a board). Never changed
     /// once made, so an Undo step can keep it.
     /// </summary>
     internal sealed class TableMark
     {
-        internal TableMark(TableMarkKind kind, Color colour, float width, Vector3[] points, string text, float yaw)
+        internal TableMark(TableMarkKind kind, Color colour, float width, Vector3[] points, string text, float yaw,
+            TableMarkStyle style = TableMarkStyle.Plain)
         {
             Kind = kind;
+            Style = style;
             Colour = colour;
             Width = width;
             Points = points ?? Array.Empty<Vector3>();
@@ -39,11 +52,13 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         public TableMarkKind Kind { get; }
+        public TableMarkStyle Style { get; }
         public Color Colour { get; }
 
         /// <summary>The line's width, or a label's letter height (world units).</summary>
         public float Width { get; }
 
+        /// <summary>The path as drawn (a swirl or wave is made around it when shown).</summary>
         public Vector3[] Points { get; }
         public string Text { get; }
 
@@ -113,7 +128,8 @@ namespace ConsoleCards.Presentation.Composition
 
     /// <summary>
     /// The drawing tool (client checklist item 5; owner's choices 2026-10-20): the Draw tool on the tool bar opens a
-    /// panel with Pen, Highlighter (MARKER), Label and Eraser, eight colours (the first is your seat's colour) and
+    /// panel with Pen, Highlighter (MARKER), Label and Eraser (Pen and Marker draw freehand; with Shift held, a straight
+    /// line from where the press started; STYLE cycles Plain, Brush, Swirl, Wavy, Dashed and Dotted), eight colours (the first is your seat's colour) and
     /// Clear all. Lines lie on whatever is under the pen (the table, mats, game boards; never on cards, pawns, tokens,
     /// dice, piles or Consoles) and stay where they were drawn when pieces move. The eraser takes a whole line or
     /// label away at a touch. Each line, label, erase or Clear is one Undo step; the drawings are kept with the table
@@ -138,6 +154,11 @@ namespace ConsoleCards.Presentation.Composition
         private const float HighlighterAlpha = 0.45f;
         private const float LabelPrefabLetterHeight = 0.64f; // the label prefab's letter height at scale 1 (world)
         private const float MarkRayLength = 500f;
+        private const int MaximumStyledPoints = 4096;
+
+        // STYLE (owner, 2026-10-20): the names on the button, in the order it cycles.
+        private static readonly string[] DrawStyleNames = { "PLAIN", "BRUSH", "SWIRL", "WAVY", "DASHED", "DOTTED" };
+        private static AnimationCurve brushWidthCurve;
 
         // The swatches; the first is replaced by the seat's colour when the panel is shown.
         private static readonly Color[] DrawPalette =
@@ -154,6 +175,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private readonly Color[] drawSwatches = new Color[8];
         private readonly Vector3[] strokePoints = new Vector3[MaximumStrokePoints];
+        private readonly Vector3[] styledPoints = new Vector3[MaximumStyledPoints];
         private readonly RaycastHit[] markHits = new RaycastHit[16];
         private readonly List<TableMark> shownMarks = new List<TableMark>(32);
         private readonly List<GameObject> shownMarkObjects = new List<GameObject>(32);
@@ -163,8 +185,11 @@ namespace ConsoleCards.Presentation.Composition
         private GameObject markRoot;
         private int drawMode = DrawModePen;
         private int drawColour;
+        private TableMarkStyle drawStyle = TableMarkStyle.Plain;
         private LineRenderer strokeLine;
         private int strokeCount;
+        private int strokeShownCount;
+        private float strokeWidth;
         private bool strokeActive;
         private bool eraseActive;
         private int erasedCount;
@@ -199,7 +224,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             ToolBarView bar = runtimeUi != null ? runtimeUi.ShownToolBar : null;
             if (bar == null || !bar.HasDrawPanel) return;
-            bar.BindDraw(ChooseDrawMode, ChooseDrawColour, ClearTableMarksByPlayer);
+            bar.BindDraw(ChooseDrawMode, ChooseDrawColour, ClearTableMarksByPlayer, CycleDrawStyle);
             ShowDrawPanel(activeTool == TableToolKind.Draw);
         }
 
@@ -210,6 +235,7 @@ namespace ConsoleCards.Presentation.Composition
             bar.ShowDraw(shown);
             if (!shown) return;
             bar.SetDrawMode(drawMode);
+            bar.SetDrawStyle(DrawStyleNames[(int)drawStyle]);
             int count = Mathf.Min(drawSwatches.Length, DrawPalette.Length);
             for (int i = 0; i < count; i++) drawSwatches[i] = DrawPalette[i];
             drawSwatches[0] = FeedbackColour(localPlayerId); // your seat's colour
@@ -232,6 +258,17 @@ namespace ConsoleCards.Presentation.Composition
             drawColour = colour;
             if (drawMode == DrawModeEraser) drawMode = DrawModePen; // a colour while erasing: back to the pen
 
+            ShowDrawPanel(true);
+            RefreshToolBarState();
+        }
+
+        // STYLE: Plain → Brush → Swirl → Wavy → Dashed → Dotted → Plain. Choosing a style while erasing or labelling
+        // goes back to the pen.
+        private void CycleDrawStyle()
+        {
+            CancelDraw();
+            drawStyle = (TableMarkStyle)(((int)drawStyle + 1) % DrawStyleNames.Length);
+            if (drawMode == DrawModeEraser || drawMode == DrawModeLabel) drawMode = DrawModePen;
             ShowDrawPanel(true);
             RefreshToolBarState();
         }
@@ -333,12 +370,23 @@ namespace ConsoleCards.Presentation.Composition
             bool highlighter = drawMode == DrawModeHighlighter;
             float unit = MarkUnit();
             point += normal * ((highlighter ? HighlighterLift : PenLift) * unit);
+            if (strokeCount > 0 && Keys.ActionModifierHeld)
+            {
+                // Shift held (owner, 2026-10-20): a straight line from where the line started to the pointer.
+                strokePoints[1] = point;
+                strokeCount = 2;
+                ShowStroke(strokeLine, strokePoints, strokeCount, drawStyle, strokeWidth, true);
+                return;
+            }
+
             float spacing = StrokePointSpacing * unit;
             if (strokeCount > 0 && (point - strokePoints[strokeCount - 1]).sqrMagnitude < spacing * spacing) return;
             if (strokeLine == null)
             {
                 TableMarkKind kind = highlighter ? TableMarkKind.Highlighter : TableMarkKind.Pen;
-                strokeLine = NewMarkLine(kind, CurrentDrawColour(kind), LineWidth(kind));
+                strokeWidth = LineWidth(kind);
+                strokeLine = NewMarkLine(kind, CurrentDrawColour(kind), strokeWidth, drawStyle);
+                strokeShownCount = 0;
                 if (strokeLine == null)
                 {
                     strokeActive = false;
@@ -348,8 +396,66 @@ namespace ConsoleCards.Presentation.Composition
 
             strokePoints[strokeCount] = point;
             strokeCount++;
-            strokeLine.positionCount = strokeCount;
-            strokeLine.SetPosition(strokeCount - 1, point);
+            ShowStroke(strokeLine, strokePoints, strokeCount, drawStyle, strokeWidth, false);
+        }
+
+        // Puts the line's shape into the Line Renderer: the path itself (Plain, Brush, Dashed, Dotted) or a swirl or
+        // wave made around it. While drawing only the new points are written (the earlier ones never change), unless
+        // the path was redrawn (a straight line with Shift). No allocation.
+        private void ShowStroke(LineRenderer line, Vector3[] path, int count, TableMarkStyle style, float width, bool rewriteAll)
+        {
+            int shown = BuildStyledPath(path, count, style, width);
+            int from = rewriteAll || line != strokeLine ? 0 : Mathf.Min(strokeShownCount, shown);
+            if (from > 0 && from == shown) from = shown - 1; // the end point may have moved
+            line.positionCount = shown;
+            for (int i = Mathf.Max(0, from - 1); i < shown; i++) line.SetPosition(i, styledPoints[i]);
+            if (line == strokeLine) strokeShownCount = shown;
+        }
+
+        // The points the Line Renderer shows for a path, into styledPoints. A swirl loops around the path and a wave
+        // swings across it, both lying flat; their size follows the line's width.
+        private int BuildStyledPath(Vector3[] path, int count, TableMarkStyle style, float width)
+        {
+            if (style != TableMarkStyle.Swirl && style != TableMarkStyle.Wavy || count < 2)
+            {
+                int plain = Mathf.Min(count, MaximumStyledPoints);
+                Array.Copy(path, styledPoints, plain);
+                return plain;
+            }
+
+            bool swirl = style == TableMarkStyle.Swirl;
+            float size = Mathf.Max(0.001f, width);
+            float radius = swirl ? 2.5f * size : 1.6f * size; // loop radius, or wave height
+            float period = swirl ? 3f * radius : 7f * size; // path length per loop or per wave
+            float step = period / 16f;
+            int written = 0;
+            float travelled = 0f; // path length walked so far
+            float next = 0f; // where the next styled point goes
+            for (int i = 1; i < count && written < MaximumStyledPoints; i++)
+            {
+                Vector3 a = path[i - 1];
+                Vector3 b = path[i];
+                Vector3 along = b - a;
+                float length = along.magnitude;
+                if (length < 1e-6f) continue;
+                Vector3 flat = new Vector3(along.x, 0f, along.z);
+                Vector3 tangent = flat.sqrMagnitude > 1e-10f ? flat.normalized : Vector3.forward;
+                Vector3 side = new Vector3(tangent.z, 0f, -tangent.x);
+                while (next <= travelled + length && written < MaximumStyledPoints)
+                {
+                    Vector3 onPath = Vector3.Lerp(a, b, (next - travelled) / length);
+                    float angle = 2f * Mathf.PI * next / period;
+                    styledPoints[written++] = swirl
+                        ? onPath + (side * (radius * Mathf.Sin(angle))) - (tangent * (radius * (1f - Mathf.Cos(angle))))
+                        : onPath + (side * (radius * Mathf.Sin(angle)));
+                    next += step;
+                }
+
+                travelled += length;
+            }
+
+            if (written == 0) styledPoints[written++] = path[0];
+            return written;
         }
 
         private float LineWidth(TableMarkKind kind)
@@ -374,15 +480,14 @@ namespace ConsoleCards.Presentation.Composition
             {
                 strokePoints[1] = strokePoints[0] + new Vector3(0.002f, 0f, 0f);
                 strokeCount = 2;
-                strokeLine.positionCount = 2;
-                strokeLine.SetPosition(1, strokePoints[1]);
+                ShowStroke(strokeLine, strokePoints, strokeCount, drawStyle, strokeWidth, true);
             }
 
             Vector3[] points = new Vector3[strokeCount];
             Array.Copy(strokePoints, points, strokeCount);
             bool highlighter = drawMode == DrawModeHighlighter;
             TableMarkKind kind = highlighter ? TableMarkKind.Highlighter : TableMarkKind.Pen;
-            TableMark mark = new TableMark(kind, strokeLine.startColor, strokeLine.widthMultiplier, points, null, 0f);
+            TableMark mark = new TableMark(kind, strokeLine.startColor, strokeWidth, points, null, 0f, drawStyle);
             tableMarks = tableMarks.With(mark);
             shownMarks.Add(mark);
             shownMarkObjects.Add(strokeLine.gameObject);
@@ -475,7 +580,8 @@ namespace ConsoleCards.Presentation.Composition
                 return FlatDistanceSquared(points[0], point) <= reach * reach;
             }
 
-            float touch = radius + (0.5f * mark.Width);
+            float spread = mark.Style == TableMarkStyle.Swirl ? 2.5f : mark.Style == TableMarkStyle.Wavy ? 1.6f : 0.5f;
+            float touch = radius + (spread * mark.Width);
             float touchSquared = touch * touch;
             if (points.Length == 1) return FlatDistanceSquared(points[0], point) <= touchSquared;
             for (int i = 1; i < points.Length; i++)
@@ -619,15 +725,15 @@ namespace ConsoleCards.Presentation.Composition
                 return label.gameObject;
             }
 
-            LineRenderer line = NewMarkLine(mark.Kind, mark.Colour, mark.Width);
+            LineRenderer line = NewMarkLine(mark.Kind, mark.Colour, mark.Width, mark.Style);
             if (line == null) return null;
-            line.positionCount = mark.Points.Length;
-            line.SetPositions(mark.Points);
+            ShowStroke(line, mark.Points, mark.Points.Length, mark.Style, mark.Width, true);
             return line.gameObject;
         }
 
-        // A flat line from the prefab, in this colour and width (a highlighter lies under pen lines).
-        private LineRenderer NewMarkLine(TableMarkKind kind, Color colour, float width)
+        // A flat line from the prefab, in this colour, width and style (a highlighter lies under pen lines). A brush is
+        // thick in the middle and thin at its ends; dashes and dots come from their own repeating pictures.
+        private LineRenderer NewMarkLine(TableMarkKind kind, Color colour, float width, TableMarkStyle style)
         {
             if (!EnsureMarkSet()) return null;
             LineRenderer line = Instantiate(markSet.TableMarkLine, MarkRoot());
@@ -639,6 +745,26 @@ namespace ConsoleCards.Presentation.Composition
             line.startColor = colour;
             line.endColor = colour;
             line.sortingOrder = kind == TableMarkKind.Highlighter ? 0 : 1;
+            if (style == TableMarkStyle.Brush)
+            {
+                brushWidthCurve ??= new AnimationCurve(
+                    new Keyframe(0f, 0.2f), new Keyframe(0.12f, 1f), new Keyframe(0.88f, 1f), new Keyframe(1f, 0.2f));
+                line.widthCurve = brushWidthCurve;
+                line.widthMultiplier = 2f * width;
+            }
+
+            Material pattern = style == TableMarkStyle.Dashed ? markSet.TableMarkDashMaterial
+                : style == TableMarkStyle.Dotted ? markSet.TableMarkDotMaterial
+                : null;
+            if (pattern != null)
+            {
+                // One dash (plus its gap) is four widths long; one dot (plus its gap) two.
+                line.sharedMaterial = pattern;
+                line.textureMode = LineTextureMode.Tile;
+                float repeat = style == TableMarkStyle.Dashed ? 4f * width : 2f * width;
+                line.textureScale = new Vector2(1f / Mathf.Max(0.0001f, repeat), 1f);
+            }
+
             return line;
         }
 
@@ -686,6 +812,7 @@ namespace ConsoleCards.Presentation.Composition
                     width = mark.Width / Mathf.Max(0.0001f, MarkUnit()),
                     text = mark.Text,
                     yaw = mark.Yaw,
+                    style = (int)mark.Style,
                 };
                 for (int p = 0; p < mark.Points.Length; p++)
                 {
@@ -734,7 +861,8 @@ namespace ConsoleCards.Presentation.Composition
                     Mathf.Max(0.001f, entry.width) * unit,
                     points,
                     entry.text,
-                    entry.yaw));
+                    entry.yaw,
+                    (TableMarkStyle)Mathf.Clamp(entry.style, 0, DrawStyleNames.Length - 1)));
             }
 
             ShowTableMarks(TableMarkSet.Of(marks));
