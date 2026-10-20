@@ -57,6 +57,7 @@ namespace ConsoleCards.Presentation.Views.Containers
         private float bandHalfWidth;
         private float bandLowerDepth;
         private float bandUpperDepth;
+        private float bandDropTop;
         private bool clearTarget;
         private float clearAmount;
 
@@ -68,6 +69,12 @@ namespace ConsoleCards.Presentation.Views.Containers
         public float Scale => scale;
 
         public bool IsCollapsed { get; private set; }
+
+        /// <summary>
+        /// The share of a card's height, from its bottom edge, where a card from the table is dropped into the hand
+        /// (the drop band). Dragging a hand card keeps the whole tray (<see cref="ContainsScreenPoint"/>).
+        /// </summary>
+        public float DropHeightFraction { get; set; } = 0.55f;
 
         /// <summary>True once a requested clear has slid the whole tray below the screen.</summary>
         public bool IsCleared => clearTarget && clearAmount >= 1f;
@@ -235,8 +242,13 @@ namespace ConsoleCards.Presentation.Views.Containers
             bandHalfWidth = (rowWidth * 0.5f) + BandMargin;
             bandLowerDepth = (depth * 0.5f) + BandMargin;
             bandUpperDepth = (depth * 0.5f) + BandMargin + Mathf.Max(0f, upperAllowance);
-            bandCollider.center = new Vector3(0f, -BandBehindCards, (bandUpperDepth - bandLowerDepth) * 0.5f);
-            bandCollider.size = new Vector3(bandHalfWidth * 2f, 0.01f, bandLowerDepth + bandUpperDepth);
+            // Drops from the table land only on the lower part of the cards (all of the strip left on screen when
+            // the tray is collapsed), so a card let go above the hand stays on the table.
+            bandDropTop = IsCollapsed
+                ? depth * 0.5f
+                : (-depth * 0.5f) + (depth * Mathf.Clamp(DropHeightFraction, 0.2f, 1f));
+            bandCollider.center = new Vector3(0f, -BandBehindCards, (bandDropTop - bandLowerDepth) * 0.5f);
+            bandCollider.size = new Vector3(bandHalfWidth * 2f, 0.01f, bandLowerDepth + bandDropTop);
 
             if (feedback != HandTrayFeedback.None)
             {
@@ -308,10 +320,11 @@ namespace ConsoleCards.Presentation.Views.Containers
 
         private void LayoutFrame()
         {
+            // The frame outlines where a drop lands (the drop band).
             float width = bandHalfWidth * 2f;
-            float depth = bandLowerDepth + bandUpperDepth;
-            float centerZ = (bandUpperDepth - bandLowerDepth) * 0.5f;
-            SetBar(0, new Vector3(0f, -FrameBehindCards, bandUpperDepth), new Vector3(width, 0.005f, FrameThickness));
+            float depth = bandLowerDepth + bandDropTop;
+            float centerZ = (bandDropTop - bandLowerDepth) * 0.5f;
+            SetBar(0, new Vector3(0f, -FrameBehindCards, bandDropTop), new Vector3(width, 0.005f, FrameThickness));
             SetBar(1, new Vector3(0f, -FrameBehindCards, -bandLowerDepth), new Vector3(width, 0.005f, FrameThickness));
             SetBar(2, new Vector3(-bandHalfWidth, -FrameBehindCards, centerZ), new Vector3(FrameThickness, 0.005f, depth));
             SetBar(3, new Vector3(bandHalfWidth, -FrameBehindCards, centerZ), new Vector3(FrameThickness, 0.005f, depth));

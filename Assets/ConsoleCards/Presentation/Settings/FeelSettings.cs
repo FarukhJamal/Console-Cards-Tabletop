@@ -140,6 +140,10 @@ namespace ConsoleCards.Presentation.Settings
         [SerializeField, Range(0.3f, 2f)] private float spreadSpacing = 1.08f;
         [Tooltip("Spread: cards in a row before the next row starts.")]
         [SerializeField, Range(2, 26)] private int spreadRowLength = 10;
+        [Tooltip("A card from the table goes into your hand only when dropped on the lower part of the hand strip: this "
+            + "share of a hand card's height, from its bottom edge (1 = the whole card; owner 2026-10-20: the old area was "
+            + "too big).")]
+        [SerializeField, Range(0.2f, 1f)] private float handDropHeight = 0.55f;
 
         [Header("Dice and flick (POL-5)")]
         [Tooltip("Seconds a die's result floats above it after a roll.")]
@@ -220,6 +224,7 @@ namespace ConsoleCards.Presentation.Settings
         public float StackMagnetPull => stackMagnetPull;
         public float SpreadSpacing => spreadSpacing;
         public int SpreadRowLength => spreadRowLength;
+        public float HandDropHeight => handDropHeight;
         public float DieResultSeconds => dieResultSeconds;
         public float MouseShakeSpeed => mouseShakeSpeed;
         public float FlickCurve => flickCurve;

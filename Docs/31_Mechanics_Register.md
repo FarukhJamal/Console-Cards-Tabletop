@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.25 · 2026-10-20 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.26 · 2026-10-20 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -411,8 +411,11 @@ Change: …
   owners' table edges with a card count. Table menu > **Seat** switches the seat on this screen (for testing).
   **Hot-seat** (off by default) covers the screen with "PASS THE SCREEN" and a summary when the turn belongs to
   another player. **Hands on table** puts your hand face up on your table edge instead of the screen tray.
+  A card from the table goes into the screen hand only when let go over the lower part of the hand strip (55 % of a
+  hand card's height from its bottom edge, Feel Settings › Hand Drop Height; all of the strip when the hand is
+  folded down); the highlight frame shows that area. Dragging your own hand cards still uses the whole tray.
 - **Source:** doc 18 §15.11; doc 25 (H1b/H2, F3)
-- **Changes:** 2026-10-14 H1b, H2, F3.
+- **Changes:** 2026-10-14 H1b, H2, F3; 2026-10-20 HAND-1 smaller drop area (to be checked).
 
 ### P-UNDO · Undo and Redo
 - **Status:** Built

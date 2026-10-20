@@ -1096,6 +1096,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             bool cardDragActive = IsCardDragActive();
+            handTrayRig.DropHeightFraction = Feel.HandDropHeight; // the share of the hand strip that takes drops
             handTrayRig.SetDropTargetActive(cardDragActive);
         }
 
