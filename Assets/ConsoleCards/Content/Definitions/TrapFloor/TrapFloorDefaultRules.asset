@@ -288,7 +288,7 @@ MonoBehaviour:
       displayValue: ''
       modeStableIds: []
     - stableId: tf-trap-out
-      text: 'Knocked out? You are out for the rest of this floor. If every player is out, the floor has failed.'
+      text: 'Knocked out? You are out for the rest of this floor and come back when it ends (won or lost). If every player is out, the floor is lost.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -346,7 +346,7 @@ MonoBehaviour:
       hintHelper: 
       modeStableIds: []
     - stableId: tf-goal-secret-exit
-      text: 'Secret Exit: one player wins at once if they meet the Key requirement.'
+      text: 'Exits are taken by landing on them. Grand Exit: once the team has the Keys, the floor is won when every player still in stands on it. Secret Exit: a player who claimed a Key and lands on it wins the floor at once. Knocked-out players come back when the floor ends.'
       settingKind: 0
       settingKey: 
       value: ''

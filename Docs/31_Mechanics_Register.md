@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.31 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.32 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -246,13 +246,15 @@ Change: …
 ### TF-KEYS-EXITS · Keys and Exits
 - **Status:** Built, in playtest
 - **Rule now:** collect the required Keys (Easy 1, Hard and Impossible 3) and bring them to the Grand Exit. When
-  all required Keys are collected, roll 2d6 to find the Exit's position. **Grand Exit:** lets all players exit.
-  **Secret Exit:** an instant win for one player for one round, once that player meets the Key requirement. On
-  Hard, players may pass Keys to each other.
+  all required Keys are collected, roll 2d6 to find the Exit's position (rules text; not in the game yet). Exits
+  are taken by landing (EXITS-1, owner 2026-10-21, team game). **Grand Exit:** once the team has the mode's Keys,
+  the floor is won when every player still in stands on it. **Secret Exit:** the turn player who lands on it holding
+  a Key they claimed wins the floor at once. On Hard, players may pass Keys to each other (not tracked yet).
 - **Settings:** `mode.keys-needed`
 - **Source:** doc 18 §6, §15.8, §15.9
 - **Open:** —
-- **Changes:** 2026-10-09 Grand and Secret Exits.
+- **Changes:** 2026-10-09 Grand and Secret Exits; 2026-10-21 taken by landing; Grand Exit needs everyone still in;
+  Secret Exit needs one claimed Key.
 
 ### TF-ENDGAME · After the Exit is revealed
 - **Status:** Built, in playtest
@@ -282,8 +284,8 @@ Change: …
 - **Status:** Built, in playtest
 - **Rule now:** a player is eliminated by a Fall, or by a Spring or Crane sending them off the grid or onto a hole.
   A knocked-out player is out for the rest of the floor and gets no more turns (owner 2026-10-21, FLOW-1). If every
-  player is out, the floor has failed (today the next round starts with everyone back; FLOORS-1 will deal the next
-  floor instead).
+  player is out, the floor is lost. Knocked-out players come back when the floor ends, won or lost (today a lost
+  floor starts the next round with everyone back; FLOORS-1 will deal the next floor instead).
 - **Settings:** —
 - **Source:** doc 18 §6, §15.5, §15.9
 - **Open:** the exact rule for "running out of usable floor".

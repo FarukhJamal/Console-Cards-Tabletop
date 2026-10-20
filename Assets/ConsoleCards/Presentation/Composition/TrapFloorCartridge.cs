@@ -1573,13 +1573,7 @@ namespace ConsoleCards.Presentation.Composition
                         !host.trapFloorObjectiveState.IsWon,
                         () => ClaimTrapFloorKey(targetCardId)));
                 }
-                else if (floorCard.Content.Category == TrapFloorFloorContentCategory.SecretExit)
-                {
-                    actions.Add(new PopupActionOption(
-                        "Attempt Escape",
-                        !host.trapFloorObjectiveState.IsWon,
-                        () => AttemptTrapFloorEscape(targetCardId)));
-                }
+                // Owner, 2026-10-21: exits are taken by landing on them (no Attempt Escape button).
             }
 
             actions.Add(new PopupActionOption(
@@ -1639,8 +1633,10 @@ namespace ConsoleCards.Presentation.Composition
 
             if (floorCard.Content.Category == TrapFloorFloorContentCategory.SecretExit)
             {
-                return $"{description}\nKEYS {host.trapFloorObjectiveState.CollectedKeyCount} / "
-                    + host.trapFloorObjectiveState.RequiredKeyCount;
+                return TrapFloorObjectiveUseCase.IsGrandExit(floorCard.Content)
+                    ? $"{description}\nEvery player still in stands here with the team's Keys to win the floor. "
+                        + $"KEYS {host.trapFloorObjectiveState.CollectedKeyCount} / {host.trapFloorObjectiveState.RequiredKeyCount}"
+                    : $"{description}\nLand here holding a Key you claimed to win the floor.";
             }
 
             return description;
@@ -1918,7 +1914,7 @@ namespace ConsoleCards.Presentation.Composition
                 + $"KEYS {result.CollectedKeyCount} / {result.RequiredKeyCount}.");
         }
 
-        internal void AttemptTrapFloorEscape(TabletopObjectId floorCardId)
+        internal void AttemptTrapFloorEscape(TabletopObjectId floorCardId, PlayerId actor)
         {
             if (host.trapFloorObjectiveUseCase == null)
             {
@@ -1927,10 +1923,14 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             TrapFloorObjectiveResult result = host.TableAuthority.Submit<TrapFloorAttemptEscapeCommand, TrapFloorObjectiveResult>(
-                new TrapFloorAttemptEscapeCommand(host.CreateCommandContext(), floorCardId));
+                new TrapFloorAttemptEscapeCommand(host.CreateCommandContext(actor), floorCardId));
             if (!result.Succeeded)
             {
-                if (result.Error == TrapFloorObjectiveError.RequiredKeysMissing)
+                if (result.Error == TrapFloorObjectiveError.EscaperHasNoKey)
+                {
+                    host.ShowMessage("SECRET EXIT — claim a Key first, then land here to win the floor.");
+                }
+                else if (result.Error == TrapFloorObjectiveError.RequiredKeysMissing)
                 {
                     host.ShowMessage(
                         $"Attempt Escape rejected: Need {result.RequiredKeyCount} Keys — "
@@ -1950,6 +1950,7 @@ namespace ConsoleCards.Presentation.Composition
 
             if (result.IsWon)
             {
+                CloseFocusedSearchReveal(); // the exit was just turned over: the win is the news
                 ShowTrapFloorVictory(result);
             }
             else
@@ -1958,8 +1959,11 @@ namespace ConsoleCards.Presentation.Composition
             }
             RefreshTrapFloorStatusUi();
             string escapedPlayer = FormatPlayerName(result.EscapedActivity.ActorPlayerId);
+            bool grand = TrapFloorObjectiveUseCase.IsGrandExit(result.FloorCard.Content);
             host.ShowMessage(result.IsWon
-                ? $"{escapedPlayer} escaped. TRAP FLOOR VICTORY."
+                ? grand
+                    ? "The team escaped through the Grand Exit. FLOOR WON."
+                    : $"{escapedPlayer} escaped through the Secret Exit. FLOOR WON."
                 : $"{escapedPlayer} escaped. ESCAPED {result.EscapedPlayerCount} / "
                     + $"{result.ParticipatingPlayerCount}.");
         }
@@ -1972,8 +1976,10 @@ namespace ConsoleCards.Presentation.Composition
             host.runtimeUi.ShowContextMenu(
                 popupPosition,
                 "TRAP FLOOR VICTORY",
-                $"{FormatPlayerName(result.EscapedActivity.ActorPlayerId)} escaped through "
-                    + $"Floor {result.FloorCard.Coordinate}.\n"
+                (TrapFloorObjectiveUseCase.IsGrandExit(result.FloorCard.Content)
+                    ? "Every player still in escaped through the Grand Exit"
+                    : $"{FormatPlayerName(result.EscapedActivity.ActorPlayerId)} escaped through the Secret Exit")
+                    + $" at {result.FloorCard.Coordinate}.\n"
                     + $"{CurrentTrapFloorObjectiveProgressText()}",
                 new[]
                 {
@@ -2216,6 +2222,101 @@ namespace ConsoleCards.Presentation.Composition
             host.RefreshSelectionPresenterAfterRuntimeProjection();
         }
 
+        // Owner, 2026-10-21 (team game): exits are taken by landing. The Secret Exit wins the floor for the turn
+        // player whose pawn lands on it holding a Key they claimed. The Grand Exit wins it once every player still in
+        // stands on it and the team has the mode's Keys. Event-time only (after a pawn move).
+        private void TryTakeExitsAfterMove(TabletopObjectId activeLandedFloorCardId)
+        {
+            if (host.trapFloorObjectiveState == null
+                || host.trapFloorObjectiveUseCase == null
+                || host.trapFloorTurnState == null
+                || host.trapFloorObjectiveState.IsWon
+                || host.trapFloorTurnState.IsCurrentFloorFailed)
+            {
+                return;
+            }
+
+            PlayerId active = host.trapFloorTurnState.ActivePlayerId;
+            if (!activeLandedFloorCardId.IsEmpty
+                && !active.IsEmpty
+                && IsOpenExit(activeLandedFloorCardId, out bool landedOnGrand)
+                && !landedOnGrand)
+            {
+                if (host.trapFloorObjectiveUseCase.HasClaimedKey(active)) AttemptTrapFloorEscape(activeLandedFloorCardId, active);
+                else host.ShowMessage("SECRET EXIT — you need a Key you claimed. Claim one, then land here to win the floor.");
+                return;
+            }
+
+            if (!TryGetGrandExitWithEveryoneOn(out TabletopObjectId grandExitId, out PlayerId anyoneOn)) return;
+            if (!host.trapFloorObjectiveState.HasRequiredKeys)
+            {
+                host.ShowMessage(
+                    $"GRAND EXIT — everyone is here, but the team needs {host.trapFloorObjectiveState.RequiredKeyCount} "
+                    + $"Key(s): {host.trapFloorObjectiveState.CollectedKeyCount} claimed.");
+                return;
+            }
+
+            AttemptTrapFloorEscape(grandExitId, active.IsEmpty ? anyoneOn : active);
+        }
+
+        // A revealed exit tile still in play (not collapsed).
+        private bool IsOpenExit(TabletopObjectId floorCardId, out bool isGrandExit)
+        {
+            isGrandExit = false;
+            if (!host.trapFloorTemplate.TryGetFloorCardState(host.matchState, floorCardId, out TrapFloorFloorCardState floorCard)
+                || !floorCard.IsRevealed
+                || floorCard.Content.Category != TrapFloorFloorContentCategory.SecretExit
+                || (host.trapFloorCollapseState != null && host.trapFloorCollapseState.IsCollapsed(floorCardId)))
+            {
+                return false;
+            }
+
+            isGrandExit = TrapFloorObjectiveUseCase.IsGrandExit(floorCard.Content);
+            return true;
+        }
+
+        // True when every seated player who is not knocked out has their pawn on the same revealed Grand Exit.
+        private bool TryGetGrandExitWithEveryoneOn(out TabletopObjectId grandExitId, out PlayerId anyoneOn)
+        {
+            grandExitId = TabletopObjectId.Empty;
+            anyoneOn = PlayerId.Empty;
+            for (int i = 0; i < host.trapFloorTemplate.Players.Count; i++)
+            {
+                TrapFloorPlayerSetupDefinition setup = host.trapFloorTemplate.Players[i];
+                if (!host.matchState.Seats.TryGetValue(setup.SeatId, out var seat)
+                    || seat.OccupantPlayerId.IsEmpty
+                    || !IsTurnParticipant(seat.OccupantPlayerId)
+                    || host.trapFloorTurnState.GetPlayerState(seat.OccupantPlayerId)
+                        == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound)
+                {
+                    continue;
+                }
+
+                if (!TryReadPawnTile(setup.PawnId, out TrapFloorCoordinate tile)
+                    || !host.trapFloorTemplate.TryGetFloorCardId(tile, out TabletopObjectId floorCardId)
+                    || (!grandExitId.IsEmpty && floorCardId != grandExitId))
+                {
+                    return false;
+                }
+
+                grandExitId = floorCardId;
+                anyoneOn = seat.OccupantPlayerId;
+            }
+
+            return !grandExitId.IsEmpty && IsOpenExit(grandExitId, out bool isGrand) && isGrand;
+        }
+
+        private bool IsTurnParticipant(PlayerId playerId)
+        {
+            IReadOnlyList<PlayerId> order = host.trapFloorTurnState.PlayerOrder;
+            for (int i = 0; i < order.Count; i++)
+            {
+                if (order[i] == playerId) return true;
+            }
+
+            return false;
+        }
+
         // G2a: remembers the tile under every pawn, so only a real move onto a new tile flips it.
         internal void SyncLandingPawnTiles()
         {
@@ -2406,6 +2507,14 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!host.landingCheckPending || host.undoTransactionInProgress) return;
             host.landingCheckPending = false;
+            RunLandingCheck(out TabletopObjectId activeLandedFloorCardId, out bool anyPawnMoved);
+            if (anyPawnMoved) TryTakeExitsAfterMove(activeLandedFloorCardId);
+        }
+
+        private void RunLandingCheck(out TabletopObjectId activeLandedFloorCardId, out bool anyPawnMoved)
+        {
+            activeLandedFloorCardId = TabletopObjectId.Empty;
+            anyPawnMoved = false;
             if (host.trapFloorTemplate == null
                 || host.matchState == null
                 || host.trapFloorTurnState == null
@@ -2451,6 +2560,8 @@ namespace ConsoleCards.Presentation.Composition
                 landingPawnTiles[pawnId] = tile;
             }
 
+            anyPawnMoved = landedTile.HasValue || otherPawnMoved;
+
             // Owner, 2026-10-15 (H3): a landing the rules do not allow is a rule check, hints on or off. It does
             // not flip its tile; a warning says why and points at the Undo button; the turn menu offers Keep move.
             string moveProblem = null;
@@ -2467,6 +2578,11 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 host.RulesCardPanel.RaiseHint(HintTriggers.PawnMoved, "own");
+                if (moveProblem == null
+                    && host.trapFloorTemplate.TryGetFloorCardId(landedTile.Value, out TabletopObjectId landedId))
+                {
+                    activeLandedFloorCardId = landedId; // an allowed landing can take an exit
+                }
             }
             else if (otherPawnMoved)
             {

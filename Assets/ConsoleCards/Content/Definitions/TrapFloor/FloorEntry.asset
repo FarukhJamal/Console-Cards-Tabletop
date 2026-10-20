@@ -15,7 +15,7 @@ MonoBehaviour:
   stableId: 54460015-4f4f-4000-8000-00150000001e
   displayName: Grand Exit
   category: SecretExit
-  description: The standard/default Trap Floor Exit. Players decide when an Attempt Escape action is appropriate.
+  description: 'When the team has the Keys and every player still in stands here, the floor is won.'
   frontArtwork: {fileID: 2800000, guid: 4534767dbdb24611a43aa69590c36514, type: 3}
   frontArtworkReference: trap-floor/fronts/grand-exit.png
   backArtwork: {fileID: 0}

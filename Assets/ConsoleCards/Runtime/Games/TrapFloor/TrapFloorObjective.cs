@@ -133,11 +133,12 @@ namespace ConsoleCards.Games.TrapFloor
         internal void RecordEscape(
             TabletopObjectId exitFloorCardId,
             PlayerId actorPlayerId,
-            int participatingPlayerCount)
+            int participatingPlayerCount,
+            bool winsFloor = false)
         {
             escapedPlayerIds.Add(actorPlayerId);
-            bool completesGame = ModeBehavior
-                    == ConsoleCards.GameTemplates.Definitions.ModeBehavior.Team
+            bool completesGame = winsFloor
+                || ModeBehavior == ConsoleCards.GameTemplates.Definitions.ModeBehavior.Team
                 || escapedPlayerIds.Count >= participatingPlayerCount;
             if (completesGame)
             {
@@ -249,6 +250,7 @@ namespace ConsoleCards.Games.TrapFloor
         GameAlreadyWon,
         RevisionOverflow,
         PlayerAlreadyEscaped,
+        EscaperHasNoKey,
     }
 
     public readonly struct TrapFloorObjectiveResult
@@ -484,12 +486,20 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(CommandResultStatus.Rejected, TrapFloorObjectiveError.GameAlreadyWon);
             }
 
-            if (!objectiveState.HasRequiredKeys)
+            // Owner, 2026-10-21 (team game): the Grand Exit needs the team's Keys (the table checks that every player
+            // still in stands on it); the Secret Exit wins the floor for a player who claimed at least one Key.
+            PlayerId escapingPlayerId = command.Context.RequestedByPlayerId;
+            bool grandExit = IsGrandExit(floorCard.Content);
+            if (grandExit && !objectiveState.HasRequiredKeys)
             {
                 return Failure(CommandResultStatus.Rejected, TrapFloorObjectiveError.RequiredKeysMissing);
             }
 
-            PlayerId escapingPlayerId = command.Context.RequestedByPlayerId;
+            if (!grandExit && !HasClaimedKey(escapingPlayerId))
+            {
+                return Failure(CommandResultStatus.Rejected, TrapFloorObjectiveError.EscaperHasNoKey);
+            }
+
             if (objectiveState.IsPlayerEscaped(escapingPlayerId))
             {
                 return Failure(CommandResultStatus.Rejected, TrapFloorObjectiveError.PlayerAlreadyEscaped);
@@ -505,7 +515,8 @@ namespace ConsoleCards.Games.TrapFloor
             objectiveState.RecordEscape(
                 floorCard.ObjectId,
                 escapingPlayerId,
-                participatingPlayerCount);
+                participatingPlayerCount,
+                winsFloor: true);
             TrapFloorActivityEntry escapedActivity = activityFeed.RecordPlayerEscaped(
                 acceptedRevision,
                 escapingPlayerId,
@@ -526,6 +537,38 @@ namespace ConsoleCards.Games.TrapFloor
                 participatingPlayerCount,
                 escapedActivity,
                 victoryActivity);
+        }
+
+        /// <summary>The Grand Exit (tag "grand-exit"); every other exit card is a Secret Exit.</summary>
+        public static bool IsGrandExit(TrapFloorFloorContentDefinition content)
+        {
+            if (content == null
+                || content.Category != TrapFloorFloorContentCategory.SecretExit
+                || content.AuthoredCard == null
+                || content.AuthoredCard.Tags == null)
+            {
+                return false;
+            }
+
+            IReadOnlyList<string> tags = content.AuthoredCard.Tags;
+            for (int i = 0; i < tags.Count; i++)
+            {
+                if (string.Equals(tags[i], "grand-exit", StringComparison.Ordinal)) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>True when the player claimed at least one Key.</summary>
+        public bool HasClaimedKey(PlayerId playerId)
+        {
+            IReadOnlyList<TrapFloorCollectedKeyState> keys = objectiveState.CollectedKeys;
+            for (int i = 0; i < keys.Count; i++)
+            {
+                if (keys[i].ClaimedByPlayerId == playerId) return true;
+            }
+
+            return false;
         }
 
         private TrapFloorObjectiveError ValidateCommand(
