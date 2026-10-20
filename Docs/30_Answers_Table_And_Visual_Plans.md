@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.37 · 2026-10-20 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.38 · 2026-10-20 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1825,7 +1825,7 @@ where each cartridge says its seats may go.
   announcements, the seat and hand helpers and the game selection menu.
 - Approved by the owner (2026-10-20: "do the whole cart next approved").
 
-**CART-1b record (written 2026-10-20, to be checked).** The table's own files no longer name Trap Floor; everything
+**CART-1b record (written 2026-10-20; approved by the owner the same day after two compile fixes).** The table's own files no longer name Trap Floor; everything
 the game needs goes through the cartridge contract.
 - **Trap Floor's half of the table** is in `TabletopComposition.TrapFloor.cs`: its state on the table (template,
   turn, rules state, use cases, Floorfall and Floormaster services, landing and physical dice in progress), building
@@ -1849,7 +1849,7 @@ the game needs goes through the cartridge contract.
 - No change in play is expected: Trap Floor and the Empty Table behave as before.
 - Not compiled here; the owner checks in Unity.
 
-**CART-1c record (written 2026-10-20, to be checked).** Seats along the table's edge.
+**CART-1c record (written 2026-10-20; approved by the owner the same day).** Seats along the table's edge.
 - A cartridge says where its seats may go (`SeatPlacement`): **Fixed** (where its template puts them) or **Along the
   edge**. Trap Floor's seats go along the edge; an Empty Table has no seats.
 - Each seat moves out along the line from the table's centre through its classic place, so seats keep their order

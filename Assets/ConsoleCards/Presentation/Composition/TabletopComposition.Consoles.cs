@@ -692,8 +692,9 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---- Dice on the D-pad (back side) ----
 
-        // A die that comes to rest on a D-pad arrow of a Console showing its back is set on the arrow's centre,
-        // and the number picker opens. One die at a time; a die already on its arrow is left alone.
+        // A die that comes to rest on a D-pad arrow of a Console showing its back is set on the arrow, and the number
+        // picker opens. PAD-1 (owner, 2026-10-20): an arrow holds up to 3 dice (for example 2d6): the first sits on
+        // the arrow, the next ones beside it. One die at a time; a die already in its place is left alone.
         private void CompleteConsoleDieSnaps()
         {
             if (!consoleDieCheckPending || !IsInitialized || matchState == null)
@@ -716,7 +717,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 TabletopObjectId dieId = dieView.ObjectId;
-                if (!TryFindDieSpot(dieView, out RuntimeConsoleInstance instance, out ConsoleLayoutSlotData spot, out Vector3 spotWorld, out _))
+                if (!TryFindDieSpot(dieView, out RuntimeConsoleInstance instance, out ConsoleLayoutSlotData spot, out Vector3 spotWorld, out _, out int place))
                 {
                     diceOnConsoleSpots.Remove(dieId);
                     continue;
@@ -730,17 +731,26 @@ namespace ConsoleCards.Presentation.Composition
                     continue;
                 }
 
-                if (diceOnConsoleSpots.TryGetValue(dieId, out string spotKey) && spotKey == spot.Key)
+                if (diceOnConsoleSpots.TryGetValue(dieId, out string placeKey) && placeKey == DiePlaceKey(instance, spot, place))
                 {
-                    continue; // already set on this arrow
+                    continue; // already set in this place
                 }
 
+                int free = FreeDiePlace(instance, spot, place, dieId);
+                if (free < 0)
+                {
+                    ShowMessage($"The {DescribeDieSpot(spot)} already holds {MaxDicePerArrow} dice.");
+                    diceOnConsoleSpots.Remove(dieId);
+                    continue;
+                }
+
+                spotWorld = DieSpotPlace(instance, spot, free, DieSpacing(dieView));
                 if (!TryPlaceDieOnSpot(dieView, instance, spotWorld, null))
                 {
                     continue;
                 }
 
-                diceOnConsoleSpots[dieId] = spot.Key;
+                diceOnConsoleSpots[dieId] = DiePlaceKey(instance, spot, free);
                 OpenDieNumberPicker(dieView);
                 return;
             }
@@ -751,12 +761,14 @@ namespace ConsoleCards.Presentation.Composition
             out RuntimeConsoleInstance foundInstance,
             out ConsoleLayoutSlotData foundSpot,
             out Vector3 foundWorld,
-            out float foundDistance)
+            out float foundDistance,
+            out int foundPlace)
         {
             foundInstance = null;
             foundSpot = null;
             foundWorld = Vector3.zero;
             foundDistance = float.MaxValue;
+            foundPlace = 0;
             if (dieView == null || !dieView.IsBound || !dieView.BoundState.ContainerId.IsEmpty)
             {
                 return false;
@@ -765,6 +777,7 @@ namespace ConsoleCards.Presentation.Composition
             Vector3 diePosition = dieView.PhysicalObject != null && dieView.PhysicalObject.Body != null
                 ? dieView.PhysicalObject.Body.position
                 : dieView.transform.position;
+            float spacing = DieSpacing(dieView);
             ConsoleLayoutData layout = GetConsoleLayout();
             for (int i = 0; i < Registry.runtimeConsoleInstances.Count; i++)
             {
@@ -784,16 +797,21 @@ namespace ConsoleCards.Presentation.Composition
                         continue;
                     }
 
-                    Vector3 world = instance.View.transform.TransformPoint(new Vector3(slot.X, 0f, slot.Z));
-                    float dx = world.x - diePosition.x;
-                    float dz = world.z - diePosition.z;
-                    float distance = Mathf.Sqrt((dx * dx) + (dz * dz));
-                    if (distance <= consoleDieSpotRadius && distance < foundDistance)
+                    // PAD-1: each arrow has a place on it and two beside it; the nearest place wins.
+                    for (int place = 0; place < MaxDicePerArrow; place++)
                     {
-                        foundInstance = instance;
-                        foundSpot = slot;
-                        foundWorld = world;
-                        foundDistance = distance;
+                        Vector3 world = DieSpotPlace(instance, slot, place, spacing);
+                        float dx = world.x - diePosition.x;
+                        float dz = world.z - diePosition.z;
+                        float distance = Mathf.Sqrt((dx * dx) + (dz * dz));
+                        if (distance <= consoleDieSpotRadius && distance < foundDistance)
+                        {
+                            foundInstance = instance;
+                            foundSpot = slot;
+                            foundWorld = world;
+                            foundDistance = distance;
+                            foundPlace = place;
+                        }
                     }
                 }
             }
@@ -882,7 +900,7 @@ namespace ConsoleCards.Presentation.Composition
             if (dieView == null
                 || dieView.DieState == null
                 || !ConsoleMatHasBackSide()
-                || !TryFindDieSpot(dieView, out _, out ConsoleLayoutSlotData spot, out _, out _))
+                || !TryFindDieSpot(dieView, out _, out ConsoleLayoutSlotData spot, out _, out _, out _))
             {
                 return;
             }
@@ -907,7 +925,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (!Registry.TryGetDieView(dieId, out DieView dieView)
-                || !TryFindDieSpot(dieView, out RuntimeConsoleInstance instance, out ConsoleLayoutSlotData spot, out Vector3 spotWorld, out _))
+                || !TryFindDieSpot(dieView, out RuntimeConsoleInstance instance, out ConsoleLayoutSlotData spot, out Vector3 spotWorld, out _, out int place))
             {
                 ShowMessage("Number not set: the die is not on a D-pad arrow.");
                 ContextMenus.CloseContextMenu();
@@ -920,9 +938,230 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            diceOnConsoleSpots[dieId] = spot.Key;
+            diceOnConsoleSpots[dieId] = DiePlaceKey(instance, spot, place);
             ContextMenus.CloseContextMenu();
             ShowMessage($"The die on the {DescribeDieSpot(spot)} now shows {value}.");
+        }
+
+        // ---- PAD-1: dice sets on the arrows, and what a controller card means ----
+
+        private const int MaxDicePerArrow = 3;
+        private readonly List<DieView> padDice = new List<DieView>(MaxDicePerArrow);
+        private readonly StringBuilder padText = new StringBuilder(64);
+
+        // Where die place `place` of an arrow is: 0 on the arrow, 1 and 2 on either side of it (across the line from
+        // the pad's centre), a die's width apart.
+        private Vector3 DieSpotPlace(RuntimeConsoleInstance instance, ConsoleLayoutSlotData spot, int place, float spacing)
+        {
+            Transform mat = instance.View.transform;
+            if (place == 0)
+            {
+                return mat.TransformPoint(new Vector3(spot.X, 0f, spot.Z));
+            }
+
+            ConsoleLayoutData layout = GetConsoleLayout();
+            float centreX = 0f;
+            float centreZ = 0f;
+            int count = 0;
+            for (int s = 0; s < layout.Slots.Count; s++)
+            {
+                ConsoleLayoutSlotData slot = layout.Slots[s];
+                if (slot.Kind != ConsoleLayoutSlotKind.Die || slot.Side != spot.Side) continue;
+                centreX += slot.X;
+                centreZ += slot.Z;
+                count++;
+            }
+
+            Vector2 outward = count > 0
+                ? new Vector2(spot.X - (centreX / count), spot.Z - (centreZ / count))
+                : Vector2.right;
+            if (outward.sqrMagnitude < 1e-6f) outward = Vector2.right;
+            outward.Normalize();
+            Vector2 across = new Vector2(-outward.y, outward.x);
+            float step = spacing / Mathf.Max(1e-4f, Mathf.Abs(mat.lossyScale.x)) * (place == 1 ? 1f : -1f);
+            return mat.TransformPoint(new Vector3(spot.X + (across.x * step), 0f, spot.Z + (across.y * step)));
+        }
+
+        // A die's width on the table, with a little room (world units).
+        private float DieSpacing(DieView dieView)
+        {
+            Renderer renderer = dieView != null ? dieView.GetComponentInChildren<Renderer>() : null;
+            float width = renderer != null
+                ? Mathf.Max(renderer.bounds.size.x, renderer.bounds.size.z)
+                : consoleDieSpotRadius * 1.2f;
+            return Mathf.Max(0.05f, width * 1.1f);
+        }
+
+        private static string DiePlaceKey(RuntimeConsoleInstance instance, ConsoleLayoutSlotData spot, int place) =>
+            $"{instance.GetHashCode()}:{spot.Key}:{place}";
+
+        // The place a die gets on an arrow: the one it was brought to if no other die has it, else the first free
+        // one; -1 when the arrow is full.
+        private int FreeDiePlace(RuntimeConsoleInstance instance, ConsoleLayoutSlotData spot, int wanted, TabletopObjectId dieId)
+        {
+            if (!DiePlaceTaken(instance, spot, wanted, dieId)) return wanted;
+            for (int place = 0; place < MaxDicePerArrow; place++)
+            {
+                if (!DiePlaceTaken(instance, spot, place, dieId)) return place;
+            }
+
+            return -1;
+        }
+
+        private bool DiePlaceTaken(RuntimeConsoleInstance instance, ConsoleLayoutSlotData spot, int place, TabletopObjectId dieId)
+        {
+            string key = DiePlaceKey(instance, spot, place);
+            foreach (KeyValuePair<TabletopObjectId, string> pair in diceOnConsoleSpots)
+            {
+                if (pair.Key != dieId && pair.Value == key && Registry.TryGetDieView(pair.Key, out DieView other) && other != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// PAD-1 (owner, 2026-10-20): a controller card put into a Console slot says what it means on the player's
+        /// controller pad (the Console's back): "X = Heavy Kick" (the ability card on the pad's X button) or
+        /// "Right = 2d6 (4 + 3)" (the dice on the pad's Right arrow, which stay there). The pad is the same Console's
+        /// back for the buttons, else the nearest Console showing its controller side. Never blocks play.
+        /// </summary>
+        internal void ShowControllerCardMeaning(IConsoleCardInteraction interaction)
+        {
+            if (!(interaction is ConsoleCardInserted)
+                || runtimeUi == null
+                || matchState == null
+                || !ConsoleMatHasBackSide()
+                || !TryGetCardLook(interaction.CardDefinitionId, out CardDefinition definition)
+                || !definition.RepresentedControllerInput.HasValue)
+            {
+                return;
+            }
+
+            RuntimeConsoleInstance played = FindConsoleInstanceBySlot(interaction.SlotContainerId);
+            if (played == null) return;
+            ControllerInput input = definition.RepresentedControllerInput.Value;
+            bool arrow = input == ControllerInput.Up || input == ControllerInput.Down
+                || input == ControllerInput.Left || input == ControllerInput.Right;
+            string text = arrow ? ArrowMeaning(played, input) : ButtonMeaning(played, input);
+            if (!string.IsNullOrEmpty(text)) FeedbackLine(text, FeedbackSeverity.Info);
+        }
+
+        private string ButtonMeaning(RuntimeConsoleInstance played, ControllerInput input)
+        {
+            string key = "Btn" + input;
+            string ability = ButtonAbilityName(played, key);
+            if (ability == null)
+            {
+                RuntimeConsoleInstance pad = NearestPadConsole(played, true);
+                if (pad != null) ability = ButtonAbilityName(pad, key);
+            }
+
+            return ability != null ? $"{input} = {ability}" : $"{input}: no ability on the controller pad yet.";
+        }
+
+        // The name of the card on a pad button of one Console, or null when the button is empty.
+        private string ButtonAbilityName(RuntimeConsoleInstance instance, string key)
+        {
+            ConsoleLayoutData layout = GetConsoleLayout();
+            for (int s = 0; s < instance.SlotViews.Length && s < layout.CardSlots.Count; s++)
+            {
+                ConsoleSlotView slotView = instance.SlotViews[s];
+                if (slotView == null
+                    || !slotView.IsBound
+                    || !string.Equals(layout.CardSlots[s].Key, key, StringComparison.OrdinalIgnoreCase)
+                    || !slotView.ContainerState.TryPeekTop(out TabletopObjectId cardId)
+                    || !matchState.Cards.TryGetValue(cardId, out CardInstanceState card))
+                {
+                    continue;
+                }
+
+                return TryGetCardLook(card.BaseState.DefinitionId, out CardDefinition ability)
+                    ? ability.DisplayName
+                    : "a card";
+            }
+
+            return null;
+        }
+
+        private string ArrowMeaning(RuntimeConsoleInstance played, ControllerInput input)
+        {
+            ConsoleState playedState = ResolveConsoleState(played);
+            RuntimeConsoleInstance pad = playedState != null && playedState.ShowsBack ? played : NearestPadConsole(played, false);
+            if (pad == null) return $"{input}: no controller pad is showing (turn a Console over, or duplicate it).";
+            string key = "Pad" + input;
+            padDice.Clear();
+            for (int d = 0; d < Registry.dieViews.Count && padDice.Count < MaxDicePerArrow; d++)
+            {
+                DieView dieView = Registry.dieViews[d];
+                if (dieView != null
+                    && dieView.DieState != null
+                    && TryFindDieSpot(dieView, out RuntimeConsoleInstance instance, out ConsoleLayoutSlotData spot, out _, out _, out _)
+                    && instance == pad
+                    && string.Equals(spot.Key, key, StringComparison.OrdinalIgnoreCase))
+                {
+                    padDice.Add(dieView);
+                }
+            }
+
+            if (padDice.Count == 0) return $"{input}: no dice on the arrow.";
+            padText.Clear().Append(input).Append(" = ");
+            bool sameSize = true;
+            for (int i = 1; i < padDice.Count; i++) sameSize &= padDice[i].DieState.SideCount == padDice[0].DieState.SideCount;
+            if (sameSize)
+            {
+                if (padDice.Count > 1) padText.Append(padDice.Count);
+                padText.Append('d').Append(padDice[0].DieState.SideCount);
+            }
+            else
+            {
+                for (int i = 0; i < padDice.Count; i++)
+                {
+                    if (i > 0) padText.Append(" + ");
+                    padText.Append('d').Append(padDice[i].DieState.SideCount);
+                }
+            }
+
+            padText.Append(" (");
+            for (int i = 0; i < padDice.Count; i++)
+            {
+                if (i > 0) padText.Append(" + ");
+                padText.Append(padDice[i].DieState.CurrentValue);
+            }
+
+            padDice.Clear();
+            return padText.Append(')').ToString();
+        }
+
+        // The nearest other Console showing its controller side (its back), or null.
+        private RuntimeConsoleInstance NearestPadConsole(RuntimeConsoleInstance from, bool otherOnly)
+        {
+            RuntimeConsoleInstance best = null;
+            float bestDistance = float.MaxValue;
+            Vector3 origin = from.View.transform.position;
+            for (int i = 0; i < Registry.runtimeConsoleInstances.Count; i++)
+            {
+                RuntimeConsoleInstance instance = Registry.runtimeConsoleInstances[i];
+                ConsoleState console = ResolveConsoleState(instance);
+                if (console == null
+                    || !console.ShowsBack
+                    || instance.View == null
+                    || (otherOnly && instance == from))
+                {
+                    continue;
+                }
+
+                float distance = (instance.View.transform.position - origin).sqrMagnitude;
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = instance;
+                }
+            }
+
+            return best;
         }
 
         private static string DescribeDieSpot(ConsoleLayoutSlotData spot)

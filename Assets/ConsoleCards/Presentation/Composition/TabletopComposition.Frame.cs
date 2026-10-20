@@ -104,6 +104,7 @@ namespace ConsoleCards.Presentation.Composition
             ShowMessage(
                 $"{FormatPlayerName(interaction.ActorPlayerId)} {verb} {cardName} {direction} Console");
 
+            ShowControllerCardMeaning(interaction); // PAD-1: "X = Heavy Kick", "Right = 2d6 (4 + 3)"
             try
             {
                 ConsoleCardInteractionAccepted?.Invoke(interaction, behavior);

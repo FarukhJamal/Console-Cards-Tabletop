@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.22 · 2026-10-20 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.25 · 2026-10-20 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -386,9 +386,13 @@ Change: …
   Star left, Cross right, Circle, Triangle, Plus and Minus corners); the back has the controller mapping (A, B, X,
   Y take cards; the D-pad arrows take dice set to a number). Cards with a symbol snap magnetically to a slot with
   the same symbol. **Flip** (right-click or F over the mat) turns it over with the cards; **Duplicate** places a
-  second Console with the other side up. In Trap Floor every slot but Main is an item slot.
-- **Source:** doc 22 §14
-- **Changes:** 2026-10-15 C3d.
+  second Console with the other side up. In Trap Floor every slot but Main is an item slot. PAD-1: an arrow holds
+  up to 3 dice (the first on it, the next ones beside it), for example 2d6; the dice stay there until the player
+  changes them. A controller card put into a Console slot says what it means: "X = Heavy Kick" (the card on that
+  button of the same Console's back, else of the nearest Console showing its controller side) or "Right = 2d6
+  (4 + 3)" (the dice on that arrow of the Console showing its controller side). It never blocks play.
+- **Source:** doc 22 §14; doc 32 (controller pad)
+- **Changes:** 2026-10-15 C3d; 2026-10-20 PAD-1 (to be checked).
 
 ### P-BOARD · Game board mats
 - **Status:** Built, approved
@@ -504,9 +508,10 @@ Change: …
   one. When the table shrinks, every piece at the edge moves in: cards, dice, pawns, tokens, decks, discard piles,
   stacks, Consoles (with their cards) and board mats (with the cards on them). Only another player's pile stops it.
   During a game the table never gets smaller than the classic area. Legs come from the base table model and stay attached. The
-  choice is saved in the profile.
+  choice is saved in the profile. The Table menu scrolls with the mouse wheel (or Up / Down) when it is taller than
+  the screen (2026-10-20; the Table rows were off the bottom).
 - **Source:** doc 30 §B6–§B10
-- **Open:** picture cards for the shapes (V4). Seats along the edge: PL-CARTRIDGE (CART-1c, to be checked).
+- **Open:** picture cards for the shapes (V4). Seats along the edge: PL-CARTRIDGE (CART-1c, approved).
 - **Changes:** 2026-10-18 every Toolbox piece moves in, game mats included (owner); 2026-10-17 T1–T3 approved.
 
 ### P-TABLE-MODELS · Table models
@@ -650,7 +655,7 @@ Change: …
 - **Source:** owner, 2026-10-19 (Console card frames 13, 14, 36-39)
 
 ### PL-CARTRIDGE · Cartridge contract
-- **Status:** In progress: CART-1a approved (2026-10-20); 1b and 1c written (2026-10-20), to be checked
+- **Status:** Built, approved (CART-1a–1c, owner 2026-10-20)
 - **Rule now:** what a game ("cartridge") must declare to plug into the platform, including where its seats may go
   on any table shape. CART-1a: the table talks to the cartridge in play for its table setups, its per-frame step, its
   status line and card, its Shop entry, its hint helpers, its own card menus and its reactions to cards played into

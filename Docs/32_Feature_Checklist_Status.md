@@ -1,6 +1,6 @@
 # 32 — Feature Checklist Status
 
-Version 0.6 · 2026-10-19 · Status: checked against the build by Claude; owner to confirm
+Version 0.7 · 2026-10-20 · Status: checked against the build by Claude; owner to confirm
 
 The owner's client checklist "Console Cards — Feature Checklist" (received again 2026-10-19) lists what the virtual
 game must support. This doc checks each item against what the platform has today (doc 31, the code) and says what
@@ -19,8 +19,8 @@ abilities; they have dice mapped to them (for example Right Arrow = 2d6, so play
 | Part | Status | Today | What is left |
 |---|---|---|---|
 | A pad with A/B/X/Y slots that take ability cards | **Partly** | The back of the Console mat is the controller mapping: A, B, X, Y take cards (P-CONSOLE). | Decide: is the back of the Console enough, or is the Controller Pad a separate, controller-shaped piece? (question for the owner) |
-| Arrow slots take dice | **Partly** | The D-pad arrows take dice, set to a number. | The checklist means a dice *amount* (2d6) mapped to the arrow, rolled when the arrow card is played. New: the arrow slot holds a dice set (1–3 dice, any size) and shows it as "→ 2d6". |
-| Playing an X card means the mapped ability | **Not yet** (helper) | Players read the pad themselves (free play is allowed). | Optional helper: when a controller card is played to the field, a small label shows what it means ("X = Heavy Kick"); playing an arrow card rolls its mapped dice next to the player. Never blocks free play. |
+| Arrow slots take dice | **Done** (to be checked) | The D-pad arrows take real dice set to a number; PAD-1: up to 3 dice per arrow (for example 2d6), the first on it and the next beside it. The dice stay; players change them (owner, 2026-10-20). | — |
+| Playing an X card means the mapped ability | **Done** (to be checked) | PAD-1: a controller card put into a Console slot shows what it means: "X = Heavy Kick" (the card on that pad button) or "Right = 2d6 (4 + 3)" (the dice on that arrow). It never blocks play. | — |
 
 ## Checklist items
 
@@ -48,3 +48,8 @@ abilities; they have dice mapped to them (for example Right Arrow = 2d6, so play
 2. Arrow dice: **players can set them** if they want (the arrow slot takes a dice set, shown as "→ 2d6").
 3. Drawing tool: **with T5**.
 
+## PAD-1 (written 2026-10-20, to be checked)
+
+Owner's choices: real dice on the arrow (up to 3); the dice stay there and players change them; a label for
+A/B/X/Y and arrow cards; a card counts as played when it goes into a Console slot. Code:
+`TabletopComposition.Consoles.cs` (dice places and the label), `TabletopComposition.Frame.cs` (calls it).

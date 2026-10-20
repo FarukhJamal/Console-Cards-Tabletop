@@ -100,6 +100,17 @@ namespace ConsoleCards.Presentation.UI
         private Action resetTable;
         private Action clearTable;
         private Action beforeMenuOpen;
+
+        // The Table menu scrolls with the mouse wheel when it is taller than the room below the bar (owner,
+        // 2026-10-20: the lower rows, Table shape and Table tools, were off the screen). The menu itself slides up;
+        // nothing is built at runtime.
+        private const float MenuScrollStep = 60f;
+        private const float MenuScreenMargin = 12f;
+        private readonly Vector3[] menuCorners = new Vector3[4];
+        private Canvas menuCanvas;
+        private Vector2 menuHome;
+        private bool menuHomeKnown;
+        private float menuScroll;
         private string undoLabel = "Undo";
         private string redoLabel = "Redo";
         private Action<bool> setRules;
@@ -512,6 +523,14 @@ namespace ConsoleCards.Presentation.UI
             beforeMenuOpen?.Invoke();
             HideTip();
             menuBlocker.gameObject.SetActive(true);
+            if (!menuHomeKnown)
+            {
+                menuHome = menu.anchoredPosition;
+                menuHomeKnown = true;
+            }
+
+            menuScroll = 0f; // each time it opens at the top
+            menu.anchoredPosition = menuHome;
             menu.gameObject.SetActive(true);
         }
 
@@ -573,7 +592,50 @@ namespace ConsoleCards.Presentation.UI
             if (IsMenuOpen && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
             {
                 CloseMenu();
+                return;
             }
+
+            if (IsMenuOpen) ScrollMenu();
+        }
+
+        // Mouse wheel (or Up / Down keys) while the Table menu is open: slides the menu so every row can be reached,
+        // never further than its last row. Polled each frame; no allocation.
+        private void ScrollMenu()
+        {
+            float maximum = MenuScrollRange();
+            float step = 0f;
+            if (Mouse.current != null)
+            {
+                float wheel = Mouse.current.scroll.ReadValue().y;
+                if (wheel > 0.01f) step = -MenuScrollStep;
+                else if (wheel < -0.01f) step = MenuScrollStep;
+            }
+
+            if (Keyboard.current != null)
+            {
+                if (Keyboard.current.downArrowKey.wasPressedThisFrame) step = MenuScrollStep;
+                else if (Keyboard.current.upArrowKey.wasPressedThisFrame) step = -MenuScrollStep;
+            }
+
+            float next = Mathf.Clamp(menuScroll + step, 0f, maximum);
+            if (Mathf.Approximately(next, menuScroll)) return;
+            menuScroll = next;
+            menu.anchoredPosition = menuHome + new Vector2(0f, menuScroll);
+        }
+
+        // How far the menu may slide up: its height less the room from its top (at home) to the screen's bottom.
+        private float MenuScrollRange()
+        {
+            if (menuCanvas == null) menuCanvas = menu.GetComponentInParent<Canvas>();
+            if (menuCanvas == null) return 0f;
+            Canvas root = menuCanvas.rootCanvas;
+            UnityEngine.Camera eye = root.renderMode == RenderMode.ScreenSpaceOverlay ? null : root.worldCamera;
+            float scale = Mathf.Max(0.0001f, root.scaleFactor);
+            menu.GetWorldCorners(menuCorners);
+            float topNow = RectTransformUtility.WorldToScreenPoint(eye, menuCorners[1]).y;
+            float topAtHome = topNow - (menuScroll * scale);
+            float room = (topAtHome - MenuScreenMargin) / scale;
+            return Mathf.Max(0f, menu.rect.height - room);
         }
 
         private void ToggleMenu()
