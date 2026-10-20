@@ -477,8 +477,12 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        // F2 markers every frame: a ring on the active pawn, a warning on each waiting Trap, and the tiles a
-        // move must reach (Spring, Crane, Dodge, Rush) with an arrow from the pawn when there is one target.
+        // F2 markers every frame: a ring on the active pawn, a warning on each waiting Trap, a calm green outline on
+        // each Trap made harmless, and the tiles a move must reach (Spring, Crane, Dodge, Rush) with an arrow from the
+        // pawn when there is one target. (2026-10-20: the green outline replaces a tint nobody could see.)
+        private readonly List<Vector3> boardFeedbackNeutralized = new List<Vector3>(8);
+        private static readonly Color NeutralizedTrapColour = new Color(0.32f, 0.78f, 0.52f, 0.9f);
+
         internal void RefreshTrapFloorBoardFeedback()
         {
             if (!playerFeedback
@@ -529,6 +533,22 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             boardFeedback.ShowTrapWarnings(boardFeedbackTraps);
+            boardFeedbackNeutralized.Clear();
+            if (trapFloorAbilityResolutionState != null)
+            {
+                IReadOnlyList<TrapFloorTrapResolutionRecord> neutralRecords = trapFloorAbilityResolutionState.TrapRecords;
+                for (int i = 0; i < neutralRecords.Count; i++)
+                {
+                    TrapFloorTrapResolutionRecord record = neutralRecords[i];
+                    if (record.Disposition == TrapFloorTrapResolutionDisposition.Neutralized
+                        && Registry.TryGetCardView(record.FloorCardId, out CardView neutralView))
+                    {
+                        boardFeedbackNeutralized.Add(neutralView.transform.position);
+                    }
+                }
+            }
+
+            boardFeedback.ShowNeutralized(boardFeedbackNeutralized, NeutralizedTrapColour);
             boardFeedbackTargets.Clear();
             IReadOnlyList<TabletopObjectId> targetIds = trapFloorAbilityResolutionState?.ActiveRushAssistance?.TargetFloorCardIds
                 ?? trapFloorAbilityResolutionState?.ActiveDodgeAssistance?.TargetFloorCardIds;

@@ -141,6 +141,9 @@ namespace ConsoleCards.Presentation.Composition
         /// <summary>True for a game's own board piece (a floor tile): it never moves, stacks or snaps.</summary>
         bool IsFixedBoardPiece(TabletopObjectId objectId);
 
+        /// <summary>True for any of the game's board tiles, also one lifted off the board: it keeps the tile's look and size.</summary>
+        bool IsBoardTile(TabletopObjectId objectId);
+
         /// <summary>The grid the game's board is drawn with (false: the game has no board grid).</summary>
         bool TryGetBoardGrid(out GridDefinitionData grid);
 
@@ -423,6 +426,8 @@ namespace ConsoleCards.Presentation.Composition
         public ControllerConfigurationData ControllerConfiguration => null;
 
         public bool IsFixedBoardPiece(TabletopObjectId objectId) => false;
+
+        public bool IsBoardTile(TabletopObjectId objectId) => false;
 
         public bool TryGetBoardGrid(out GridDefinitionData grid)
         {

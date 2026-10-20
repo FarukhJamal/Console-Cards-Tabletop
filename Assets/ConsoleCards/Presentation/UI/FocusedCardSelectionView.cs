@@ -80,7 +80,7 @@ namespace ConsoleCards.Presentation.UI
             instructionLabel.text = model.Instruction;
             statusLabel.text = model.Status;
             confirmButtonLabel.text = model.ConfirmLabel;
-            cancelButtonLabel.text = "Cancel";
+            cancelButtonLabel.text = string.IsNullOrWhiteSpace(model.CancelLabel) ? "Cancel" : model.CancelLabel;
             BindButton(dismissOverlayButton, model.Dismiss);
             BindButton(cancelButton, model.Dismiss);
             BindButton(confirmButton, Confirm);
@@ -341,7 +341,8 @@ namespace ConsoleCards.Presentation.UI
             int maximumSelectionCount,
             Func<IReadOnlyList<TabletopObjectId>, bool> canConfirm,
             Action<IReadOnlyList<TabletopObjectId>> confirm,
-            Action dismiss)
+            Action dismiss,
+            string cancelLabel = null)
         {
             if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("A focused Card selection requires a title.", nameof(title));
             if (string.IsNullOrWhiteSpace(confirmLabel)) throw new ArgumentException("A focused Card selection requires a confirm label.", nameof(confirmLabel));
@@ -356,6 +357,7 @@ namespace ConsoleCards.Presentation.UI
             CanConfirm = canConfirm ?? throw new ArgumentNullException(nameof(canConfirm));
             Confirm = confirm ?? throw new ArgumentNullException(nameof(confirm));
             Dismiss = dismiss ?? throw new ArgumentNullException(nameof(dismiss));
+            CancelLabel = cancelLabel ?? string.Empty;
         }
 
         public string Title { get; }
@@ -367,6 +369,9 @@ namespace ConsoleCards.Presentation.UI
         public Func<IReadOnlyList<TabletopObjectId>, bool> CanConfirm { get; }
         public Action<IReadOnlyList<TabletopObjectId>> Confirm { get; }
         public Action Dismiss { get; }
+
+        /// <summary>The cancel button's words ("Not now", "Let it happen"); empty: "Cancel".</summary>
+        public string CancelLabel { get; }
     }
 
     public sealed class FocusedCardRevealModel

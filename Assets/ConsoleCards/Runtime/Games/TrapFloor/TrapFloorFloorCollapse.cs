@@ -432,6 +432,13 @@ namespace ConsoleCards.Games.TrapFloor
                 xAxisDie.CurrentValue,
                 yAxisDie.CurrentValue,
                 revision);
+            // Owner, 2026-10-21 (as in the playtest): the collapsed tile is lifted off by a player and set beside the
+            // board, so it is no longer locked in its cell. The game still knows the cell is a hole.
+            if (matchState.Cards.TryGetValue(floorCardId, out CardInstanceState collapsedCard))
+            {
+                collapsedCard.BaseState.SetUserLocked(false);
+            }
+
             activityFeed.RecordFloorCollapsed(
                 revision,
                 command.Context.RequestedByPlayerId,

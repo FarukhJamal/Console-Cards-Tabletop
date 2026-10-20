@@ -153,7 +153,9 @@ namespace ConsoleCards.Games.TrapFloor
 
         /// <summary>
         /// The floor tile under a table position: the nearest tile whose card footprint contains it. Used to
-        /// find where a pawn stands (G2a). False when the position is off the board.
+        /// find where a pawn stands (G2a). False when the position is off the board. Each tile's place is its grid
+        /// cell (worked out from a tile still lying in place), so a collapsed tile lifted off the board still counts
+        /// as the hole at its cell (owner, 2026-10-21).
         /// </summary>
         public bool TryGetFloorCoordinateAt(
             MatchState matchState,
@@ -170,10 +172,20 @@ namespace ConsoleCards.Games.TrapFloor
             double halfHeight = Grid.CellHeight * 0.5d;
             double nearestDistanceSquared = double.MaxValue;
             bool found = false;
+            bool hasReference = TryGetGridReference(matchState, out TrapFloorCoordinate referenceCoordinate, out TableCoordinate referencePosition);
             foreach (KeyValuePair<TrapFloorCoordinate, TabletopObjectId> floor in floorCardIds)
             {
-                if (!matchState.Cards.TryGetValue(floor.Value, out CardInstanceState floorCard)) continue;
-                TableCoordinate floorPosition = floorCard.BaseState.Pose.Position;
+                TableCoordinate floorPosition;
+                if (hasReference)
+                {
+                    floorPosition = CellPosition(floor.Key, referenceCoordinate, referencePosition);
+                }
+                else
+                {
+                    if (!matchState.Cards.TryGetValue(floor.Value, out CardInstanceState floorCard)) continue;
+                    floorPosition = floorCard.BaseState.Pose.Position;
+                }
+
                 double deltaX = position.X - floorPosition.X;
                 double deltaY = position.Y - floorPosition.Y;
                 double distanceSquared = (deltaX * deltaX) + (deltaY * deltaY);
@@ -188,6 +200,54 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             return found;
+        }
+
+        /// <summary>
+        /// Where a grid cell lies on the table (its centre), from a tile still lying in place. False when no tile is
+        /// in place to measure from.
+        /// </summary>
+        public bool TryGetCellPosition(MatchState matchState, TrapFloorCoordinate cell, out TableCoordinate position)
+        {
+            position = default;
+            if (matchState == null
+                || !TryGetGridReference(matchState, out TrapFloorCoordinate referenceCoordinate, out TableCoordinate referencePosition))
+            {
+                return false;
+            }
+
+            position = CellPosition(cell, referenceCoordinate, referencePosition);
+            return true;
+        }
+
+        // A tile that has never been lifted (still locked in its cell): the grid is measured from it.
+        private bool TryGetGridReference(
+            MatchState matchState,
+            out TrapFloorCoordinate referenceCoordinate,
+            out TableCoordinate referencePosition)
+        {
+            foreach (KeyValuePair<TrapFloorCoordinate, TabletopObjectId> floor in floorCardIds)
+            {
+                if (matchState.Cards.TryGetValue(floor.Value, out CardInstanceState card) && card.BaseState.IsUserLocked)
+                {
+                    referenceCoordinate = floor.Key;
+                    referencePosition = card.BaseState.Pose.Position;
+                    return true;
+                }
+            }
+
+            referenceCoordinate = default;
+            referencePosition = default;
+            return false;
+        }
+
+        private TableCoordinate CellPosition(
+            TrapFloorCoordinate cell,
+            TrapFloorCoordinate referenceCoordinate,
+            TableCoordinate referencePosition)
+        {
+            return new TableCoordinate(
+                referencePosition.X + ((cell.X - referenceCoordinate.X) * Grid.ColumnPitch),
+                referencePosition.Y + ((cell.Y - referenceCoordinate.Y) * Grid.RowPitch));
         }
 
         public bool IsFloorCard(TabletopObjectId objectId)

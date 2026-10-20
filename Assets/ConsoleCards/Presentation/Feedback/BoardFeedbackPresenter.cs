@@ -17,6 +17,7 @@ namespace ConsoleCards.Presentation.Feedback
         private const int PingPool = 6;
         private const int SelectionPool = 40;
         private const int PuffPool = 4;
+        private const int NeutralizedPool = 8;
 
         private readonly BoardFeedbackSet set;
         private readonly BoardFeedbackMarker ring;
@@ -25,6 +26,7 @@ namespace ConsoleCards.Presentation.Feedback
         private readonly BoardFeedbackMarker[] flashes;
         private readonly BoardFeedbackMarker[] bursts;
         private readonly BoardFeedbackMarker[] reach;
+        private readonly BoardFeedbackMarker[] neutralized; // traps made harmless (Disarm, Check): a calm outline
         private readonly BoardFeedbackMarker collapseTarget;
         private readonly BoardFeedbackArrow arrow;
         private readonly BoardFeedbackMarker[] pings;
@@ -49,6 +51,7 @@ namespace ConsoleCards.Presentation.Feedback
             flashes = MakePool(set.FlipFlash, parent, FlashPool);
             bursts = MakePool(set.CollapseBurst, parent, BurstPool);
             reach = MakePool(set.ReachTile, parent, ReachPool);
+            neutralized = MakePool(set.MoveTarget, parent, NeutralizedPool);
             collapseTarget = Make(set.CollapseTarget, parent);
             if (set.MoveArrow != null)
             {
@@ -179,6 +182,14 @@ namespace ConsoleCards.Presentation.Feedback
             ShowPool(warnings, positions, Vector3.up * set.TrapWarningLift, new Color(0.94f, 0.28f, 0.24f, 1f));
         }
 
+        /// <summary>
+        /// The traps made harmless (known issue fixed 2026-10-20: their tint went on a hidden plate, so nothing showed).
+        /// </summary>
+        public void ShowNeutralized(List<Vector3> positions, Color colour)
+        {
+            ShowPool(neutralized, positions, Vector3.up * set.TileMarkerLift, colour);
+        }
+
         public void ShowMoveTargets(List<Vector3> positions, Color colour, bool showArrow, Vector3 arrowFrom)
         {
             ShowPool(targets, positions, Vector3.up * set.TileMarkerLift, colour);
@@ -234,6 +245,7 @@ namespace ConsoleCards.Presentation.Feedback
             ring?.Hide();
             HideRange(warnings, 0);
             HideRange(targets, 0);
+            HideRange(neutralized, 0);
             HideRange(flashes, 0);
             HideRange(bursts, 0);
             arrow?.Hide();

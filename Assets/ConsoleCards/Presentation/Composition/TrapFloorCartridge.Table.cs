@@ -321,8 +321,23 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- floor tiles ----------
 
+        // Owner, 2026-10-21: a tile the floor dice collapsed is lifted off the board and is an ordinary card from then
+        // on (move, flip, stack); its cell stays a hole. A taken prize's tile stays in its cell as the hole marker.
         public bool IsFixedBoardPiece(TabletopObjectId objectId) =>
+            IsBoardTile(objectId) && !IsLiftedCollapsedTile(objectId);
+
+        public bool IsBoardTile(TabletopObjectId objectId) =>
             host.trapFloorTemplate != null && host.trapFloorTemplate.IsFloorCard(objectId);
+
+        internal bool IsLiftedCollapsedTile(TabletopObjectId objectId) =>
+            host.trapFloorCollapseState != null
+            && host.trapFloorCollapseState.TryGetCollapsedFloor(objectId, out TrapFloorCollapsedFloorState collapsed)
+            && !collapsed.IsTakenPrize;
+
+        internal bool IsHoleMarker(TabletopObjectId objectId) =>
+            host.trapFloorCollapseState != null
+            && host.trapFloorCollapseState.TryGetCollapsedFloor(objectId, out TrapFloorCollapsedFloorState collapsed)
+            && collapsed.IsTakenPrize;
 
         public bool TryGetBoardGrid(out GridDefinitionData grid)
         {
@@ -340,7 +355,7 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // A floor tile: a MYSTERY back with the round's board back, its content's colour and art face up, and a hole
-        // once it collapsed.
+        // once its prize was taken (a tile the dice collapsed keeps its own look: it is lifted off as a card).
         public void StyleBoardPiece(CardInstanceState card, ref CardLook look)
         {
             look.BackLabel = "MYSTERY";
@@ -350,8 +365,7 @@ namespace ConsoleCards.Presentation.Composition
                     card.BaseState.Id,
                     out TrapFloorFloorCardState floorCard))
             {
-                if (host.trapFloorCollapseState != null
-                    && host.trapFloorCollapseState.IsCollapsed(card.BaseState.Id))
+                if (IsHoleMarker(card.BaseState.Id))
                 {
                     look.FrontColor = new Color(0.025f, 0.03f, 0.04f);
                     look.BackColor = look.FrontColor;
@@ -418,8 +432,7 @@ namespace ConsoleCards.Presentation.Composition
                     targetCardId,
                     out TrapFloorFloorCardState floorCard))
             {
-                if (host.trapFloorCollapseState != null
-                    && host.trapFloorCollapseState.IsCollapsed(targetCardId))
+                if (IsHoleMarker(targetCardId))
                 {
                     Color holeColor = new Color(0.025f, 0.03f, 0.04f);
                     model = new CardInspectModel(
@@ -436,6 +449,29 @@ namespace ConsoleCards.Presentation.Composition
                             $"Floor {floorCard.Coordinate} is permanently collapsed and unusable.",
                             null,
                             holeColor,
+                            Color.white),
+                        false);
+                    return true;
+                }
+
+                if (IsLiftedCollapsedTile(targetCardId))
+                {
+                    // Owner, 2026-10-21: the lifted tile is shown as itself, with no game action; its cell is the hole.
+                    string offFloor = $"This tile collapsed and is off the floor: space {floorCard.Coordinate} is a hole.";
+                    model = new CardInspectModel(
+                        $"Collapsed tile {floorCard.Coordinate} | {targetCardId}",
+                        card.Face,
+                        new CardInspectSideModel(
+                            $"{floorCard.Content.DisplayName} — COLLAPSED",
+                            $"{offFloor}\n\nCategory: {floorCard.Content.Category}\n\n{floorCard.Content.DisplayText}",
+                            null,
+                            TrapFloorContentColor(floorCard.Content.Category),
+                            new Color(0.04f, 0.06f, 0.08f)),
+                        new CardInspectSideModel(
+                            "MYSTERY — COLLAPSED",
+                            offFloor,
+                            null,
+                            new Color(0.10f, 0.19f, 0.42f),
                             Color.white),
                         false);
                     return true;

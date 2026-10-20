@@ -194,10 +194,12 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             CurrentRound = checked(CurrentRound + 1);
-            eliminatedPlayerIds.Clear();
+            // Owner, 2026-10-21: a knocked-out player stays out for the rest of the floor; only a failed floor
+            // (everyone out) brings everyone back.
+            if (IsCurrentFloorFailed) eliminatedPlayerIds.Clear();
             IsCurrentFloorFailed = false;
             Phase = TrapFloorTurnPhase.PlayerTurn;
-            activePlayerIndex = 0;
+            activePlayerIndex = FindNextActivePlayerIndex(0, false);
             floorOperatorIndex = -1;
         }
 
@@ -471,7 +473,7 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             bool startsNextRound = state.Phase == TrapFloorTurnPhase.FloorTurn;
-            bool reactivatesPlayers = startsNextRound && state.CopyEliminatedPlayerIds().Length > 0;
+            bool reactivatesPlayers = startsNextRound && state.IsCurrentFloorFailed;
             state.Advance();
             if (startsNextRound)
             {

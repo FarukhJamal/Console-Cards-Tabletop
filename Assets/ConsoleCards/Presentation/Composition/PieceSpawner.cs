@@ -97,7 +97,7 @@ namespace ConsoleCards.Presentation.Composition
             host.ApplySelectionHighlightHide(selectionVisual);
             ConfigureCardVisuals(createdVisualReferences, card, label);
             createdView.Bind(card, host.coordinateConverter);
-            if (host.ActiveCartridge.IsFixedBoardPiece(card.BaseState.Id))
+            if (host.ActiveCartridge.IsBoardTile(card.BaseState.Id))
             {
                 // CART-1b: a game's board tile (for example a floor tile) is drawn smaller and the game may mark it.
                 clone.transform.localScale = Vector3.one * host.floorCardVisualScale;
@@ -445,7 +445,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             visualReferences.AlignFaceLabelsToSurface(host.tabletopLocalOrderHeight);
             bool isButtonCard = host.IsButtonCard(card);
-            bool isBoardPiece = host.ActiveCartridge.IsFixedBoardPiece(card.BaseState.Id);
+            bool isBoardPiece = host.ActiveCartridge.IsBoardTile(card.BaseState.Id); // also a lifted collapsed tile
             Color frontColor = isButtonCard
                 ? new Color(0.58f, 0.88f, 0.82f)
                 : new Color(0.95f, 0.88f, 0.42f);

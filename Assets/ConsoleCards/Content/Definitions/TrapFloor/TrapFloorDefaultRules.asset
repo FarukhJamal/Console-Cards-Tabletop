@@ -124,7 +124,7 @@ MonoBehaviour:
     numbered: 1
     entries:
     - stableId: tf-floor-roll
-      text: 'After every player has had a turn, one player rolls the two dice and that tile collapses. Whoever rolls changes each round.'
+      text: 'After every player has had a turn, one player rolls the two dice (first die = column, second die = row) and that tile collapses: it is a hole from then on. Any player lifts the tile off and sets it beside the board; if nobody does, End Floor Turn removes it. Whoever rolls changes each round.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -178,7 +178,7 @@ MonoBehaviour:
       hintHelper: trapfloor.traps-waiting
       modeStableIds: []
     - stableId: tf-ability-cost
-      text: 'Each card shows its cost. Pay it in full to take the card and again to play it; players never share a payment.'
+      text: 'Each card shows its cost. Pay it in full to buy or take the card; using it later is free. Players never share a payment.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -288,7 +288,7 @@ MonoBehaviour:
       displayValue: ''
       modeStableIds: []
     - stableId: tf-trap-out
-      text: 'Knocked out? You sit out the rest of the round and come back next round.'
+      text: 'Knocked out? You are out for the rest of this floor. If every player is out, the floor has failed.'
       settingKind: 0
       settingKey: 
       value: ''

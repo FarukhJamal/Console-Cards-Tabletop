@@ -314,6 +314,7 @@ namespace ConsoleCards.Presentation.Composition
                 + "Place the chosen cards in your Console, then Confirm Payment");
         }
 
+
         internal void CancelFocusedPurchaseSelection()
         {
             host.pendingPurchaseDefinitionStableId = string.Empty;
@@ -690,7 +691,8 @@ namespace ConsoleCards.Presentation.Composition
             RefreshTrapFloorStatusUi();
             host.ShowMessage(
                 $"Floorfall rolled {result.Roll.XAxisResult}/{result.Roll.YAxisResult}; "
-                + $"Floor {result.Roll.Coordinate} collapsed permanently."
+                + $"Floor {result.Roll.Coordinate} collapsed: lift the tile off and set it beside the board "
+                + "(End Floor Turn does it otherwise)."
                 + (result.BoardExhausted ? " The Board is exhausted." : string.Empty));
         }
 
@@ -1010,26 +1012,38 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            int reactions = CountUsableReactions(actor);
             string body = $"{(skipped ? "Skipping" : "Ending")} {host.PlayerLabel(actor)}'s turn applies:\n• "
                 + string.Join("\n• ", lines)
-                + "\n\nPlay a Reaction (Dodge, Shield) first if you want to stop it.";
+                + (reactions > 0
+                    ? $"\n\nYou hold {reactions} Reaction{(reactions == 1 ? string.Empty : "s")} that can stop it."
+                    : "\n\nPlay a Reaction (Dodge, Shield) first if you want to stop it.");
             Action close = () => host.runtimeUi?.CloseTabletopPopup();
+            List<PopupActionOption> options = new List<PopupActionOption>(3);
+            if (reactions > 0)
+            {
+                // Owner, 2026-10-20: the player is helped to stop the trap before it applies.
+                options.Add(new PopupActionOption("Use a Reaction…", true, () =>
+                {
+                    close();
+                    ShowReactionOffer(actor);
+                }));
+            }
+
+            options.Add(new PopupActionOption(
+                skipped ? "Apply and Skip" : "Apply and End Turn",
+                true,
+                () =>
+                {
+                    close();
+                    AdvanceTrapFloorTurn(skipped);
+                }));
+            options.Add(new PopupActionOption("Not yet", true, close));
             host.runtimeUi.ShowContextMenu(
                 new Vector2((Screen.width * 0.5f) - 200f, Screen.height * 0.66f),
                 skipped ? "SKIP TURN?" : "END TURN?",
                 body,
-                new[]
-                {
-                    new PopupActionOption(
-                        skipped ? "Apply and Skip" : "Apply and End Turn",
-                        true,
-                        () =>
-                        {
-                            close();
-                            AdvanceTrapFloorTurn(skipped);
-                        }),
-                    new PopupActionOption("Not yet", true, close),
-                },
+                options.ToArray(),
                 close,
                 _ => close());
         }
@@ -1071,7 +1085,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             switch (effect)
             {
-                case TrapFloorTrapEffectCategory.EliminateForCurrentRound: return "you are ELIMINATED this round.";
+                case TrapFloorTrapEffectCategory.EliminateForCurrentRound: return "you are OUT for the rest of this floor.";
                 case TrapFloorTrapEffectCategory.BlindNextRound: return "BLIND next round (no draw, random direction).";
                 case TrapFloorTrapEffectCategory.SlowNextRound: return "SLOW next round (less movement).";
                 case TrapFloorTrapEffectCategory.StickyNextRound: return "STUCK next round.";
@@ -1100,17 +1114,22 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
             bool wasFloorTurn = host.trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn;
-            bool reactivatesPlayers = wasFloorTurn && HasEliminatedTrapFloorPlayers();
+            bool reactivatesPlayers = wasFloorTurn && host.trapFloorTurnState.IsCurrentFloorFailed; // knocked out = out for the floor
             PlayerId actor = host.trapFloorTurnState.IsCurrentFloorFailed
                 ? host.trapFloorTurnState.PlayerOrder[0]
                 : host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
                 ? host.trapFloorTurnState.ActivePlayerId
                 : host.trapFloorTurnState.FloorOperatorPlayerId;
-            TrapFloorTurnAdvanceResult result;
+            TrapFloorTurnAdvanceResult result = default;
+            bool knockedOut = false;
             string trapSummary = string.Empty;
+            int tilesSetAside = 0;
             host.SessionService.BeginUndoBatch();
             try
             {
+                // Owner, 2026-10-21: a collapsed tile nobody lifted off is set beside the board as the floor turn ends.
+                if (wasFloorTurn) tilesSetAside = SetCollapsedTilesAside();
+
                 if (host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn)
                 {
                     RevealWaitingLandingTile(true); // a tile still waiting turns over before the turn passes
@@ -1124,16 +1143,25 @@ namespace ConsoleCards.Presentation.Composition
                     return;
                 }
 
-                result = skipped
-                    ? host.trapFloorTurnService.Skip(host.matchState, host.CreateCommandContext(actor))
-                    : host.trapFloorTurnService.Advance(host.matchState, host.CreateCommandContext(actor));
+                // A waiting Trap knocked the player out: the turn has already passed on, so it is not ended twice.
+                knockedOut = !wasFloorTurn
+                    && (host.trapFloorTurnState.IsCurrentFloorFailed
+                        || host.trapFloorTurnState.GetPlayerState(actor)
+                            == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound);
+                if (!knockedOut && !wasFloorTurn) RememberPrizeLeft(actor);
+                if (!knockedOut)
+                {
+                    result = skipped
+                        ? host.trapFloorTurnService.Skip(host.matchState, host.CreateCommandContext(actor))
+                        : host.trapFloorTurnService.Advance(host.matchState, host.CreateCommandContext(actor));
+                }
             }
             finally
             {
                 host.SessionService.EndUndoBatch();
             }
 
-            if (!result.Succeeded)
+            if (!knockedOut && !result.Succeeded)
             {
                 string action = skipped ? "Skip Turn" : "End Turn";
                 host.ShowMessage($"{trapSummary}{action} rejected: {result.Error}.");
@@ -1156,9 +1184,16 @@ namespace ConsoleCards.Presentation.Composition
             if (wasFloorTurn)
             {
                 string reactivated = reactivatesPlayers ? " All Players reactivated." : string.Empty;
+                string setAside = tilesSetAside == 0
+                    ? string.Empty
+                    : $" {(tilesSetAside == 1 ? "The collapsed tile was" : $"{tilesSetAside} collapsed tiles were")} set beside the board.";
                 host.ShowMessage(
                     $"ROUND {host.trapFloorTurnState.CurrentRound} — "
-                    + $"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} turn.{reactivated}");
+                    + $"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} turn.{reactivated}{setAside}");
+            }
+            else if (host.trapFloorTurnState.IsCurrentFloorFailed)
+            {
+                host.ShowMessage($"{skip}Everyone is out — this floor has failed. End Floor Turn to continue.");
             }
             else if (host.trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
             {
@@ -1632,7 +1667,7 @@ namespace ConsoleCards.Presentation.Composition
             switch (content.TrapEffect)
             {
                 case TrapFloorTrapEffectCategory.EliminateForCurrentRound:
-                    return "Assisted consequence: eliminate the resolving Player for the current Round.";
+                    return "Assisted consequence: the resolving Player is out for the rest of this floor.";
                 case TrapFloorTrapEffectCategory.BlindNextRound:
                     return "Assisted consequence: no Controller Card draw next Round; roll a d4 for movement direction.";
                 case TrapFloorTrapEffectCategory.SlowNextRound:
@@ -1792,6 +1827,14 @@ namespace ConsoleCards.Presentation.Composition
                 ? $"{revealedFloor.Content.DisplayText}\n\nResolve it now, or return to play a Reaction first. "
                     + "End Turn applies it if you leave it."
                 : revealedFloor.Content.DisplayText;
+            // Owner, 2026-10-20: a player holding a Reaction that can stop this trap is offered it right here.
+            int usableReactions = trapWaiting ? CountUsableReactions(host.trapFloorTurnState.ActivePlayerId) : 0;
+            if (usableReactions > 0)
+            {
+                body = $"{revealedFloor.Content.DisplayText}\n\nYou hold {usableReactions} Reaction"
+                    + $"{(usableReactions == 1 ? string.Empty : "s")} that can stop it. Use one now, or let it happen.";
+            }
+
             const string header = "YOU LANDED ON";
             string state = $"{revealedFloor.Content.Category.ToString().ToUpperInvariant()} • REVEALED";
             FocusedCardRevealModel model = trapWaiting
@@ -1804,14 +1847,16 @@ namespace ConsoleCards.Presentation.Composition
                     revealedFloor.Content.DisplayName,
                     revealedFloor.Content.DisplayText,
                     body,
-                    "Resolve Trap",
+                    usableReactions > 0 ? "Let it happen" : "Resolve Trap",
                     () =>
                     {
                         CloseFocusedSearchReveal();
                         ResolveTrapFloorTrap(revealedId);
                     },
-                    "Return to Tabletop",
-                    CloseFocusedSearchReveal)
+                    usableReactions > 0 ? "Use a Reaction…" : "Return to Tabletop",
+                    usableReactions > 0
+                        ? (Action)(() => ShowReactionOffer(host.trapFloorTurnState.ActivePlayerId))
+                        : CloseFocusedSearchReveal)
                 : new FocusedCardRevealModel(
                     revealedId,
                     backArtwork,
@@ -1971,6 +2016,7 @@ namespace ConsoleCards.Presentation.Composition
                     out TrapFloorPlayerSetupDefinition player)
                 || !TryReadPawnTile(player.PawnId, out TrapFloorCoordinate tile)
                 || !host.trapFloorTemplate.TryGetFloorCardId(tile, out TabletopObjectId floorCardId)
+                || WasPrizeLeft(host.trapFloorTurnState.ActivePlayerId, floorCardId)
                 || !host.trapFloorTemplate.TryGetFloorCardState(host.matchState, floorCardId, out TrapFloorFloorCardState floorCard)
                 || !floorCard.IsRevealed
                 || host.trapFloorCollapseState.IsCollapsed(floorCardId)
@@ -1981,6 +2027,50 @@ namespace ConsoleCards.Presentation.Composition
 
             prizeTile = floorCard;
             return true;
+        }
+
+        // Owner, 2026-10-21: a prize the player left when their turn ended is not offered to them again while they
+        // stay on it ("you are safe there and walk off next turn"); the next player to land there may take it.
+        // Presentation-only memory: one entry per player, dropped once they stand anywhere else.
+        private struct PrizeLeft
+        {
+            public TabletopObjectId FloorCardId;
+            public int Round;
+        }
+
+        private readonly Dictionary<PlayerId, PrizeLeft> prizesLeft = new Dictionary<PlayerId, PrizeLeft>(4);
+        private TrapFloorTurnState prizesLeftTurnState;
+
+        private void RememberPrizeLeft(PlayerId player)
+        {
+            if (TryGetActivePawnPrizeTile(out TrapFloorFloorCardState prize))
+            {
+                prizesLeft[player] = new PrizeLeft
+                {
+                    FloorCardId = prize.ObjectId,
+                    Round = host.trapFloorTurnState.CurrentRound,
+                };
+            }
+        }
+
+        // True while the player still stands on the prize they left in an earlier round (an Undo back into that
+        // round offers it again).
+        private bool WasPrizeLeft(PlayerId player, TabletopObjectId floorCardId)
+        {
+            if (!ReferenceEquals(prizesLeftTurnState, host.trapFloorTurnState))
+            {
+                prizesLeft.Clear();
+                prizesLeftTurnState = host.trapFloorTurnState;
+            }
+
+            if (!prizesLeft.TryGetValue(player, out PrizeLeft left)) return false;
+            if (left.FloorCardId != floorCardId)
+            {
+                prizesLeft.Remove(player); // they walked off; landing there again later is a new visit
+                return false;
+            }
+
+            return left.Round < host.trapFloorTurnState.CurrentRound;
         }
 
         internal static string TakePrizeLabel(TrapFloorFloorCardState prizeTile)
@@ -2518,15 +2608,29 @@ namespace ConsoleCards.Presentation.Composition
 
             TrapFloorAbilityEffect effect =
                 TrapFloorAbilityResolutionService.ResolveEffect(definition.EffectMetadata);
-            if (effect != TrapFloorAbilityEffect.Disarm
-                && effect != TrapFloorAbilityEffect.Shield
-                && effect != TrapFloorAbilityEffect.Dodge
-                && effect != TrapFloorAbilityEffect.Rush
-                && effect != TrapFloorAbilityEffect.Check)
+            if (!IsAssistedAbility(effect))
             {
                 return;
             }
 
+            // Owner, 2026-10-20: putting an Ability into the Console no longer uses it behind the scenes. The player
+            // is asked (what it would do now, its cost, Use / Not now); a card the player already chose to use (from a
+            // prompt, after paying) is used at once when it lands.
+            if (insertion.CardInstanceId == abilityUseOnInsertCardId)
+            {
+                abilityUseOnInsertCardId = TabletopObjectId.Empty;
+                ActivateAbility(insertion, definition, effect);
+                return;
+            }
+
+            OfferAbilityOnInsert(insertion, definition);
+        }
+
+        // Uses an Ability for real (the player chose it, and paid when it has a cost): the trap it answers is marked,
+        // Dodge and Rush light their tiles, and the result is said.
+        private void ActivateAbility(ConsoleCardInserted insertion, CardDefinition definition, TrapFloorAbilityEffect effect)
+        {
+            IConsoleCardInteraction interaction = insertion;
             TrapFloorAbilityActivationResult result = host.trapFloorAbilityResolutionService.Activate(
                 host.matchState,
                 insertion,
@@ -3458,6 +3562,15 @@ namespace ConsoleCards.Presentation.Composition
                         KeepNotAllowedMove));
                 }
 
+                // Owner, 2026-10-20: a waiting trap and a Reaction that can stop it: offered in the turn menu too.
+                if (!purchasePending && CountUsableReactions(host.trapFloorTurnState.ActivePlayerId) > 0)
+                {
+                    actions.Add(new PopupActionOption(
+                        "Use a Reaction…",
+                        true,
+                        () => ShowReactionOffer(host.trapFloorTurnState.ActivePlayerId)));
+                }
+
                 // F3: End Turn says when it will apply waiting Traps, and asks first.
                 int waiting = PendingEndTurnEffects(host.trapFloorTurnState.ActivePlayerId, null);
                 string applies = waiting > 0 ? $" (applies {waiting})" : string.Empty;
@@ -3896,7 +4009,9 @@ namespace ConsoleCards.Presentation.Composition
                 ? configuredLabel
                 : "FLOOR";
             host.Spawner.ConfigureCardVisuals(visualReferences, card, label);
-            visualReferences.SetCardContentVisible(true);
+            // Owner, 2026-10-21: a lifted collapsed tile keeps its own face and back, so its content shows as usual.
+            visualReferences.SetCardContentVisible(
+                IsHoleMarker(floorCardId) || host.ShouldShowCardContent(card));
             visualReferences.CardView.ApplyAcceptedState();
             if (host.inspectedCardId == floorCardId)
             {

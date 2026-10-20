@@ -1358,30 +1358,8 @@ namespace ConsoleCards.Games.TrapFloor
             PawnState pawn,
             out TrapFloorCoordinate coordinate)
         {
-            TableCoordinate pawnPosition = PawnPosition(pawn);
-            double halfWidth = template.Grid.CellWidth * 0.5d;
-            double halfHeight = template.Grid.CellHeight * 0.5d;
-            double nearestDistanceSquared = double.MaxValue;
-            bool found = false;
-            coordinate = default;
-            foreach (KeyValuePair<TrapFloorCoordinate, TabletopObjectId> floor in template.FloorCardIds)
-            {
-                if (!matchState.Cards.TryGetValue(floor.Value, out CardInstanceState floorCard)) continue;
-                TableCoordinate floorPosition = floorCard.BaseState.Pose.Position;
-                double deltaX = pawnPosition.X - floorPosition.X;
-                double deltaY = pawnPosition.Y - floorPosition.Y;
-                double distanceSquared = (deltaX * deltaX) + (deltaY * deltaY);
-                if (Math.Abs(deltaX) <= halfWidth
-                    && Math.Abs(deltaY) <= halfHeight
-                    && distanceSquared < nearestDistanceSquared)
-                {
-                    coordinate = floor.Key;
-                    nearestDistanceSquared = distanceSquared;
-                    found = true;
-                }
-            }
-
-            return found;
+            // The same tile lookup as everywhere else (by grid cell, so a lifted collapsed tile still counts).
+            return template.TryGetFloorCoordinateAt(matchState, PawnPosition(pawn), out coordinate);
         }
 
         private void AddDodgeTarget(int x, int y, ICollection<TabletopObjectId> targets)

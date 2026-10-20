@@ -768,7 +768,7 @@ namespace ConsoleCards.Presentation.Composition
 
         // As the board-space placement does it: a loose piece through MoveObject, a physical one through
         // CommitPhysicalObject (resting on the new table top, keeping its turn).
-        private bool MoveLoosePiece(TabletopObjectView piece, TabletopObjectState state, TabletopPose pose)
+        internal bool MoveLoosePiece(TabletopObjectView piece, TabletopObjectState state, TabletopPose pose)
         {
             bool accepted;
             if (piece.PhysicalObject == null)

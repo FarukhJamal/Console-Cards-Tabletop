@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.28 · 2026-10-20 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.31 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -196,10 +196,17 @@ Change: …
 
   Costs (any one of the inputs after "/"): Check `Up + A/B/X/Y`, Dodge `Down + A/B/X/Y`, Shield `A + B + X + Y`,
   Rush `Left/Right + A/B/X/Y`, Disarm and Push not set.
+  - **Using one is the player's choice (ABIL-1, owner 2026-10-21):** putting an Ability card into your Console asks
+    first (what it would do now, or why not and when; its cost; Use / Not now) and the card stays in the slot either
+    way. When a trap you revealed is waiting and you hold a Reaction that can stop it (hand, beside the Console or in
+    a slot), the game offers it on the reveal, in the turn menu (Use a Reaction…) and before End Turn applies the
+    trap; you can always let it happen. Using an Ability you own is free (buying it was the payment). Push is
+    still done by hand.
 - **Settings:** `card.cost.<card ID>`
 - **Source:** doc 18 §15.3, §15.9, §15.10
 - **Open:** costs of Disarm and Push (and confirming Check and Rush); exact text of Dodge, Shield and Disarm.
-- **Changes:** 2026-10-09 Check replaces Jump, Rush replaces Run; Safe Search removed.
+- **Changes:** 2026-10-09 Check replaces Jump, Rush replaces Run; Safe Search removed; 2026-10-21 used only by
+  choice, offered when it can help, free to use once owned (ABIL-1).
 
 ### TF-PAYMENT · Controller hand and paying costs
 - **Status:** Built, in playtest
@@ -215,13 +222,15 @@ Change: …
 ### TF-PRIZES · Taking prizes from the floor
 - **Status:** Built, in playtest
 - **Rule now:** on a face-up Ability or Friend under your pawn, the turn menu offers **Take …**. An Ability is
-  paid by its cost (TF-PAYMENT) and played later by paying the same cost again; a Friend, or an Ability with no
-  cost yet, is free. You may decline, and the next player who lands there may take it. The card goes to your hand
+  paid by its cost (TF-PAYMENT) and used later for free (ABIL-1, owner 2026-10-21); a Friend, or an Ability with no
+  cost yet, is free. You may decline: a prize left when your turn ends is not offered to you again while you stay
+  on it (FLOW-1), and the next player who lands there may take it. The card goes to your hand
   (or beside your Console when the hand is full), and the tile becomes a hole. A prize never eliminates.
 - **Settings:** `card.cost.<card ID>`
 - **Source:** doc 18 §15.4 (G2a)
 - **Open:** —
-- **Changes:** 2026-10-12 implemented (G2a).
+- **Changes:** 2026-10-12 implemented (G2a); 2026-10-21 using is free; a prize left is not offered again to the
+  same player while they stay on it.
 
 ### TF-SHOP · The Shop
 - **Status:** Built, approved
@@ -256,23 +265,30 @@ Change: …
 
 ### TF-COLLAPSE · Floor collapse
 - **Status:** Built, in playtest
-- **Rule now:** at intervals, 2d6 pick a tile (column, row) that becomes a permanent hole. Easy and Hard collapse
-  each round (the floor turn). On Impossible there is no collapse until the first player exits; then the floor
+- **Rule now:** at intervals, 2d6 pick a tile (first die = column, second = row) that becomes a permanent hole. Any
+  player lifts the tile off and sets it beside the board; if nobody does, End Floor Turn sets it there (COLLAPSE-2,
+  owner 2026-10-21). The lifted tile keeps its own look and is an ordinary card (move, flip, stack); only its
+  space is the hole (FLOW-1). Easy and Hard collapse each round (the floor turn). On Impossible there is no collapse until the first player exits; then the floor
   collapses at each player's turn. The hint shows the tile the dice point at.
 - **Settings:** —
 - **Source:** doc 18 §7, §15.8, §15.9; doc 23 §10
 - **Open:** exact interval, rerolls and protection; what happens to a player standing on a collapsing tile.
-- **Changes:** 2026-10-09 Impossible collapses only after the first exit.
+- **Changes:** 2026-10-09 Impossible collapses only after the first exit; 2026-10-21 the tile is lifted off by a
+  player (or by End Floor Turn).
+- **Planned (FLOORS-1, owner 2026-10-21):** win or lose ends the floor; the next floor is dealt fresh one row and
+  one column smaller (6×6 down to 3×3, the last floor); a die beyond the grid is rolled again.
 
 ### TF-ELIMINATION · Elimination
 - **Status:** Built, in playtest
 - **Rule now:** a player is eliminated by a Fall, or by a Spring or Crane sending them off the grid or onto a hole.
-  Elimination lasts for the current Floor only: the player sits out the rest of that round and returns next round
-  (in Survival too). Players lose together by running out of usable floor.
+  A knocked-out player is out for the rest of the floor and gets no more turns (owner 2026-10-21, FLOW-1). If every
+  player is out, the floor has failed (today the next round starts with everyone back; FLOORS-1 will deal the next
+  floor instead).
 - **Settings:** —
 - **Source:** doc 18 §6, §15.5, §15.9
 - **Open:** the exact rule for "running out of usable floor".
-- **Changes:** 2026-10-09 elimination lasts one Floor.
+- **Changes:** 2026-10-09 elimination lasts one Floor; 2026-10-21 the code matched it (players no longer came back
+  each round).
 
 ### TF-DIFFICULTY · Difficulty
 - **Status:** Built, in playtest
