@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.32 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.33 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -279,6 +279,18 @@ Change: …
   player (or by End Floor Turn).
 - **Planned (FLOORS-1, owner 2026-10-21):** win or lose ends the floor; the next floor is dealt fresh one row and
   one column smaller (6×6 down to 3×3, the last floor); a die beyond the grid is rolled again.
+
+### TF-FLOORS · Floors that shrink
+- **Status:** Built, to be checked (FLOORS-1)
+- **Rule now:** a floor ends when it is won (an exit) or lost (everyone out). The next floor is dealt fresh, one
+  row and one column smaller (6×6, 5×5, 4×4, 3×3), with the same tile mix scaled down (both Exits stay; Keys never
+  below the mode's count). Winning the 3×3 wins the game; losing it loses the game. Each floor is a new deal:
+  everyone is back in, Hands, Consoles and Abilities are dealt again, Avatars stay, Controller decks are shuffled,
+  pawns start in the new corners. A floor or Crane die beyond a smaller grid is rolled again.
+- **Settings:** the floor.count rules set the first floor; later floors scale from them
+- **Source:** owner, 2026-10-21 (playtest flow)
+- **Open:** the Ability deck for buying (ABIL-DECK, next).
+- **Changes:** 2026-10-21 built.
 
 ### TF-ELIMINATION · Elimination
 - **Status:** Built, in playtest

@@ -38,8 +38,14 @@ namespace ConsoleCards.Games.TrapFloor
             IDictionary<TabletopObjectId, string> cardLabels,
             IEnumerable<TrapFloorPlayerSetupDefinition> players,
             TabletopObjectId floorfallXAxisDieId,
-            TabletopObjectId floorfallYAxisDieId)
+            TabletopObjectId floorfallYAxisDieId,
+            int floorIndex = 0,
+            int floorCount = 1)
         {
+            if (floorCount < 1) throw new ArgumentOutOfRangeException(nameof(floorCount));
+            if (floorIndex < 0 || floorIndex >= floorCount) throw new ArgumentOutOfRangeException(nameof(floorIndex));
+            FloorIndex = floorIndex;
+            FloorCount = floorCount;
             GameDefinition = gameDefinition ?? throw new ArgumentNullException(nameof(gameDefinition));
             ActiveMode = activeMode ?? throw new ArgumentNullException(nameof(activeMode));
             Template = template ?? throw new ArgumentNullException(nameof(template));
@@ -81,6 +87,16 @@ namespace ConsoleCards.Games.TrapFloor
         public ModeDefinitionData ActiveMode { get; }
 
         public GridDefinitionData Grid => GameDefinition.Grid;
+
+        /// <summary>FLOORS-1 (owner, 2026-10-21): which floor this is, from 0; each floor is one row and one column
+        /// smaller than the one before.</summary>
+        public int FloorIndex { get; }
+
+        /// <summary>How many floors the game has (6×6 down to 3×3 gives 4).</summary>
+        public int FloorCount { get; }
+
+        /// <summary>The last floor: winning it wins the game, losing it loses the game.</summary>
+        public bool IsLastFloor => FloorIndex >= FloorCount - 1;
 
         public int GridRows => Grid.Rows;
 

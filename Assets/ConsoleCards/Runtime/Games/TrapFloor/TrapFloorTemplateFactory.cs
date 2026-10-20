@@ -27,6 +27,9 @@ namespace ConsoleCards.Games.TrapFloor
         public const string FloorContentRole = "floor";
         public const string ControllerInputContentSetId = "trap-floor-controller-inputs";
 
+        /// <summary>FLOORS-1 (owner, 2026-10-21): the smallest floor; each floor is one row and one column smaller.</summary>
+        public const int MinimumFloorSize = 3;
+
         private const double PlayerConsoleRadius = 6.1d;
         // Trap Floor's placement choices beside each Console (console-local along-z). Positions come from
         // ConsoleAdjacentPlacement with its Standard settings (gap, pile size, clearance and margin rules).
@@ -86,14 +89,39 @@ namespace ConsoleCards.Games.TrapFloor
             string selectedModeStableId,
             ConsoleLayoutData consoleLayout)
         {
+            return CreateStandardFourPlayer(randomValueSource, gameDefinition, selectedModeStableId, consoleLayout, 0);
+        }
+
+        /// <summary>How many floors a game has: its authored grid down to <see cref="MinimumFloorSize"/>.</summary>
+        public static int FloorCountFor(GridDefinitionData grid)
+        {
+            if (grid == null) throw new ArgumentNullException(nameof(grid));
+            return Math.Max(1, Math.Min(grid.Rows, grid.Columns) - MinimumFloorSize + 1);
+        }
+
+        /// <summary>
+        /// FLOORS-1 (owner, 2026-10-21): one floor of the game. Floor 0 is the authored grid; each later floor is
+        /// one row and one column smaller and is dealt fresh, with the same tile mix scaled down (both Exits and
+        /// at least the mode's Key count always stay).
+        /// </summary>
+        public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
+            IRandomValueSource randomValueSource,
+            GameDefinitionData gameDefinition,
+            string selectedModeStableId,
+            ConsoleLayoutData consoleLayout,
+            int floorIndex)
+        {
             if (randomValueSource == null) throw new ArgumentNullException(nameof(randomValueSource));
             if (gameDefinition == null) throw new ArgumentNullException(nameof(gameDefinition));
+            int floorCount = FloorCountFor(gameDefinition.Grid);
+            if (floorIndex < 0 || floorIndex >= floorCount) throw new ArgumentOutOfRangeException(nameof(floorIndex));
+            if (floorIndex > 0) gameDefinition = WithFloorGrid(gameDefinition, floorIndex);
 
             ModeDefinitionData activeMode = ValidateAndResolveMode(gameDefinition, selectedModeStableId);
             Guid gameDefinitionId = ParseStableGuid(gameDefinition.StableId, "Game");
             GridDefinitionData grid = gameDefinition.Grid;
             IReadOnlyList<TrapFloorFloorContentDefinition> floorContent =
-                ResolveFloorContent(gameDefinition, activeMode, grid, randomValueSource);
+                ResolveFloorContent(gameDefinition, activeMode, grid, randomValueSource, floorIndex > 0);
             IReadOnlyList<TrapFloorAvatarSetup> avatars = ResolveAvatars(gameDefinition);
             IReadOnlyList<CardDefinitionData> controllerInputCards = ResolveControllerInputCards(gameDefinition);
             ConsoleSlotDefinitionData mainSlot = ResolveConsoleSlot(gameDefinition.Console, "Main", 1);
@@ -146,7 +174,7 @@ namespace ConsoleCards.Games.TrapFloor
                     grid,
                     mainSlot,
                     sideSlots,
-                    controllerInputCards,
+                    Shuffled(controllerInputCards, randomValueSource), // owner, 2026-10-21: every deal shuffles the deck
                     seats,
                     containers,
                     memberships,
@@ -179,7 +207,9 @@ namespace ConsoleCards.Games.TrapFloor
             GameTemplate template = new GameTemplate(
                 templateId,
                 GameTemplate.CurrentSchemaVersion,
-                $"{gameDefinition.DisplayName} — {activeMode.DisplayName}",
+                floorIndex == 0
+                    ? $"{gameDefinition.DisplayName} — {activeMode.DisplayName}"
+                    : $"{gameDefinition.DisplayName} — {activeMode.DisplayName} — Floor {floorIndex + 1}",
                 gameDefinition.ManualRules,
                 playerLayout.Id,
                 StandardPlayerCount,
@@ -216,7 +246,61 @@ namespace ConsoleCards.Games.TrapFloor
                 labels,
                 players,
                 floorfallXAxisDieId,
-                floorfallYAxisDieId);
+                floorfallYAxisDieId,
+                floorIndex,
+                floorCount);
+        }
+
+        // The game data with the floor's smaller grid (same cell size and centre); everything else is unchanged.
+        private static GameDefinitionData WithFloorGrid(GameDefinitionData data, int floorIndex)
+        {
+            GridDefinitionData grid = data.Grid;
+            GridDefinitionData floorGrid = new GridDefinitionData(
+                grid.StableId,
+                grid.Rows - floorIndex,
+                grid.Columns - floorIndex,
+                grid.CellWidth,
+                grid.CellHeight,
+                grid.HorizontalSpacing,
+                grid.VerticalSpacing,
+                grid.OriginX,
+                grid.OriginY,
+                grid.LayoutMetadata);
+            return new GameDefinitionData(
+                data.StableId,
+                data.DisplayName,
+                data.ManualRules,
+                data.MinimumPlayers,
+                data.MaximumPlayers,
+                floorGrid,
+                data.Cards,
+                data.ContentSets,
+                data.Avatars,
+                data.Modes,
+                data.DefaultModeStableId,
+                data.Console,
+                data.InputVocabulary,
+                data.ControllerConfiguration,
+                data.ControllerMappingKind,
+                data.PresentationReference,
+                data.AssistanceConfiguration,
+                data.RuleSettings);
+        }
+
+        private static IReadOnlyList<CardDefinitionData> Shuffled(
+            IReadOnlyList<CardDefinitionData> cards,
+            IRandomValueSource randomValueSource)
+        {
+            List<CardDefinitionData> shuffled = new List<CardDefinitionData>(cards);
+            for (int i = shuffled.Count - 1; i > 0; i--)
+            {
+                int pick = randomValueSource.NextInt(0, i + 1);
+                CardDefinitionData swap = shuffled[i];
+                shuffled[i] = shuffled[pick];
+                shuffled[pick] = swap;
+            }
+
+            return shuffled;
         }
 
         public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
@@ -277,20 +361,29 @@ namespace ConsoleCards.Games.TrapFloor
             GameDefinitionData gameDefinition,
             ModeDefinitionData activeMode,
             GridDefinitionData grid,
-            IRandomValueSource randomValueSource)
+            IRandomValueSource randomValueSource,
+            bool scaleToGrid)
         {
             List<TrapFloorFloorContentDefinition> drawn = new List<TrapFloorFloorContentDefinition>(grid.CellCount);
-            int groupCount = 0;
+            List<FloorGroupDraw> groups = new List<FloorGroupDraw>();
             for (int setIndex = 0; setIndex < gameDefinition.ContentSets.Count; setIndex++)
             {
                 GameContentSetData contentSet = gameDefinition.ContentSets[setIndex];
                 if (!string.Equals(contentSet.Role, FloorContentRole, StringComparison.OrdinalIgnoreCase)) continue;
-                groupCount++;
                 List<TrapFloorFloorContentDefinition> pool = ExpandFloorGroup(gameDefinition, contentSet);
-                int drawCount = ResolveFloorDrawCount(gameDefinition, activeMode, contentSet, pool.Count);
-                DrawFloorGroup(contentSet, pool, drawCount, randomValueSource, drawn);
+                groups.Add(new FloorGroupDraw(
+                    contentSet,
+                    pool,
+                    ResolveFloorDrawCount(gameDefinition, activeMode, contentSet, pool.Count)));
             }
 
+            if (scaleToGrid) ScaleFloorDrawCounts(groups, grid.CellCount, activeMode.RequiredKeyCount);
+            for (int i = 0; i < groups.Count; i++)
+            {
+                DrawFloorGroup(groups[i].ContentSet, groups[i].Pool, groups[i].Count, randomValueSource, drawn);
+            }
+
+            int groupCount = groups.Count;
             if (groupCount == 0)
             {
                 throw new ArgumentException(
@@ -330,6 +423,137 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             return drawn;
+        }
+
+        private enum FloorGroupKind
+        {
+            Other = 0,
+            Keys = 1,
+            Exits = 2,
+        }
+
+        private sealed class FloorGroupDraw
+        {
+            public FloorGroupDraw(GameContentSetData contentSet, List<TrapFloorFloorContentDefinition> pool, int count)
+            {
+                ContentSet = contentSet;
+                Pool = pool;
+                Count = count;
+                BaseCount = count;
+                Kind = KindOf(pool);
+            }
+
+            public GameContentSetData ContentSet { get; }
+            public List<TrapFloorFloorContentDefinition> Pool { get; }
+            public int Count { get; set; }
+            public int BaseCount { get; }
+            public FloorGroupKind Kind { get; }
+            public int MaximumCount => ContentSet.AllowRepeats ? int.MaxValue : Pool.Count;
+
+            private static FloorGroupKind KindOf(List<TrapFloorFloorContentDefinition> pool)
+            {
+                if (pool.Count == 0) return FloorGroupKind.Other;
+                TrapFloorFloorContentCategory first = pool[0].Category;
+                for (int i = 1; i < pool.Count; i++)
+                {
+                    if (pool[i].Category != first) return FloorGroupKind.Other;
+                }
+
+                return first == TrapFloorFloorContentCategory.Key
+                    ? FloorGroupKind.Keys
+                    : first == TrapFloorFloorContentCategory.SecretExit
+                        ? FloorGroupKind.Exits
+                        : FloorGroupKind.Other;
+            }
+        }
+
+        // FLOORS-1 (owner, 2026-10-21: "same mix, scaled"): a smaller floor keeps every Exit, scales the Keys but
+        // never below the mode's Key count, and shares the remaining cells among the other groups in proportion
+        // (largest remainder), so the counts add up to the floor's cells.
+        private static void ScaleFloorDrawCounts(List<FloorGroupDraw> groups, int cellCount, int requiredKeys)
+        {
+            int baseTotal = 0;
+            for (int i = 0; i < groups.Count; i++) baseTotal += groups[i].BaseCount;
+            if (baseTotal == 0 || baseTotal == cellCount) return;
+            double ratio = cellCount / (double)baseTotal;
+
+            int fixedTotal = 0;
+            int keys = 0;
+            for (int i = 0; i < groups.Count; i++)
+            {
+                FloorGroupDraw group = groups[i];
+                if (group.Kind == FloorGroupKind.Exits)
+                {
+                    fixedTotal += group.Count;
+                }
+                else if (group.Kind == FloorGroupKind.Keys)
+                {
+                    group.Count = Math.Min(group.BaseCount, (int)Math.Round(group.BaseCount * ratio, MidpointRounding.AwayFromZero));
+                    keys += group.Count;
+                }
+            }
+
+            for (int i = 0; i < groups.Count && keys < requiredKeys; i++)
+            {
+                FloorGroupDraw group = groups[i];
+                while (group.Kind == FloorGroupKind.Keys && keys < requiredKeys && group.Count < group.MaximumCount)
+                {
+                    group.Count++;
+                    keys++;
+                }
+            }
+
+            fixedTotal += keys;
+            int remaining = cellCount - fixedTotal;
+            int otherBase = 0;
+            for (int i = 0; i < groups.Count; i++)
+            {
+                if (groups[i].Kind == FloorGroupKind.Other) otherBase += groups[i].BaseCount;
+            }
+
+            if (remaining < 0 || (remaining > 0 && otherBase == 0))
+            {
+                throw new ArgumentException(
+                    $"A floor of {cellCount} tiles cannot hold the Exits and Keys ({fixedTotal}) with the other tiles in proportion.");
+            }
+
+            double[] leftOver = new double[groups.Count];
+            int assigned = 0;
+            for (int i = 0; i < groups.Count; i++)
+            {
+                FloorGroupDraw group = groups[i];
+                leftOver[i] = -1d;
+                if (group.Kind != FloorGroupKind.Other) continue;
+                double exact = otherBase == 0 ? 0d : remaining * (group.BaseCount / (double)otherBase);
+                group.Count = Math.Min(group.MaximumCount, (int)Math.Floor(exact));
+                leftOver[i] = exact - group.Count;
+                assigned += group.Count;
+            }
+
+            while (assigned < remaining)
+            {
+                int best = -1;
+                for (int i = 0; i < groups.Count; i++)
+                {
+                    FloorGroupDraw group = groups[i];
+                    if (group.Kind != FloorGroupKind.Other || group.Count >= group.MaximumCount) continue;
+                    if (best < 0
+                        || leftOver[i] > leftOver[best]
+                        || (leftOver[i] == leftOver[best] && group.BaseCount > groups[best].BaseCount))
+                    {
+                        best = i;
+                    }
+                }
+
+                if (best < 0)
+                {
+                    throw new ArgumentException($"The floor groups cannot fill a floor of {cellCount} tiles.");
+                }
+
+                groups[best].Count++;
+                leftOver[best] = -1d;
+                assigned++;
+            }
         }
 
         // The group's pool: every card once per copy (its quantity).

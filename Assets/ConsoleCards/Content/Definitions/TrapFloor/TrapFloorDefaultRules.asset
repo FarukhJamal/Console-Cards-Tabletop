@@ -42,7 +42,7 @@ MonoBehaviour:
       displayValue: ''
       modeStableIds: []
     - stableId: tf-setup-fixed
-      text: 'Also 6 Keys, the Grand Exit and the Secret Exit. All the counts must add up to the 36 tiles.'
+      text: 'Also 6 Keys, the Grand Exit and the Secret Exit. All the counts must add up to the 36 tiles. Each later floor is one row and one column smaller, down to 3×3, with the same mix scaled down (both Exits and enough Keys always stay).'
       settingKind: 0
       settingKey: 
       value: ''
@@ -346,7 +346,7 @@ MonoBehaviour:
       hintHelper: 
       modeStableIds: []
     - stableId: tf-goal-secret-exit
-      text: 'Exits are taken by landing on them. Grand Exit: once the team has the Keys, the floor is won when every player still in stands on it. Secret Exit: a player who claimed a Key and lands on it wins the floor at once. Knocked-out players come back when the floor ends.'
+      text: 'Exits are taken by landing on them. Grand Exit: once the team has the Keys, the floor is won when every player still in stands on it. Secret Exit: a player who claimed a Key and lands on it wins the floor at once. A won or lost floor ends: everyone comes back and the next, smaller floor is dealt fresh (Avatars stay; Hands, Consoles and Abilities are dealt again). Win the last floor (3×3) to win the game.'
       settingKind: 0
       settingKey: 
       value: ''

@@ -88,6 +88,9 @@ namespace ConsoleCards.Presentation.Composition
         // "shop.enabled" is on. The source says whether the Hand picker pays for a Shop card or a floor prize.
         internal TrapFloorBuyFromShopUseCase trapFloorShopUseCase;
         internal bool landingCheckPending;
+        // FLOORS-1: the floor the next table replacement deals (0 = the first, full-size floor). Set only while
+        // the next floor is being dealt, so New table and Restart always start at the first floor.
+        internal int trapFloorNextFloorIndex;
         // Owner, 2026-10-15: a tile the active pawn lands on turns over only once no pawn stands on it (the pawn
         // moves aside or ahead), or when the turn ends. Its card still counts for the player who landed.
         internal readonly HashSet<TabletopObjectId> landedFloorCards = new HashSet<TabletopObjectId>();
@@ -409,7 +412,8 @@ namespace ConsoleCards.Presentation.Composition
                     Banner(FeedbackEventKind.Reward, $"{who.ToUpperInvariant()} ESCAPED", string.Empty, colour);
                     break;
                 case TrapFloorActivityKind.WonGame:
-                    Banner(FeedbackEventKind.Reward, "YOU WIN!", who, colour);
+                    Banner(FeedbackEventKind.Reward,
+                        trapFloorTemplate == null || trapFloorTemplate.IsLastFloor ? "YOU WIN!" : "FLOOR WON", who, colour);
                     break;
                 case TrapFloorActivityKind.UsedShield:
                     FeedbackLine($"{who} used Shield.", FeedbackSeverity.Gain);

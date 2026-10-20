@@ -667,12 +667,17 @@ namespace ConsoleCards.Presentation.Composition
 
             if (result.RerollRequired)
             {
-                host.ShowMessage(
-                    $"Floor {result.Roll.Coordinate} is already collapsed; rerolling both official d6.");
-                if (!LaunchPhysicalFloorCollapseDice(
-                        xAxisDieView,
-                        yAxisDieView,
-                        host.physicalFloorCollapseActor))
+                // FLOORS-1: a die beyond a smaller floor is rolled again on its own.
+                bool beyond = result.Roll.FloorCardId.IsEmpty;
+                bool rerollX = !beyond || result.Roll.XAxisResult > host.trapFloorTemplate.GridColumns;
+                bool rerollY = !beyond || result.Roll.YAxisResult > host.trapFloorTemplate.GridRows;
+                host.ShowMessage(beyond
+                    ? $"Floorfall rolled {result.Roll.XAxisResult}/{result.Roll.YAxisResult}: beyond the "
+                        + $"{host.trapFloorTemplate.GridColumns}×{host.trapFloorTemplate.GridRows} floor; rolling "
+                        + (rerollX && rerollY ? "both dice" : rerollX ? "the column die" : "the row die") + " again."
+                    : $"Floor {result.Roll.Coordinate} is already collapsed; rerolling both official d6.");
+                if ((rerollX && !xAxisDieView.PhysicalObject.Roll(host.physicalFloorCollapseActor, true))
+                    | (rerollY && !yAxisDieView.PhysicalObject.Roll(host.physicalFloorCollapseActor, true)))
                 {
                     host.physicalFloorCollapsePending = false;
                     host.physicalFloorCollapseActor = PlayerId.Empty;
@@ -1113,6 +1118,12 @@ namespace ConsoleCards.Presentation.Composition
                 host.ShowMessage("Turn tracking is unavailable outside Trap Floor.");
                 return;
             }
+            if (host.trapFloorTurnState.IsCurrentFloorFailed)
+            {
+                ShowFloorEnded(false); // FLOORS-1: everyone out loses the floor; the next one is dealt smaller
+                return;
+            }
+
             bool wasFloorTurn = host.trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn;
             bool reactivatesPlayers = wasFloorTurn && host.trapFloorTurnState.IsCurrentFloorFailed; // knocked out = out for the floor
             PlayerId actor = host.trapFloorTurnState.IsCurrentFloorFailed
@@ -1193,7 +1204,7 @@ namespace ConsoleCards.Presentation.Composition
             }
             else if (host.trapFloorTurnState.IsCurrentFloorFailed)
             {
-                host.ShowMessage($"{skip}Everyone is out — this floor has failed. End Floor Turn to continue.");
+                host.ShowMessage($"{skip}Everyone is out: the floor is lost. {FloorEndedChoiceText()}");
             }
             else if (host.trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
             {
@@ -1262,7 +1273,9 @@ namespace ConsoleCards.Presentation.Composition
                         host.trapFloorTurnService);
                     if (!launch.Succeeded)
                     {
-                        host.ShowMessage(launch.Error == TrapFloorLaunchError.DiceNotSettled
+                        host.ShowMessage(launch.Error == TrapFloorLaunchError.DieBeyondGrid
+                            ? "CRANE — a die shows more than this floor has: roll that die again, then End Turn again."
+                            : launch.Error == TrapFloorLaunchError.DiceNotSettled
                             ? "CRANE — roll both dice and let them settle, then End Turn again."
                             : $"End Turn: {trap.Content.DisplayName} could not be applied ({launch.Error}).");
                         return false;
@@ -1753,7 +1766,9 @@ namespace ConsoleCards.Presentation.Composition
                 host.trapFloorTurnService);
             if (!result.Succeeded)
             {
-                host.ShowMessage(result.Error == TrapFloorLaunchError.DiceNotSettled
+                host.ShowMessage(result.Error == TrapFloorLaunchError.DieBeyondGrid
+                    ? "CRANE — a die shows more than this floor has: roll that die again, then choose Resolve Trap again."
+                    : result.Error == TrapFloorLaunchError.DiceNotSettled
                     ? "CRANE — roll both dice and let them settle, then choose Resolve Trap again."
                     : $"Resolve Trap rejected: {result.Error}.");
                 return;
@@ -1970,23 +1985,13 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void ShowTrapFloorVictory(TrapFloorObjectiveResult result)
         {
-            Vector2 popupPosition = host.contextMenuAnchorScreenPosition;
             host.ContextMenus.CloseContextMenu();
-            Action closeVictory = () => host.runtimeUi?.CloseTabletopPopup();
-            host.runtimeUi.ShowContextMenu(
-                popupPosition,
-                "TRAP FLOOR VICTORY",
+            ShowFloorEnded(
+                true,
                 (TrapFloorObjectiveUseCase.IsGrandExit(result.FloorCard.Content)
                     ? "Every player still in escaped through the Grand Exit"
                     : $"{FormatPlayerName(result.EscapedActivity.ActorPlayerId)} escaped through the Secret Exit")
-                    + $" at {result.FloorCard.Coordinate}.\n"
-                    + $"{CurrentTrapFloorObjectiveProgressText()}",
-                new[]
-                {
-                    new PopupActionOption("Close", true, closeVictory),
-                },
-                closeVictory,
-                _ => closeVictory());
+                    + $" at {result.FloorCard.Coordinate}.");
         }
 
         internal void ShowTrapFloorReveal(TrapFloorRevealFloorResult result)
@@ -3492,7 +3497,9 @@ namespace ConsoleCards.Presentation.Composition
                 // The player list lives on the status card; the one-line turn strip keeps only the Keys.
                 turnDetail += $"\n{CurrentTrapFloorPlayerStatesText()}";
                 TrapFloorStatusModel turnStatus = new TrapFloorStatusModel(
-                    $"ROUND {host.trapFloorTurnState.CurrentRound}",
+                    host.trapFloorTemplate != null && host.trapFloorTemplate.FloorCount > 1
+                        ? $"FLOOR {host.trapFloorTemplate.FloorIndex + 1}/{host.trapFloorTemplate.FloorCount} · ROUND {host.trapFloorTurnState.CurrentRound}"
+                        : $"ROUND {host.trapFloorTurnState.CurrentRound}",
                     phase,
                     CurrentTrapFloorObjectiveProgressText(),
                     turnDetail,
@@ -3626,12 +3633,15 @@ namespace ConsoleCards.Presentation.Composition
                 return actions;
             }
 
-            if (host.trapFloorTurnState.IsCurrentFloorFailed)
+            if (host.trapFloorTurnState.IsCurrentFloorFailed
+                || (host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsWon))
             {
+                // FLOORS-1: a won or lost floor goes on to the next, smaller floor (or ends the game on the last).
+                bool won = !host.trapFloorTurnState.IsCurrentFloorFailed;
                 actions.Add(new PopupActionOption(
-                    "End Floor Turn",
+                    FloorEndedActionLabel(),
                     true,
-                    AdvanceTrapFloorTurn));
+                    () => ShowFloorEnded(won)));
                 return actions;
             }
 
@@ -3721,7 +3731,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (host.trapFloorTurnState.IsCurrentFloorFailed)
             {
-                return "This round failed. You can still move pieces by hand; end the Floor Turn to continue.";
+                return $"Everyone is out: the floor is lost. {FloorEndedChoiceText()}";
             }
 
             if (host.trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
@@ -4086,7 +4096,9 @@ namespace ConsoleCards.Presentation.Composition
             if (host.trapFloorCollapseState.IsCollapsePending)
             {
                 return roll != null && roll.RequiredReroll
-                    ? $"FLOORFALL {roll.XAxisResult}/{roll.YAxisResult}: ALREADY A HOLE — REROLLING"
+                    ? roll.FloorCardId.IsEmpty
+                        ? $"FLOORFALL {roll.XAxisResult}/{roll.YAxisResult}: BEYOND THE FLOOR — REROLLING"
+                        : $"FLOORFALL {roll.XAxisResult}/{roll.YAxisResult}: ALREADY A HOLE — REROLLING"
                     : "FLOORFALL: ROLLING 2d6";
             }
 
@@ -4330,13 +4342,18 @@ namespace ConsoleCards.Presentation.Composition
 
             host.availableTrapFloorTemplates.Clear();
             List<GameTemplateRegistration> registrations = new List<GameTemplateRegistration>(gameDefinition.Modes.Count);
+            // FLOORS-1: while the next floor is being dealt, every mode's setup is that smaller floor.
+            int floorIndex = Math.Min(
+                Math.Max(0, host.trapFloorNextFloorIndex),
+                TrapFloorTemplateFactory.FloorCountFor(gameDefinition.Grid) - 1);
             for (int i = 0; i < gameDefinition.Modes.Count; i++)
             {
                 TrapFloorTemplateDefinition template = TrapFloorTemplateFactory.CreateStandardFourPlayer(
                     host.authoritativeRandomValueSource,
                     gameDefinition,
                     gameDefinition.Modes[i].StableId,
-                    host.GetConsoleLayout());
+                    host.GetConsoleLayout(),
+                    floorIndex);
                 host.availableTrapFloorTemplates.Add(template.Template.Id, template);
                 registrations.Add(new GameTemplateRegistration(template.Template, template.ContentCatalog));
             }

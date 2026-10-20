@@ -398,6 +398,21 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorCoordinate coordinate = new TrapFloorCoordinate(
                 xAxisDie.CurrentValue,
                 yAxisDie.CurrentValue);
+            // FLOORS-1 (owner, 2026-10-21): on a smaller floor a die beyond the grid is rolled again.
+            if (xAxisDie.CurrentValue > template.GridColumns || yAxisDie.CurrentValue > template.GridRows)
+            {
+                if (matchState.Revision == long.MaxValue) return Failure(TrapFloorCollapseError.RevisionOverflow);
+                long rerollRevision = checked(matchState.Revision + 1L);
+                TrapFloorCollapseRollState beyond = state.RecordRoll(
+                    xAxisDie, yAxisDie, coordinate, TabletopObjectId.Empty, true);
+                matchState.AdvanceRevision(
+                    command.Context.Id,
+                    command.Context.RequestedByPlayerId,
+                    AuthoritativeActionKind.TrapFloorCollapse,
+                    AuthoritativeActionRecordMode.Intermediate);
+                return TrapFloorCollapseResult.Accepted(rerollRevision, beyond, rerollRequired: true);
+            }
+
             if (!template.TryGetFloorCardId(coordinate, out TabletopObjectId floorCardId)
                 || !template.TryGetFloorCardState(matchState, floorCardId, out TrapFloorFloorCardState floorCard))
                 return Failure(TrapFloorCollapseError.FloorMappingMissing);

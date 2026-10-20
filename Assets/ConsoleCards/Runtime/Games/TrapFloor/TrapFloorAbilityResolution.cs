@@ -874,6 +874,7 @@ namespace ConsoleCards.Games.TrapFloor
         ActorIsNotActivePlayer = 4,
         DiceNotSettled = 5,
         EliminationRejected = 6,
+        DieBeyondGrid = 7,
     }
 
     /// <summary>Outcome of a Spring or Crane Trap: the player is eliminated, or must move to the target tile.</summary>
@@ -1562,6 +1563,9 @@ namespace ConsoleCards.Games.TrapFloor
                     return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.DiceNotSettled);
                 x = columnDie.CurrentValue;
                 y = rowDie.CurrentValue;
+                // FLOORS-1 (owner, 2026-10-21): on a smaller floor a die beyond the grid is rolled again.
+                if (x > template.GridColumns || y > template.GridRows)
+                    return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.DieBeyondGrid);
             }
 
             bool onGrid = x >= TrapFloorCoordinate.MinimumAxisValue

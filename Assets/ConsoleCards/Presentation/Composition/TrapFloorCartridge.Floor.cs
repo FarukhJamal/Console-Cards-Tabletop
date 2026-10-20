@@ -1,8 +1,11 @@
+using System;
 using System.Collections.Generic;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Games.TrapFloor;
+using ConsoleCards.Presentation.UI;
 using ConsoleCards.Presentation.Views;
+using UnityEngine;
 
 namespace ConsoleCards.Presentation.Composition
 {
@@ -85,5 +88,100 @@ namespace ConsoleCards.Presentation.Composition
 
         private static bool IsInCell(TableCoordinate position, TableCoordinate cell, double halfWidth, double halfHeight) =>
             System.Math.Abs(position.X - cell.X) <= halfWidth && System.Math.Abs(position.Y - cell.Y) <= halfHeight;
+
+        // ---------- FLOORS-1: floors that shrink (owner, 2026-10-21) ----------
+        // A win (an exit) or a loss (everyone out) ends the floor. The next floor is a fresh deal one row and one
+        // column smaller (the table is set up again, so hands, Consoles, Abilities, Keys, holes and knock-outs start
+        // over; Avatars stay). Winning the last floor (3×3) wins the game; losing it loses the game.
+
+        private int NextFloorSize(out int columns)
+        {
+            columns = host.trapFloorTemplate.GridColumns - 1;
+            return host.trapFloorTemplate.GridRows - 1;
+        }
+
+        internal string FloorEndedActionLabel()
+        {
+            if (host.trapFloorTemplate == null || host.trapFloorTemplate.IsLastFloor) return "Play Again";
+            int rows = NextFloorSize(out int columns);
+            return $"Deal Next Floor ({columns}×{rows})";
+        }
+
+        internal string FloorEndedChoiceText()
+        {
+            return host.trapFloorTemplate == null || host.trapFloorTemplate.IsLastFloor
+                ? "That was the last floor: the game is lost. Choose Play Again to start over."
+                : $"Choose {FloorEndedActionLabel()} in the turn menu.";
+        }
+
+        // The floor's end: says what happened and offers the next floor (or a new game after the last one).
+        internal void ShowFloorEnded(bool won, string detail = null)
+        {
+            if (host.runtimeUi == null || host.trapFloorTemplate == null) return;
+            TrapFloorTemplateDefinition floor = host.trapFloorTemplate;
+            int number = floor.FloorIndex + 1;
+            bool last = floor.IsLastFloor;
+            string title = last
+                ? won ? "YOU WIN THE GAME" : "GAME OVER"
+                : won ? $"FLOOR {number} WON" : $"FLOOR {number} LOST";
+            string next;
+            if (last)
+            {
+                next = won
+                    ? "That was the last floor: the team escaped the Trap Floor."
+                    : "Everyone is out on the last floor: the team lost.";
+            }
+            else
+            {
+                int rows = NextFloorSize(out int columns);
+                next = $"Next: Floor {number + 1} of {floor.FloorCount}, {columns}×{rows}, dealt fresh. Knocked-out players "
+                    + "come back; Hands, Consoles and Abilities are dealt again (Avatars stay) and the Controller decks "
+                    + "are shuffled. This cannot be undone.";
+            }
+
+            string body = string.IsNullOrEmpty(detail) ? next : $"{detail}\n{next}";
+            Action close = () => host.runtimeUi?.CloseTabletopPopup();
+            host.runtimeUi.ShowContextMenu(
+                new Vector2((Screen.width * 0.5f) - 200f, Screen.height * 0.66f),
+                title,
+                body,
+                new[]
+                {
+                    new PopupActionOption(
+                        FloorEndedActionLabel(),
+                        true,
+                        () =>
+                        {
+                            close();
+                            if (last) DealFloor(0);
+                            else DealFloor(floor.FloorIndex + 1);
+                        }),
+                    new PopupActionOption("Not yet", true, close),
+                },
+                close,
+                _ => close());
+        }
+
+        // Sets the table up again at the given floor (0 = a new game at full size), keeping the mode and seats.
+        private void DealFloor(int floorIndex)
+        {
+            if (host.activeSession == null) return;
+            host.trapFloorNextFloorIndex = floorIndex;
+            bool dealt;
+            try
+            {
+                dealt = host.SessionService.TryReplaceTable(host.activeSession.Selection);
+            }
+            finally
+            {
+                host.trapFloorNextFloorIndex = 0;
+            }
+
+            if (!dealt || host.trapFloorTemplate == null) return;
+            host.ShowMessage(floorIndex == 0
+                ? "A new game: Floor 1."
+                : $"FLOOR {host.trapFloorTemplate.FloorIndex + 1} of {host.trapFloorTemplate.FloorCount} — "
+                    + $"{host.trapFloorTemplate.GridColumns}×{host.trapFloorTemplate.GridRows}, dealt fresh.");
+        }
     }
 }
