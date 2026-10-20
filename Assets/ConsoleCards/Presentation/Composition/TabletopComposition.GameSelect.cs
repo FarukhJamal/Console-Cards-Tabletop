@@ -6,7 +6,6 @@ using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Content;
 using ConsoleCards.Presentation.Saving;
 using ConsoleCards.Presentation.UI;

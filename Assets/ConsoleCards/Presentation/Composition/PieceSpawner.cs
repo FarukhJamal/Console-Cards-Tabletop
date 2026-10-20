@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -98,13 +97,11 @@ namespace ConsoleCards.Presentation.Composition
             host.ApplySelectionHighlightHide(selectionVisual);
             ConfigureCardVisuals(createdVisualReferences, card, label);
             createdView.Bind(card, host.coordinateConverter);
-            if (host.trapFloorTemplate != null && host.trapFloorTemplate.IsFloorCard(card.BaseState.Id))
+            if (host.ActiveCartridge.IsFixedBoardPiece(card.BaseState.Id))
             {
+                // CART-1b: a game's board tile (for example a floor tile) is drawn smaller and the game may mark it.
                 clone.transform.localScale = Vector3.one * host.floorCardVisualScale;
-                host.abilityTargetPresenter.Register(
-                    card.BaseState.Id,
-                    createdVisualReferences.FaceUpRenderer,
-                    createdVisualReferences.FaceDownRenderer);
+                host.ActiveCartridge.OnBoardPieceViewCreated(card.BaseState.Id, createdVisualReferences);
             }
 
             else if (host.CardSizeClassOf(card) == CardSizeClass.Large)
@@ -123,7 +120,7 @@ namespace ConsoleCards.Presentation.Composition
             out TabletopSelectionVisual selectionVisual)
         {
             PawnView createdView = UnityEngine.Object.Instantiate(host.catalogPawnPrefab);
-            GameObject root = PrepareRuntimeRoot(createdView.gameObject, "Trap Floor Pawn");
+            GameObject root = PrepareRuntimeRoot(createdView.gameObject, "Game Pawn");
             selectionVisual = createdView.GetComponent<TabletopSelectionVisual>();
             ValidateRuntimeSelectionVisual(createdView, selectionVisual);
             selectionVisual.SetSelected(false);
@@ -136,9 +133,11 @@ namespace ConsoleCards.Presentation.Composition
         internal void ConfigureOfficialPawnPresentation()
         {
             ClearOfficialPawnPresentation();
-            for (int playerIndex = 0; playerIndex < host.trapFloorTemplate.Players.Count; playerIndex++)
+            IReadOnlyList<CartridgeSeat> seats = host.ActiveCartridge.Seats; // CART-1b: each seat's own pawn
+            for (int playerIndex = 0; playerIndex < seats.Count; playerIndex++)
             {
-                TrapFloorPlayerSetupDefinition player = host.trapFloorTemplate.Players[playerIndex];
+                CartridgeSeat player = seats[playerIndex];
+                if (player.PawnId.IsEmpty) continue; // a game without pawns
                 int playerNumber = player.LayoutSeatIndex + 1;
                 PawnView officialView = null;
                 for (int viewIndex = 0; viewIndex < host.Registry.pawnViews.Count; viewIndex++)
@@ -153,7 +152,7 @@ namespace ConsoleCards.Presentation.Composition
 
                 if (officialView == null)
                 {
-                    throw new InvalidOperationException("Official Trap Floor Pawn has no bound Presentation View.");
+                    throw new InvalidOperationException("A seat's official pawn has no bound Presentation View.");
                 }
 
                 Color playerColor = PlayerSeatColor(player.LayoutSeatIndex);
@@ -279,8 +278,8 @@ namespace ConsoleCards.Presentation.Composition
             ConfigureWorldLabel(
                 label,
                 displayLabel,
-                TrapFloorCoinAreaLabelCharacterSize,
-                TrapFloorCoinAreaLabelFontSize);
+                CoinAreaLabelCharacterSize,
+                CoinAreaLabelFontSize);
             view.Configure(label);
 
             host.ApplyAuthoredPose(root.transform, pose);
@@ -343,7 +342,7 @@ namespace ConsoleCards.Presentation.Composition
             GameObject root = PrepareRuntimeRoot(view.gameObject, name);
             if (!host.playerLayout.TryGetSeat(layoutSeatIndex, out _))
             {
-                throw new InvalidOperationException("Trap Floor Console references a missing Player Layout Seat.");
+                throw new InvalidOperationException("A game Console references a missing Player Layout Seat.");
             }
 
             SeatState seat = host.matchState.GetSeat(seatId);
@@ -446,13 +445,12 @@ namespace ConsoleCards.Presentation.Composition
         {
             visualReferences.AlignFaceLabelsToSurface(host.tabletopLocalOrderHeight);
             bool isButtonCard = host.IsButtonCard(card);
-            bool isFloorCard = host.trapFloorTemplate != null
-                && host.trapFloorTemplate.IsFloorCard(card.BaseState.Id);
+            bool isBoardPiece = host.ActiveCartridge.IsFixedBoardPiece(card.BaseState.Id);
             Color frontColor = isButtonCard
                 ? new Color(0.58f, 0.88f, 0.82f)
                 : new Color(0.95f, 0.88f, 0.42f);
             string frontLabel = label;
-            string backLabel = isFloorCard ? "MYSTERY" : visualReferences.BackLabel.text;
+            string backLabel = visualReferences.BackLabel.text;
             bool backLabelIsPlaceholder = true;
             Color backColor = new Color(0.10f, 0.19f, 0.42f);
             Texture2D frontArtwork = null;
@@ -469,49 +467,27 @@ namespace ConsoleCards.Presentation.Composition
                 frontLabel = avatarDefinition.DisplayName;
                 frontArtwork = host.AvatarArt(avatarDefinition);
             }
-            if (isFloorCard
-                && host.trapFloorTemplate.TryGetFloorCardState(
-                    host.matchState,
-                    card.BaseState.Id,
-                    out TrapFloorFloorCardState floorCard))
+            if (isBoardPiece)
             {
-                if (host.trapFloorCollapseState != null
-                    && host.trapFloorCollapseState.IsCollapsed(card.BaseState.Id))
+                // CART-1b: the game draws its own board tiles (their face, back, labels and art).
+                CardLook look = new CardLook
                 {
-                    frontColor = new Color(0.025f, 0.03f, 0.04f);
-                    backColor = frontColor;
-                    frontLabel = $"HOLE\n{floorCard.Coordinate}";
-                    backLabel = frontLabel;
-                    backLabelIsPlaceholder = false;
-                    frontArtwork = null;
-                    backArtwork = null;
-                }
-                else
-                {
-                    frontColor = TrapFloorContentColor(floorCard.Content.Category);
-                    Texture2D contentFront = host.TryGetAuthoredCardDefinition(floorCard.Content.Id, out CardDefinition contentDefinition)
-                        ? host.FrontArt(contentDefinition)
-                        : null;
-                    if (contentFront != null)
-                    {
-                        frontArtwork = contentFront;
-                    }
-
-                    backArtwork = host.CurrentBoardCardBack();
-                    if (floorCard.Content.Category == TrapFloorFloorContentCategory.Key
-                        && host.trapFloorObjectiveState != null)
-                    {
-                        bool isClaimed = host.trapFloorObjectiveState.TryGetClaim(card.BaseState.Id, out _);
-                        frontLabel = isClaimed
-                            ? $"KEY — CLAIMED\n{floorCard.Content.DisplayName}"
-                            : $"KEY — UNCLAIMED\n{floorCard.Content.DisplayName}";
-                    }
-                    else
-                    {
-                        frontLabel = $"{floorCard.Content.Category.ToString().ToUpperInvariant()}\n"
-                            + floorCard.Content.DisplayName;
-                    }
-                }
+                    FrontColor = frontColor,
+                    BackColor = backColor,
+                    FrontLabel = frontLabel,
+                    BackLabel = backLabel,
+                    BackLabelIsPlaceholder = backLabelIsPlaceholder,
+                    FrontArtwork = frontArtwork,
+                    BackArtwork = backArtwork,
+                };
+                host.ActiveCartridge.StyleBoardPiece(card, ref look);
+                frontColor = look.FrontColor;
+                backColor = look.BackColor;
+                frontLabel = look.FrontLabel;
+                backLabel = look.BackLabel;
+                backLabelIsPlaceholder = look.BackLabelIsPlaceholder;
+                frontArtwork = look.FrontArtwork;
+                backArtwork = look.BackArtwork;
             }
 
             // No art (including a hole) puts the plate back on its plain material.
@@ -532,15 +508,15 @@ namespace ConsoleCards.Presentation.Composition
             ConfigureWorldLabel(
                 visualReferences.FrontLabel,
                 frontLabel,
-                isFloorCard
-                    ? TrapFloorFloorLabelCharacterSize
-                    : TrapFloorCardLabelCharacterSize,
-                TrapFloorCardLabelFontSize);
+                isBoardPiece
+                    ? BoardTileLabelCharacterSize
+                    : CardLabelCharacterSize,
+                CardLabelFontSize);
             ConfigureWorldLabel(
                 visualReferences.BackLabel,
                 backLabel,
-                TrapFloorCardBackLabelCharacterSize,
-                TrapFloorCardLabelFontSize);
+                CardBackLabelCharacterSize,
+                CardLabelFontSize);
             visualReferences.SetBackLabelHidden(
                 backLabelIsPlaceholder && host.HidesTableVisual(TableVisualHide.CardPlaceholderLabels));
             TableVisualHide faceLabelPart = backLabelIsPlaceholder
@@ -559,7 +535,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             // ICON-1, FRAME-1: the game's frame on the card front, with a tab and symbol at each icon place.
-            host.ApplyCardIcons(visualReferences, isFloorCard ? null : authoredDefinition, card.BaseState.DefinitionId);
+            host.ApplyCardIcons(visualReferences, isBoardPiece ? null : authoredDefinition, card.BaseState.DefinitionId);
         }
 
         internal static void SetLabelRendererVisible(TextMesh label, bool visible)
@@ -621,7 +597,7 @@ namespace ConsoleCards.Presentation.Composition
         }
         // ---------- from TabletopComposition.cs ----------
 
-        internal const float TrapFloorFloorLabelCharacterSize = 0.16f;
+        internal const float BoardTileLabelCharacterSize = 0.16f;
         internal static readonly Vector3 LocalHandRestPosition = new Vector3(0f, 0f, -1.86f);
         internal readonly List<GameObject> officialPawnLabels = new List<GameObject>();
         internal readonly List<Renderer> officialPawnRenderers = new List<Renderer>();

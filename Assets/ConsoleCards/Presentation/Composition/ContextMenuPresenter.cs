@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -196,24 +195,17 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            if (host.floormasterLifecycleState?.PendingCard != null
-                && host.floormasterLifecycleState.PendingCard.CardId == hitCard.ObjectId)
+            // CART-1b: the game's own cards (a card waiting to be resolved, a board tile) open the game's menu.
+            if (host.ActiveCartridge.TryGetCardMenuMode(hitCard.ObjectId, out ContextMenuMode gameMenu))
             {
-                host.selectionState.Select(hitCard);
-                host.selectionPresenter.Refresh();
-                OpenContextMenu(
-                    ContextMenuMode.PendingFloormasterCard,
-                    screenPosition,
-                    hitCard.ObjectId,
-                    ContainerId.Empty,
-                    TabletopObjectId.Empty);
-                return true;
-            }
+                if (gameMenu == ContextMenuMode.GamePendingCard)
+                {
+                    host.selectionState.Select(hitCard);
+                    host.selectionPresenter.Refresh();
+                }
 
-            if (host.trapFloorTemplate != null && host.trapFloorTemplate.IsFloorCard(hitCard.ObjectId))
-            {
                 OpenContextMenu(
-                    ContextMenuMode.FloorCard,
+                    gameMenu,
                     screenPosition,
                     hitCard.ObjectId,
                     ContainerId.Empty,
@@ -308,7 +300,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.selectedDrawCount = Mathf.Clamp(
                     host.selectedDrawCount,
                     1,
-                    Math.Max(1, host.TrapFloorGame.AvailableDrawableCount(containerId)));
+                    Math.Max(1, host.AvailableDrawableCount(containerId)));
             }
 
             SetContextMenuMode(mode);
@@ -435,8 +427,8 @@ namespace ConsoleCards.Presentation.Composition
                 case ContextMenuMode.TabletopCard:
                     ShowTabletopCardContextMenu();
                     break;
-                case ContextMenuMode.FloorCard:
-                case ContextMenuMode.PendingFloormasterCard:
+                case ContextMenuMode.BoardPiece:
+                case ContextMenuMode.GamePendingCard:
                     // CART-1a: the game's own menus come from the cartridge in play.
                     if (!host.ActiveCartridge.TryShowContextMenu(host.contextMenuMode))
                     {
@@ -500,7 +492,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             AddControllerDrawAction(actions, targetDeckId);
-            if (host.HasLocalHand() && !host.TrapFloorGame.IsAssistedControllerDeck(targetDeckId) && targetDeck.Count > 0)
+            if (host.HasLocalHand() && !host.ActiveCartridge.IsAssistedControllerDeck(targetDeckId) && targetDeck.Count > 0)
             {
                 actions.Add(new PopupActionOption(
                     "Draw to Hand",
@@ -631,9 +623,8 @@ namespace ConsoleCards.Presentation.Composition
         internal void ShowControllerDrawPopup()
         {
             ContainerId targetDeckId = host.contextMenuContainerId;
-            int availableCount = host.TrapFloorGame.AvailableControllerDeckCount(targetDeckId);
-            ControllerConfigurationData configuration =
-                host.trapFloorTemplate.GameDefinition.ControllerConfiguration;
+            int availableCount = host.AvailableAssistedDeckCount(targetDeckId);
+            ControllerConfigurationData configuration = host.ActiveCartridge.ControllerConfiguration;
             List<PopupActionOption> actions = new List<PopupActionOption>
             {
                 new PopupActionOption(
@@ -656,7 +647,7 @@ namespace ConsoleCards.Presentation.Composition
                         host.selectedDrawCount = Mathf.Clamp(
                             host.selectedDrawCount,
                             1,
-                            Math.Max(1, host.TrapFloorGame.AvailableControllerDeckCount(targetDeckId)));
+                            Math.Max(1, host.AvailableAssistedDeckCount(targetDeckId)));
                         SetContextMenuMode(ContextMenuMode.CustomDrawCards);
                     }),
                 new PopupActionOption(
@@ -691,7 +682,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void ShowCustomControllerDrawPopup()
         {
-            int availableCount = host.TrapFloorGame.AvailableControllerDeckCount(host.contextMenuContainerId);
+            int availableCount = host.AvailableAssistedDeckCount(host.contextMenuContainerId);
             host.selectedDrawCount = availableCount > 0
                 ? Mathf.Clamp(host.selectedDrawCount, 1, availableCount)
                 : 0;
@@ -709,7 +700,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void ChangeSelectedControllerDrawCount(int delta)
         {
-            int availableCount = host.TrapFloorGame.AvailableControllerDeckCount(host.contextMenuContainerId);
+            int availableCount = host.AvailableAssistedDeckCount(host.contextMenuContainerId);
             if (availableCount <= 0)
             {
                 host.selectedDrawCount = 0;
@@ -723,7 +714,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void ConfirmSelectedControllerDrawCount()
         {
-            int availableCount = host.TrapFloorGame.AvailableControllerDeckCount(host.contextMenuContainerId);
+            int availableCount = host.AvailableAssistedDeckCount(host.contextMenuContainerId);
             if (availableCount <= 0)
             {
                 host.runtimeUi?.SetDrawCountPopupValue(0, 0);
@@ -1056,7 +1047,7 @@ namespace ConsoleCards.Presentation.Composition
             List<PopupActionOption> actions,
             ContainerId targetDeckId)
         {
-            if (!host.TrapFloorGame.IsAssistedControllerDeck(targetDeckId))
+            if (!host.ActiveCartridge.IsAssistedControllerDeck(targetDeckId))
             {
                 return;
             }
@@ -1069,16 +1060,16 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void DrawControllerCardsFromContext(ContainerId targetDeckId, int requestedCount)
         {
-            TrapFloorPlayerSetupDefinition player = host.TrapFloorGame.GetAssistedTrapFloorPlayerSetup();
+            CartridgeSeat player = host.ActiveCartridge.GetAssistedSeat(); // the seat whose turn the game helps with
             if (requestedCount <= 0
-                || !host.TrapFloorGame.IsAssistedControllerDeck(targetDeckId)
+                || !host.ActiveCartridge.IsAssistedControllerDeck(targetDeckId)
                 || host.contextMenuContainerId != targetDeckId)
             {
                 CloseContextMenu();
                 return;
             }
 
-            int drawCount = Math.Min(requestedCount, host.TrapFloorGame.AvailableControllerDeckCount(targetDeckId));
+            int drawCount = Math.Min(requestedCount, host.AvailableAssistedDeckCount(targetDeckId));
             int deckLimitedCount = drawCount;
             drawCount = ClampToHandComfortCap(player.HandContainerId, drawCount);
             if (drawCount <= 0 && deckLimitedCount > 0)
@@ -1098,7 +1089,7 @@ namespace ConsoleCards.Presentation.Composition
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 host.CaptureContainerCardTransforms(targetDeckId, player.HandContainerId);
             DrawCardsResult result = host.TableAuthority.Submit<DrawCardsCommand, DrawCardsResult>(new DrawCardsCommand(
-                    host.CreateCommandContext(host.trapFloorTurnState.ActivePlayerId),
+                    host.CreateCommandContext(host.ActiveCartridge.TurnPlayerId),
                     targetDeckId,
                     player.HandContainerId,
                     drawCount));
@@ -1128,7 +1119,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void DrawUpToConfiguredHandLimitFromContext(ContainerId targetDeckId)
         {
-            if (!host.TrapFloorGame.IsAssistedControllerDeck(targetDeckId)
+            if (!host.ActiveCartridge.IsAssistedControllerDeck(targetDeckId)
                 || host.contextMenuContainerId != targetDeckId)
             {
                 CloseContextMenu();
@@ -1143,12 +1134,12 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         internal ControllerInputHandDrawResult DrawControllerCardsUpToComfortCap(
-            TrapFloorPlayerSetupDefinition player,
+            CartridgeSeat player,
             ContainerState hand)
         {
             int drawCount = Math.Min(
                 host.handComfortSettings.RemainingFor(hand),
-                host.TrapFloorGame.AvailableControllerDeckCount(player.ControllerDeckId));
+                host.AvailableAssistedDeckCount(player.ControllerDeckId));
             if (drawCount <= 0)
             {
                 host.ShowMessage(host.handComfortSettings.RemainingFor(hand) <= 0
@@ -1160,7 +1151,7 @@ namespace ConsoleCards.Presentation.Composition
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 host.CaptureContainerCardTransforms(player.ControllerDeckId, player.HandContainerId);
             DrawCardsResult result = host.TableAuthority.Submit<DrawCardsCommand, DrawCardsResult>(new DrawCardsCommand(
-                    host.CreateCommandContext(host.trapFloorTurnState.ActivePlayerId),
+                    host.CreateCommandContext(host.ActiveCartridge.TurnPlayerId),
                     player.ControllerDeckId,
                     player.HandContainerId,
                     drawCount));
@@ -1282,19 +1273,15 @@ namespace ConsoleCards.Presentation.Composition
                         && host.Registry.TryGetDeckPresentation(host.contextMenuContainerId, out _, out _);
                 case ContextMenuMode.DrawCards:
                 case ContextMenuMode.CustomDrawCards:
-                    return host.TrapFloorGame.IsAssistedControllerDeck(host.contextMenuContainerId)
+                    return host.ActiveCartridge.IsAssistedControllerDeck(host.contextMenuContainerId)
                         && host.Registry.TryGetDeckPresentation(host.contextMenuContainerId, out _, out _);
                 case ContextMenuMode.TabletopCard:
                     return IsCurrentContextCardInContainer(ContainerId.Empty)
                         && host.Registry.TryGetCardView(host.contextMenuCardId, out _);
-                case ContextMenuMode.FloorCard:
-                    return host.trapFloorTemplate != null
-                        && host.matchState.Cards.ContainsKey(host.contextMenuCardId)
-                        && host.trapFloorTemplate.IsFloorCard(host.contextMenuCardId)
-                        && host.Registry.TryGetCardView(host.contextMenuCardId, out _);
-                case ContextMenuMode.PendingFloormasterCard:
-                    return host.floormasterLifecycleState?.PendingCard != null
-                        && host.floormasterLifecycleState.PendingCard.CardId == host.contextMenuCardId
+                case ContextMenuMode.BoardPiece:
+                case ContextMenuMode.GamePendingCard:
+                    return host.ActiveCartridge.TryGetCardMenuMode(host.contextMenuCardId, out ContextMenuMode gameMenu)
+                        && gameMenu == host.contextMenuMode
                         && host.matchState.Cards.ContainsKey(host.contextMenuCardId)
                         && host.Registry.TryGetCardView(host.contextMenuCardId, out _);
                 case ContextMenuMode.ContainedCard:

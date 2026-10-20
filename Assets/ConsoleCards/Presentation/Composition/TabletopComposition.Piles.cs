@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -114,7 +113,7 @@ namespace ConsoleCards.Presentation.Composition
         public ControllerInputHandDrawResult DrawUpToConfiguredHandLimit()
         {
             EnsureInitialized();
-            TrapFloorPlayerSetupDefinition player = TrapFloorGame.GetAssistedTrapFloorPlayerSetup();
+            CartridgeSeat player = ActiveCartridge.GetAssistedSeat();
             if (matchState.Containers.TryGetValue(player.HandContainerId, out ContainerState capHand))
             {
                 // Draw To Hand Limit fills the hand up to the player's hand cap; the game's own limit is
@@ -124,9 +123,8 @@ namespace ConsoleCards.Presentation.Composition
 
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts =
                 CaptureContainerCardTransforms(player.ControllerDeckId, player.HandContainerId);
-            ControllerInputHandDrawResult result = trapFloorTurnService.DrawForCurrentPlayer(
-                matchState,
-                CreateCommandContext(trapFloorTurnState.ActivePlayerId));
+            ControllerInputHandDrawResult result = ActiveCartridge.DrawControllerHandForTurn(
+                CreateCommandContext(ActiveCartridge.TurnPlayerId));
             ApplyLayout(player.ControllerDeckId);
             ApplyLayout(player.HandContainerId);
             if (result.Succeeded) AnimateDrawnCards(transitionStarts); // SMOOTH-1
@@ -165,11 +163,9 @@ namespace ConsoleCards.Presentation.Composition
                 AnimateDrawnCards(transitionStarts); // SMOOTH-1: one after another, along an arc
                 string whose = targetHandId == handContainerId ? "Hand" : $"{HandOwnerName(targetHandId)}'s hand";
                 if (targetHandId != handContainerId
-                    && trapFloorTurnState != null
-                    && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
-                    && !trapFloorTurnState.IsCurrentFloorFailed
-                    && (!TrapFloorGame.TryGetTrapFloorPlayerSetup(trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition activeSetup)
-                        || activeSetup.HandContainerId != targetHandId))
+                    && ActiveCartridge.IsPlayerTurnOpen
+                    && (!TryGetGameSeat(ActiveCartridge.TurnPlayerId, out CartridgeSeat activeSeat)
+                        || activeSeat.HandContainerId != targetHandId))
                 {
                     whose += " (not their turn)";
                 }

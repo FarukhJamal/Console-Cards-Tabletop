@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -162,7 +161,7 @@ namespace ConsoleCards.Presentation.Composition
                 || !view.BoundState.ContainerId.IsEmpty
                 || view.BoundState.IsUserLocked
                 || view.PhysicalObject.IsHeld
-                || (trapFloorTemplate != null && trapFloorTemplate.IsFloorCard(view.BoundState.Id))
+                || ActiveCartridge.IsFixedBoardPiece(view.BoundState.Id)
                 || !TryProjectFlickPoint(screenPosition, out Vector3 anchor))
             {
                 return false;

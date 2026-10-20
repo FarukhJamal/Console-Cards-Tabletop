@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -106,11 +105,11 @@ namespace ConsoleCards.Presentation.Composition
             cardsSetOnBoardSpaces.Clear();
         }
 
-        // Trap Floor's board drawn as a v2 mat over its play area: the spaces are the floor grid's cells.
+        // A game's board (Trap Floor's floor) drawn as a v2 mat over its play area: the spaces are the game grid's
+        // cells (CART-1b: the cartridge gives the grid).
         private void ApplyTemplateBoardMat(BoxCollider boardCollider)
         {
-            if (boardMatPrefab == null || trapFloorTemplate == null) return;
-            GridDefinitionData floor = trapFloorTemplate.GameDefinition.Grid;
+            if (boardMatPrefab == null || !ActiveCartridge.TryGetBoardGrid(out GridDefinitionData floor)) return;
             BoardGrid grid = templateBoardGrid ?? new BoardGrid(
                 floor.Columns,
                 floor.Rows,
@@ -118,7 +117,7 @@ namespace ConsoleCards.Presentation.Composition
                 (float)floor.CellHeight,
                 (float)Math.Max(floor.HorizontalSpacing, 0d),
                 BoardGrid.Standard.Frame);
-            if (templateBoardMat == null) templateBoardMat = CreateBoardMatInstance("Trap Floor Board Mat", grid);
+            if (templateBoardMat == null) templateBoardMat = CreateBoardMatInstance($"{ActiveCartridge.DisplayName} Board Mat", grid);
             else templateBoardMat.Apply(grid);
             templateBoardMat.SetSurfaceEnabled(false); // the board's own surface holds the floor tiles
             Transform board = boardCollider.transform;
@@ -456,7 +455,7 @@ namespace ConsoleCards.Presentation.Composition
                 if (card == null || !card.IsBound || card.BoundState == null) continue;
                 TabletopObjectState state = card.BoundState;
                 if (!state.ContainerId.IsEmpty || state.IsUserLocked) continue;
-                if (trapFloorTemplate != null && trapFloorTemplate.IsFloorCard(state.Id)) continue; // floor tiles never move
+                if (ActiveCartridge.IsFixedBoardPiece(state.Id)) continue; // a game's board tiles never move
                 if (card.PhysicalObject != null
                     && (card.PhysicalObject.IsHeld
                         || state.PhysicalState == null

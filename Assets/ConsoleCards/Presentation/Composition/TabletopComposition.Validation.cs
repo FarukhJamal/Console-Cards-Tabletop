@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -48,23 +47,23 @@ namespace ConsoleCards.Presentation.Composition
     /// <summary>Checks on the scene and prefab references before the table starts. (R1a: moved here unchanged from TabletopComposition.cs.)</summary>
     public sealed partial class TabletopComposition
     {
-        private void ValidateTrapFloorConfiguration()
+        private void ValidateTemplateConfiguration()
         {
             ValidateCommonConfiguration();
             RequireReference(gameBoardPhysicalSurface, nameof(gameBoardPhysicalSurface));
             RequireReference(gameBoardVisualRoot, nameof(gameBoardVisualRoot));
             RequireReference(gameBoardVisualMaterial, nameof(gameBoardVisualMaterial));
-            RequireReference(trapFloorGameDefinition, nameof(trapFloorGameDefinition));
+            ActiveCartridge.ValidateConfiguration(); // CART-1b: what the game itself needs from the scene
             if (!gameBoardVisualRoot.IsChildOf(gameBoardPhysicalSurface.transform))
             {
                 throw new InvalidOperationException(
-                    "The Trap Floor Board visual must be a child of its authored physical surface.");
+                    "The game Board visual must be a child of its authored physical surface.");
             }
 
             ValidateFiniteGreaterThanZero(floorCardVisualScale, nameof(floorCardVisualScale));
             ValidateFiniteGreaterThanZero(largeCardVisualScale, nameof(largeCardVisualScale));
             ValidateCardPrefabReferences();
-            ValidateTrapFloorPrefabReferences();
+            ValidateTemplatePrefabReferences();
             ValidatePreInitializationState();
         }
 

@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -389,7 +388,7 @@ namespace ConsoleCards.Presentation.Composition
             if (view is CardView card)
             {
                 return !card.IsOverlayPresentation
-                    && (trapFloorTemplate == null || !trapFloorTemplate.IsFloorCard(state.Id)); // floor tiles are the board
+                    && !ActiveCartridge.IsFixedBoardPiece(state.Id); // a game's board tiles are the board
             }
 
             return view is PawnView || view is TokenView || view is DieView;

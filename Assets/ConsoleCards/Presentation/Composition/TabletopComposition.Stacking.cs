@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -173,7 +172,7 @@ namespace ConsoleCards.Presentation.Composition
             TabletopObjectState state = card.BoundState;
             return state.ContainerId.IsEmpty
                 && !state.IsUserLocked
-                && (trapFloorTemplate == null || !trapFloorTemplate.IsFloorCard(state.Id)); // floor tiles never stack
+                && !ActiveCartridge.IsFixedBoardPiece(state.Id); // a game's board tiles never stack
         }
 
         private static Vector3 RestPosition(CardView card)

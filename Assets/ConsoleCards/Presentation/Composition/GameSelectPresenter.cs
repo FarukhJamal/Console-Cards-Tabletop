@@ -6,7 +6,6 @@ using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Content;
 using ConsoleCards.Presentation.Saving;
 using ConsoleCards.Presentation.UI;
@@ -141,7 +140,7 @@ namespace ConsoleCards.Presentation.Composition
                 Deck = DeckLineText(entry, out bool canChangeDeck),
                 CanChangeDeck = canChangeDeck,
                 ProfileName = host.EnsureProfile().Active.displayName,
-                CanOpenCardArt = ReferenceEquals(entry.Game, host.trapFloorGameDefinition) && entry.Game != null,
+                CanOpenCardArt = host.UsesTableArt(entry.Game),
                 CanEditCards = !isEmpty,
                 CanEditDecks = !isEmpty,
                 CanStart = playable,
@@ -174,16 +173,8 @@ namespace ConsoleCards.Presentation.Composition
                     Name = string.IsNullOrWhiteSpace(game.DisplayName) ? game.name : game.DisplayName,
                     Game = game,
                 };
-                // Only Trap Floor has playable templates so far; each is one mode ("Trap Floor — Easy").
-                if (ReferenceEquals(game, host.trapFloorGameDefinition))
-                {
-                    foreach (KeyValuePair<GameTemplateId, TrapFloorTemplateDefinition> pair in host.availableTrapFloorTemplates)
-                    {
-                        entry.Templates.Add(pair.Key);
-                        string mode = pair.Value.ActiveMode != null ? pair.Value.ActiveMode.DisplayName : string.Empty;
-                        entry.ModeNames.Add(string.IsNullOrWhiteSpace(mode) ? pair.Value.Template.DisplayName : mode);
-                    }
-                }
+                // CART-1b: a game with code lists its playable templates, one per mode ("Trap Floor — Easy").
+                host.Cartridges.CodeCartridgeFor(game)?.ListTemplates(entry.Templates, entry.ModeNames);
 
                 entries.Add(entry);
             }
@@ -251,7 +242,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal string GameRulesText(GameSelectEntry entry)
         {
-            if (ReferenceEquals(entry.Game, host.trapFloorGameDefinition))
+            if (entry.Game != null && ReferenceEquals(entry.Game, host.TableGame))
             {
                 host.RulesCardPanel.EnsureHouseRulesLoaded();
                 RuleSetDefinition rules = host.RulesCardPanel.ActiveRuleSet;
@@ -321,7 +312,7 @@ namespace ConsoleCards.Presentation.Composition
                 {
                     CardDefinition card = set.Cards[c];
                     if (card == null || card.RepresentedControllerInput != null) continue;
-                    return ReferenceEquals(game, host.trapFloorGameDefinition)
+                    return host.UsesTableArt(game)
                         ? host.FrontArt(card)
                         : card.FrontArtwork;
                 }
@@ -332,7 +323,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal ContentArtServiceScope ArtFor(GameDefinition game)
         {
-            if (ReferenceEquals(game, host.trapFloorGameDefinition)) return new ContentArtServiceScope(host.contentArt, false);
+            if (host.UsesTableArt(game)) return new ContentArtServiceScope(host.contentArt, false);
             ContentArtService art = new ContentArtService(ContentPackStore.ForProfile(host.EnsureProfile()));
             art.UseGame(game);
             return new ContentArtServiceScope(art, true);
@@ -403,10 +394,10 @@ namespace ConsoleCards.Presentation.Composition
                     }
                 }
             }
-            else if (ReferenceEquals(entry.Game, host.trapFloorGameDefinition) && !string.IsNullOrEmpty(ChosenTrapFloorDeckId()))
+            else if (host.Cartridges.CodeCartridgeFor(entry.Game) != null && !string.IsNullOrEmpty(ChosenDeckIdOf(entry.Game)))
             {
                 // A deck of yours must be able to set up the board (for example enough Traps for the floor).
-                string problem = TrialTrapFloorDeck(templateId);
+                string problem = host.Cartridges.CodeCartridgeFor(entry.Game).TrialChosenDeck(templateId);
                 if (problem != null)
                 {
                     ShowGameSelect($"This deck cannot set up {entry.Name}: {problem} Choose another deck, or add cards to it.", entries);
@@ -548,34 +539,12 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        internal string ChosenTrapFloorDeckId()
+        // The deck of yours chosen to play a game with (L2-5); empty: the game's own deck.
+        internal string ChosenDeckIdOf(GameDefinition game)
         {
-            if (host.trapFloorGameDefinition == null) return string.Empty;
+            if (game == null) return string.Empty;
             host.EnsureContentArt();
-            return PlayDeckIdOf(host.trapFloorGameDefinition);
-        }
-
-        // Sets the game up once, off the table, with the chosen deck. Null when it works, else what went wrong.
-        internal string TrialTrapFloorDeck(GameTemplateId templateId)
-        {
-            if (!host.availableTrapFloorTemplates.TryGetValue(templateId, out TrapFloorTemplateDefinition template)) return null;
-            host.RulesCardPanel.EnsureHouseRulesLoaded();
-            GameContent content = host.TrapFloorGame.BuildTrapFloorContent(true);
-            try
-            {
-                GameDefinitionData data = content.ToData(host.RulesCardPanel.ActiveRuleSet);
-                TrapFloorTemplateFactory.CreateStandardFourPlayer(
-                    new SystemRandomValueSource(), data, template.ActiveMode.StableId, host.GetConsoleLayout());
-                return null;
-            }
-            catch (Exception exception)
-            {
-                return exception.Message;
-            }
-            finally
-            {
-                content.Destroy();
-            }
+            return PlayDeckIdOf(game);
         }
 
         internal static List<ObjectDefinitionId> DeckCardIds(PlayerDeckRecord deck)

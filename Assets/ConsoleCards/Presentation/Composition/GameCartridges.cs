@@ -1,10 +1,18 @@
 using System;
 using System.Collections.Generic;
+using ConsoleCards.Application.Authority;
+using ConsoleCards.Application.Commands;
+using ConsoleCards.Core.Coordinates;
+using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Cards;
+using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Events;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
+using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
+using ConsoleCards.Presentation.UI;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Composition
@@ -12,13 +20,17 @@ namespace ConsoleCards.Presentation.Composition
     /// <summary>
     /// The cartridge contract (CART-1, doc 30 §A4): what a game hands the table. The table code talks to "the current
     /// cartridge" through this, never to a game by name. A <b>code cartridge</b> (Trap Floor) brings its own helpers:
-    /// table setups (game templates), a per-frame step, its status card, its Shop, its hint helpers, its own card
-    /// menus and its Console card reactions. A <b>data cartridge</b> (<see cref="DataCartridge"/>: an Empty Table, a game
-    /// a player made, a DLC game without code) needs no code: every hook does nothing and the status line names it.
-    /// CART-1a moves the table's hook points behind the contract; CART-1b moves the rest of the game's state.
+    /// table setups (game templates), its rules state and commands, its seats and turns, its board tiles, a per-frame
+    /// step, its status card, its Shop, its hint helpers, its own card menus and its Console card reactions. A
+    /// <b>data cartridge</b> (<see cref="DataCartridge"/>: an Empty Table, a game a player made, a DLC game without
+    /// code) needs no code: every hook does nothing and the status line names it.
+    /// CART-1a moved the table's hook points behind the contract; CART-1b moved the rest of the game's state and code
+    /// (the table's own files no longer name a game); CART-1c added where the seats may go (<see cref="SeatPlacement"/>).
     /// </summary>
     internal interface IGameCartridge
     {
+        // ---------- who it is ----------
+
         /// <summary>The game's stable ID ("empty-table" for an Empty Table).</summary>
         string StableId { get; }
 
@@ -31,20 +43,144 @@ namespace ConsoleCards.Presentation.Composition
         /// <summary>True for a cartridge with code (helpers); false for data only.</summary>
         bool HasCode { get; }
 
+        // ---------- table setups (templates) ----------
+
         /// <summary>Adds the cartridge's table setups (one per mode) to the catalog the New table menu starts.</summary>
         void RegisterTemplates(List<GameTemplateRegistration> registrations);
+
+        /// <summary>The game's own setup for one of its templates (false: not one of its templates).</summary>
+        bool TryGetTemplateSetup(GameTemplateId templateId, out object setup);
+
+        /// <summary>Lists its playable templates for the game selection menu, with a mode name for each.</summary>
+        void ListTemplates(List<GameTemplateId> templates, List<string> modeNames);
+
+        /// <summary>Forgets its registered templates (the table is going away, or registering failed).</summary>
+        void ForgetTemplates();
+
+        /// <summary>The table's context for one of its setups, seen from the seat of <paramref name="requestingPlayerId"/>.</summary>
+        TabletopComposition.TemplateContext CreateTemplateContext(TabletopSession session, object setup, PlayerId requestingPlayerId);
+
+        /// <summary>
+        /// Checks that the game can set itself up from this data in this mode (throws with the reason when it cannot):
+        /// a house rule or a deck of yours is tried off the table before it is used.
+        /// </summary>
+        void CheckSetUp(GameDefinitionData data, string modeStableId);
+
+        /// <summary>Sets the game up once, off the table, with the deck of yours chosen for it. Null when it works, else what went wrong.</summary>
+        string TrialChosenDeck(GameTemplateId templateId);
+
+        // ---------- building and clearing the table ----------
+
+        /// <summary>The table is being built from one of its templates (first step of the build).</summary>
+        void UseTemplate(TabletopComposition.TemplateContext context);
+
+        /// <summary>Checks the scene references the game itself needs (throws when one is missing).</summary>
+        void ValidateConfiguration();
+
+        /// <summary>Makes the game's rules state (or takes it back from an Undo step) and its use cases.</summary>
+        void BuildRules();
+
+        /// <summary>Makes the game's services that need the table's dice and random source.</summary>
+        void BuildServices();
+
+        /// <summary>The piece views are bound (the game may hold a view back, for example a tile waiting to turn).</summary>
+        void OnObjectViewsBound();
+
+        /// <summary>Adds the game's commands to the table's command door, and the views that follow them. Called once.</summary>
+        void AttachToAuthority(LocalTableAuthority authority);
 
         /// <summary>The table was built and is ready (presentation the game shows from the start).</summary>
         void OnTableReady();
 
-        /// <summary>The table is going away (a new table, Undo's rebuild, leaving Play mode).</summary>
+        /// <summary>The table is going away (a new table, Undo's rebuild, leaving Play mode): first step.</summary>
         void OnTableShutdown();
+
+        /// <summary>The table is going away: the game's markers and pending dice, before the views are released.</summary>
+        void ClearTableMarkers();
+
+        /// <summary>The table is gone: the game forgets this table's rules state and services.</summary>
+        void ClearTableState();
+
+        /// <summary>The game's own part of an Undo step (plain data), or null.</summary>
+        ICartridgeUndoState CaptureUndoState();
+
+        // ---------- seats and turns ----------
+
+        /// <summary>The game's seats, in seat order (an Empty Table has none). Read often; never allocates.</summary>
+        IReadOnlyList<CartridgeSeat> Seats { get; }
+
+        /// <summary>The player whose turn it is (empty: the game has no turns, or none is running).</summary>
+        PlayerId TurnPlayerId { get; }
+
+        /// <summary>True while a player's turn is open (not a game step between turns).</summary>
+        bool IsPlayerTurnOpen { get; }
+
+        /// <summary>The round in play (0: the game has no rounds).</summary>
+        int CurrentRound { get; }
+
+        /// <summary>The stable ID of the mode in play (empty: no mode).</summary>
+        string ActiveModeStableId { get; }
+
+        /// <summary>Where the game's seats may go on the table (CART-1c): kept where its template put them, or along the edge.</summary>
+        SeatPlacement SeatPlacement { get; }
+
+        /// <summary>The seat whose turn the game helps with (throws when there is no player turn).</summary>
+        CartridgeSeat GetAssistedSeat();
+
+        /// <summary>True for a deck the game deals from itself (the table's Deal and Shuffle leave it alone).</summary>
+        bool IsAssistedControllerDeck(ContainerId containerId);
+
+        /// <summary>The game's own draw for the turn player's Controller hand (when the hand has no cap to fill).</summary>
+        ControllerInputHandDrawResult DrawControllerHandForTurn(CommandContext context);
+
+        /// <summary>The game's Controller settings (hand limit), or null.</summary>
+        ControllerConfigurationData ControllerConfiguration { get; }
+
+        // ---------- board tiles and card looks ----------
+
+        /// <summary>True for a game's own board piece (a floor tile): it never moves, stacks or snaps.</summary>
+        bool IsFixedBoardPiece(TabletopObjectId objectId);
+
+        /// <summary>The grid the game's board is drawn with (false: the game has no board grid).</summary>
+        bool TryGetBoardGrid(out GridDefinitionData grid);
+
+        /// <summary>A board piece's view was made (the game may mark it, for example for move targets).</summary>
+        void OnBoardPieceViewCreated(TabletopObjectId objectId, CardVisualReferences references);
+
+        /// <summary>Draws one of its board pieces: face, back, labels and art.</summary>
+        void StyleBoardPiece(CardInstanceState card, ref CardLook look);
+
+        /// <summary>The game's own right-click menu for a card (a card waiting to be resolved, a board tile).</summary>
+        bool TryGetCardMenuMode(TabletopObjectId cardId, out TabletopComposition.ContextMenuMode mode);
+
+        /// <summary>Shows one of the game's own menus (true) or leaves the mode to the table (false).</summary>
+        bool TryShowContextMenu(TabletopComposition.ContextMenuMode mode);
+
+        /// <summary>What the inspect panel shows for one of its pieces (false: the table's own text).</summary>
+        bool TryBuildInspectModel(TabletopObjectId cardId, CardInstanceState card, out CardInspectModel model);
+
+        /// <summary>The inspect panel opened or closed (the game forgets what it was opened for).</summary>
+        void ForgetInspectContext();
+
+        /// <summary>The cost line of a card's inspect text ("" for no cost): the rules in play first, else the card's own.</summary>
+        string FormatInputCost(CardDefinition definition);
+
+        // ---------- each frame, actions and feedback ----------
 
         /// <summary>Each frame, before the hint helpers (for example a landing tile turning over).</summary>
         void TickEarly();
 
         /// <summary>Each frame, after the hint helpers (for example dice of the game settling).</summary>
         void TickLate();
+
+        /// <summary>Each frame: the game's banners, messages and board markers.</summary>
+        void TickFeedback();
+
+        /// <summary>An action was accepted (the game follows its own moves, for example a pawn landing).</summary>
+        void OnActionAccepted(AuthoritativeActionAcceptance acceptance);
+
+        /// <summary>The Undo text for one of the game's own actions, or null for the table's.</summary>
+        string DescribeAction(AuthoritativeActionAcceptance acceptance, string actor);
 
         /// <summary>The status line under the session bar.</summary>
         string StatusText();
@@ -66,12 +202,105 @@ namespace ConsoleCards.Presentation.Composition
 
         /// <summary>A card was played into a Console slot (the game may react, for example an ability).</summary>
         void OnConsoleCardInteraction(IConsoleCardInteraction interaction, ConsoleCardBehavior behavior);
+    }
 
-        /// <summary>Shows one of the game's own menus (true) or leaves the mode to the table (false).</summary>
-        bool TryShowContextMenu(TabletopComposition.ContextMenuMode mode);
+    /// <summary>Where a game's seats may go on the table (CART-1c, doc 31 PL-CARTRIDGE).</summary>
+    internal enum SeatPlacement
+    {
+        /// <summary>The seats stay where the game's template puts them (the classic table's places).</summary>
+        Fixed = 0,
 
-        /// <summary>True for a deck the game deals from itself (the table's Deal and Shuffle leave it alone).</summary>
-        bool IsAssistedControllerDeck(ContainerId containerId);
+        /// <summary>
+        /// Each seat sits at the table's edge, out along the line from the table's centre through its place on the
+        /// classic table (so the seats keep their order and their facing); on the classic table they are at home.
+        /// </summary>
+        AlongEdge = 1,
+    }
+
+    /// <summary>
+    /// One seat of a game (CART-1b): its place in the table's player layout and the containers that belong to it
+    /// (empty when the game has none). The table builds each seat's Console, hand, Controller deck and action area
+    /// from these. CART-1c: <see cref="HomeConsolePose"/> is where the template puts the seat's Console on the
+    /// classic table.
+    /// </summary>
+    internal readonly struct CartridgeSeat
+    {
+        public CartridgeSeat(
+            int layoutSeatIndex,
+            SeatId seatId,
+            ContainerId handContainerId,
+            ContainerId controllerDeckId,
+            ContainerId actionAreaContainerId,
+            TabletopObjectId pawnId,
+            TabletopPose homeConsolePose)
+        {
+            LayoutSeatIndex = layoutSeatIndex;
+            SeatId = seatId;
+            HandContainerId = handContainerId;
+            ControllerDeckId = controllerDeckId;
+            ActionAreaContainerId = actionAreaContainerId;
+            PawnId = pawnId;
+            HomeConsolePose = homeConsolePose;
+        }
+
+        public int LayoutSeatIndex { get; }
+        public SeatId SeatId { get; }
+        public ContainerId HandContainerId { get; }
+        public ContainerId ControllerDeckId { get; }
+        public ContainerId ActionAreaContainerId { get; }
+        public TabletopObjectId PawnId { get; }
+        public TabletopPose HomeConsolePose { get; }
+    }
+
+    /// <summary>How a card is drawn (CART-1b): a game changes this for its own board pieces.</summary>
+    internal struct CardLook
+    {
+        public Color FrontColor;
+        public Color BackColor;
+        public string FrontLabel;
+        public string BackLabel;
+        public bool BackLabelIsPlaceholder;
+        public Texture2D FrontArtwork;
+        public Texture2D BackArtwork;
+    }
+
+    /// <summary>
+    /// A game's own part of an Undo step (CART-1b): plain data, no Unity objects. The table keeps it with the step
+    /// and hands back a fresh live copy (<see cref="Restore"/>) when the table is rebuilt; only the game reads it.
+    /// </summary>
+    internal interface ICartridgeUndoState
+    {
+        object Restore();
+    }
+
+    /// <summary>Card text every game shares (CART-1b).</summary>
+    internal static class CartridgeText
+    {
+        /// <summary>A card's authored cost in card notation ("" for no cost).</summary>
+        internal static string FormatAuthoredInputCost(InputCostDefinition inputCost)
+        {
+            if (inputCost == null || inputCost.Requirements.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            List<InputRequirementData> requirements = new List<InputRequirementData>(inputCost.Requirements.Count);
+            for (int i = 0; i < inputCost.Requirements.Count; i++)
+            {
+                InputRequirement requirement = inputCost.Requirements[i];
+                List<ControllerInput> inputs = new List<ControllerInput>(1 + requirement.AlsoAccepts.Count)
+                {
+                    requirement.Input,
+                };
+                inputs.AddRange(requirement.AlsoAccepts);
+                requirements.Add(new InputRequirementData(inputs, requirement.Count));
+            }
+
+            return InputCostNotation.Format(new InputCostData(requirements));
+        }
+
+        /// <summary>"\n\nCost: …" for an inspect text, or "".</summary>
+        internal static string CostLine(string cost) => string.IsNullOrEmpty(cost) ? string.Empty : $"\n\nCost: {cost}";
     }
 
     /// <summary>
@@ -81,6 +310,7 @@ namespace ConsoleCards.Presentation.Composition
     internal sealed class DataCartridge : IGameCartridge
     {
         public const string EmptyTableId = "empty-table";
+        private static readonly CartridgeSeat[] NoSeats = new CartridgeSeat[0];
 
         private readonly TabletopComposition host;
         private readonly GameDefinition game;
@@ -111,6 +341,52 @@ namespace ConsoleCards.Presentation.Composition
         {
         }
 
+        public bool TryGetTemplateSetup(GameTemplateId templateId, out object setup)
+        {
+            setup = null;
+            return false;
+        }
+
+        public void ListTemplates(List<GameTemplateId> templates, List<string> modeNames)
+        {
+        }
+
+        public void ForgetTemplates()
+        {
+        }
+
+        public TabletopComposition.TemplateContext CreateTemplateContext(TabletopSession session, object setup, PlayerId requestingPlayerId) =>
+            throw new InvalidOperationException($"{DisplayName} has no table setups.");
+
+        public void CheckSetUp(GameDefinitionData data, string modeStableId)
+        {
+        }
+
+        public string TrialChosenDeck(GameTemplateId templateId) => null;
+
+        public void UseTemplate(TabletopComposition.TemplateContext context) =>
+            throw new InvalidOperationException($"{DisplayName} has no table setups.");
+
+        public void ValidateConfiguration()
+        {
+        }
+
+        public void BuildRules()
+        {
+        }
+
+        public void BuildServices()
+        {
+        }
+
+        public void OnObjectViewsBound()
+        {
+        }
+
+        public void AttachToAuthority(LocalTableAuthority authority)
+        {
+        }
+
         public void OnTableReady()
         {
         }
@@ -119,6 +395,70 @@ namespace ConsoleCards.Presentation.Composition
         {
         }
 
+        public void ClearTableMarkers()
+        {
+        }
+
+        public void ClearTableState()
+        {
+        }
+
+        public ICartridgeUndoState CaptureUndoState() => null;
+
+        public IReadOnlyList<CartridgeSeat> Seats => NoSeats;
+        public PlayerId TurnPlayerId => PlayerId.Empty;
+        public bool IsPlayerTurnOpen => false;
+        public int CurrentRound => 0;
+        public string ActiveModeStableId => string.Empty;
+        public SeatPlacement SeatPlacement => SeatPlacement.Fixed;
+
+        public CartridgeSeat GetAssistedSeat() =>
+            throw new InvalidOperationException("Controller assistance requires a game with player turns.");
+
+        public bool IsAssistedControllerDeck(ContainerId containerId) => false;
+
+        public ControllerInputHandDrawResult DrawControllerHandForTurn(CommandContext context) =>
+            ControllerInputHandDrawResult.NoChange(host.matchState != null ? host.matchState.Revision : 0L);
+
+        public ControllerConfigurationData ControllerConfiguration => null;
+
+        public bool IsFixedBoardPiece(TabletopObjectId objectId) => false;
+
+        public bool TryGetBoardGrid(out GridDefinitionData grid)
+        {
+            grid = null;
+            return false;
+        }
+
+        public void OnBoardPieceViewCreated(TabletopObjectId objectId, CardVisualReferences references)
+        {
+        }
+
+        public void StyleBoardPiece(CardInstanceState card, ref CardLook look)
+        {
+        }
+
+        public bool TryGetCardMenuMode(TabletopObjectId cardId, out TabletopComposition.ContextMenuMode mode)
+        {
+            mode = TabletopComposition.ContextMenuMode.None;
+            return false;
+        }
+
+        public bool TryShowContextMenu(TabletopComposition.ContextMenuMode mode) => false;
+
+        public bool TryBuildInspectModel(TabletopObjectId cardId, CardInstanceState card, out CardInspectModel model)
+        {
+            model = null;
+            return false;
+        }
+
+        public void ForgetInspectContext()
+        {
+        }
+
+        public string FormatInputCost(CardDefinition definition) =>
+            definition == null ? string.Empty : CartridgeText.CostLine(CartridgeText.FormatAuthoredInputCost(definition.InputCost));
+
         public void TickEarly()
         {
         }
@@ -126,6 +466,14 @@ namespace ConsoleCards.Presentation.Composition
         public void TickLate()
         {
         }
+
+        public void TickFeedback() => host.boardFeedback?.HideAll();
+
+        public void OnActionAccepted(AuthoritativeActionAcceptance acceptance)
+        {
+        }
+
+        public string DescribeAction(AuthoritativeActionAcceptance acceptance, string actor) => null;
 
         public string StatusText()
         {
@@ -151,10 +499,6 @@ namespace ConsoleCards.Presentation.Composition
         public void OnConsoleCardInteraction(IConsoleCardInteraction interaction, ConsoleCardBehavior behavior)
         {
         }
-
-        public bool TryShowContextMenu(TabletopComposition.ContextMenuMode mode) => false;
-
-        public bool IsAssistedControllerDeck(ContainerId containerId) => false;
     }
 
     /// <summary>
@@ -180,6 +524,23 @@ namespace ConsoleCards.Presentation.Composition
         /// <summary>The Empty Table's cartridge (also a game a player made).</summary>
         internal DataCartridge EmptyTable => emptyTable ?? (emptyTable = new DataCartridge(host, null));
 
+        /// <summary>
+        /// The first code cartridge's game: the game an Empty Table borrows cards, rules and pictures from (null when
+        /// the build has no game with code).
+        /// </summary>
+        internal GameDefinition DefaultGame
+        {
+            get
+            {
+                for (int i = 0; i < codeCartridges.Count; i++)
+                {
+                    if (codeCartridges[i].Game != null) return codeCartridges[i].Game;
+                }
+
+                return null;
+            }
+        }
+
         internal void Register(IGameCartridge cartridge)
         {
             if (cartridge == null) throw new ArgumentNullException(nameof(cartridge));
@@ -192,16 +553,51 @@ namespace ConsoleCards.Presentation.Composition
         internal IGameCartridge For(GameDefinition game)
         {
             if (game == null) return EmptyTable;
+            IGameCartridge code = CodeCartridgeFor(game);
+            if (code != null) return code;
             string id = game.StableId ?? string.Empty;
+            if (byGame.TryGetValue(id, out IGameCartridge cartridge)) return cartridge;
+            DataCartridge data = new DataCartridge(host, game);
+            if (id.Length > 0) byGame[id] = data;
+            return data;
+        }
+
+        /// <summary>The code cartridge of a game, or null (no game, or a game with data only).</summary>
+        internal IGameCartridge CodeCartridgeFor(GameDefinition game)
+        {
+            if (game == null) return null;
             for (int i = 0; i < codeCartridges.Count; i++)
             {
                 if (ReferenceEquals(codeCartridges[i].Game, game)) return codeCartridges[i];
             }
 
-            if (byGame.TryGetValue(id, out IGameCartridge cartridge)) return cartridge;
-            DataCartridge data = new DataCartridge(host, game);
-            if (id.Length > 0) byGame[id] = data;
-            return data;
+            return null;
+        }
+
+        /// <summary>The code cartridge that registered a template, with its own setup for it.</summary>
+        internal bool TryGetTemplateSetup(GameTemplateId templateId, out IGameCartridge owner, out object setup)
+        {
+            for (int i = 0; i < codeCartridges.Count; i++)
+            {
+                if (codeCartridges[i].TryGetTemplateSetup(templateId, out setup))
+                {
+                    owner = codeCartridges[i];
+                    return true;
+                }
+            }
+
+            owner = null;
+            setup = null;
+            return false;
+        }
+
+        /// <summary>Every code cartridge forgets its registered templates.</summary>
+        internal void ForgetTemplates()
+        {
+            for (int i = 0; i < codeCartridges.Count; i++)
+            {
+                codeCartridges[i].ForgetTemplates();
+            }
         }
     }
 }

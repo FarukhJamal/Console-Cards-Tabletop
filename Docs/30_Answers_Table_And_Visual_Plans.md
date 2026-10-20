@@ -1,6 +1,6 @@
 # 30 — Answers, Table Selection Plan and Visual Polish Plan
 
-Version 0.36 · 2026-10-20 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
+Version 0.37 · 2026-10-20 · Status: approved by the owner with changes (2026-10-16; teal instead of green, C1): the table ping is free
 (A2), multiplayer is a to-do done only when the owner asks while the code is kept ready for it (A6), Part B has a
 performance budget (B5), Part C covers the screen layout and the circuit-board theme (C1–C3). The order of
 implementation is approved (end of the doc). Nothing here is built yet except what is marked as existing.
@@ -1823,4 +1823,41 @@ where each cartridge says its seats may go.
 - No change in play is expected: Trap Floor and the Empty Table behave as before.
 - Still naming Trap Floor (CART-1b): the table's build of the game, its turn and round state, its Shop and prize
   announcements, the seat and hand helpers and the game selection menu.
+- Approved by the owner (2026-10-20: "do the whole cart next approved").
+
+**CART-1b record (written 2026-10-20, to be checked).** The table's own files no longer name Trap Floor; everything
+the game needs goes through the cartridge contract.
+- **Trap Floor's half of the table** is in `TabletopComposition.TrapFloor.cs`: its state on the table (template,
+  turn, rules state, use cases, Floorfall and Floormaster services, landing and physical dice in progress), building
+  it, its seat context, its feedback (turn banners, activity lines, board markers) and its board card backs. The
+  game itself stays in `TrapFloorCartridge` (with a new part, `TrapFloorCartridge.Table.cs`, for the contract).
+- **The one place a game is named** is `TabletopComposition.BuiltInCartridges.cs`: one line per code cartridge.
+- **New in the contract:** its templates (find, list for the game selection menu, forget), the table's context for a
+  setup and seat, checking a setup off the table (house rules, a deck of yours), building and clearing its state,
+  its commands at the command door (and the views that follow them), its part of an Undo step, its seats (place in the
+  layout, hand, Controller deck, action area, pawn, Console home), the turn player, turn open, round and mode, the
+  assisted seat and its Controller draw, its board tiles (fixed, grid, look, menu, inspect text), the cost line of a
+  card, its per-frame feedback, following its own moves, and naming its own actions for Undo.
+- **The table now works from the cartridge's seats** for seat switching and hot-seat, player names and colours, hand
+  owners and draws, dealing, the seat Consoles and hands it builds, and the pawn colours.
+- **Undo:** a step keeps the game's own state as an opaque part the table never reads (`ICartridgeUndoState`).
+- **Generic names:** label sizes, the table's cards (`tableContent`), the game in play (`TableGame`: the cartridge's
+  game, or the first code game for an Empty Table), the card menu modes (`BoardPiece`, `GamePendingCard`).
+- `LateUpdate` and passing Console card events on moved to `TabletopComposition.Frame.cs`.
+- Left with a Trap Floor name outside the game: the UI's `HideTrapFloorStatus` (the status card view) and a few
+  comments that use it as the example.
+- No change in play is expected: Trap Floor and the Empty Table behave as before.
+- Not compiled here; the owner checks in Unity.
+
+**CART-1c record (written 2026-10-20, to be checked).** Seats along the table's edge.
+- A cartridge says where its seats may go (`SeatPlacement`): **Fixed** (where its template puts them) or **Along the
+  edge**. Trap Floor's seats go along the edge; an Empty Table has no seats.
+- Each seat moves out along the line from the table's centre through its classic place, so seats keep their order
+  and their facing. It goes as far out as its pieces fit with a small margin (0.35 table units) inside the edge, and
+  never nearer the centre than its classic place (the game keeps its room). On the classic table seats go home.
+- What moves with a seat: its Console (with the cards in it), its piles and hand zone, and the loose cards lying in
+  its area (for example starting abilities beside the Console). A seat's own piles move for that seat's player.
+- When: a game's table starts or is reset (part of the start, so Undo does not take it back), and the table's shape or
+  size changes during a game (one Undo step, after the pieces at the edge move in). The seat views are framed again.
+- Dealing to the table follows the seats (the deal spot moves with the seat's Console).
 - Not compiled here; the owner checks in Unity.

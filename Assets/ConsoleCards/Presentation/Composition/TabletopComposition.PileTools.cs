@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -152,7 +151,7 @@ namespace ConsoleCards.Presentation.Composition
             return matchState.Containers.TryGetValue(pileId, out ContainerState pile)
                 && (pile.Kind == ContainerKind.Deck || pile.Kind == ContainerKind.Stack)
                 && pile.Count >= 2
-                && !TrapFloorGame.IsAssistedControllerDeck(pileId);
+                && !ActiveCartridge.IsAssistedControllerDeck(pileId);
         }
 
         internal void AddSplitIntoPilesAction(List<PopupActionOption> actions, ContainerId pileId)

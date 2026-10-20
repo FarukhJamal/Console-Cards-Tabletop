@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -56,7 +55,7 @@ namespace ConsoleCards.Presentation.Composition
             string blocked = !IsInitialized ? "the table is not ready"
                 : rebuildingFromUndo ? "the table is rebuilding"
                 : activeSession == null ? "there is no active session"
-                : templateContext == null || templateContext.TrapFloorTemplate == null
+                : templateContext == null || ActiveCartridge.Seats.Count == 0
                     ? "this table has no seats"
                 : target.IsEmpty ? "no player was chosen"
                 : target == localPlayerId ? "this screen already plays that seat"
@@ -70,9 +69,9 @@ namespace ConsoleCards.Presentation.Composition
             TemplateContext next;
             try
             {
-                next = CreateTrapFloorTemplateContext(
+                next = templateContext.Cartridge.CreateTemplateContext(
                     templateContext.Session,
-                    templateContext.TrapFloorTemplate,
+                    templateContext.GameSetup,
                     target);
             }
             catch (InvalidOperationException exception)
@@ -102,7 +101,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 Shutdown(true);
                 templateContext = next;
-                pendingRestoredTrapFloorState = current.TrapFloor?.Restore();
+                pendingRestoredGameState = current.GameState?.Restore();
                 pendingRestoredControllerPurchaseState = current.PendingControllerPurchase?.Restore();
                 InitializeActiveSession(false);
                 undoHistory.ReplaceCurrentState(SessionService.CaptureUndoSnapshot());
@@ -121,7 +120,7 @@ namespace ConsoleCards.Presentation.Composition
             }
             finally
             {
-                pendingRestoredTrapFloorState = null;
+                pendingRestoredGameState = null;
                 pendingRestoredControllerPurchaseState = null;
                 rebuildingFromUndo = false;
                 SessionService.RefreshUndoUi();
@@ -133,7 +132,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             bool before = handsOnTable;
             handsOnTable = on;
-            if (!IsInitialized || activeSession == null || templateContext?.TrapFloorTemplate == null) return;
+            if (!IsInitialized || activeSession == null || templateContext == null) return;
             if (seatSwitchPending || rebuildingFromUndo)
             {
                 handsOnTable = before;
@@ -165,7 +164,8 @@ namespace ConsoleCards.Presentation.Composition
         internal void NextScreenSeat()
         {
             Debug.Log("[Seat] Seat row clicked.", this);
-            if (!IsInitialized || trapFloorTemplate == null || matchState == null)
+            IReadOnlyList<CartridgeSeat> seats = ActiveCartridge.Seats;
+            if (!IsInitialized || seats.Count == 0 || matchState == null)
             {
                 SeatSwitchFailed(PlayerId.Empty, "this table has no seats");
                 return;
@@ -177,11 +177,11 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            int count = trapFloorTemplate.Players.Count;
+            int count = seats.Count;
             int localIndex = -1;
             for (int i = 0; i < count; i++)
             {
-                if (matchState.GetSeat(trapFloorTemplate.Players[i].SeatId).OccupantPlayerId == localPlayerId)
+                if (matchState.GetSeat(seats[i].SeatId).OccupantPlayerId == localPlayerId)
                 {
                     localIndex = i;
                     break;
@@ -191,7 +191,7 @@ namespace ConsoleCards.Presentation.Composition
             for (int step = 1; step < count; step++)
             {
                 PlayerId candidate = matchState.GetSeat(
-                    trapFloorTemplate.Players[(localIndex + step + count) % count].SeatId).OccupantPlayerId;
+                    seats[(localIndex + step + count) % count].SeatId).OccupantPlayerId;
                 if (candidate.IsEmpty || candidate == localPlayerId) continue;
                 BeginSeatSwitch(candidate, false);
                 return;
@@ -237,7 +237,7 @@ namespace ConsoleCards.Presentation.Composition
             PlayerId target = seatSwitchTarget;
             bool fromHandover = seatSwitchFromHandover;
             if (fromHandover
-                && (trapFloorTurnState == null || trapFloorTurnState.ActivePlayerId != target))
+                && ActiveCartridge.TurnPlayerId != target)
             {
                 handTrayRig?.SetCleared(false);
                 runtimeUi?.FadeOutHotSeatHandover();
@@ -273,7 +273,7 @@ namespace ConsoleCards.Presentation.Composition
             bool moved = cameraController.ShowPreset(seatSwitchCameraView, seatSwitchCameraSeconds)
                 || cameraController.ShowMidView()
                 || cameraController.ShowCloseView();
-            if (!moved) ProjectTrapFloorCameraBookmark();
+            if (!moved) ProjectTemplateCameraBookmark();
             Debug.Log(
                 $"[Seat] Screen seat is now {PlayerLabel(localPlayerId)} (layout seat {localPlayerLayoutSeatIndex + 1}, "
                 + $"facing {(localSeatLayout != null ? localSeatLayout.FacingRotationDegrees : 0f)}°); camera view "
@@ -301,7 +301,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            PlayerId active = trapFloorTurnState.ActivePlayerId;
+            PlayerId active = ActiveCartridge.TurnPlayerId;
             if (hotSeatHandoverOpen && hotSeatHandoverFor == active) return;
             OpenHotSeatHandover(active);
         }
@@ -315,7 +315,7 @@ namespace ConsoleCards.Presentation.Composition
                 "PASS THE SCREEN",
                 label.ToUpperInvariant(),
                 BuildHandoverSummary(player),
-                $"I'm {TrapFloorGame.FormatPlayerName(player)} — show my hand",
+                $"I'm {FormatPlayerName(player)} — show my hand",
                 FeedbackColour(player));
             if (runtimeUi != null && runtimeUi.ShowHotSeatHandover(model, ConfirmHotSeatHandover))
             {
@@ -335,8 +335,7 @@ namespace ConsoleCards.Presentation.Composition
             PlayerId target = hotSeatHandoverFor;
             hotSeatHandoverOpen = false; // the cover stays up until the new seat is ready, then fades
             if (!IsInitialized
-                || trapFloorTurnState == null
-                || trapFloorTurnState.ActivePlayerId != target)
+                || ActiveCartridge.TurnPlayerId != target)
             {
                 // The turn moved while the cover was up: lift it; the next frame opens a new handover if needed.
                 runtimeUi?.FadeOutHotSeatHandover();
@@ -396,8 +395,8 @@ namespace ConsoleCards.Presentation.Composition
 
         private int PlayerHandCount(PlayerId player)
         {
-            return TrapFloorGame.TryGetTrapFloorPlayerSetup(player, out TrapFloorPlayerSetupDefinition setup)
-                && matchState.Containers.TryGetValue(setup.HandContainerId, out ContainerState hand)
+            return TryGetGameSeat(player, out CartridgeSeat seat)
+                && matchState.Containers.TryGetValue(seat.HandContainerId, out ContainerState hand)
                 ? hand.Count
                 : 0;
         }
@@ -414,7 +413,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (string.IsNullOrEmpty(line)) return;
             handoverLog[handoverLogCount % HandoverLogSize] = line;
-            handoverLogRound[handoverLogCount % HandoverLogSize] = trapFloorTurnState != null ? trapFloorTurnState.CurrentRound : 0;
+            handoverLogRound[handoverLogCount % HandoverLogSize] = ActiveCartridge.CurrentRound;
             handoverLogCount++;
         }
 
@@ -450,38 +449,138 @@ namespace ConsoleCards.Presentation.Composition
 
         internal string PlayerLabel(PlayerId player)
         {
-            string colour = TryGetTrapFloorSeatIndex(player, out int seat) ? $" ({PlayerColorName(seat)})" : string.Empty;
-            return $"{TrapFloorGame.FormatPlayerName(player)}{colour}";
+            string colour = TryGetSeatIndex(player, out int seat) ? $" ({PlayerColorName(seat)})" : string.Empty;
+            return $"{FormatPlayerName(player)}{colour}";
+        }
+
+        // CART-1b: the seats of the game in play, from its cartridge (an Empty Table has none). A seat's number is
+        // its place in the table's player layout.
+        internal bool TryGetGameSeat(PlayerId player, out CartridgeSeat seat)
+        {
+            IReadOnlyList<CartridgeSeat> seats = ActiveCartridge.Seats;
+            if (!player.IsEmpty && matchState != null)
+            {
+                for (int i = 0; i < seats.Count; i++)
+                {
+                    if (matchState.Seats.TryGetValue(seats[i].SeatId, out SeatState state) && state.OccupantPlayerId == player)
+                    {
+                        seat = seats[i];
+                        return true;
+                    }
+                }
+            }
+
+            seat = default;
+            return false;
+        }
+
+        // "Player 2": the seat a player sits in; a player without a seat is a participating player.
+        internal string FormatPlayerName(PlayerId player) =>
+            TryGetGameSeat(player, out CartridgeSeat seat) ? $"Player {seat.LayoutSeatIndex + 1}" : "Participating Player";
+
+        // How many cards a draw from this deck can take: the deck's cards, up to the room in the hand it fills.
+        internal int AvailableDrawableCount(ContainerId sourceDeckContainerId)
+        {
+            if (matchState == null
+                || !matchState.Containers.TryGetValue(sourceDeckContainerId, out ContainerState deck)
+                || !matchState.Containers.TryGetValue(DrawTargetHandFor(sourceDeckContainerId), out ContainerState hand))
+            {
+                return 0;
+            }
+
+            int handSpace = hand.Capacity == 0
+                ? deck.Count
+                : Math.Max(0, hand.Capacity - hand.Count);
+            return Math.Min(deck.Count, handSpace);
+        }
+
+        // The cards left in a deck the game deals from itself (0 for any other deck).
+        internal int AvailableAssistedDeckCount(ContainerId deckId) =>
+            ActiveCartridge.IsAssistedControllerDeck(deckId) && matchState != null
+                ? matchState.GetContainer(deckId).Count
+                : 0;
+
+        // Any pawn held or dragged (for the hint's console note when it is not the turn player's). Polled each
+        // frame; no allocation.
+        internal bool IsAnyPawnHeld(out TabletopObjectId pawnId)
+        {
+            pawnId = TabletopObjectId.Empty;
+            if (interactionStateMachine != null
+                && interactionStateMachine.Phase == TabletopInteractionPhase.DraggingObject
+                && matchState != null
+                && matchState.Pawns.ContainsKey(interactionStateMachine.ActiveObjectId))
+            {
+                pawnId = interactionStateMachine.ActiveObjectId;
+                return true;
+            }
+
+            for (int i = 0; i < Registry.pawnViews.Count; i++)
+            {
+                PawnView view = Registry.pawnViews[i];
+                if (view != null && view.IsBound && view.PhysicalObject != null && view.PhysicalObject.IsHeld)
+                {
+                    pawnId = view.ObjectId;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // True while the turn player holds their own seat's pawn (dragged or lifted). Polled each frame; no allocation.
+        internal bool IsTurnPawnHeld()
+        {
+            if (!ActiveCartridge.IsPlayerTurnOpen
+                || !TryGetGameSeat(ActiveCartridge.TurnPlayerId, out CartridgeSeat seat)
+                || seat.PawnId.IsEmpty)
+            {
+                return false;
+            }
+
+            if (interactionStateMachine != null
+                && interactionStateMachine.Phase == TabletopInteractionPhase.DraggingObject
+                && interactionStateMachine.ActiveObjectId == seat.PawnId)
+            {
+                return true;
+            }
+
+            for (int i = 0; i < Registry.pawnViews.Count; i++)
+            {
+                PawnView view = Registry.pawnViews[i];
+                if (view == null || !view.IsBound || view.ObjectId != seat.PawnId) continue;
+                if (view.PhysicalObject != null && view.PhysicalObject.IsHeld) return true;
+            }
+
+            return false;
         }
 
         // True while a Player turn belongs to someone whose hand is not the screen hand.
         private bool ScreenHandBehindTurn()
         {
-            return trapFloorTurnState != null
-                && templateContext != null
-                && templateContext.TrapFloorTemplate != null
-                && !trapFloorTurnState.IsCurrentFloorFailed
-                && trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
-                && !trapFloorTurnState.ActivePlayerId.IsEmpty
-                && trapFloorTurnState.ActivePlayerId != localPlayerId
-                && trapFloorTurnState.ActivePlayerId != handSeatSyncFailedFor;
+            PlayerId turn = ActiveCartridge.TurnPlayerId;
+            return templateContext != null
+                && ActiveCartridge.IsPlayerTurnOpen
+                && !turn.IsEmpty
+                && turn != localPlayerId
+                && turn != handSeatSyncFailedFor;
         }
 
         // The hand a draw from this deck fills: the deck owner's hand (a Console's Controller Deck belongs to
         // its seat), otherwise the screen hand.
         internal ContainerId DrawTargetHandFor(ContainerId deckId)
         {
-            if (trapFloorTemplate != null
+            IReadOnlyList<CartridgeSeat> seats = ActiveCartridge.Seats;
+            if (seats.Count > 0
                 && matchState != null
                 && matchState.Containers.TryGetValue(deckId, out ContainerState deck))
             {
-                for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+                for (int i = 0; i < seats.Count; i++)
                 {
-                    TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[i];
-                    if (player.ControllerDeckId == deckId
-                        || (!deck.OwnerSeatId.IsEmpty && deck.OwnerSeatId == player.SeatId))
+                    CartridgeSeat seat = seats[i];
+                    if (seat.ControllerDeckId == deckId
+                        || (!deck.OwnerSeatId.IsEmpty && deck.OwnerSeatId == seat.SeatId))
                     {
-                        return player.HandContainerId;
+                        return seat.HandContainerId;
                     }
                 }
             }
@@ -497,16 +596,16 @@ namespace ConsoleCards.Presentation.Composition
 
         internal string HandOwnerName(ContainerId handId)
         {
-            if (trapFloorTemplate != null && matchState != null)
+            IReadOnlyList<CartridgeSeat> seats = ActiveCartridge.Seats;
+            if (matchState != null)
             {
-                for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+                for (int i = 0; i < seats.Count; i++)
                 {
-                    TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[i];
-                    if (player.HandContainerId == handId)
+                    if (seats[i].HandContainerId == handId)
                     {
-                        PlayerId owner = matchState.GetSeat(player.SeatId).OccupantPlayerId;
-                        string colour = TryGetTrapFloorSeatIndex(owner, out int seat) ? $" ({PlayerColorName(seat)})" : string.Empty;
-                        return $"{TrapFloorGame.FormatPlayerName(owner)}{colour}";
+                        PlayerId owner = matchState.GetSeat(seats[i].SeatId).OccupantPlayerId;
+                        string colour = TryGetSeatIndex(owner, out int seat) ? $" ({PlayerColorName(seat)})" : string.Empty;
+                        return $"{FormatPlayerName(owner)}{colour}";
                     }
                 }
             }

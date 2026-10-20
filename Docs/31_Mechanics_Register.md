@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.21 · 2026-10-20 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.22 · 2026-10-20 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -506,7 +506,7 @@ Change: …
   During a game the table never gets smaller than the classic area. Legs come from the base table model and stay attached. The
   choice is saved in the profile.
 - **Source:** doc 30 §B6–§B10
-- **Open:** seats along the table outline (with CART-1); picture cards for the shapes (V4).
+- **Open:** picture cards for the shapes (V4). Seats along the edge: PL-CARTRIDGE (CART-1c, to be checked).
 - **Changes:** 2026-10-18 every Toolbox piece moves in, game mats included (owner); 2026-10-17 T1–T3 approved.
 
 ### P-TABLE-MODELS · Table models
@@ -650,12 +650,18 @@ Change: …
 - **Source:** owner, 2026-10-19 (Console card frames 13, 14, 36-39)
 
 ### PL-CARTRIDGE · Cartridge contract
-- **Status:** In progress: CART-1a written (2026-10-20), to be checked; 1b and 1c to come
+- **Status:** In progress: CART-1a approved (2026-10-20); 1b and 1c written (2026-10-20), to be checked
 - **Rule now:** what a game ("cartridge") must declare to plug into the platform, including where its seats may go
   on any table shape. CART-1a: the table talks to the cartridge in play for its table setups, its per-frame step, its
   status line and card, its Shop entry, its hint helpers, its own card menus and its reactions to cards played into
   Console slots. Trap Floor is the first code cartridge; an Empty Table, a game a player made and a game box without
-  code are data cartridges (the status line names a player's game).
+  code are data cartridges (the status line names a player's game). CART-1b: the table's own code no longer names a
+  game; a cartridge also brings its templates, its rules state and commands, its part of each Undo step, its seats
+  and turns, its board tiles (look, menu, inspect text) and its feedback. CART-1c: a cartridge says where its seats
+  may go: fixed, or along the edge. Trap Floor's seats sit at the table's edge on any shape (out along the line
+  from the centre through their classic places, keeping order and facing, never nearer than the classic place);
+  each seat's Console, piles, hand zone and the loose cards beside it move together, when a game starts or is reset
+  and when the table changes during a game. On the classic table the seats are at home.
 - **Source:** doc 30 §A4
 
 ### PL-MULTIPLAYER · Online multiplayer

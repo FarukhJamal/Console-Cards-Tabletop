@@ -192,9 +192,11 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             int moved = MovePiecesIn();
+            int seatsMoved = ArrangeSeatsAlongEdge(false); // CART-1c: a game's seats follow the edge
             message = moved > 0
                 ? $" Moved {moved} {(moved == 1 ? "piece" : "pieces")} in from the edge (Undo puts {(moved == 1 ? "it" : "them")} back)."
                 : string.Empty;
+            if (seatsMoved > 0) message += $" {seatsMoved} seat{(seatsMoved == 1 ? " moves" : "s move")} to the new edge.";
             return true;
         }
 

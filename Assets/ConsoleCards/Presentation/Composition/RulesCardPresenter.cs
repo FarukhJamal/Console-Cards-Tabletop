@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -74,12 +73,12 @@ namespace ConsoleCards.Presentation.Composition
 
             if (host.activeSession == null
                 || host.activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom
-                || host.trapFloorGameDefinition == null)
+                || host.TableGame == null)
             {
                 return null;
             }
 
-            string modeStableId = host.trapFloorTemplate != null ? host.trapFloorTemplate.ActiveMode.StableId : string.Empty;
+            string modeStableId = host.ActiveCartridge.ActiveModeStableId;
             RulesCardModel model = RulesCardModel.FromRuleSet(ActiveRuleSet, modeStableId);
             if (model == null) return null;
             if (rulesCardActions == null)
@@ -101,24 +100,24 @@ namespace ConsoleCards.Presentation.Composition
         // ---------- house rules (doc 23, R3) ----------
 
         internal RuleSetDefinition ActiveRuleSet =>
-            activeRuleSet != null ? activeRuleSet : host.trapFloorGameDefinition != null ? host.trapFloorGameDefinition.DefaultRuleSet : null;
+            activeRuleSet != null ? activeRuleSet : host.TableGame != null ? host.TableGame.DefaultRuleSet : null;
 
         // Index in the pick list: 0 is the default set, then the saved sets oldest first.
         internal int ActiveRuleSetIndex => activeRuleSet == null ? 0 : host.houseRuleSets.IndexOf(activeRuleSet) + 1;
 
         internal RuleSetDefinition RuleSetAt(int index) =>
-            index <= 0 || index > host.houseRuleSets.Count ? host.trapFloorGameDefinition.DefaultRuleSet : host.houseRuleSets[index - 1];
+            index <= 0 || index > host.houseRuleSets.Count ? host.TableGame.DefaultRuleSet : host.houseRuleSets[index - 1];
 
         // Reads the saved house-rule sets once, at start. Sets made from other rules are skipped.
         internal void EnsureHouseRulesLoaded()
         {
-            if (houseRulesLoaded || host.trapFloorGameDefinition == null || host.trapFloorGameDefinition.DefaultRuleSet == null) return;
+            if (houseRulesLoaded || host.TableGame == null || host.TableGame.DefaultRuleSet == null) return;
             houseRulesLoaded = true;
-            RuleSetDefinition defaults = host.trapFloorGameDefinition.DefaultRuleSet;
+            RuleSetDefinition defaults = host.TableGame.DefaultRuleSet;
             try
             {
                 houseRulesStore = new HouseRulesStore(ContentPackStore.ForProfile(host.EnsureProfile()));
-                List<HouseRuleSetRecord> records = houseRulesStore.Load(host.trapFloorGameDefinition.StableId);
+                List<HouseRuleSetRecord> records = houseRulesStore.Load(host.TableGame.StableId);
                 for (int i = 0; i < records.Count; i++)
                 {
                     HouseRuleSetRecord record = records[i];
@@ -184,7 +183,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void OpenRuleSetSwitch(int direction)
         {
             int count = 1 + host.houseRuleSets.Count;
-            if (count < 2 || host.trapFloorGameDefinition == null) return;
+            if (count < 2 || host.TableGame == null) return;
             ruleProposalEntryId = null;
             ruleProposalSetIndex = (((ActiveRuleSetIndex + direction) % count) + count) % count;
             BeginRuleProposal();
@@ -369,13 +368,13 @@ namespace ConsoleCards.Presentation.Composition
             RuleSetDefinition trial = RuleSetDefinition.CreateHouseRules(ActiveRuleSet, "rules-trial", "Trial", change);
             try
             {
-                var gameDefinition = host.trapFloorContent != null
-                    ? host.trapFloorContent.ToData(trial)
-                    : host.trapFloorGameDefinition.ToData(trial);
-                for (int i = 0; i < gameDefinition.Modes.Count; i++)
+                var gameDefinition = host.tableContent != null
+                    ? host.tableContent.ToData(trial)
+                    : host.TableGame.ToData(trial);
+                IGameCartridge cartridge = host.Cartridges.CodeCartridgeFor(host.TableGame); // CART-1b: the game sets itself up
+                for (int i = 0; cartridge != null && i < gameDefinition.Modes.Count; i++)
                 {
-                    TrapFloorTemplateFactory.CreateStandardFourPlayer(
-                        new SystemRandomValueSource(), gameDefinition, gameDefinition.Modes[i].StableId, host.GetConsoleLayout());
+                    cartridge.CheckSetUp(gameDefinition, gameDefinition.Modes[i].StableId);
                 }
 
                 return true;
@@ -424,7 +423,7 @@ namespace ConsoleCards.Presentation.Composition
         // carrying the changes already in play) and put it in play. Text applies at once; settings at restart.
         internal void CommitRuleProposal()
         {
-            RuleSetDefinition defaults = host.trapFloorGameDefinition.DefaultRuleSet;
+            RuleSetDefinition defaults = host.TableGame.DefaultRuleSet;
             if (ruleProposalEntryId == null)
             {
                 activeRuleSet = ruleProposalSetIndex <= 0 ? null : host.houseRuleSets[ruleProposalSetIndex - 1];
@@ -457,7 +456,7 @@ namespace ConsoleCards.Presentation.Composition
             HouseRuleSetRecord record = HouseRuleSetRecord.FromChanges($"house-{Guid.NewGuid():N}", name, defaults, changes);
             string saveNote = string.Empty;
             string error = "no store";
-            if (houseRulesStore == null || !houseRulesStore.TrySave(host.trapFloorGameDefinition.StableId, record, out error))
+            if (houseRulesStore == null || !houseRulesStore.TrySave(host.TableGame.StableId, record, out error))
             {
                 saveNote = " It could not be saved on this computer, so it lasts until you close the game.";
                 Debug.LogWarning($"[Rules] House rules '{name}' were not saved: {error}");
@@ -568,10 +567,10 @@ namespace ConsoleCards.Presentation.Composition
             EnsureHints();
             bool isGame = host.activeSession != null
                 && host.activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom
-                && host.trapFloorGameDefinition != null;
-            string modeStableId = host.trapFloorTemplate != null ? host.trapFloorTemplate.ActiveMode.StableId : string.Empty;
+                && host.TableGame != null;
+            string modeStableId = host.ActiveCartridge.ActiveModeStableId;
             host.hintService.SetGameHints(isGame
-                ? RuleHints.Collect(ActiveRuleSet, modeStableId, host.trapFloorGameDefinition.StableId)
+                ? RuleHints.Collect(ActiveRuleSet, modeStableId, host.TableGame.StableId)
                 : null);
             // H3: the game's hint helpers run while a rule in play names them.
             host.hintService.SetHelpersInPlay(isGame ? RuleHints.CollectHelpers(ActiveRuleSet, modeStableId) : null);
@@ -614,8 +613,8 @@ namespace ConsoleCards.Presentation.Composition
             bool cardDrag = host.IsCardDragActive();
             if (cardDrag && !hintCardDragSeen) RaiseHint(HintTriggers.CardDragged);
             hintCardDragSeen = cardDrag;
-            bool pawnDrag = host.TrapFloorGame.IsAnyPawnHeld(out _);
-            if (pawnDrag && !hintPawnDragSeen) RaiseHint(HintTriggers.PawnDragged, host.TrapFloorGame.IsActivePawnHeld() ? "own" : "other");
+            bool pawnDrag = host.IsAnyPawnHeld(out _);
+            if (pawnDrag && !hintPawnDragSeen) RaiseHint(HintTriggers.PawnDragged, host.IsTurnPawnHeld() ? "own" : "other");
             hintPawnDragSeen = pawnDrag;
         }
         // ---------- from TabletopComposition.cs ----------

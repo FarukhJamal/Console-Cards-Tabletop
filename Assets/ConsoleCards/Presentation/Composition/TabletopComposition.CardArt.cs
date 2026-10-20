@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -48,41 +47,6 @@ namespace ConsoleCards.Presentation.Composition
     /// <summary>Card art, card looks, labels and art materials. (R1a: moved here unchanged from TabletopComposition.cs.)</summary>
     public sealed partial class TabletopComposition
     {
-        // Board (floor) card backs change per round: round 1 uses the first back, round 2 the second,
-        // and so on, repeating after the last (doc 24). Null when the game has no backs.
-        internal Texture2D CurrentBoardCardBack()
-        {
-            if (trapFloorGameDefinition == null)
-            {
-                return null;
-            }
-
-            int count = BoardCardBackCount();
-            if (count == 0)
-            {
-                return null;
-            }
-
-            int round = trapFloorRoundState != null ? Math.Max(1, trapFloorRoundState.CurrentRoundNumber) : 1;
-            int index = (round - 1) % count;
-            IReadOnlyList<Texture2D> backs = trapFloorGameDefinition.BoardCardBacks;
-            IReadOnlyList<string> keys = trapFloorGameDefinition.BoardCardBackReferences;
-            return Art(
-                keys != null && index < keys.Count ? keys[index] : null,
-                backs != null && index < backs.Count ? backs[index] : null);
-        }
-
-        // A back counts when it has a texture or a key (a pack may supply the picture for a key).
-        private int BoardCardBackCount()
-        {
-            if (trapFloorGameDefinition == null) return 0;
-            int textures = trapFloorGameDefinition.BoardCardBacks != null ? trapFloorGameDefinition.BoardCardBacks.Count : 0;
-            int keys = trapFloorGameDefinition.BoardCardBackReferences != null
-                ? trapFloorGameDefinition.BoardCardBackReferences.Count
-                : 0;
-            return Math.Max(textures, keys);
-        }
-
         // ---------- A2: art by key ----------
 
         private Texture2D Art(string key, Texture2D builtIn)
@@ -119,9 +83,9 @@ namespace ConsoleCards.Presentation.Composition
                 contentArt.Library.TextureReleased += HandleArtTextureReleased;
             }
 
-            if (!contentArt.HasGame && trapFloorGameDefinition != null)
+            if (!contentArt.HasGame && TableGame != null)
             {
-                contentArt.UseGame(trapFloorGameDefinition);
+                contentArt.UseGame(TableGame);
             }
         }
 
@@ -309,39 +273,16 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        // Only does work on the frame the round number changes; re-applies floor backs then.
-        private void RefreshBoardCardBacksIfRoundChanged()
-        {
-            int round = trapFloorRoundState != null ? trapFloorRoundState.CurrentRoundNumber : 0;
-            if (round == boardCardBacksRound)
-            {
-                return;
-            }
-
-            boardCardBacksRound = round;
-            if (trapFloorTemplate == null
-                || matchState == null
-                || trapFloorGameDefinition == null
-                || BoardCardBackCount() < 2)
-            {
-                return;
-            }
-
-            foreach (TabletopObjectId floorCardId in trapFloorTemplate.FloorCardIds.Values)
-            {
-                TrapFloorGame.RefreshTrapFloorFloorCardPresentation(floorCardId);
-            }
-        }
-
         private bool TryGetAuthoredAvatar(ObjectDefinitionId definitionId, out AvatarDefinition avatar)
         {
             avatar = null;
-            if (trapFloorTemplate == null || trapFloorGameDefinition == null)
+            GameDefinition game = ActiveCartridge.Game; // a game's table: its own avatars
+            if (game == null)
             {
                 return false;
             }
 
-            IReadOnlyList<AvatarDefinition> avatars = trapFloorGameDefinition.Avatars;
+            IReadOnlyList<AvatarDefinition> avatars = game.Avatars;
             for (int i = 0; i < avatars.Count; i++)
             {
                 AvatarDefinition candidate = avatars[i];
@@ -369,6 +310,10 @@ namespace ConsoleCards.Presentation.Composition
                 : CardSizeClass.Standard;
         }
 
+        // The table's own picture service (contentArt) belongs to the default game (CART-1b); any other game gets a
+        // short-lived one.
+        internal bool UsesTableArt(GameDefinition game) => game != null && ReferenceEquals(game, Cartridges.DefaultGame);
+
         // How a card looks (name, art, size): its game's card definition, found in this table's game or in any
         // game box of the library. Presentation only; game rules keep using TryGetAuthoredCardDefinition.
         internal bool TryGetCardLook(ObjectDefinitionId definitionId, out CardDefinition definition)
@@ -376,8 +321,8 @@ namespace ConsoleCards.Presentation.Composition
             if (TryGetAuthoredCardDefinition(definitionId, out definition)) return true;
             definition = null;
             if (definitionId.IsEmpty) return false;
-            if (trapFloorContent != null && trapFloorContent.TryGetCard(definitionId, out definition)) return true;
-            if (trapFloorGameDefinition != null && trapFloorGameDefinition.TryGetCard(definitionId, out definition)) return true;
+            if (tableContent != null && tableContent.TryGetCard(definitionId, out definition)) return true;
+            if (TableGame != null && TableGame.TryGetCard(definitionId, out definition)) return true;
             IReadOnlyList<ComponentCatalog> boxes = componentLibrary != null ? componentLibrary.GameBoxes : null;
             for (int i = 0; boxes != null && i < boxes.Count; i++)
             {
@@ -393,7 +338,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (TryGetAuthoredAvatar(definitionId, out avatar)) return true;
             if (definitionId.IsEmpty) return false;
-            if (FindAvatar(trapFloorGameDefinition, definitionId, out avatar)) return true;
+            if (FindAvatar(TableGame, definitionId, out avatar)) return true;
             IReadOnlyList<ComponentCatalog> boxes = componentLibrary != null ? componentLibrary.GameBoxes : null;
             for (int i = 0; boxes != null && i < boxes.Count; i++)
             {
@@ -420,27 +365,6 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             return false;
-        }
-
-        internal static Color TrapFloorContentColor(TrapFloorFloorContentCategory category)
-        {
-            switch (category)
-            {
-                case TrapFloorFloorContentCategory.Trap:
-                    return new Color(0.86f, 0.34f, 0.28f);
-                case TrapFloorFloorContentCategory.Friend:
-                    return new Color(0.40f, 0.76f, 0.70f);
-                case TrapFloorFloorContentCategory.Key:
-                    return new Color(0.95f, 0.78f, 0.26f);
-                case TrapFloorFloorContentCategory.SecretExit:
-                    return new Color(0.56f, 0.48f, 0.84f);
-                case TrapFloorFloorContentCategory.Entry:
-                    return new Color(0.40f, 0.70f, 0.42f);
-                case TrapFloorFloorContentCategory.Ability:
-                    return new Color(0.42f, 0.66f, 0.90f);
-                default:
-                    return new Color(0.95f, 0.88f, 0.42f);
-            }
         }
 
         internal bool HidesTableVisual(TableVisualHide part)
@@ -479,8 +403,8 @@ namespace ConsoleCards.Presentation.Composition
             ConfigureWorldLabel(
                 label,
                 text,
-                TrapFloorContainerLabelCharacterSize,
-                TrapFloorContainerLabelFontSize);
+                ContainerLabelCharacterSize,
+                ContainerLabelFontSize);
         }
 
         internal static void ConfigureWorldLabel(
@@ -639,16 +563,16 @@ namespace ConsoleCards.Presentation.Composition
             ObjectDefinitionId definitionId,
             out CardDefinition definition)
         {
-            if (trapFloorTemplate != null
-                && trapFloorContent != null
-                && trapFloorContent.TryGetCard(definitionId, out definition))
+            GameDefinition game = ActiveCartridge.Game; // CART-1b: rules read the cards of the game in play
+            if (game != null
+                && tableContent != null
+                && tableContent.TryGetCard(definitionId, out definition))
             {
                 return true;
             }
 
-            if (trapFloorTemplate != null
-                && trapFloorGameDefinition != null
-                && trapFloorGameDefinition.TryGetCard(definitionId, out definition))
+            if (game != null
+                && game.TryGetCard(definitionId, out definition))
             {
                 return true;
             }

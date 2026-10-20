@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -64,7 +63,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void OpenCardInspect(TabletopObjectId targetCardId)
         {
-            host.activeFloorRevealActivity = null;
+            host.ActiveCartridge.ForgetInspectContext(); // CART-1b: e.g. which reveal the inspect was opened for
             if (host.ContextMenus.IsInAnotherPlayersHand(targetCardId))
             {
                 host.ShowMessage("That card is in another player's hand.");
@@ -87,7 +86,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void CloseCardInspect()
         {
-            host.activeFloorRevealActivity = null;
+            host.ActiveCartridge.ForgetInspectContext(); // CART-1b: e.g. which reveal the inspect was opened for
             host.inspectedCardId = TabletopObjectId.Empty;
             host.inspectedCardRenderedRevision = -1;
             host.runtimeUi?.CloseCardInspect();
@@ -132,126 +131,9 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            if (host.trapFloorTemplate != null
-                && host.trapFloorTemplate.TryGetFloorCardState(
-                    host.matchState,
-                    targetCardId,
-                    out TrapFloorFloorCardState floorCard))
+            // CART-1b: a game's own pieces (for example a board tile) say what they show.
+            if (host.ActiveCartridge.TryBuildInspectModel(targetCardId, card, out model))
             {
-                if (host.trapFloorCollapseState != null
-                    && host.trapFloorCollapseState.IsCollapsed(targetCardId))
-                {
-                    Color holeColor = new Color(0.025f, 0.03f, 0.04f);
-                    model = new CardInspectModel(
-                        $"Collapsed Floor {floorCard.Coordinate} | {targetCardId}",
-                        card.Face,
-                        new CardInspectSideModel(
-                            "HOLE",
-                            $"Floor {floorCard.Coordinate} is permanently collapsed and unusable.",
-                            null,
-                            holeColor,
-                            Color.white),
-                        new CardInspectSideModel(
-                            "HOLE",
-                            $"Floor {floorCard.Coordinate} is permanently collapsed and unusable.",
-                            null,
-                            holeColor,
-                            Color.white),
-                        false);
-                    return true;
-                }
-
-                TrapFloorActivityEntry revealActivity = host.activeFloorRevealActivity != null
-                    && host.activeFloorRevealActivity.FloorCardId == targetCardId
-                        ? host.activeFloorRevealActivity
-                        : null;
-                string revealContext = revealActivity == null
-                    ? string.Empty
-                    : $"Revealed by: {host.TrapFloorGame.FormatPlayerName(revealActivity.ActorPlayerId)}\n"
-                        + $"Floor coordinate: {floorCard.Coordinate}\n";
-                string objectiveContext = string.Empty;
-                string frontTitle = floorCard.Content.DisplayName;
-                string inputCostContext = host.TryGetAuthoredCardDefinition(
-                        card.BaseState.DefinitionId,
-                        out CardDefinition floorCardDefinition)
-                    ? host.TrapFloorGame.FormatInputCost(floorCardDefinition)
-                    : string.Empty;
-                PopupActionOption? primaryAction = null;
-                if (floorCard.Content.Category == TrapFloorFloorContentCategory.Trap)
-                {
-                    bool safelyRevealed = host.TrapFloorGame.WasTrapSafelyRevealed(targetCardId);
-                    bool neutralized = host.TrapFloorGame.IsTrapFloorTrapNeutralized(targetCardId);
-                    objectiveContext = safelyRevealed
-                        ? "CAREFUL SEARCH — Trap did not trigger during this reveal.\nThe Floor remains a Trap.\n"
-                        : neutralized
-                        ? "TRAP NEUTRALIZED\nThis Floor is safe from assisted Trap consequences.\n"
-                        : TrapFloorCartridge.TrapFloorTrapEffectDescription(floorCard.Content) + "\n";
-                    if (safelyRevealed)
-                    {
-                        frontTitle = $"{floorCard.Content.DisplayName} — REVEALED SAFELY";
-                    }
-                    else if (neutralized)
-                    {
-                        frontTitle = $"{floorCard.Content.DisplayName} — SAFE";
-                    }
-                    else if (host.TrapFloorGame.IsTrapFloorTrapResolved(targetCardId))
-                    {
-                        frontTitle = $"{floorCard.Content.DisplayName} — RESOLVED";
-                        objectiveContext = "TRAP RESOLVED\nIts assisted consequence has already been applied or prevented.\n";
-                    }
-                    else if (floorCard.Content.HasSupportedAssistedTrapEffect)
-                    {
-                        primaryAction = new PopupActionOption(
-                            "Resolve Trap",
-                            host.TrapFloorGame.CanResolveTrapFloorTrap(targetCardId),
-                            () => host.TrapFloorGame.ResolveTrapFloorTrap(targetCardId));
-                    }
-                }
-                else if (floorCard.Content.Category == TrapFloorFloorContentCategory.Key
-                    && host.trapFloorObjectiveState != null)
-                {
-                    if (host.trapFloorObjectiveState.TryGetClaim(
-                            targetCardId,
-                            out TrapFloorCollectedKeyState claim))
-                    {
-                        frontTitle = "KEY — CLAIMED";
-                        objectiveContext = $"Key status: CLAIMED\n"
-                            + $"Claimed by: {host.TrapFloorGame.FormatPlayerName(claim.ClaimedByPlayerId)}\n";
-                    }
-                    else
-                    {
-                        frontTitle = "KEY — UNCLAIMED";
-                        objectiveContext = "Key status: UNCLAIMED\n"
-                            + "Claim this Key before attempting to escape.\n";
-                        primaryAction = new PopupActionOption(
-                            "Claim Key",
-                            !host.trapFloorObjectiveState.IsWon,
-                            () => host.TrapFloorGame.ClaimTrapFloorKey(targetCardId));
-                    }
-                }
-
-                string frontBody = $"{revealContext}{objectiveContext}"
-                    + $"Category: {floorCard.Content.Category}\n"
-                    + $"Content: {floorCard.Content.DisplayName}\n\n"
-                    + floorCard.Content.DisplayText
-                    + inputCostContext;
-                model = new CardInspectModel(
-                    $"Floor {floorCard.Coordinate} | {targetCardId}",
-                    card.Face,
-                    new CardInspectSideModel(
-                        frontTitle,
-                        frontBody,
-                        null,
-                        TrapFloorContentColor(floorCard.Content.Category),
-                        new Color(0.04f, 0.06f, 0.08f)),
-                    new CardInspectSideModel(
-                        "MYSTERY",
-                        $"Floor {floorCard.Coordinate}\nContent stays hidden until a pawn lands on it.",
-                        null,
-                        new Color(0.10f, 0.19f, 0.42f),
-                        Color.white),
-                    false,
-                    primaryAction);
                 return true;
             }
 
@@ -267,7 +149,7 @@ namespace ConsoleCards.Presentation.Composition
                 ? authoredDefinition.DisplayName
                 : "FRONT";
             string authoredFrontBody = hasAuthoredDefinition
-                ? authoredDefinition.Description + host.TrapFloorGame.FormatInputCost(authoredDefinition)
+                ? authoredDefinition.Description + host.ActiveCartridge.FormatInputCost(authoredDefinition)
                 : visualReferences.FrontLabel.text;
             model = new CardInspectModel(
                 targetCardId.ToString(),

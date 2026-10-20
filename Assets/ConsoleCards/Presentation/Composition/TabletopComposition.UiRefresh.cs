@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -46,7 +45,7 @@ using UnityCamera = UnityEngine.Camera;
 namespace ConsoleCards.Presentation.Composition
 {
     /// <summary>
-    /// R2c: the status line and the Trap Floor status card and turn strip are redrawn when something changed, not
+    /// R2c: the status line and the game's status card and turn strip are redrawn when something changed, not
     /// every frame (they build new texts and button lists, which made garbage every frame). They redraw when:
     /// a table change is accepted (the table authority's announcement, or the match revision moving for changes
     /// made outside the door); a game step asks for it (<see cref="MarkTableUiDirty"/>, which the old hand-called
@@ -80,7 +79,7 @@ namespace ConsoleCards.Presentation.Composition
             TableReplaced?.Invoke();
         }
 
-        /// <summary>Asks for the status line and Trap Floor status to be redrawn at the end of this frame.</summary>
+        /// <summary>Asks for the status line and the game's status to be redrawn at the end of this frame.</summary>
         internal void MarkTableUiDirty()
         {
             tableUiDirty = true;

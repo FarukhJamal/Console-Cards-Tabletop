@@ -87,11 +87,12 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!definitionId.IsEmpty)
             {
-                if (trapFloorGameDefinition != null
-                    && ((trapFloorContent != null && trapFloorContent.TryGetCard(definitionId, out _))
-                        || trapFloorGameDefinition.TryGetCard(definitionId, out _)))
+                GameDefinition tableGame = TableGame;
+                if (tableGame != null
+                    && ((tableContent != null && tableContent.TryGetCard(definitionId, out _))
+                        || tableGame.TryGetCard(definitionId, out _)))
                 {
-                    return trapFloorGameDefinition.CardFrameStyle;
+                    return tableGame.CardFrameStyle;
                 }
 
                 IReadOnlyList<ComponentCatalog> boxes = componentLibrary != null ? componentLibrary.GameBoxes : null;

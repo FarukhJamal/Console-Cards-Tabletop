@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -159,7 +158,7 @@ namespace ConsoleCards.Presentation.Composition
                 TokenView createdTokenView = Spawner.CreateTokenView(
                     token,
                     out TabletopSelectionVisual createdSelectionVisual,
-                    TrapFloorCoinVisualScale);
+                    CoinVisualScale);
                 Registry.tokenViews.Add(createdTokenView);
                 Registry.tokenSelectionVisuals.Add(createdSelectionVisual);
             }
@@ -198,9 +197,10 @@ namespace ConsoleCards.Presentation.Composition
                 handView.ConfigureTray(handTrayRig);
             }
 
-            for (int playerIndex = 0; playerIndex < trapFloorTemplate.Players.Count; playerIndex++)
+            IReadOnlyList<CartridgeSeat> seats = ActiveCartridge.Seats; // CART-1b: the game's seats
+            for (int playerIndex = 0; playerIndex < seats.Count; playerIndex++)
             {
-                TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[playerIndex];
+                CartridgeSeat player = seats[playerIndex];
                 RuntimeDeckInstance controllerDeck = Spawner.CreateRuntimeDeckInstance(
                     $"Player {playerIndex + 1} Controller Deck",
                     $"P{playerIndex + 1} CTRL",
@@ -213,7 +213,7 @@ namespace ConsoleCards.Presentation.Composition
                 ConfigurePileBay(controllerDeck.Visual, deckPileStyle, player.SeatId);
 
                 Registry.controllerDeckViews.Add(controllerDeck.View);
-                ContainerId actionAreaId = player.ActionAbilityAreaContainerId;
+                ContainerId actionAreaId = player.ActionAreaContainerId;
                 StackRuntimeView actionArea = Spawner.CreateStackRuntimeView(
                     $"P{playerIndex + 1} ACTIONS",
                     matchState.GetContainer(actionAreaId),
@@ -282,7 +282,7 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < Registry.runtimeConsoleInstances.Count; i++)
             {
                 RuntimeConsoleInstance instance = Registry.runtimeConsoleInstances[i];
-                TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[instance.LayoutSeatIndex];
+                CartridgeSeat player = ActiveCartridge.Seats[instance.LayoutSeatIndex];
                 BindConsole(
                     instance.View,
                     matchState.GetSeat(player.SeatId).Console,
@@ -329,7 +329,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (slotViews.Count != runtimeConsole.SlotCount || slotVisuals.Count != runtimeConsole.SlotCount)
             {
-                throw new InvalidOperationException("Trap Floor Console presentation does not match its Runtime Slot count.");
+                throw new InvalidOperationException("The game's Console presentation does not match its Runtime Slot count.");
             }
 
             List<ConsoleSlotView> orderedSlots = new List<ConsoleSlotView>(runtimeConsole.SlotCount);
@@ -372,21 +372,12 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // The layout seat index of a participating player; it picks the player's colour.
-        internal bool TryGetTrapFloorSeatIndex(PlayerId playerId, out int seatIndex)
+        internal bool TryGetSeatIndex(PlayerId playerId, out int seatIndex)
         {
             seatIndex = -1;
-            if (playerId.IsEmpty || trapFloorTemplate == null || matchState == null) return false;
-            for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
-            {
-                TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[i];
-                if (matchState.Seats.TryGetValue(player.SeatId, out SeatState seat) && seat.OccupantPlayerId == playerId)
-                {
-                    seatIndex = player.LayoutSeatIndex;
-                    return true;
-                }
-            }
-
-            return false;
+            if (!TryGetGameSeat(playerId, out CartridgeSeat seat)) return false;
+            seatIndex = seat.LayoutSeatIndex;
+            return true;
         }
 
         private void ConfigureStackDropTarget(StackRuntimeView stackRuntimeView)

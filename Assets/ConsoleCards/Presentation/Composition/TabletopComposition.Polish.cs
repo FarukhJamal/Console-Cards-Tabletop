@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -961,7 +960,7 @@ namespace ConsoleCards.Presentation.Composition
             if (!matchState.Containers.TryGetValue(pileId, out ContainerState pile)
                 || pile.Count < 2
                 || (pile.Kind != ContainerKind.Deck && pile.Kind != ContainerKind.Stack && pile.Kind != ContainerKind.DiscardPile)
-                || TrapFloorGame.IsAssistedControllerDeck(pileId))
+                || ActiveCartridge.IsAssistedControllerDeck(pileId))
             {
                 return;
             }

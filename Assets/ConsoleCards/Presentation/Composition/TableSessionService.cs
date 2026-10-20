@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -122,7 +121,7 @@ namespace ConsoleCards.Presentation.Composition
             }
             catch (Exception exception)
             {
-                host.availableTrapFloorTemplates.Clear();
+                host.Cartridges.ForgetTemplates();
                 host.sessionTemplateCatalog = new GameTemplateCatalog(Array.Empty<GameTemplateRegistration>());
                 templateCatalogError = exception.Message;
             }
@@ -225,7 +224,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.ActiveCartridge.StatusText(),
                 new ComponentToolboxBindings(
                     host.componentLibrary,
-                    host.activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom ? null : host.trapFloorGameDefinition,
+                    host.activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom ? null : host.ActiveCartridge.Game,
                     host.PlaceCatalogEntry,
                     host.activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom && !host.emptyTableHandContainerId.IsEmpty,
                     host.emptyTableHandEnabled,
@@ -238,7 +237,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.RulesCardPanel.SetHintsEnabled);
             host.runtimeUi.ShowTipsSetting(host.tipsEnabled, host.RulesCardPanel.SetTipsEnabled);
             host.runtimeUi.ShowPlaySettings(
-                host.trapFloorTemplate != null && host.activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom,
+                host.ActiveCartridge.Seats.Count > 0 && host.activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom,
                 $"Seat: {host.PlayerLabel(host.localPlayerId)}",
                 host.NextScreenSeat,
                 host.hotSeatMode,
@@ -251,7 +250,7 @@ namespace ConsoleCards.Presentation.Composition
             host.RefreshTableShapeEntry(); // T1: the table's shape, on every table
             host.PlayerGamesPanel.RefreshSaveGameEntry(); // doc 29: Save table as a game, on an Empty Table
             host.runtimeUi.ShowViewSettings(
-                host.trapFloorTemplate != null && host.activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom,
+                host.ActiveCartridge.Seats.Count > 0 && host.activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom,
                 host.handsOnTable,
                 host.SetHandsOnTable,
                 host.fullFeedback,
@@ -323,7 +322,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (selection.Kind == TabletopSessionKind.GameTemplate
-                && host.availableTrapFloorTemplates.ContainsKey(selection.GameTemplateId))
+                && host.Cartridges.TryGetTemplateSetup(selection.GameTemplateId, out _, out _))
             {
                 try
                 {
@@ -353,23 +352,24 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            TrapFloorTemplateDefinition candidateTemplate = null;
             TemplateContext candidateContext = null;
             try
             {
                 if (selection.Kind == TabletopSessionKind.GameTemplate)
                 {
-                    if (!host.availableTrapFloorTemplates.TryGetValue(
+                    // CART-1b: the cartridge that registered the template makes the table's context for it.
+                    if (!host.Cartridges.TryGetTemplateSetup(
                             selection.GameTemplateId,
-                            out candidateTemplate))
+                            out IGameCartridge candidateCartridge,
+                            out object candidateSetup))
                     {
                         throw new InvalidOperationException(
-                            "The selected Game Template has no registered prototype Presentation wiring.");
+                            "The selected Game Template belongs to no game on this table.");
                     }
 
-                    candidateContext = CreateTrapFloorTemplateContext(
+                    candidateContext = candidateCartridge.CreateTemplateContext(
                         result.Session,
-                        candidateTemplate,
+                        candidateSetup,
                         tableActionActorId);
                 }
             }
@@ -383,7 +383,6 @@ namespace ConsoleCards.Presentation.Composition
 
             TabletopSession previousSession = host.activeSession;
             TemplateContext previousContext = host.templateContext;
-            TrapFloorTemplateDefinition previousTemplate = host.trapFloorTemplate;
             bool hadActivePresentation = host.IsInitialized;
 
             try
@@ -396,11 +395,11 @@ namespace ConsoleCards.Presentation.Composition
                 host.activeSession = result.Session;
                 host.emptyTableHandEnabled = true;
                 host.templateContext = candidateContext;
-                host.trapFloorTemplate = candidateTemplate;
                 host.InitializeActiveSession(false);
                 host.gameTemplatesPanelError = null;
                 host.gameTemplatesPanelVisible = false;
                 ShowActiveSessionUi();
+                host.ArrangeSeatsAtStart(); // CART-1c: on a bigger or other-shaped table the seats start at its edge
                 host.GameSelectPanel.OnTableReplaced(selection); // L2-5: a deck of yours chosen for an Empty Table is placed now
                 return true;
             }
@@ -409,7 +408,6 @@ namespace ConsoleCards.Presentation.Composition
                 host.Shutdown();
                 host.activeSession = previousSession;
                 host.templateContext = previousContext;
-                host.trapFloorTemplate = previousTemplate;
                 host.gameTemplatesPanelError = $"Table replacement failed: {exception.Message}";
                 Debug.LogError(host.gameTemplatesPanelError, host);
 
@@ -517,6 +515,7 @@ namespace ConsoleCards.Presentation.Composition
                 throw;
             }
 
+            host.ArrangeSeatsAtStart(); // CART-1c: the seats start at the table's edge again
             host.ActiveCartridge.RefreshStatusUi();
         }
 
@@ -556,12 +555,12 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             MatchState replacement;
-            TrapFloorSessionState restoredTrapFloor = null;
+            object restoredGameState = null;
             PendingControllerPurchaseState restoredPurchase = null;
             try
             {
                 replacement = snapshot.Match.Restore(undoRevision);
-                restoredTrapFloor = snapshot.TrapFloor?.Restore();
+                restoredGameState = snapshot.GameState?.Restore();
                 restoredPurchase = snapshot.PendingControllerPurchase?.Restore();
             }
             catch (Exception exception)
@@ -577,7 +576,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 host.Shutdown(true);
                 host.activeSession.ReplaceCurrentMatch(replacement);
-                host.pendingRestoredTrapFloorState = restoredTrapFloor;
+                host.pendingRestoredGameState = restoredGameState;
                 host.pendingRestoredControllerPurchaseState = restoredPurchase;
                 host.InitializeActiveSession(false);
                 host.undoHistory.CommitUndo();
@@ -599,7 +598,7 @@ namespace ConsoleCards.Presentation.Composition
             }
             finally
             {
-                host.pendingRestoredTrapFloorState = null;
+                host.pendingRestoredGameState = null;
                 host.pendingRestoredControllerPurchaseState = null;
                 host.rebuildingFromUndo = false;
                 RefreshUndoUi();
@@ -634,12 +633,12 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             MatchState replacement;
-            TrapFloorSessionState restoredTrapFloor = null;
+            object restoredGameState = null;
             PendingControllerPurchaseState restoredPurchase = null;
             try
             {
                 replacement = snapshot.Match.Restore(redoRevision);
-                restoredTrapFloor = snapshot.TrapFloor?.Restore();
+                restoredGameState = snapshot.GameState?.Restore();
                 restoredPurchase = snapshot.PendingControllerPurchase?.Restore();
             }
             catch (Exception exception)
@@ -655,7 +654,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 host.Shutdown(true);
                 host.activeSession.ReplaceCurrentMatch(replacement);
-                host.pendingRestoredTrapFloorState = restoredTrapFloor;
+                host.pendingRestoredGameState = restoredGameState;
                 host.pendingRestoredControllerPurchaseState = restoredPurchase;
                 host.InitializeActiveSession(false);
                 host.undoHistory.CommitRedo();
@@ -672,7 +671,7 @@ namespace ConsoleCards.Presentation.Composition
             }
             finally
             {
-                host.pendingRestoredTrapFloorState = null;
+                host.pendingRestoredGameState = null;
                 host.pendingRestoredControllerPurchaseState = null;
                 host.rebuildingFromUndo = false;
                 RefreshUndoUi();
@@ -761,29 +760,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.RefreshAcceptedCardFaces(); // a Hand turns arriving cards face up (H1b)
             }
 
-            if ((acceptance.Kind == AuthoritativeActionKind.MoveObject
-                    || acceptance.Kind == AuthoritativeActionKind.PhysicalObjectSettled)
-                && host.TrapFloorGame.IsGuidedMoveShown())
-            {
-                // R4: a move made while an Ability or a Trap shows where to go is not a regular move.
-                host.TrapFloorGame.EnsureMoveTurn();
-                host.TrapFloorGame.guidedMoveThisTurn = true;
-            }
-
-            if ((acceptance.Kind == AuthoritativeActionKind.MoveObject
-                    || acceptance.Kind == AuthoritativeActionKind.PhysicalObjectSettled)
-                && host.trapFloorAbilityResolutionService != null
-                && host.trapFloorAbilityResolutionService.ClearMovementAssistanceIfPawnMoved(host.matchState))
-            {
-                host.abilityTargetPresenter?.ClearCurrent();
-            }
-
-            if ((acceptance.Kind == AuthoritativeActionKind.MoveObject
-                    || acceptance.Kind == AuthoritativeActionKind.PhysicalObjectSettled)
-                && host.trapFloorTemplate != null)
-            {
-                host.landingCheckPending = true;
-            }
+            host.ActiveCartridge.OnActionAccepted(acceptance); // CART-1b: the game follows its own moves (landing, guided moves)
 
             if (acceptance.Kind == AuthoritativeActionKind.MoveObject
                 || acceptance.Kind == AuthoritativeActionKind.PhysicalObjectSettled)
@@ -898,11 +875,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             return SessionUndoSnapshot.Capture(
                 host.matchState,
-                host.trapFloorActivityFeed,
-                host.trapFloorObjectiveState,
-                host.trapFloorCollapseState,
-                host.trapFloorTurnState,
-                host.trapFloorAbilityResolutionState,
+                host.ActiveCartridge.CaptureUndoState(), // CART-1b: the game's own part of the step
                 host.pendingControllerPurchaseState);
         }
 
@@ -936,18 +909,13 @@ namespace ConsoleCards.Presentation.Composition
                 case AuthoritativeActionKind.DeleteComponent: return $"{actor} deleted a Component";
                 case AuthoritativeActionKind.PopulateDeck: return $"{actor} populated a Deck";
                 case AuthoritativeActionKind.PhysicalObjectSettled: return $"{actor} moved a physical object";
-                case AuthoritativeActionKind.TrapFloorReveal: return $"{actor} searched a Floor";
-                case AuthoritativeActionKind.TrapFloorClaimKey: return $"{actor} claimed a Key";
-                case AuthoritativeActionKind.TrapFloorAttemptEscape: return $"{actor} attempted Escape";
-                case AuthoritativeActionKind.TrapFloorCollapse: return $"{actor} collapsed a Floor";
                 case AuthoritativeActionKind.PurchaseActionOrAbility: return $"{actor} bought or took an Ability";
                 case AuthoritativeActionKind.FlipConsole: return $"{actor} turned a Console over";
                 case AuthoritativeActionKind.MoveBoard: return $"{actor} moved a Board";
                 case AuthoritativeActionKind.ResizeBoardGrid: return $"{actor} changed a Board's grid";
                 default:
-                    return host.trapFloorTurnState == null
-                        ? $"{actor} performed a table action"
-                        : $"{actor} advanced the Trap Floor turn";
+                    // CART-1b: a game names its own actions; anything else is a table action.
+                    return host.ActiveCartridge.DescribeAction(acceptance, actor) ?? $"{actor} performed a table action";
             }
         }
 

@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -65,7 +64,7 @@ namespace ConsoleCards.Presentation.Composition
     /// (R1a, doc 30 A5). Since R1 (2026-10-18) the larger jobs are plain classes it owns, each reached through one
     /// property: Registry (every view and the lookups), Spawner (makes the pieces), ContextMenus (right-click menus),
     /// CardInspectPanel, RulesCardPanel, CardEditorPanel, DeckEditorPanel, GameSelectPanel, PlayerGamesPanel and
-    /// ProfilePanel (one presenter per panel), TrapFloorGame (the Trap Floor cartridge) and SessionService (start,
+    /// ProfilePanel (one presenter per panel), Cartridges and ActiveCartridge (the games, CART-1) and SessionService (start,
     /// replace, reset, Undo and Redo). Every change to the table goes through TableAuthority (the command door, R1b).
     /// </summary>
     public sealed partial class TabletopComposition : MonoBehaviour, IContainedCardDragFeedback, ICardDropMagnet
@@ -73,10 +72,6 @@ namespace ConsoleCards.Presentation.Composition
         // The table session: starting, replacing and resetting the table, and Undo and Redo with their history.
         private TableSessionService tableSessionServiceInstance;
         internal TableSessionService SessionService => tableSessionServiceInstance ??= new TableSessionService(this);
-
-        // The Trap Floor game, the first cartridge (doc 30 A4): turns, dice, waiting Traps, landing, prizes, Keys, escape, its status texts and turn menu, the Shop and its hint helpers.
-        private TrapFloorCartridge trapFloorCartridgeInstance;
-        internal TrapFloorCartridge TrapFloorGame => trapFloorCartridgeInstance ??= new TrapFloorCartridge(this);
 
         // CART-1a (doc 30 §A4): the cartridges the table knows, and the one in play. A table set up from a game's
         // template plays that game's cartridge; an Empty Table (and a game a player made) plays the data cartridge.
@@ -89,15 +84,22 @@ namespace ConsoleCards.Presentation.Composition
                 if (cartridgeRegistry == null)
                 {
                     cartridgeRegistry = new GameCartridgeRegistry(this);
-                    cartridgeRegistry.Register(TrapFloorGame); // the first code cartridge
+                    RegisterBuiltInCartridges(cartridgeRegistry); // the games with code this build ships with
                 }
 
                 return cartridgeRegistry;
             }
         }
 
-        // CART-1b replaces the Trap Floor check here with the template's own cartridge.
-        internal IGameCartridge ActiveCartridge => trapFloorTemplate != null ? (IGameCartridge)TrapFloorGame : Cartridges.EmptyTable;
+        // CART-1b: the cartridge of the table in play. A table set up from a game's template plays the cartridge that
+        // made the template (set when the table is built, cleared when it goes); every other table plays the Empty
+        // Table's data cartridge.
+        private IGameCartridge activeCartridge;
+        internal IGameCartridge ActiveCartridge => activeCartridge ?? Cartridges.EmptyTable;
+
+        // The game whose cards, rules and pictures the table uses: the cartridge in play's game; an Empty Table
+        // borrows the first code cartridge's (its cards stay placeable from the Toolbox).
+        internal GameDefinition TableGame => ActiveCartridge.Game ?? Cartridges.DefaultGame;
 
         // The table forwards a card played into a Console slot to the cartridge in play.
         private void HandleCartridgeConsoleInteraction(IConsoleCardInteraction interaction, ConsoleCardBehavior behavior)
@@ -151,14 +153,14 @@ namespace ConsoleCards.Presentation.Composition
 
         // Console Slot anchors must sit at their layout positions (console-local x/z) within this tolerance.
         private const float ConsoleLayoutAnchorTolerance = 0.0005f;
-        private const float TrapFloorCoinVisualScale = 0.34f;
-        internal const float TrapFloorCoinAreaLabelCharacterSize = 0.12f;
-        internal const int TrapFloorCoinAreaLabelFontSize = 56;
-        internal const float TrapFloorCardLabelCharacterSize = 0.18f;
-        internal const float TrapFloorCardBackLabelCharacterSize = 0.14f;
-        private const float TrapFloorContainerLabelCharacterSize = 0.1f;
-        internal const int TrapFloorCardLabelFontSize = 64;
-        private const int TrapFloorContainerLabelFontSize = 48;
+        private const float CoinVisualScale = 0.34f;
+        internal const float CoinAreaLabelCharacterSize = 0.12f;
+        internal const int CoinAreaLabelFontSize = 56;
+        internal const float CardLabelCharacterSize = 0.18f;
+        internal const float CardBackLabelCharacterSize = 0.14f;
+        private const float ContainerLabelCharacterSize = 0.1f;
+        internal const int CardLabelFontSize = 64;
+        private const int ContainerLabelFontSize = 48;
         internal const int ToolboxPhysicalOrderStride = 40;
         private static readonly Rect DeveloperControlsPanelRect = new Rect(16f, 330f, 280f, 320f);
 
@@ -166,15 +168,15 @@ namespace ConsoleCards.Presentation.Composition
         [SerializeField] internal TabletopCameraInputAdapter cameraInputAdapter;
         [SerializeField] internal TabletopObjectInputAdapter objectInputAdapter;
         [SerializeField] internal TabletopInputFrameCoordinator inputFrameCoordinator;
-        // Session-owned Trap Floor Board. Placement discovery still uses PhysicalTabletopSurface registration.
-        [Tooltip("Trap Floor Board collider/surface. The Board is shown only while the Trap Floor Template is active.")]
+        // Session-owned game Board. Placement discovery still uses PhysicalTabletopSurface registration.
+        [Tooltip("Game Board collider/surface. The Board is shown only while a game's template table is active.")]
         [SerializeField] private Collider gameBoardPhysicalSurface;
         [Tooltip("Imported Game Board model root used only as visual geometry under the authored Board collider.")]
         [SerializeField] private Transform gameBoardVisualRoot;
         [Tooltip("Only imported renderers using this Board material remain visible; showcase Table/lighting geometry stays disabled.")]
         [SerializeField] private Material gameBoardVisualMaterial;
         private GameBoardView adoptedGameBoard;
-        // C3e (doc 22 §15): the Board Mat prefab, the placed boards' views, Trap Floor's board drawn as a mat and its
+        // C3e (doc 22 §15): the Board Mat prefab, the placed boards' views, a game's board drawn as a mat and its
         // grid setting, and cards already set on a space.
         private const float CardSpaceWidth = 1.1f;
         private const float CardSpaceDepth = 1.5f;
@@ -193,13 +195,6 @@ namespace ConsoleCards.Presentation.Composition
         [SerializeField] private PhysicalInteractionConfig physicalInteraction = new PhysicalInteractionConfig();
         private PhysicalTabletopSurfaces physicalSurfaceQuery;
         internal LocalPhysicalObjectAuthority physicalAuthority;
-        internal bool physicalFloorfallPending;
-        internal PlayerId physicalFloorfallActor;
-        internal bool physicalFloorCollapsePending;
-        internal PlayerId physicalFloorCollapseActor;
-        internal bool physicalBlindDirectionPending;
-        internal PlayerId physicalBlindDirectionActor;
-        internal TabletopObjectId physicalBlindDirectionDieId;
         // Component library (doc 22): Base box, Controller box, Game boxes and environment, each a catalog of
         // components (stable ID, prefab, linked definitions). Every spawn prefab comes from it (C1 piles, C3a
         // cards, pawns, tokens, dice and Consoles).
@@ -207,8 +202,6 @@ namespace ConsoleCards.Presentation.Composition
         [SerializeField] internal TableUiController runtimeUi;
         [Tooltip("Optional authored local Controller Mapping area included by Camera presets that request it.")]
         [SerializeField] private Transform sceneControllerMappingArea;
-        [Tooltip("Designer-authored Trap Floor identity, content, Grid, Mode, Console, and presentation data.")]
-        [SerializeField] internal GameDefinition trapFloorGameDefinition;
 
         [SerializeField] internal LayerMask interactionLayerMask;
         [SerializeField] internal float maximumHitDistance = 100f;
@@ -278,8 +271,8 @@ namespace ConsoleCards.Presentation.Composition
         // The player profile in use (doc 28): every save (pictures, packs, cards, decks, rules, hints) goes in its folder.
         internal ProfileService profiles;
         // This table's cards (doc 27 L2-1): the game's cards with the player's changes and new cards. Rebuilt when
-        // the Trap Floor templates are; its runtime cards are destroyed with it.
-        internal GameContent trapFloorContent;
+        // the game's templates are; its runtime cards are destroyed with it.
+        internal GameContent tableContent;
         private ContentArtPanelActions cardArtActions;
         private bool artRefreshing;
         private MaterialPropertyBlock cardSlotProperties; // created on first use: Unity forbids it in field initializers
@@ -314,56 +307,18 @@ namespace ConsoleCards.Presentation.Composition
         internal RuleSetDefinition templatesRuleSet;
         internal readonly List<RuleSetDefinition> houseRuleSets = new List<RuleSetDefinition>();
         internal bool ruleProposalOpen;
-        internal TrapFloorSessionState pendingRestoredTrapFloorState;
+        // CART-1b: the game's own state from an Undo step, handed to its cartridge when the table is rebuilt.
+        internal object pendingRestoredGameState;
         internal PendingControllerPurchaseState pendingRestoredControllerPurchaseState;
 
         internal MatchState matchState;
         internal TabletopSession activeSession;
         internal GameTemplateCatalog sessionTemplateCatalog;
-        internal readonly Dictionary<GameTemplateId, TrapFloorTemplateDefinition> availableTrapFloorTemplates =
-            new Dictionary<GameTemplateId, TrapFloorTemplateDefinition>();
         internal string gameTemplatesPanelError;
         internal TemplateContext templateContext;
-        internal TrapFloorTemplateDefinition trapFloorTemplate;
-        internal TrapFloorActivityFeedState trapFloorActivityFeed;
-        internal TrapFloorRevealFloorUseCase trapFloorRevealFloorUseCase;
-        internal TrapFloorObjectiveState trapFloorObjectiveState;
-        internal TrapFloorObjectiveUseCase trapFloorObjectiveUseCase;
-        internal TrapFloorCollapseState trapFloorCollapseState;
-        internal TrapFloorCollapseUseCase trapFloorCollapseUseCase;
-        internal TrapFloorTurnState trapFloorTurnState;
-        internal TrapFloorTurnService trapFloorTurnService;
-        internal TrapFloorTakePrizeUseCase trapFloorTakePrizeUseCase;
-        // The Shop (doc 18 §15.4, owner 2026-10-15): every Ability for sale on your turn, open while the rule
-        // "shop.enabled" is on. The source says whether the Hand picker pays for a Shop card or a floor prize.
-        internal TrapFloorBuyFromShopUseCase trapFloorShopUseCase;
-        internal bool landingCheckPending;
-        // Owner, 2026-10-15: a tile the active pawn lands on turns over only once no pawn stands on it (the pawn
-        // moves aside or ahead), or when the turn ends. Its card still counts for the player who landed.
-        internal readonly HashSet<TabletopObjectId> landedFloorCards = new HashSet<TabletopObjectId>();
-        internal TabletopObjectId waitingLandingFloorCardId;
-        internal PlayerId waitingLandingActor;
-        internal TrapFloorAbilityResolutionState trapFloorAbilityResolutionState;
-        internal TrapFloorAbilityResolutionService trapFloorAbilityResolutionService;
         internal PendingControllerPurchaseState pendingControllerPurchaseState;
         private readonly ControllerInputHandService controllerInputHandService =
             new ControllerInputHandService();
-        internal TrapFloorActivityEntry activeFloorRevealActivity;
-        internal TrapFloorFloorfallState floorfallState;
-        internal TrapFloorFloorfallService floorfallService;
-        internal TrapFloorFloorfallTargetPresenter floorfallTargetPresenter;
-        internal TrapFloorAbilityTargetPresenter abilityTargetPresenter;
-        internal TrapFloorFloormasterLifecycleState floormasterLifecycleState;
-        private TrapFloorFloormasterLifecycleService floormasterLifecycleService;
-        internal TrapFloorRoundState trapFloorRoundState;
-        private int boardCardBacksRound;
-        // Player feedback (doc 25, F1): what has already been announced.
-        private TrapFloorActivityFeedState announcedFeed;
-        private TrapFloorTurnState announcedTurnState;
-        private long announcedSequence;
-        private int announcedRound;
-        private PlayerId announcedActivePlayer;
-        private TrapFloorTurnPhase announcedPhase;
         // Board feedback markers (doc 25, F2), made once from Resources/BoardFeedbackSet.
         internal BoardFeedbackPresenter boardFeedback;
         private bool boardFeedbackUnavailable;
@@ -406,7 +361,6 @@ namespace ConsoleCards.Presentation.Composition
         private float seatRevealAt = -1f;
         // Groups every accepted action between Begin/EndUndoBatch into one Undo step (End Turn + Trap effects).
         internal bool undoBatchActive;
-        internal TrapFloorRoundOrchestrationService trapFloorRoundOrchestrationService;
         internal SystemRandomValueSource authoritativeRandomValueSource;
         private ITabletopComponentIdentitySource componentIdentitySource;
         private CreateTabletopComponentUseCase componentCreationUseCase;
@@ -516,21 +470,7 @@ namespace ConsoleCards.Presentation.Composition
 
         public MatchState MatchState => matchState;
 
-        public TrapFloorFloorfallState FloorfallState => floorfallState;
-
-        public TrapFloorFloormasterLifecycleState FloormasterLifecycleState => floormasterLifecycleState;
-
-        public TrapFloorRoundState TrapFloorRoundState => trapFloorRoundState;
-
-        public TrapFloorActivityFeedState TrapFloorActivityFeed => trapFloorActivityFeed;
-
         public event Action<IConsoleCardInteraction, ConsoleCardBehavior> ConsoleCardInteractionAccepted;
-
-        public TrapFloorObjectiveState TrapFloorObjectiveState => trapFloorObjectiveState;
-
-        public TrapFloorCollapseState TrapFloorCollapseState => trapFloorCollapseState;
-
-        public TrapFloorTurnState TrapFloorTurnState => trapFloorTurnState;
 
         public PlayerLayoutDefinition PlayerLayout => playerLayout;
 
@@ -635,14 +575,16 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            InitializeTrapFloorSession(restoreInitialBaseline);
+            InitializeTemplateSession(restoreInitialBaseline);
         }
 
-        private void InitializeTrapFloorSession(bool restoreInitialBaseline)
+        // A table set up from a game's template (CART-1b): the table builds it and the game's cartridge adds its own
+        // parts at fixed points (its rules state, its services, its views).
+        private void InitializeTemplateSession(bool restoreInitialBaseline)
         {
             if (templateContext == null)
             {
-                throw new InvalidOperationException("The selected Game Template has no Trap Floor prototype wiring.");
+                throw new InvalidOperationException("The selected Game Template has no table wiring.");
             }
 
             try
@@ -650,18 +592,18 @@ namespace ConsoleCards.Presentation.Composition
                 // Restore authoritative state and its authored Template/Mode metadata before any
                 // Presentation validation asks the active definition for Console or Board data.
                 RestoreTemplateContext(restoreInitialBaseline);
-                ValidateTrapFloorConfiguration();
+                ValidateTemplateConfiguration();
                 presentationTransitions = new TabletopPresentationTransitionController();
                 BuildRuntimeGraph();
                 BuildToolboxRuntime();
-                BuildFloorfallRuntime();
+                ActiveCartridge.BuildServices(); // CART-1b: the game's services that need the table's dice and random source
                 BindObjectViews();
-                TrapFloorGame.HoldWaitingLandingTileView();
+                ActiveCartridge.OnObjectViewsBound(); // CART-1b
                 BuildContainerViews();
                 BindContainerViews();
                 ProjectUnprojectedPlacedComponents();
                 ConfigureTabletopCameraFraming();
-                if (!rebuildingFromUndo) ProjectTrapFloorCameraBookmark();
+                if (!rebuildingFromUndo) ProjectTemplateCameraBookmark();
                 RefreshCardContentVisibility();
                 ConfigureDropTargets();
                 BuildInteractionGraph();
@@ -688,7 +630,7 @@ namespace ConsoleCards.Presentation.Composition
 
                 selectionPresenter.Refresh();
                 ActiveCartridge.OnTableReady(); // CART-1a
-                ShowMessage("Trap Floor tabletop foundation ready.");
+                ShowMessage($"{ActiveCartridge.DisplayName} table ready.");
                 IsInitialized = true;
                 SessionService.BeginUndoTrackingForCurrentMatch();
             }
@@ -798,23 +740,13 @@ namespace ConsoleCards.Presentation.Composition
                 handTrayRig?.SetCleared(false, true);
                 handoverLogCount = 0; // a new or reset table starts a new log
                 shownActivityLogCount = -1;
-                landedFloorCards.Clear();
                 templateBoardGrid = null; // a new table draws the game's board with its own grid
-                waitingLandingFloorCardId = TabletopObjectId.Empty;
-                waitingLandingActor = PlayerId.Empty;
             }
 
             SessionService.StopUndoTrackingCurrentMatch();
             carryDropPending = false; // a carried stack is dropped with the old table
             ClearCarryState();
             ClearGestures(); // UX-1: no flick aim or dice shake carries over to a rebuilt table
-            physicalFloorfallPending = false;
-            physicalFloorfallActor = PlayerId.Empty;
-            physicalFloorCollapsePending = false;
-            physicalFloorCollapseActor = PlayerId.Empty;
-            physicalBlindDirectionPending = false;
-            physicalBlindDirectionActor = PlayerId.Empty;
-            physicalBlindDirectionDieId = TabletopObjectId.Empty;
             physicalAuthority?.Shutdown();
             physicalAuthority = null;
             if (cameraInputAdapter != null && cameraInputAdapter.CameraController != null)
@@ -824,9 +756,7 @@ namespace ConsoleCards.Presentation.Composition
             SetGameBoardActive(false);
             ClearFeedback();
             boardFeedback?.HideAll();
-            floorfallTargetPresenter?.Clear();
-            abilityTargetPresenter?.Clear();
-            floorfallState?.Clear();
+            ActiveCartridge.ClearTableMarkers(); // CART-1b: the game's own markers, before the views go
 
             if (frameCoordinatorEnabledByComposition && inputFrameCoordinator != null)
             {
@@ -932,34 +862,13 @@ namespace ConsoleCards.Presentation.Composition
             ReleaseRuntimeCardInstances();
 
             matchState = null;
-            trapFloorTemplate = null;
-            trapFloorActivityFeed?.Clear();
-            trapFloorActivityFeed = null;
-            trapFloorRevealFloorUseCase = null;
-            trapFloorObjectiveState?.Clear();
-            trapFloorObjectiveState = null;
-            trapFloorObjectiveUseCase = null;
-            trapFloorCollapseState?.Clear();
-            trapFloorCollapseState = null;
-            trapFloorCollapseUseCase = null;
-            trapFloorTurnState = null;
-            trapFloorTurnService = null;
+            ActiveCartridge.ClearTableState(); // CART-1b: the game forgets this table's rules state and services
+            activeCartridge = null; // the next table says which cartridge it plays
             ConsoleCardInteractionAccepted -= HandleCartridgeConsoleInteraction;
-            trapFloorAbilityResolutionState = null;
-            trapFloorAbilityResolutionService = null;
             pendingControllerPurchaseState?.Clear();
             pendingControllerPurchaseState = null;
             pendingPurchaseDefinitionStableId = string.Empty;
             assistedHandCardIds.Clear();
-            activeFloorRevealActivity = null;
-            floorfallState = null;
-            floorfallService = null;
-            floorfallTargetPresenter = null;
-            abilityTargetPresenter = null;
-            floormasterLifecycleState = null;
-            floormasterLifecycleService = null;
-            trapFloorRoundState = null;
-            trapFloorRoundOrchestrationService = null;
             authoritativeRandomValueSource = null;
             componentIdentitySource = null;
             componentCreationUseCase = null;
@@ -1096,8 +1005,8 @@ namespace ConsoleCards.Presentation.Composition
             ReleaseCardIconAssets();
             contentArt?.Dispose(); // destroys the pictures the content service loaded
             CardEditorPanel.DisposeCardEditor(); // and those the card editor loaded for another game
-            trapFloorContent?.Destroy(); // destroys the cards made from the player's content
-            trapFloorContent = null;
+            tableContent?.Destroy(); // destroys the cards made from the player's content
+            tableContent = null;
             for (int i = 0; i < houseRuleSets.Count; i++)
             {
                 if (houseRuleSets[i] != null) Destroy(houseRuleSets[i]);
@@ -1117,7 +1026,7 @@ namespace ConsoleCards.Presentation.Composition
 
             activeSession = null;
             sessionTemplateCatalog = null;
-            availableTrapFloorTemplates.Clear();
+            Cartridges.ForgetTemplates();
         }
 
         private void Update()
@@ -1155,13 +1064,12 @@ namespace ConsoleCards.Presentation.Composition
             ActiveCartridge.TickEarly(); // CART-1a: the game's own step before the hint helpers
             hintService?.TickHelpers(); // H3: the game's hint helpers (reach markers, collapse target)
             RulesCardPanel.UpdateHintTriggers();
-            RefreshBoardCardBacksIfRoundChanged();
             ActiveCartridge.TickLate(); // CART-1a: the game's own step after them
             CompleteConsoleDieSnaps();
             UpdateCardStackDrops(); // before the board snap: a card dropped on a card stacks
             CompletePendingStackCarry(); // a stack carried by press-and-hold is merged or put down
             CompleteBoardCardSnaps();
-            // SMOOTH-1: card motion now ticks in LateUpdate (TabletopComposition.TrapFloor.cs), after every layout of
+            // SMOOTH-1: card motion now ticks in LateUpdate (TabletopComposition.Frame.cs), after every layout of
             // the frame, so a layout applied later in the frame can no longer flash a moving card at its end place.
             RefreshHandInteractionPresentation();
             RefreshHandTrayDropTarget();
@@ -1171,12 +1079,11 @@ namespace ConsoleCards.Presentation.Composition
                 ClearFeedback();
             }
 
-            RefreshTableUiIfChanged(); // R2c: status line and Trap Floor status only when something changed
+            RefreshTableUiIfChanged(); // R2c: status line and the game's status card only when something changed
             RefreshToolboxPlacementUi();
             ContextMenus.RefreshOpenTabletopPopup();
             CardInspectPanel.RefreshCardInspectPopup();
-            AnnounceTrapFloorFeedback();
-            RefreshBoardFeedback();
+            ActiveCartridge.TickFeedback(); // CART-1b: the game's banners, messages and board markers
             UpdateGestures(); // UX-1: dice shake and the cursor
         }
 
@@ -1203,12 +1110,12 @@ namespace ConsoleCards.Presentation.Composition
         // The pile style the active template declares for a Deck or Stack (null: not declared, or no style).
         private GameTemplatePileStyle ResolveTemplatePileStyle(ContainerId containerId)
         {
-            if (trapFloorTemplate == null)
+            if (templateContext == null || templateContext.Template == null)
             {
                 return null;
             }
 
-            IReadOnlyList<GameTemplateContainerDefinition> definitions = trapFloorTemplate.Template.Containers;
+            IReadOnlyList<GameTemplateContainerDefinition> definitions = templateContext.Template.Containers;
             for (int i = 0; i < definitions.Count; i++)
             {
                 if (definitions[i].Id == containerId)
@@ -1501,8 +1408,8 @@ namespace ConsoleCards.Presentation.Composition
             CustomDrawCards,
             PopulateDeck,
             TabletopCard,
-            FloorCard,
-            PendingFloormasterCard,
+            BoardPiece, // a game's own board piece (CART-1b: the cartridge shows its menu)
+            GamePendingCard, // a game's card waiting to be resolved (the cartridge shows its menu)
             ContainedCard,
             Stack,
             Die,
@@ -1531,7 +1438,9 @@ namespace ConsoleCards.Presentation.Composition
 
             public TemplateContext(
                 TabletopSession session,
-                TrapFloorTemplateDefinition trapFloorTemplate,
+                IGameCartridge cartridge,
+                GameTemplate template,
+                object gameSetup,
                 PlayerId localPlayerId,
                 SeatId localSeatId,
                 int localPlayerLayoutSeatIndex,
@@ -1544,7 +1453,9 @@ namespace ConsoleCards.Presentation.Composition
                 IReadOnlyDictionary<ObjectDefinitionId, ButtonCardDefinition> buttonDefinitions)
             {
                 Session = session ?? throw new ArgumentNullException(nameof(session));
-                TrapFloorTemplate = trapFloorTemplate ?? throw new ArgumentNullException(nameof(trapFloorTemplate));
+                Cartridge = cartridge ?? throw new ArgumentNullException(nameof(cartridge));
+                Template = template ?? throw new ArgumentNullException(nameof(template));
+                GameSetup = gameSetup ?? throw new ArgumentNullException(nameof(gameSetup));
                 LocalPlayerId = localPlayerId;
                 LocalSeatId = localSeatId;
                 LocalPlayerLayoutSeatIndex = localPlayerLayoutSeatIndex;
@@ -1567,7 +1478,11 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             public TabletopSession Session { get; }
-            public TrapFloorTemplateDefinition TrapFloorTemplate { get; }
+            // CART-1b: the cartridge that made the template, the template, and the cartridge's own setup for it
+            // (players, board, rules data; only the cartridge reads it).
+            public IGameCartridge Cartridge { get; }
+            public GameTemplate Template { get; }
+            public object GameSetup { get; }
             public PlayerId LocalPlayerId { get; }
             public SeatId LocalSeatId { get; }
             public int LocalPlayerLayoutSeatIndex { get; }

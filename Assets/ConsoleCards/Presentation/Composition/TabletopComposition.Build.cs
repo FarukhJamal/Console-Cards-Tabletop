@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -59,116 +58,16 @@ namespace ConsoleCards.Presentation.Composition
 
             if (templateContext == null)
             {
-                throw new InvalidOperationException("Trap Floor Presentation requires a selected Template session context.");
+                throw new InvalidOperationException("A game table requires a selected Template session context.");
             }
 
             pendingControllerPurchaseState = pendingRestoredControllerPurchaseState
                 ?? new PendingControllerPurchaseState(matchState.Id);
 
-            BuildTrapFloorRevealRuntime();
-            ProjectTemplateBoardSurface();
-        }
-
-        private void BuildTrapFloorRevealRuntime()
-        {
-            if (pendingRestoredTrapFloorState != null)
-            {
-                trapFloorActivityFeed = pendingRestoredTrapFloorState.Activity;
-                trapFloorCollapseState = pendingRestoredTrapFloorState.Collapse;
-                trapFloorObjectiveState = pendingRestoredTrapFloorState.Objective;
-                trapFloorTurnState = pendingRestoredTrapFloorState.Turn;
-                trapFloorAbilityResolutionState = pendingRestoredTrapFloorState.AbilityResolution;
-            }
-            else
-            {
-                trapFloorActivityFeed = new TrapFloorActivityFeedState(matchState.Id);
-                trapFloorCollapseState = new TrapFloorCollapseState(
-                    matchState.Id,
-                    trapFloorTemplate.FloorCardIds.Count);
-                trapFloorObjectiveState = new TrapFloorObjectiveState(
-                    matchState.Id,
-                    trapFloorTemplate.ActiveMode.RequiredKeyCount,
-                    trapFloorTemplate.ActiveMode.Behavior);
-                trapFloorTurnState = new TrapFloorTurnState(
-                    matchState.Id,
-                    activeSession.Request.ActivePlayerIds);
-                trapFloorAbilityResolutionState =
-                    new TrapFloorAbilityResolutionState(matchState.Id);
-            }
-            trapFloorCollapseUseCase = new TrapFloorCollapseUseCase(
-                trapFloorTemplate,
-                trapFloorCollapseState,
-                trapFloorActivityFeed);
-            trapFloorRevealFloorUseCase = new TrapFloorRevealFloorUseCase(
-                trapFloorTemplate,
-                trapFloorActivityFeed,
-                trapFloorCollapseState,
-                trapFloorAbilityResolutionState,
-                trapFloorTurnState);
-            trapFloorObjectiveUseCase = new TrapFloorObjectiveUseCase(
-                trapFloorTemplate,
-                trapFloorObjectiveState,
-                trapFloorActivityFeed);
-            trapFloorTurnService = new TrapFloorTurnService(
-                trapFloorTemplate,
-                trapFloorTurnState,
-                controllerInputHandService,
-                trapFloorActivityFeed,
-                trapFloorAbilityResolutionState);
-            trapFloorAbilityResolutionService = new TrapFloorAbilityResolutionService(
-                trapFloorAbilityResolutionState,
-                trapFloorTurnState,
-                trapFloorActivityFeed,
-                trapFloorTemplate,
-                trapFloorCollapseState);
-            // Rush/Dodge/Spring help reads where the Pawn really is (physical state first), not its placed pose.
-            trapFloorAbilityResolutionService.PawnPositionResolver = TrapFloorGame.PawnTablePosition;
-            trapFloorTakePrizeUseCase = new TrapFloorTakePrizeUseCase(
-                trapFloorTemplate,
-                trapFloorCollapseState,
-                trapFloorTurnState);
-            trapFloorShopUseCase = new TrapFloorBuyFromShopUseCase(trapFloorTemplate, trapFloorTurnState);
+            ActiveCartridge.BuildRules(); // CART-1b: the game's rules state (restored after Undo) and its use cases
             ConsoleCardInteractionAccepted -= HandleCartridgeConsoleInteraction; // CART-1a: to the cartridge in play
             ConsoleCardInteractionAccepted += HandleCartridgeConsoleInteraction;
-            activeFloorRevealActivity = null;
-            TrapFloorGame.SyncLandingPawnTiles();
-        }
-
-        private void BuildFloorfallRuntime()
-        {
-            floorfallState = new TrapFloorFloorfallState();
-            floorfallService = new TrapFloorFloorfallService(
-                trapFloorTemplate,
-                matchState,
-                authoritativeRandomValueSource,
-                floorfallState);
-            floorfallTargetPresenter = new TrapFloorFloorfallTargetPresenter();
-            abilityTargetPresenter = new TrapFloorAbilityTargetPresenter();
-            TrapFloorGame.reachHintShown = false;
-            boardFeedback?.HideReach();
-        }
-
-        private void BuildFloormasterLifecycleRuntime()
-        {
-            floormasterLifecycleState = new TrapFloorFloormasterLifecycleState(matchState.Id);
-            floormasterLifecycleService = new TrapFloorFloormasterLifecycleService(
-                trapFloorTemplate,
-                authoritativeRandomValueSource,
-                floormasterLifecycleState);
-        }
-
-        private void BuildTrapFloorRoundRuntime()
-        {
-            trapFloorRoundState = new TrapFloorRoundState(
-                matchState.Id,
-                activeSession.Request.ActivePlayerIds);
-            trapFloorRoundOrchestrationService = new TrapFloorRoundOrchestrationService(
-                trapFloorTemplate,
-                matchState,
-                trapFloorRoundState,
-                floormasterLifecycleState,
-                floormasterLifecycleService,
-                floorfallService);
+            ProjectTemplateBoardSurface();
         }
 
         private void BuildToolboxRuntime()
@@ -237,54 +136,7 @@ namespace ConsoleCards.Presentation.Composition
             Physics.SyncTransforms();
         }
 
-        internal static TemplateContext CreateTrapFloorTemplateContext(
-            TabletopSession session,
-            TrapFloorTemplateDefinition templateDefinition,
-            PlayerId requestingPlayerId)
-        {
-            if (session == null)
-            {
-                throw new ArgumentNullException(nameof(session));
-            }
-
-            if (templateDefinition == null)
-            {
-                throw new ArgumentNullException(nameof(templateDefinition));
-            }
-
-            TrapFloorPlayerSetupDefinition localPlayer = null;
-            for (int i = 0; i < templateDefinition.Players.Count; i++)
-            {
-                TrapFloorPlayerSetupDefinition candidate = templateDefinition.Players[i];
-                if (session.CurrentMatch.GetSeat(candidate.SeatId).OccupantPlayerId == requestingPlayerId)
-                {
-                    localPlayer = candidate;
-                    break;
-                }
-            }
-
-            if (localPlayer == null)
-            {
-                throw new InvalidOperationException(
-                    "The requesting Player is not assigned to a Trap Floor Seat.");
-            }
-
-            return new TemplateContext(
-                session,
-                templateDefinition,
-                requestingPlayerId,
-                localPlayer.SeatId,
-                localPlayer.LayoutSeatIndex,
-                localPlayer.HandContainerId,
-                templateDefinition.BoardPlayAreaId,
-                localPlayer.AvatarCardId,
-                localPlayer.PawnId,
-                TabletopObjectId.Empty,
-                templateDefinition.CardLabels,
-                CreateControllerInputDefinitions(templateDefinition.GameDefinition));
-        }
-
-        private static Dictionary<ObjectDefinitionId, ButtonCardDefinition> CreateControllerInputDefinitions(
+        internal static Dictionary<ObjectDefinitionId, ButtonCardDefinition> CreateControllerInputDefinitions(
             GameDefinitionData gameDefinition)
         {
             Dictionary<ObjectDefinitionId, ButtonCardDefinition> definitions =
@@ -329,13 +181,13 @@ namespace ConsoleCards.Presentation.Composition
             if (gameBoardPhysicalSurface == null)
             {
                 throw new InvalidOperationException(
-                    "Trap Floor Presentation requires an authored Game Board physical surface.");
+                    "A game table requires an authored Game Board physical surface.");
             }
 
             if (!(gameBoardPhysicalSurface is BoxCollider boardCollider))
             {
                 throw new InvalidOperationException(
-                    "Trap Floor's rectangular Board physical surface must use a BoxCollider.");
+                    "The game's rectangular Board physical surface must use a BoxCollider.");
             }
 
             PlayAreaState board = matchState.GetPlayArea(centralPlayAreaId);
@@ -352,7 +204,7 @@ namespace ConsoleCards.Presentation.Composition
             if (scaleX <= Mathf.Epsilon || scaleY <= Mathf.Epsilon || scaleZ <= Mathf.Epsilon)
             {
                 throw new InvalidOperationException(
-                    "Trap Floor Board physical surface requires a non-zero Transform scale.");
+                    "The game Board physical surface requires a non-zero Transform scale.");
             }
 
             Vector3 size = boardCollider.size;
@@ -495,7 +347,7 @@ namespace ConsoleCards.Presentation.Composition
             if (boardRenderers.Count == 0)
             {
                 throw new InvalidOperationException(
-                    "The imported Trap Floor Board visual has no renderer using its configured Board material.");
+                    "The imported game Board visual has no renderer using its configured Board material.");
             }
 
             gameBoardVisualRoot.localPosition = Vector3.zero;
@@ -509,7 +361,7 @@ namespace ConsoleCards.Presentation.Composition
                 || sourceSize.z <= Mathf.Epsilon)
             {
                 throw new InvalidOperationException(
-                    "The imported Trap Floor Board visual requires non-zero three-dimensional renderer bounds.");
+                    "The imported game Board visual requires non-zero three-dimensional renderer bounds.");
             }
 
             gameBoardVisualRoot.localScale = new Vector3(
@@ -583,7 +435,8 @@ namespace ConsoleCards.Presentation.Composition
                 ? context.Session.Reset()
                 : context.Session.CurrentMatch;
             playerLayout = context.Session.PlayerLayout;
-            trapFloorTemplate = context.TrapFloorTemplate;
+            activeCartridge = context.Cartridge; // CART-1b: the table plays the cartridge that made the template
+            activeCartridge.UseTemplate(context);
             localPlayerLayoutSeatIndex = context.LocalPlayerLayoutSeatIndex;
             if (!playerLayout.TryGetSeat(localPlayerLayoutSeatIndex, out localSeatLayout))
             {
@@ -622,7 +475,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 Shutdown(true);
                 activeSession.ReplaceCurrentMatch(previousMatch);
-                pendingRestoredTrapFloorState = previousSnapshot.TrapFloor?.Restore();
+                pendingRestoredGameState = previousSnapshot.GameState?.Restore();
                 pendingRestoredControllerPurchaseState =
                     previousSnapshot.PendingControllerPurchase?.Restore();
                 rebuildingFromUndo = true;
@@ -639,14 +492,14 @@ namespace ConsoleCards.Presentation.Composition
             }
             finally
             {
-                pendingRestoredTrapFloorState = null;
+                pendingRestoredGameState = null;
                 pendingRestoredControllerPurchaseState = null;
                 rebuildingFromUndo = wasRebuildingFromUndo;
                 SessionService.RefreshUndoUi();
             }
         }
 
-        private void ValidateTrapFloorPrefabReferences()
+        private void ValidateTemplatePrefabReferences()
         {
             ValidateObjectPrefab(catalogPawnPrefab, nameof(catalogPawnPrefab));
             ValidateObjectPrefab(catalogTokenPrefab, nameof(catalogTokenPrefab));

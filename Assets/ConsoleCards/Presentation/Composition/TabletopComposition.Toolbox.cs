@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -912,13 +911,13 @@ namespace ConsoleCards.Presentation.Composition
                     ConfigureWorldLabel(
                         preview.FrontLabel,
                         "CARD",
-                        TrapFloorCardLabelCharacterSize,
-                        TrapFloorCardLabelFontSize);
+                        CardLabelCharacterSize,
+                        CardLabelFontSize);
                     ConfigureWorldLabel(
                         preview.BackLabel,
                         preview.BackLabel.text,
-                        TrapFloorCardBackLabelCharacterSize,
-                        TrapFloorCardLabelFontSize);
+                        CardBackLabelCharacterSize,
+                        CardLabelFontSize);
                     preview.SetBackLabelHidden(HidesTableVisual(TableVisualHide.CardPlaceholderLabels));
                     ApplyLabelRendererHide(preview.FrontLabel, TableVisualHide.CardFaceLabels);
                     ApplyLabelRendererHide(preview.BackLabel, TableVisualHide.CardFaceLabels);
@@ -1004,13 +1003,13 @@ namespace ConsoleCards.Presentation.Composition
                 ConfigureWorldLabel(
                     preview.FrontLabel,
                     "CARD",
-                    TrapFloorCardLabelCharacterSize,
-                    TrapFloorCardLabelFontSize);
+                    CardLabelCharacterSize,
+                    CardLabelFontSize);
                 ConfigureWorldLabel(
                     preview.BackLabel,
                     preview.BackLabel.text,
-                    TrapFloorCardBackLabelCharacterSize,
-                    TrapFloorCardLabelFontSize);
+                    CardBackLabelCharacterSize,
+                    CardLabelFontSize);
                 preview.SetBackLabelHidden(HidesTableVisual(TableVisualHide.CardPlaceholderLabels));
                 ApplyLabelRendererHide(preview.FrontLabel, TableVisualHide.CardFaceLabels);
                 ApplyLabelRendererHide(preview.BackLabel, TableVisualHide.CardFaceLabels);

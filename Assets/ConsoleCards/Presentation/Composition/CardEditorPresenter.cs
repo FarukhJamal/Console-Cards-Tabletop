@@ -27,7 +27,6 @@ using ConsoleCards.Core.Events;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Coordinates;
 using ConsoleCards.Presentation.Feedback;
@@ -119,9 +118,11 @@ namespace ConsoleCards.Presentation.Composition
         {
             editorGames.Clear();
             HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (host.trapFloorGameDefinition != null && seen.Add(host.trapFloorGameDefinition.StableId ?? string.Empty))
+            IReadOnlyList<IGameCartridge> cartridges = host.Cartridges.CodeCartridges; // CART-1b: the games with code first
+            for (int i = 0; i < cartridges.Count; i++)
             {
-                editorGames.Add(host.trapFloorGameDefinition);
+                GameDefinition game = cartridges[i].Game;
+                if (game != null && seen.Add(game.StableId ?? string.Empty)) editorGames.Add(game);
             }
 
             IReadOnlyList<ComponentCatalog> boxes = host.componentLibrary != null ? host.componentLibrary.GameBoxes : null;
@@ -138,7 +139,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             ContentArtService previous = editorOtherArt;
             editorOtherArt = null;
-            if (!ReferenceEquals(game, host.trapFloorGameDefinition))
+            if (!host.UsesTableArt(game))
             {
                 editorOtherArt = new ContentArtService(ContentPackStore.ForProfile(host.EnsureProfile()));
                 editorOtherArt.UseGame(game);

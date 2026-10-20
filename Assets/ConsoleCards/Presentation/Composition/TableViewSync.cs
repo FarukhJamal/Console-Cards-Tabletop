@@ -4,7 +4,6 @@ using ConsoleCards.Application.Results;
 using ConsoleCards.Application.UseCases;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Identifiers;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Views.Containers;
 using static ConsoleCards.Presentation.Composition.TabletopComposition;
 
@@ -19,14 +18,14 @@ namespace ConsoleCards.Presentation.Composition
     /// <item><b>Piles</b> (R2a): shuffle, draw, reorder, split and merge lay the touched piles out again; a split's
     /// new stack gets its view and a merged stack loses its view.</item>
     /// <item><b>What exists</b> (R2b): Toolbox create, duplicate, populate and delete, card batches, pile
-    /// duplicates, boards (place, move, grid, remove), moved piles and Consoles, and the cards the Trap Floor Shop and
-    /// prizes hand out get, change or lose their views here.</item>
+    /// duplicates, boards (place, move, grid, remove), moved piles and Consoles get, change or lose their views here
+    /// (the cards a game hands out, for example from a Shop, follow its own commands in its cartridge).</item>
     /// <item><b>Gestures</b> (R2b): a card or token carried, a piece moved, turned or flipped, a physics rest and a
     /// Console turned over are shown by the gesture or animation on the computer where they happen. When the player
     /// who did it plays on another computer (multiplayer, later), the view is set from the accepted state here.
     /// Today every seat plays on this computer, so this part waits for multiplayer.</item>
-    /// <item><b>Trap Floor's own moments</b> (reveals, collapse, Keys, escape) stay with the cartridge, which animates
-    /// them; they follow the cartridge contract (CART-1).</item>
+    /// <item><b>A game's own moments</b> (for example reveals, prizes, a card bought) stay with its cartridge, which
+    /// observes its own commands and animates them (CART-1b, <see cref="IGameCartridge.AttachToAuthority"/>).</item>
     /// </list>
     /// Runs inside Submit, before it returns; nothing here allocates per frame.
     /// </summary>
@@ -61,8 +60,6 @@ namespace ConsoleCards.Presentation.Composition
             authority.Observe<MoveBoardCommand, CommandResult>(OnBoardMoved);
             authority.Observe<SetBoardGridCommand, CommandResult>(OnBoardGridSet);
             authority.Observe<DeleteBoardCommand, CommandResult>(OnBoardDeleted);
-            authority.Observe<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(OnShopCardBought);
-            authority.Observe<TrapFloorTakePrizeCommand, TrapFloorTakePrizeResult>(OnPrizeTaken);
 
             // Gestures: shown here only when the player plays on another computer (R2b).
             authority.Observe<TransferCardCommand, TransferCardResult>(OnCardTransferred);
@@ -74,7 +71,7 @@ namespace ConsoleCards.Presentation.Composition
             authority.Observe<FlipConsoleCommand, CommandResult>(OnConsoleFlipped);
         }
 
-        private bool Ready => host.IsInitialized && host.matchState != null;
+        internal bool Ready => host.IsInitialized && host.matchState != null;
 
         // ---------- Piles ----------
 
@@ -178,21 +175,6 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!Ready) return;
             host.PresentDeletedBoard(command.BoardId);
-        }
-
-        private void OnShopCardBought(TrapFloorBuyFromShopCommand command, TrapFloorBuyFromShopResult result)
-        {
-            if (!Ready) return;
-            host.TrapFloorGame.PresentGrantedCard(result.GrantedCardId, result.Card.DisplayName, result.DestinationContainerId);
-        }
-
-        private void OnPrizeTaken(TrapFloorTakePrizeCommand command, TrapFloorTakePrizeResult result)
-        {
-            if (!Ready) return;
-            host.TrapFloorGame.PresentGrantedCard(
-                result.GrantedCardId,
-                result.FloorCard.Content.DisplayName,
-                result.DestinationContainerId);
         }
 
         // ---------- Gestures (another computer's player only) ----------

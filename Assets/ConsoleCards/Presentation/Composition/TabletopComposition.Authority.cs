@@ -23,7 +23,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -139,21 +138,13 @@ namespace ConsoleCards.Presentation.Composition
             authority.Register<DeleteBoardCommand, CommandResult>(
                 command => boardUseCases.Delete(matchState, command.Context, command.BoardId), IsAccepted);
 
-            // Trap Floor.
-            authority.Register<TrapFloorBeginCollapseCommand, TrapFloorCollapseResult>(
-                command => trapFloorCollapseUseCase.Begin(matchState, command), IsAccepted);
-            authority.Register<TrapFloorResolveCollapseCommand, TrapFloorCollapseResult>(
-                command => trapFloorCollapseUseCase.ResolveSettled(matchState, command), IsAccepted);
-            authority.Register<TrapFloorRevealFloorCommand, TrapFloorRevealFloorResult>(
-                command => trapFloorRevealFloorUseCase.Execute(matchState, command), IsAccepted);
-            authority.Register<TrapFloorClaimKeyCommand, TrapFloorObjectiveResult>(
-                command => trapFloorObjectiveUseCase.ClaimKey(matchState, command), IsAccepted);
-            authority.Register<TrapFloorAttemptEscapeCommand, TrapFloorObjectiveResult>(
-                command => trapFloorObjectiveUseCase.AttemptEscape(matchState, command), IsAccepted);
-            authority.Register<TrapFloorTakePrizeCommand, TrapFloorTakePrizeResult>(
-                command => trapFloorTakePrizeUseCase.Execute(matchState, command), IsAccepted);
-            authority.Register<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(
-                command => trapFloorShopUseCase.Execute(matchState, command), IsAccepted);
+            // CART-1b: each game with code adds its own commands (and the views that follow them) to the door.
+            IReadOnlyList<IGameCartridge> cartridges = Cartridges.CodeCartridges;
+            for (int i = 0; i < cartridges.Count; i++)
+            {
+                cartridges[i].AttachToAuthority(authority);
+            }
+
             return authority;
         }
 
@@ -178,11 +169,6 @@ namespace ConsoleCards.Presentation.Composition
         private static bool IsAccepted(PopulateDeckResult result) => result.Succeeded;
         private static bool IsAccepted(DeleteTabletopComponentResult result) => result.Succeeded;
         private static bool IsAccepted(CreateBoardResult result) => result.Succeeded;
-        private static bool IsAccepted(TrapFloorCollapseResult result) => result.Succeeded;
-        private static bool IsAccepted(TrapFloorRevealFloorResult result) => result.Succeeded;
-        private static bool IsAccepted(TrapFloorObjectiveResult result) => result.Succeeded;
-        private static bool IsAccepted(TrapFloorTakePrizeResult result) => result.Succeeded;
-        private static bool IsAccepted(TrapFloorBuyFromShopResult result) => result.Succeeded;
 
         private CreateBoardResult CreateBoard(CreateBoardCommand command)
         {

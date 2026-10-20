@@ -22,7 +22,6 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
-using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Art;
 using ConsoleCards.Presentation.Camera;
 using ConsoleCards.Presentation.Content;
@@ -87,12 +86,12 @@ namespace ConsoleCards.Presentation.Composition
             // An Empty Table follows no game's rules (as the rules card).
             if (activeSession == null
                 || activeSession.Selection.Kind == TabletopSessionKind.EmptyCustom
-                || trapFloorGameDefinition == null)
+                || TableGame == null)
             {
                 return false;
             }
 
-            string modeStableId = trapFloorTemplate != null ? trapFloorTemplate.ActiveMode.StableId : string.Empty;
+            string modeStableId = ActiveCartridge.ActiveModeStableId;
             return DealRule.TryRead(RulesCardPanel.ActiveRuleSet, modeStableId, out rule);
         }
 
@@ -526,14 +525,15 @@ namespace ConsoleCards.Presentation.Composition
         {
             List<DealSeat> seats = new List<DealSeat>();
             if (matchState == null) return seats;
-            if (trapFloorTemplate != null)
+            IReadOnlyList<CartridgeSeat> gameSeats = ActiveCartridge.Seats; // CART-1b: a game's seats, in seat order
+            if (gameSeats.Count > 0)
             {
-                for (int i = 0; i < trapFloorTemplate.Players.Count; i++)
+                for (int i = 0; i < gameSeats.Count; i++)
                 {
-                    TrapFloorPlayerSetupDefinition player = trapFloorTemplate.Players[i];
+                    CartridgeSeat player = gameSeats[i];
                     if (player.HandContainerId.IsEmpty || !matchState.Containers.ContainsKey(player.HandContainerId)) continue;
                     TableCoordinate spot = matchState.Seats.TryGetValue(player.SeatId, out SeatState seat)
-                        ? seat.TablePose.Position
+                        ? SeatMovedPoint(player, seat, seat.TablePose.Position) // CART-1c: where the seat is now
                         : new TableCoordinate(0d, 0d);
                     seats.Add(new DealSeat { Name = HandOwnerName(player.HandContainerId), Hand = player.HandContainerId, Spot = spot, Seat = spot });
                 }

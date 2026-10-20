@@ -51,7 +51,7 @@ namespace ConsoleCards.Presentation.Composition
     /// (R1e: moved out of TabletopComposition; the table reaches it as <c>TrapFloorGame</c> and it
     /// reaches the table through <c>host</c>.)
     /// </summary>
-    internal sealed class TrapFloorCartridge : IGameCartridge
+    internal sealed partial class TrapFloorCartridge : IGameCartridge
     {
         private readonly TabletopComposition host;
 
@@ -2392,7 +2392,7 @@ namespace ConsoleCards.Presentation.Composition
             if (!landedTile.HasValue && otherPawnOnHiddenTile)
             {
                 // UX-1 hint: moving another player's pawn never flips; say whose pawn does.
-                string colour = host.TryGetTrapFloorSeatIndex(host.trapFloorTurnState.ActivePlayerId, out int seatIndex)
+                string colour = host.TryGetSeatIndex(host.trapFloorTurnState.ActivePlayerId, out int seatIndex)
                     ? $" ({PlayerColorName(seatIndex).ToLowerInvariant()})"
                     : string.Empty;
                 host.ShowMessage(
@@ -2483,7 +2483,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             host.EnsureContentArt();
             GameContent content = new GameContent(host.trapFloorGameDefinition, host.contentArt.LoadPlayerCards(), host.contentArt.LoadPlayerDecks(),
-                useChosenDeck ? host.GameSelectPanel.ChosenTrapFloorDeckId() : null);
+                useChosenDeck ? host.GameSelectPanel.ChosenDeckIdOf(Game) : null);
             for (int i = 0; i < content.Warnings.Count; i++)
             {
                 Debug.LogWarning($"[Your cards] {content.Warnings[i]}", host);
@@ -2736,30 +2736,10 @@ namespace ConsoleCards.Presentation.Composition
                 cost = FormatAuthoredInputCost(definition.InputCost);
             }
 
-            return string.IsNullOrEmpty(cost) ? string.Empty : $"\n\nCost: {cost}";
+            return CartridgeText.CostLine(cost);
         }
 
-        internal static string FormatAuthoredInputCost(InputCostDefinition inputCost)
-        {
-            if (inputCost == null || inputCost.Requirements.Count == 0)
-            {
-                return string.Empty;
-            }
-
-            List<InputRequirementData> requirements = new List<InputRequirementData>(inputCost.Requirements.Count);
-            for (int i = 0; i < inputCost.Requirements.Count; i++)
-            {
-                InputRequirement requirement = inputCost.Requirements[i];
-                List<ControllerInput> inputs = new List<ControllerInput>(1 + requirement.AlsoAccepts.Count)
-                {
-                    requirement.Input,
-                };
-                inputs.AddRange(requirement.AlsoAccepts);
-                requirements.Add(new InputRequirementData(inputs, requirement.Count));
-            }
-
-            return InputCostNotation.Format(new InputCostData(requirements));
-        }
+        internal static string FormatAuthoredInputCost(InputCostDefinition inputCost) => CartridgeText.FormatAuthoredInputCost(inputCost);
         // ---------- from TabletopComposition.TrapFloorHints.cs ----------
 
         // R4 hints (doc 23 §9), behind the hint helper "trapfloor.reach" since H3: the tiles in reach light while
@@ -2819,59 +2799,10 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // True while the active player holds their own pawn (dragged or lifted). Polled each frame; no allocation.
-        internal bool IsActivePawnHeld()
-        {
-            if (host.trapFloorTemplate == null
-                || host.trapFloorTurnState == null
-                || host.trapFloorTurnState.IsCurrentFloorFailed
-                || host.trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn
-                || !TryGetTrapFloorPlayerSetup(host.trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition player))
-            {
-                return false;
-            }
-
-            if (host.interactionStateMachine != null
-                && host.interactionStateMachine.Phase == TabletopInteractionPhase.DraggingObject
-                && host.interactionStateMachine.ActiveObjectId == player.PawnId)
-            {
-                return true;
-            }
-
-            for (int i = 0; i < host.Registry.pawnViews.Count; i++)
-            {
-                PawnView view = host.Registry.pawnViews[i];
-                if (view == null || !view.IsBound || view.ObjectId != player.PawnId) continue;
-                if (view.PhysicalObject != null && view.PhysicalObject.IsHeld) return true;
-            }
-
-            return false;
-        }
+        internal bool IsActivePawnHeld() => host.IsTurnPawnHeld(); // CART-1b: the table's seat pawns
 
         // Any pawn held or dragged (for the hint's console note when it is not the active player's).
-        internal bool IsAnyPawnHeld(out TabletopObjectId pawnId)
-        {
-            pawnId = TabletopObjectId.Empty;
-            if (host.interactionStateMachine != null
-                && host.interactionStateMachine.Phase == TabletopInteractionPhase.DraggingObject
-                && host.matchState != null
-                && host.matchState.Pawns.ContainsKey(host.interactionStateMachine.ActiveObjectId))
-            {
-                pawnId = host.interactionStateMachine.ActiveObjectId;
-                return true;
-            }
-
-            for (int i = 0; i < host.Registry.pawnViews.Count; i++)
-            {
-                PawnView view = host.Registry.pawnViews[i];
-                if (view != null && view.IsBound && view.PhysicalObject != null && view.PhysicalObject.IsHeld)
-                {
-                    pawnId = view.ObjectId;
-                    return true;
-                }
-            }
-
-            return false;
-        }
+        internal bool IsAnyPawnHeld(out TabletopObjectId pawnId) => host.IsAnyPawnHeld(out pawnId);
 
         // Called once a frame by the reach helper while a rule in play names it.
         internal void UpdateReachHint(bool hintsOn)
@@ -3321,7 +3252,7 @@ namespace ConsoleCards.Presentation.Composition
                     : host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
                         ? host.trapFloorTurnState.ActivePlayerId
                         : host.trapFloorTurnState.FloorOperatorPlayerId;
-                Color? turnColor = host.TryGetTrapFloorSeatIndex(turnPlayerId, out int turnSeatIndex)
+                Color? turnColor = host.TryGetSeatIndex(turnPlayerId, out int turnSeatIndex)
                     ? PlayerSeatColor(turnSeatIndex)
                     : (Color?)null;
                 string phase = host.trapFloorTurnState.IsCurrentFloorFailed
@@ -4028,22 +3959,7 @@ namespace ConsoleCards.Presentation.Composition
             throw new InvalidOperationException("Authoritative Card has no bound Presentation View.");
         }
 
-        internal string FormatPlayerName(PlayerId playerId)
-        {
-            if (host.trapFloorTemplate != null && host.matchState != null)
-            {
-                for (int i = 0; i < host.trapFloorTemplate.Players.Count; i++)
-                {
-                    TrapFloorPlayerSetupDefinition player = host.trapFloorTemplate.Players[i];
-                    if (host.matchState.GetSeat(player.SeatId).OccupantPlayerId == playerId)
-                    {
-                        return $"Player {player.LayoutSeatIndex + 1}";
-                    }
-                }
-            }
-
-            return "Participating Player";
-        }
+        internal string FormatPlayerName(PlayerId playerId) => host.FormatPlayerName(playerId); // CART-1b: the table's seat names
 
         internal string FormatPlayerShortName(PlayerId playerId)
         {
@@ -4062,27 +3978,9 @@ namespace ConsoleCards.Presentation.Composition
             return "Player";
         }
 
-        internal int AvailableDrawableCount(ContainerId sourceDeckContainerId)
-        {
-            if (host.matchState == null
-                || !host.matchState.Containers.TryGetValue(sourceDeckContainerId, out ContainerState deck)
-                || !host.matchState.Containers.TryGetValue(host.DrawTargetHandFor(sourceDeckContainerId), out ContainerState hand))
-            {
-                return 0;
-            }
+        internal int AvailableDrawableCount(ContainerId sourceDeckContainerId) => host.AvailableDrawableCount(sourceDeckContainerId);
 
-            int handSpace = hand.Capacity == 0
-                ? deck.Count
-                : Math.Max(0, hand.Capacity - hand.Count);
-            return Math.Min(deck.Count, handSpace);
-        }
-
-        internal int AvailableControllerDeckCount(ContainerId sourceDeckContainerId)
-        {
-            return IsAssistedControllerDeck(sourceDeckContainerId)
-                ? host.matchState.GetContainer(sourceDeckContainerId).Count
-                : 0;
-        }
+        internal int AvailableControllerDeckCount(ContainerId sourceDeckContainerId) => host.AvailableAssistedDeckCount(sourceDeckContainerId);
 
         internal TrapFloorPlayerSetupDefinition GetAssistedTrapFloorPlayerSetup()
         {
@@ -4152,7 +4050,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 mine = BuildTemplates(true);
             }
-            catch (Exception exception) when (!string.IsNullOrEmpty(host.GameSelectPanel.ChosenTrapFloorDeckId()))
+            catch (Exception exception) when (!string.IsNullOrEmpty(host.GameSelectPanel.ChosenDeckIdOf(Game)))
             {
                 string message = $"Your deck cannot set up Trap Floor ({exception.Message}); the game's own deck is used.";
                 Debug.LogWarning("[Your decks] " + message, host);
@@ -4193,8 +4091,8 @@ namespace ConsoleCards.Presentation.Composition
                 throw;
             }
 
-            GameContent previousContent = host.trapFloorContent;
-            host.trapFloorContent = content;
+            GameContent previousContent = host.tableContent;
+            host.tableContent = content;
             previousContent?.Destroy();
             if (gameDefinition.Modes.Count == 0)
                 throw new InvalidOperationException("Trap Floor requires at least one authored Mode.");
@@ -4222,12 +4120,11 @@ namespace ConsoleCards.Presentation.Composition
             RefreshMovementAssistancePresentation();
         }
 
-        public void OnTableShutdown() => FinishPawnHops();
-
         public void TickEarly() => CompletePendingLandingFlip();
 
         public void TickLate()
         {
+            host.RefreshBoardCardBacksIfRoundChanged(); // the floor's backs change with the round
             CompletePhysicalFloorfallIfSettled();
             CompletePhysicalFloorCollapseIfSettled();
             CompletePhysicalBlindDirectionIfSettled();
@@ -4252,10 +4149,10 @@ namespace ConsoleCards.Presentation.Composition
         {
             switch (mode)
             {
-                case ContextMenuMode.FloorCard:
+                case ContextMenuMode.BoardPiece:
                     ShowFloorCardContextMenu();
                     return true;
-                case ContextMenuMode.PendingFloormasterCard:
+                case ContextMenuMode.GamePendingCard:
                     ShowPendingFloormasterCardContextMenu();
                     return true;
                 default:
