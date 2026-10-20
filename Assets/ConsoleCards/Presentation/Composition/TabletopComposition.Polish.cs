@@ -133,6 +133,7 @@ namespace ConsoleCards.Presentation.Composition
                 polishHooked = true;
                 PhysicalLooseObject.Impact += HandlePieceImpact;
                 PhysicalLooseObject.DieSettled += HandleDieSettled;
+                PhysicalLooseObject.DieCocked += HandleDieCocked;
             }
 
             if (!presetSuppressionSet && cameraInputAdapter != null)
@@ -148,6 +149,7 @@ namespace ConsoleCards.Presentation.Composition
             polishHooked = false;
             PhysicalLooseObject.Impact -= HandlePieceImpact;
             PhysicalLooseObject.DieSettled -= HandleDieSettled;
+            PhysicalLooseObject.DieCocked -= HandleDieCocked;
         }
 
         /// <summary>Shows the overlay (tooltips, peek, die results) with the rest of the table's UI.</summary>
@@ -245,6 +247,17 @@ namespace ConsoleCards.Presentation.Composition
             if (seconds <= 0f) return;
             Vector3 above = PieceRestPosition(die.View) + (Vector3.up * (WorldPerCardWidth() * 0.5f));
             runtimeUi.ShowFloatLabel(above, value.ToString(), DieResultColour, seconds);
+        }
+
+        // Known issue fixed (2026-10-20): a die that stays cocked shows "?" above it and says how to settle it.
+        private void HandleDieCocked(PhysicalLooseObject die)
+        {
+            if (!IsInitialized || die == null || die.View == null) return;
+            ShowMessage($"The die landed cocked, so it shows no number: roll it again ({Keys.RollName}).");
+            if (runtimeUi == null || !overlayShown) return;
+            float seconds = Mathf.Max(2f, Feel.DieResultSeconds);
+            Vector3 above = PieceRestPosition(die.View) + (Vector3.up * (WorldPerCardWidth() * 0.5f));
+            runtimeUi.ShowFloatLabel(above, "?", DieResultColour, seconds);
         }
 
         // ---------- Carry: wheel height and the landing ghost (POL-1 / POL-2) ----------

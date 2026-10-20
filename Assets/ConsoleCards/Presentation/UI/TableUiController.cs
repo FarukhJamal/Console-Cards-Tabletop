@@ -877,6 +877,7 @@ namespace ConsoleCards.Presentation.UI
         // Closing another modal never hides the hot-seat handover cover that may share the Modal layer.
         private void SetModalLayerOffUnlessHandover()
         {
+            if (quitting) return;
             if (modalLayer != null && !IsVisible(hotSeatHandoverView) && !IsVisible(contentArtPanelView)
                 && !IsVisible(ruleProposalPanelView) && !IsVisible(profilePanelView) && !IsVisible(cardEditorPanelView)
                 && !IsVisible(deckEditorPanelView) && !IsVisible(gameSelectPanelView)
@@ -1380,6 +1381,7 @@ namespace ConsoleCards.Presentation.UI
 
         private void ReleaseModalViews()
         {
+            if (quitting) return;
             ReleaseView(contentArtPanelView);
             ReleaseView(profilePanelView);
             ReleaseView(cardEditorPanelView);
@@ -1393,8 +1395,26 @@ namespace ConsoleCards.Presentation.UI
             SetModalLayerOffUnlessHandover();
         }
 
+        // Known issue fixed (2026-10-20): stopping Play mode tears the scene down in no set order, so a panel (or a part
+        // of it) can already be gone when the table closes its panels. Then nothing is released: the scene is going.
+        private static bool quitting;
+
+        /// <summary>True while Play mode stops or the game quits (the scene's objects are being destroyed).</summary>
+        public static bool IsQuitting => quitting;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetQuitting()
+        {
+            quitting = false;
+            UnityEngine.Application.quitting -= MarkQuitting;
+            UnityEngine.Application.quitting += MarkQuitting;
+        }
+
+        private static void MarkQuitting() => quitting = true;
+
         private void ReleaseView(ReusableUiView view)
         {
+            if (quitting) return;
             if (view != null && view.IsAcquired)
             {
                 uiService.Release(view);

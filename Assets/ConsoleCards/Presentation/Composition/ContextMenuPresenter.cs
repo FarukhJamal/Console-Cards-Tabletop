@@ -955,7 +955,9 @@ namespace ConsoleCards.Presentation.Composition
             host.runtimeUi.ShowContextMenu(
                 host.contextMenuAnchorScreenPosition,
                 "DIE",
-                $"d{targetDieView.DieState.SideCount}: {targetDieView.DieState.CurrentValue}",
+                targetDieView.DieState.BaseState.PhysicalState?.Mode == PhysicalObjectMode.SleepingUnresolved
+                    ? $"d{targetDieView.DieState.SideCount}: cocked (roll again)"
+                    : $"d{targetDieView.DieState.SideCount}: {targetDieView.DieState.CurrentValue}",
                 actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);

@@ -64,6 +64,7 @@ namespace ConsoleCards.Presentation.Interaction
             public const float SupportRayDepth = 100f;
             public const float FootprintInset = 0.8f;
             public const float FootprintMaxStep = 0.35f;        // corners may lift the object over steps up to this tall
+            public const float ReenterDescentSeconds = 0.3f;    // a piece carried in from off the table eases down onto it
 
             // Roll()
             public const float RollApexHeight = 1.2f;            // keeps roll arc constant when gravity changes
@@ -93,6 +94,8 @@ namespace ConsoleCards.Presentation.Interaction
         private float containedPickupLift;
         private bool hasSupportHeight;
         private float smoothedSupportHeight;
+        private bool heldWithoutSupport;
+        private bool supportReentry;
         private float currentClearance;
         private float gentlePlacementIntent;
         private float orientationRecoveryResumeTime;
@@ -157,6 +160,9 @@ namespace ConsoleCards.Presentation.Interaction
         /// <summary>POL-5: a die a player rolled, threw or let go came to rest showing this value.</summary>
         public static event Action<PhysicalLooseObject, int> DieSettled;
 
+        /// <summary>A die a player rolled came to rest cocked (on an edge or leaning) after its nudges: no face to read.</summary>
+        public static event Action<PhysicalLooseObject> DieCocked;
+
         public TabletopObjectView View => view;
 
         public bool IsHeld => held;
@@ -205,6 +211,8 @@ namespace ConsoleCards.Presentation.Interaction
             compoundActionActive = false;
             hasPointerAnchor = false;
             hasSupportHeight = false;
+            heldWithoutSupport = false;
+            supportReentry = false;
             hasHeldTarget = false;
             containedPickupLift = 0f;
             gentlePlacementIntent = 0f;
@@ -304,6 +312,8 @@ namespace ConsoleCards.Presentation.Interaction
             held = false;
             hasPointerAnchor = false;
             hasSupportHeight = false;
+            heldWithoutSupport = false;
+            supportReentry = false;
             hasHeldTarget = false;
             containedPickupLift = 0f;
             gentlePlacementIntent = 0f;
@@ -389,6 +399,8 @@ namespace ConsoleCards.Presentation.Interaction
                 : body.position.y;
             containedPickupLift = 0f;
             hasSupportHeight = false;
+            heldWithoutSupport = false;
+            supportReentry = false;
             currentClearance = profile.HeldClearance;
             gentlePlacementIntent = 0f;
             orientationRecoveryResumeTime = 0f;
@@ -436,7 +448,32 @@ namespace ConsoleCards.Presentation.Interaction
             bool hasSupport = TryResolveSupportHeight(target, out float supportHeight);
             if (hasSupport)
             {
-                smoothedSupportHeight = SmoothSupportHeight(supportHeight, deltaTime);
+                // Known issue fixed (2026-10-20): a piece carried in from off the table (hovering where nothing was
+                // under it) used to drop about 2 units at once when its centre crossed the edge. It now starts from the
+                // height it is at and eases down onto the table.
+                if (!hasSupportHeight) supportReentry = false;
+                if (heldWithoutSupport)
+                {
+                    heldWithoutSupport = false;
+                    float currentBottom = target.y - carryRaise - RootHeightAboveBottom() - currentClearance;
+                    if (currentBottom > supportHeight + 0.01f)
+                    {
+                        hasSupportHeight = true;
+                        smoothedSupportHeight = currentBottom;
+                        supportReentry = true;
+                    }
+                }
+
+                if (supportReentry)
+                {
+                    smoothedSupportHeight = SmoothValue(smoothedSupportHeight, supportHeight, Tune.ReenterDescentSeconds, deltaTime);
+                    if (smoothedSupportHeight - supportHeight <= 0.01f) supportReentry = false;
+                }
+                else
+                {
+                    smoothedSupportHeight = SmoothSupportHeight(supportHeight, deltaTime);
+                }
+
                 float pickupProgress = PickupProgress();
                 float targetClearance = pickupProgress < 1f
                     ? profile.HeldClearance
@@ -463,9 +500,12 @@ namespace ConsoleCards.Presentation.Interaction
                     : targetBottomHeight;
                 target.y = bottomHeight + RootHeightAboveBottom();
             }
-            else if (containedPickupLift > 0f)
+            else
             {
-                target.y += containedPickupLift * Mathf.SmoothStep(0f, 1f, PickupProgress());
+                // Nothing under a loose piece (off the table): remembered for when it comes back over. A card taken from
+                // a hand or pile keeps its own lift, as before.
+                if (containedPickupLift > 0f) target.y += containedPickupLift * Mathf.SmoothStep(0f, 1f, PickupProgress());
+                else heldWithoutSupport = true;
             }
 
             target.y += carryRaise; // POL-1: raised with the wheel
@@ -555,6 +595,8 @@ namespace ConsoleCards.Presentation.Interaction
             heldTargetPosition = position;
             hasHeldTarget = true;
             hasSupportHeight = false;
+            heldWithoutSupport = false;
+            supportReentry = false;
             deliberateRotationPending = false;
             releaseMotion.Reset();
             return true;
@@ -707,6 +749,8 @@ namespace ConsoleCards.Presentation.Interaction
             held = false;
             hasPointerAnchor = false;
             hasSupportHeight = false;
+            heldWithoutSupport = false;
+            supportReentry = false;
             hasHeldTarget = false;
             containedPickupLift = 0f;
             gentlePlacementIntent = 0f;
@@ -795,6 +839,8 @@ namespace ConsoleCards.Presentation.Interaction
             held = false;
             hasPointerAnchor = false;
             hasSupportHeight = false;
+            heldWithoutSupport = false;
+            supportReentry = false;
             hasHeldTarget = false;
             containedPickupLift = 0f;
             gentlePlacementIntent = 0f;
@@ -874,7 +920,8 @@ namespace ConsoleCards.Presentation.Interaction
                         }
 
                         FreezeBody();
-                        Commit(State(body.position, body.rotation, Vector3.zero, Vector3.zero,
+                        bool rolledByPlayer = userActionActive || compoundActionActive;
+                        bool cockedAccepted = Commit(State(body.position, body.rotation, Vector3.zero, Vector3.zero,
                             PhysicalObjectMode.SleepingUnresolved, actor), null,
                             userActionActive
                                 ? AuthoritativeActionRecordMode.Transaction
@@ -883,6 +930,7 @@ namespace ConsoleCards.Presentation.Interaction
                                     : AuthoritativeActionRecordMode.None);
                         userActionActive = false;
                         compoundActionActive = false;
+                        if (cockedAccepted && rolledByPlayer) DieCocked?.Invoke(this); // known issue fixed: a visible sign
                         return; // Still cocked after nudges: record the actual resting pose and unresolved status.
                     }
                     value = face;

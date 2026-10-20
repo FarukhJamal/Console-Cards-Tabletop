@@ -81,14 +81,16 @@ namespace ConsoleCards.Presentation.Composition
 
         public void ClearFeedback()
         {
+            if (ConsoleCards.Presentation.UI.TableUiController.IsQuitting) return; // the scene is being destroyed
             SetFeedback(null);
         }
 
         private void SetFeedback(GameObject activeRoot)
         {
-            validTargetFeedbackRoot.SetActive(ReferenceEquals(activeRoot, validTargetFeedbackRoot));
-            sourceTargetFeedbackRoot.SetActive(ReferenceEquals(activeRoot, sourceTargetFeedbackRoot));
-            invalidTargetFeedbackRoot.SetActive(ReferenceEquals(activeRoot, invalidTargetFeedbackRoot));
+            // A part already destroyed (the table closing) is skipped.
+            if (validTargetFeedbackRoot != null) validTargetFeedbackRoot.SetActive(ReferenceEquals(activeRoot, validTargetFeedbackRoot));
+            if (sourceTargetFeedbackRoot != null) sourceTargetFeedbackRoot.SetActive(ReferenceEquals(activeRoot, sourceTargetFeedbackRoot));
+            if (invalidTargetFeedbackRoot != null) invalidTargetFeedbackRoot.SetActive(ReferenceEquals(activeRoot, invalidTargetFeedbackRoot));
         }
 
         private static void RequireReference(UnityEngine.Object reference, string name)

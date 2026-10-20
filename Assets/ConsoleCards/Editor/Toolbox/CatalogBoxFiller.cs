@@ -10,8 +10,11 @@ namespace ConsoleCards.Editor.Toolbox
     /// <summary>
     /// Fills the Controller box and each Game box with tiles that place real cards (doc 22, C3c):
     /// a Controller Deck of every card that stands for a controller input, one deck per content set of the box's
-    /// game, and the game's Avatars. Entries that already exist (same name) are kept; nothing is removed. The
-    /// Toolbox tiles are synced afterwards.
+    /// game, and the game's Avatars. Entries that already exist (same name) are kept. A content set with exactly the
+    /// same cards as an earlier set of the game gets no tile of its own, and a deck tile that places exactly the same
+    /// cards as an earlier tile of its box is removed (owner, 2026-10-20: Trap Floor's abilities showed twice, as
+    /// "Floor Abilities" and "Trap Floor Abilities"; the game keeps both sets, one for the floor and one for the
+    /// shop). The Toolbox tiles are synced afterwards.
     /// </summary>
     public static class CatalogBoxFiller
     {
@@ -50,11 +53,13 @@ namespace ConsoleCards.Editor.Toolbox
                 GameDefinition game = box != null ? box.Game : null;
                 if (game == null) continue;
                 IReadOnlyList<GameContentSet> sets = game.ContentSets;
+                HashSet<string> setCards = new HashSet<string>();
                 for (int s = 0; sets != null && s < sets.Count; s++)
                 {
                     GameContentSet set = sets[s];
                     List<CardDefinition> cards = CollectSet(set);
                     if (cards.Count == 0 || AllControllerInputs(cards)) continue; // controller cards live in the Controller box
+                    if (!setCards.Add(CardsKey(cards))) continue; // the same cards as an earlier set: one tile is enough
                     string name = string.IsNullOrWhiteSpace(set.DisplayName) ? $"Set {s + 1}" : set.DisplayName;
                     added += AddDeckEntry(box, name, $"{Total(cards)} {game.DisplayName} cards", baseDeck.Prefab, bayStyle, cards, null);
                 }
@@ -72,6 +77,13 @@ namespace ConsoleCards.Editor.Toolbox
                 }
             }
 
+            int removed = 0;
+            if (library.ControllerBox != null) removed += RemoveDuplicateDeckEntries(library.ControllerBox);
+            for (int i = 0; i < library.GameBoxes.Count; i++)
+            {
+                if (library.GameBoxes[i] != null) removed += RemoveDuplicateDeckEntries(library.GameBoxes[i]);
+            }
+
             AssetDatabase.SaveAssets();
             try
             {
@@ -83,8 +95,68 @@ namespace ConsoleCards.Editor.Toolbox
                 return;
             }
 
-            Debug.Log($"[Catalog] Added {added} box tile(s). Syncing the Toolbox tiles.");
+            Debug.Log($"[Catalog] Added {added} box tile(s), removed {removed} duplicate tile(s). Syncing the Toolbox tiles.");
             ComponentToolboxBuilder.SyncFromLibrary();
+        }
+
+        // The cards a list places, as one text (order does not matter; copies count).
+        private static string CardsKey(List<CardDefinition> cards)
+        {
+            List<string> ids = new List<string>(cards.Count);
+            for (int i = 0; i < cards.Count; i++)
+            {
+                if (cards[i] != null) ids.Add(AssetDatabase.GetAssetPath(cards[i]) + "#" + cards[i].name);
+            }
+
+            ids.Sort(StringComparer.Ordinal);
+            return string.Join("|", ids);
+        }
+
+        // Removes a deck tile that places exactly the same cards as an earlier tile of the same box (the earlier one,
+        // lowest Toolbox order first, is kept). Returns how many were removed.
+        private static int RemoveDuplicateDeckEntries(ComponentCatalog catalog)
+        {
+            SerializedObject so = new SerializedObject(catalog);
+            SerializedProperty entries = so.FindProperty("entries");
+            List<int> order = new List<int>(entries.arraySize);
+            for (int i = 0; i < entries.arraySize; i++) order.Add(i);
+            order.Sort((a, b) =>
+            {
+                int byOrder = entries.GetArrayElementAtIndex(a).FindPropertyRelative("toolboxOrder").intValue
+                    .CompareTo(entries.GetArrayElementAtIndex(b).FindPropertyRelative("toolboxOrder").intValue);
+                return byOrder != 0 ? byOrder : a.CompareTo(b);
+            });
+
+            HashSet<string> seen = new HashSet<string>();
+            List<int> duplicates = new List<int>();
+            for (int k = 0; k < order.Count; k++)
+            {
+                SerializedProperty entry = entries.GetArrayElementAtIndex(order[k]);
+                if (entry.FindPropertyRelative("kind").intValue != (int)ComponentCatalogKind.Deck) continue;
+                SerializedProperty links = entry.FindPropertyRelative("definitions");
+                List<string> ids = new List<string>();
+                for (int l = 0; l < links.arraySize; l++)
+                {
+                    SerializedProperty link = links.GetArrayElementAtIndex(l);
+                    if (link.FindPropertyRelative("role").stringValue != ComponentDefinitionLink.CardRole) continue;
+                    UnityEngine.Object definition = link.FindPropertyRelative("definition").objectReferenceValue;
+                    if (definition != null) ids.Add(AssetDatabase.GetAssetPath(definition) + "#" + definition.name);
+                }
+
+                if (ids.Count == 0) continue;
+                ids.Sort(StringComparer.Ordinal);
+                if (seen.Add(string.Join("|", ids))) continue;
+                duplicates.Add(order[k]);
+                Debug.Log($"[Catalog] Removed \"{entry.FindPropertyRelative("displayName").stringValue}\" from {catalog.name}: "
+                    + "it places the same cards as an earlier tile.");
+            }
+
+            if (duplicates.Count == 0) return 0;
+            duplicates.Sort();
+            for (int i = duplicates.Count - 1; i >= 0; i--) entries.DeleteArrayElementAtIndex(duplicates[i]);
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(catalog);
+            return duplicates.Count;
         }
 
         private static int AddDeckEntry(

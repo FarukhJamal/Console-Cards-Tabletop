@@ -122,29 +122,6 @@ MonoBehaviour:
       definition: {fileID: 11400000, guid: a2222222222242228222222222222222, type: 2}
     - role: Card
       definition: {fileID: 11400000, guid: fd525b561aca4c5dadc5336438e94f7c, type: 2}
-  - id: 4d1d7459-4011-46d9-8dbb-7d26d0b32768
-    displayName: Trap Floor Abilities
-    description: 6 Trap Floor cards
-    kind: 1
-    prefab: {fileID: 100100, guid: 7a0f4b2d5e9c4b1fbd4a6e8cab5f7d93, type: 3}
-    icon: {fileID: 21300000, guid: fc442632f73df5d4d9b147b51bf54ba7, type: 3}
-    showInToolbox: 1
-    toolboxOrder: 5
-    definitions:
-    - role: BayStyle
-      definition: {fileID: 11400000, guid: 6f9e3a1c4d8b4a0eac3f5d7b9a4e6c82, type: 2}
-    - role: Card
-      definition: {fileID: 11400000, guid: a1111111111141118111111111111111, type: 2}
-    - role: Card
-      definition: {fileID: 11400000, guid: a2222222222242228222222222222222, type: 2}
-    - role: Card
-      definition: {fileID: 11400000, guid: a3333333333343338333333333333333, type: 2}
-    - role: Card
-      definition: {fileID: 11400000, guid: a4444444444444448444444444444444, type: 2}
-    - role: Card
-      definition: {fileID: 11400000, guid: a5555555555545558555555555555555, type: 2}
-    - role: Card
-      definition: {fileID: 11400000, guid: fd525b561aca4c5dadc5336438e94f7c, type: 2}
   - id: 49bd9a55-8a17-405e-adf1-4356a523a35d
     displayName: Avatars
     description: The 4 Trap Floor avatar cards

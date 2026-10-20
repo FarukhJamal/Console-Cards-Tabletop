@@ -127,6 +127,7 @@ namespace ConsoleCards.Presentation.Composition
 
         public void ClearFeedback()
         {
+            if (ConsoleCards.Presentation.UI.TableUiController.IsQuitting) return; // the scene is being destroyed
             SetFeedback(PileBayFeedback.None, baseMaterial);
         }
 
