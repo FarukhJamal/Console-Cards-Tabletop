@@ -578,14 +578,59 @@ namespace ConsoleCards.Presentation.Composition
                 || host.trapFloorRoundState.Phase != TrapFloorRoundPhase.Floorfall
                 || !host.Registry.TryGetDieView(host.trapFloorTemplate.FloorfallXAxisDieId, out DieView x)
                 || !host.Registry.TryGetDieView(host.trapFloorTemplate.FloorfallYAxisDieId, out DieView y)
-                || x.PhysicalObject == null || y.PhysicalObject == null
-                || x.PhysicalObject.IsHeld || y.PhysicalObject.IsHeld) return false;
+                || x.PhysicalObject == null || y.PhysicalObject == null) return false;
             if (host.physicalFloorfallActor.IsEmpty) host.physicalFloorfallActor = host.localPlayerId;
-            if (!x.PhysicalObject.Roll(host.physicalFloorfallActor) || !y.PhysicalObject.Roll(host.physicalFloorfallActor))
-            { host.physicalFloorfallActor = PlayerId.Empty; return false; }
+            // DICE-1 (owner, 2026-10-21): the game never rolls; it asks, and reads the dice once the player has rolled them.
+            AskForFloorDiceRoll(true, true);
             host.physicalFloorfallPending = true;
-            host.ShowMessage("Floorfall Dice rolling physically; waiting for both to settle.");
+            host.ShowMessage("FLOORFALL — roll both floor dice (pick them up and throw them).");
             return true;
+        }
+
+        // ---------- DICE-1: the players roll the dice themselves (owner, 2026-10-21) ----------
+        // When a roll is needed the game only asks for it and remembers each die's state at that moment; a die counts
+        // as rolled once it has moved since (a new accepted state) and lies still. A cocked die is asked again.
+        // Event-time only.
+        private PhysicalObjectState askedXDieState;
+        private PhysicalObjectState askedYDieState;
+        private PhysicalObjectState askedBlindDieState;
+        private bool askedXDie;
+        private bool askedYDie;
+
+        private PhysicalObjectState DiePhysicalState(TabletopObjectId dieId) =>
+            host.matchState != null && host.matchState.Dice.TryGetValue(dieId, out DieState die)
+                ? die.BaseState.PhysicalState
+                : null;
+
+        private void AskForFloorDiceRoll(bool xDie, bool yDie)
+        {
+            askedXDie = xDie;
+            askedYDie = yDie;
+            askedXDieState = DiePhysicalState(host.trapFloorTemplate.FloorfallXAxisDieId);
+            askedYDieState = DiePhysicalState(host.trapFloorTemplate.FloorfallYAxisDieId);
+        }
+
+        // True once every asked floor die was rolled and lies still (the others only need to lie still).
+        private bool FloorDiceRolledAsAsked()
+        {
+            return DieRolledAsAsked(host.trapFloorTemplate.FloorfallXAxisDieId, askedXDie, ref askedXDieState, "column")
+                & DieRolledAsAsked(host.trapFloorTemplate.FloorfallYAxisDieId, askedYDie, ref askedYDieState, "row");
+        }
+
+        private bool DieRolledAsAsked(TabletopObjectId dieId, bool asked, ref PhysicalObjectState askedState, string name)
+        {
+            PhysicalObjectState state = DiePhysicalState(dieId);
+            if (state == null) return false;
+            if (!asked) return state.Mode == PhysicalObjectMode.Sleeping;
+            if (ReferenceEquals(state, askedState)) return false;
+            if (state.Mode == PhysicalObjectMode.SleepingUnresolved)
+            {
+                askedState = state;
+                host.ShowMessage($"The {name} die is cocked: roll it again.");
+                return false;
+            }
+
+            return state.Mode == PhysicalObjectMode.Sleeping;
         }
 
         internal void CompletePhysicalFloorfallIfSettled()
@@ -593,15 +638,30 @@ namespace ConsoleCards.Presentation.Composition
             if (!host.physicalFloorfallPending) return;
             if (host.trapFloorRoundState == null || host.trapFloorRoundState.Phase != TrapFloorRoundPhase.Floorfall)
             { host.physicalFloorfallPending = false; host.physicalFloorfallActor = PlayerId.Empty; return; }
-            DieState x = host.matchState.Dice[host.trapFloorTemplate.FloorfallXAxisDieId];
-            DieState y = host.matchState.Dice[host.trapFloorTemplate.FloorfallYAxisDieId];
-            if (x.BaseState.PhysicalState?.Mode != PhysicalObjectMode.Sleeping
-                || y.BaseState.PhysicalState?.Mode != PhysicalObjectMode.Sleeping) return;
+            if (!FloorDiceRolledAsAsked()) return;
             host.physicalFloorfallPending = false;
             if (host.floorfallService.IsProtectedPhysicalResult(new TrapFloorFloorfallContext(host.trapFloorRoundState.CurrentRoundNumber)))
             { BeginPhysicalFloorfall(); return; }
             TriggerFloorfall();
             host.physicalFloorfallActor = PlayerId.Empty;
+        }
+
+        // While a collapse waits for its roll, the turn menu's entry reminds the player instead of being greyed out;
+        // after an Undo or a rebuild it picks the wait up again for the player who began it.
+        internal void RemindFloorCollapseRoll()
+        {
+            if (host.trapFloorCollapseState == null || !host.trapFloorCollapseState.IsCollapsePending) return;
+            if (!host.physicalFloorCollapsePending)
+            {
+                host.physicalFloorCollapsePending = true;
+                host.physicalFloorCollapseActor = host.trapFloorCollapseState.PendingActorPlayerId;
+                AskForFloorDiceRoll(true, true);
+                RefreshTrapFloorStatusUi();
+            }
+
+            host.ShowMessage(
+                $"FLOORFALL — {FormatPlayerName(host.physicalFloorCollapseActor)}, roll the two floor dice (column and row); "
+                + "the floor collapses where they land.");
         }
 
         internal bool BeginPhysicalFloorCollapse()
@@ -628,12 +688,6 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             PlayerId actor = host.trapFloorTurnState.FloorOperatorPlayerId;
-            if (!LaunchPhysicalFloorCollapseDice(xAxisDieView, yAxisDieView, actor))
-            {
-                host.ShowMessage("Collapse Floor rejected: both official d6 must be loose and available.");
-                return false;
-            }
-
             TrapFloorCollapseResult begin = host.TableAuthority.Submit<TrapFloorBeginCollapseCommand, TrapFloorCollapseResult>(
                 new TrapFloorBeginCollapseCommand(host.CreateCommandContext(actor)));
             if (!begin.Succeeded)
@@ -644,9 +698,10 @@ namespace ConsoleCards.Presentation.Composition
 
             host.physicalFloorCollapsePending = true;
             host.physicalFloorCollapseActor = actor;
+            AskForFloorDiceRoll(true, true); // DICE-1: the player rolls them
             RefreshTrapFloorStatusUi();
             host.ShowMessage(
-                $"{FormatPlayerName(actor)} triggered Floorfall; rolling the two official d6 physically.");
+                $"FLOORFALL — {FormatPlayerName(actor)}, roll the two floor dice (column and row).");
             return true;
         }
 
@@ -657,29 +712,18 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            // DICE-1 fix (owner, 2026-10-21): a die the player is holding to roll does not end the wait (it used to,
+            // leaving the collapse pending with no way to finish it and Collapse Floor greyed out).
             if (host.trapFloorCollapseState == null
                 || host.trapFloorCollapseUseCase == null
-                || !host.trapFloorCollapseState.IsCollapsePending
-                || !TryGetOfficialFloorfallDieViews(out DieView xAxisDieView, out DieView yAxisDieView))
+                || !host.trapFloorCollapseState.IsCollapsePending)
             {
                 host.physicalFloorCollapsePending = false;
                 host.physicalFloorCollapseActor = PlayerId.Empty;
                 return;
             }
 
-            DieState xAxisDie = host.matchState.Dice[host.trapFloorTemplate.FloorfallXAxisDieId];
-            DieState yAxisDie = host.matchState.Dice[host.trapFloorTemplate.FloorfallYAxisDieId];
-            if (xAxisDie.BaseState.PhysicalState?.Mode != PhysicalObjectMode.Sleeping
-                || yAxisDie.BaseState.PhysicalState?.Mode != PhysicalObjectMode.Sleeping
-                || (ReferenceEquals(
-                        xAxisDie.BaseState.PhysicalState,
-                        host.trapFloorCollapseState.LastResolvedXAxisPhysicalState)
-                    && ReferenceEquals(
-                        yAxisDie.BaseState.PhysicalState,
-                        host.trapFloorCollapseState.LastResolvedYAxisPhysicalState)))
-            {
-                return;
-            }
+            if (!FloorDiceRolledAsAsked()) return; // DICE-1: wait for the player's roll
 
             TrapFloorCollapseResult result = host.TableAuthority.Submit<TrapFloorResolveCollapseCommand, TrapFloorCollapseResult>(
                 new TrapFloorResolveCollapseCommand(
@@ -700,16 +744,10 @@ namespace ConsoleCards.Presentation.Composition
                 bool rerollY = !beyond || result.Roll.YAxisResult > host.trapFloorTemplate.GridRows;
                 host.ShowMessage(beyond
                     ? $"Floorfall rolled {result.Roll.XAxisResult}/{result.Roll.YAxisResult}: beyond the "
-                        + $"{host.trapFloorTemplate.GridColumns}×{host.trapFloorTemplate.GridRows} floor; rolling "
+                        + $"{host.trapFloorTemplate.GridColumns}×{host.trapFloorTemplate.GridRows} floor: roll "
                         + (rerollX && rerollY ? "both dice" : rerollX ? "the column die" : "the row die") + " again."
-                    : $"Floor {result.Roll.Coordinate} is already collapsed; rerolling both official d6.");
-                if ((rerollX && !xAxisDieView.PhysicalObject.Roll(host.physicalFloorCollapseActor, true))
-                    | (rerollY && !yAxisDieView.PhysicalObject.Roll(host.physicalFloorCollapseActor, true)))
-                {
-                    host.physicalFloorCollapsePending = false;
-                    host.physicalFloorCollapseActor = PlayerId.Empty;
-                    host.ShowMessage("Automatic Floorfall reroll could not launch both official d6.");
-                }
+                    : $"Floor {result.Roll.Coordinate} is already collapsed: roll both floor dice again.");
+                AskForFloorDiceRoll(rerollX, rerollY); // DICE-1: the player rolls again
 
                 RefreshTrapFloorStatusUi();
                 return;
@@ -746,16 +784,11 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             PlayerId actor = host.trapFloorTurnState.ActivePlayerId;
-            if (!dieView.PhysicalObject.Roll(actor, true))
-            {
-                host.ShowMessage("Roll Blind Direction rejected: the d4 is unavailable or controlled.");
-                return false;
-            }
-
             host.physicalBlindDirectionPending = true;
             host.physicalBlindDirectionActor = actor;
             host.physicalBlindDirectionDieId = dieId;
-            host.ShowMessage("BLIND — rolling physical d4; waiting for it to settle.");
+            askedBlindDieState = DiePhysicalState(dieId); // DICE-1: the player rolls it
+            host.ShowMessage($"BLIND — {FormatPlayerName(actor)}, roll the d4 for your direction.");
             return true;
         }
 
@@ -781,16 +814,11 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            if (ReferenceEquals(physicalState, askedBlindDieState)) return; // DICE-1: not rolled yet
             if (physicalState.Mode == PhysicalObjectMode.SleepingUnresolved)
             {
-                if (host.Registry.TryGetDieView(host.physicalBlindDirectionDieId, out DieView unresolvedDieView)
-                    && unresolvedDieView.PhysicalObject != null
-                    && unresolvedDieView.PhysicalObject.Roll(host.physicalBlindDirectionActor, true))
-                {
-                    host.ShowMessage("Blind d4 is cocked; rolling it again.");
-                    return;
-                }
-                CancelPhysicalBlindDirection("Blind direction roll could not resolve the cocked d4.");
+                askedBlindDieState = physicalState;
+                host.ShowMessage("The d4 is cocked: roll it again.");
                 return;
             }
 
@@ -872,15 +900,6 @@ namespace ConsoleCards.Presentation.Composition
                 && yAxisDieView.PhysicalObject.OwnsLooseTransform
                 && !xAxisDieView.BoundState.IsUserLocked
                 && !yAxisDieView.BoundState.IsUserLocked;
-        }
-
-        internal static bool LaunchPhysicalFloorCollapseDice(
-            DieView xAxisDieView,
-            DieView yAxisDieView,
-            PlayerId actor)
-        {
-            return xAxisDieView.PhysicalObject.Roll(actor, true)
-                && yAxisDieView.PhysicalObject.Roll(actor, true);
         }
 
         public TrapFloorRoundSearchResult SearchFloormasterDeck()
@@ -3660,9 +3679,14 @@ namespace ConsoleCards.Presentation.Composition
                     break;
                 case TrapFloorRoundPhase.Floorfall:
                     actions.Add(new PopupActionOption(
-                        "Roll Floorfall",
+                        host.physicalFloorfallPending ? "Floorfall: roll the dice" : "Roll Floorfall",
                         true,
-                        () => BeginPhysicalFloorfall()));
+                        () =>
+                        {
+                            // While waiting it only reminds the player (DICE-1).
+                            if (host.physicalFloorfallPending) host.ShowMessage("FLOORFALL — roll both floor dice (pick them up and throw them).");
+                            else BeginPhysicalFloorfall();
+                        }));
                     actions.Add(new PopupActionOption(
                         "Floorfall done",
                         host.trapFloorRoundState.AcceptedFloorfallCount > 0,
@@ -3705,9 +3729,14 @@ namespace ConsoleCards.Presentation.Composition
                     && !blindStatus.IsDirectionResolved)
                 {
                     actions.Add(new PopupActionOption(
-                        "Roll Blind Direction",
-                        !host.physicalBlindDirectionPending,
-                        () => BeginPhysicalBlindDirection()));
+                        host.physicalBlindDirectionPending ? "Blind: roll the d4" : "Roll Blind Direction",
+                        true,
+                        () =>
+                        {
+                            // While waiting it only reminds the player (DICE-1).
+                            if (host.physicalBlindDirectionPending) host.ShowMessage("BLIND — roll the d4 for your direction.");
+                            else BeginPhysicalBlindDirection();
+                        }));
                 }
                 // Search and Careful Search are gone (doc 18 §15.2, G2d): landing on a tile flips it for free.
                 bool purchasePending = host.pendingControllerPurchaseState != null
@@ -3742,11 +3771,8 @@ namespace ConsoleCards.Presentation.Composition
                         KeepNotAllowedMove));
                 }
 
-                // ABIL-DECK (owner, 2026-10-21): draw 3 from the Ability deck and buy any.
-                if (!purchasePending && TryGetAbilityOfferAction(out string abilityDrawLabel))
-                {
-                    actions.Add(new PopupActionOption(abilityDrawLabel, true, OpenAbilityOffer));
-                }
+                // ABIL-DECK: the turn menu no longer offers "Draw 3 Abilities" (owner, 2026-10-21): players draw
+                // from the Ability deck themselves, as the rules card (tf-turn-draw) says.
 
                 // Owner, 2026-10-20: a waiting trap and a Reaction that can stop it: offered in the turn menu too.
                 if (!purchasePending && CountUsableReactions(host.trapFloorTurnState.ActivePlayerId) > 0)
@@ -3773,11 +3799,11 @@ namespace ConsoleCards.Presentation.Composition
 
             if (host.trapFloorCollapseState != null)
             {
+                bool collapseWaiting = host.trapFloorCollapseState.IsCollapsePending;
                 actions.Add(new PopupActionOption(
-                    "Collapse Floor",
-                    !host.trapFloorCollapseState.IsCollapsePending
-                        && !host.trapFloorCollapseState.IsBoardExhausted,
-                    () => BeginPhysicalFloorCollapse()));
+                    collapseWaiting ? "Floorfall: roll the 2 floor dice" : "Collapse Floor",
+                    collapseWaiting || !host.trapFloorCollapseState.IsBoardExhausted,
+                    collapseWaiting ? (Action)RemindFloorCollapseRoll : () => BeginPhysicalFloorCollapse()));
             }
 
             actions.Add(new PopupActionOption(
@@ -3815,7 +3841,7 @@ namespace ConsoleCards.Presentation.Composition
             int moveTiles = MoveAllowance(out _);
             string standardGuidance =
                 $"Draw up to {handLimit} if needed\n"
-                + (TryGetAbilityOfferAction(out _) ? $"Draw {AbilityOfferSize} Abilities and buy any you can pay for\n" : string.Empty)
+                + (TryGetAbilityOfferAction(out _) ? $"Draw {AbilityOfferSize} from the Ability deck and buy any you can pay for\n" : string.Empty)
                 + $"Move up to {moveTiles} tile{(moveTiles == 1 ? string.Empty : "s")} "
                 + "in one straight line (they light while you hold your pawn); landing flips a tile. "
                 + "Take a prize you stand on, then End Turn";
@@ -4159,9 +4185,9 @@ namespace ConsoleCards.Presentation.Composition
             {
                 return roll != null && roll.RequiredReroll
                     ? roll.FloorCardId.IsEmpty
-                        ? $"FLOORFALL {roll.XAxisResult}/{roll.YAxisResult}: BEYOND THE FLOOR — REROLLING"
-                        : $"FLOORFALL {roll.XAxisResult}/{roll.YAxisResult}: ALREADY A HOLE — REROLLING"
-                    : "FLOORFALL: ROLLING 2d6";
+                        ? $"FLOORFALL {roll.XAxisResult}/{roll.YAxisResult}: BEYOND THE FLOOR — ROLL AGAIN"
+                        : $"FLOORFALL {roll.XAxisResult}/{roll.YAxisResult}: ALREADY A HOLE — ROLL AGAIN"
+                    : "FLOORFALL: ROLL THE 2 FLOOR DICE";
             }
 
             string usable = $"USABLE FLOORS {host.trapFloorCollapseState.UsableFloorCount}"

@@ -66,7 +66,7 @@ MonoBehaviour:
     numbered: 1
     entries:
     - stableId: tf-turn-draw
-      text: 'Draw from the Controller deck (one deck for everyone) until you hold {value}. Then draw 3 from the Ability deck beside the board and buy any you can pay for; what you do not buy goes back and the deck is shuffled.'
+      text: 'Draw from the Controller deck (one deck for everyone) until you hold {value}. Then draw 3 cards from the Ability deck beside the board yourself and buy any you can pay for (the Controller Cards you pay with go back into the Controller deck); put the ones you do not buy back on the Ability deck and shuffle it.'
       settingKind: 1
       settingKey: controller.hand-size
       value: '10'

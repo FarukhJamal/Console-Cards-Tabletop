@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.37 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.39 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -247,6 +247,12 @@ Change: …
   left side, level with its middle, with the discard above it; the Controller deck off the bottom-right corner.
 - **Custom layout (LAYOUT-1, P-LAYOUT):** the players may arrange the table (Table menu → Arrange table…) and, when
   everyone agrees, every deal of the game uses their layout (saved per game and player count).
+- **Drawing Abilities (D4-1, owner 2026-10-21):** no menu button: the player draws 3 from the Ability deck by hand,
+  buys any they can pay for (payment cards back into the Controller deck), puts the rest back and shuffles it.
+- **Blind d4 (D4-1):** one d4 lies beside the floor dice for the Blind trap's direction roll.
+- **Dice (DICE-1, owner 2026-10-21):** the game never rolls a die. Collapse Floor and Roll Blind Direction ask the
+  player to roll (the two floor dice, or the d4) and the result is read once the dice have been thrown and lie
+  still; a die beyond the floor, on a hole or cocked is asked for again.
 - **Players (PLACE-1, P-LAYOUT):** 2, 3 or 4 players, chosen in New table…; only those seats are dealt (2 opposite,
   3 on three sides). The Controller deck and the Ability deck hold one set per player.
 - **Settings:** `shop.enabled` (applies at once; default off since 2026-10-21)
@@ -567,7 +573,7 @@ Change: …
 - **Changes:** 2026-10-18 every Toolbox piece moves in, game mats included (owner); 2026-10-17 T1–T3 approved.
 
 ### P-LAYOUT · Where seats and pieces go
-- **Status:** Built, in playtest
+- **Status:** Built
 - **Rule now:** **Default placement (PLACE-1, owner 2026-10-21):** a game's layout has a seat per side of the table.
   When fewer players sit down, the seats used face the board and are spread out: seat 0 always, then each next seat
   is the one farthest round the table from those already chosen (ties to the lower seat). On the 4-seat table:
@@ -580,7 +586,7 @@ Change: …
 - **Settings:** —
 - **Source:** owner 2026-10-21
 - **Open:** PLACE-2: player-made games use the same seat rule (their saved Consoles become the seats).
-- **Changes:** 2026-10-21 LAYOUT-1; 2026-10-21 PLACE-1 (to be checked).
+- **Changes:** 2026-10-21 LAYOUT-1; 2026-10-21 PLACE-1 (approved).
 
 ### P-TABLE-MODELS · Table models
 - **Status:** Built, approved

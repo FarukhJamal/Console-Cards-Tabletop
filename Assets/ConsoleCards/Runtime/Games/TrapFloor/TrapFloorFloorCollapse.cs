@@ -509,10 +509,12 @@ namespace ConsoleCards.Games.TrapFloor
                 && yAxisDie.SideCount == TrapFloorFloorfallService.DieSideCount;
         }
 
+        // DICE-1 (owner, 2026-10-21): the players roll the dice themselves after the collapse begins, so a die
+        // lying on the table (not held) can be used; the result counts once the dice have moved since the begin.
         private static bool CanUseLaunchedDie(DieState die)
         {
             PhysicalObjectState physical = die.BaseState.PhysicalState;
-            return physical != null && physical.Mode == PhysicalObjectMode.Dynamic;
+            return physical != null && physical.Mode != PhysicalObjectMode.Held;
         }
 
         private static bool IsSettled(DieState die)

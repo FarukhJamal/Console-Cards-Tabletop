@@ -45,6 +45,8 @@ namespace ConsoleCards.Games.TrapFloor
         private const double FloorfallDiceX = 3.45d;
         private const double FloorfallDiceY = 3.45d;
         private const double FloorfallDiceSpacing = 0.9d;
+        // The Blind trap's direction die (doc 18; TrapFloorAbilityResolution requires a d4).
+        private const int BlindDieSideCount = 4;
         private const float DefaultCameraOrthographicSize = 7.35f;
         private const string MainConsoleSlotKey = "Main";
 
@@ -182,12 +184,14 @@ namespace ConsoleCards.Games.TrapFloor
             PlayAreaId boardPlayAreaId = new PlayAreaId(CreateGuid(2, 1));
             ObjectDefinitionId pawnDefinitionId = new ObjectDefinitionId(CreateGuid(20, 8));
             ObjectDefinitionId dieDefinitionId = new ObjectDefinitionId(CreateGuid(20, 10));
+            ObjectDefinitionId blindDieDefinitionId = new ObjectDefinitionId(CreateGuid(20, 11));
 
             List<GameTemplateObjectDefinition> objectDefinitions = BuildObjectDefinitions(
                 gameDefinition,
                 avatars,
                 pawnDefinitionId,
-                dieDefinitionId);
+                dieDefinitionId,
+                blindDieDefinitionId);
             List<GameTemplateSeatDefinition> seats = new List<GameTemplateSeatDefinition>(playerCount);
             List<GameTemplateContainerDefinition> containers = new List<GameTemplateContainerDefinition>();
             List<GameTemplateObjectInstanceDefinition> objects = new List<GameTemplateObjectInstanceDefinition>();
@@ -239,6 +243,14 @@ namespace ConsoleCards.Games.TrapFloor
                 ?? new TableCoordinate(FloorfallDiceX + (FloorfallDiceSpacing * 0.5d), FloorfallDiceY);
             objects.Add(CreateFloorfallDie(floorfallXAxisDieId, dieDefinitionId, xAxisDie.X, xAxisDie.Y));
             objects.Add(CreateFloorfallDie(floorfallYAxisDieId, dieDefinitionId, yAxisDie.X, yAxisDie.Y));
+            // D4-1 (owner, 2026-10-21): the d4 the Blind trap rolls for its direction lies beside the floor dice
+            // (next to the Y die, so it follows a saved table layout too).
+            objects.Add(CreateFloorfallDie(
+                new TabletopObjectId(CreateGuid(60, 3)),
+                blindDieDefinitionId,
+                yAxisDie.X + FloorfallDiceSpacing,
+                yAxisDie.Y,
+                BlindDieSideCount));
 
             ContainerId abilityDeckId = CreateAbilityDeck(
                 gameDefinition, playerCount, grid, randomValueSource, containers, memberships, objects, labels,
@@ -1058,17 +1070,20 @@ namespace ConsoleCards.Games.TrapFloor
             GameDefinitionData definition,
             IReadOnlyList<TrapFloorAvatarSetup> avatars,
             ObjectDefinitionId pawnDefinitionId,
-            ObjectDefinitionId dieDefinitionId)
+            ObjectDefinitionId dieDefinitionId,
+            ObjectDefinitionId blindDieDefinitionId)
         {
             List<GameTemplateObjectDefinition> definitions = new List<GameTemplateObjectDefinition>
             {
                 new GameTemplateObjectDefinition(pawnDefinitionId, TabletopObjectKind.Pawn, "Player Pawn"),
                 new GameTemplateObjectDefinition(dieDefinitionId, TabletopObjectKind.Die, "Six-sided Die"),
+                new GameTemplateObjectDefinition(blindDieDefinitionId, TabletopObjectKind.Die, "Four-sided Die"),
             };
             HashSet<ObjectDefinitionId> seen = new HashSet<ObjectDefinitionId>
             {
                 pawnDefinitionId,
                 dieDefinitionId,
+                blindDieDefinitionId,
             };
             // Every Avatar needs its own Card definition. An authored ID that matches the Pawn, the Die or another
             // Avatar would make the Avatar card resolve to the wrong kind, so it is reported by name here.
@@ -1425,7 +1440,8 @@ namespace ConsoleCards.Games.TrapFloor
             TabletopObjectId objectId,
             ObjectDefinitionId definitionId,
             double tableX,
-            double tableY)
+            double tableY,
+            int sideCount = TrapFloorFloorfallService.DieSideCount)
         {
             return new GameTemplateObjectInstanceDefinition(
                 objectId,
@@ -1436,7 +1452,7 @@ namespace ConsoleCards.Games.TrapFloor
                 ObjectVisibility.Public,
                 false,
                 CardFace.FaceUp,
-                TrapFloorFloorfallService.DieSideCount,
+                sideCount,
                 1);
         }
 
