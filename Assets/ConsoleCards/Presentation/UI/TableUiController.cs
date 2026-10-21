@@ -43,6 +43,7 @@ namespace ConsoleCards.Presentation.UI
         private ContentArtPanelView contentArtPanelView;
         private RuleProposalPanelView ruleProposalPanelView;
         private ProfilePanelView profilePanelView;
+        private PersonaPanelView personaPanelView;
         private TablePanelView tablePanelView;
         private CardEditorPanelView cardEditorPanelView;
         private bool cardEditorEntryWarned;
@@ -504,6 +505,43 @@ namespace ConsoleCards.Presentation.UI
 
         public bool IsProfilePanelOpen => IsVisible(profilePanelView);
 
+        /// <summary>PERSONA-2: shows or refreshes the Persona panel (it replaces the profile panel). False when its prefab is missing.</summary>
+        public bool ShowPersonaPanel(PersonaPanelModel model, PersonaPanelActions actions)
+        {
+            try
+            {
+                EnsureService();
+                if (personaPanelView == null || !personaPanelView.IsAcquired)
+                {
+                    ReleaseView(tabletopPopupView);
+                    popupLayer.SetActive(false);
+                    ReleaseModalViews();
+                    componentToolboxView?.CloseToolbox();
+                    personaPanelView = uiService.AcquireCached<PersonaPanelView>(UiPrefabIds.PersonaPanel);
+                }
+
+                modalLayer.SetActive(true);
+                personaPanelView.Bind(model, actions);
+                personaPanelView.Show();
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                Debug.LogWarning(
+                    "The Persona panel is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs (Final UI). "
+                    + exception.Message);
+                return false;
+            }
+        }
+
+        public bool IsPersonaPanelOpen => IsVisible(personaPanelView);
+
+        public void ClosePersonaPanel()
+        {
+            ReleaseView(personaPanelView);
+            SetModalLayerOffUnlessHandover();
+        }
+
         /// <summary>Binds the Table menu's "Table tools…" row (T3), which opens Table mode; null hides it.</summary>
         public void ShowTableToolsEntry(Action openTableTools)
         {
@@ -892,7 +930,8 @@ namespace ConsoleCards.Presentation.UI
         {
             if (quitting) return;
             if (modalLayer != null && !IsVisible(hotSeatHandoverView) && !IsVisible(contentArtPanelView)
-                && !IsVisible(ruleProposalPanelView) && !IsVisible(profilePanelView) && !IsVisible(cardEditorPanelView)
+                && !IsVisible(ruleProposalPanelView) && !IsVisible(profilePanelView) && !IsVisible(personaPanelView)
+                && !IsVisible(cardEditorPanelView)
                 && !IsVisible(deckEditorPanelView) && !IsVisible(gameSelectPanelView)
                 && !IsVisible(gameSavePanelView) && !IsVisible(tablePanelView))
             {
@@ -1260,6 +1299,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(contentArtPanelView);
             ReleaseView(ruleProposalPanelView);
             ReleaseView(profilePanelView);
+            ReleaseView(personaPanelView);
             ReleaseView(cardEditorPanelView);
             ReleaseView(deckEditorPanelView);
             ReleaseView(gameSelectPanelView);
@@ -1397,6 +1437,7 @@ namespace ConsoleCards.Presentation.UI
             if (quitting) return;
             ReleaseView(contentArtPanelView);
             ReleaseView(profilePanelView);
+            ReleaseView(personaPanelView);
             ReleaseView(cardEditorPanelView);
             ReleaseView(deckEditorPanelView);
             ReleaseView(gameSelectPanelView);

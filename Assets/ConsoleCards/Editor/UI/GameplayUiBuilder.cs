@@ -39,6 +39,7 @@ namespace ConsoleCards.Editor.UI
         public const string HintStripPath = Folder + "HintStrip.prefab";
         public const string ProfilePanelPath = Folder + "ProfilePanel.prefab";
         public const string ProfileRowPath = Folder + "ProfileRow.prefab";
+        public const string PersonaPanelPath = Folder + "PersonaPanel.prefab";
         public const string CardEditorPanelPath = Folder + "CardEditorPanel.prefab";
         public const string CardEditorRowPath = Folder + "CardEditorRow.prefab";
         public const string CardEditorDeckRowPath = Folder + "CardEditorDeckRow.prefab";
@@ -129,6 +130,7 @@ namespace ConsoleCards.Editor.UI
             Save<HintStripView>(HintStripPath, "HintStrip", BuildHintStrip, stretch: true);
             Save<ProfileRowView>(ProfileRowPath, "ProfileRow", BuildProfileRow, stretch: false);
             Save<ProfilePanelView>(ProfilePanelPath, "ProfilePanel", BuildProfilePanel, stretch: true);
+            Save<PersonaPanelView>(PersonaPanelPath, "PersonaPanel", BuildPersonaPanel, stretch: true);
             Save<CardEditorRowView>(CardEditorRowPath, "CardEditorRow", BuildCardEditorRow, stretch: false);
             Save<CardEditorDeckRowView>(CardEditorDeckRowPath, "CardEditorDeckRow", BuildCardEditorDeckRow, stretch: false);
             Save<DeckEditorCardRowView>(DeckEditorCardRowPath, "DeckEditorCardRow", BuildDeckEditorCardRow, stretch: false);
@@ -143,6 +145,7 @@ namespace ConsoleCards.Editor.UI
             AddMissingShopLabels();
             AddMissingDeckPicker();
             AddMissingPlayerCountPicker();
+            AddMissingProfilePersona();
             AddMissingDeleteGameButton();
             AddMissingGameSaveSteps();
             AddMissingGameSaveDealStep();
@@ -202,6 +205,9 @@ namespace ConsoleCards.Editor.UI
                 UiRetention.CachedSingleInstance);
             AssignCatalogEntry(UiPrefabIds.ProfilePanel,
                 AssetDatabase.LoadAssetAtPath<ProfilePanelView>(ProfilePanelPath), UiLayer.Modal,
+                UiRetention.CachedSingleInstance);
+            AssignCatalogEntry(UiPrefabIds.PersonaPanel,
+                AssetDatabase.LoadAssetAtPath<PersonaPanelView>(PersonaPanelPath), UiLayer.Modal,
                 UiRetention.CachedSingleInstance);
             AssignCatalogEntry(UiPrefabIds.ProfileRow,
                 AssetDatabase.LoadAssetAtPath<ProfileRowView>(ProfileRowPath), UiLayer.Modal,
@@ -1119,6 +1125,133 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("saveOverLabel").objectReferenceValue = saveOverLabel;
             so.FindProperty("saveAsNewButton").objectReferenceValue = saveAsNew;
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // PERSONA-2: a "Your Persona..." button in the Profile panel, between the profiles list and the name box, that
+        // opens the Persona panel. A Persona section left by the first try (PERSONA-1b: five pickers) is taken out and
+        // the profiles list gets its height back. Added to a ProfilePanel that lacks the button.
+        private static void AddMissingProfilePersona()
+        {
+            if (!File.Exists(ProfilePanelPath)) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(ProfilePanelPath);
+            try
+            {
+                ProfilePanelView view = root.GetComponent<ProfilePanelView>();
+                if (view == null) return;
+                SerializedObject so = new SerializedObject(view);
+                if (so.FindProperty("personaButton").objectReferenceValue != null) return;
+                InputField nameInput = so.FindProperty("nameInput").objectReferenceValue as InputField;
+                ScrollRect scroll = so.FindProperty("scroll").objectReferenceValue as ScrollRect;
+                if (nameInput == null || nameInput.transform.parent == null) return;
+                Transform body = nameInput.transform.parent;
+                Transform oldSection = body.Find("PersonaSection");
+                if (oldSection != null)
+                {
+                    Object.DestroyImmediate(oldSection.gameObject);
+                    LayoutElement list = scroll != null ? scroll.GetComponent<LayoutElement>() : null;
+                    if (list != null && list.preferredHeight < 300f)
+                    {
+                        list.preferredHeight = 300f;
+                        list.minHeight = 300f;
+                    }
+                }
+
+                Transform nameTitle = body.Find("NameTitle");
+                int index = nameTitle != null ? nameTitle.GetSiblingIndex() : nameInput.transform.GetSiblingIndex();
+                RectTransform row = ButtonRow(body, TextAnchor.MiddleLeft);
+                row.name = "PersonaRow";
+                row.SetSiblingIndex(index);
+                Button persona = GoButton(row, "PersonaButton", "Your Persona...", 260f, out _);
+                Label(Child("PersonaHint", row), bodyFont, 15, Muted, TextAnchor.MiddleLeft, "how you look at the table");
+                so.FindProperty("personaButton").objectReferenceValue = persona;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                PrefabUtility.SaveAsPrefabAsset(root, ProfilePanelPath);
+                Debug.Log($"[Gameplay UI] Added the Your Persona button to {ProfilePanelPath}.");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+        }
+
+        // PERSONA-2: the Persona panel. A centred card: the turning preview on the left (with turn buttons), on the
+        // right one row per choice (title, <, value, >), then the status line, Randomize and Done.
+        private static void BuildPersonaPanel(RectTransform root, PersonaPanelView view)
+        {
+            Button overlay = DismissOverlay(root);
+            Vector2 centre = new Vector2(0.5f, 0.5f);
+            RectTransform panel = ColumnCard(root, "PersonaPanel", centre, centre, 1020f);
+            BlockClicks(panel);
+            CardHeader(panel, "YOUR PERSONA", 22, 58f);
+            Button close = HeaderCloseButton(panel);
+            RectTransform body = Body(panel, 20, 10f);
+            RectTransform columns = Child("Columns", body);
+            Row(columns.gameObject, 0, 0, 0, 0, 24f, TextAnchor.UpperLeft);
+            Size(columns.gameObject, -1f, 640f);
+
+            RectTransform previewColumn = Child("PreviewColumn", columns);
+            Column(previewColumn.gameObject, 0, 0, 0, 0, 10f);
+            Size(previewColumn.gameObject, 400f, 640f, 400f);
+            RawImage preview = CardPicture(previewColumn, "Preview", 400f, 500f, false, out _);
+            RectTransform turnRow = ButtonRow(previewColumn, TextAnchor.MiddleCenter);
+            turnRow.name = "TurnRow";
+            Button turnLeft = PlainButton(turnRow, "TurnLeftButton", "< Turn", 150f, out _);
+            Button turnRight = PlainButton(turnRow, "TurnRightButton", "Turn >", 150f, out _);
+            Label(Child("PreviewHint", previewColumn), bodyFont, 14, Muted, TextAnchor.UpperCenter,
+                "This is how the others see you at the table.");
+
+            RectTransform choices = Child("Choices", columns);
+            Column(choices.gameObject, 0, 0, 0, 0, 6f);
+            Size(choices.gameObject, 556f, 640f, 480f).flexibleWidth = 1f;
+            string[] titles = { "BODY", "BUILD", "SKIN", "EYES", "HAIR", "HAIR COLOUR", "BEARD", "OUTFIT", "TOP", "BOTTOM", "SHOES", "EMBLEM" };
+            Text[] titleLabels = new Text[titles.Length];
+            Text[] valueLabels = new Text[titles.Length];
+            Button[] previous = new Button[titles.Length];
+            Button[] next = new Button[titles.Length];
+            for (int i = 0; i < titles.Length; i++)
+            {
+                RectTransform row = ButtonRow(choices, TextAnchor.MiddleLeft);
+                row.name = $"Choice{i + 1}";
+                RectTransform titleRect = Child("Title", row);
+                titleLabels[i] = Label(titleRect, boldFont, 15, Muted, TextAnchor.MiddleLeft, titles[i]);
+                Size(titleRect.gameObject, 150f, 44f, 150f);
+                previous[i] = PlainButton(row, "PreviousButton", "<", 44f, out _);
+                RectTransform valueRect = Child("Value", row);
+                valueLabels[i] = Label(valueRect, boldFont, 17, Ink, TextAnchor.MiddleCenter, "Choice");
+                valueLabels[i].resizeTextForBestFit = true;
+                valueLabels[i].resizeTextMinSize = 11;
+                valueLabels[i].resizeTextMaxSize = 17;
+                Size(valueRect.gameObject, 230f, 44f, 180f);
+                next[i] = PlainButton(row, "NextButton", ">", 44f, out _);
+            }
+
+            Text status = Label(Child("Status", body), bodyFont, 15, Muted, TextAnchor.MiddleLeft,
+                "Choose how you look at the table. Every change is saved in your profile.");
+            RectTransform footer = ButtonRow(body);
+            footer.name = "Footer";
+            Button randomize = PlainButton(footer, "RandomizeButton", "Randomize", 200f, out _);
+            Button done = GoButton(footer, "DoneButton", "Done", 220f, out _);
+
+            SerializedObject so = new SerializedObject(view);
+            so.FindProperty("dismissOverlayButton").objectReferenceValue = overlay;
+            so.FindProperty("closeButton").objectReferenceValue = close;
+            so.FindProperty("preview").objectReferenceValue = preview;
+            so.FindProperty("turnLeftButton").objectReferenceValue = turnLeft;
+            so.FindProperty("turnRightButton").objectReferenceValue = turnRight;
+            SetArray(so.FindProperty("titleLabels"), titleLabels);
+            SetArray(so.FindProperty("valueLabels"), valueLabels);
+            SetArray(so.FindProperty("previousButtons"), previous);
+            SetArray(so.FindProperty("nextButtons"), next);
+            so.FindProperty("randomizeButton").objectReferenceValue = randomize;
+            so.FindProperty("doneButton").objectReferenceValue = done;
+            so.FindProperty("statusLabel").objectReferenceValue = status;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void SetArray(SerializedProperty list, Object[] items)
+        {
+            list.arraySize = items.Length;
+            for (int i = 0; i < items.Length; i++) list.GetArrayElementAtIndex(i).objectReferenceValue = items[i];
         }
 
         // Doc 29: a Delete game button before Start in the game selection menu's footer (for your own games). Added

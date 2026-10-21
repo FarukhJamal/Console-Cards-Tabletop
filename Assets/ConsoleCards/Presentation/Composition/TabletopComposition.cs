@@ -757,6 +757,7 @@ namespace ConsoleCards.Presentation.Composition
             SetGameBoardActive(false);
             ClearFeedback();
             boardFeedback?.HideAll();
+            HidePersonas(); // PERSONA-1: the seat projectors come back with the next table
             ActiveCartridge.ClearTableMarkers(); // CART-1b: the game's own markers, before the views go
 
             if (frameCoordinatorEnabledByComposition && inputFrameCoordinator != null)
@@ -1003,6 +1004,7 @@ namespace ConsoleCards.Presentation.Composition
             ResetTableCursor();
             boardFeedback?.Destroy();
             boardFeedback = null;
+            DestroyPersonas();
             ReleaseCardArtMaterials();
             ReleaseCardIconAssets();
             contentArt?.Dispose(); // destroys the pictures the content service loaded
@@ -1087,6 +1089,7 @@ namespace ConsoleCards.Presentation.Composition
             CardInspectPanel.RefreshCardInspectPopup();
             ActiveCartridge.TickFeedback(); // CART-1b: the game's banners, messages and board markers
             UpdateGestures(); // UX-1: dice shake and the cursor
+            TickPersonas(); // PERSONA-1: each seat's Persona at its table edge
         }
 
         // The tray band is a drop target only while a card drag is in progress.

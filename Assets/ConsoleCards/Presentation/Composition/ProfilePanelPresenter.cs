@@ -112,17 +112,43 @@ namespace ConsoleCards.Presentation.Composition
                     Create = CreateProfile,
                     Rename = RenameProfile,
                     Close = CloseProfilePanel,
+                    OpenPersona = host.PersonaPanel.Open,
+                    CycleAvatar = CycleAvatar,
                 };
             }
 
             string text = string.IsNullOrEmpty(status)
                 ? "Everything you make is saved in your profile. Switching profile starts a fresh table."
                 : status;
-            if (!host.runtimeUi.ShowProfilePanel(new ProfilePanelModel(service.Active.displayName, rows, text),
-                    profilePanelActions, clearName))
+            PersonaSet personas = host.PersonaSetForProfile;
+            // AVATAR-1: the button shows and changes your avatar; the 3D customizer opens only when the set turns it on.
+            profilePanelActions.CycleAvatar = personas != null && !personas.CharacterCustomizer && personas.AvatarCount > 0
+                ? CycleAvatar
+                : (Action)null;
+            profilePanelActions.OpenPersona = personas != null && personas.CharacterCustomizer ? host.PersonaPanel.Open : (Action)null;
+            ProfilePanelModel model = new ProfilePanelModel(service.Active.displayName, rows, text)
+            {
+                AvatarText = profilePanelActions.CycleAvatar != null
+                    ? $"Avatar: {personas.AvatarName(service.Active.avatar)}  >"
+                    : string.Empty,
+            };
+            if (!host.runtimeUi.ShowProfilePanel(model, profilePanelActions, clearName))
             {
                 host.ShowMessage("The profile panel is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs.");
             }
+        }
+
+        // AVATAR-1: the next avatar picture, saved in the profile at once; your avatar at the table changes too.
+        internal void CycleAvatar()
+        {
+            PersonaSet personas = host.PersonaSetForProfile;
+            if (personas == null || personas.AvatarCount == 0) return;
+            ProfileService service = host.EnsureProfile();
+            int next = PersonaSet.Wrap(service.Active.avatar + 1, personas.AvatarCount);
+            string status = service.SaveAvatar(next, out string error)
+                ? $"Your avatar is now {personas.AvatarName(next)}; it stands behind your seat at the table."
+                : $"Could not save your avatar: {error}.";
+            ShowProfilePanel(status, false);
         }
 
         internal void CloseProfilePanel()

@@ -128,6 +128,34 @@ namespace ConsoleCards.Presentation.Saving
             return false;
         }
 
+        /// <summary>AVATAR-1: saves the active profile's avatar picture (kept as it was when the save fails).</summary>
+        public bool SaveAvatar(int avatar, out string error)
+        {
+            ProfileInfo profile = RequireActive();
+            int previous = profile.avatar;
+            profile.avatar = avatar;
+            if (Store.Save(profile, out error)) return true;
+            profile.avatar = previous;
+            return false;
+        }
+
+        /// <summary>PERSONA-1b: saves the active profile's Persona (kept as it was when the save fails).</summary>
+        public bool SavePersona(PersonaLook look, out string error)
+        {
+            ProfileInfo profile = RequireActive();
+            if (look == null)
+            {
+                error = "No Persona to save";
+                return false;
+            }
+
+            PersonaLook previous = profile.persona;
+            profile.persona = look.Copy();
+            if (Store.Save(profile, out error)) return true;
+            profile.persona = previous;
+            return false;
+        }
+
         private void SetActive(ProfileInfo profile, bool raise)
         {
             profile.lastUsedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);

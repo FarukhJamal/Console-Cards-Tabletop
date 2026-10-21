@@ -1,0 +1,156 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 02cb613aaf9b39d4e88afacf03390916, type: 3}
+  m_Name: PersonaSet
+  m_EditorClassIdentifier: ConsoleCards.Presentation::ConsoleCards.Presentation.Feedback.PersonaSet
+  avatars:
+  - {fileID: 2800000, guid: cacf99d47ff43c34f861a618bfbf56f1, type: 3}
+  - {fileID: 2800000, guid: e1671d10577147e48881481356baf275, type: 3}
+  - {fileID: 2800000, guid: f11ba877d4831c1459667c4634ccc254, type: 3}
+  - {fileID: 2800000, guid: 0ebf8a015432496499d2c9206ef78a53, type: 3}
+  - {fileID: 2800000, guid: f0636216a4f1f44439c7969399986762, type: 3}
+  - {fileID: 2800000, guid: 3bc204f03040af04bbb78095a6d4de2a, type: 3}
+  - {fileID: 2800000, guid: ded41211e23bf6f4bbf9d5beae533200, type: 3}
+  - {fileID: 2800000, guid: af82140ccc6254a4da8f4f4d4ac45dcd, type: 3}
+  avatarStand: {fileID: 159099624430918569, guid: 75be215dd34ebc24eb75570ab16887f3, type: 3}
+  avatarFromEdge: 1.2
+  avatarLean: 12
+  avatarLift: 0.3
+  avatarGlowIdle: 0.75
+  avatarGlowTurn: 1.6
+  nameOnRim: 1
+  rimNameInset: 0.35
+  rimNameSize: 0.09
+  showCharacters: 0
+  characterCustomizer: 0
+  showSeatTags: 0
+  character: {fileID: 6700305643436461518, guid: 1ee8621623d30054087e676bf2c0c674, type: 3}
+  lightSkin:
+  - {fileID: 2800000, guid: 845797d2bb1eb5845b3a123f5e38e728, type: 3}
+  - {fileID: 2800000, guid: 3c5b13b45b66a494e9921785fe441a9d, type: 3}
+  darkSkin:
+  - {fileID: 2800000, guid: bb2f83dfe937d914f83a0b7acffaae35, type: 3}
+  - {fileID: 2800000, guid: 3334ff4d0058ded4199280f573fd2125, type: 3}
+  builds:
+  - Slim
+  - Regular
+  - Broad
+  buildWidths:
+  - 0.9
+  - 1
+  - 1.12
+  skinTones:
+  - name: Porcelain
+    dark: 0
+    tint: {r: 1, g: 0.96, b: 0.95, a: 1}
+  - name: Fair
+    dark: 0
+    tint: {r: 1, g: 1, b: 1, a: 1}
+  - name: Warm
+    dark: 0
+    tint: {r: 1, g: 0.88, b: 0.78, a: 1}
+  - name: Olive
+    dark: 0
+    tint: {r: 0.9, g: 0.82, b: 0.68, a: 1}
+  - name: Brown
+    dark: 1
+    tint: {r: 1, g: 1, b: 1, a: 1}
+  - name: Deep
+    dark: 1
+    tint: {r: 0.72, g: 0.66, b: 0.62, a: 1}
+  eyeColours:
+  - name: Brown
+    colour: {r: 0.45, g: 0.28, b: 0.15, a: 1}
+  - name: Blue
+    colour: {r: 0.25, g: 0.5, b: 0.95, a: 1}
+  - name: Green
+    colour: {r: 0.25, g: 0.65, b: 0.35, a: 1}
+  - name: Grey
+    colour: {r: 0.6, g: 0.65, b: 0.7, a: 1}
+  - name: Amber
+    colour: {r: 0.85, g: 0.6, b: 0.2, a: 1}
+  - name: Violet
+    colour: {r: 0.6, g: 0.35, b: 0.9, a: 1}
+  hairColours:
+  - name: Black
+    colour: {r: 0.12, g: 0.11, b: 0.11, a: 1}
+  - name: Dark Brown
+    colour: {r: 0.3, g: 0.19, b: 0.12, a: 1}
+  - name: Brown
+    colour: {r: 0.52, g: 0.33, b: 0.19, a: 1}
+  - name: Auburn
+    colour: {r: 0.6, g: 0.24, b: 0.12, a: 1}
+  - name: Blonde
+    colour: {r: 0.92, g: 0.78, b: 0.5, a: 1}
+  - name: Silver
+    colour: {r: 0.82, g: 0.84, b: 0.88, a: 1}
+  - name: Neon Blue
+    colour: {r: 0.2, g: 0.6, b: 1, a: 1}
+  - name: Hot Pink
+    colour: {r: 1, g: 0.3, b: 0.65, a: 1}
+  outfits:
+  - Plain
+  - Two-tone
+  - Stripes
+  - Circuit
+  clothColours:
+  - name: Charcoal
+    colour: {r: 0.16, g: 0.17, b: 0.2, a: 1}
+  - name: White
+    colour: {r: 0.92, g: 0.92, b: 0.9, a: 1}
+  - name: Console Orange
+    colour: {r: 0.93, g: 0.4, b: 0.13, a: 1}
+  - name: Red
+    colour: {r: 0.82, g: 0.18, b: 0.18, a: 1}
+  - name: Yellow
+    colour: {r: 0.95, g: 0.78, b: 0.2, a: 1}
+  - name: Green
+    colour: {r: 0.25, g: 0.62, b: 0.32, a: 1}
+  - name: Teal
+    colour: {r: 0.12, g: 0.6, b: 0.62, a: 1}
+  - name: Navy
+    colour: {r: 0.13, g: 0.2, b: 0.42, a: 1}
+  - name: Denim
+    colour: {r: 0.28, g: 0.4, b: 0.62, a: 1}
+  - name: Purple
+    colour: {r: 0.45, g: 0.25, b: 0.62, a: 1}
+  - name: Pink
+    colour: {r: 0.95, g: 0.55, b: 0.72, a: 1}
+  - name: Khaki
+    colour: {r: 0.66, g: 0.6, b: 0.44, a: 1}
+  emblems:
+  - {fileID: 2800000, guid: 9d4b36968b33ff94788117e9ecee9e52, type: 3}
+  - {fileID: 2800000, guid: e4b4714973db00e43bfdd55bc22aed67, type: 3}
+  - {fileID: 2800000, guid: 8bf62bcee4a206d419c05c178a4e0bd7, type: 3}
+  - {fileID: 2800000, guid: 28fae5e57c782e946a6f1893f26d061a, type: 3}
+  characterSize: 11
+  pastEdgeMetres: 0.45
+  sidewaysMetres: 0
+  feetBelowTableMetres: 1.2
+  seated: 1
+  upperLegForward: 0.6
+  kneeBend: -0.9
+  armDown: -0.35
+  armForward: 0.45
+  elbowBend: 0.1
+  nameOverHead: 0
+  hideCloserThan: 7
+  showFullFrom: 15
+  seatTag: {fileID: 8770902787922782644, guid: 96617ac5fa2025742b191ff9aa5b71d1, type: 3}
+  tagFromEdge: 0.2
+  tagLean: 55
+  tagGlowIdle: 0.7
+  tagGlowTurn: 1.5
+  edgeGlowIdle: 0.6
+  edgeGlowTurn: 1.6
+  glowPulseSpeed: 1.6
+  glowPulseAmount: 0.25

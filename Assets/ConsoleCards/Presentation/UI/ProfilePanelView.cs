@@ -33,6 +33,9 @@ namespace ConsoleCards.Presentation.UI
         }
 
         public string ActiveName { get; }
+
+        /// <summary>AVATAR-1: the avatar button's text ("Avatar: Spark  >"); empty keeps the prefab's text.</summary>
+        public string AvatarText { get; set; } = string.Empty;
         public IReadOnlyList<ProfileRowModel> Rows { get; }
         public string Status { get; }
     }
@@ -45,6 +48,10 @@ namespace ConsoleCards.Presentation.UI
         public Action<string> Rename;
         public Action OpenFolder;
         public Action Close;
+        /// <summary>PERSONA-2: opens the Persona panel (the 3D character customizer, switched off for now).</summary>
+        public Action OpenPersona;
+        /// <summary>AVATAR-1: shows the next avatar picture; the same button as the Persona panel's.</summary>
+        public Action CycleAvatar;
     }
 
     /// <summary>
@@ -65,6 +72,9 @@ namespace ConsoleCards.Presentation.UI
         [Tooltip("Optional. Shown only when the game offers it (not in play; the profiles folder is a Unity menu).")]
         [SerializeField] private Button openFolderButton;
         [SerializeField] private Text statusLabel;
+
+        [Tooltip("Opens the Persona panel (PERSONA-2). Added by Create Missing Gameplay UI Prefabs.")]
+        [SerializeField] private Button personaButton;
 
         private readonly List<ProfileRowView> rowViews = new List<ProfileRowView>();
         private IRuntimeUiService uiService;
@@ -102,6 +112,14 @@ namespace ConsoleCards.Presentation.UI
                 openFolderButton.onClick.AddListener(HandleOpenFolder);
             }
 
+            if (personaButton != null)
+            {
+                personaButton.gameObject.SetActive(actions.CycleAvatar != null || actions.OpenPersona != null);
+                personaButton.onClick.AddListener(HandleOpenPersona);
+                Text buttonText = personaButton.GetComponentInChildren<Text>(true);
+                if (buttonText != null && !string.IsNullOrEmpty(model.AvatarText)) buttonText.text = model.AvatarText;
+            }
+
             activeNameLabel.text = model.ActiveName;
             statusLabel.text = model.Status;
             if (clearName) nameInput.text = string.Empty;
@@ -117,6 +135,12 @@ namespace ConsoleCards.Presentation.UI
 
             Canvas.ForceUpdateCanvases();
             scroll.verticalNormalizedPosition = 1f;
+        }
+
+        private void HandleOpenPersona()
+        {
+            if (actions?.CycleAvatar != null) actions.CycleAvatar();
+            else actions?.OpenPersona?.Invoke();
         }
 
         public override void Unbind()
@@ -143,6 +167,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(createButton);
             Clear(renameButton);
             Clear(openFolderButton);
+            Clear(personaButton);
         }
 
         private static void Clear(Button button)

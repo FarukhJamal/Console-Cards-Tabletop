@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.40 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.47 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -589,7 +589,37 @@ Change: …
   starting on its Console count) and, when fewer play than it has Consoles, lays out only the ones the same rule
   picks. A game that deals at Start deals for that count.
 - **Open:** —
-- **Changes:** 2026-10-21 LAYOUT-1; 2026-10-21 PLACE-1 (approved); 2026-10-21 PLACE-2 (to be checked).
+- **Changes:** 2026-10-21 LAYOUT-1; 2026-10-21 PLACE-1 (approved); 2026-10-21 PLACE-2 (approved).
+
+### P-AVATAR · Who plays at each side (avatars)
+- **Status:** Built (AVATAR-1), in playtest
+- **Rule now:** each seat of the game in play shows its player's avatar picture standing just past the table's edge
+  behind the Console, framed in the seat colour (brighter and breathing on their turn), and the player's name along
+  the rim in front of the seat, in the seat colour, readable from across the table. The profile chooses its avatar
+  (Profile panel → Avatar: <name> >). Other seats on this screen get one each by seat. An Empty Table shows none.
+- **Settings:** the Persona set: the avatar pictures (Content/Art/Persona/Avatars, Avatar_<Name>.png), where the
+  avatar stands and leans, its glow, the rim name on/off, inset and size.
+- **Source:** owner 2026-10-21
+- **Open:** your own picture as an avatar.
+- **Changes:** 2026-10-21 AVATAR-1 (to be checked); replaces P-PERSONA's characters for now.
+
+### P-PERSONA · Who plays at each side
+- **Status:** Built (PERSONA-2), switched off for now (AVATAR-1); kept for later
+- **Rule now:** behind each seat of the game in play, just past the table's edge and facing the board, sits that
+  player's character (Universal Base Characters by Quaternius, CC0), like a player at the table in VR: full colour,
+  an edge light in the seat colour (brighter and breathing on their turn) and the Console-symbol emblem on the chest.
+  **Seat tags:** at the table edge behind each Console stands a glowing name panel in the seat colour, leaning back so
+  it reads from above, brighter on that player's turn (the name over the head is off; the set can turn it on). A character close to the camera (your own, seen from behind) fades away. The seat on
+  this screen shows the profile's character and name; other seats a character of their own and "Player n". An
+  Empty Table shows none.
+- **Persona panel:** Profile panel → Your Persona…: a turning 3D preview (Turn buttons) and 12 choices with < >:
+  body (male, female), build, skin, eyes, hair (7 styles or none), hair colour, beard, outfit (plain, two-tone,
+  stripes, circuit), top, bottom and shoe colours, emblem; Randomize; Done. Saved in the profile at once.
+- **Settings:** the Persona set (Resources/PersonaSet): the colour and name lists, the size (table units per metre),
+  where the character sits, the sitting pose, the fade distances, the glow.
+- **Source:** owner 2026-10-21
+- **Open:** accessories (headset, glasses, caps) and outfit models need models; 1c the level from play.
+- **Changes:** 2026-10-21 PERSONA-1 (shape figures, replaced); 2026-10-21 PERSONA-2 (to be checked).
 
 ### P-TABLE-MODELS · Table models
 - **Status:** Built, approved

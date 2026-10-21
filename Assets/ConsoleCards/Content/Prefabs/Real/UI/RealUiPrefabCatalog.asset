@@ -153,3 +153,7 @@ MonoBehaviour:
     prefab: {fileID: 7344100794832164039, guid: 268afb75e67f7194eadc80e1ff2d7624, type: 3}
     layer: 1
     retention: 0
+  - id: platform.persona-panel
+    prefab: {fileID: 7054922590072750804, guid: 28cb73386d2ead045b4a6a74875d7871, type: 3}
+    layer: 3
+    retention: 0
