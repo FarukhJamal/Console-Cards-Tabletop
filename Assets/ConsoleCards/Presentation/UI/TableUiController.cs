@@ -55,6 +55,7 @@ namespace ConsoleCards.Presentation.UI
         private bool tableShapeEntryWarned;
         private bool tableEdgeEntryWarned;
         private bool tableToolsEntryWarned;
+        private bool arrangeTableEntryWarned;
         private HintStripView hintStripView;
         private bool hintStripWarned;
         private ToolBarView toolBarView;
@@ -512,6 +513,18 @@ namespace ConsoleCards.Presentation.UI
                 tableToolsEntryWarned = true;
                 Debug.LogWarning(
                     "The Table menu has no Table tools row: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
+            }
+        }
+
+        /// <summary>Binds the Table menu's "Arrange table…" row (LAYOUT-1); null hides it.</summary>
+        public void ShowArrangeTableEntry(Action openArrangeTable)
+        {
+            EnsureSessionBarView();
+            if (!sessionBarView.BindArrangeTable(openArrangeTable) && openArrangeTable != null && !arrangeTableEntryWarned)
+            {
+                arrangeTableEntryWarned = true;
+                Debug.LogWarning(
+                    "The Table menu has no Arrange table row: run Console Cards > UI > Add Missing Table Menu Rows (Final UI).");
             }
         }
 

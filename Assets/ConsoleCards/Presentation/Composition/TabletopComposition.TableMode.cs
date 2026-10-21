@@ -382,8 +382,15 @@ namespace ConsoleCards.Presentation.Composition
             ShowMessage(message);
         }
 
+        // LAYOUT-1: back to the play view after arranging the table (as Table mode does when it closes).
+        internal void ShowPlayView()
+        {
+            TabletopCameraController cameraController = cameraInputAdapter?.CameraController;
+            if (cameraController != null && !cameraController.ShowBoardView()) cameraController.ShowDefaultView();
+        }
+
         // The whole table from above (Table mode), wherever the camera was panned or turned.
-        private void FrameWholeTable()
+        internal void FrameWholeTable()
         {
             TabletopCameraController cameraController = cameraInputAdapter?.CameraController;
             if (cameraController == null) return;

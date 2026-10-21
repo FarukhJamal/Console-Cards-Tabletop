@@ -90,6 +90,10 @@ namespace ConsoleCards.Presentation.UI
         [Tooltip("The Table menu row \"Table tools…\" that opens Table mode.")]
         [SerializeField] private Button tableToolsButton;
 
+        [Header("Arrange table (LAYOUT-1; optional, added by Add Missing Table Menu Rows)")]
+        [Tooltip("The Table menu row \"Arrange table…\" that opens the custom table layout.")]
+        [SerializeField] private Button arrangeTableButton;
+
         [Header("Shop (doc 18 §15.4; optional, added by Add Missing Table Menu Rows)")]
         [Tooltip("The Shop entry on the bar: the shop icon and the word Shop, between Redo and Table.")]
         [SerializeField] private Button shopButton;
@@ -132,6 +136,7 @@ namespace ConsoleCards.Presentation.UI
         private Func<string> cycleTableShape;
         private Func<string> cycleTableEdge;
         private Action openTableTools;
+        private Action openArrangeTable;
         private Action openCardEditor;
         private Action openDeckEditor;
         private Action openSaveGame;
@@ -463,6 +468,22 @@ namespace ConsoleCards.Presentation.UI
             return true;
         }
 
+        /// <summary>Binds the optional "Arrange table…" row (LAYOUT-1); null hides it. False when the prefab lacks it.</summary>
+        public bool BindArrangeTable(Action openArrangeTableAction)
+        {
+            RequireAcquired();
+            if (arrangeTableButton == null)
+            {
+                return false;
+            }
+
+            Clear(arrangeTableButton);
+            openArrangeTable = openArrangeTableAction;
+            arrangeTableButton.gameObject.SetActive(openArrangeTable != null);
+            arrangeTableButton.onClick.AddListener(HandleArrangeTable);
+            return true;
+        }
+
         /// <summary>
         /// Binds the optional Shop entry on the bar (doc 18 §15.4): shown while <paramref name="openShopAction"/> is
         /// set (a game whose Shop is open), hidden for null. False when the prefab lacks it.
@@ -576,6 +597,7 @@ namespace ConsoleCards.Presentation.UI
             cycleTableShape = null;
             cycleTableEdge = null;
             openTableTools = null;
+            openArrangeTable = null;
             openCardEditor = null;
             openDeckEditor = null;
             openSaveGame = null;
@@ -822,6 +844,13 @@ namespace ConsoleCards.Presentation.UI
             action?.Invoke();
         }
 
+        private void HandleArrangeTable()
+        {
+            Action action = openArrangeTable;
+            CloseMenu();
+            action?.Invoke();
+        }
+
         private void HandleTableEdge()
         {
             string label = cycleTableEdge?.Invoke();
@@ -917,6 +946,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(tableShapeButton);
             Clear(tableEdgeButton);
             Clear(tableToolsButton);
+            Clear(arrangeTableButton);
             Clear(cardEditorButton);
             Clear(deckEditorButton);
             Clear(saveGameButton);

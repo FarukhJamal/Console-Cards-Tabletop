@@ -309,7 +309,9 @@ namespace ConsoleCards.Presentation.Composition
         public string ActiveModeStableId => host.trapFloorTemplate != null ? host.trapFloorTemplate.ActiveMode.StableId : string.Empty;
 
         // Trap Floor's seats go to the table's edge on any shape (owner, 2026-10-20: CART-1c); the floor stays in the middle.
-        public SeatPlacement SeatPlacement => SeatPlacement.AlongEdge;
+        // LAYOUT-1: with the players' own layout the seats stay where it put them.
+        public SeatPlacement SeatPlacement =>
+            host.trapFloorTemplate != null && host.trapFloorTemplate.UsesCustomLayout ? SeatPlacement.Fixed : SeatPlacement.AlongEdge;
 
         public CartridgeSeat GetAssistedSeat() => SeatFor(GetAssistedTrapFloorPlayerSetup());
 

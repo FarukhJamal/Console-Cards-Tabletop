@@ -1593,6 +1593,11 @@ namespace ConsoleCards.Presentation.Composition
 
             TabletopObjectId targetCardId = host.contextMenuCardId;
             List<PopupActionOption> actions = new List<PopupActionOption>();
+            if (IsArrangingTable)
+            {
+                actions.Add(new PopupActionOption("Move board", true, BeginArrangeBoardMove)); // LAYOUT-1
+            }
+
             bool isCollapsed = host.trapFloorCollapseState != null
                 && host.trapFloorCollapseState.IsCollapsed(targetCardId);
             if (floorCard.IsRevealed
@@ -4403,14 +4408,36 @@ namespace ConsoleCards.Presentation.Composition
             int floorIndex = Math.Min(
                 Math.Max(0, host.trapFloorNextFloorIndex),
                 TrapFloorTemplateFactory.FloorCountFor(gameDefinition.Grid) - 1);
+            // LAYOUT-1: dealt with the players' table layout (the one being arranged, else the saved one).
+            TrapFloorTableLayout tableLayout = LayoutForDeal();
             for (int i = 0; i < gameDefinition.Modes.Count; i++)
             {
-                TrapFloorTemplateDefinition template = TrapFloorTemplateFactory.CreateStandardFourPlayer(
-                    host.authoritativeRandomValueSource,
-                    gameDefinition,
-                    gameDefinition.Modes[i].StableId,
-                    host.GetConsoleLayout(),
-                    floorIndex);
+                TrapFloorTemplateDefinition template;
+                try
+                {
+                    template = TrapFloorTemplateFactory.CreateStandardFourPlayer(
+                        host.authoritativeRandomValueSource,
+                        gameDefinition,
+                        gameDefinition.Modes[i].StableId,
+                        host.GetConsoleLayout(),
+                        floorIndex,
+                        tableLayout);
+                }
+                catch (Exception exception) when (tableLayout != null)
+                {
+                    // A layout that no longer fits never stops a deal: the default places are used.
+                    Debug.LogWarning($"[Layout] The table layout could not be used ({exception.Message}); the default layout is used.");
+                    host.ShowMessage("The saved table layout could not be used here, so the default layout is used.");
+                    tableLayout = null;
+                    template = TrapFloorTemplateFactory.CreateStandardFourPlayer(
+                        host.authoritativeRandomValueSource,
+                        gameDefinition,
+                        gameDefinition.Modes[i].StableId,
+                        host.GetConsoleLayout(),
+                        floorIndex,
+                        null);
+                }
+
                 host.availableTrapFloorTemplates.Add(template.Template.Id, template);
                 registrations.Add(new GameTemplateRegistration(template.Template, template.ContentCatalog));
             }
@@ -4429,6 +4456,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             CompletePendingLandingFlip();
             DiscardUsedAbility();
+            DealArrangedBoardIfPlaced();
         }
 
         public void TickLate()

@@ -111,11 +111,30 @@ namespace ConsoleCards.Games.TrapFloor
             ConsoleLayoutData consoleLayout,
             int floorIndex)
         {
+            return CreateStandardFourPlayer(randomValueSource, gameDefinition, selectedModeStableId, consoleLayout, floorIndex, null);
+        }
+
+        /// <summary>
+        /// LAYOUT-1 (owner, 2026-10-21): as above, dealt with the players' saved table layout (null: the default
+        /// places). The layout places each seat's Console (its hand zone and staging row follow it), the shared piles,
+        /// the floor dice and the board's centre; a smaller floor shrinks around that centre.
+        /// </summary>
+        public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
+            IRandomValueSource randomValueSource,
+            GameDefinitionData gameDefinition,
+            string selectedModeStableId,
+            ConsoleLayoutData consoleLayout,
+            int floorIndex,
+            TrapFloorTableLayout tableLayout)
+        {
             if (randomValueSource == null) throw new ArgumentNullException(nameof(randomValueSource));
             if (gameDefinition == null) throw new ArgumentNullException(nameof(gameDefinition));
             int floorCount = FloorCountFor(gameDefinition.Grid);
             if (floorIndex < 0 || floorIndex >= floorCount) throw new ArgumentOutOfRangeException(nameof(floorIndex));
-            if (floorIndex > 0) gameDefinition = WithFloorGrid(gameDefinition, floorIndex);
+            if (floorIndex > 0 || (tableLayout != null && tableLayout.BoardCenter.HasValue))
+            {
+                gameDefinition = WithFloorGrid(gameDefinition, floorIndex, tableLayout?.BoardCenter);
+            }
 
             ModeDefinitionData activeMode = ValidateAndResolveMode(gameDefinition, selectedModeStableId);
             Guid gameDefinitionId = ParseStableGuid(gameDefinition.StableId, "Game");
@@ -164,7 +183,8 @@ namespace ConsoleCards.Games.TrapFloor
 
             // TABLE-1 (owner, 2026-10-21, as in the playtest): one Controller deck for everyone beside the board.
             ContainerId controllerDeckId = CreateSharedControllerDeck(
-                controllerInputCards, grid, randomValueSource, containers, memberships, objects, labels);
+                controllerInputCards, grid, randomValueSource, containers, memberships, objects, labels,
+                tableLayout?.ControllerDeck);
 
             for (int seatIndex = 0; seatIndex < StandardPlayerCount; seatIndex++)
             {
@@ -179,6 +199,7 @@ namespace ConsoleCards.Games.TrapFloor
                     mainSlot,
                     sideSlots,
                     controllerDeckId,
+                    tableLayout?.SeatConsole(seatIndex),
                     seats,
                     containers,
                     memberships,
@@ -192,23 +213,21 @@ namespace ConsoleCards.Games.TrapFloor
 
             TabletopObjectId floorfallXAxisDieId = new TabletopObjectId(CreateGuid(60, 1));
             TabletopObjectId floorfallYAxisDieId = new TabletopObjectId(CreateGuid(60, 2));
-            objects.Add(CreateFloorfallDie(
-                floorfallXAxisDieId,
-                dieDefinitionId,
-                FloorfallDiceX - (FloorfallDiceSpacing * 0.5d),
-                FloorfallDiceY));
-            objects.Add(CreateFloorfallDie(
-                floorfallYAxisDieId,
-                dieDefinitionId,
-                FloorfallDiceX + (FloorfallDiceSpacing * 0.5d),
-                FloorfallDiceY));
+            TableCoordinate xAxisDie = tableLayout?.DieX?.Position
+                ?? new TableCoordinate(FloorfallDiceX - (FloorfallDiceSpacing * 0.5d), FloorfallDiceY);
+            TableCoordinate yAxisDie = tableLayout?.DieY?.Position
+                ?? new TableCoordinate(FloorfallDiceX + (FloorfallDiceSpacing * 0.5d), FloorfallDiceY);
+            objects.Add(CreateFloorfallDie(floorfallXAxisDieId, dieDefinitionId, xAxisDie.X, xAxisDie.Y));
+            objects.Add(CreateFloorfallDie(floorfallYAxisDieId, dieDefinitionId, yAxisDie.X, yAxisDie.Y));
 
             ContainerId abilityDeckId = CreateAbilityDeck(
-                gameDefinition, grid, randomValueSource, containers, memberships, objects, labels);
-            ContainerId abilityDiscardId = CreateAbilityDiscard(grid, containers, memberships);
+                gameDefinition, grid, randomValueSource, containers, memberships, objects, labels,
+                tableLayout?.AbilityDeck);
+            ContainerId abilityDiscardId = CreateAbilityDiscard(grid, containers, memberships, tableLayout?.AbilityDiscard);
 
             TabletopBounds boardBounds = CreateBoardBounds(grid);
-            if (!adjacentPlacement.UsesFallbackShape)
+            // A saved layout is the players' own choice of places: the default seat check does not apply to it.
+            if (!adjacentPlacement.UsesFallbackShape && (tableLayout == null || !tableLayout.HasSeatPlaces))
             {
                 CheckSeatPlacement(adjacentPlacement, seatPieces, playerLayout, boardBounds);
             }
@@ -258,15 +277,17 @@ namespace ConsoleCards.Games.TrapFloor
                 floorIndex,
                 floorCount,
                 abilityDeckId,
-                abilityDiscardId);
+                abilityDiscardId,
+                tableLayout != null);
         }
 
-        // TABLE-1 (owner, 2026-10-21): the Ability discard pile, just below the Ability deck. Used Abilities go there;
+        // TABLE-1 (owner, 2026-10-21): the Ability discard pile, just above the Ability deck. Used Abilities go there;
         // when the Ability deck runs out, the discard is shuffled into it.
         private static ContainerId CreateAbilityDiscard(
             GridDefinitionData grid,
             List<GameTemplateContainerDefinition> containers,
-            List<GameTemplateContainerMembership> memberships)
+            List<GameTemplateContainerMembership> memberships,
+            TabletopPose? placed = null)
         {
             ContainerId discardId = new ContainerId(CreateGuid(71, 3));
             TabletopPose deckPose = AbilityDeckPose(grid);
@@ -277,8 +298,8 @@ namespace ConsoleCards.Games.TrapFloor
                 ObjectVisibility.Public,
                 0,
                 true,
-                new TabletopPose(
-                    new TableCoordinate(deckPose.Position.X, deckPose.Position.Y - SharedPileSpacing),
+                placed ?? new TabletopPose(
+                    new TableCoordinate(deckPose.Position.X, deckPose.Position.Y + AbilityDiscardAboveDeck),
                     0f,
                     0,
                     0)));
@@ -287,8 +308,11 @@ namespace ConsoleCards.Games.TrapFloor
         }
 
         // TABLE-1 (owner, 2026-10-21): every player's set of Controller Cards in one shuffled, face-down deck off the
-        // board's bottom-right corner (the Ability deck is off the top-left). Paid cards go straight back into it.
-        private const double SharedPileSpacing = 1.6d;
+        // board's bottom-right corner (the Ability piles are beside its left side). Paid cards go straight back into it.
+        // Owner, 2026-10-21 (layout shown in a screenshot): the Ability deck beside the board's left side, level with
+        // its middle, with the discard pile above it.
+        private const double AbilityDiscardAboveDeck = 2.0d;
+        private const double AbilityPilesClearanceX = 1.4d;
 
         private static ContainerId CreateSharedControllerDeck(
             IReadOnlyList<CardDefinitionData> controllerInputCards,
@@ -297,7 +321,8 @@ namespace ConsoleCards.Games.TrapFloor
             List<GameTemplateContainerDefinition> containers,
             List<GameTemplateContainerMembership> memberships,
             List<GameTemplateObjectInstanceDefinition> objects,
-            Dictionary<TabletopObjectId, string> labels)
+            Dictionary<TabletopObjectId, string> labels,
+            TabletopPose? placed = null)
         {
             ContainerId deckId = new ContainerId(CreateGuid(71, 2));
             TabletopBounds board = CreateBoardBounds(grid);
@@ -308,7 +333,7 @@ namespace ConsoleCards.Games.TrapFloor
                 ObjectVisibility.Public,
                 0,
                 true,
-                new TabletopPose(
+                placed ?? new TabletopPose(
                     new TableCoordinate(board.Maximum.X + AbilityDeckClearanceX, board.Minimum.Y - AbilityDeckClearanceY),
                     0f,
                     0,
@@ -352,8 +377,8 @@ namespace ConsoleCards.Games.TrapFloor
 
         // ABIL-DECK (owner, 2026-10-21): buying is from the table. A shared, shuffled, face-down Ability deck beside
         // the board holds every Ability that has a price, one copy per player. Empty when no Ability has a price yet.
-        // It sits off the board's top-left corner, measured from the floor (owner, 2026-10-21: at the dice's mirror
-        // place it overlapped the board), so it stays clear of the board's frame on every floor size.
+        // It sits beside the board's left side, measured from the floor, so it stays clear of the board's frame on every
+        // floor size. The clearances below place the shared Controller deck off the board's bottom-right corner.
         private const double AbilityDeckClearanceX = 1.85d; // board frame, a gap and half a deck bay, with room to spare
         private const double AbilityDeckClearanceY = 0.9d;
 
@@ -364,7 +389,8 @@ namespace ConsoleCards.Games.TrapFloor
             List<GameTemplateContainerDefinition> containers,
             List<GameTemplateContainerMembership> memberships,
             List<GameTemplateObjectInstanceDefinition> objects,
-            Dictionary<TabletopObjectId, string> labels)
+            Dictionary<TabletopObjectId, string> labels,
+            TabletopPose? placed = null)
         {
             List<CardDefinitionData> forSale = new List<CardDefinitionData>();
             List<CardDefinitionData> catalog = TrapFloorShop.Catalog(gameDefinition);
@@ -386,7 +412,7 @@ namespace ConsoleCards.Games.TrapFloor
                 ObjectVisibility.Public,
                 0,
                 true,
-                AbilityDeckPose(grid),
+                placed ?? AbilityDeckPose(grid),
                 pileStyle: ControllerDeckPileStyle));
             List<TabletopObjectId> cardIds = new List<TabletopObjectId>(order.Count);
             for (int i = 0; i < order.Count; i++)
@@ -415,15 +441,15 @@ namespace ConsoleCards.Games.TrapFloor
             TabletopBounds board = CreateBoardBounds(grid);
             return new TabletopPose(
                 new TableCoordinate(
-                    board.Minimum.X - AbilityDeckClearanceX,
-                    board.Maximum.Y + AbilityDeckClearanceY),
+                    board.Minimum.X - AbilityPilesClearanceX,
+                    board.Center.Y),
                 0f,
                 0,
                 0);
         }
 
         // The game data with the floor's smaller grid (same cell size and centre); everything else is unchanged.
-        private static GameDefinitionData WithFloorGrid(GameDefinitionData data, int floorIndex)
+        private static GameDefinitionData WithFloorGrid(GameDefinitionData data, int floorIndex, TableCoordinate? center = null)
         {
             GridDefinitionData grid = data.Grid;
             GridDefinitionData floorGrid = new GridDefinitionData(
@@ -434,8 +460,8 @@ namespace ConsoleCards.Games.TrapFloor
                 grid.CellHeight,
                 grid.HorizontalSpacing,
                 grid.VerticalSpacing,
-                grid.OriginX,
-                grid.OriginY,
+                center.HasValue ? center.Value.X : grid.OriginX, // LAYOUT-1: the board where the players put it
+                center.HasValue ? center.Value.Y : grid.OriginY,
                 grid.LayoutMetadata);
             return new GameDefinitionData(
                 data.StableId,
@@ -1083,6 +1109,7 @@ namespace ConsoleCards.Games.TrapFloor
             ConsoleSlotDefinitionData mainSlot,
             ConsoleSlotDefinitionData sideSlot,
             ContainerId controllerDeckId,
+            TabletopPose? consolePoseOverride,
             ICollection<GameTemplateSeatDefinition> seats,
             ICollection<GameTemplateContainerDefinition> containers,
             ICollection<GameTemplateContainerMembership> memberships,
@@ -1093,6 +1120,8 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorSeatPieces seatPieces,
             IReadOnlyList<int> extraConsoleSlotCapacities)
         {
+            // LAYOUT-1: the seat's Console where the saved layout puts it; its hand zone and staging row follow it.
+            TabletopPose seatConsolePose = consolePoseOverride ?? GetConsolePose(layoutSeat);
             int playerNumber = seatIndex + 1;
             int idBase = seatIndex * 20;
             SeatId seatId = new SeatId(CreateGuid(40, playerNumber));
@@ -1114,7 +1143,7 @@ namespace ConsoleCards.Games.TrapFloor
                 seatIndex,
                 handId,
                 consoleSlotIds,
-                GetConsolePose(layoutSeat)));
+                seatConsolePose));
             // The authored maximum is an assisted draw target, not a physical capacity. Zero keeps
             // the Hand technically unbounded for freeform draws beyond that recommendation.
             containers.Add(new GameTemplateContainerDefinition(
@@ -1124,7 +1153,7 @@ namespace ConsoleCards.Games.TrapFloor
                 ObjectVisibility.OwnerOnly,
                 0,
                 true,
-                ConsoleAdjacentPlacement.ToTablePose(GetConsolePose(layoutSeat), seatPieces.HandZone),
+                ConsoleAdjacentPlacement.ToTablePose(seatConsolePose, seatPieces.HandZone),
                 (float)seatPieces.HandZone.Width,
                 (float)seatPieces.HandZone.Depth));
             containers.Add(CreateContainer(
@@ -1156,11 +1185,11 @@ namespace ConsoleCards.Games.TrapFloor
             // TABLE-1: no Controller deck or Action stack per seat. A bought Ability that does not fit in the Hand
             // is placed loose where the stack was, beside the Console.
             TabletopPose abilityOverflowPose =
-                ConsoleAdjacentPlacement.ToTablePose(GetConsolePose(layoutSeat), seatPieces.ActionStack);
+                ConsoleAdjacentPlacement.ToTablePose(seatConsolePose, seatPieces.ActionStack);
 
             TabletopObjectId avatarId = new TabletopObjectId(CreateGuid(42, playerNumber));
             TabletopObjectId pawnId = new TabletopObjectId(CreateGuid(45, playerNumber));
-            TabletopPose consolePose = GetConsolePose(layoutSeat);
+            TabletopPose consolePose = seatConsolePose;
             TabletopPose avatarPose = mainSlotYawOffset.HasValue
                 ? new TabletopPose(TableCoordinate.Zero, consolePose.RotationDegrees + mainSlotYawOffset.Value, 0, 0)
                 : TabletopPose.Default;

@@ -126,6 +126,11 @@ namespace ConsoleCards.Presentation.Composition
             runtimeUi.ShowTableShapeEntry(TableShapeText(), canChange ? cycleTableShapeAction : null);
             runtimeUi.ShowTableEdgeEntry(TableEdgeText(), canChange ? cycleTableEdgeAction : null);
             runtimeUi.ShowTableToolsEntry(canChange ? OpenTableModeAction : null);
+            // LAYOUT-1: the players' own table layout, for a game that can keep one.
+            runtimeUi.ShowArrangeTableEntry(
+                ActiveCartridge is TrapFloorCartridge trapFloor && trapFloor.CanArrangeTable
+                    ? trapFloor.OpenArrangeTableAction
+                    : null);
         }
 
         private string TableEdgeText() => $"Edge: {TableSpec.EdgeLabel(tableSpec.edge)}";

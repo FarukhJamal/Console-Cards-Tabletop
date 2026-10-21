@@ -76,6 +76,18 @@ namespace ConsoleCards.Presentation.UI
             actions = panelActions ?? throw new ArgumentNullException(nameof(panelActions));
             RemoveListeners();
 
+            // LAYOUT-1: the Arrange table panel shows no shape row and may hide Undo/Redo and rename its buttons.
+            if (shapeButtons.Length > 0 && shapeButtons[0] != null && shapeButtons[0].transform.parent != null)
+            {
+                shapeButtons[0].transform.parent.gameObject.SetActive(model.ShowShapes);
+            }
+
+            undoButton.gameObject.SetActive(model.ShowHistory);
+            redoButton.gameObject.SetActive(model.ShowHistory);
+            SetLabel(resetButton, model.ResetText, ref resetLabelText);
+            SetLabel(cancelButton, model.CancelText, ref cancelLabelText);
+            SetLabel(doneButton, model.DoneText, ref doneLabelText);
+
             for (int i = 0; i < shapeButtons.Length; i++)
             {
                 int shape = i;
@@ -209,6 +221,19 @@ namespace ConsoleCards.Presentation.UI
         {
             if (button != null) button.onClick.RemoveAllListeners();
         }
+
+        private string resetLabelText;
+        private string cancelLabelText;
+        private string doneLabelText;
+
+        // A button's words: the model's, or the prefab's own when the model gives none (remembered the first time).
+        private static void SetLabel(Button button, string text, ref string original)
+        {
+            Text label = button != null ? button.GetComponentInChildren<Text>(true) : null;
+            if (label == null) return;
+            if (original == null) original = label.text;
+            label.text = string.IsNullOrEmpty(text) ? original : text;
+        }
     }
 
     /// <summary>The sizes Table mode can change (doc 30, B3; T3), in the order of the panel's rows.</summary>
@@ -241,6 +266,17 @@ namespace ConsoleCards.Presentation.UI
         public bool CanUndo;
         public bool CanRedo;
         public string Status = string.Empty;
+
+        /// <summary>LAYOUT-1: false hides the shape buttons (the Arrange table panel).</summary>
+        public bool ShowShapes = true;
+
+        /// <summary>LAYOUT-1: false hides Undo and Redo.</summary>
+        public bool ShowHistory = true;
+
+        /// <summary>LAYOUT-1: the Reset, Cancel and Done buttons' words; empty keeps the prefab's.</summary>
+        public string ResetText = string.Empty;
+        public string CancelText = string.Empty;
+        public string DoneText = string.Empty;
 
         /// <summary>The camera the table is seen through, for placing the handles.</summary>
         public UnityEngine.Camera Camera;

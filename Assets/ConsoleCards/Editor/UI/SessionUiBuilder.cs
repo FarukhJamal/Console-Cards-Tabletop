@@ -426,6 +426,17 @@ namespace ConsoleCards.Editor.UI
                 added++;
             }
 
+            // The Arrange table row (LAYOUT-1) goes under Table tools.
+            SerializedProperty arrangeTable = so.FindProperty("arrangeTableButton");
+            if (arrangeTable != null && arrangeTable.objectReferenceValue == null)
+            {
+                Component above = so.FindProperty("tableToolsButton").objectReferenceValue as Component;
+                Button arrange = MenuRow(menu, "ArrangeTableRow", "Arrange table…", false);
+                arrange.transform.SetSiblingIndex(AfterRow(menu, above, menu.childCount - 1));
+                arrangeTable.objectReferenceValue = arrange;
+                added++;
+            }
+
             so.ApplyModifiedPropertiesWithoutUndo();
             return added;
         }

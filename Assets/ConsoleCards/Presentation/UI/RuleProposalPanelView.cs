@@ -41,6 +41,9 @@ namespace ConsoleCards.Presentation.UI
         public string EditText = string.Empty;
         public string PreviewText = string.Empty;
         public string Status = string.Empty;
+
+        /// <summary>The No button's words while the players agree; empty: "No, keep the rule" (LAYOUT-1 reuses the panel).</summary>
+        public string RejectText = string.Empty;
         public IReadOnlyList<RuleProposalVoter> Voters = Array.Empty<RuleProposalVoter>();
     }
 
@@ -112,7 +115,9 @@ namespace ConsoleCards.Presentation.UI
             }
 
             proposeButton.gameObject.SetActive(editing);
-            rejectLabel.text = editing ? "Cancel" : "No, keep the rule";
+            rejectLabel.text = editing
+                ? "Cancel"
+                : string.IsNullOrEmpty(model.RejectText) ? "No, keep the rule" : model.RejectText;
             agreeRow.SetActive(model.Agreeing);
             for (int i = 0; i < agreeButtons.Length; i++)
             {

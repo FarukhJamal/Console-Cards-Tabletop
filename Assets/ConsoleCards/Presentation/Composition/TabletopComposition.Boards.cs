@@ -215,6 +215,33 @@ namespace ConsoleCards.Presentation.Composition
             return true;
         }
 
+        // LAYOUT-1 (owner, 2026-10-21): a preview of the game's own board (Trap Floor's floor) to place while arranging the
+        // table. The board itself cannot move during play; commit gets the new centre and the table is dealt again.
+        internal bool BeginTemplateBoardPlacement(Func<TabletopPose, bool> commit)
+        {
+            EnsureInitialized();
+            if (componentPlacementController == null
+                || boardMatPrefab == null
+                || templateBoardMat == null
+                || !templateBoardMat.HasGrid
+                || !matchState.PlayAreas.ContainsKey(centralPlayAreaId))
+            {
+                ShowMessage("The board cannot be placed here.");
+                return false;
+            }
+
+            ContextMenus.CloseContextMenu();
+            componentPlacementController.Cancel();
+            GameObject previewRoot = CreateBoardPlacementPreview(templateBoardMat.Grid);
+            componentPlacementController.BeginContainerMove(
+                previewRoot,
+                new TabletopPose(matchState.GetPlayArea(centralPlayAreaId).Bounds.Center, 0f, 0, 0),
+                commit);
+            ShowPlacementHint("Move Board");
+            ShowMessage("Move board: left-click to place it, right-click or Escape to cancel.");
+            return true;
+        }
+
         private void BeginBoardMove(BoardId boardId)
         {
             EnsureInitialized();

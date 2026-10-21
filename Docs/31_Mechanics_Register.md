@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.35 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.36 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -243,7 +243,10 @@ Change: …
   card itself goes to them), and End Turn shuffles the rest back. The Shop is off by default.
 - **Table (TABLE-1, owner 2026-10-21):** one shared Controller deck; paid Controller Cards go back into it. Used
   Abilities go on the Ability discard pile, shuffled into the Ability deck when it runs short. No Action stack per
-  seat: an Ability that does not fit in the Hand lies beside the Console.
+  seat: an Ability that does not fit in the Hand lies beside the Console. The Ability deck sits beside the board's
+  left side, level with its middle, with the discard above it; the Controller deck off the bottom-right corner.
+- **Custom layout (LAYOUT-1, P-LAYOUT):** the players may arrange the table (Table menu → Arrange table…) and, when
+  everyone agrees, every deal of the game uses their layout (saved per game and player count).
 - **Settings:** `shop.enabled` (applies at once; default off since 2026-10-21)
 - **Source:** doc 18 §15.4
 - **Open:** —

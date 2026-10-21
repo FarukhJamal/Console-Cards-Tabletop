@@ -42,8 +42,10 @@ namespace ConsoleCards.Games.TrapFloor
             int floorIndex = 0,
             int floorCount = 1,
             ContainerId abilityDeckId = default,
-            ContainerId abilityDiscardId = default)
+            ContainerId abilityDiscardId = default,
+            bool usesCustomLayout = false)
         {
+            UsesCustomLayout = usesCustomLayout;
             AbilityDeckId = abilityDeckId;
             AbilityDiscardId = abilityDiscardId;
             if (floorCount < 1) throw new ArgumentOutOfRangeException(nameof(floorCount));
@@ -98,6 +100,9 @@ namespace ConsoleCards.Games.TrapFloor
 
         /// <summary>ABIL-DECK (owner, 2026-10-21): the shared Ability deck players draw 3 from and buy (empty: none).</summary>
         public ContainerId AbilityDeckId { get; }
+
+        /// <summary>LAYOUT-1: dealt with the players' saved table layout (the seats stay where it put them).</summary>
+        public bool UsesCustomLayout { get; }
 
         /// <summary>TABLE-1 (owner, 2026-10-21): the shared Ability discard pile (used Abilities; empty: none).</summary>
         public ContainerId AbilityDiscardId { get; }
@@ -560,5 +565,60 @@ namespace ConsoleCards.Games.TrapFloor
 
         /// <summary>TABLE-1: where a bought Ability goes, loose beside the Console, when the Hand is full.</summary>
         public TabletopPose AbilityOverflowPose { get; }
+    }
+
+    /// <summary>
+    /// LAYOUT-1 (owner, 2026-10-21): the players' own table layout, agreed by everyone and saved per game and player
+    /// count. Each place is absolute (table units); a missing one keeps the game's default place. The board's centre
+    /// moves the whole floor (each smaller floor shrinks around it).
+    /// </summary>
+    public sealed class TrapFloorTableLayout
+    {
+        private readonly TabletopPose?[] seatConsoles;
+
+        public TrapFloorTableLayout(
+            IReadOnlyList<TabletopPose?> seatConsoles,
+            TabletopPose? controllerDeck,
+            TabletopPose? abilityDeck,
+            TabletopPose? abilityDiscard,
+            TabletopPose? dieX,
+            TabletopPose? dieY,
+            TableCoordinate? boardCenter)
+        {
+            this.seatConsoles = new TabletopPose?[seatConsoles?.Count ?? 0];
+            for (int i = 0; i < this.seatConsoles.Length; i++) this.seatConsoles[i] = seatConsoles[i];
+            ControllerDeck = controllerDeck;
+            AbilityDeck = abilityDeck;
+            AbilityDiscard = abilityDiscard;
+            DieX = dieX;
+            DieY = dieY;
+            BoardCenter = boardCenter;
+        }
+
+        public TabletopPose? ControllerDeck { get; }
+        public TabletopPose? AbilityDeck { get; }
+        public TabletopPose? AbilityDiscard { get; }
+        public TabletopPose? DieX { get; }
+        public TabletopPose? DieY { get; }
+        public TableCoordinate? BoardCenter { get; }
+        public int SeatCount => seatConsoles.Length;
+
+        /// <summary>True when the layout places at least one seat's Console.</summary>
+        public bool HasSeatPlaces
+        {
+            get
+            {
+                for (int i = 0; i < seatConsoles.Length; i++)
+                {
+                    if (seatConsoles[i].HasValue) return true;
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>Where seat <paramref name="seatIndex"/>'s Console goes; null keeps the default place.</summary>
+        public TabletopPose? SeatConsole(int seatIndex) =>
+            seatIndex >= 0 && seatIndex < seatConsoles.Length ? seatConsoles[seatIndex] : null;
     }
 }
