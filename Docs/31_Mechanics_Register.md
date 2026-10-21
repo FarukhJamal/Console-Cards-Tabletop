@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.39 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.40 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -585,8 +585,11 @@ Change: …
   where they were put).
 - **Settings:** —
 - **Source:** owner 2026-10-21
-- **Open:** PLACE-2: player-made games use the same seat rule (their saved Consoles become the seats).
-- **Changes:** 2026-10-21 LAYOUT-1; 2026-10-21 PLACE-1 (approved).
+  **Your games (PLACE-2):** each saved Console is a seat; New table… asks how many play (the game's saved range,
+  starting on its Console count) and, when fewer play than it has Consoles, lays out only the ones the same rule
+  picks. A game that deals at Start deals for that count.
+- **Open:** —
+- **Changes:** 2026-10-21 LAYOUT-1; 2026-10-21 PLACE-1 (approved); 2026-10-21 PLACE-2 (to be checked).
 
 ### P-TABLE-MODELS · Table models
 - **Status:** Built, approved

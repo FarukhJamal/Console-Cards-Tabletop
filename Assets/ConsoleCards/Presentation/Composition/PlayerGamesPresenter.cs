@@ -739,7 +739,9 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // Lays a saved table out on the (new, empty) table: boards first, so everything else rests on them.
-        internal void LayOutPlayerGame(PlayerGameFile game)
+        // PLACE-2: playerCount (0: every Console) is how many play; fewer players than saved Consoles use the
+        // platform seat rule (the first Console, then each next the farthest round the table, PlayerLayoutSeatRules).
+        internal void LayOutPlayerGame(PlayerGameFile game, int playerCount = 0)
         {
             try
             {
@@ -763,10 +765,10 @@ namespace ConsoleCards.Presentation.Composition
                 if (!grid.IsValid || !host.CommitBoardCreate(LoadPose(board.pose), grid, false)) failed++;
             }
 
-            for (int i = 0; i < table.consoles.Count; i++)
+            List<SavedConsole> seated = SeatedConsoles(table.consoles, playerCount);
+            for (int i = 0; i < seated.Count; i++)
             {
-                SavedConsole console = table.consoles[i];
-                if (console == null) continue;
+                SavedConsole console = seated[i];
                 if (!host.AddToolboxComponentAtPose(TabletopComponentKind.Console, 0, LoadPose(console.pose), console.showsBack, true).Succeeded) failed++;
             }
 
@@ -831,10 +833,30 @@ namespace ConsoleCards.Presentation.Composition
 
             host.LoadTableMarks(table.marks); // drawing tool: the game's drawings, part of its start
             host.SessionService.ShowActiveSessionUi(); // the chip shows the game's name and the rules card its rules
-            host.DealAtGameStart(game, gameDeckContainerId); // DEAL-1: a game that deals when it starts
+            host.DealAtGameStart(game, gameDeckContainerId, playerCount); // DEAL-1: a game that deals when it starts
+            string players = playerCount > 0 ? $" for {CountText(playerCount, "player")}" : string.Empty;
             host.ShowMessage(failed == 0
-                ? $"{game.name} is ready. Its rules are on the rules card."
+                ? $"{game.name} is ready{players}. Its rules are on the rules card."
                 : $"{game.name} is ready, but {failed} piece{(failed == 1 ? string.Empty : "s")} could not be laid out.");
+        }
+
+        // The Consoles laid out for playerCount players: all of them when as many or more play, else the ones the
+        // seat rule spreads round the table (in their saved order).
+        internal static List<SavedConsole> SeatedConsoles(List<SavedConsole> consoles, int playerCount)
+        {
+            List<SavedConsole> saved = new List<SavedConsole>(consoles.Count);
+            for (int i = 0; i < consoles.Count; i++)
+            {
+                if (consoles[i] != null) saved.Add(consoles[i]);
+            }
+
+            if (playerCount <= 0 || playerCount >= saved.Count) return saved;
+            List<TableCoordinate> places = new List<TableCoordinate>(saved.Count);
+            for (int i = 0; i < saved.Count; i++) places.Add(LoadPose(saved[i].pose).Position);
+            IReadOnlyList<int> chosen = PlayerLayoutSeatRules.ChooseSpread(places, playerCount);
+            List<SavedConsole> seated = new List<SavedConsole>(chosen.Count);
+            for (int i = 0; i < chosen.Count; i++) seated.Add(saved[chosen[i]]);
+            return seated;
         }
 
         internal static List<ObjectDefinitionId> CardIds(List<string> ids)
@@ -951,6 +973,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             bool armed = deleteArmedGameId == game.id;
+            bool showPlayers = host.GameSelectPanel.PlayerRange(entry, out int fewestPlayers, out int mostPlayers);
             return new GameSelectModel
             {
                 Games = rows,
@@ -960,6 +983,10 @@ namespace ConsoleCards.Presentation.Composition
                     ? host.GameSelectPanel.GameDetail(entry)
                     : $"{host.GameSelectPanel.GameDetail(entry)} · {game.description}",
                 ShowMode = false,
+                // PLACE-2: how many play; fewer than its Consoles use the seat rule.
+                ShowPlayers = showPlayers,
+                PlayersText = GameSelectPresenter.PlayersLineText(host.GameSelectPanel.ChosenPlayerCount(entry)),
+                CanChangePlayers = mostPlayers > fewestPlayers,
                 Rules = rules == 0 ? "Rules: none written yet" : $"Rules: {CountText(rules, "rule")} written by you",
                 Deck = game.deck != null && game.deck.IsSet
                     ? $"Deck: {game.deck.name}, shuffled at Start. {TableSummary(game.table ?? new SavedTable())}"

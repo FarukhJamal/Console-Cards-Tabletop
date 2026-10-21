@@ -251,8 +251,9 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- dealing at the start (a player's game) and by key ----------
 
-        // Called after a player's game laid out its deck: deals now when its rule says so.
-        internal void DealAtGameStart(PlayerGameFile game, ContainerId deckId)
+        // Called after a player's game laid out its deck: deals now when its rule says so. PLACE-2: playerCount (0:
+        // not chosen) is the count chosen in New table…, dealt for without asking again.
+        internal void DealAtGameStart(PlayerGameFile game, ContainerId deckId, int playerCount = 0)
         {
             if (game == null || deckId.IsEmpty || !DealRule.TryParse(game.deal, out DealRule rule) || rule.When != DealTiming.Setup)
             {
@@ -260,6 +261,13 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (!CanDealFrom(deckId)) return;
+            if (playerCount > 0)
+            {
+                dealDraftPlayers = Mathf.Clamp(playerCount, 1, DealMaximumPlayers);
+                DealFromPile(deckId, rule, dealDraftPlayers);
+                return;
+            }
+
             int seats = DealSeatsWithHands().Count;
             if (seats > 0 || game.minimumPlayers >= game.maximumPlayers)
             {

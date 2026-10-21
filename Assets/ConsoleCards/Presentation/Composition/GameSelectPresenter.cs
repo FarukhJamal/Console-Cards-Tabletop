@@ -355,6 +355,15 @@ namespace ConsoleCards.Presentation.Composition
         // The players a game can be dealt for (false: the game does not ask, for example the Empty Table).
         internal bool PlayerRange(GameSelectEntry entry, out int fewest, out int most)
         {
+            if (entry != null && entry.PlayerGame != null)
+            {
+                // PLACE-2: a game you made, from its saved players (each saved Console is a seat).
+                PlayerGameFile game = entry.PlayerGame;
+                fewest = Mathf.Clamp(game.minimumPlayers, 1, PlayerGameFile.MaximumPlayers);
+                most = Mathf.Clamp(game.maximumPlayers, fewest, PlayerGameFile.MaximumPlayers);
+                return true;
+            }
+
             IGameCartridge cartridge = entry != null && entry.PlayerGame == null ? host.Cartridges.CodeCartridgeFor(entry.Game) : null;
             fewest = cartridge != null ? cartridge.MinimumDealPlayers : 0;
             most = cartridge != null ? cartridge.MaximumDealPlayers : 0;
@@ -365,8 +374,25 @@ namespace ConsoleCards.Presentation.Composition
         internal int ChosenPlayerCount(GameSelectEntry entry)
         {
             if (!PlayerRange(entry, out int fewest, out int most)) return 0;
-            int count = gameSelectPlayerCount > 0 ? gameSelectPlayerCount : host.Cartridges.CodeCartridgeFor(entry.Game).DealPlayerCount;
+            int count = gameSelectPlayerCount > 0
+                ? gameSelectPlayerCount
+                : entry.PlayerGame != null
+                    ? SavedConsoleCount(entry.PlayerGame, most)
+                    : host.Cartridges.CodeCartridgeFor(entry.Game).DealPlayerCount;
             return Mathf.Clamp(count, fewest, most);
+        }
+
+        // A game you made starts on as many players as it has Consoles (its maximum when it has none).
+        private static int SavedConsoleCount(PlayerGameFile game, int most)
+        {
+            int consoles = 0;
+            List<SavedConsole> saved = game.table != null ? game.table.consoles : null;
+            for (int i = 0; saved != null && i < saved.Count; i++)
+            {
+                if (saved[i] != null) consoles++;
+            }
+
+            return consoles > 0 ? consoles : most;
         }
 
         internal static string PlayersLineText(int count) =>
@@ -402,6 +428,7 @@ namespace ConsoleCards.Presentation.Composition
                 // Doc 29: a game you made starts as an Empty Table, then its table is laid out.
                 pendingDeckCards = null;
                 pendingPlayerGame = entry.PlayerGame;
+                pendingPlayerGameCount = ChosenPlayerCount(entry); // PLACE-2
                 returnToGameSelect = false;
                 host.runtimeUi?.CloseGameSelect();
                 host.SessionService.RequestTableReplacement(TabletopSessionSelection.EmptyCustom);
@@ -609,6 +636,8 @@ namespace ConsoleCards.Presentation.Composition
             List<ObjectDefinitionId> cards = pendingDeckCards;
             string name = pendingDeckName;
             PlayerGameFile game = pendingPlayerGame;
+            int gamePlayers = pendingPlayerGameCount;
+            pendingPlayerGameCount = 0;
             pendingDeckCards = null;
             pendingDeckName = string.Empty;
             pendingPlayerGame = null;
@@ -617,7 +646,7 @@ namespace ConsoleCards.Presentation.Composition
             host.PlayerGamesPanel.activePlayerGame = selection.Kind == TabletopSessionKind.EmptyCustom ? game : null;
             if (host.PlayerGamesPanel.activePlayerGame != null)
             {
-                host.PlayerGamesPanel.LayOutPlayerGame(host.PlayerGamesPanel.activePlayerGame);
+                host.PlayerGamesPanel.LayOutPlayerGame(host.PlayerGamesPanel.activePlayerGame, gamePlayers);
                 return;
             }
 
@@ -692,5 +721,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal const string PlayerGameEntryPrefix = "my:";
         internal PlayerGameFile pendingPlayerGame;
+        // PLACE-2: how many play the game you made that is starting (0: not chosen).
+        internal int pendingPlayerGameCount;
     }
 }

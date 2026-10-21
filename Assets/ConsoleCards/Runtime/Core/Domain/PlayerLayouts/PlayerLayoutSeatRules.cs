@@ -23,18 +23,49 @@ namespace ConsoleCards.Core.Domain.PlayerLayouts
                 throw new ArgumentNullException(nameof(layout));
             }
 
-            int total = layout.OccupiedSeatCount;
-            if (count < PlayerLayoutDefinition.MinimumSeatCount || count > total)
+            if (count < PlayerLayoutDefinition.MinimumSeatCount || count > layout.OccupiedSeatCount)
             {
                 throw new ArgumentOutOfRangeException(nameof(count));
             }
 
-            double[] angles = new double[total];
-            TableCoordinate centre = Centre(layout);
+            TableCoordinate[] positions = new TableCoordinate[layout.OccupiedSeatCount];
+            for (int i = 0; i < positions.Length; i++) positions[i] = layout.Seats[i].PlayerZonePose.Position;
+            return ChooseSpread(positions, count);
+        }
+
+        /// <summary>
+        /// PLACE-2: the same rule for any places round a table (for example the Consoles of a game a player made):
+        /// the indices of <paramref name="count"/> of <paramref name="positions"/>, the first always, then each next
+        /// the farthest round the middle of all of them from those already chosen, returned in their own order.
+        /// </summary>
+        public static IReadOnlyList<int> ChooseSpread(IReadOnlyList<TableCoordinate> positions, int count)
+        {
+            if (positions == null)
+            {
+                throw new ArgumentNullException(nameof(positions));
+            }
+
+            int total = positions.Count;
+            if (count < 1 || count > total)
+            {
+                throw new ArgumentOutOfRangeException(nameof(count));
+            }
+
+            // The middle of the places: the board sits there on every built-in layout.
+            double centreX = 0d;
+            double centreY = 0d;
             for (int i = 0; i < total; i++)
             {
-                TableCoordinate position = layout.Seats[i].PlayerZonePose.Position;
-                angles[i] = Math.Atan2(position.Y - centre.Y, position.X - centre.X);
+                centreX += positions[i].X;
+                centreY += positions[i].Y;
+            }
+
+            centreX /= total;
+            centreY /= total;
+            double[] angles = new double[total];
+            for (int i = 0; i < total; i++)
+            {
+                angles[i] = Math.Atan2(positions[i].Y - centreY, positions[i].X - centreX);
             }
 
             bool[] chosen = new bool[total];
@@ -120,20 +151,6 @@ namespace ConsoleCards.Core.Domain.PlayerLayouts
                 layout.Name + " (" + count + " players)",
                 seats,
                 layout.TableBounds);
-        }
-
-        private static TableCoordinate Centre(PlayerLayoutDefinition layout)
-        {
-            // The middle of the seats: the board sits there on every built-in layout.
-            double x = 0d;
-            double y = 0d;
-            for (int i = 0; i < layout.Seats.Count; i++)
-            {
-                x += layout.Seats[i].PlayerZonePose.Position.X;
-                y += layout.Seats[i].PlayerZonePose.Position.Y;
-            }
-
-            return new TableCoordinate(x / layout.Seats.Count, y / layout.Seats.Count);
         }
 
         private static double AngleBetween(double a, double b)
