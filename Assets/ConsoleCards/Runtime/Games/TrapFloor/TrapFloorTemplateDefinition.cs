@@ -40,8 +40,12 @@ namespace ConsoleCards.Games.TrapFloor
             TabletopObjectId floorfallXAxisDieId,
             TabletopObjectId floorfallYAxisDieId,
             int floorIndex = 0,
-            int floorCount = 1)
+            int floorCount = 1,
+            ContainerId abilityDeckId = default,
+            ContainerId abilityDiscardId = default)
         {
+            AbilityDeckId = abilityDeckId;
+            AbilityDiscardId = abilityDiscardId;
             if (floorCount < 1) throw new ArgumentOutOfRangeException(nameof(floorCount));
             if (floorIndex < 0 || floorIndex >= floorCount) throw new ArgumentOutOfRangeException(nameof(floorIndex));
             FloorIndex = floorIndex;
@@ -91,6 +95,12 @@ namespace ConsoleCards.Games.TrapFloor
         /// <summary>FLOORS-1 (owner, 2026-10-21): which floor this is, from 0; each floor is one row and one column
         /// smaller than the one before.</summary>
         public int FloorIndex { get; }
+
+        /// <summary>ABIL-DECK (owner, 2026-10-21): the shared Ability deck players draw 3 from and buy (empty: none).</summary>
+        public ContainerId AbilityDeckId { get; }
+
+        /// <summary>TABLE-1 (owner, 2026-10-21): the shared Ability discard pile (used Abilities; empty: none).</summary>
+        public ContainerId AbilityDiscardId { get; }
 
         /// <summary>How many floors the game has (6×6 down to 3×3 gives 4).</summary>
         public int FloorCount { get; }
@@ -513,8 +523,10 @@ namespace ConsoleCards.Games.TrapFloor
             ContainerId actionAbilityAreaContainerId,
             TabletopObjectId avatarCardId,
             TabletopObjectId pawnId,
-            TrapFloorCoordinate startingCorner)
+            TrapFloorCoordinate startingCorner,
+            TabletopPose abilityOverflowPose = default)
         {
+            AbilityOverflowPose = abilityOverflowPose;
             LayoutSeatIndex = layoutSeatIndex;
             SeatId = seatId;
             HandContainerId = handContainerId;
@@ -545,5 +557,8 @@ namespace ConsoleCards.Games.TrapFloor
         public TabletopObjectId ModeCardId => TabletopObjectId.Empty;
         public TabletopObjectId PawnId { get; }
         public TrapFloorCoordinate StartingCorner { get; }
+
+        /// <summary>TABLE-1: where a bought Ability goes, loose beside the Console, when the Hand is full.</summary>
+        public TabletopPose AbilityOverflowPose { get; }
     }
 }

@@ -201,26 +201,36 @@ namespace ConsoleCards.Presentation.Composition
             for (int playerIndex = 0; playerIndex < seats.Count; playerIndex++)
             {
                 CartridgeSeat player = seats[playerIndex];
-                RuntimeDeckInstance controllerDeck = Spawner.CreateRuntimeDeckInstance(
-                    $"Player {playerIndex + 1} Controller Deck",
-                    $"P{playerIndex + 1} CTRL",
-                    player.ControllerDeckId,
-                    false);
-                Registry.runtimeDeckInstances.Add(controllerDeck);
-                GameTemplatePileStyle deckPileStyle = ResolveTemplatePileStyle(player.ControllerDeckId)
-                    ?? GameTemplatePileStyle.DefaultFor(ContainerKind.Deck);
-                controllerDeck.View.ConfigureTableRest(true, deckPileStyle.MaximumPileHeight);
-                ConfigurePileBay(controllerDeck.Visual, deckPileStyle, player.SeatId);
+                // TABLE-1: a seat's own Controller Deck and Action stack. A deck shared by every seat (no owner) and
+                // the game's other piles get their views with the table's placed piles.
+                if (matchState.Containers.TryGetValue(player.ControllerDeckId, out ContainerState seatDeck)
+                    && !seatDeck.OwnerSeatId.IsEmpty)
+                {
+                    RuntimeDeckInstance controllerDeck = Spawner.CreateRuntimeDeckInstance(
+                        $"Player {playerIndex + 1} Controller Deck",
+                        $"P{playerIndex + 1} CTRL",
+                        player.ControllerDeckId,
+                        false);
+                    Registry.runtimeDeckInstances.Add(controllerDeck);
+                    GameTemplatePileStyle deckPileStyle = ResolveTemplatePileStyle(player.ControllerDeckId)
+                        ?? GameTemplatePileStyle.DefaultFor(ContainerKind.Deck);
+                    controllerDeck.View.ConfigureTableRest(true, deckPileStyle.MaximumPileHeight);
+                    ConfigurePileBay(controllerDeck.Visual, deckPileStyle, player.SeatId);
 
-                Registry.controllerDeckViews.Add(controllerDeck.View);
+                    Registry.controllerDeckViews.Add(controllerDeck.View);
+                }
+
                 ContainerId actionAreaId = player.ActionAreaContainerId;
-                StackRuntimeView actionArea = Spawner.CreateStackRuntimeView(
-                    $"P{playerIndex + 1} ACTIONS",
-                    matchState.GetContainer(actionAreaId),
-                    matchState.ContainerPlacements[actionAreaId],
-                    false,
-                    ResolveTemplatePileStyle(actionAreaId));
-                Registry.stackViewsByContainerId.Add(actionAreaId, actionArea);
+                if (!actionAreaId.IsEmpty && matchState.Containers.ContainsKey(actionAreaId))
+                {
+                    StackRuntimeView actionArea = Spawner.CreateStackRuntimeView(
+                        $"P{playerIndex + 1} ACTIONS",
+                        matchState.GetContainer(actionAreaId),
+                        matchState.ContainerPlacements[actionAreaId],
+                        false,
+                        ResolveTemplatePileStyle(actionAreaId));
+                    Registry.stackViewsByContainerId.Add(actionAreaId, actionArea);
+                }
 
                 if (player.LayoutSeatIndex != localPlayerLayoutSeatIndex
                     && matchState.TryGetContainerPlacement(player.HandContainerId, out ContainerPlacementState hiddenHandZone)

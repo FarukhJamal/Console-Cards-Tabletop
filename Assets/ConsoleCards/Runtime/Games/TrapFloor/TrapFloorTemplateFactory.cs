@@ -162,6 +162,10 @@ namespace ConsoleCards.Games.TrapFloor
 
             TrapFloorCoordinate[] startingCorners = AssignStartingCorners(playerLayout, grid, StandardPlayerCount);
 
+            // TABLE-1 (owner, 2026-10-21, as in the playtest): one Controller deck for everyone beside the board.
+            ContainerId controllerDeckId = CreateSharedControllerDeck(
+                controllerInputCards, grid, randomValueSource, containers, memberships, objects, labels);
+
             for (int seatIndex = 0; seatIndex < StandardPlayerCount; seatIndex++)
             {
                 playerLayout.TryGetSeat(seatIndex, out PlayerSeatLayoutEntry layoutSeat);
@@ -174,7 +178,7 @@ namespace ConsoleCards.Games.TrapFloor
                     grid,
                     mainSlot,
                     sideSlots,
-                    Shuffled(controllerInputCards, randomValueSource), // owner, 2026-10-21: every deal shuffles the deck
+                    controllerDeckId,
                     seats,
                     containers,
                     memberships,
@@ -198,6 +202,10 @@ namespace ConsoleCards.Games.TrapFloor
                 dieDefinitionId,
                 FloorfallDiceX + (FloorfallDiceSpacing * 0.5d),
                 FloorfallDiceY));
+
+            ContainerId abilityDeckId = CreateAbilityDeck(
+                gameDefinition, grid, randomValueSource, containers, memberships, objects, labels);
+            ContainerId abilityDiscardId = CreateAbilityDiscard(grid, containers, memberships);
 
             TabletopBounds boardBounds = CreateBoardBounds(grid);
             if (!adjacentPlacement.UsesFallbackShape)
@@ -248,7 +256,170 @@ namespace ConsoleCards.Games.TrapFloor
                 floorfallXAxisDieId,
                 floorfallYAxisDieId,
                 floorIndex,
-                floorCount);
+                floorCount,
+                abilityDeckId,
+                abilityDiscardId);
+        }
+
+        // TABLE-1 (owner, 2026-10-21): the Ability discard pile, just below the Ability deck. Used Abilities go there;
+        // when the Ability deck runs out, the discard is shuffled into it.
+        private static ContainerId CreateAbilityDiscard(
+            GridDefinitionData grid,
+            List<GameTemplateContainerDefinition> containers,
+            List<GameTemplateContainerMembership> memberships)
+        {
+            ContainerId discardId = new ContainerId(CreateGuid(71, 3));
+            TabletopPose deckPose = AbilityDeckPose(grid);
+            containers.Add(new GameTemplateContainerDefinition(
+                discardId,
+                ContainerKind.DiscardPile,
+                SeatId.Empty,
+                ObjectVisibility.Public,
+                0,
+                true,
+                new TabletopPose(
+                    new TableCoordinate(deckPose.Position.X, deckPose.Position.Y - SharedPileSpacing),
+                    0f,
+                    0,
+                    0)));
+            memberships.Add(new GameTemplateContainerMembership(discardId, Array.Empty<TabletopObjectId>()));
+            return discardId;
+        }
+
+        // TABLE-1 (owner, 2026-10-21): every player's set of Controller Cards in one shuffled, face-down deck off the
+        // board's bottom-right corner (the Ability deck is off the top-left). Paid cards go straight back into it.
+        private const double SharedPileSpacing = 1.6d;
+
+        private static ContainerId CreateSharedControllerDeck(
+            IReadOnlyList<CardDefinitionData> controllerInputCards,
+            GridDefinitionData grid,
+            IRandomValueSource randomValueSource,
+            List<GameTemplateContainerDefinition> containers,
+            List<GameTemplateContainerMembership> memberships,
+            List<GameTemplateObjectInstanceDefinition> objects,
+            Dictionary<TabletopObjectId, string> labels)
+        {
+            ContainerId deckId = new ContainerId(CreateGuid(71, 2));
+            TabletopBounds board = CreateBoardBounds(grid);
+            containers.Add(new GameTemplateContainerDefinition(
+                deckId,
+                ContainerKind.Deck,
+                SeatId.Empty,
+                ObjectVisibility.Public,
+                0,
+                true,
+                new TabletopPose(
+                    new TableCoordinate(board.Maximum.X + AbilityDeckClearanceX, board.Minimum.Y - AbilityDeckClearanceY),
+                    0f,
+                    0,
+                    0),
+                pileStyle: ControllerDeckPileStyle));
+
+            List<TabletopObjectId> cardIds = new List<TabletopObjectId>(controllerInputCards.Count * StandardPlayerCount);
+            for (int seatIndex = 0; seatIndex < StandardPlayerCount; seatIndex++)
+            {
+                for (int i = 0; i < controllerInputCards.Count; i++)
+                {
+                    CardDefinitionData controllerCard = controllerInputCards[i];
+                    TabletopObjectId controllerCardId = new TabletopObjectId(CreateGuid(47, (seatIndex * 10000) + i + 1));
+                    objects.Add(new GameTemplateObjectInstanceDefinition(
+                        controllerCardId,
+                        new ObjectDefinitionId(
+                            ParseStableGuid(controllerCard.StableId, $"Controller Card '{controllerCard.DisplayName}'")),
+                        TabletopObjectKind.Card,
+                        TabletopPose.Default,
+                        SeatId.Empty,
+                        ObjectVisibility.Public,
+                        false,
+                        CardFace.FaceDown));
+                    cardIds.Add(controllerCardId);
+                    labels.Add(controllerCardId, controllerCard.DisplayName);
+                }
+            }
+
+            // Shuffled on every deal.
+            for (int i = cardIds.Count - 1; i > 0; i--)
+            {
+                int pick = randomValueSource.NextInt(0, i + 1);
+                TabletopObjectId swap = cardIds[i];
+                cardIds[i] = cardIds[pick];
+                cardIds[pick] = swap;
+            }
+
+            memberships.Add(new GameTemplateContainerMembership(deckId, cardIds));
+            return deckId;
+        }
+
+        // ABIL-DECK (owner, 2026-10-21): buying is from the table. A shared, shuffled, face-down Ability deck beside
+        // the board holds every Ability that has a price, one copy per player. Empty when no Ability has a price yet.
+        // It sits off the board's top-left corner, measured from the floor (owner, 2026-10-21: at the dice's mirror
+        // place it overlapped the board), so it stays clear of the board's frame on every floor size.
+        private const double AbilityDeckClearanceX = 1.85d; // board frame, a gap and half a deck bay, with room to spare
+        private const double AbilityDeckClearanceY = 0.9d;
+
+        private static ContainerId CreateAbilityDeck(
+            GameDefinitionData gameDefinition,
+            GridDefinitionData grid,
+            IRandomValueSource randomValueSource,
+            List<GameTemplateContainerDefinition> containers,
+            List<GameTemplateContainerMembership> memberships,
+            List<GameTemplateObjectInstanceDefinition> objects,
+            Dictionary<TabletopObjectId, string> labels)
+        {
+            List<CardDefinitionData> forSale = new List<CardDefinitionData>();
+            List<CardDefinitionData> catalog = TrapFloorShop.Catalog(gameDefinition);
+            for (int i = 0; i < catalog.Count; i++)
+            {
+                if (TrapFloorShop.IsForSale(catalog[i])) forSale.Add(catalog[i]);
+            }
+
+            if (forSale.Count == 0) return ContainerId.Empty;
+            List<CardDefinitionData> copies = new List<CardDefinitionData>(forSale.Count * StandardPlayerCount);
+            for (int copy = 0; copy < StandardPlayerCount; copy++) copies.AddRange(forSale);
+            IReadOnlyList<CardDefinitionData> order = Shuffled(copies, randomValueSource);
+
+            ContainerId deckId = new ContainerId(CreateGuid(71, 1));
+            containers.Add(new GameTemplateContainerDefinition(
+                deckId,
+                ContainerKind.Deck,
+                SeatId.Empty,
+                ObjectVisibility.Public,
+                0,
+                true,
+                AbilityDeckPose(grid),
+                pileStyle: ControllerDeckPileStyle));
+            List<TabletopObjectId> cardIds = new List<TabletopObjectId>(order.Count);
+            for (int i = 0; i < order.Count; i++)
+            {
+                CardDefinitionData card = order[i];
+                TabletopObjectId cardId = new TabletopObjectId(CreateGuid(72, i + 1));
+                objects.Add(new GameTemplateObjectInstanceDefinition(
+                    cardId,
+                    new ObjectDefinitionId(ParseStableGuid(card.StableId, $"Ability '{card.DisplayName}'")),
+                    TabletopObjectKind.Card,
+                    TabletopPose.Default,
+                    SeatId.Empty,
+                    ObjectVisibility.Public,
+                    false,
+                    CardFace.FaceDown));
+                cardIds.Add(cardId);
+                labels.Add(cardId, card.DisplayName);
+            }
+
+            memberships.Add(new GameTemplateContainerMembership(deckId, cardIds));
+            return deckId;
+        }
+
+        private static TabletopPose AbilityDeckPose(GridDefinitionData grid)
+        {
+            TabletopBounds board = CreateBoardBounds(grid);
+            return new TabletopPose(
+                new TableCoordinate(
+                    board.Minimum.X - AbilityDeckClearanceX,
+                    board.Maximum.Y + AbilityDeckClearanceY),
+                0f,
+                0,
+                0);
         }
 
         // The game data with the floor's smaller grid (same cell size and centre); everything else is unchanged.
@@ -911,7 +1082,7 @@ namespace ConsoleCards.Games.TrapFloor
             GridDefinitionData grid,
             ConsoleSlotDefinitionData mainSlot,
             ConsoleSlotDefinitionData sideSlot,
-            IReadOnlyList<CardDefinitionData> controllerInputCards,
+            ContainerId controllerDeckId,
             ICollection<GameTemplateSeatDefinition> seats,
             ICollection<GameTemplateContainerDefinition> containers,
             ICollection<GameTemplateContainerMembership> memberships,
@@ -930,8 +1101,6 @@ namespace ConsoleCards.Games.TrapFloor
             ContainerId[] sideSlotIds = new ContainerId[sideSlot.PhysicalSlotCount];
             for (int i = 0; i < sideSlotIds.Length; i++)
                 sideSlotIds[i] = new ContainerId(CreateGuid(41, idBase + 3 + i));
-            ContainerId controllerDeckId = new ContainerId(CreateGuid(41, idBase + 19));
-            ContainerId actionAbilityAreaId = new ContainerId(CreateGuid(41, idBase + 18));
 
             ContainerId[] extraSlotIds = new ContainerId[extraConsoleSlotCapacities.Count];
             for (int i = 0; i < extraSlotIds.Length; i++)
@@ -984,23 +1153,10 @@ namespace ConsoleCards.Games.TrapFloor
                     extraConsoleSlotCapacities[i]));
             }
 
-            containers.Add(new GameTemplateContainerDefinition(
-                actionAbilityAreaId,
-                ContainerKind.Stack,
-                seatId,
-                ObjectVisibility.Public,
-                0,
-                true,
-                ConsoleAdjacentPlacement.ToTablePose(GetConsolePose(layoutSeat), seatPieces.ActionStack)));
-            containers.Add(new GameTemplateContainerDefinition(
-                controllerDeckId,
-                ContainerKind.Deck,
-                seatId,
-                ObjectVisibility.Public,
-                0,
-                true,
-                ConsoleAdjacentPlacement.ToTablePose(GetConsolePose(layoutSeat), seatPieces.ControllerDeck),
-                pileStyle: ControllerDeckPileStyle));
+            // TABLE-1: no Controller deck or Action stack per seat. A bought Ability that does not fit in the Hand
+            // is placed loose where the stack was, beside the Console.
+            TabletopPose abilityOverflowPose =
+                ConsoleAdjacentPlacement.ToTablePose(GetConsolePose(layoutSeat), seatPieces.ActionStack);
 
             TabletopObjectId avatarId = new TabletopObjectId(CreateGuid(42, playerNumber));
             TabletopObjectId pawnId = new TabletopObjectId(CreateGuid(45, playerNumber));
@@ -1046,29 +1202,6 @@ namespace ConsoleCards.Games.TrapFloor
                 labels.Add(abilityId, ability.DisplayName);
             }
 
-            List<TabletopObjectId> controllerCardIds = new List<TabletopObjectId>(controllerInputCards.Count);
-            for (int i = 0; i < controllerInputCards.Count; i++)
-            {
-                CardDefinitionData controllerCard = controllerInputCards[i];
-                TabletopObjectId controllerCardId = new TabletopObjectId(
-                    CreateGuid(47, (seatIndex * 10000) + i + 1));
-                ObjectDefinitionId controllerDefinitionId = new ObjectDefinitionId(
-                    ParseStableGuid(controllerCard.StableId, $"Controller Card '{controllerCard.DisplayName}'"));
-                objects.Add(new GameTemplateObjectInstanceDefinition(
-                    controllerCardId,
-                    controllerDefinitionId,
-                    TabletopObjectKind.Card,
-                    TabletopPose.Default,
-                    seatId,
-                    ObjectVisibility.OwnerOnly,
-                    false,
-                    CardFace.FaceDown));
-                controllerCardIds.Add(controllerCardId);
-                labels.Add(controllerCardId, controllerCard.DisplayName);
-            }
-
-            memberships.Add(new GameTemplateContainerMembership(controllerDeckId, controllerCardIds));
-            memberships.Add(new GameTemplateContainerMembership(actionAbilityAreaId, Array.Empty<TabletopObjectId>()));
             memberships.Add(new GameTemplateContainerMembership(handId, Array.Empty<TabletopObjectId>()));
             players.Add(new TrapFloorPlayerSetupDefinition(
                 seatIndex,
@@ -1077,10 +1210,11 @@ namespace ConsoleCards.Games.TrapFloor
                 mainSlotId,
                 ConcatSlotIds(sideSlotIds, extraSlotIds),
                 controllerDeckId,
-                actionAbilityAreaId,
+                ContainerId.Empty,
                 avatarId,
                 pawnId,
-                startingCorner));
+                startingCorner,
+                abilityOverflowPose));
         }
 
         private static GameTemplateObjectInstanceDefinition CreatePlayerCard(

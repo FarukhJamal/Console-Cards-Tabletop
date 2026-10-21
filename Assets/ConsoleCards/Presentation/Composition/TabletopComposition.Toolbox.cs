@@ -1267,8 +1267,9 @@ namespace ConsoleCards.Presentation.Composition
                 switch (container.Kind)
                 {
                     case ContainerKind.Deck:
-                        if (!matchState.IsTemplateContainer(containerId)
-                            && !Registry.TryGetDeckPresentation(containerId, out _, out _))
+                        // TABLE-1: a game's shared deck (Trap Floor's Controller and Ability decks) has no seat view,
+                        // so it is shown here too; a seat's deck already has its view.
+                        if (!Registry.TryGetDeckPresentation(containerId, out _, out _))
                         {
                             ProjectToolboxDeck(containerId);
                         }

@@ -577,8 +577,9 @@ namespace ConsoleCards.Presentation.Composition
                 for (int i = 0; i < seats.Count; i++)
                 {
                     CartridgeSeat seat = seats[i];
-                    if (seat.ControllerDeckId == deckId
-                        || (!deck.OwnerSeatId.IsEmpty && deck.OwnerSeatId == seat.SeatId))
+                    // A deck shared by every seat (TABLE-1) fills this screen's hand.
+                    if (!deck.OwnerSeatId.IsEmpty
+                        && (seat.ControllerDeckId == deckId || deck.OwnerSeatId == seat.SeatId))
                     {
                         return seat.HandContainerId;
                     }

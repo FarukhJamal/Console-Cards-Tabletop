@@ -100,7 +100,15 @@ namespace ConsoleCards.Presentation.Composition
         internal void RefreshShopEntry()
         {
             if (host.runtimeUi == null) return;
-            host.runtimeUi.ShowShopEntry(IsShopOpen() ? (Action)OpenActionAbilityPurchase : null);
+            bool open = IsShopOpen();
+            if (open)
+            {
+                // TABLE-1 check (owner, 2026-10-21: the Shop still showed): which rules opened it.
+                RuleSetDefinition rules = host.RulesCardPanel.ActiveRuleSet;
+                Debug.Log($"[Shop] Open: the rules in play ('{(rules != null ? rules.DisplayName : "none")}') set the Shop on.");
+            }
+
+            host.runtimeUi.ShowShopEntry(open ? (Action)OpenActionAbilityPurchase : null);
         }
 
         internal bool IsShopBuyingTurn() =>
@@ -124,6 +132,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            pendingDeckCardId = TabletopObjectId.Empty; // a Shop purchase, not a card from the Ability deck
             ShowActionAbilityPurchase(IsShopBuyingTurn()
                 ? $"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} is buying."
                 : "You can look; buying is on a player's own turn.");
@@ -318,6 +327,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void CancelFocusedPurchaseSelection()
         {
             host.pendingPurchaseDefinitionStableId = string.Empty;
+            pendingDeckCardId = TabletopObjectId.Empty;
             host.runtimeUi?.CloseFocusedCardSelection();
             host.ShowMessage("Payment cancelled.");
         }
@@ -361,6 +371,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void CancelPendingActionAbilityPurchase()
         {
             host.pendingPurchaseDefinitionStableId = string.Empty;
+            pendingDeckCardId = TabletopObjectId.Empty;
             host.runtimeUi?.CloseFocusedCardSelection();
             host.runtimeUi?.CloseActionAbilityPurchase();
             if (host.pendingControllerPurchaseState == null
@@ -469,12 +480,15 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            // ABIL-DECK: a card drawn from the Ability deck is bought out of the deck itself.
+            TabletopObjectId deckCardId = TakePendingDeckCard(cardDefinitionStableId);
             TrapFloorBuyFromShopResult result = host.TableAuthority.Submit<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(
                 new TrapFloorBuyFromShopCommand(
                     host.CreateCommandContext(host.trapFloorTurnState.ActivePlayerId),
                     cardDefinitionStableId,
-                    TabletopObjectId.New(),
-                    paymentCardIds));
+                    deckCardId.IsEmpty ? TabletopObjectId.New() : deckCardId,
+                    paymentCardIds,
+                    deckCardId));
             if (!result.Succeeded)
             {
                 host.ShowMessage($"Shop purchase rejected: {result.Error}.");
@@ -486,6 +500,18 @@ namespace ConsoleCards.Presentation.Composition
             ReplaceCurrentUndoStateForPurchaseAssistance();
 
             string name = result.Card.DisplayName;
+            if (!deckCardId.IsEmpty)
+            {
+                // The deck card already has a view: lay out the deck and the card's new place, and show its face.
+                host.ViewSync.SyncContainer(host.trapFloorTemplate.AbilityDeckId);
+                host.ViewSync.SyncContainer(result.DestinationContainerId);
+                if (result.DestinationContainerId.IsEmpty) host.PresentAcceptedObject(deckCardId); // loose beside the Console
+                host.RefreshCardContentVisibility();
+                host.RefreshSelectionPresenterAfterRuntimeProjection();
+            }
+
+            ShowPaymentReturned();
+
             // R2: the bought card got its view from the table's view sync (PresentGrantedCard).
             if (host.Registry.TryGetCardView(result.GrantedCardId, out CardView boughtView))
             {
@@ -494,9 +520,10 @@ namespace ConsoleCards.Presentation.Composition
             if (TryGetTrapFloorPlayerSetup(host.trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition buyer))
             {
                 string buyerName = host.HandOwnerName(buyer.HandContainerId);
+                string from = deckCardId.IsEmpty ? "the Shop" : "the Ability deck";
                 host.ShowMessage(result.PlacedInHand
-                    ? $"Bought {name} from the Shop into {buyerName}'s hand."
-                    : $"Bought {name} from the Shop. {buyerName}'s hand is full, so it is beside their Console.");
+                    ? $"Bought {name} from {from} into {buyerName}'s hand."
+                    : $"Bought {name} from {from}. {buyerName}'s hand is full, so it is beside their Console.");
             }
         }
         // ---------- from TabletopComposition.TrapFloor.cs ----------
@@ -1160,6 +1187,7 @@ namespace ConsoleCards.Presentation.Composition
                         || host.trapFloorTurnState.GetPlayerState(actor)
                             == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound);
                 if (!knockedOut && !wasFloorTurn) RememberPrizeLeft(actor);
+                if (!wasFloorTurn) EndAbilityOffer(); // ABIL-DECK: what was not bought goes back; the deck is shuffled
                 if (!knockedOut)
                 {
                     result = skipped
@@ -2196,6 +2224,7 @@ namespace ConsoleCards.Presentation.Composition
             ReplaceCurrentUndoStateForPurchaseAssistance();
 
             string prizeName = result.FloorCard.Content.DisplayName;
+            ShowPaymentReturned();
             // R2: the prize card got its view from the table's view sync (PresentGrantedCard).
             if (host.Registry.TryGetCardView(result.GrantedCardId, out CardView grantedView))
             {
@@ -2206,6 +2235,25 @@ namespace ConsoleCards.Presentation.Composition
             host.ShowMessage(result.PlacedInHand
                 ? $"Took {prizeName} into {takerName}'s hand. The tile is now a hole."
                 : $"Took {prizeName}. {takerName}'s hand is full, so it is beside their Console. The tile is now a hole.");
+        }
+
+        // TABLE-1: the Controller Cards that paid went back into the Controller deck: lay out the deck and the
+        // active player's Console slots again.
+        internal void ShowPaymentReturned()
+        {
+            if (!TryGetTrapFloorPlayerSetup(host.trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition player))
+            {
+                return;
+            }
+
+            host.ViewSync.SyncContainer(player.ControllerDeckId);
+            for (int i = 0; i < player.SideSlotContainerIds.Count; i++)
+            {
+                host.ViewSync.SyncContainer(player.SideSlotContainerIds[i]);
+            }
+
+            host.RefreshAcceptedCardFaces();
+            host.RefreshCardContentVisibility();
         }
 
         // R2: a card the Shop or a prize hands out gets its view, named after the card, in the pile or hand it went to.
@@ -2683,7 +2731,7 @@ namespace ConsoleCards.Presentation.Composition
             return player.ControllerDeckId == containerId
                 && host.matchState.Containers.TryGetValue(containerId, out ContainerState container)
                 && container.Kind == ContainerKind.Deck
-                && container.OwnerSeatId == player.SeatId
+                && (container.OwnerSeatId.IsEmpty || container.OwnerSeatId == player.SeatId) // TABLE-1: shared deck
                 && host.matchState.Seats.TryGetValue(player.SeatId, out SeatState seat)
                 && seat.OccupantPlayerId == host.trapFloorTurnState.ActivePlayerId;
         }
@@ -2772,6 +2820,7 @@ namespace ConsoleCards.Presentation.Composition
 
             host.ContextMenus.CloseContextMenu();
             host.CardInspectPanel.CloseCardInspect();
+            QueueUsedAbilityDiscard(insertion.CardInstanceId); // TABLE-1: the used card goes on the Ability discard pile
             RefreshTrapFloorStatusUi();
             if (effect == TrapFloorAbilityEffect.Dodge)
             {
@@ -3688,6 +3737,12 @@ namespace ConsoleCards.Presentation.Composition
                         KeepNotAllowedMove));
                 }
 
+                // ABIL-DECK (owner, 2026-10-21): draw 3 from the Ability deck and buy any.
+                if (!purchasePending && TryGetAbilityOfferAction(out string abilityDrawLabel))
+                {
+                    actions.Add(new PopupActionOption(abilityDrawLabel, true, OpenAbilityOffer));
+                }
+
                 // Owner, 2026-10-20: a waiting trap and a Reaction that can stop it: offered in the turn menu too.
                 if (!purchasePending && CountUsableReactions(host.trapFloorTurnState.ActivePlayerId) > 0)
                 {
@@ -3754,7 +3809,9 @@ namespace ConsoleCards.Presentation.Composition
             int handLimit = host.trapFloorTemplate.GameDefinition.ControllerConfiguration.MaximumHandSize;
             int moveTiles = MoveAllowance(out _);
             string standardGuidance =
-                $"Draw up to {handLimit} if needed\nMove up to {moveTiles} tile{(moveTiles == 1 ? string.Empty : "s")} "
+                $"Draw up to {handLimit} if needed\n"
+                + (TryGetAbilityOfferAction(out _) ? $"Draw {AbilityOfferSize} Abilities and buy any you can pay for\n" : string.Empty)
+                + $"Move up to {moveTiles} tile{(moveTiles == 1 ? string.Empty : "s")} "
                 + "in one straight line (they light while you hold your pawn); landing flips a tile. "
                 + "Take a prize you stand on, then End Turn";
             bool isBlind = TryGetActiveBlindStatus(out TrapFloorBlindStatusState blindStatus);
@@ -4368,7 +4425,11 @@ namespace ConsoleCards.Presentation.Composition
             RefreshMovementAssistancePresentation();
         }
 
-        public void TickEarly() => CompletePendingLandingFlip();
+        public void TickEarly()
+        {
+            CompletePendingLandingFlip();
+            DiscardUsedAbility();
+        }
 
         public void TickLate()
         {

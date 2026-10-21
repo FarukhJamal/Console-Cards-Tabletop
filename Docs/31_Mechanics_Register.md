@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.33 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.35 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -238,7 +238,13 @@ Change: …
   first, then Reactions), on their own turn, at any time; buying does not replace moving. Off-turn the Shop can be
   opened to look. Payment is the same as for floor prizes. An Ability with no price is listed as "Price not set
   yet". The Shop entry is on the session bar, between Redo and Table.
-- **Settings:** `shop.enabled` (applies at once)
+- **Ability deck (ABIL-DECK, owner 2026-10-21):** buying is from the table by default: each turn the player draws
+  3 from a shared Ability deck (every priced Ability, one copy per player), buys any they can pay for (the drawn
+  card itself goes to them), and End Turn shuffles the rest back. The Shop is off by default.
+- **Table (TABLE-1, owner 2026-10-21):** one shared Controller deck; paid Controller Cards go back into it. Used
+  Abilities go on the Ability discard pile, shuffled into the Ability deck when it runs short. No Action stack per
+  seat: an Ability that does not fit in the Hand lies beside the Console.
+- **Settings:** `shop.enabled` (applies at once; default off since 2026-10-21)
 - **Source:** doc 18 §15.4
 - **Open:** —
 - **Changes:** 2026-10-15 the market returns as the Shop.

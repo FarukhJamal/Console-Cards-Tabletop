@@ -219,10 +219,10 @@ namespace ConsoleCards.Games.TrapFloor
                     command.GrantedCardId,
                     floorCard.Content.Id,
                     TabletopObjectKind.Card,
-                    TabletopPose.Default,
+                    destination != null ? TabletopPose.Default : player.AbilityOverflowPose,
                     ContainerId.Empty,
                     actor,
-                    destination.Visibility,
+                    destination != null ? destination.Visibility : ObjectVisibility.Public,
                     false),
                 CardFace.FaceUp);
             ContainerTransferService transfer = new ContainerTransferService();
@@ -230,9 +230,13 @@ namespace ConsoleCards.Games.TrapFloor
             try
             {
                 matchState.AddUncontainedCard(grantedCard);
-                ContainerTransferResult placement = transfer.PlaceIntoContainer(grantedCard.BaseState, destination);
-                if (!placement.Succeeded)
-                    throw new InvalidOperationException($"Taken prize placement failed: {placement.Error}.");
+                if (destination != null)
+                {
+                    ContainerTransferResult placement = transfer.PlaceIntoContainer(grantedCard.BaseState, destination);
+                    if (!placement.Succeeded)
+                        throw new InvalidOperationException($"Taken prize placement failed: {placement.Error}.");
+                }
+
                 collapseState.RecordTakenPrize(command.FloorCardId, floorCard.Coordinate, actor, revision);
                 holeRecorded = true;
             }
@@ -241,7 +245,9 @@ namespace ConsoleCards.Games.TrapFloor
                 if (holeRecorded) collapseState.RemoveTakenPrize(command.FloorCardId);
                 if (matchState.ContainsObject(grantedCard.BaseState.Id))
                 {
-                    if (grantedCard.BaseState.ContainerId == destination.Id && destination.Contains(grantedCard.BaseState.Id))
+                    if (destination != null
+                        && grantedCard.BaseState.ContainerId == destination.Id
+                        && destination.Contains(grantedCard.BaseState.Id))
                         transfer.RemoveFromContainer(grantedCard.BaseState, destination);
                     matchState.RemoveObject(grantedCard.BaseState.Id);
                 }
@@ -249,13 +255,46 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.MutationFailed);
             }
 
+            ReturnPaymentToControllerDeck(matchState, player, command.PaymentCardIds);
             matchState.AdvanceRevision(command.Context.Id, actor, AuthoritativeActionKind.PurchaseActionOrAbility);
             return TrapFloorTakePrizeResult.Accepted(
                 revision,
                 floorCard,
                 command.GrantedCardId,
-                destination.Id,
+                destination != null ? destination.Id : ContainerId.Empty,
                 placedInHand);
+        }
+
+        // TABLE-1 (owner, 2026-10-21, as in the playtest): the Controller Cards that paid go straight back into the
+        // Controller deck, at the bottom, face down. Shared with the Shop.
+        internal static void ReturnPaymentToControllerDeck(
+            MatchState matchState,
+            TrapFloorPlayerSetupDefinition player,
+            IReadOnlyList<TabletopObjectId> paymentCardIds)
+        {
+            if (paymentCardIds == null
+                || player.ControllerDeckId.IsEmpty
+                || !matchState.Containers.TryGetValue(player.ControllerDeckId, out ContainerState deck))
+            {
+                return;
+            }
+
+            ContainerTransferService transfer = new ContainerTransferService();
+            for (int i = 0; i < paymentCardIds.Count; i++)
+            {
+                if (!matchState.Cards.TryGetValue(paymentCardIds[i], out CardInstanceState card)
+                    || card.BaseState.ContainerId.IsEmpty
+                    || card.BaseState.ContainerId == deck.Id
+                    || !matchState.Containers.TryGetValue(card.BaseState.ContainerId, out ContainerState slot))
+                {
+                    continue;
+                }
+
+                if (transfer.MoveBetweenContainers(card.BaseState, slot, deck, 0).Succeeded)
+                {
+                    card.SetFace(CardFace.FaceDown);
+                }
+            }
         }
 
         private TrapFloorTakePrizeError ValidatePayment(
@@ -288,7 +327,8 @@ namespace ConsoleCards.Games.TrapFloor
             return TrapFloorTakePrizeError.None;
         }
 
-        // The Hand, unless it already holds the game's hand limit; then the Action stack beside the Console.
+        // The Hand, unless it already holds the game's hand limit; then the Action stack beside the Console when the
+        // seat has one, otherwise (TABLE-1) null: the card is placed loose beside the Console (AbilityOverflowPose).
         // Shared with the Shop (doc 18 §15.4), so a bought card goes where a taken one does.
         internal static bool TryResolveDestination(
             TrapFloorTemplateDefinition template,
@@ -308,8 +348,15 @@ namespace ConsoleCards.Games.TrapFloor
                 return true;
             }
 
-            return matchState.Containers.TryGetValue(player.ActionAbilityAreaContainerId, out destination)
-                && !destination.IsFull;
+            if (!player.ActionAbilityAreaContainerId.IsEmpty
+                && matchState.Containers.TryGetValue(player.ActionAbilityAreaContainerId, out destination)
+                && !destination.IsFull)
+            {
+                return true;
+            }
+
+            destination = null;
+            return true;
         }
 
         private bool TryGetPlayerSetup(

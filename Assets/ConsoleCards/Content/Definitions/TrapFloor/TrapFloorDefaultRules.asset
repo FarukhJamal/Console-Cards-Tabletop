@@ -66,7 +66,7 @@ MonoBehaviour:
     numbered: 1
     entries:
     - stableId: tf-turn-draw
-      text: 'Draw Controller Cards until you hold {value}.'
+      text: 'Draw from the Controller deck (one deck for everyone) until you hold {value}. Then draw 3 from the Ability deck beside the board and buy any you can pay for; what you do not buy goes back and the deck is shuffled.'
       settingKind: 1
       settingKey: controller.hand-size
       value: '10'
@@ -178,7 +178,7 @@ MonoBehaviour:
       hintHelper: trapfloor.traps-waiting
       modeStableIds: []
     - stableId: tf-ability-cost
-      text: 'Each card shows its cost. Pay it in full to buy or take the card; using it later is free. Players never share a payment.'
+      text: 'Each card shows its cost. Pay it in full to buy or take the card; using it later is free. Players never share a payment. The Controller Cards you pay with go back into the Controller deck; a used Ability goes on the Ability discard pile, which is shuffled into the Ability deck when that runs out.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -191,7 +191,7 @@ MonoBehaviour:
       text: 'Shop: {value}. On your turn you may buy any Ability from the Shop (the SHOP icon at the top) by paying its cost. It goes to your Hand, or beside your Console when your Hand is full. An Ability without a price yet is not for sale. Turning the Shop on or off asks the table and applies at once.'
       settingKind: 2
       settingKey: shop.enabled
-      value: 'on'
+      value: 'off'
       displayValue: ''
       hintTrigger: turn.start
       hintContext: player

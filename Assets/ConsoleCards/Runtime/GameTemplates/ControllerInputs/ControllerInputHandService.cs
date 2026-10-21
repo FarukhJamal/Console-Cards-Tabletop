@@ -128,7 +128,8 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
                 return ControllerInputHandDrawResult.Failure(ControllerInputHandDrawError.SourceDeckMissing);
             if (sourceDeck.Kind != ContainerKind.Deck)
                 return ControllerInputHandDrawResult.Failure(ControllerInputHandDrawError.SourceNotDeck);
-            if (sourceDeck.OwnerSeatId != command.PlayerSeatId)
+            // A shared deck (no owner seat, TABLE-1) serves every seat; a seat's own deck serves only that seat.
+            if (!sourceDeck.OwnerSeatId.IsEmpty && sourceDeck.OwnerSeatId != command.PlayerSeatId)
                 return ControllerInputHandDrawResult.Failure(ControllerInputHandDrawError.SourceDeckOwnedByAnotherSeat);
 
             ControllerConfigurationData configuration = gameDefinition.ControllerConfiguration;

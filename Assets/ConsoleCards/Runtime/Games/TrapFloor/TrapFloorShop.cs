@@ -35,6 +35,7 @@ namespace ConsoleCards.Games.TrapFloor
         DestinationMissing = 15,
         RevisionOverflow = 16,
         MutationFailed = 17,
+        SourceCardNotInAbilityDeck = 18,
     }
 
     /// <summary>
@@ -107,7 +108,19 @@ namespace ConsoleCards.Games.TrapFloor
             string cardDefinitionStableId,
             TabletopObjectId grantedCardId,
             IEnumerable<TabletopObjectId> paymentCardIds)
+            : this(context, cardDefinitionStableId, grantedCardId, paymentCardIds, TabletopObjectId.Empty)
         {
+        }
+
+        /// <summary>ABIL-DECK: with a source card, that card is bought out of the table's Ability deck (no new card).</summary>
+        public TrapFloorBuyFromShopCommand(
+            CommandContext context,
+            string cardDefinitionStableId,
+            TabletopObjectId grantedCardId,
+            IEnumerable<TabletopObjectId> paymentCardIds,
+            TabletopObjectId sourceCardId)
+        {
+            SourceCardId = sourceCardId;
             if (string.IsNullOrWhiteSpace(cardDefinitionStableId))
                 throw new ArgumentException("A Shop purchase needs a Card Definition ID.", nameof(cardDefinitionStableId));
             if (grantedCardId.IsEmpty) throw new ArgumentException("Granted Card ID cannot be empty.", nameof(grantedCardId));
@@ -122,6 +135,7 @@ namespace ConsoleCards.Games.TrapFloor
         public string CardDefinitionStableId { get; }
         public TabletopObjectId GrantedCardId { get; }
         public IReadOnlyList<TabletopObjectId> PaymentCardIds { get; }
+        public TabletopObjectId SourceCardId { get; }
     }
 
     public readonly struct TrapFloorBuyFromShopResult
@@ -213,7 +227,19 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(CommandResultStatus.Rejected, TrapFloorShopError.NotForSale);
             if (!Guid.TryParse(card.StableId, out Guid definitionGuid))
                 return Failure(CommandResultStatus.Rejected, TrapFloorShopError.CardDefinitionIdInvalid);
-            if (matchState.ContainsObject(command.GrantedCardId))
+            bool fromDeck = !command.SourceCardId.IsEmpty;
+            ContainerState abilityDeck = null;
+            CardInstanceState deckCard = null;
+            if (fromDeck)
+            {
+                if (template.AbilityDeckId.IsEmpty
+                    || !matchState.Containers.TryGetValue(template.AbilityDeckId, out abilityDeck)
+                    || !abilityDeck.Contains(command.SourceCardId)
+                    || !matchState.Cards.TryGetValue(command.SourceCardId, out deckCard)
+                    || deckCard.BaseState.DefinitionId != new ObjectDefinitionId(definitionGuid))
+                    return Failure(CommandResultStatus.Rejected, TrapFloorShopError.SourceCardNotInAbilityDeck);
+            }
+            else if (matchState.ContainsObject(command.GrantedCardId))
                 return Failure(CommandResultStatus.Rejected, TrapFloorShopError.GrantedCardIdAlreadyExists);
 
             ControllerInputCostEvaluation payment = new ControllerInputCostEvaluator().EvaluateExact(
@@ -237,30 +263,57 @@ namespace ConsoleCards.Games.TrapFloor
             if (matchState.Revision == long.MaxValue)
                 return Failure(CommandResultStatus.Conflict, TrapFloorShopError.RevisionOverflow);
 
+            if (fromDeck)
+            {
+                // The drawn card itself leaves the deck for the buyer (face up, theirs): into the Hand, or (TABLE-1)
+                // loose beside the Console when the Hand is full.
+                ContainerTransferService deckTransfer = new ContainerTransferService();
+                ContainerTransferResult moved = destination != null
+                    ? deckTransfer.MoveBetweenContainers(deckCard.BaseState, abilityDeck, destination)
+                    : deckTransfer.RemoveFromContainer(deckCard.BaseState, abilityDeck);
+                if (!moved.Succeeded) return Failure(CommandResultStatus.Rejected, TrapFloorShopError.MutationFailed);
+                if (destination == null) deckCard.BaseState.SetPose(player.AbilityOverflowPose);
+                deckCard.BaseState.SetOwner(actor);
+                deckCard.BaseState.SetVisibility(destination != null ? destination.Visibility : ObjectVisibility.Public);
+                deckCard.SetFace(CardFace.FaceUp);
+                TrapFloorTakePrizeUseCase.ReturnPaymentToControllerDeck(matchState, player, command.PaymentCardIds);
+                long deckRevision = matchState.AdvanceRevision(
+                    command.Context.Id,
+                    actor,
+                    AuthoritativeActionKind.PurchaseActionOrAbility);
+                return TrapFloorBuyFromShopResult.Accepted(
+                    deckRevision, card, command.SourceCardId, destination != null ? destination.Id : ContainerId.Empty, placedInHand);
+            }
+
             CardInstanceState boughtCard = new CardInstanceState(
                 new TabletopObjectState(
                     command.GrantedCardId,
                     new ObjectDefinitionId(definitionGuid),
                     TabletopObjectKind.Card,
-                    TabletopPose.Default,
+                    destination != null ? TabletopPose.Default : player.AbilityOverflowPose,
                     ContainerId.Empty,
                     actor,
-                    destination.Visibility,
+                    destination != null ? destination.Visibility : ObjectVisibility.Public,
                     false),
                 CardFace.FaceUp);
             ContainerTransferService transfer = new ContainerTransferService();
             try
             {
                 matchState.AddUncontainedCard(boughtCard);
-                ContainerTransferResult placement = transfer.PlaceIntoContainer(boughtCard.BaseState, destination);
-                if (!placement.Succeeded)
-                    throw new InvalidOperationException($"Shop card placement failed: {placement.Error}.");
+                if (destination != null)
+                {
+                    ContainerTransferResult placement = transfer.PlaceIntoContainer(boughtCard.BaseState, destination);
+                    if (!placement.Succeeded)
+                        throw new InvalidOperationException($"Shop card placement failed: {placement.Error}.");
+                }
             }
             catch
             {
                 if (matchState.ContainsObject(boughtCard.BaseState.Id))
                 {
-                    if (boughtCard.BaseState.ContainerId == destination.Id && destination.Contains(boughtCard.BaseState.Id))
+                    if (destination != null
+                        && boughtCard.BaseState.ContainerId == destination.Id
+                        && destination.Contains(boughtCard.BaseState.Id))
                         transfer.RemoveFromContainer(boughtCard.BaseState, destination);
                     matchState.RemoveObject(boughtCard.BaseState.Id);
                 }
@@ -268,11 +321,13 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(CommandResultStatus.Rejected, TrapFloorShopError.MutationFailed);
             }
 
+            TrapFloorTakePrizeUseCase.ReturnPaymentToControllerDeck(matchState, player, command.PaymentCardIds);
             long revision = matchState.AdvanceRevision(
                 command.Context.Id,
                 actor,
                 AuthoritativeActionKind.PurchaseActionOrAbility);
-            return TrapFloorBuyFromShopResult.Accepted(revision, card, command.GrantedCardId, destination.Id, placedInHand);
+            return TrapFloorBuyFromShopResult.Accepted(
+                revision, card, command.GrantedCardId, destination != null ? destination.Id : ContainerId.Empty, placedInHand);
         }
 
         private bool TryGetPlayerSetup(MatchState matchState, PlayerId playerId, out TrapFloorPlayerSetupDefinition resolved)
