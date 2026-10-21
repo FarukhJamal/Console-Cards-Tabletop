@@ -311,7 +311,13 @@ namespace ConsoleCards.Presentation.Composition
             persona.AvatarIndex = avatarIndex;
             if (persona.View != null) persona.View.Apply(persona.Look, personaSet, persona.Colour, persona.Name);
             if (persona.Tag != null) persona.Tag.Apply(persona.Name, persona.Colour);
-            if (persona.Avatar != null) persona.Avatar.Apply(personaSet.Avatar(avatarIndex), persona.Colour);
+            if (persona.Avatar != null)
+            {
+                persona.Avatar.Apply(personaSet.Avatar(avatarIndex), persona.Colour);
+                bool newTag = persona.Avatar.NameTag == null;
+                persona.Avatar.ShowNameTag(persona.Name, personaSet.AvatarNameTag, personaSet.NameTagLetters, personaSet.NameTagGap);
+                if (newTag && persona.Avatar.NameTag != null) WorldTextDepth.Apply(persona.Avatar.NameTag);
+            }
             if (persona.RimName != null)
             {
                 persona.RimName.text = persona.Name;

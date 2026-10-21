@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.47 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.48 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -597,11 +597,13 @@ Change: …
   behind the Console, framed in the seat colour (brighter and breathing on their turn), and the player's name along
   the rim in front of the seat, in the seat colour, readable from across the table. The profile chooses its avatar
   (Profile panel → Avatar: <name> >). Other seats on this screen get one each by seat. An Empty Table shows none.
+  **Name tag (AVATAR-2):** a plate in the seat colour with the name in white, over the avatar's head (or in front,
+  under the picture), glowing with the frame on that player's turn.
 - **Settings:** the Persona set: the avatar pictures (Content/Art/Persona/Avatars, Avatar_<Name>.png), where the
   avatar stands and leans, its glow, the rim name on/off, inset and size.
 - **Source:** owner 2026-10-21
 - **Open:** your own picture as an avatar.
-- **Changes:** 2026-10-21 AVATAR-1 (to be checked); replaces P-PERSONA's characters for now.
+- **Changes:** 2026-10-21 AVATAR-1 (approved); AVATAR-2 name tags (to be checked); replaces P-PERSONA's characters for now.
 
 ### P-PERSONA · Who plays at each side
 - **Status:** Built (PERSONA-2), switched off for now (AVATAR-1); kept for later

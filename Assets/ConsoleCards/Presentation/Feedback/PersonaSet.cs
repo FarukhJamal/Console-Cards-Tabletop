@@ -16,6 +16,14 @@ namespace ConsoleCards.Presentation.Feedback
     {
         public const string ResourcePath = "PersonaSet";
 
+        /// <summary>AVATAR-2: where the name tag sits on the avatar.</summary>
+        public enum NameTagPlace
+        {
+            Off = 0,
+            OverHead = 1,
+            InFront = 2,
+        }
+
         [Serializable]
         public struct NamedColour
         {
@@ -58,6 +66,12 @@ namespace ConsoleCards.Presentation.Feedback
         [SerializeField] private float avatarLift = 0.3f;
         [SerializeField] private float avatarGlowIdle = 0.75f;
         [SerializeField] private float avatarGlowTurn = 1.6f;
+        [Tooltip("AVATAR-2: the player's name tag on their avatar: over its head, or in front (under the picture).")]
+        [SerializeField] private NameTagPlace avatarNameTag = NameTagPlace.OverHead;
+        [Tooltip("The name tag's letter size (table units).")]
+        [SerializeField] private float nameTagLetters = 0.11f;
+        [Tooltip("Room between the picture's frame and the name tag (table units).")]
+        [SerializeField] private float nameTagGap = 0.15f;
         [Tooltip("Write each player's name along the table's rim in front of their seat, in the seat colour.")]
         [SerializeField] private bool nameOnRim = true;
         [Tooltip("How far in from the table's edge the rim name lies (table units).")]
@@ -193,6 +207,9 @@ namespace ConsoleCards.Presentation.Feedback
         public float AvatarGlowIdle => avatarGlowIdle;
         public float AvatarGlowTurn => avatarGlowTurn;
         public bool NameOnRim => nameOnRim;
+        public NameTagPlace AvatarNameTag => avatarNameTag;
+        public float NameTagLetters => nameTagLetters;
+        public float NameTagGap => nameTagGap;
         public float RimNameInset => rimNameInset;
         public float RimNameSize => rimNameSize;
         public bool ShowCharacters => showCharacters;
