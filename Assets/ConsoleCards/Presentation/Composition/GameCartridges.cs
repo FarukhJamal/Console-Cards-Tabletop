@@ -69,6 +69,18 @@ namespace ConsoleCards.Presentation.Composition
         /// <summary>Sets the game up once, off the table, with the deck of yours chosen for it. Null when it works, else what went wrong.</summary>
         string TrialChosenDeck(GameTemplateId templateId);
 
+        /// <summary>PLACE-1: the fewest players New table… can deal the game for (0: the menu does not ask).</summary>
+        int MinimumDealPlayers { get; }
+
+        /// <summary>PLACE-1: the most players New table… can deal the game for (0: the menu does not ask).</summary>
+        int MaximumDealPlayers { get; }
+
+        /// <summary>PLACE-1: how many players the game's next deal is for (0: the menu does not ask).</summary>
+        int DealPlayerCount { get; }
+
+        /// <summary>PLACE-1: chooses how many players the game's next deal is for (kept within the range).</summary>
+        void ChooseDealPlayerCount(int count);
+
         // ---------- building and clearing the table ----------
 
         /// <summary>The table is being built from one of its templates (first step of the build).</summary>
@@ -409,6 +421,16 @@ namespace ConsoleCards.Presentation.Composition
         public ICartridgeUndoState CaptureUndoState() => null;
 
         public IReadOnlyList<CartridgeSeat> Seats => NoSeats;
+
+        public int MinimumDealPlayers => 0;
+
+        public int MaximumDealPlayers => 0;
+
+        public int DealPlayerCount => 0;
+
+        public void ChooseDealPlayerCount(int count)
+        {
+        }
         public PlayerId TurnPlayerId => PlayerId.Empty;
         public bool IsPlayerTurnOpen => false;
         public int CurrentRound => 0;

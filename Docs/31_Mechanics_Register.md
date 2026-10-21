@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.36 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.37 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -247,6 +247,8 @@ Change: …
   left side, level with its middle, with the discard above it; the Controller deck off the bottom-right corner.
 - **Custom layout (LAYOUT-1, P-LAYOUT):** the players may arrange the table (Table menu → Arrange table…) and, when
   everyone agrees, every deal of the game uses their layout (saved per game and player count).
+- **Players (PLACE-1, P-LAYOUT):** 2, 3 or 4 players, chosen in New table…; only those seats are dealt (2 opposite,
+  3 on three sides). The Controller deck and the Ability deck hold one set per player.
 - **Settings:** `shop.enabled` (applies at once; default off since 2026-10-21)
 - **Source:** doc 18 §15.4
 - **Open:** —
@@ -528,9 +530,10 @@ Change: …
 - **Status:** Built
 - **Rule now:** New table… lists every game with its picture, players, mode, rules and deck; choose the deck to
   play with (yours or the game's); Playing as; Make it yours (card art, card editor, deck editor); Start. Your own
-  games are listed too.
+  games are listed too. A game that lets players choose shows **PLAYERS < n >** under MODE (Trap Floor 2–4; see
+  P-LAYOUT); it starts on the count the game was last dealt for.
 - **Source:** doc 24 (L2-4, L2-5); doc 29
-- **Changes:** 2026-10-16 L2-4, L2-5.
+- **Changes:** 2026-10-16 L2-4, L2-5; 2026-10-21 PLACE-1 player count (to be checked).
 
 ### P-PLAYER-GAMES · Save table as a game
 - **Status:** Built, approved
@@ -562,6 +565,22 @@ Change: …
 - **Source:** doc 30 §B6–§B10
 - **Open:** picture cards for the shapes (V4). Seats along the edge: PL-CARTRIDGE (CART-1c, approved).
 - **Changes:** 2026-10-18 every Toolbox piece moves in, game mats included (owner); 2026-10-17 T1–T3 approved.
+
+### P-LAYOUT · Where seats and pieces go
+- **Status:** Built, in playtest
+- **Rule now:** **Default placement (PLACE-1, owner 2026-10-21):** a game's layout has a seat per side of the table.
+  When fewer players sit down, the seats used face the board and are spread out: seat 0 always, then each next seat
+  is the one farthest round the table from those already chosen (ties to the lower seat). On the 4-seat table:
+  2 players sit opposite, 3 on three sides, 4 on all sides. The seats keep their table order, so turns go round the
+  table. Seats stand at the table edge (P-TABLE); the shared pieces lie around the board. The count is chosen in New
+  table… and kept for the game's later deals (next floor, restart, Reset, Arrange table).
+  **Custom layout (LAYOUT-1):** Table menu → Arrange table… lets the players place Consoles, shared piles, dice and
+  the board; when everyone agrees it is saved per game and player count and every deal uses it (seats then stay
+  where they were put).
+- **Settings:** —
+- **Source:** owner 2026-10-21
+- **Open:** PLACE-2: player-made games use the same seat rule (their saved Consoles become the seats).
+- **Changes:** 2026-10-21 LAYOUT-1; 2026-10-21 PLACE-1 (to be checked).
 
 ### P-TABLE-MODELS · Table models
 - **Status:** Built, approved

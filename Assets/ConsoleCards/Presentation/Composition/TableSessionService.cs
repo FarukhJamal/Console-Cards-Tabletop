@@ -282,11 +282,12 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        internal void RequestTableReplacement(TabletopSessionSelection selection)
+        // PLACE-1: playerCount (0: keep the game's current count) is how many players a game's table is dealt for.
+        internal void RequestTableReplacement(TabletopSessionSelection selection, int playerCount = 0)
         {
             if (!host.IsInitialized || !HasCurrentTableContent())
             {
-                TryReplaceTable(selection);
+                TryReplaceTable(selection, playerCount);
                 return;
             }
 
@@ -302,7 +303,7 @@ namespace ConsoleCards.Presentation.Composition
                             ? "Clear Table"
                             : $"Load {replacementName}",
                         true,
-                        () => TryReplaceTable(selection)),
+                        () => TryReplaceTable(selection, playerCount)),
                     new PopupActionOption(
                         "Cancel",
                         true,
@@ -310,6 +311,34 @@ namespace ConsoleCards.Presentation.Composition
                 },
                 host.ContextMenus.CloseContextMenu,
                 host.ContextMenus.DismissPopupFromSecondary);
+        }
+
+        // PLACE-1: deals the game's table for playerCount players (0: its current count). When the table cannot be
+        // replaced the game goes back to the count it had, so the table in play keeps matching its setups.
+        internal bool TryReplaceTable(TabletopSessionSelection selection, int playerCount)
+        {
+            if (playerCount <= 0
+                || selection.Kind != TabletopSessionKind.GameTemplate
+                || !host.Cartridges.TryGetTemplateSetup(selection.GameTemplateId, out IGameCartridge owner, out _)
+                || owner.DealPlayerCount == playerCount)
+            {
+                return TryReplaceTable(selection);
+            }
+
+            int previousCount = owner.DealPlayerCount;
+            owner.ChooseDealPlayerCount(playerCount);
+            if (TryReplaceTable(selection)) return true;
+            owner.ChooseDealPlayerCount(previousCount);
+            try
+            {
+                RegisterGameTemplates();
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[Players] The game's setups could not be prepared again for {previousCount} players: {exception.Message}");
+            }
+
+            return false;
         }
 
         internal bool TryReplaceTable(TabletopSessionSelection selection)

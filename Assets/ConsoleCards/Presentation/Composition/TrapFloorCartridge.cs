@@ -4421,7 +4421,8 @@ namespace ConsoleCards.Presentation.Composition
                         gameDefinition.Modes[i].StableId,
                         host.GetConsoleLayout(),
                         floorIndex,
-                        tableLayout);
+                        tableLayout,
+                        DealPlayerCount);
                 }
                 catch (Exception exception) when (tableLayout != null)
                 {
@@ -4435,7 +4436,8 @@ namespace ConsoleCards.Presentation.Composition
                         gameDefinition.Modes[i].StableId,
                         host.GetConsoleLayout(),
                         floorIndex,
-                        null);
+                        null,
+                        DealPlayerCount);
                 }
 
                 host.availableTrapFloorTemplates.Add(template.Template.Id, template);

@@ -54,8 +54,8 @@ namespace ConsoleCards.Presentation.Composition
             && host.activeSession != null
             && host.activeSession.Selection.Kind == TabletopSessionKind.GameTemplate;
 
-        // The layout key: Trap Floor always seats its four players.
-        private static int LayoutPlayerCount => TrapFloorTemplateFactory.StandardPlayerCount;
+        // The layout key: how many players the table is dealt for (PLACE-1: 2, 3 or 4), each count its own layout.
+        private int LayoutPlayerCount => DealPlayerCount;
 
         private string LayoutGameId => Game != null ? Game.StableId : "trap-floor";
 
@@ -80,7 +80,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private static TrapFloorTableLayout ToLayout(TableLayoutRecord record)
+        private TrapFloorTableLayout ToLayout(TableLayoutRecord record)
         {
             TabletopPose?[] seats = new TabletopPose?[LayoutPlayerCount];
             for (int i = 0; i < seats.Length; i++) seats[i] = Place(record, SeatRolePrefix + i);

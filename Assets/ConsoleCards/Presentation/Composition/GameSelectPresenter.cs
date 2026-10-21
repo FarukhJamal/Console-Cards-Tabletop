@@ -66,6 +66,8 @@ namespace ConsoleCards.Presentation.Composition
         internal GameSelectActions gameSelectActions;
         internal string gameSelectEntryId = string.Empty;
         internal int gameSelectModeIndex;
+        // PLACE-1: how many players the chosen game is dealt for (0: the game's current count).
+        internal int gameSelectPlayerCount;
         // An editor or panel opened from the menu goes back to it when closed.
         internal bool returnToGameSelect;
         // L2-5: the deck an Empty Table starts with (0: none), and the cards waiting to be placed after Start.
@@ -99,6 +101,7 @@ namespace ConsoleCards.Presentation.Composition
                 {
                     SelectGame = SelectGameEntry,
                     CycleMode = CycleGameMode,
+                    CyclePlayers = CycleGamePlayers,
                     CycleDeck = CycleGameDeck,
                     OpenProfile = () => OpenFromGameSelect(host.ProfilePanel.OpenProfilePanel),
                     OpenCardArt = () => OpenFromGameSelect(host.OpenCardArtPanel),
@@ -127,6 +130,7 @@ namespace ConsoleCards.Presentation.Composition
 
             bool isEmpty = entry.Game == null;
             bool playable = isEmpty || entry.Templates.Count > 0;
+            bool showPlayers = PlayerRange(entry, out int fewestPlayers, out int mostPlayers);
             GameSelectModel model = new GameSelectModel
             {
                 Games = rows,
@@ -136,6 +140,9 @@ namespace ConsoleCards.Presentation.Composition
                 ShowMode = entry.ModeNames.Count > 0,
                 ModeName = entry.ModeNames.Count > 0 ? entry.ModeNames[gameSelectModeIndex] : string.Empty,
                 CanChangeMode = entry.ModeNames.Count > 1,
+                ShowPlayers = showPlayers,
+                PlayersText = PlayersLineText(ChosenPlayerCount(entry)),
+                CanChangePlayers = mostPlayers > fewestPlayers,
                 Rules = isEmpty ? "No rules: free play with the platform's components." : GameRulesText(entry),
                 Deck = DeckLineText(entry, out bool canChangeDeck),
                 CanChangeDeck = canChangeDeck,
@@ -339,6 +346,40 @@ namespace ConsoleCards.Presentation.Composition
             host.PlayerGamesPanel.deleteArmedGameId = string.Empty;
             gameSelectEntryId = entry.Id;
             gameSelectModeIndex = CurrentGameEntryId(entries) == entry.Id ? CurrentModeIndex(entry) : 0;
+            gameSelectPlayerCount = 0;
+            ShowGameSelect(string.Empty, entries);
+        }
+
+        // ---------- how many players (PLACE-1) ----------
+
+        // The players a game can be dealt for (false: the game does not ask, for example the Empty Table).
+        internal bool PlayerRange(GameSelectEntry entry, out int fewest, out int most)
+        {
+            IGameCartridge cartridge = entry != null && entry.PlayerGame == null ? host.Cartridges.CodeCartridgeFor(entry.Game) : null;
+            fewest = cartridge != null ? cartridge.MinimumDealPlayers : 0;
+            most = cartridge != null ? cartridge.MaximumDealPlayers : 0;
+            return fewest > 0 && most >= fewest && entry.Templates.Count > 0;
+        }
+
+        // The count chosen in the menu, else the game's current count (the one its table was last dealt for).
+        internal int ChosenPlayerCount(GameSelectEntry entry)
+        {
+            if (!PlayerRange(entry, out int fewest, out int most)) return 0;
+            int count = gameSelectPlayerCount > 0 ? gameSelectPlayerCount : host.Cartridges.CodeCartridgeFor(entry.Game).DealPlayerCount;
+            return Mathf.Clamp(count, fewest, most);
+        }
+
+        internal static string PlayersLineText(int count) =>
+            count <= 0 ? string.Empty : $"{count} player{(count == 1 ? string.Empty : "s")}";
+
+        internal void CycleGamePlayers(int step)
+        {
+            List<GameSelectEntry> entries = GameSelectEntries();
+            GameSelectEntry entry = FindGameSelectEntry(entries, gameSelectEntryId);
+            if (!PlayerRange(entry, out int fewest, out int most) || most <= fewest) return;
+            int span = most - fewest + 1;
+            int index = ChosenPlayerCount(entry) - fewest;
+            gameSelectPlayerCount = fewest + (((index + step) % span) + span) % span;
             ShowGameSelect(string.Empty, entries);
         }
 
@@ -407,9 +448,11 @@ namespace ConsoleCards.Presentation.Composition
 
             returnToGameSelect = false;
             host.runtimeUi?.CloseGameSelect();
-            host.SessionService.RequestTableReplacement(entry.Game == null
-                ? TabletopSessionSelection.EmptyCustom
-                : TabletopSessionSelection.FromGameTemplate(templateId));
+            host.SessionService.RequestTableReplacement(
+                entry.Game == null
+                    ? TabletopSessionSelection.EmptyCustom
+                    : TabletopSessionSelection.FromGameTemplate(templateId),
+                ChosenPlayerCount(entry));
         }
 
         // ---------- the deck to play with (L2-5) ----------

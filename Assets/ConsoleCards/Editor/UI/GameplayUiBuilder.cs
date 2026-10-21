@@ -142,6 +142,7 @@ namespace ConsoleCards.Editor.UI
             AddMissingRuleControls();
             AddMissingShopLabels();
             AddMissingDeckPicker();
+            AddMissingPlayerCountPicker();
             AddMissingDeleteGameButton();
             AddMissingGameSaveSteps();
             AddMissingGameSaveDealStep();
@@ -1321,6 +1322,55 @@ namespace ConsoleCards.Editor.UI
             {
                 PrefabUtility.UnloadPrefabContents(root);
             }
+        }
+
+        // PLACE-1: a PLAYERS < 4 players > row under the game selection menu's MODE row, to choose how many players the
+        // table is dealt for. Added to a GameSelectPanel that lacks it (new ones too); the chosen game's info block
+        // grows by one row so nothing below it moves under it, nothing else in the prefab changes.
+        private static void AddMissingPlayerCountPicker()
+        {
+            if (!File.Exists(GameSelectPanelPath)) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(GameSelectPanelPath);
+            try
+            {
+                GameSelectPanelView view = root.GetComponent<GameSelectPanelView>();
+                if (view == null) return;
+                SerializedObject so = new SerializedObject(view);
+                if (so.FindProperty("playersRow").objectReferenceValue != null) return;
+                GameObject modeRow = so.FindProperty("modeRow").objectReferenceValue as GameObject;
+                if (modeRow == null || modeRow.transform.parent == null) return;
+                Transform info = modeRow.transform.parent;
+                RectTransform row = ButtonRow(info, TextAnchor.MiddleLeft);
+                row.name = "PlayersRow";
+                row.SetSiblingIndex(modeRow.transform.GetSiblingIndex() + 1);
+                FitLabel(Child("PlayersTitle", row), boldFont, 16, Muted, "PLAYERS");
+                Button previous = PlainButton(row, "PreviousPlayersButton", "<", 52f, out _);
+                RectTransform labelRect = Child("Players", row);
+                Text players = Label(labelRect, boldFont, 18, Ink, TextAnchor.MiddleCenter, "4 players");
+                Size(labelRect.gameObject, 220f, 52f, 220f);
+                Button next = PlainButton(row, "NextPlayersButton", ">", 52f, out _);
+                GrowHeight(info, 60f);
+                GrowHeight(info.parent, 60f);
+                so.FindProperty("playersRow").objectReferenceValue = row.gameObject;
+                so.FindProperty("previousPlayersButton").objectReferenceValue = previous;
+                so.FindProperty("nextPlayersButton").objectReferenceValue = next;
+                so.FindProperty("playersLabel").objectReferenceValue = players;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                PrefabUtility.SaveAsPrefabAsset(root, GameSelectPanelPath);
+                Debug.Log($"[Gameplay UI] Added the player count choice (PLAYERS < >) to {GameSelectPanelPath}.");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+        }
+
+        private static void GrowHeight(Transform target, float extra)
+        {
+            LayoutElement element = target != null ? target.GetComponent<LayoutElement>() : null;
+            if (element == null) return;
+            if (element.preferredHeight > 0f) element.preferredHeight += extra;
+            if (element.minHeight > 0f) element.minHeight += extra;
         }
 
         // ---------- deck editor (doc 27 List 2, L2-3) ----------

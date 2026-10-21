@@ -99,7 +99,26 @@ namespace ConsoleCards.Presentation.Composition
         public void CheckSetUp(GameDefinitionData data, string modeStableId)
         {
             TrapFloorTemplateFactory.CreateStandardFourPlayer(
-                new SystemRandomValueSource(), data, modeStableId, host.GetConsoleLayout());
+                new SystemRandomValueSource(), data, modeStableId, host.GetConsoleLayout(), 0, null, DealPlayerCount);
+        }
+
+        // ---------- how many players (PLACE-1) ----------
+
+        // 0: not chosen yet, the game's most players (4).
+        private int dealPlayerCount;
+
+        public int MinimumDealPlayers =>
+            Math.Max(1, Math.Min(Game != null ? Game.MinimumPlayers : TrapFloorTemplateFactory.StandardPlayerCount, TrapFloorTemplateFactory.StandardPlayerCount));
+
+        public int MaximumDealPlayers =>
+            Math.Max(MinimumDealPlayers, Math.Min(Game != null ? Game.MaximumPlayers : TrapFloorTemplateFactory.StandardPlayerCount, TrapFloorTemplateFactory.StandardPlayerCount));
+
+        public int DealPlayerCount =>
+            dealPlayerCount <= 0 ? MaximumDealPlayers : Math.Max(MinimumDealPlayers, Math.Min(dealPlayerCount, MaximumDealPlayers));
+
+        public void ChooseDealPlayerCount(int count)
+        {
+            dealPlayerCount = Math.Max(MinimumDealPlayers, Math.Min(count, MaximumDealPlayers));
         }
 
         // Sets the game up once, off the table, with the chosen deck. Null when it works, else what went wrong.
@@ -112,7 +131,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 GameDefinitionData data = content.ToData(host.RulesCardPanel.ActiveRuleSet);
                 TrapFloorTemplateFactory.CreateStandardFourPlayer(
-                    new SystemRandomValueSource(), data, template.ActiveMode.StableId, host.GetConsoleLayout());
+                    new SystemRandomValueSource(), data, template.ActiveMode.StableId, host.GetConsoleLayout(), 0, null, DealPlayerCount);
                 return null;
             }
             catch (Exception exception)

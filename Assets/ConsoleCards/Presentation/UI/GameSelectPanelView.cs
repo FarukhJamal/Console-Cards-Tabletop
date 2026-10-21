@@ -16,6 +16,10 @@ namespace ConsoleCards.Presentation.UI
         public bool ShowMode;
         public string ModeName = string.Empty;
         public bool CanChangeMode;
+        // PLACE-1: how many players the table is dealt for (games that let players choose).
+        public bool ShowPlayers;
+        public string PlayersText = string.Empty;
+        public bool CanChangePlayers;
         public string Rules = string.Empty;
         public string Deck = string.Empty;
         public bool CanChangeDeck;
@@ -35,6 +39,7 @@ namespace ConsoleCards.Presentation.UI
     {
         public Action<string> SelectGame;
         public Action<int> CycleMode;
+        public Action<int> CyclePlayers;
         public Action<int> CycleDeck;
         public Action OpenProfile;
         public Action OpenCardArt;
@@ -70,6 +75,11 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button previousModeButton;
         [SerializeField] private Button nextModeButton;
         [SerializeField] private Text modeLabel;
+        [Tooltip("Choose how many players (PLACE-1). Added by Create Missing Gameplay UI Prefabs.")]
+        [SerializeField] private GameObject playersRow;
+        [SerializeField] private Button previousPlayersButton;
+        [SerializeField] private Button nextPlayersButton;
+        [SerializeField] private Text playersLabel;
         [SerializeField] private Text rulesLabel;
         [SerializeField] private Text deckLabel;
         [Tooltip("Choose the deck to play with (L2-5). Added by Create Missing Gameplay UI Prefabs.")]
@@ -130,6 +140,10 @@ namespace ConsoleCards.Presentation.UI
             modeLabel.text = model.ModeName;
             previousModeButton.interactable = model.CanChangeMode;
             nextModeButton.interactable = model.CanChangeMode;
+            if (playersRow != null) playersRow.SetActive(model.ShowPlayers);
+            if (playersLabel != null) playersLabel.text = model.PlayersText;
+            if (previousPlayersButton != null) previousPlayersButton.interactable = model.CanChangePlayers;
+            if (nextPlayersButton != null) nextPlayersButton.interactable = model.CanChangePlayers;
             rulesLabel.text = model.Rules;
             deckLabel.text = model.Deck;
             if (previousDeckButton != null) previousDeckButton.interactable = model.CanChangeDeck;
@@ -148,6 +162,8 @@ namespace ConsoleCards.Presentation.UI
             closeButton.onClick.AddListener(HandleClose);
             previousModeButton.onClick.AddListener(HandlePreviousMode);
             nextModeButton.onClick.AddListener(HandleNextMode);
+            if (previousPlayersButton != null) previousPlayersButton.onClick.AddListener(HandlePreviousPlayers);
+            if (nextPlayersButton != null) nextPlayersButton.onClick.AddListener(HandleNextPlayers);
             if (previousDeckButton != null) previousDeckButton.onClick.AddListener(HandlePreviousDeck);
             if (nextDeckButton != null) nextDeckButton.onClick.AddListener(HandleNextDeck);
             profileButton.onClick.AddListener(HandleProfile);
@@ -196,6 +212,8 @@ namespace ConsoleCards.Presentation.UI
             Clear(closeButton);
             Clear(previousModeButton);
             Clear(nextModeButton);
+            Clear(previousPlayersButton);
+            Clear(nextPlayersButton);
             Clear(previousDeckButton);
             Clear(nextDeckButton);
             Clear(profileButton);
@@ -215,6 +233,8 @@ namespace ConsoleCards.Presentation.UI
         private void HandleSelectGame(string id) => actions?.SelectGame?.Invoke(id);
         private void HandlePreviousMode() => actions?.CycleMode?.Invoke(-1);
         private void HandleNextMode() => actions?.CycleMode?.Invoke(1);
+        private void HandlePreviousPlayers() => actions?.CyclePlayers?.Invoke(-1);
+        private void HandleNextPlayers() => actions?.CyclePlayers?.Invoke(1);
         private void HandlePreviousDeck() => actions?.CycleDeck?.Invoke(-1);
         private void HandleNextDeck() => actions?.CycleDeck?.Invoke(1);
         private void HandleProfile() => actions?.OpenProfile?.Invoke();
