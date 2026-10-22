@@ -1562,6 +1562,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.ShowMessage(
                     $"ROUND {host.trapFloorTurnState.CurrentRound} — "
                     + $"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} turn.{reactivated}{setAside}");
+                ShowNextRoundEffectsPopup(host.trapFloorTurnState.ActivePlayerId); // NEXT-1
             }
             else if (host.trapFloorTurnState.IsCurrentFloorFailed)
             {
@@ -1584,6 +1585,7 @@ namespace ConsoleCards.Presentation.Composition
                     $"{skip}{FormatPlayerName(next).ToUpperInvariant()}'S TURN{effects}: draw up to {handLimit} Controller Cards "
                         + "and 3 Abilities to buy, then move or use an Ability.",
                     FeedbackSeverity.Info);
+                ShowNextRoundEffectsPopup(next); // NEXT-1
             }
 
             // KEYS-1: a player knocked out may leave everyone still in on the Grand Exit (not only a move wins).
@@ -5020,6 +5022,53 @@ namespace ConsoleCards.Presentation.Composition
             int pending = PendingEndTurnEffects(playerId, null);
             if (pending > 0) chips += $"  · {pending} TRAP{(pending == 1 ? string.Empty : "S")} WAITING";
             return chips;
+        }
+
+        // NEXT-1 (owner, 2026-10-23: the next-round effect popup): a Blind, Slow, Stuck or Overcharged effect on the turn
+        // player shows again at their turn start, as a centre popup with OK. Event-time only.
+        private void ShowNextRoundEffectsPopup(PlayerId player)
+        {
+            if (host.runtimeUi == null
+                || host.trapFloorAbilityResolutionState == null
+                || host.trapFloorTurnState == null
+                || host.trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn
+                || player.IsEmpty)
+            {
+                return;
+            }
+
+            int round = host.trapFloorTurnState.CurrentRound;
+            List<string> lines = new List<string>(3);
+            if (host.trapFloorAbilityResolutionState.TryGetBlindStatus(player, round, out _))
+            {
+                lines.Add("BLIND — no Controller Cards drawn this turn. Throw the d4: you may move only in the direction it "
+                    + "shows (the lit tiles).");
+            }
+
+            if (host.trapFloorAbilityResolutionState.TryGetSlowStatus(player, round, out TrapFloorSlowStatusState slow)
+                && slow.MovementModifier != 0)
+            {
+                int tiles = Math.Abs(slow.MovementModifier);
+                string tileWord = tiles == 1 ? "tile" : "tiles";
+                lines.Add(slow.MovementModifier > 0
+                    ? $"OVERCHARGED — you may move {tiles} {tileWord} more this turn."
+                    : $"SLOW — you move {tiles} {tileWord} less this turn.");
+            }
+
+            if (host.trapFloorAbilityResolutionState.TryGetStickyStatus(player, round, out _))
+            {
+                lines.Add("STUCK — your pawn cannot move this turn. You may still use an Ability, then End Turn.");
+            }
+
+            if (lines.Count == 0) return;
+            Action close = () => host.runtimeUi?.CloseTabletopPopup();
+            host.runtimeUi.ShowContextMenu(
+                new Vector2((Screen.width * 0.5f) - 200f, Screen.height * 0.66f),
+                $"{FormatPlayerName(player).ToUpperInvariant()} — THIS TURN",
+                string.Join("\n", lines),
+                new[] { new PopupActionOption("OK", true, close) },
+                close,
+                _ => close());
         }
 
         internal string CurrentTrapFloorPlayerStatesText()
