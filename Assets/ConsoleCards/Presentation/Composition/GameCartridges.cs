@@ -159,6 +159,12 @@ namespace ConsoleCards.Presentation.Composition
         /// <summary>The grid the game's board is drawn with (false: the game has no board grid).</summary>
         bool TryGetBoardGrid(out GridDefinitionData grid);
 
+        /// <summary>
+        /// Rows and columns taken off the board grid (MAT-2: Trap Floor's smaller floors). The board is drawn this
+        /// many spaces bigger, with the grid's tiles from its first row and column; the extra spaces stay empty.
+        /// </summary>
+        int BoardRemovedSpaces { get; }
+
         /// <summary>A board piece's view was made (the game may mark it, for example for move targets).</summary>
         void OnBoardPieceViewCreated(TabletopObjectId objectId, CardVisualReferences references);
 
@@ -456,6 +462,8 @@ namespace ConsoleCards.Presentation.Composition
             grid = null;
             return false;
         }
+
+        public int BoardRemovedSpaces => 0;
 
         public void OnBoardPieceViewCreated(TabletopObjectId objectId, CardVisualReferences references)
         {

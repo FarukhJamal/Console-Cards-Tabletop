@@ -374,6 +374,10 @@ namespace ConsoleCards.Presentation.Composition
             return grid != null;
         }
 
+        // MAT-2 (owner, 2026-10-22: "board 6x6 visually and cards on 5x5"): each floor after the first has one row and
+        // one column fewer; the board keeps the first floor's size, and the removed spaces stay empty.
+        public int BoardRemovedSpaces => host.trapFloorTemplate != null ? Math.Max(0, host.trapFloorTemplate.FloorIndex) : 0;
+
         // Floor tiles light as move targets (Rush, Dodge, Spring, Crane).
         public void OnBoardPieceViewCreated(TabletopObjectId objectId, CardVisualReferences references)
         {

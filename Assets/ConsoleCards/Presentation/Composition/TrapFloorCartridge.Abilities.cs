@@ -139,7 +139,9 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (host.runtimeUi == null) return;
             TrapFloorAbilityEffect effect = TrapFloorAbilityResolutionService.ResolveEffect(definition.EffectMetadata);
-            PlayerId player = insertion.ActorPlayerId;
+            // USE-1 (owner, 2026-10-22: "why can't I use my Ability when I didn't move"): the turn is judged by the
+            // Console's owner, not by the seat shown on screen (one screen plays every seat).
+            PlayerId player = insertion.ConsoleOwnerPlayerId.IsEmpty ? insertion.ActorPlayerId : insertion.ConsoleOwnerPlayerId;
             bool usable = CanUseAbilityNow(effect, insertion.CardInstanceId, player, out string what);
             string name = definition.DisplayName;
             string title = $"USE {name.ToUpperInvariant()}?";

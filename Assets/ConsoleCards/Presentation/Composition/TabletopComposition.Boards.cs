@@ -110,25 +110,31 @@ namespace ConsoleCards.Presentation.Composition
         private void ApplyTemplateBoardMat(BoxCollider boardCollider)
         {
             if (boardMatPrefab == null || !ActiveCartridge.TryGetBoardGrid(out GridDefinitionData floor)) return;
-            // MAT-1 (owner, 2026-10-22: "I still can see an empty row and column"): the mat always has the floor's
-            // columns and rows, so a smaller floor (5x5, 4x4, 3x3) has no empty spaces. A resize from the board menu
-            // keeps only its space size here.
+            // MAT-2 (owner, 2026-10-22: "board 6x6 visually and cards on 5x5"): the mat keeps the first floor's size.
+            // A smaller floor's tiles lie on its spaces from the first row and column; the removed row(s) and
+            // column(s) stay as empty spaces. A resize from the board menu keeps only its space size here.
+            int removed = Math.Max(0, ActiveCartridge.BoardRemovedSpaces);
             BoardGrid grid = templateBoardGrid.HasValue
-                ? templateBoardGrid.Value.WithSize(floor.Columns, floor.Rows)
+                ? templateBoardGrid.Value.WithSize(floor.Columns + removed, floor.Rows + removed)
                 : new BoardGrid(
-                    floor.Columns,
-                    floor.Rows,
+                    floor.Columns + removed,
+                    floor.Rows + removed,
                     (float)floor.CellWidth,
                     (float)floor.CellHeight,
                     (float)Math.Max(floor.HorizontalSpacing, 0d),
                     BoardGrid.Standard.Frame);
-            Debug.Log($"[Board] The game board mat is {grid.Columns}x{grid.Rows} for a {floor.Columns}x{floor.Rows} floor.", this);
             if (templateBoardMat == null) templateBoardMat = CreateBoardMatInstance($"{ActiveCartridge.DisplayName} Board Mat", grid);
             else templateBoardMat.Apply(grid);
             templateBoardMat.SetSurfaceEnabled(false); // the board's own surface holds the floor tiles
             Transform board = boardCollider.transform;
             Vector3 top = board.TransformPoint(boardCollider.center + (Vector3.up * (boardCollider.size.y * 0.5f)));
-            templateBoardMat.transform.SetPositionAndRotation(top - (Vector3.up * templateBoardMat.Thickness), board.rotation);
+            // MAT-2: the mat's centre moves half the removed spaces along the grid's columns and rows, so its first
+            // space stays under the floor's first tile.
+            Vector3 shift = (coordinateConverter.WorldXAxisPerTableUnit * (float)(removed * floor.ColumnPitch * 0.5d))
+                + (coordinateConverter.WorldYAxisPerTableUnit * (float)(removed * floor.RowPitch * 0.5d));
+            templateBoardMat.transform.SetPositionAndRotation(
+                top + shift - (Vector3.up * templateBoardMat.Thickness),
+                board.rotation);
             if (gameBoardVisualRoot != null) gameBoardVisualRoot.gameObject.SetActive(false);
         }
 
