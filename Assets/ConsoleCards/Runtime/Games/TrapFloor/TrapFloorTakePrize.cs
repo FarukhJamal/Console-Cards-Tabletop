@@ -71,6 +71,20 @@ namespace ConsoleCards.Games.TrapFloor
         public TableCoordinate PawnPosition { get; }
     }
 
+    /// <summary>PRIZE-2: moves a taken prize's tile card, which no pawn stands on any more, to its taker.</summary>
+    public sealed class TrapFloorCollectPrizeCommand : ITabletopCommand
+    {
+        public TrapFloorCollectPrizeCommand(CommandContext context, TabletopObjectId floorCardId)
+        {
+            if (floorCardId.IsEmpty) throw new ArgumentException("Floor Card ID cannot be empty.", nameof(floorCardId));
+            Context = context;
+            FloorCardId = floorCardId;
+        }
+
+        public CommandContext Context { get; }
+        public TabletopObjectId FloorCardId { get; }
+    }
+
     public readonly struct TrapFloorTakePrizeResult
     {
         private TrapFloorTakePrizeResult(
@@ -125,9 +139,9 @@ namespace ConsoleCards.Games.TrapFloor
     /// <summary>
     /// Takes the prize on a revealed Ability or Friend tile (doc 18 §15.4, G2a). The active Player's pawn must stand
     /// on the tile. An Ability with a cost needs the exact payment placed in the Player's Console side slots; a
-    /// Friend, or an Ability with no cost yet, is free. A copy of the card goes to the Player's Hand, or to the
-    /// Action stack beside the Console when the Hand is at its limit, and the tile becomes a hole. The Player
-    /// standing there is safe and walks off on a later turn.
+    /// Friend, or an Ability with no cost yet, is free. PRIZE-1/2 (owner, 2026-10-22): the tile card itself becomes the
+    /// taker's, but stays under their pawn (they would fall otherwise); once no pawn stands on it, CollectTakenPrize
+    /// moves it to their Hand, or beside the Console when the Hand is at its limit, and the cell is a gap from then on.
     /// </summary>
     public sealed class TrapFloorTakePrizeUseCase
     {
@@ -201,66 +215,105 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.PawnNotOnTile);
             if (floorCard.Content.AuthoredCard == null)
                 return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.CardDefinitionMissing);
-            if (matchState.ContainsObject(command.GrantedCardId))
-                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.GrantedCardIdAlreadyExists);
+            if (!matchState.Cards.TryGetValue(command.FloorCardId, out CardInstanceState tileCard)
+                || !tileCard.BaseState.ContainerId.IsEmpty)
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.FloorCardMissingOrInvalid);
 
             TrapFloorTakePrizeError paymentError = ValidatePayment(matchState, player, floorCard.Content, command);
             if (paymentError != TrapFloorTakePrizeError.None)
                 return Failure(CommandResultStatus.Rejected, paymentError);
 
-            if (!TryResolveDestination(template, matchState, player, out ContainerState destination, out bool placedInHand))
-                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.DestinationMissing);
             if (matchState.Revision == long.MaxValue)
                 return Failure(CommandResultStatus.Conflict, TrapFloorTakePrizeError.RevisionOverflow);
 
+            // PRIZE-2 (owner, 2026-10-22: "the card from the floor is removed when the player moves next, in his next
+            // turn, otherwise that player will fall"): taking pays and makes the card the taker's, but the tile stays
+            // under their pawn. CollectTakenPrize moves it to their Hand once no pawn stands on it.
             long revision = checked(matchState.Revision + 1L);
-            CardInstanceState grantedCard = new CardInstanceState(
-                new TabletopObjectState(
-                    command.GrantedCardId,
-                    floorCard.Content.Id,
-                    TabletopObjectKind.Card,
-                    destination != null ? TabletopPose.Default : player.AbilityOverflowPose,
-                    ContainerId.Empty,
-                    actor,
-                    destination != null ? destination.Visibility : ObjectVisibility.Public,
-                    false),
-                CardFace.FaceUp);
-            ContainerTransferService transfer = new ContainerTransferService();
-            bool holeRecorded = false;
-            try
-            {
-                matchState.AddUncontainedCard(grantedCard);
-                if (destination != null)
-                {
-                    ContainerTransferResult placement = transfer.PlaceIntoContainer(grantedCard.BaseState, destination);
-                    if (!placement.Succeeded)
-                        throw new InvalidOperationException($"Taken prize placement failed: {placement.Error}.");
-                }
-
-                collapseState.RecordTakenPrize(command.FloorCardId, floorCard.Coordinate, actor, revision);
-                holeRecorded = true;
-            }
-            catch
-            {
-                if (holeRecorded) collapseState.RemoveTakenPrize(command.FloorCardId);
-                if (matchState.ContainsObject(grantedCard.BaseState.Id))
-                {
-                    if (destination != null
-                        && grantedCard.BaseState.ContainerId == destination.Id
-                        && destination.Contains(grantedCard.BaseState.Id))
-                        transfer.RemoveFromContainer(grantedCard.BaseState, destination);
-                    matchState.RemoveObject(grantedCard.BaseState.Id);
-                }
-
-                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.MutationFailed);
-            }
-
+            collapseState.RecordTakenPrize(command.FloorCardId, floorCard.Coordinate, actor, revision);
+            tileCard.BaseState.SetOwner(actor);
             ReturnPaymentToControllerDeck(matchState, player, command.PaymentCardIds);
             matchState.AdvanceRevision(command.Context.Id, actor, AuthoritativeActionKind.PurchaseActionOrAbility);
             return TrapFloorTakePrizeResult.Accepted(
                 revision,
                 floorCard,
-                command.GrantedCardId,
+                command.FloorCardId,
+                ContainerId.Empty,
+                false);
+        }
+
+        /// <summary>
+        /// PRIZE-2: a taken prize whose tile no pawn stands on any more leaves the floor for its taker: the tile card
+        /// itself goes into their Hand (or beside their Console when the Hand is full), face up, unlocked, theirs.
+        /// Amends the move that took the pawn off (no Undo step of its own).
+        /// </summary>
+        public TrapFloorTakePrizeResult CollectTakenPrize(MatchState matchState, TrapFloorCollectPrizeCommand command)
+        {
+            if (matchState == null) return Failure(CommandResultStatus.Invalid, TrapFloorTakePrizeError.MatchRequired);
+            if (command == null) return Failure(CommandResultStatus.Invalid, TrapFloorTakePrizeError.CommandRequired);
+            if (command.Context.MatchId != matchState.Id)
+                return Failure(CommandResultStatus.Invalid, TrapFloorTakePrizeError.MatchIdMismatch);
+            if (matchState.GameTemplateId != template.Template.Id || collapseState.MatchId != matchState.Id)
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.MatchTemplateMismatch);
+            if (!collapseState.TryGetCollapsedFloor(command.FloorCardId, out TrapFloorCollapsedFloorState taken)
+                || !taken.IsTakenPrize
+                || !template.TryGetFloorCardState(matchState, command.FloorCardId, out TrapFloorFloorCardState floorCard)
+                || !matchState.Cards.TryGetValue(command.FloorCardId, out CardInstanceState tileCard)
+                || !tileCard.BaseState.ContainerId.IsEmpty
+                || !tileCard.BaseState.IsUserLocked)
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.FloorCardMissingOrInvalid);
+            PlayerId taker = taken.CollapsedByPlayerId;
+            if (!TryGetPlayerSetup(matchState, taker, out TrapFloorPlayerSetupDefinition player))
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.PlayerSetupMissing);
+            if (!TryResolveDestination(template, matchState, player, out ContainerState destination, out bool placedInHand))
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.DestinationMissing);
+            if (matchState.Revision == long.MaxValue)
+                return Failure(CommandResultStatus.Conflict, TrapFloorTakePrizeError.RevisionOverflow);
+
+            TabletopObjectState tile = tileCard.BaseState;
+            TabletopPose previousPose = tile.Pose;
+            ObjectVisibility previousVisibility = tile.Visibility;
+            PhysicalObjectState previousPhysical = tile.PhysicalState;
+            ContainerTransferService transfer = new ContainerTransferService();
+            try
+            {
+                tile.SetUserLocked(false);
+                tile.SetOwner(taker);
+                tile.SetVisibility(destination != null ? destination.Visibility : ObjectVisibility.Public);
+                tile.SetPhysicalState(null);
+                if (destination != null)
+                {
+                    ContainerTransferResult placement = transfer.PlaceIntoContainer(tile, destination);
+                    if (!placement.Succeeded)
+                        throw new InvalidOperationException($"Taken prize placement failed: {placement.Error}.");
+                }
+                else
+                {
+                    tile.SetPose(player.AbilityOverflowPose);
+                }
+
+                tileCard.SetFace(CardFace.FaceUp);
+            }
+            catch
+            {
+                if (destination != null && tile.ContainerId == destination.Id && destination.Contains(tile.Id))
+                    transfer.RemoveFromContainer(tile, destination);
+                tile.SetPose(previousPose);
+                tile.SetVisibility(previousVisibility);
+                tile.SetUserLocked(true);
+                tile.SetPhysicalState(previousPhysical);
+                return Failure(CommandResultStatus.Rejected, TrapFloorTakePrizeError.MutationFailed);
+            }
+
+            long revision = matchState.AdvanceRevision(
+                command.Context.Id,
+                taker,
+                AuthoritativeActionKind.PurchaseActionOrAbility,
+                AuthoritativeActionRecordMode.None);
+            return TrapFloorTakePrizeResult.Accepted(
+                revision,
+                floorCard,
+                command.FloorCardId,
                 destination != null ? destination.Id : ContainerId.Empty,
                 placedInHand);
         }

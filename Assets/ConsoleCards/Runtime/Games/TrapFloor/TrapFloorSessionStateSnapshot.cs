@@ -29,6 +29,7 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly TrapFloorTurnPhase turnPhase;
         private readonly int activeTurnPlayerIndex;
         private readonly int floorOperatorIndex;
+        private readonly int floorResumeIndex; // IMP-1
         private readonly PlayerId[] eliminatedTurnPlayerIds;
         private readonly bool isCurrentFloorFailed;
         private readonly TrapFloorTrapResolutionRecord[] trapResolutionRecords;
@@ -68,6 +69,7 @@ namespace ConsoleCards.Games.TrapFloor
             turnPhase = turnPosition.Phase;
             activeTurnPlayerIndex = turnPosition.ActivePlayerIndex;
             floorOperatorIndex = turnPosition.FloorOperatorIndex;
+            floorResumeIndex = turnPosition.FloorResumeIndex;
             eliminatedTurnPlayerIds = turn.CopyEliminatedPlayerIds();
             isCurrentFloorFailed = turn.IsCurrentFloorFailed;
             trapResolutionRecords = abilityResolution.CopyTrapRecords();
@@ -136,7 +138,8 @@ namespace ConsoleCards.Games.TrapFloor
                 activeTurnPlayerIndex,
                 floorOperatorIndex,
                 eliminatedTurnPlayerIds,
-                isCurrentFloorFailed);
+                isCurrentFloorFailed,
+                floorResumeIndex);
             TrapFloorAbilityResolutionState abilityResolution =
                 new TrapFloorAbilityResolutionState(MatchId);
             abilityResolution.Restore(

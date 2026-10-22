@@ -109,7 +109,7 @@ MonoBehaviour:
       hintHelper: 
       modeStableIds: []
     - stableId: tf-turn-take
-      text: 'Standing on a face-up Ability or Friend? You may take it: pay the Ability''s cost (a Friend is free). It goes to your Hand, or beside your Console if your Hand is full, and the tile becomes a hole. You are safe there and walk off next turn. Skip it and the next player to land there may take it.'
+      text: 'Standing on a face-up Ability or Friend? You may take it: pay the Ability''s cost (a Friend is free). The tile card is yours: it stays under your pawn (you are safe there) and comes off the floor into your Hand (or beside your Console if your Hand is full) when you move off it next turn. Its space then stays empty. Skip it and the next player to land there may take it.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -124,7 +124,7 @@ MonoBehaviour:
     numbered: 1
     entries:
     - stableId: tf-floor-roll
-      text: 'After every player has had a turn, one player rolls the two dice (first die = column, second die = row) and that tile collapses: it is a hole from then on. Any player lifts the tile off and sets it beside the board; if nobody does, End Floor Turn removes it. Whoever rolls changes each round.'
+      text: 'After every player has had a turn, one player rolls the two dice (first die = column, second die = row) and that tile collapses: it is a hole from then on, and a player standing on it falls and is out for the rest of this floor. Any player lifts the tile off and sets it beside the board; if nobody does, End Floor Turn removes it. Whoever rolls changes each round.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -138,7 +138,7 @@ MonoBehaviour:
       - trap-floor-mode-easy
       - trap-floor-mode-hard
     - stableId: tf-floor-impossible
-      text: 'Turns go player, floor, player, floor. The floor starts collapsing once the first player exits.'
+      text: 'Once the first player escapes, turns go player, floor, player, floor: the players roll the floor dice after every player turn.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -327,14 +327,14 @@ MonoBehaviour:
       modeStableIds:
       - trap-floor-mode-impossible
     - stableId: tf-goal-win-mode
-      text: 'Win mode: {value}.'
+      text: 'Win mode: chosen in New table… (Regular, Team or Survival).'
       settingKind: 3
       settingKey: game.win-mode
       value: 'Team'
       displayValue: 'Team, one player must escape'
       modeStableIds: []
     - stableId: tf-goal-exit-roll
-      text: 'When the Keys are collected, roll 2d6 to place the Exit. From then on every Trap triggers again, and a prize you take leaves a hole.'
+      text: 'Survival: once the Grand Exit is face up, stepping on a tile triggers it again, and prizes (Abilities, Friends) can no longer be taken.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -346,7 +346,7 @@ MonoBehaviour:
       hintHelper: 
       modeStableIds: []
     - stableId: tf-goal-secret-exit
-      text: 'Exits are taken by landing on them. Grand Exit: once the team has the Keys, the floor is won when every player still in stands on it. Secret Exit: a player who claimed a Key and lands on it wins the floor at once. A won or lost floor ends: everyone comes back and the next, smaller floor is dealt fresh (Avatars stay; Hands, Consoles and Abilities are dealt again). Win the last floor (3×3) to win the game.'
+      text: 'Exits are taken by landing on them. Regular: once the team has the Keys, the floor is won when every player still in stands on the Grand Exit, and a player holding a Key who lands on the Secret Exit wins the floor at once. Team: one player escaping wins. Survival: every player still in must escape (an escaped pawn leaves the floor) and the Grand Exit needs 3 Keys. A won or lost floor ends: everyone comes back and the next, smaller floor is dealt fresh (Avatars stay; Hands, Consoles and Abilities are dealt again). Win the last floor (3×3) to win the game.'
       settingKind: 0
       settingKey: 
       value: ''

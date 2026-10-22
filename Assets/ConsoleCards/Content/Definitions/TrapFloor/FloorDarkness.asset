@@ -26,4 +26,4 @@ MonoBehaviour:
   orientation: 0
   preferredConsolePlacement: 
   tags: [trap-floor, floor-content, blind-trap]
-  effectMetadata: 'trap-effect-blind-next-round;d4-directions=1:Up,2:Right,3:Down,4:Left'
+  effectMetadata: 'trap-effect-blind-next-round;d4-directions=1:Left,2:Down,3:Right,4:Up'

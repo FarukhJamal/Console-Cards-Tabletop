@@ -238,7 +238,26 @@ namespace ConsoleCards.Games.TrapFloor
     public sealed class TrapFloorBeginCollapseCommand : ITabletopCommand
     {
         public TrapFloorBeginCollapseCommand(CommandContext context) { Context = context; }
+
+        /// <summary>
+        /// COLLAPSE-3 (owner, 2026-10-21): the floor turn waits for the dice by itself, so the collapse can begin
+        /// after the throw. The dice states from before that throw then count as the launch, so the throw resolves it.
+        /// </summary>
+        public TrapFloorBeginCollapseCommand(
+            CommandContext context,
+            PhysicalObjectState xAxisLaunchState,
+            PhysicalObjectState yAxisLaunchState)
+        {
+            Context = context;
+            XAxisLaunchState = xAxisLaunchState;
+            YAxisLaunchState = yAxisLaunchState;
+            HasLaunchStates = true;
+        }
+
         public CommandContext Context { get; }
+        public bool HasLaunchStates { get; }
+        public PhysicalObjectState XAxisLaunchState { get; }
+        public PhysicalObjectState YAxisLaunchState { get; }
     }
 
     public sealed class TrapFloorResolveCollapseCommand : ITabletopCommand
@@ -363,8 +382,8 @@ namespace ConsoleCards.Games.TrapFloor
             long revision = checked(matchState.Revision + 1L);
             state.Begin(
                 command.Context.RequestedByPlayerId,
-                xAxisDie.BaseState.PhysicalState,
-                yAxisDie.BaseState.PhysicalState);
+                command.HasLaunchStates ? command.XAxisLaunchState : xAxisDie.BaseState.PhysicalState,
+                command.HasLaunchStates ? command.YAxisLaunchState : yAxisDie.BaseState.PhysicalState);
             activityFeed.RecordFloorfallTriggered(
                 revision,
                 command.Context.RequestedByPlayerId,

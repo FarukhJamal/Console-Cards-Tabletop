@@ -155,9 +155,10 @@ namespace ConsoleCards.Presentation.Composition
                     matchState.Id,
                     trapFloorTemplate.ActiveMode.RequiredKeyCount,
                     trapFloorTemplate.ActiveMode.Behavior);
+                TrapFloorGame.ApplyPendingTableChoices(); // MODE-1 / DIR-1: the choices made for this new table
                 trapFloorTurnState = new TrapFloorTurnState(
                     matchState.Id,
-                    activeSession.Request.ActivePlayerIds);
+                    TrapFloorGame.OrderedTurnPlayers(activeSession.Request.ActivePlayerIds)); // DIR-1
                 trapFloorAbilityResolutionState =
                     new TrapFloorAbilityResolutionState(matchState.Id);
             }

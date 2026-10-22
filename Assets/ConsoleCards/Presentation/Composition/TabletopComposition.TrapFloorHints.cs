@@ -202,8 +202,10 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 if (roll == shownRoll) return;
+                // FIX-3 (owner, 2026-10-22: "already removed floor tile was marked for collapse"): every recorded roll's
+                // tile is already gone (collapsed, or the one just collapsed), so the hint marks nothing; the tile the
+                // dice point at before Collapse is marked by the floor turn itself (ROUND-1).
                 shownRoll = roll;
-                owner.TrapFloorGame.ShowFloorfallTarget(roll.FloorCardId);
             }
 
             public override HintEntry Explain(string trigger, string context, HintLevel level)
@@ -218,7 +220,7 @@ namespace ConsoleCards.Presentation.Composition
 
                 return TrapFloorCartridge.HelperReminder(TrapFloorCartridge.CollapseHintId, trigger, context,
                     $"The floor dice rolled {roll.XAxisResult} and {roll.YAxisResult}: column {roll.XAxisResult}, "
-                    + $"row {roll.YAxisResult} is a hole now (marked). Moves cannot cross holes.",
+                    + $"row {roll.YAxisResult} is a hole now. Moves cannot cross holes.",
                     TrapFloorCartridge.HelperHintPriority);
             }
 

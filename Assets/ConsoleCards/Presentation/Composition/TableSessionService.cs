@@ -292,6 +292,13 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             string replacementName = ReplacementDisplayName(selection);
+            // MODE-1 / DIR-1: Cancel keeps the game in play, so the New table… choices waiting for the deal are dropped.
+            Action CancelReplacement = () =>
+            {
+                host.TrapFloorGame.PendingWinMode = null;
+                host.TrapFloorGame.PendingAnticlockwise = null;
+                host.ContextMenus.CloseContextMenu();
+            };
             host.runtimeUi.ShowContextMenu(
                 new Vector2(Screen.width * 0.5f, Screen.height * 0.5f),
                 "REPLACE CURRENT TABLE?",
@@ -307,9 +314,9 @@ namespace ConsoleCards.Presentation.Composition
                     new PopupActionOption(
                         "Cancel",
                         true,
-                        host.ContextMenus.CloseContextMenu),
+                        CancelReplacement),
                 },
-                host.ContextMenus.CloseContextMenu,
+                CancelReplacement,
                 host.ContextMenus.DismissPopupFromSecondary);
         }
 

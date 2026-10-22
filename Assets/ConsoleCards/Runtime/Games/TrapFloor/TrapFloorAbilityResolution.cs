@@ -406,6 +406,23 @@ namespace ConsoleCards.Games.TrapFloor
                 TrapFloorTrapResolutionDisposition.Pending));
         }
 
+        // MODE-2 (owner, 2026-10-22, Survival): once the Grand Exit is face up, stepping on a Trap tile triggers it again:
+        // a new waiting record for the player who stepped on it (TryGetTrap reads the newest).
+        internal void RecordRetriggeredTrap(
+            long acceptedRevision,
+            PlayerId affectedPlayerId,
+            TrapFloorFloorCardState floorCard)
+        {
+            if (floorCard == null) throw new ArgumentNullException(nameof(floorCard));
+            if (floorCard.Content.Category != TrapFloorFloorContentCategory.Trap) return;
+            trapRecords.Add(new TrapFloorTrapResolutionRecord(
+                floorCard.ObjectId,
+                affectedPlayerId,
+                acceptedRevision,
+                floorCard.Content,
+                TrapFloorTrapResolutionDisposition.Pending));
+        }
+
         public bool TryGetTrap(
             TabletopObjectId floorCardId,
             out TrapFloorTrapResolutionRecord record)
@@ -1414,6 +1431,40 @@ namespace ConsoleCards.Games.TrapFloor
                     return hashCode;
                 }
             }
+        }
+
+        /// <summary>
+        /// MODE-2 (owner, 2026-10-22, Survival): a face-up Trap tile stepped on again triggers again for that player
+        /// (a new waiting Trap; Resolve Trap or End Turn applies it). False when the tile is not a face-up Trap or one
+        /// is already waiting there. Amends the move's Undo step.
+        /// </summary>
+        public bool RetriggerRevealedTrap(
+            MatchState matchState,
+            CommandContext context,
+            TabletopObjectId floorCardId,
+            PlayerId affectedPlayerId)
+        {
+            if (matchState == null
+                || template == null
+                || matchState.Id != state.MatchId
+                || affectedPlayerId.IsEmpty
+                || !template.TryGetFloorCardState(matchState, floorCardId, out TrapFloorFloorCardState floorCard)
+                || !floorCard.IsRevealed
+                || floorCard.Content.Category != TrapFloorFloorContentCategory.Trap
+                || (state.TryGetTrap(floorCardId, out TrapFloorTrapResolutionRecord latest) && latest.IsPending)
+                || matchState.Revision == long.MaxValue)
+            {
+                return false;
+            }
+
+            long revision = checked(matchState.Revision + 1L);
+            state.RecordRetriggeredTrap(revision, affectedPlayerId, floorCard);
+            matchState.AdvanceRevision(
+                context.Id,
+                affectedPlayerId,
+                AuthoritativeActionKind.TrapFloorReveal,
+                AuthoritativeActionRecordMode.None);
+            return true;
         }
 
         public TrapFloorTurnAdvanceResult ResolveSupportedTrap(

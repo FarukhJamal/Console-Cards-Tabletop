@@ -104,13 +104,18 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (host.trapFloorTemplate == null || host.trapFloorTemplate.IsLastFloor) return "Play Again";
             int rows = NextFloorSize(out int columns);
-            return $"Deal Next Floor ({columns}×{rows})";
+            return $"Start next phase ({columns}×{rows})"; // FLOOR-2
         }
 
-        internal string FloorEndedChoiceText()
+        internal string FloorEndedChoiceText() => FloorEndedChoiceText(false);
+
+        // MODE-1: a Survival floor where someone escaped is won even when the rest are out.
+        internal string FloorEndedChoiceText(bool won)
         {
             return host.trapFloorTemplate == null || host.trapFloorTemplate.IsLastFloor
-                ? "That was the last floor: the game is lost. Choose Play Again to start over."
+                ? won
+                    ? "That was the last floor: the game is won. Choose Play Again to start over."
+                    : "That was the last floor: the game is lost. Choose Play Again to start over."
                 : $"Choose {FloorEndedActionLabel()} in the turn menu.";
         }
 
@@ -121,9 +126,11 @@ namespace ConsoleCards.Presentation.Composition
             TrapFloorTemplateDefinition floor = host.trapFloorTemplate;
             int number = floor.FloorIndex + 1;
             bool last = floor.IsLastFloor;
+            // FLOOR-2 (owner, 2026-10-22: "popup with Starting next phase and OK"): won or lost is the first line.
             string title = last
                 ? won ? "YOU WIN THE GAME" : "GAME OVER"
-                : won ? $"FLOOR {number} WON" : $"FLOOR {number} LOST";
+                : "STARTING NEXT PHASE";
+            string result = won ? $"Floor {number} won." : $"Floor {number} lost.";
             string next;
             if (last)
             {
@@ -134,7 +141,7 @@ namespace ConsoleCards.Presentation.Composition
             else
             {
                 int rows = NextFloorSize(out int columns);
-                next = $"Next: Floor {number + 1} of {floor.FloorCount}, {columns}×{rows}, dealt fresh. Knocked-out players "
+                next = $"{result} Next: Floor {number + 1} of {floor.FloorCount}, {columns}×{rows}, dealt fresh. Knocked-out players "
                     + "come back; Hands, Consoles and Abilities are dealt again (Avatars stay) and the Controller decks "
                     + "are shuffled. This cannot be undone.";
             }
@@ -148,7 +155,7 @@ namespace ConsoleCards.Presentation.Composition
                 new[]
                 {
                     new PopupActionOption(
-                        FloorEndedActionLabel(),
+                        last ? FloorEndedActionLabel() : "OK",
                         true,
                         () =>
                         {
@@ -166,6 +173,8 @@ namespace ConsoleCards.Presentation.Composition
         private void DealFloor(int floorIndex)
         {
             if (host.activeSession == null) return;
+            PendingWinMode = null; // MODE-1: the next floor keeps this game's win mode and turn direction
+            PendingAnticlockwise = null;
             host.trapFloorNextFloorIndex = floorIndex;
             bool dealt;
             try

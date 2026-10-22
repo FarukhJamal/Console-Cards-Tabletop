@@ -27,6 +27,9 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly HashSet<PlayerId> eliminatedPlayerIds;
         private int activePlayerIndex;
         private int floorOperatorIndex;
+        // IMP-1: in a floor turn between two player turns, the index of the player who plays next (-1: the floor turn
+        // ends the round).
+        private int floorResumeIndex = -1;
 
         public TrapFloorTurnState(MatchId matchId, IEnumerable<PlayerId> participatingPlayerIds)
             : this(
@@ -130,6 +133,35 @@ namespace ConsoleCards.Games.TrapFloor
                 : -1;
         }
 
+        // IMP-1: the restored turn state of a floor turn between players (Undo, Redo).
+        internal TrapFloorTurnState(
+            MatchId matchId,
+            IEnumerable<PlayerId> participatingPlayerIds,
+            int currentRound,
+            TrapFloorTurnPhase phase,
+            int activePlayerIndex,
+            int floorOperatorIndex,
+            IEnumerable<PlayerId> eliminatedPlayerIds,
+            bool isCurrentFloorFailed,
+            int floorResumeIndex)
+            : this(
+                matchId,
+                participatingPlayerIds,
+                currentRound,
+                phase,
+                activePlayerIndex,
+                floorOperatorIndex,
+                eliminatedPlayerIds,
+                isCurrentFloorFailed)
+        {
+            this.floorResumeIndex = !isCurrentFloorFailed
+                && phase == TrapFloorTurnPhase.FloorTurn
+                && floorResumeIndex >= 0
+                && floorResumeIndex < playerOrder.Count
+                    ? floorResumeIndex
+                    : -1;
+        }
+
         public MatchId MatchId { get; }
         public int CurrentRound { get; private set; }
         public TrapFloorTurnPhase Phase { get; private set; }
@@ -171,7 +203,19 @@ namespace ConsoleCards.Games.TrapFloor
                 Phase,
                 activePlayerIndex,
                 floorOperatorIndex,
-                IsCurrentFloorFailed);
+                IsCurrentFloorFailed,
+                floorResumeIndex);
+
+        /// <summary>
+        /// IMP-1 (owner, 2026-10-22, Impossible: "once a player exits the turn order is floor, player, floor, player"):
+        /// while true, a floor turn follows every player turn, and the next player plays after it in the same round.
+        /// The table sets it from the mode and the escapes before each advance (it is derived, so Undo needs nothing).
+        /// </summary>
+        public bool FloorTurnAfterEachPlayer { get; set; }
+
+        /// <summary>IMP-1: a floor turn between two player turns (not the one that ends the round).</summary>
+        public bool IsFloorTurnBetweenPlayers =>
+            !IsCurrentFloorFailed && Phase == TrapFloorTurnPhase.FloorTurn && floorResumeIndex >= 0;
 
         internal void Advance()
         {
@@ -181,6 +225,17 @@ namespace ConsoleCards.Games.TrapFloor
                     throw new InvalidOperationException("A failed Trap Floor round must be completed from Floor Turn.");
 
                 int nextPlayerIndex = FindNextActivePlayerIndex(activePlayerIndex + 1, false);
+                if (nextPlayerIndex >= 0 && FloorTurnAfterEachPlayer)
+                {
+                    // IMP-1: a floor turn between players; the next player still in plays after it (same round). Any
+                    // player rolls, so the operator is simply a player still in.
+                    Phase = TrapFloorTurnPhase.FloorTurn;
+                    activePlayerIndex = -1;
+                    floorOperatorIndex = nextPlayerIndex;
+                    floorResumeIndex = nextPlayerIndex;
+                    return;
+                }
+
                 if (nextPlayerIndex >= 0)
                 {
                     activePlayerIndex = nextPlayerIndex;
@@ -190,7 +245,22 @@ namespace ConsoleCards.Games.TrapFloor
                 Phase = TrapFloorTurnPhase.FloorTurn;
                 activePlayerIndex = -1;
                 floorOperatorIndex = FindNextActivePlayerIndex((CurrentRound - 1) % playerOrder.Count, true);
+                floorResumeIndex = -1;
                 return;
+            }
+
+            if (!IsCurrentFloorFailed && floorResumeIndex >= 0)
+            {
+                // IMP-1: after a floor turn between players, the next player still in plays (same round).
+                int resumeIndex = FindNextActivePlayerIndex(floorResumeIndex, false);
+                floorResumeIndex = -1;
+                if (resumeIndex >= 0)
+                {
+                    Phase = TrapFloorTurnPhase.PlayerTurn;
+                    activePlayerIndex = resumeIndex;
+                    floorOperatorIndex = -1;
+                    return;
+                }
             }
 
             CurrentRound = checked(CurrentRound + 1);
@@ -201,6 +271,7 @@ namespace ConsoleCards.Games.TrapFloor
             Phase = TrapFloorTurnPhase.PlayerTurn;
             activePlayerIndex = FindNextActivePlayerIndex(0, false);
             floorOperatorIndex = -1;
+            floorResumeIndex = -1;
         }
 
         internal PlayerId MarkPlayerEliminatedForCurrentRound(PlayerId playerId)
@@ -220,6 +291,7 @@ namespace ConsoleCards.Games.TrapFloor
                 Phase = TrapFloorTurnPhase.FloorTurn;
                 activePlayerIndex = -1;
                 floorOperatorIndex = -1;
+                floorResumeIndex = -1;
                 return playerId;
             }
 
@@ -249,6 +321,7 @@ namespace ConsoleCards.Games.TrapFloor
             activePlayerIndex = position.ActivePlayerIndex;
             floorOperatorIndex = position.FloorOperatorIndex;
             IsCurrentFloorFailed = position.IsCurrentFloorFailed;
+            floorResumeIndex = position.FloorResumeIndex;
         }
 
         private int FindNextActivePlayerIndex(int startingIndex, bool wrap)
@@ -272,13 +345,15 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorTurnPhase phase,
             int activePlayerIndex,
             int floorOperatorIndex,
-            bool isCurrentFloorFailed)
+            bool isCurrentFloorFailed,
+            int floorResumeIndex = -1)
         {
             Round = round;
             Phase = phase;
             ActivePlayerIndex = activePlayerIndex;
             FloorOperatorIndex = floorOperatorIndex;
             IsCurrentFloorFailed = isCurrentFloorFailed;
+            FloorResumeIndex = floorResumeIndex;
         }
 
         public int Round { get; }
@@ -286,6 +361,7 @@ namespace ConsoleCards.Games.TrapFloor
         public int ActivePlayerIndex { get; }
         public int FloorOperatorIndex { get; }
         public bool IsCurrentFloorFailed { get; }
+        public int FloorResumeIndex { get; }
     }
 
     public enum TrapFloorTurnAdvanceError
@@ -472,7 +548,7 @@ namespace ConsoleCards.Games.TrapFloor
                     context.RequestedByPlayerId);
             }
 
-            bool startsNextRound = state.Phase == TrapFloorTurnPhase.FloorTurn;
+            bool startsNextRound = state.Phase == TrapFloorTurnPhase.FloorTurn && !state.IsFloorTurnBetweenPlayers;
             bool reactivatesPlayers = startsNextRound && state.IsCurrentFloorFailed;
             state.Advance();
             if (startsNextRound)

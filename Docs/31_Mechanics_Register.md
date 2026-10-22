@@ -1,6 +1,6 @@
 # 31 — Mechanics Register
 
-Version 1.48 · 2026-10-21 · Status: living document. Updated after every playtest document (see "How playtest
+Version 1.58 · 2026-10-22 · Status: living document. Updated after every playtest document (see "How playtest
 updates work").
 
 ## What this is
@@ -161,7 +161,9 @@ Change: …
 - **Rule now:** a Trap affects only the player who flips it, on that turn, once. A flipped Trap **waits** on the
   player, so a Reaction (Check, Dodge, Shield) can answer it. **Resolve Trap** applies it, and End Turn applies
   any still waiting. Chains: a Trap that moves a player onto a face-down card flips that card too (each card flips
-  once).
+  once). A Spring or Crane (or a Dodge or Rush) lights the tile to move to; the light stays until the pawn lands
+  there, and a landing elsewhere does not flip and says why (Undo, or Keep move; End Turn still moves the pawn for a
+  Spring or Crane). TRAP-1, 2026-10-21.
 
   | Trap | Effect | Proposed count |
   |---|---|---|
@@ -214,6 +216,8 @@ Change: …
   holds up to 10. A cost is all or nothing, cannot be shared, and may repeat inputs or accept any one of several.
   To pay: choose the cards from your hand, place them in your Console, then **Confirm Payment** in the turn menu
   (Cancel Payment keeps the cards where they are).
+  Any card with the same button as a chosen one pays too, and on one screen anyone may move the cards for the
+  payer; a card that cannot pay says so (BUY-1, 2026-10-21).
 - **Settings:** `controller.hand-size`, `card.cost.<card ID>`
 - **Source:** doc 18 §9, §15.4; doc 22 §6
 - **Open:** whether any game uses Start and Select (left out of the deck for now).
@@ -224,8 +228,10 @@ Change: …
 - **Rule now:** on a face-up Ability or Friend under your pawn, the turn menu offers **Take …**. An Ability is
   paid by its cost (TF-PAYMENT) and used later for free (ABIL-1, owner 2026-10-21); a Friend, or an Ability with no
   cost yet, is free. You may decline: a prize left when your turn ends is not offered to you again while you stay
-  on it (FLOW-1), and the next player who lands there may take it. The card goes to your hand
-  (or beside your Console when the hand is full), and the tile becomes a hole. A prize never eliminates.
+  on it (FLOW-1), and the next player who lands there may take it. The tile card itself becomes
+  yours but stays under your pawn (you would fall otherwise); when your pawn moves off it (your next turn) it comes
+  off the floor into your hand (or beside your Console when the hand is full) and its space stays empty, a gap like a
+  collapsed cell (PRIZE-1, PRIZE-2, owner 2026-10-22: no hole markers any more). A prize never eliminates.
 - **Settings:** `card.cost.<card ID>`
 - **Source:** doc 18 §15.4 (G2a)
 - **Open:** —
@@ -249,7 +255,7 @@ Change: …
   everyone agrees, every deal of the game uses their layout (saved per game and player count).
 - **Drawing Abilities (D4-1, owner 2026-10-21):** no menu button: the player draws 3 from the Ability deck by hand,
   buys any they can pay for (payment cards back into the Controller deck), puts the rest back and shuffles it.
-- **Blind d4 (D4-1):** one d4 lies beside the floor dice for the Blind trap's direction roll.
+- **Blind d4 (D4-1):** one d4 lies beside the floor dice for the Blind trap's direction roll. The d4 reads 1 = Left, 2 = Down, 3 = Right, 4 = Up (D4-2, owner 2026-10-22).
 - **Dice (DICE-1, owner 2026-10-21):** the game never rolls a die. Collapse Floor and Roll Blind Direction ask the
   player to roll (the two floor dice, or the d4) and the result is read once the dice have been thrown and lie
   still; a die beyond the floor, on a hole or cocked is asked for again.
@@ -262,36 +268,44 @@ Change: …
 
 ### TF-KEYS-EXITS · Keys and Exits
 - **Status:** Built, in playtest
-- **Rule now:** collect the required Keys (Easy 1, Hard and Impossible 3) and bring them to the Grand Exit. When
-  all required Keys are collected, roll 2d6 to find the Exit's position (rules text; not in the game yet). Exits
-  are taken by landing (EXITS-1, owner 2026-10-21, team game). **Grand Exit:** once the team has the mode's Keys,
+- **Rule now:** collect the required Keys (Easy 1, Hard and Impossible 3; Survival always 3) and bring them to the
+  Grand Exit (no 2d6 Exit roll). What an escape wins depends on the win mode (TF-WINMODE). Exits are taken by landing (EXITS-1, owner 2026-10-21, team game). **Grand Exit:** once the team has the mode's Keys,
   the floor is won when every player still in stands on it. **Secret Exit:** the turn player who lands on it holding
   a Key they claimed wins the floor at once. On Hard, players may pass Keys to each other (not tracked yet).
+  KEYS-1 (2026-10-21): landing on a revealed Key nobody claimed claims it for the turn player (Claim Key in the menu
+  also claims for the turn player); the Grand Exit is checked after every move and every End Turn, so a player left
+  alone on it wins when the Keys are there; the Key and Exit messages always show.
+  KEYS-3 (owner, 2026-10-22): a Key is a key for everyone: each player may take each Key tile once (a taken Key
+  can be taken again by the others); the team's Keys count each Key tile once.
 - **Settings:** `mode.keys-needed`
 - **Source:** doc 18 §6, §15.8, §15.9
 - **Open:** —
 - **Changes:** 2026-10-09 Grand and Secret Exits; 2026-10-21 taken by landing; Grand Exit needs everyone still in;
   Secret Exit needs one claimed Key.
 
-### TF-ENDGAME · After the Exit is revealed
-- **Status:** Built, in playtest
-- **Rule now:** stepping on any Trap tile triggers it again, including Traps already flipped. Prizes can still be
-  taken; a taken prize tile then acts as a hole.
+### TF-ENDGAME · After the Exit is revealed (Survival)
+- **Status:** Built (MODE-2, 2026-10-22), to be checked
+- **Rule now (owner, 2026-10-22):** Survival only. From the moment the Grand Exit tile is face up, stepping on any tile
+  triggers it again (Traps included, even those already flipped), and prizes (Abilities, Friends) can no longer be
+  taken. There is no 2d6 Exit roll: the Exits are dealt on the floor.
 - **Settings:** —
-- **Source:** doc 18 §15.8, §15.9
+- **Source:** doc 18 §15.8, §15.9; owner 2026-10-22
 - **Open:** —
-- **Changes:** 2026-10-09 owner decisions.
+- **Changes:** 2026-10-09 owner decisions; 2026-10-22 Survival only, starts when the Grand Exit is face up, prizes off.
 
 ### TF-COLLAPSE · Floor collapse
 - **Status:** Built, in playtest
 - **Rule now:** at intervals, 2d6 pick a tile (first die = column, second = row) that becomes a permanent hole. Any
   player lifts the tile off and sets it beside the board; if nobody does, End Floor Turn sets it there (COLLAPSE-2,
   owner 2026-10-21). The lifted tile keeps its own look and is an ordinary card (move, flip, stack); only its
-  space is the hole (FLOW-1). Easy and Hard collapse each round (the floor turn). On Impossible there is no collapse until the first player exits; then the floor
+  space is the hole (FLOW-1). Easy and Hard collapse each round (the floor turn): throwing the two floor dice is
+  enough; the game watches them all floor turn (COLLAPSE-3, 2026-10-21; Collapse Floor still works). On Impossible there is no collapse until the first player exits; then the floor
   collapses at each player's turn. The hint shows the tile the dice point at.
 - **Settings:** —
 - **Source:** doc 18 §7, §15.8, §15.9; doc 23 §10
-- **Open:** exact interval, rerolls and protection; what happens to a player standing on a collapsing tile.
+- **Rule (FALL-1, owner 2026-10-22):** a player whose pawn stands on the tile that collapses falls with it and is out
+  for the rest of this floor (rules card tf-floor-roll). If that leaves nobody in, the floor is lost.
+- **Open:** exact interval, rerolls and protection.
 - **Changes:** 2026-10-09 Impossible collapses only after the first exit; 2026-10-21 the tile is lifted off by a
   player (or by End Floor Turn).
 - **Planned (FLOORS-1, owner 2026-10-21):** win or lose ends the floor; the next floor is dealt fresh one row and
@@ -311,7 +325,8 @@ Change: …
 
 ### TF-ELIMINATION · Elimination
 - **Status:** Built, in playtest
-- **Rule now:** a player is eliminated by a Fall, or by a Spring or Crane sending them off the grid or onto a hole.
+- **Rule now:** a player is eliminated by a Fall, by a Spring or Crane sending them off the grid or onto a hole, or
+  by the floor collapsing under their pawn (FALL-1).
   A knocked-out player is out for the rest of the floor and gets no more turns (owner 2026-10-21, FLOW-1). If every
   player is out, the floor is lost. Knocked-out players come back when the floor ends, won or lost (today a lost
   floor starts the next round with everyone back; FLOORS-1 will deal the next floor instead).
@@ -322,23 +337,34 @@ Change: …
   each round).
 
 ### TF-DIFFICULTY · Difficulty
-- **Status:** Built, in playtest
-- **Rule now:** **Easy:** bring 1 Key to the Grand Exit. **Hard:** all 3 Keys, by any means possible.
-  **Impossible:** all 3 Keys; once a player exits, the floor collapses at each player's turn. Starting Abilities
+- **Status:** Built (IMP-1, 2026-10-22), to be checked
+- **Rule now (owner, 2026-10-22, confirmed):** the difficulty sets what the exits need. **Easy:** bring 1 Key to the
+  Grand Exit. **Hard:** bring all 3 Keys to the Grand Exit, by any means possible (the Keys count for the whole team).
+  **Impossible:** all 3 Keys; once a player escapes, the turn order becomes player, floor, player, floor: after every
+  player turn a player rolls the 2d6 and a tile collapses (never automatic; the players roll). Starting Abilities
   come from the Avatar (Hard adds none).
 - **Settings:** `mode.keys-needed`
-- **Source:** doc 18 §9, §15.8, §15.9
+- **Source:** doc 18 §9, §15.8, §15.9; owner 2026-10-22 (doc 34 §1b)
 - **Open:** —
-- **Changes:** 2026-10-09 split from win mode.
+- **Changes:** 2026-10-09 split from win mode; 2026-10-22 confirmed; Impossible is back (doc 33 D2 reversed).
 
 ### TF-WINMODE · Win mode
-- **Status:** Built, in playtest
-- **Rule now:** chosen separately from difficulty (for example Hard · Team). **Team:** only one player needs to
-  escape. **Survival:** every player must escape.
+- **Status:** Built (MODE-1, MODE-2, 2026-10-22), to be checked. Chosen in New table… (WIN MODE row)
+- **Rule now (owner, 2026-10-22):** chosen at New table…, apart from the difficulty (for example Hard · Team):
+  - **Regular (default):** Grand Exit, the main exit: once the team has the difficulty's Keys, the floor is won when
+    every player still in stands on it. Secret Exit, a bonus exit: a player holding a Key who lands on it escapes now
+    and wins the floor at once.
+  - **Team:** only one player needs to escape. Grand Exit: one player on it with the team's Keys (difficulty) wins.
+    Secret Exit: as in Regular (a bonus instant win for one player).
+  - **Survival:** every player still in must escape (knocked-out players do not count). An escaped pawn leaves the
+    floor and that player takes no more turns this floor. The Grand Exit opens only with 3 Keys. Once the Grand Exit
+    tile is face up, stepping on any tile triggers it again and prizes (Abilities, Friends) can no longer be taken
+    (TF-ENDGAME).
 - **Settings:** `game.win-mode`
-- **Source:** doc 18 §15.8
+- **Source:** doc 18 §15.8; owner 2026-10-22 (doc 34 §1b)
 - **Open:** —
-- **Changes:** 2026-10-09 separate choice.
+- **Changes:** 2026-10-09 separate choice; 2026-10-22 Regular added as the default; Team and Survival are back as
+  options (doc 33 D1 reversed).
 
 ### TF-ENDTURN · End Turn and waiting Traps
 - **Status:** Built, in playtest

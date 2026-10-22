@@ -199,6 +199,8 @@ namespace ConsoleCards.Presentation.Composition
                 command => host.trapFloorObjectiveUseCase.AttemptEscape(host.matchState, command), result => result.Succeeded);
             authority.Register<TrapFloorTakePrizeCommand, TrapFloorTakePrizeResult>(
                 command => host.trapFloorTakePrizeUseCase.Execute(host.matchState, command), result => result.Succeeded);
+            authority.Register<TrapFloorCollectPrizeCommand, TrapFloorTakePrizeResult>( // PRIZE-2
+                command => host.trapFloorTakePrizeUseCase.CollectTakenPrize(host.matchState, command), result => result.Succeeded);
             authority.Register<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(
                 command => host.trapFloorShopUseCase.Execute(host.matchState, command), result => result.Succeeded);
 
@@ -343,7 +345,9 @@ namespace ConsoleCards.Presentation.Composition
         // ---------- floor tiles ----------
 
         // Owner, 2026-10-21: a tile the floor dice collapsed is lifted off the board and is an ordinary card from then
-        // on (move, flip, stack); its cell stays a hole. A taken prize's tile stays in its cell as the hole marker.
+        // on (move, flip, stack); its cell stays a hole. PRIZE-1 (owner, 2026-10-22: "replace all functionality of hole
+        // with removal from floor"): a taken prize's tile leaves the floor for the taker the same way, so no tile is a
+        // hole marker any more; an empty cell is the gap.
         public bool IsFixedBoardPiece(TabletopObjectId objectId) =>
             IsBoardTile(objectId) && !IsLiftedCollapsedTile(objectId);
 
@@ -353,12 +357,16 @@ namespace ConsoleCards.Presentation.Composition
         internal bool IsLiftedCollapsedTile(TabletopObjectId objectId) =>
             host.trapFloorCollapseState != null
             && host.trapFloorCollapseState.TryGetCollapsedFloor(objectId, out TrapFloorCollapsedFloorState collapsed)
-            && !collapsed.IsTakenPrize;
+            && !(collapsed.IsTakenPrize && IsTakenPrizeOnFloor(objectId));
 
-        internal bool IsHoleMarker(TabletopObjectId objectId) =>
-            host.trapFloorCollapseState != null
-            && host.trapFloorCollapseState.TryGetCollapsedFloor(objectId, out TrapFloorCollapsedFloorState collapsed)
-            && collapsed.IsTakenPrize;
+        // PRIZE-2 (owner, 2026-10-22): a taken prize stays on the floor, fixed, under its taker's pawn until they move off.
+        internal bool IsTakenPrizeOnFloor(TabletopObjectId objectId) =>
+            host.matchState != null
+            && host.matchState.Cards.TryGetValue(objectId, out CardInstanceState card)
+            && card.BaseState.ContainerId.IsEmpty
+            && card.BaseState.IsUserLocked;
+
+        internal bool IsHoleMarker(TabletopObjectId objectId) => false; // PRIZE-1: no hole markers
 
         public bool TryGetBoardGrid(out GridDefinitionData grid)
         {
@@ -616,19 +624,9 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (IsGuidedMoveShown())
-            {
-                // R4: a move made while an Ability or a Trap shows where to go is not a regular move.
-                EnsureMoveTurn();
-                guidedMoveThisTurn = true;
-            }
-
-            if (host.trapFloorAbilityResolutionService != null
-                && host.trapFloorAbilityResolutionService.ClearMovementAssistanceIfPawnMoved(host.matchState))
-            {
-                host.abilityTargetPresenter?.ClearCurrent();
-            }
-
+            // TRAP-1 (owner, 2026-10-21: "if I don't do what the trap says the highlighter disappears, also no
+            // warnings"): a move while an Ability or a Trap shows where to go is judged once the pawn has landed
+            // (CheckGuidedMove, in the landing check), not cleared on any move.
             if (host.trapFloorTemplate != null)
             {
                 host.landingCheckPending = true;

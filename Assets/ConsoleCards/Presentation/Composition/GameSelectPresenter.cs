@@ -78,6 +78,8 @@ namespace ConsoleCards.Presentation.Composition
         internal bool OpenGameSelect()
         {
             host.EnsureContentArt();
+            host.TrapFloorGame.PendingWinMode = null; // MODE-1: a choice from a menu left without dealing is dropped
+            host.TrapFloorGame.PendingAnticlockwise = null;
             List<GameSelectEntry> entries = GameSelectEntries();
             if (FindGameSelectEntry(entries, gameSelectEntryId) == null)
             {
@@ -102,6 +104,8 @@ namespace ConsoleCards.Presentation.Composition
                     SelectGame = SelectGameEntry,
                     CycleMode = CycleGameMode,
                     CyclePlayers = CycleGamePlayers,
+                    CycleWinMode = CycleGameWinMode,
+                    CycleTurns = CycleGameTurns,
                     CycleDeck = CycleGameDeck,
                     OpenProfile = () => OpenFromGameSelect(host.ProfilePanel.OpenProfilePanel),
                     OpenCardArt = () => OpenFromGameSelect(host.OpenCardArtPanel),
@@ -143,6 +147,10 @@ namespace ConsoleCards.Presentation.Composition
                 ShowPlayers = showPlayers,
                 PlayersText = PlayersLineText(ChosenPlayerCount(entry)),
                 CanChangePlayers = mostPlayers > fewestPlayers,
+                ShowWinMode = IsTrapFloorEntry(entry),
+                WinModeText = IsTrapFloorEntry(entry) ? TrapFloorCartridge.WinModeName(ChosenWinMode()) : string.Empty,
+                ShowTurns = IsTrapFloorEntry(entry) && ChosenPlayerCount(entry) > 2,
+                TurnsText = TrapFloorCartridge.TurnsName(ChosenAnticlockwise()),
                 Rules = isEmpty ? "No rules: free play with the platform's components." : GameRulesText(entry),
                 Deck = DeckLineText(entry, out bool canChangeDeck),
                 CanChangeDeck = canChangeDeck,
@@ -409,6 +417,40 @@ namespace ConsoleCards.Presentation.Composition
             ShowGameSelect(string.Empty, entries);
         }
 
+        // ---------- the win mode (MODE-1) and the turn direction (DIR-1), owner 2026-10-22 ----------
+
+        private int gameSelectWinMode = -1;
+        private int gameSelectTurns = -1;
+
+        private bool IsTrapFloorEntry(GameSelectEntry entry) =>
+            entry != null
+            && entry.PlayerGame == null
+            && entry.Game != null
+            && entry.Templates.Count > 0
+            && host.Cartridges.CodeCartridgeFor(entry.Game) is TrapFloorCartridge;
+
+        private TrapFloorWinMode ChosenWinMode() =>
+            gameSelectWinMode >= 0 ? (TrapFloorWinMode)gameSelectWinMode : host.TrapFloorGame.WinMode;
+
+        private bool ChosenAnticlockwise() =>
+            gameSelectTurns >= 0 ? gameSelectTurns == 1 : host.TrapFloorGame.Anticlockwise;
+
+        internal void CycleGameWinMode(int step)
+        {
+            List<GameSelectEntry> entries = GameSelectEntries();
+            if (!IsTrapFloorEntry(FindGameSelectEntry(entries, gameSelectEntryId))) return;
+            gameSelectWinMode = ((((int)ChosenWinMode() + step) % 3) + 3) % 3;
+            ShowGameSelect(TrapFloorCartridge.WinModeHint(ChosenWinMode()), entries);
+        }
+
+        internal void CycleGameTurns(int step)
+        {
+            List<GameSelectEntry> entries = GameSelectEntries();
+            if (!IsTrapFloorEntry(FindGameSelectEntry(entries, gameSelectEntryId))) return;
+            gameSelectTurns = ChosenAnticlockwise() ? 0 : 1;
+            ShowGameSelect(string.Empty, entries);
+        }
+
         internal void CycleGameMode(int step)
         {
             List<GameSelectEntry> entries = GameSelectEntries();
@@ -471,6 +513,16 @@ namespace ConsoleCards.Presentation.Composition
                     ShowGameSelect($"This deck cannot set up {entry.Name}: {problem} Choose another deck, or add cards to it.", entries);
                     return;
                 }
+            }
+
+            if (IsTrapFloorEntry(entry))
+            {
+                // MODE-1 / DIR-1: the choices apply when the new table is dealt (Cancel on "replace the table?"
+                // keeps the game in play as it is).
+                host.TrapFloorGame.PendingWinMode = ChosenWinMode();
+                host.TrapFloorGame.PendingAnticlockwise = ChosenAnticlockwise();
+                gameSelectWinMode = -1;
+                gameSelectTurns = -1;
             }
 
             returnToGameSelect = false;

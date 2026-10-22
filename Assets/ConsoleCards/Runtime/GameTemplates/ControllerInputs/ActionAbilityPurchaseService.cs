@@ -112,6 +112,25 @@ namespace ConsoleCards.GameTemplates.ControllerInputs
             return insertedCardIds.Add(cardId);
         }
 
+        /// <summary>
+        /// BUY-1 (owner, 2026-10-21: "I am unable to buy an ability"): another card that gives the same input takes
+        /// the place of a chosen card that is not in the Console yet, so the player may pay with any matching card.
+        /// The caller checks that the inputs match.
+        /// </summary>
+        public bool ReplaceSelected(TabletopObjectId chosenCardId, TabletopObjectId replacementCardId)
+        {
+            if (!IsActive
+                || chosenCardId.IsEmpty
+                || replacementCardId.IsEmpty
+                || insertedCardIds.Contains(chosenCardId)
+                || selectedCardIds.Contains(replacementCardId))
+                return false;
+            int index = selectedCardIds.IndexOf(chosenCardId);
+            if (index < 0) return false;
+            selectedCardIds[index] = replacementCardId;
+            return true;
+        }
+
         public bool RecordConsoleRemoval(
             PlayerId actorPlayerId,
             PlayerId consoleOwnerPlayerId,

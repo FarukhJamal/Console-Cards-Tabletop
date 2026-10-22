@@ -145,6 +145,7 @@ namespace ConsoleCards.Editor.UI
             AddMissingShopLabels();
             AddMissingDeckPicker();
             AddMissingPlayerCountPicker();
+            AddMissingGameOptionRows(); // MODE-1 / DIR-1
             AddMissingProfilePersona();
             AddMissingDeleteGameButton();
             AddMissingGameSaveSteps();
@@ -1496,6 +1497,55 @@ namespace ConsoleCards.Editor.UI
             {
                 PrefabUtility.UnloadPrefabContents(root);
             }
+        }
+
+        // MODE-1 / DIR-1 (owner, 2026-10-22): WIN MODE < > and TURNS < > rows under PLAYERS in New table….
+        private static void AddMissingGameOptionRows()
+        {
+            if (!File.Exists(GameSelectPanelPath)) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(GameSelectPanelPath);
+            try
+            {
+                GameSelectPanelView view = root.GetComponent<GameSelectPanelView>();
+                if (view == null) return;
+                SerializedObject so = new SerializedObject(view);
+                if (so.FindProperty("winModeRow").objectReferenceValue != null) return;
+                GameObject after = so.FindProperty("playersRow").objectReferenceValue as GameObject;
+                if (after == null) after = so.FindProperty("modeRow").objectReferenceValue as GameObject;
+                if (after == null || after.transform.parent == null) return;
+                Transform info = after.transform.parent;
+                int index = after.transform.GetSiblingIndex() + 1;
+                AddOptionRow(so, info, index, "WinMode", "WIN MODE", "Regular");
+                AddOptionRow(so, info, index + 1, "Turns", "TURNS", "Clockwise");
+                GrowHeight(info, 120f);
+                GrowHeight(info.parent, 120f);
+                so.ApplyModifiedPropertiesWithoutUndo();
+                PrefabUtility.SaveAsPrefabAsset(root, GameSelectPanelPath);
+                Debug.Log($"[Gameplay UI] Added WIN MODE < > and TURNS < > to {GameSelectPanelPath}.");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+        }
+
+        // One "TITLE  <  value  >" row; its parts go to the view's fields named after it (winModeRow, previousWinModeButton…).
+        private static void AddOptionRow(SerializedObject so, Transform info, int siblingIndex, string name, string title, string value)
+        {
+            RectTransform row = ButtonRow(info, TextAnchor.MiddleLeft);
+            row.name = name + "Row";
+            row.SetSiblingIndex(siblingIndex);
+            FitLabel(Child(name + "Title", row), boldFont, 16, Muted, title);
+            Button previous = PlainButton(row, "Previous" + name + "Button", "<", 52f, out _);
+            RectTransform labelRect = Child(name, row);
+            Text label = Label(labelRect, boldFont, 18, Ink, TextAnchor.MiddleCenter, value);
+            Size(labelRect.gameObject, 220f, 52f, 220f);
+            Button next = PlainButton(row, "Next" + name + "Button", ">", 52f, out _);
+            string field = char.ToLowerInvariant(name[0]) + name.Substring(1);
+            so.FindProperty(field + "Row").objectReferenceValue = row.gameObject;
+            so.FindProperty("previous" + name + "Button").objectReferenceValue = previous;
+            so.FindProperty("next" + name + "Button").objectReferenceValue = next;
+            so.FindProperty(field + "Label").objectReferenceValue = label;
         }
 
         private static void GrowHeight(Transform target, float extra)

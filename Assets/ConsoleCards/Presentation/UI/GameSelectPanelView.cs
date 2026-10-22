@@ -20,6 +20,11 @@ namespace ConsoleCards.Presentation.UI
         public bool ShowPlayers;
         public string PlayersText = string.Empty;
         public bool CanChangePlayers;
+        // MODE-1 / DIR-1 (owner, 2026-10-22): the win mode and the turn direction (games that let players choose).
+        public bool ShowWinMode;
+        public string WinModeText = string.Empty;
+        public bool ShowTurns;
+        public string TurnsText = string.Empty;
         public string Rules = string.Empty;
         public string Deck = string.Empty;
         public bool CanChangeDeck;
@@ -40,6 +45,8 @@ namespace ConsoleCards.Presentation.UI
         public Action<string> SelectGame;
         public Action<int> CycleMode;
         public Action<int> CyclePlayers;
+        public Action<int> CycleWinMode;
+        public Action<int> CycleTurns;
         public Action<int> CycleDeck;
         public Action OpenProfile;
         public Action OpenCardArt;
@@ -80,6 +87,16 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button previousPlayersButton;
         [SerializeField] private Button nextPlayersButton;
         [SerializeField] private Text playersLabel;
+        [Tooltip("Choose the win mode (MODE-1). Added by Create Missing Gameplay UI Prefabs.")]
+        [SerializeField] private GameObject winModeRow;
+        [SerializeField] private Button previousWinModeButton;
+        [SerializeField] private Button nextWinModeButton;
+        [SerializeField] private Text winModeLabel;
+        [Tooltip("Choose the turn direction (DIR-1). Added by Create Missing Gameplay UI Prefabs.")]
+        [SerializeField] private GameObject turnsRow;
+        [SerializeField] private Button previousTurnsButton;
+        [SerializeField] private Button nextTurnsButton;
+        [SerializeField] private Text turnsLabel;
         [SerializeField] private Text rulesLabel;
         [SerializeField] private Text deckLabel;
         [Tooltip("Choose the deck to play with (L2-5). Added by Create Missing Gameplay UI Prefabs.")]
@@ -144,6 +161,10 @@ namespace ConsoleCards.Presentation.UI
             if (playersLabel != null) playersLabel.text = model.PlayersText;
             if (previousPlayersButton != null) previousPlayersButton.interactable = model.CanChangePlayers;
             if (nextPlayersButton != null) nextPlayersButton.interactable = model.CanChangePlayers;
+            if (winModeRow != null) winModeRow.SetActive(model.ShowWinMode);
+            if (winModeLabel != null) winModeLabel.text = model.WinModeText;
+            if (turnsRow != null) turnsRow.SetActive(model.ShowTurns);
+            if (turnsLabel != null) turnsLabel.text = model.TurnsText;
             rulesLabel.text = model.Rules;
             deckLabel.text = model.Deck;
             if (previousDeckButton != null) previousDeckButton.interactable = model.CanChangeDeck;
@@ -164,6 +185,10 @@ namespace ConsoleCards.Presentation.UI
             nextModeButton.onClick.AddListener(HandleNextMode);
             if (previousPlayersButton != null) previousPlayersButton.onClick.AddListener(HandlePreviousPlayers);
             if (nextPlayersButton != null) nextPlayersButton.onClick.AddListener(HandleNextPlayers);
+            if (previousWinModeButton != null) previousWinModeButton.onClick.AddListener(HandlePreviousWinMode);
+            if (nextWinModeButton != null) nextWinModeButton.onClick.AddListener(HandleNextWinMode);
+            if (previousTurnsButton != null) previousTurnsButton.onClick.AddListener(HandlePreviousTurns);
+            if (nextTurnsButton != null) nextTurnsButton.onClick.AddListener(HandleNextTurns);
             if (previousDeckButton != null) previousDeckButton.onClick.AddListener(HandlePreviousDeck);
             if (nextDeckButton != null) nextDeckButton.onClick.AddListener(HandleNextDeck);
             profileButton.onClick.AddListener(HandleProfile);
@@ -214,6 +239,10 @@ namespace ConsoleCards.Presentation.UI
             Clear(nextModeButton);
             Clear(previousPlayersButton);
             Clear(nextPlayersButton);
+            Clear(previousWinModeButton);
+            Clear(nextWinModeButton);
+            Clear(previousTurnsButton);
+            Clear(nextTurnsButton);
             Clear(previousDeckButton);
             Clear(nextDeckButton);
             Clear(profileButton);
@@ -235,6 +264,10 @@ namespace ConsoleCards.Presentation.UI
         private void HandleNextMode() => actions?.CycleMode?.Invoke(1);
         private void HandlePreviousPlayers() => actions?.CyclePlayers?.Invoke(-1);
         private void HandleNextPlayers() => actions?.CyclePlayers?.Invoke(1);
+        private void HandlePreviousWinMode() => actions?.CycleWinMode?.Invoke(-1);
+        private void HandleNextWinMode() => actions?.CycleWinMode?.Invoke(1);
+        private void HandlePreviousTurns() => actions?.CycleTurns?.Invoke(-1);
+        private void HandleNextTurns() => actions?.CycleTurns?.Invoke(1);
         private void HandlePreviousDeck() => actions?.CycleDeck?.Invoke(-1);
         private void HandleNextDeck() => actions?.CycleDeck?.Invoke(1);
         private void HandleProfile() => actions?.OpenProfile?.Invoke();

@@ -110,13 +110,19 @@ namespace ConsoleCards.Presentation.Composition
         private void ApplyTemplateBoardMat(BoxCollider boardCollider)
         {
             if (boardMatPrefab == null || !ActiveCartridge.TryGetBoardGrid(out GridDefinitionData floor)) return;
-            BoardGrid grid = templateBoardGrid ?? new BoardGrid(
-                floor.Columns,
-                floor.Rows,
-                (float)floor.CellWidth,
-                (float)floor.CellHeight,
-                (float)Math.Max(floor.HorizontalSpacing, 0d),
-                BoardGrid.Standard.Frame);
+            // MAT-1 (owner, 2026-10-22: "I still can see an empty row and column"): the mat always has the floor's
+            // columns and rows, so a smaller floor (5x5, 4x4, 3x3) has no empty spaces. A resize from the board menu
+            // keeps only its space size here.
+            BoardGrid grid = templateBoardGrid.HasValue
+                ? templateBoardGrid.Value.WithSize(floor.Columns, floor.Rows)
+                : new BoardGrid(
+                    floor.Columns,
+                    floor.Rows,
+                    (float)floor.CellWidth,
+                    (float)floor.CellHeight,
+                    (float)Math.Max(floor.HorizontalSpacing, 0d),
+                    BoardGrid.Standard.Frame);
+            Debug.Log($"[Board] The game board mat is {grid.Columns}x{grid.Rows} for a {floor.Columns}x{floor.Rows} floor.", this);
             if (templateBoardMat == null) templateBoardMat = CreateBoardMatInstance($"{ActiveCartridge.DisplayName} Board Mat", grid);
             else templateBoardMat.Apply(grid);
             templateBoardMat.SetSurfaceEnabled(false); // the board's own surface holds the floor tiles
