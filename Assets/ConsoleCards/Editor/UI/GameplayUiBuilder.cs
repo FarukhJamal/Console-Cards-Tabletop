@@ -547,7 +547,7 @@ namespace ConsoleCards.Editor.UI
             RectTransform body = Body(panel, 18, 8f);
 
             FieldTitle(body, "ShapeTitle", "SHAPE");
-            string[] shapes = { "Classic", "Rectangle", "Square", "Round", "Oval", "Star" };
+            string[] shapes = { "Classic", "Rectangle", "Square", "Round", "Oval", "Hexagon" };
             Button[] shapeButtons = new Button[shapes.Length];
             for (int line = 0; line < 2; line++)
             {

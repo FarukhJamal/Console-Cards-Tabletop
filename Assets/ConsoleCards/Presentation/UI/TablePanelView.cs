@@ -15,7 +15,7 @@ namespace ConsoleCards.Presentation.UI
     public sealed class TablePanelView : ReusableUiView
     {
         [SerializeField] private Button closeButton;
-        [Tooltip("Classic, Rectangle, Square, Round, Oval, Star — in that order.")]
+        [Tooltip("Classic, Rectangle, Square, Round, Oval, Hexagon — in that order.")]
         [SerializeField] private Button[] shapeButtons = Array.Empty<Button>();
         [SerializeField] private GameObject modelRow;
         [SerializeField] private Button previousModelButton;
@@ -242,7 +242,7 @@ namespace ConsoleCards.Presentation.UI
         Width = 0,
         Depth = 1,
         Corners = 2,
-        Points = 3,
+        Points = 3, // the star's; unused since T-3 (kept so the panel's rows keep their order)
         InnerSize = 4,
         EdgeHeight = 5,
         EdgeWidth = 6,
@@ -255,7 +255,7 @@ namespace ConsoleCards.Presentation.UI
         public const int FieldCount = 7;
         public const int HandleCount = 6;
 
-        /// <summary>The chosen shape button (Classic, Rectangle, Square, Round, Oval, Star), or −1 for a model.</summary>
+        /// <summary>The chosen shape button (Classic, Rectangle, Square, Round, Oval, Hexagon), or −1 for a model.</summary>
         public int SelectedShape;
         public bool ShowModels;
         public string ModelText = string.Empty;

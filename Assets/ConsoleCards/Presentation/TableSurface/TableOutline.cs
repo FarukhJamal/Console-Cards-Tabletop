@@ -28,7 +28,7 @@ namespace ConsoleCards.Presentation.TableSurface
         /// <summary>Half the width and depth of the outline's bounding box.</summary>
         public Vector2 HalfSize { get; private set; }
 
-        /// <summary>False when the outline has inward corners (a star): its filling then needs ear clipping.</summary>
+        /// <summary>False when the outline has inward corners: its filling then needs ear clipping.</summary>
         public bool IsConvex { get; private set; } = true;
 
         /// <summary>The length all the way round.</summary>
@@ -51,13 +51,14 @@ namespace ConsoleCards.Presentation.TableSurface
                 case TableShape.Square:
                     AddRoundedRectangle(halfW, halfD, spec.cornerRadius * worldPerUnit, spacing);
                     break;
-                case TableShape.Star:
-                    // Straight sides need no points of their own: just the tips and the inner corners.
-                    for (int i = 0; i < 2 * spec.starPoints; i++)
+                case TableShape.Hexagon:
+                    // Straight sides need no points of their own: just the six corners.
+                    for (int i = 0; i < 6; i++)
                     {
-                        points.Add(TableSpec.StarCorner(i, spec.starPoints, spec.starInner) * halfW);
+                        points.Add(TableSpec.HexagonCorner(i) * halfW);
                     }
 
+                    halfD = halfW * TableSpec.HexagonDepthShare; // flat edge to flat edge
                     break;
                 default:
                     AddEllipse(halfW, halfD, spacing);

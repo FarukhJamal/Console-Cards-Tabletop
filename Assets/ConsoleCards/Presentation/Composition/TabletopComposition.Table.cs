@@ -19,7 +19,7 @@ namespace ConsoleCards.Presentation.Composition
     /// <item>Classic shows the whole base table. Rectangle, Square, Round and Oval are built on the base table: they
     /// replace its playing area and sides, keep its lower frame (legs), use its playing-area material and reach
     /// down to its legs.</item>
-    /// <item>After Oval comes Star (T2); then the Table menu row goes through the other table models, which replace
+    /// <item>After Oval comes Hexagon (T-3, it replaced the Star); then the Table menu row goes through the other table models, which replace
     /// the base table.</item>
     /// <item>The "Edge: …" row (T2) cycles the built tables' edge: None, Lip, Rounded rail, Wooden rail, Spikes,
     /// Neon.</item>
@@ -155,7 +155,7 @@ namespace ConsoleCards.Presentation.Composition
             SaveFiles.WriteJson(TableSpecPath, tableSpec, TableArea);
             ShowMessage(IsBuiltShape(tableSpec.shape)
                 ? $"Edge: {TableSpec.EdgeLabel(tableSpec.edge)}.{note}"
-                : $"Edge: {TableSpec.EdgeLabel(tableSpec.edge)}. It shows on the built tables (Rectangle, Square, Round, Oval, Star).");
+                : $"Edge: {TableSpec.EdgeLabel(tableSpec.edge)}. It shows on the built tables (Rectangle, Square, Round, Oval, Hexagon).");
             return TableEdgeText();
         }
 
@@ -450,12 +450,12 @@ namespace ConsoleCards.Presentation.Composition
             return null;
         }
 
-        // Built shapes in order (Star last), then every other table model, then Classic again.
+        // Built shapes in order (Hexagon last), then every other table model, then Classic again.
         private TableSpec NextTableSpec()
         {
             LoadTableModels();
             TableSpec model = null;
-            if (tableSpec.shape == TableShape.Star)
+            if (tableSpec.shape == TableShape.Hexagon)
             {
                 int first = NextCycleModel(-1);
                 if (first >= 0) model = ModelSpec(tableModels[first]);

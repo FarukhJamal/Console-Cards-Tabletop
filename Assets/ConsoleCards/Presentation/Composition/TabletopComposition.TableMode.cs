@@ -24,8 +24,8 @@ namespace ConsoleCards.Presentation.Composition
 {
     /// <summary>
     /// Table mode (doc 30, B3; T3): the Table menu's "Table tools…" opens a side panel and turns the camera to the
-    /// top view. Shape buttons, sizes (− / + with Shift for big steps, or typed in), corners, star points and inner
-    /// size, the edge and its size, and size handles on the table itself (drag; Alt for free sizes). A new shape
+    /// top view. Shape buttons, sizes (− / + with Shift for big steps, or typed in), corners,
+    /// the edge and its size, and size handles on the table itself (drag; Alt for free sizes). A new shape
     /// grows out of the old one. Every change is one Undo step (up to 16) inside Table mode; Done keeps the table
     /// (saved in the profile), Cancel or Esc puts back the table Table mode started with.
     /// <para>Nothing falls off (owner, 2026-10-17: move the pieces in; 2026-10-18: every Toolbox piece): when the
@@ -44,11 +44,10 @@ namespace ConsoleCards.Presentation.Composition
         private const int HandleSideFar = 2;
         private const int HandleSideNear = 3;
         private const int HandleCornerOrRadius = 4;
-        private const int HandleStarInner = 5;
 
         private static readonly TableShape[] PanelShapes =
         {
-            TableShape.Classic, TableShape.Rectangle, TableShape.Square, TableShape.Round, TableShape.Oval, TableShape.Star,
+            TableShape.Classic, TableShape.Rectangle, TableShape.Square, TableShape.Round, TableShape.Oval, TableShape.Hexagon,
         };
 
         private readonly List<TableSpec> tableUndo = new List<TableSpec>(TableUndoLimit);
@@ -124,9 +123,8 @@ namespace ConsoleCards.Presentation.Composition
                 spec.depth.ToString("0.0", CultureInfo.InvariantCulture));
             SetField(model, TableField.Corners, shape == TableShape.Rectangle || shape == TableShape.Square,
                 spec.cornerRadius.ToString("0.00", CultureInfo.InvariantCulture));
-            SetField(model, TableField.Points, shape == TableShape.Star, spec.starPoints.ToString(CultureInfo.InvariantCulture));
-            SetField(model, TableField.InnerSize, shape == TableShape.Star,
-                Mathf.RoundToInt(spec.starInner * 100f).ToString(CultureInfo.InvariantCulture) + "%");
+            SetField(model, TableField.Points, false, string.Empty); // T-3: the star's rows stay hidden (no star now)
+            SetField(model, TableField.InnerSize, false, string.Empty);
             bool hasEdge = built && spec.edge != TableEdge.None;
             SetField(model, TableField.EdgeHeight, hasEdge, spec.edgeHeight.ToString("0.00", CultureInfo.InvariantCulture));
             SetField(model, TableField.EdgeWidth, hasEdge, spec.edgeWidth.ToString("0.00", CultureInfo.InvariantCulture));
@@ -229,7 +227,7 @@ namespace ConsoleCards.Presentation.Composition
             TableSpec candidate = shape == TableShape.Classic
                 ? new TableSpec { shape = TableShape.Classic }
                 : TableSpec.DefaultFor(shape, classicFrame.ClassicSize.x, classicFrame.ClassicSize.y);
-            KeepEdgeAndStar(candidate);
+            KeepEdge(candidate);
             ApplyTableModeChange(candidate, $"{TableSpec.Label(shape)} table.");
         }
 
@@ -246,7 +244,7 @@ namespace ConsoleCards.Presentation.Composition
                 ? (direction > 0 ? 0 : choices.Count - 1)
                 : (current + direction + choices.Count) % choices.Count;
             TableSpec candidate = ModelSpec(tableModels[choices[next]]);
-            KeepEdgeAndStar(candidate);
+            KeepEdge(candidate);
             ApplyTableModeChange(candidate, $"{TableShapeName(candidate)} table.{ModelFitNote()}");
         }
 
@@ -264,12 +262,6 @@ namespace ConsoleCards.Presentation.Composition
                 case TableField.Corners:
                     candidate.cornerRadius = Snap(candidate.cornerRadius + (direction * (big ? 1f : 0.25f)), 0.25f);
                     break;
-                case TableField.Points:
-                    candidate.starPoints += direction;
-                    break;
-                case TableField.InnerSize:
-                    candidate.starInner = Snap(candidate.starInner + (direction * (big ? 0.1f : 0.05f)), 0.05f);
-                    break;
                 case TableField.EdgeHeight:
                     candidate.edgeHeight = Snap(candidate.edgeHeight + (direction * (big ? 0.25f : 0.05f)), 0.05f);
                     break;
@@ -281,7 +273,7 @@ namespace ConsoleCards.Presentation.Composition
             ApplyTableModeChange(candidate, string.Empty);
         }
 
-        // A typed value is taken as it is (no snapping). Inner size may be typed as a percentage.
+        // A typed value is taken as it is (no snapping).
         private void PanelType(TableField field, string text)
         {
             string clean = (text ?? string.Empty).Replace('%', ' ').Replace(',', '.').Trim();
@@ -297,8 +289,6 @@ namespace ConsoleCards.Presentation.Composition
                 case TableField.Width: candidate.width = value; break;
                 case TableField.Depth: candidate.depth = value; break;
                 case TableField.Corners: candidate.cornerRadius = value; break;
-                case TableField.Points: candidate.starPoints = Mathf.RoundToInt(value); break;
-                case TableField.InnerSize: candidate.starInner = value > 1f ? value / 100f : value; break;
                 case TableField.EdgeHeight: candidate.edgeHeight = value; break;
                 case TableField.EdgeWidth: candidate.edgeWidth = value; break;
             }
@@ -341,7 +331,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!IsBuiltShape(tableSpec.shape)) return;
             TableSpec candidate = TableSpec.DefaultFor(tableSpec.shape, classicFrame.ClassicSize.x, classicFrame.ClassicSize.y);
-            KeepEdgeAndStar(candidate);
+            KeepEdge(candidate);
             ApplyTableModeChange(candidate, "Size reset.");
         }
 
@@ -398,14 +388,12 @@ namespace ConsoleCards.Presentation.Composition
             else cameraController.ShowPreset(TabletopCameraPreset.TopDown);
         }
 
-        // A new shape keeps the chosen edge, its size and the star settings.
-        private void KeepEdgeAndStar(TableSpec candidate)
+        // A new shape keeps the chosen edge and its size.
+        private void KeepEdge(TableSpec candidate)
         {
             candidate.edge = tableSpec.edge;
             candidate.edgeHeight = tableSpec.edgeHeight;
             candidate.edgeWidth = tableSpec.edgeWidth;
-            candidate.starPoints = tableSpec.starPoints;
-            candidate.starInner = tableSpec.starInner;
         }
 
         private static float Snap(float value, float step) => Mathf.Round(value / step) * step;
@@ -413,8 +401,8 @@ namespace ConsoleCards.Presentation.Composition
         // ---------- size handles ----------
 
         // Where each handle sits for the shape (table-local flat points, lifted to the edge's top), and which show:
-        // Rectangle four sides; Square one corner; Round one radius; Oval width and depth; Star the tip and an
-        // inner corner. Classic and models have no handles.
+        // Rectangle four sides; Square one corner; Round one radius; Oval width and depth; Hexagon one corner.
+        // Classic and models have no handles.
         private void PlaceHandles(TablePanelModel model, TableSpec spec)
         {
             for (int i = 0; i < TablePanelModel.HandleCount; i++) model.HandleShown[i] = false;
@@ -440,9 +428,8 @@ namespace ConsoleCards.Presentation.Composition
                     SetHandle(model, HandleSideRight, new Vector2(halfW, 0f), spec);
                     SetHandle(model, HandleSideFar, new Vector2(0f, halfD), spec);
                     break;
-                case TableShape.Star:
-                    SetHandle(model, HandleCornerOrRadius, TableSpec.StarCorner(0, spec.starPoints, spec.starInner) * halfW, spec);
-                    SetHandle(model, HandleStarInner, TableSpec.StarCorner(1, spec.starPoints, spec.starInner) * halfW, spec);
+                case TableShape.Hexagon:
+                    SetHandle(model, HandleCornerOrRadius, TableSpec.HexagonCorner(0) * halfW, spec);
                     break;
             }
         }
@@ -462,7 +449,7 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // While dragging only the look follows (no collider change, so nothing on the table moves or falls);
-        // the size snaps to 0.5 (0.05 for the star's inner corner) unless Alt is held.
+        // the size snaps to 0.5 unless Alt is held.
         private void DragTableHandle(int index, Vector2 screen)
         {
             if (index != activeHandle || handleSpec == null || targetCamera == null) return;
@@ -494,20 +481,16 @@ namespace ConsoleCards.Presentation.Composition
                         ? Mathf.Max(Mathf.Abs(flat.x), Mathf.Abs(flat.y))
                         : flat.magnitude) / unit;
                     break;
-                case HandleStarInner:
-                    next.starInner = flat.magnitude / Mathf.Max(0.01f, 0.5f * next.width * unit);
-                    break;
             }
 
             if (!free)
             {
                 next.width = Snap(next.width, 0.5f);
                 next.depth = Snap(next.depth, 0.5f);
-                next.starInner = Snap(next.starInner, 0.05f);
             }
 
             next.Clamp();
-            if (next.width == handleSpec.width && next.depth == handleSpec.depth && next.starInner == handleSpec.starInner) return;
+            if (next.width == handleSpec.width && next.depth == handleSpec.depth) return;
             handleSpec = next;
             generatedTable.Preview(next, unit);
             RefreshTablePanel(DragText(next, index, free));
@@ -515,11 +498,9 @@ namespace ConsoleCards.Presentation.Composition
 
         private static string DragText(TableSpec spec, int index, bool free)
         {
-            string size = index == HandleStarInner
-                ? $"Inner size {Mathf.RoundToInt(spec.starInner * 100f)}%"
-                : spec.shape == TableShape.Rectangle || spec.shape == TableShape.Oval
-                    ? $"{spec.width:0.0} × {spec.depth:0.0}"
-                    : $"{spec.width:0.0} across";
+            string size = spec.shape == TableShape.Rectangle || spec.shape == TableShape.Oval
+                ? $"{spec.width:0.0} × {spec.depth:0.0}"
+                : $"{spec.width:0.0} across";
             return free ? $"{size} (free size)" : $"{size} · hold Alt for free sizes";
         }
 
