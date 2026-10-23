@@ -58,6 +58,8 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private KeyChip[] keyChips = new KeyChip[0];
         [SerializeField] private float keyChipsWidth = 560f;
         [SerializeField] private float keyChipPadding = 40f;
+        [Tooltip("Optional (V5): the Controls bar holding the keys; it hides with them.")]
+        [SerializeField] private GameObject keysBar;
         [SerializeField] private Button keysToggle;
         [SerializeField] private Button helpButton;
         [Tooltip("Optional (owner, 2026-10-19): switches the hand tray between a fan and a straight row.")]
@@ -302,6 +304,7 @@ namespace ConsoleCards.Presentation.UI
         {
             keysWanted = wanted;
             keysStrip.SetActive(keysWanted && keysAllowed);
+            if (keysBar != null) keysBar.SetActive(keysWanted && keysAllowed);
         }
 
         /// <summary>The Hints switch: with Hints off the keys strip stays hidden.</summary>
@@ -309,6 +312,7 @@ namespace ConsoleCards.Presentation.UI
         {
             keysAllowed = allowed;
             keysStrip.SetActive(keysWanted && keysAllowed);
+            if (keysBar != null) keysBar.SetActive(keysWanted && keysAllowed);
         }
 
         /// <summary>Shows the selection buttons while pieces are selected (TOOLS-1b: any component but boards and Consoles).</summary>

@@ -68,6 +68,15 @@ namespace ConsoleCards.Presentation.UI
         }
 
         public string SetName { get; }
+
+        /// <summary>V5: the game's name for the title ("RULES · TRAP FLOOR"); empty shows "RULES".</summary>
+        public string GameName { get; private set; } = string.Empty;
+
+        public RulesCardModel WithGameName(string gameName)
+        {
+            GameName = gameName ?? string.Empty;
+            return this;
+        }
         public bool IsHouseRules { get; }
         public IReadOnlyList<RulesCardLine> Lines { get; }
 

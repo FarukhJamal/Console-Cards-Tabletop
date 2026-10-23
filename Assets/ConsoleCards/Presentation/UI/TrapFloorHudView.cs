@@ -22,6 +22,41 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private GameObject actionsTitle;
         [SerializeField] private Text actionHelpLabel;
 
+        [Header("V5 (Figma): players on the round bar, the player card rows, the HUD's own buttons")]
+        [Tooltip("Optional: one slot per player (dot and name) on the round bar. Set by Apply Kit Look.")]
+        [SerializeField] private PlayerSlot[] playerSlots = new PlayerSlot[0];
+        [SerializeField] private Sprite activeDot;
+        [SerializeField] private Sprite idleDot;
+        [Tooltip("Optional: the player card rows; while shown the old detail lines hide.")]
+        [SerializeField] private GameObject cardRows;
+        [SerializeField] private Text cardTitle;
+        [SerializeField] private Text avatarValue;
+        [SerializeField] private Text keysValue;
+        [SerializeField] private Image statusChip;
+        [SerializeField] private Text statusValue;
+        [SerializeField] private Text inHandValue;
+        [SerializeField] private Text floorValue;
+        [Tooltip("Optional: the HUD's own action button (cloned per action) instead of the shared popup row.")]
+        [SerializeField] private PopupActionRowView actionTemplate;
+        [SerializeField] private string primaryActionLabel = "End Turn";
+        [SerializeField] private Color primaryDot = new Color(0.024f, 0.937f, 0.941f, 1f);
+        [SerializeField] private Color otherDot = new Color(0.42f, 0.447f, 0.459f, 1f);
+        [SerializeField] private Color statusText = new Color(0.086f, 0.098f, 0.102f, 1f);
+        [SerializeField] private Color noStatusText = new Color(0.608f, 0.643f, 0.655f, 1f);
+
+        [Serializable]
+        public sealed class PlayerSlot
+        {
+            public GameObject root;
+            public Image dot;
+            public Text name;
+        }
+
+        private readonly List<PopupActionRowView> ownButtons = new List<PopupActionRowView>();
+        private readonly List<Image> ownButtonDots = new List<Image>();
+        private readonly List<PopupActionOption> orderedActions = new List<PopupActionOption>();
+        private string defaultCardTitle;
+
         private readonly List<PopupActionRowView> actionRows =
             new List<PopupActionRowView>();
         private IRuntimeUiService uiManager;
@@ -68,7 +103,8 @@ namespace ConsoleCards.Presentation.UI
             phaseLabel.text = status.Phase;
             if (playerChip != null)
             {
-                playerChip.gameObject.SetActive(status.PlayerColor.HasValue);
+                // V5: the players' dots on the round bar replace the single chip.
+                playerChip.gameObject.SetActive(status.PlayerColor.HasValue && (playerSlots == null || playerSlots.Length == 0));
                 if (status.PlayerColor.HasValue) playerChip.color = status.PlayerColor.Value;
             }
 
@@ -82,6 +118,8 @@ namespace ConsoleCards.Presentation.UI
             containerCountsLabel.gameObject.SetActive(!string.IsNullOrWhiteSpace(status.ContainerCounts));
             actionHelpLabel.text = status.ActionHelp;
             actionHelpLabel.gameObject.SetActive(!string.IsNullOrWhiteSpace(status.ActionHelp));
+            ShowPlayers(status.Players);
+            ShowCard(status.Card);
 
             floorfallPanel.SetActive(floorfall.Visible);
             floorfallDiceLabel.text = floorfall.Dice;
@@ -119,6 +157,8 @@ namespace ConsoleCards.Presentation.UI
             actionsTitle.SetActive(actions.Count > 0);
             actionsRoot.gameObject.SetActive(actions.Count > 0);
             actionHelpLabel.gameObject.SetActive(false);
+            ShowPlayers(null);
+            ShowCard(null);
             BindActions(actions);
             base.Show();
         }
@@ -137,8 +177,67 @@ namespace ConsoleCards.Presentation.UI
             if (floorfallTargetLabel != null) floorfallTargetLabel.text = string.Empty;
         }
 
+        // V5: the players on the round bar, the turn player's dot ringed.
+        private void ShowPlayers(IReadOnlyList<TrapFloorHudPlayer> players)
+        {
+            if (playerSlots == null) return;
+            for (int i = 0; i < playerSlots.Length; i++)
+            {
+                PlayerSlot slot = playerSlots[i];
+                if (slot == null || slot.root == null) continue;
+                bool shown = players != null && i < players.Count;
+                slot.root.SetActive(shown);
+                if (!shown) continue;
+                TrapFloorHudPlayer player = players[i];
+                if (slot.name != null) slot.name.text = player.Name;
+                if (slot.dot != null)
+                {
+                    slot.dot.color = player.Color;
+                    Sprite sprite = player.Active ? activeDot : idleDot;
+                    if (sprite != null) slot.dot.sprite = sprite;
+                }
+            }
+        }
+
+        // V5: the turn player's card (Avatar, Keys, Status, In hand, Floor); without one the old lines show.
+        private void ShowCard(TrapFloorPlayerCardModel card)
+        {
+            if (cardRows == null) return;
+            bool shown = card != null;
+            cardRows.SetActive(shown);
+            if (cardTitle != null)
+            {
+                if (defaultCardTitle == null) defaultCardTitle = cardTitle.text;
+                cardTitle.text = shown ? card.Title : defaultCardTitle;
+            }
+
+            if (!shown) return;
+            searchProgressLabel.gameObject.SetActive(false);
+            detailLabel.gameObject.SetActive(false);
+            containerCountsLabel.gameObject.SetActive(false);
+            actionHelpLabel.gameObject.SetActive(false);
+            if (avatarValue != null) avatarValue.text = card.Avatar;
+            if (keysValue != null) keysValue.text = card.Keys;
+            bool hasStatus = !string.IsNullOrEmpty(card.Status);
+            if (statusChip != null) statusChip.enabled = hasStatus;
+            if (statusValue != null)
+            {
+                statusValue.text = hasStatus ? card.Status : "None";
+                statusValue.color = hasStatus ? statusText : noStatusText;
+            }
+
+            if (inHandValue != null) inHandValue.text = card.InHand;
+            if (floorValue != null) floorValue.text = card.Floor;
+        }
+
         private void BindActions(IReadOnlyList<PopupActionOption> actions)
         {
+            if (actionTemplate != null)
+            {
+                BindOwnButtons(actions);
+                return;
+            }
+
             while (actionRows.Count < actions.Count)
             {
                 PopupActionRowView row =
@@ -166,8 +265,63 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
+        // V5: END TURN first with a cyan dot, the other actions after it with a grey dot (clones of the template,
+        // made once and kept).
+        private void BindOwnButtons(IReadOnlyList<PopupActionOption> actions)
+        {
+            orderedActions.Clear();
+            for (int i = 0; i < actions.Count; i++)
+            {
+                if (IsPrimary(actions[i])) orderedActions.Add(actions[i]);
+            }
+
+            for (int i = 0; i < actions.Count; i++)
+            {
+                if (!IsPrimary(actions[i])) orderedActions.Add(actions[i]);
+            }
+
+            while (ownButtons.Count < orderedActions.Count)
+            {
+                PopupActionRowView button = Instantiate(actionTemplate, actionsRoot, false);
+                button.name = "Action" + ownButtons.Count;
+                button.ValidateReferences();
+                button.Acquire();
+                Transform dot = button.transform.Find("Dot");
+                ownButtons.Add(button);
+                ownButtonDots.Add(dot != null ? dot.GetComponent<Image>() : null);
+            }
+
+            for (int i = 0; i < ownButtons.Count; i++)
+            {
+                PopupActionRowView button = ownButtons[i];
+                if (i < orderedActions.Count)
+                {
+                    PopupActionOption action = orderedActions[i];
+                    button.Bind(new PopupActionOption(action.Label.ToUpperInvariant(), action.Enabled, action.Selected));
+                    if (ownButtonDots[i] != null) ownButtonDots[i].color = IsPrimary(action) ? primaryDot : otherDot;
+                    button.Show();
+                }
+                else
+                {
+                    button.Hide();
+                    button.Unbind();
+                }
+            }
+        }
+
+        private bool IsPrimary(PopupActionOption action) =>
+            !string.IsNullOrEmpty(primaryActionLabel)
+            && action.Label.StartsWith(primaryActionLabel, StringComparison.OrdinalIgnoreCase);
+
         private void UnbindActions()
         {
+            for (int i = 0; i < ownButtons.Count; i++)
+            {
+                if (ownButtons[i] == null) continue;
+                ownButtons[i].Hide();
+                ownButtons[i].Unbind();
+            }
+
             for (int i = actionRows.Count - 1; i >= 0; i--)
             {
                 if (actionRows[i] != null)
@@ -190,7 +344,9 @@ namespace ConsoleCards.Presentation.UI
             string detail,
             string containerCounts,
             string actionHelp,
-            Color? playerColor = null)
+            Color? playerColor = null,
+            IReadOnlyList<TrapFloorHudPlayer> players = null,
+            TrapFloorPlayerCardModel card = null)
         {
             Round = round ?? string.Empty;
             Phase = phase ?? string.Empty;
@@ -199,6 +355,8 @@ namespace ConsoleCards.Presentation.UI
             ContainerCounts = containerCounts ?? string.Empty;
             ActionHelp = actionHelp ?? string.Empty;
             PlayerColor = playerColor;
+            Players = players;
+            Card = card;
         }
 
         public string Round { get; }
@@ -215,6 +373,55 @@ namespace ConsoleCards.Presentation.UI
 
         /// <summary>The colour of the player whose turn it is (UX-1); null hides the turn strip's colour chip.</summary>
         public Color? PlayerColor { get; }
+
+        /// <summary>V5: the players in turn order for the round bar (null: none shown).</summary>
+        public IReadOnlyList<TrapFloorHudPlayer> Players { get; }
+
+        /// <summary>V5: the turn player's card (null: the old detail lines show).</summary>
+        public TrapFloorPlayerCardModel Card { get; }
+    }
+
+    /// <summary>A player on the round bar: colour name, seat colour, and whether it is their turn.</summary>
+    public readonly struct TrapFloorHudPlayer
+    {
+        public TrapFloorHudPlayer(string name, Color color, bool active)
+        {
+            Name = name ?? string.Empty;
+            Color = color;
+            Active = active;
+        }
+
+        public string Name { get; }
+
+        public Color Color { get; }
+
+        public bool Active { get; }
+    }
+
+    /// <summary>The player card (Figma V5): title and the five rows.</summary>
+    public sealed class TrapFloorPlayerCardModel
+    {
+        public TrapFloorPlayerCardModel(string title, string avatar, string keys, string status, string inHand, string floor)
+        {
+            Title = title ?? string.Empty;
+            Avatar = avatar ?? string.Empty;
+            Keys = keys ?? string.Empty;
+            Status = status ?? string.Empty;
+            InHand = inHand ?? string.Empty;
+            Floor = floor ?? string.Empty;
+        }
+
+        public string Title { get; }
+
+        public string Avatar { get; }
+
+        public string Keys { get; }
+
+        public string Status { get; }
+
+        public string InHand { get; }
+
+        public string Floor { get; }
     }
 
     public readonly struct FloorfallStatusModel

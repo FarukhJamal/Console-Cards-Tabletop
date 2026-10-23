@@ -57,6 +57,12 @@ MonoBehaviour:
   scroll: {fileID: 1757274415717332813}
   collapsedText: WHAT HAPPENED  (L)
   expandedText: HIDE  (L)
+  peekHeight: 110
+  panelRect: {fileID: 8619425262733045103}
+  panelButton: {fileID: 658823405849624412}
+  header: {fileID: 4671377373508784517}
+  viewport: {fileID: 901650366079664225}
+  peekInset: 22
 --- !u!1 &1313475684867447439
 GameObject:
   m_ObjectHideFlags: 0
@@ -124,7 +130,7 @@ MonoBehaviour:
       m_Calls: []
   m_FontData:
     m_Font: {fileID: 12800000, guid: 48b0c5504f075524787af6cf00c4d7d7, type: 3}
-    m_FontSize: 16
+    m_FontSize: 17
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 10
@@ -420,7 +426,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 760776dd681fb2243a5ff1e465408185, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 3d3a32613b26a0f4aa55d91d35a57c19, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -429,7 +435,7 @@ MonoBehaviour:
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1.5
+  m_PixelsPerUnitMultiplier: 3
 --- !u!114 &2875224252350370750
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -468,7 +474,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &2404212136511063387
 RectTransform:
   m_ObjectHideFlags: 0
@@ -630,7 +636,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.8784314, g: 0.3254902, b: 0.12156863, a: 0}
+  m_Color: {r: 0, g: 0, b: 0, a: 0}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -793,7 +799,7 @@ MonoBehaviour:
       m_Calls: []
   m_FontData:
     m_Font: {fileID: 12800000, guid: ad4532f3e9c4c0543b7e0b5863034d9d, type: 3}
-    m_FontSize: 19
+    m_FontSize: 17
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 10
@@ -920,8 +926,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 29, y: 160}
-  m_SizeDelta: {x: 460, y: 300}
+  m_AnchoredPosition: {x: 28, y: 125}
+  m_SizeDelta: {x: 420, y: 300}
   m_Pivot: {x: 0, y: 0}
 --- !u!114 &658823405849624412
 MonoBehaviour:

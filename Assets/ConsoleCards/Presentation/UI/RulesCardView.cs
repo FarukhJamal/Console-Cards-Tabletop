@@ -25,6 +25,13 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private GameObject pendingRow;
         [SerializeField] private Text pendingLabel;
         [SerializeField] private Button restartButton;
+        [Header("V5 (Figma): title, footer with the house rules line and < FOLD > (optional, set by Apply Kit Look)")]
+        [SerializeField] private Text titleLabel;
+        [SerializeField] private Text footerLabel;
+        [SerializeField] private Button foldButton;
+        [SerializeField] private Text foldLabel;
+        [SerializeField] private Button foldPreviousButton;
+        [SerializeField] private Button foldNextButton;
 
         private readonly List<RulesCardLineView> lineViews = new List<RulesCardLineView>();
         private IRuntimeUiService uiService;
@@ -56,7 +63,13 @@ namespace ConsoleCards.Presentation.UI
             ValidateReferences();
             Unbind();
             setNameLabel.text = model.SetName;
-            houseRulesBadge.SetActive(model.IsHouseRules);
+            houseRulesBadge.SetActive(model.IsHouseRules && footerLabel == null);
+            if (titleLabel != null)
+            {
+                titleLabel.text = string.IsNullOrEmpty(model.GameName) ? "RULES" : "RULES \u00b7 " + model.GameName.ToUpperInvariant();
+            }
+
+            if (footerLabel != null) footerLabel.text = FooterText(model);
             for (int i = 0; i < model.Lines.Count; i++)
             {
                 RulesCardLine line = model.Lines[i];
@@ -70,6 +83,7 @@ namespace ConsoleCards.Presentation.UI
 
             BindHouseRules(model);
             collapseButton.onClick.AddListener(ToggleCollapsed);
+            if (foldButton != null) foldButton.onClick.AddListener(ToggleCollapsed);
             ApplyCollapsed();
             scrollRect.verticalNormalizedPosition = 1f;
         }
@@ -84,6 +98,9 @@ namespace ConsoleCards.Presentation.UI
             if (previousSetButton != null) previousSetButton.onClick.RemoveAllListeners();
             if (nextSetButton != null) nextSetButton.onClick.RemoveAllListeners();
             if (restartButton != null) restartButton.onClick.RemoveAllListeners();
+            if (foldButton != null) foldButton.onClick.RemoveAllListeners();
+            if (foldPreviousButton != null) foldPreviousButton.onClick.RemoveAllListeners();
+            if (foldNextButton != null) foldNextButton.onClick.RemoveAllListeners();
 
             for (int i = lineViews.Count - 1; i >= 0; i--)
             {
@@ -101,7 +118,19 @@ namespace ConsoleCards.Presentation.UI
         {
             RulesCardActions actions = model.Actions;
             bool canCycle = actions?.CycleRuleSet != null && model.RuleSetCount > 1;
-            if (ruleSetRow != null) ruleSetRow.SetActive(canCycle);
+            if (ruleSetRow != null) ruleSetRow.SetActive(canCycle && foldButton == null); // V5: the footer's < > instead
+            if (foldPreviousButton != null)
+            {
+                foldPreviousButton.gameObject.SetActive(canCycle);
+                if (canCycle) foldPreviousButton.onClick.AddListener(() => actions.CycleRuleSet(-1));
+            }
+
+            if (foldNextButton != null)
+            {
+                foldNextButton.gameObject.SetActive(canCycle);
+                if (canCycle) foldNextButton.onClick.AddListener(() => actions.CycleRuleSet(1));
+            }
+
             if (canCycle && previousSetButton != null) previousSetButton.onClick.AddListener(() => actions.CycleRuleSet(-1));
             if (canCycle && nextSetButton != null) nextSetButton.onClick.AddListener(() => actions.CycleRuleSet(1));
             bool pending = !string.IsNullOrEmpty(model.PendingText);
@@ -114,6 +143,19 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
+        // V5 footer: "House rules: 1 change" when rules were changed, else the rule set in play.
+        private static string FooterText(RulesCardModel model)
+        {
+            int changes = 0;
+            for (int i = 0; i < model.Lines.Count; i++)
+            {
+                if (model.Lines[i].Changed) changes++;
+            }
+
+            if (changes > 0) return changes == 1 ? "House rules: 1 change" : $"House rules: {changes} changes";
+            return model.IsHouseRules ? $"House rules: {model.SetName}" : $"Rules: {model.SetName}";
+        }
+
         private void ToggleCollapsed()
         {
             collapsed = !collapsed;
@@ -124,6 +166,7 @@ namespace ConsoleCards.Presentation.UI
         private void ApplyCollapsed()
         {
             body.SetActive(!collapsed);
+            if (foldLabel != null) foldLabel.text = collapsed ? "OPEN" : "FOLD";
             chevron.localRotation = Quaternion.Euler(0f, 0f, collapsed ? 180f : 0f);
             if (transform is RectTransform rect)
             {

@@ -94,7 +94,8 @@ namespace ConsoleCards.Presentation.Composition
             string pending = host.templatesRuleSet != null && SettingsDiffer(host.templatesRuleSet, ActiveRuleSet)
                 ? "Changed settings start when the game restarts."
                 : string.Empty;
-            return model.WithActions(rulesCardActions, 1 + host.houseRuleSets.Count, pending);
+            return model.WithActions(rulesCardActions, 1 + host.houseRuleSets.Count, pending)
+                .WithGameName(host.ActiveCartridge.DisplayName);
         }
 
         // ---------- house rules (doc 23, R3) ----------

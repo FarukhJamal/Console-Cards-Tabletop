@@ -4401,6 +4401,13 @@ namespace ConsoleCards.Presentation.Composition
                 hash = (hash * 31) + pendingLaunchTargetId.GetHashCode();
                 hash = (hash * 31) + (host.trapFloorActivityFeed?.Entries.Count ?? 0);
                 hash = (hash * 31) + host.localPlayerId.GetHashCode();
+                // V5: the player card's In hand and Keys redraw when they change.
+                if (turn != null && TryGetTrapFloorPlayerSetup(turn.ActivePlayerId, out TrapFloorPlayerSetupDefinition handOwner))
+                {
+                    hash = (hash * 31) + ContainerCount(handOwner.HandContainerId);
+                }
+
+                if (host.trapFloorObjectiveState != null) hash = (hash * 31) + host.trapFloorObjectiveState.CollectedKeyCount;
                 return hash;
             }
         }
@@ -4424,12 +4431,12 @@ namespace ConsoleCards.Presentation.Composition
                 Color? turnColor = host.TryGetSeatIndex(turnPlayerId, out int turnSeatIndex)
                     ? PlayerSeatColor(turnSeatIndex)
                     : (Color?)null;
+                // V5 (owner, 2026-10-24: follow the Figma): "RED'S TURN - 2 MOVES"; the effects are on the player card.
                 string phase = host.trapFloorTurnState.IsCurrentFloorFailed
                     ? "ALL PLAYERS ELIMINATED"
                     : host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
-                        ? turnColor.HasValue
-                            ? $"{FormatPlayerName(turnPlayerId).ToUpperInvariant()} ({PlayerColorName(turnSeatIndex)}) TURN{PlayerEffectChips(turnPlayerId)}"
-                            : $"{FormatPlayerName(turnPlayerId).ToUpperInvariant()} TURN{PlayerEffectChips(turnPlayerId)}"
+                        ? $"{(turnColor.HasValue ? PlayerColorName(turnSeatIndex) : FormatPlayerName(turnPlayerId).ToUpperInvariant())}'S TURN"
+                            + TurnMovesText()
                         : "FLOOR TURN";
                 string turnDetail = CurrentTrapFloorCollapseStatusText();
                 if (!host.trapFloorTurnState.IsCurrentFloorFailed
@@ -4441,9 +4448,7 @@ namespace ConsoleCards.Presentation.Composition
                 // The player list lives on the status card; the one-line turn strip keeps only the Keys.
                 turnDetail += $"\n{CurrentTrapFloorPlayerStatesText()}";
                 TrapFloorStatusModel turnStatus = new TrapFloorStatusModel(
-                    host.trapFloorTemplate != null && host.trapFloorTemplate.FloorCount > 1
-                        ? $"FLOOR {host.trapFloorTemplate.FloorIndex + 1}/{host.trapFloorTemplate.FloorCount} · ROUND {host.trapFloorTurnState.CurrentRound}"
-                        : $"ROUND {host.trapFloorTurnState.CurrentRound}",
+                    $"ROUND {host.trapFloorTurnState.CurrentRound}", // the floor is on the player card (V5)
                     phase,
                     CurrentTrapFloorObjectiveProgressText(),
                     turnDetail,
@@ -4451,7 +4456,9 @@ namespace ConsoleCards.Presentation.Composition
                         ? "ALL PLAYERS ELIMINATED"
                         : host.trapFloorObjectiveState.IsWon ? "VICTORY" : string.Empty,
                     host.RulesCardPanel.HintText(TrapFloorTurnGuidanceText()),
-                    turnColor);
+                    turnColor,
+                    BuildHudPlayers(turnPlayerId),
+                    BuildPlayerCard(turnPlayerId));
                 host.runtimeUi.ShowTrapFloorStatus(
                     turnStatus,
                     BuildFloorfallStatusModel(),
@@ -4496,6 +4503,89 @@ namespace ConsoleCards.Presentation.Composition
             FloorfallStatusModel floorfall = BuildFloorfallStatusModel();
             host.runtimeUi.ShowTrapFloorStatus(status, floorfall, host.AddHandTrayToggleAction(BuildTrapFloorAssistedActions()));
         }
+
+        // V5: " - 2 MOVES" after the turn player's name (nothing outside a player turn).
+        private string TurnMovesText()
+        {
+            if (host.trapFloorTemplate == null || host.trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn) return string.Empty;
+            int moves = MoveAllowance(out _);
+            return moves == 1 ? " - 1 MOVE" : $" - {moves} MOVES";
+        }
+
+        // V5: the players in turn order for the round bar ("Blue", "Red", ...), the turn player ringed.
+        private List<TrapFloorHudPlayer> BuildHudPlayers(PlayerId turnPlayerId)
+        {
+            List<TrapFloorHudPlayer> players = new List<TrapFloorHudPlayer>(host.trapFloorTurnState.PlayerOrder.Count);
+            for (int i = 0; i < host.trapFloorTurnState.PlayerOrder.Count; i++)
+            {
+                PlayerId playerId = host.trapFloorTurnState.PlayerOrder[i];
+                bool seated = host.TryGetSeatIndex(playerId, out int seatIndex);
+                string name = seated ? TitleCase(PlayerColorName(seatIndex)) : FormatPlayerName(playerId);
+                Color color = PlayerSeatColor(seated ? seatIndex : -1);
+                bool gone = host.trapFloorTurnState.GetPlayerState(playerId) == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound
+                    || (host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsPlayerEscaped(playerId));
+                if (gone) color.a = 0.35f;
+                players.Add(new TrapFloorHudPlayer(name, color, playerId == turnPlayerId));
+            }
+
+            return players;
+        }
+
+        // V5: the turn player's card: RED PLAYER, Avatar, Keys, Status, In hand, Floor.
+        private TrapFloorPlayerCardModel BuildPlayerCard(PlayerId playerId)
+        {
+            if (playerId.IsEmpty) return null;
+            string title = host.TryGetSeatIndex(playerId, out int seatIndex)
+                ? $"{PlayerColorName(seatIndex)} PLAYER"
+                : FormatPlayerName(playerId).ToUpperInvariant();
+            string avatar = "—";
+            string inHand = "—";
+            if (TryGetTrapFloorPlayerSetup(playerId, out TrapFloorPlayerSetupDefinition setup))
+            {
+                if (host.matchState.Cards.TryGetValue(setup.AvatarCardId, out CardInstanceState avatarCard)
+                    && host.TryGetAvatarLook(avatarCard.BaseState.DefinitionId, out AvatarDefinition look))
+                {
+                    avatar = look.DisplayName;
+                }
+
+                int cards = ContainerCount(setup.HandContainerId);
+                inHand = cards == 1 ? "1 CARD" : $"{cards} CARDS";
+            }
+
+            string keys = host.trapFloorObjectiveState != null
+                ? $"{host.trapFloorObjectiveState.CollectedKeyCount} / {KeysNeededForGrandExit()}"
+                : "—";
+            string floor = host.trapFloorTemplate != null
+                ? (host.trapFloorTemplate.FloorCount > 1
+                    ? $"{host.trapFloorTemplate.FloorIndex + 1}/{host.trapFloorTemplate.FloorCount} · {host.trapFloorTemplate.ActiveMode.DisplayName}"
+                    : $"{host.trapFloorTemplate.FloorIndex + 1} · {host.trapFloorTemplate.ActiveMode.DisplayName}")
+                : "—";
+            return new TrapFloorPlayerCardModel(title, avatar, keys, PlayerStatusText(playerId), inHand, floor);
+        }
+
+        // V5: the effects on a player this round, as the card's Status chip ("OVERCHARGED +1"); empty when none.
+        private string PlayerStatusText(PlayerId playerId)
+        {
+            if (host.trapFloorAbilityResolutionState == null || host.trapFloorTurnState == null) return string.Empty;
+            int round = host.trapFloorTurnState.CurrentRound;
+            string status = string.Empty;
+            if (host.trapFloorAbilityResolutionState.TryGetSlowStatus(playerId, round, out TrapFloorSlowStatusState slow)
+                && slow.MovementModifier != 0)
+            {
+                status = $"{(slow.MovementModifier > 0 ? "OVERCHARGED" : "SLOW")} {FormatSignedModifier(slow.MovementModifier)}";
+            }
+
+            if (host.trapFloorAbilityResolutionState.TryGetBlindStatus(playerId, round, out _)) status = JoinStatus(status, "BLIND");
+            if (host.trapFloorAbilityResolutionState.TryGetStickyStatus(playerId, round, out _)) status = JoinStatus(status, "STUCK");
+            int pending = PendingEndTurnEffects(playerId, null);
+            if (pending > 0) status = JoinStatus(status, pending == 1 ? "1 TRAP WAITING" : $"{pending} TRAPS WAITING");
+            return status;
+        }
+
+        private static string JoinStatus(string status, string more) => status.Length == 0 ? more : status + " · " + more;
+
+        private static string TitleCase(string word) =>
+            string.IsNullOrEmpty(word) ? string.Empty : word.Substring(0, 1) + word.Substring(1).ToLowerInvariant();
 
         internal FloorfallStatusModel BuildFloorfallStatusModel()
         {

@@ -193,3 +193,13 @@ bar; Later / Got it stay on the hint bar as dark chips. Not in V5, so hidden: th
 and the Log's tab. Still to do (UI-2): the round bar's player list (Blue, Red, Green, Yellow) and the player card's rows
 (Avatar, Keys, Status, In hand, Floor), which need the game to report those values.
 
+### UI-1d — every V5 detail (2026-10-24)
+
+The owner asked to match everything the reference shows. Now in the game: the round bar lists the players with
+coloured dots (turn player ringed) and reads "RED'S TURN - 2 MOVES"; the player card has the Title_Label header with
+an orange ///, the rows Avatar, Keys, Status chip, In hand chip and Floor, and END TURN / SKIP TURN as screwed buttons
+under it; the Rules card has "RULES · TRAP FLOOR ///", rows that light cyan on hover (click proposes a change), and the
+footer "House rules: 1 change" with < FOLD >; the Log and + TOOLBOX use small screwed frames; the Controls bar holds
+only the keys. Kept though not drawn in V5: the table tools (a small screwed bar above the Controls bar), the
+Floorfall details (above the buttons while a Floorfall is on), and rule headings in the list. "In hand" shows the
+number of cards (a hand is private, so card names are not shown).

@@ -24,6 +24,8 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Text chipSubtitle;
         [SerializeField] private Color gameChipColor = Color.red;
         [SerializeField] private Color tableChipColor = Color.black;
+        [Tooltip("V5 (Figma): the top bar shows only the game's name; off hides the mode line under it.")]
+        [SerializeField] private bool showSubtitle = true;
         [SerializeField] private Button undoButton;
         [SerializeField] private Image undoIcon;
         [SerializeField] private SessionBarHoverTarget undoHover;
@@ -193,7 +195,7 @@ namespace ConsoleCards.Presentation.UI
             chipFill.color = isGame ? gameChipColor : tableChipColor;
             chipGlyph.SetActive(isGame);
             chipTitle.text = title;
-            bool hasSubtitle = isGame && !string.IsNullOrWhiteSpace(subtitle);
+            bool hasSubtitle = isGame && showSubtitle && !string.IsNullOrWhiteSpace(subtitle);
             chipSubtitle.gameObject.SetActive(hasSubtitle);
             chipSubtitle.text = hasSubtitle ? subtitle : string.Empty;
 

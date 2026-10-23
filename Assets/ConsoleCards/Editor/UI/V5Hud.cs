@@ -10,13 +10,16 @@ using UnityEngine.UI;
 namespace ConsoleCards.Editor.UI
 {
     /// <summary>
-    /// V5 table screen (owner, 2026-10-24: "follow the Figma"). Lays out and skins the table HUD after the Figma V5
-    /// screen (Content/UI/Figma/Components/Reference.png) with the owner's exported components, at their drawn size
-    /// (the 2x exports of the 1440 design are 2/3 of a UI unit per pixel on the 1920 canvas):
-    /// top bar (Top: TRAP FLOOR, Undo, Redo, SHOP, TABLE), round bar (Top: ROUND over the turn), hint bar (Hint),
-    /// Rules card (Rules frame, Rule_Entry rows with an orange arrow), player card (Rules frame around
-    /// Container_Player_card), action buttons (Button_Enabled), the Log (Log, always showing the newest lines),
-    /// + TOOLBOX (Toolbox_Button) and the Controls bar (Controls: the keys as Frame_move chips, then the tools).
+    /// V5 table screen (owner, 2026-10-24: "match everything the Figma reference is doing"). Lays out and skins the
+    /// table HUD as the Figma V5 screen (Content/UI/Figma/Components/Reference.png) with the owner's exported
+    /// components at their drawn size (the 2x exports of the 1440 design are 2/3 of a UI unit per pixel on the 1920
+    /// canvas):
+    /// top bar (Top: dot, game, Undo, Redo, SHOP, TABLE); round bar (Top: ROUND over "RED'S TURN - 2 MOVES", the
+    /// players with coloured dots, the turn player's ringed); hint bar; Rules card ("RULES · GAME ///", Rule_Entry rows
+    /// with an orange arrow that light cyan on hover, footer "House rules: 1 change" and &lt; FOLD &gt;); player card
+    /// ("RED PLAYER ///" on Title_Label, rows Avatar, Keys, Status chip, In hand chip, Floor) with END TURN and the
+    /// other actions under it as screwed buttons; the Log and + TOOLBOX bottom left in small screwed frames; the
+    /// Controls bar bottom right holding only the keys, the table tools in a small screwed bar above it.
     /// Part of Console Cards > UI > Apply Kit Look (UI-1); setting the same values again changes nothing.
     /// </summary>
     public static class V5Hud
@@ -26,11 +29,15 @@ namespace ConsoleCards.Editor.UI
         private const float Margin = 28f;
         private const float BarHeight = 87f; // the Top and Controls bars: 130 export pixels
         private const float ExportScale = 1.5f; // export pixels per UI unit
+        private const float SmallFrameScale = 3f; // the Rules frame at half size: small screwed panels and buttons
         private const float BarsCentre = 195f; // round bar and hint bar, from the screen centre
+        private const float CardWidth = 358f;
         private const int KeyChipCount = 6;
+        private const int PlayerSlotCount = 6;
 
         private static readonly Color White = UiKit.Hex("e8eced");
         private static readonly Color Muted = UiKit.Hex("9ba4a7");
+        private static readonly Color Slashes = UiKit.Hex("6b7275");
         private static readonly Color Orange = UiKit.Hex("ff7b2e");
         private static readonly Color Cyan = UiKit.Hex("06eff0");
         private static readonly Color Dark = UiKit.Hex("16191a");
@@ -44,13 +51,18 @@ namespace ConsoleCards.Editor.UI
             { "Button_Enabled", new Vector4(16f, 16f, 16f, 16f) },
             { "Frame_move", new Vector4(12f, 12f, 12f, 12f) },
             { "Rule_Entry", new Vector4(10f, 10f, 10f, 10f) },
+            { "Selected_Rule_entry", new Vector4(14f, 10f, 10f, 10f) },
             { "Container_Player_card", new Vector4(12f, 12f, 12f, 12f) },
+            { "Title_Label", Vector4.zero },
             { "Status", new Vector4(10f, 10f, 10f, 10f) },
             { "Line", Vector4.zero },
+            { "Line 1", Vector4.zero },
             { "Undo", Vector4.zero },
             { "Redo", Vector4.zero },
             { "ShopIcon", Vector4.zero },
             { "TableIcon", Vector4.zero },
+            { "leftArrowIcon", Vector4.zero },
+            { "RightArrowIcon", Vector4.zero },
             { "cyan_on ellipse", Vector4.zero },
         };
 
@@ -59,6 +71,7 @@ namespace ConsoleCards.Editor.UI
             { "V5_HintBar", new Vector4(44f, 0f, 44f, 0f) },
             { "V5_Bullet", Vector4.zero },
             { "V5_Dot", Vector4.zero },
+            { "V5_DotPlain", Vector4.zero },
         };
 
         private static readonly HashSet<string> Prefabs = new HashSet<string>
@@ -100,14 +113,14 @@ namespace ConsoleCards.Editor.UI
                     TopBar(root.transform);
                     break;
                 case "TrapFloorHud":
-                    RoundBar(root.transform);
-                    PlayerCard(root.transform);
+                    RoundBar(root);
+                    PlayerCard(root);
                     break;
                 case "RulesCard":
-                    RulesCard(root.transform);
+                    RulesCard(root);
                     break;
                 case "RulesLine":
-                    RulesLine(root.transform);
+                    RulesLine(root);
                     break;
                 case "RulesHeading":
                     Style(Find(root.transform, "Text"), bold, 14, Muted);
@@ -128,8 +141,8 @@ namespace ConsoleCards.Editor.UI
                     ToolboxButton(root.transform);
                     break;
                 case "FeedbackMessages":
-                    Place(Find(root.transform, "Messages"), Vector2.zero, Vector2.zero, new Vector2(Margin, 207f),
-                        new Vector2(413f, 184f));
+                    Place(Find(root.transform, "Messages"), Vector2.zero, Vector2.zero, new Vector2(Margin, 245f),
+                        new Vector2(420f, 184f));
                     break;
             }
 
@@ -145,14 +158,20 @@ namespace ConsoleCards.Editor.UI
             if (bar == null) return;
             Place(bar, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(Margin, -Margin), new Vector2(bar.sizeDelta.x, BarHeight));
             Unfit(bar, false, true);
-            Row(bar, 50, 50, 22f);
+            Row(bar, 50, 50, 30f);
             Skin(Find(bar, "Fill"), Figma("Top"), 130f / BarHeight);
             Off(Find(bar, "Shadow"));
 
             SessionBarView view = root.GetComponent<SessionBarView>();
-            SetColor(view, "gameChipColor", Clear);
-            SetColor(view, "tableChipColor", Clear);
-            SetColor(view, "iconColor", White);
+            if (view != null)
+            {
+                SerializedObject so = new SerializedObject(view);
+                SetColorValue(so, "gameChipColor", Clear);
+                SetColorValue(so, "tableChipColor", Clear);
+                SetColorValue(so, "iconColor", White);
+                SetBool(so, "showSubtitle", false);
+                so.ApplyModifiedPropertiesWithoutUndo();
+            }
 
             RectTransform chip = Find(bar, "Chip");
             Row(chip, 0, 0, 12f);
@@ -175,19 +194,20 @@ namespace ConsoleCards.Editor.UI
             Style(Find(menu, "Header/Title"), bold, 22, White);
         }
 
-        // Round bar: ROUND (orange) over the turn line, the player's dot in front, Keys at the right.
-        private static void RoundBar(Transform root)
+        // Round bar: ROUND (orange) over the turn line; the players at the right, the turn player's dot ringed.
+        private static void RoundBar(GameObject root)
         {
-            RectTransform strip = Find(root, "TurnStrip");
+            RectTransform strip = Find(root.transform, "TurnStrip");
             if (strip == null) return;
             Place(strip, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(BarsCentre, -Margin), new Vector2(728f, BarHeight));
             Unfit(strip, true, true);
             Skin(strip, Figma("Top"), 130f / BarHeight);
-            Row(strip, 50, 50, 14f);
+            Row(strip, 50, 50, 18f);
 
-            RectTransform title = Ensure(strip, "Title", 1);
+            RectTransform title = Ensure(strip, "Title", 0);
             VerticalLayoutGroup column = title.GetComponent<VerticalLayoutGroup>();
             if (column == null) column = title.gameObject.AddComponent<VerticalLayoutGroup>();
+            column.padding = new RectOffset(0, 0, 0, 0);
             column.spacing = 0f;
             column.childAlignment = TextAnchor.MiddleLeft;
             column.childControlWidth = true;
@@ -200,111 +220,283 @@ namespace ConsoleCards.Editor.UI
             if (round != null && round.parent != title) round.SetParent(title, false);
             if (phase != null && phase.parent != title) phase.SetParent(title, false);
             if (round != null) round.SetSiblingIndex(0);
-            Style(round, bold, 14, Orange);
-            Style(phase, bold, 21, White);
+            Style(round, bold, 15, Orange);
+            Style(phase, bold, 22, White);
 
+            // The single colour chip is replaced by the players' dots (the view keeps it hidden).
             RectTransform chip = Find(strip, "PlayerChip");
-            if (chip != null)
+            if (chip != null) chip.SetAsLastSibling();
+            Active(chip, false);
+
+            RectTransform players = Ensure(strip, "Players", 1);
+            Row(players, 0, 0, 16f);
+            TrapFloorHudView view = root.GetComponent<TrapFloorHudView>();
+            SerializedObject so = view != null ? new SerializedObject(view) : null;
+            SerializedProperty slots = so?.FindProperty("playerSlots");
+            if (slots != null && slots.arraySize != PlayerSlotCount) slots.arraySize = PlayerSlotCount;
+            for (int i = 0; i < PlayerSlotCount; i++)
             {
-                chip.SetSiblingIndex(0);
-                Image dot = chip.GetComponent<Image>();
-                if (dot != null)
+                RectTransform slot = Ensure(players, "Player" + i, i);
+                Row(slot, 0, 0, 7f);
+                RectTransform dot = Ensure(slot, "Dot", 0);
+                Picture(dot, Derived("V5_DotPlain"), Color.white);
+                Size(dot, 20f, 20f);
+                Text name = Words(Ensure(slot, "Name", 1), medium, 17, White, "Blue");
+                if (slots != null)
                 {
-                    dot.sprite = Derived("V5_Dot");
-                    dot.type = Image.Type.Simple;
-                    dot.preserveAspect = true;
+                    SerializedProperty entry = slots.GetArrayElementAtIndex(i);
+                    entry.FindPropertyRelative("root").objectReferenceValue = slot.gameObject;
+                    entry.FindPropertyRelative("dot").objectReferenceValue = dot.GetComponent<Image>();
+                    entry.FindPropertyRelative("name").objectReferenceValue = name;
                 }
 
-                Size(chip, 22f, 22f);
-                Active(Find(chip, "Icon"), false);
+                Active(slot, i < 4);
             }
 
+            // The Keys move to the player card (the view hides this line while the card shows).
             RectTransform keys = Find(strip, "Keys");
-            if (keys != null) keys.SetAsLastSibling();
+            if (keys != null) keys.SetSiblingIndex(2);
             Style(keys, bold, 16, White);
+
+            if (so == null) return;
+            SetReference(so, "activeDot", Derived("V5_Dot"));
+            SetReference(so, "idleDot", Derived("V5_DotPlain"));
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        // Player card (top right): the screwed Rules frame around the card body.
-        private static void PlayerCard(Transform root)
+        // Player card (top right): "RED PLAYER ///", the five rows; END TURN and the other actions under the card.
+        private static void PlayerCard(GameObject root)
         {
-            RectTransform card = Find(root, "StatusCard");
+            Transform t = root.transform;
+            RectTransform card = Find(t, "StatusCard") ?? Find(t, "RightColumn/StatusCard");
             if (card == null) return;
-            Place(card, Vector2.one, Vector2.one, new Vector2(-Margin, -Margin), new Vector2(358f, card.sizeDelta.y));
-            Column(card, 24, 24, 22, 26, 10f);
+
+            // A right column: the card, then the buttons, each sized by its content.
+            RectTransform right = Ensure((RectTransform)t, "RightColumn", -1);
+            Place(right, Vector2.one, Vector2.one, new Vector2(-Margin, -Margin), new Vector2(CardWidth, right.sizeDelta.y));
+            VerticalLayoutGroup rightColumn = right.GetComponent<VerticalLayoutGroup>();
+            if (rightColumn == null) rightColumn = right.gameObject.AddComponent<VerticalLayoutGroup>();
+            ColumnLayout(rightColumn, 0, 0, 0, 0, 10f);
+            Fit(right, false, true);
+            if (card.parent != right) card.SetParent(right, false);
+            card.SetSiblingIndex(0);
+            Unfit(card, true, true);
+
+            Column(card, 16, 16, 16, 18, 12f);
             Skin(Find(card, "Fill"), Figma("Rules"), ExportScale);
             Off(Find(card, "Shadow"));
-            Tint(Find(card, "Header"), Clear);
-            Style(Find(card, "Header/Title"), bold, 26, White, TextAnchor.MiddleLeft);
+            RectTransform header = Find(card, "Header");
+            Stretched(header, Figma("Title_Label"), Color.white);
+            Size(header, -1f, 64f);
+            RectTransform cardTitle = Find(header, "Title");
+            if (cardTitle != null)
+            {
+                cardTitle.anchorMin = Vector2.zero;
+                cardTitle.anchorMax = Vector2.one;
+                cardTitle.pivot = new Vector2(0f, 0.5f);
+                cardTitle.offsetMin = new Vector2(18f, 0f);
+                cardTitle.offsetMax = new Vector2(-70f, 0f);
+            }
+
+            Style(cardTitle, bold, 28, White, TextAnchor.MiddleLeft);
+            SlashMark(header, Orange, 28);
             Tint(Find(card, "HeaderRule"), Clear);
 
             RectTransform body = Find(card, "Body");
             if (body == null) return;
-            Image bodyImage = body.GetComponent<Image>();
-            if (bodyImage == null) bodyImage = body.gameObject.AddComponent<Image>();
             Skin(body, Figma("Container_Player_card"), ExportScale);
-            bodyImage.raycastTarget = false;
-            Column(body, 18, 18, 14, 16, 8f);
+            body.GetComponent<Image>().raycastTarget = false;
+            Column(body, 18, 18, 4, 4, 0f);
             Style(Find(body, "Detail"), medium, 17, White);
             Style(Find(body, "ContainerCounts"), medium, 15, Muted);
             Style(Find(body, "ActionsTitle"), bold, 14, Muted);
             Style(Find(body, "ActionHelp"), medium, 14, Muted);
+
+            RectTransform rows = Ensure(body, "Rows", 0);
+            VerticalLayoutGroup rowsColumn = rows.GetComponent<VerticalLayoutGroup>();
+            if (rowsColumn == null) rowsColumn = rows.gameObject.AddComponent<VerticalLayoutGroup>();
+            ColumnLayout(rowsColumn, 0, 0, 0, 0, 0f);
+            Text avatar = TextRow(rows, 0, "Avatar", "Clairvoyant", 18);
+            Text keys = TextRow(rows, 2, "Keys", "1 / 3", 22);
+            Text status = ChipRow(rows, 4, "Status", "OVERCHARGED +1", Figma("Status"), Dark, out Image statusChip);
+            Text inHand = ChipRow(rows, 6, "In hand", "4 CARDS", Figma("Frame_move"), White, out _);
+            Text floor = TextRow(rows, 8, "Floor", "1 · Easy", 18);
+            for (int i = 1; i < 8; i += 2) Separator(rows, "Rule" + i, i);
+
+            // The buttons under the card: Floorfall details, then the actions.
+            RectTransform buttons = Ensure(right, "Buttons", 1);
+            VerticalLayoutGroup buttonsColumn = buttons.GetComponent<VerticalLayoutGroup>();
+            if (buttonsColumn == null) buttonsColumn = buttons.gameObject.AddComponent<VerticalLayoutGroup>();
+            ColumnLayout(buttonsColumn, 0, 0, 0, 0, 8f);
+            RectTransform floorfall = Find(body, "Floorfall") ?? Find(buttons, "Floorfall");
+            if (floorfall != null && floorfall.parent != buttons) floorfall.SetParent(buttons, false);
+            if (floorfall != null) floorfall.SetSiblingIndex(0);
+            Skin(floorfall, Figma("Rules"), SmallFrameScale);
+            VerticalLayoutGroup floorfallColumn = floorfall != null ? floorfall.GetComponent<VerticalLayoutGroup>() : null;
+            if (floorfallColumn != null) floorfallColumn.padding = new RectOffset(22, 22, 14, 14);
+            RectTransform actions = Find(body, "Actions") ?? Find(buttons, "Actions");
+            if (actions != null && actions.parent != buttons) actions.SetParent(buttons, false);
+            if (actions != null) actions.SetSiblingIndex(1);
+            VerticalLayoutGroup actionsColumn = actions != null ? actions.GetComponent<VerticalLayoutGroup>() : null;
+            if (actionsColumn != null) ColumnLayout(actionsColumn, 0, 0, 0, 0, 8f);
+
+            PopupActionRowView template = ActionTemplate((RectTransform)t);
+
+            TrapFloorHudView view = root.GetComponent<TrapFloorHudView>();
+            if (view == null) return;
+            SerializedObject so = new SerializedObject(view);
+            SetReference(so, "cardRows", rows.gameObject);
+            SetReference(so, "cardTitle", cardTitle != null ? cardTitle.GetComponent<Text>() : null);
+            SetReference(so, "avatarValue", avatar);
+            SetReference(so, "keysValue", keys);
+            SetReference(so, "statusChip", statusChip);
+            SetReference(so, "statusValue", status);
+            SetReference(so, "inHandValue", inHand);
+            SetReference(so, "floorValue", floor);
+            SetReference(so, "actionTemplate", template);
+            SetColorValue(so, "statusText", Dark);
+            SetColorValue(so, "noStatusText", Muted);
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        // Rules card (left): the screwed frame, "RULES · <set>", rows in Rule_Entry boxes.
-        private static void RulesCard(Transform root)
+        // END TURN, SKIP TURN...: a small screwed frame, a dot (cyan for End Turn) and the word; the view clones it.
+        private static PopupActionRowView ActionTemplate(RectTransform hud)
         {
-            RectTransform card = Find(root, "Card");
+            RectTransform button = Ensure(hud, "ActionTemplate", -1);
+            Active(button, false);
+            Skin(button, Figma("Rules"), SmallFrameScale);
+            Image plate = button.GetComponent<Image>();
+            Button press = button.GetComponent<Button>();
+            if (press == null) press = button.gameObject.AddComponent<Button>();
+            press.targetGraphic = plate;
+            ColorBlock colors = press.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(0.82f, 1f, 1f, 1f);
+            colors.pressedColor = new Color(0.7f, 0.85f, 0.85f, 1f);
+            colors.selectedColor = Color.white;
+            colors.disabledColor = new Color(1f, 1f, 1f, 0.45f);
+            press.colors = colors;
+            HorizontalLayoutGroup row = Row(button, 24, 24, 14f);
+            row.childAlignment = TextAnchor.MiddleCenter;
+            Size(button, -1f, 58f);
+            RectTransform dot = Ensure(button, "Dot", 0);
+            Picture(dot, Derived("V5_DotPlain"), Cyan);
+            Size(dot, 18f, 18f);
+            Text label = Words(Ensure(button, "Label", 1), bold, 21, White, "END TURN");
+            PopupActionRowView view = button.GetComponent<PopupActionRowView>();
+            if (view == null) view = button.gameObject.AddComponent<PopupActionRowView>();
+            SerializedObject so = new SerializedObject(view);
+            SetReference(so, "button", press);
+            SetReference(so, "label", label);
+            so.ApplyModifiedPropertiesWithoutUndo();
+            return view;
+        }
+
+        // Rules card (left): "RULES · TRAP FLOOR ///", the rows, footer "House rules: 1 change" and < FOLD >.
+        private static void RulesCard(GameObject root)
+        {
+            Transform t = root.transform;
+            RectTransform card = Find(t, "Card");
             if (card == null) return;
             Place(card, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(Margin, -127f), new Vector2(461f, card.sizeDelta.y));
-            Column(card, 28, 28, 24, 30, 12f);
+            Column(card, 26, 26, 22, 22, 12f);
             Skin(Find(card, "Fill"), Figma("Rules"), ExportScale);
             Off(Find(card, "Shadow"));
-            Tint(Find(card, "Header"), Clear);
-            RectTransform title = Find(card, "Header/Title");
+            RectTransform header = Find(card, "Header");
+            Tint(header, Clear);
+            RectTransform title = Find(header, "Title");
             if (title != null)
             {
-                title.anchoredPosition = new Vector2(0f, title.anchoredPosition.y);
-                title.sizeDelta = new Vector2(112f, title.sizeDelta.y);
-                Text words = title.GetComponent<Text>();
-                if (words != null) words.text = "RULES ·";
+                title.anchorMin = Vector2.zero;
+                title.anchorMax = Vector2.one;
+                title.pivot = new Vector2(0f, 0.5f);
+                title.offsetMin = new Vector2(4f, 0f);
+                title.offsetMax = new Vector2(-60f, 0f);
             }
 
-            Style(title, bold, 24, White);
-            RectTransform setName = Find(card, "Header/SetName");
-            if (setName != null)
-            {
-                setName.anchoredPosition = new Vector2(112f, setName.anchoredPosition.y);
-                setName.sizeDelta = new Vector2(-112f - 60f, setName.sizeDelta.y);
-            }
-
-            Style(setName, bold, 24, White);
-            Tint(Find(card, "Header/CollapseButton"), Clear);
-            Tint(Find(card, "Header/CollapseButton/Chevron"), White);
-            Skin(Find(card, "Header/HouseRulesBadge"), Figma("Status"), ExportScale);
-            Style(Find(card, "Header/HouseRulesBadge/Label"), bold, 12, Dark);
+            Style(title, bold, 26, White, TextAnchor.MiddleLeft);
+            Active(Find(header, "SetName"), false);
+            Active(Find(header, "CollapseButton"), false);
+            Skin(Find(header, "HouseRulesBadge"), Figma("Status"), ExportScale);
+            Style(Find(header, "HouseRulesBadge/Label"), bold, 12, Dark);
+            SlashMark(header, Slashes, 26);
             Tint(Find(card, "HeaderRule"), Clear);
-            Tint(Find(card, "Body"), Clear);
+            RectTransform body = Find(card, "Body");
+            Tint(body, Clear);
+            Size(body, -1f, 345f);
             VerticalLayoutGroup lines = Find(card, "Body/Lines")?.GetComponent<VerticalLayoutGroup>();
             if (lines != null) lines.spacing = 10f;
+
+            // Footer: the house rules line, then < FOLD > (previous set, fold, next set).
+            RectTransform footer = Ensure(card, "Footer", body != null ? body.GetSiblingIndex() + 1 : -1);
+            Row(footer, 2, 0, 10f);
+            Size(footer, -1f, 44f);
+            Text info = Words(Ensure(footer, "Info", 0), medium, 16, Muted, "House rules: 1 change");
+            Flexible((RectTransform)info.transform);
+            RectTransform pill = Ensure(footer, "Fold", 1);
+            Skin(pill, Figma("Frame_move"), ExportScale);
+            pill.GetComponent<Image>().raycastTarget = false;
+            HorizontalLayoutGroup pillRow = Row(pill, 12, 12, 16f);
+            pillRow.childAlignment = TextAnchor.MiddleCenter;
+            Size(pill, -1f, 40f);
+            Button previous = ArrowButton(pill, "Previous", 0, Figma("leftArrowIcon"));
+            RectTransform wordRect = Ensure(pill, "Word", 1);
+            Text word = Words(wordRect, bold, 16, White, "FOLD");
+            word.raycastTarget = true;
+            Button fold = wordRect.GetComponent<Button>();
+            if (fold == null) fold = wordRect.gameObject.AddComponent<Button>();
+            Hover(fold, word);
+            Button next = ArrowButton(pill, "Next", 2, Figma("RightArrowIcon"));
+
+            RulesCardView view = root.GetComponent<RulesCardView>();
+            if (view == null) return;
+            SerializedObject so = new SerializedObject(view);
+            SetReference(so, "titleLabel", title != null ? title.GetComponent<Text>() : null);
+            SetReference(so, "footerLabel", info);
+            SetReference(so, "foldButton", fold);
+            SetReference(so, "foldLabel", word);
+            SetReference(so, "foldPreviousButton", previous);
+            SetReference(so, "foldNextButton", next);
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void RulesLine(Transform root)
+        // A rule: Rule_Entry box, orange arrow, text; the row lights (Selected_Rule_entry) and proposes a change.
+        private static void RulesLine(GameObject root)
         {
+            RectTransform rect = (RectTransform)root.transform;
+            Skin(rect, Figma("Rule_Entry"), ExportScale);
             Image box = root.GetComponent<Image>();
-            if (box == null) box = root.gameObject.AddComponent<Image>();
-            Skin(root, Figma("Rule_Entry"), ExportScale);
-            box.raycastTarget = false;
-            HorizontalLayoutGroup row = Row(root as RectTransform, 14, 16, 12f, 12, 12);
-            if (row != null) row.childAlignment = TextAnchor.MiddleLeft;
+            box.raycastTarget = true;
+            Button press = root.GetComponent<Button>();
+            if (press == null) press = root.AddComponent<Button>();
+            press.targetGraphic = box;
+            press.transition = Selectable.Transition.SpriteSwap;
+            SpriteState states = press.spriteState;
+            states.highlightedSprite = Figma("Selected_Rule_entry");
+            states.pressedSprite = Figma("Selected_Rule_entry");
+            states.selectedSprite = null;
+            states.disabledSprite = null;
+            press.spriteState = states;
+            Navigation navigation = press.navigation;
+            navigation.mode = Navigation.Mode.None;
+            press.navigation = navigation;
+            HorizontalLayoutGroup row = Row(rect, 14, 16, 12f, 12, 12);
+            row.childAlignment = TextAnchor.MiddleLeft;
 
-            RectTransform bullet = Ensure(root as RectTransform, "Bullet", 0);
+            RectTransform bullet = Ensure(rect, "Bullet", 0);
             Picture(bullet, Derived("V5_Bullet"), Color.white);
             Size(bullet, 12f, 14f);
-            Active(Find(root, "Number"), false);
-            Style(Find(root, "Text"), medium, 17, White);
-            Tint(Find(root, "ChangedMark"), Cyan);
-            Skin(Find(root, "ChangeButton"), Figma("Frame_move"), ExportScale);
-            Style(Find(root, "ChangeButton/Label"), bold, 13, White);
+            Active(Find(rect, "Number"), false);
+            Style(Find(rect, "Text"), medium, 17, White);
+            Tint(Find(rect, "ChangedMark"), Cyan);
+            Skin(Find(rect, "ChangeButton"), Figma("Frame_move"), ExportScale);
+            Style(Find(rect, "ChangeButton/Label"), bold, 13, White);
+
+            RulesCardLineView view = root.GetComponent<RulesCardLineView>();
+            if (view == null) return;
+            SerializedObject so = new SerializedObject(view);
+            SetReference(so, "rowButton", press);
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         // Hint bar under the round bar: the HINT chip, the line, Later and Got it as dark chips.
@@ -325,24 +517,25 @@ namespace ConsoleCards.Editor.UI
             ChipButton(Find(card, "GotItButton"), 34f);
         }
 
-        // The Log (bottom left, above + TOOLBOX): always open on the newest lines; L or a click grows it.
+        // The Log (bottom left, above + TOOLBOX): a small screwed panel always open on the newest lines.
         private static void Log(GameObject root)
         {
             Transform t = root.transform;
             Active(Find(t, "Tab"), false);
             RectTransform panel = Find(t, "Panel");
             if (panel == null) return;
-            Place(panel, Vector2.zero, Vector2.zero, new Vector2(Margin, 95f), new Vector2(413f, 300f));
-            Skin(Find(panel, "Fill"), Figma("Log"), ExportScale);
+            Place(panel, Vector2.zero, Vector2.zero, new Vector2(Margin, 125f), new Vector2(420f, 300f));
+            Skin(Find(panel, "Fill"), Figma("Rules"), SmallFrameScale);
             Off(Find(panel, "Shadow"));
             Tint(Find(panel, "Header"), Clear);
-            Style(Find(panel, "Header/Title"), bold, 17, Cyan);
-            Style(Find(panel, "Viewport/Content/Lines"), medium, 16, White);
+            Style(Find(panel, "Header/Title"), bold, 17, White);
+            Style(Find(panel, "Viewport/Content/Lines"), medium, 17, White);
 
             ActivityLogView view = root.GetComponent<ActivityLogView>();
             if (view == null) return;
             SerializedObject so = new SerializedObject(view);
-            SetFloat(so, "peekHeight", 96f);
+            SetFloat(so, "peekHeight", 110f);
+            SetFloat(so, "peekInset", 22f);
             SetReference(so, "panelRect", panel);
             SetReference(so, "panelButton", panel.GetComponent<Button>());
             SetReference(so, "header", Find(panel, "Header")?.gameObject);
@@ -350,7 +543,7 @@ namespace ConsoleCards.Editor.UI
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        // Controls bar (bottom right): the keys as chips, a rule, then the tools as dark chips (the chosen one cyan).
+        // Controls bar (bottom right): only the keys, as chips; the table tools sit in a small screwed bar above it.
         private static void ControlsBar(GameObject root)
         {
             Transform t = root.transform;
@@ -365,6 +558,7 @@ namespace ConsoleCards.Editor.UI
             Tint(strip, Clear);
             Row(strip, 0, 0, 14f);
             Active(Find(strip, "Keys"), false);
+            Active(Find(strip, "End"), false);
             ToolBarView view = root.GetComponent<ToolBarView>();
             SerializedObject so = view != null ? new SerializedObject(view) : null;
             SerializedProperty chips = so?.FindProperty("keyChips");
@@ -395,33 +589,37 @@ namespace ConsoleCards.Editor.UI
                 Active(chip, i == 0);
             }
 
-            RectTransform end = Ensure(strip, "End", -1);
-            end.SetAsLastSibling();
-            Picture(end, Figma("Line"), Color.white);
-            Size(end, 2f, 40f);
+            // The tools: out of the Controls bar into their own small bar above its right end.
+            RectTransform tools = Find(bar, "Tools") ?? Find(t, "Tools");
+            if (tools != null)
+            {
+                if (tools.parent != t) tools.SetParent(t, false);
+                Place(tools, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-Margin, 24f + BarHeight + 10f), tools.sizeDelta);
+                Fit(tools, true, true);
+                Row(tools, 18, 18, 8f, 10, 10);
+                Off(Find(tools, "Shadow"));
+                Skin(Find(tools, "Fill"), Figma("Rules"), SmallFrameScale);
+                Picture(Find(tools, "Divider"), Figma("Line"), Color.white);
+                ChipButton(Find(tools, "KeysButton"), -1f);
+                ChipButton(Find(tools, "HelpButton"), -1f);
+                Tint(Find(tools, "KeysButton/Icon"), White);
+            }
 
-            RectTransform tools = Find(bar, "Tools");
-            Off(Find(tools, "Shadow"));
-            Tint(Find(tools, "Fill"), Clear);
-            Picture(Find(tools, "Divider"), Figma("Line"), Color.white);
-            ChipButton(Find(tools, "KeysButton"), -1f);
-            ChipButton(Find(tools, "HelpButton"), -1f);
-            Tint(Find(tools, "KeysButton/Icon"), White);
-
-            // SelectionActions and DrawActions open just above the bar.
-            MoveY(Find(t, "SelectionActions"), 123f);
-            MoveY(Find(t, "DrawActions"), 123f);
+            // SelectionActions and DrawActions open above the tools.
+            MoveY(Find(t, "SelectionActions"), 24f + BarHeight + 10f + 76f + 10f);
+            MoveY(Find(t, "DrawActions"), 24f + BarHeight + 10f + 76f + 10f);
 
             if (so == null) return;
-            SetFloatColor(so, "idleFill", ChipDark);
-            SetFloatColor(so, "activeFill", Cyan);
-            SetFloatColor(so, "idleIcon", White);
-            SetFloatColor(so, "activeIcon", Dark);
-            SetFloat(so, "keyChipsWidth", 560f);
+            SetColorValue(so, "idleFill", ChipDark);
+            SetColorValue(so, "activeFill", Cyan);
+            SetColorValue(so, "idleIcon", White);
+            SetColorValue(so, "activeIcon", Dark);
+            SetFloat(so, "keyChipsWidth", 720f);
+            SetReference(so, "keysBar", bar.gameObject);
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        // Rows of actions (End turn, Skip turn, menu rows): the dark Button_Enabled plate.
+        // Rows of actions in popups (the Shop's list): the dark Button_Enabled plate.
         private static void ActionButton(Transform root)
         {
             Skin(root, Figma("Button_Enabled"), ExportScale);
@@ -429,17 +627,17 @@ namespace ConsoleCards.Editor.UI
             Style(Find(root, "Label"), bold, 18, White);
         }
 
-        // + TOOLBOX bottom left (Toolbox_Button); the placing card moves under the hint bar.
+        // + TOOLBOX bottom left in a small screwed frame; the placing card moves under the hint bar.
         private static void ToolboxButton(Transform root)
         {
             RectTransform open = Find(root, "OpenButton");
             if (open != null)
             {
-                Place(open, Vector2.zero, Vector2.zero, new Vector2(Margin, 24f), new Vector2(196f, 55f));
-                Skin(Find(open, "Fill"), Figma("Toolbox_Button"), ExportScale);
+                Place(open, Vector2.zero, Vector2.zero, new Vector2(Margin, 24f), new Vector2(228f, 74f));
+                Skin(Find(open, "Fill"), Figma("Rules"), SmallFrameScale);
                 Off(Find(open, "Shadow"));
                 RectTransform label = Find(open, "Label");
-                Style(label, bold, 20, White, TextAnchor.MiddleCenter);
+                Style(label, bold, 22, White, TextAnchor.MiddleCenter);
                 Text words = label != null ? label.GetComponent<Text>() : null;
                 if (words != null) words.text = "+  TOOLBOX";
             }
@@ -449,6 +647,77 @@ namespace ConsoleCards.Editor.UI
             {
                 Place(placing, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(BarsCentre, -215f), placing.sizeDelta);
             }
+        }
+
+        // ---------- Row builders ----------
+
+        private static Text TextRow(RectTransform rows, int index, string label, string sample, int valueSize)
+        {
+            RectTransform row = RowShell(rows, label, index);
+            Text value = Words(Ensure(row, "Value", 1), valueSize > 18 ? bold : medium, valueSize, White, sample);
+            value.alignment = TextAnchor.MiddleRight;
+            return value;
+        }
+
+        private static Text ChipRow(RectTransform rows, int index, string label, string sample, Sprite chipSprite,
+            Color textColor, out Image chipImage)
+        {
+            RectTransform row = RowShell(rows, label, index);
+            RectTransform chip = Ensure(row, "Chip", 1);
+            Skin(chip, chipSprite, ExportScale);
+            chipImage = chip.GetComponent<Image>();
+            chipImage.raycastTarget = false;
+            HorizontalLayoutGroup chipRow = Row(chip, 12, 12, 0f);
+            chipRow.childAlignment = TextAnchor.MiddleCenter;
+            Size(chip, -1f, 32f);
+            return Words(Ensure(chip, "Text", 0), bold, 14, textColor, sample);
+        }
+
+        private static RectTransform RowShell(RectTransform rows, string label, int index)
+        {
+            RectTransform row = Ensure(rows, label.Replace(" ", string.Empty) + "Row", index);
+            Row(row, 0, 0, 10f);
+            Size(row, -1f, 58f);
+            Text name = Words(Ensure(row, "Label", 0), medium, 18, White, label);
+            name.text = label;
+            Flexible((RectTransform)name.transform);
+            return row;
+        }
+
+        private static void Separator(RectTransform rows, string name, int index)
+        {
+            RectTransform rule = Ensure(rows, name, index);
+            Stretched(rule, Figma("Line 1"), Color.white);
+            Size(rule, -1f, 1f);
+        }
+
+        // "///" at the right of a card's header.
+        private static void SlashMark(RectTransform header, Color color, int size)
+        {
+            if (header == null) return;
+            RectTransform slashes = Ensure(header, "Slashes", -1);
+            slashes.anchorMin = new Vector2(1f, 0f);
+            slashes.anchorMax = new Vector2(1f, 1f);
+            slashes.pivot = new Vector2(1f, 0.5f);
+            slashes.anchoredPosition = new Vector2(-14f, 0f);
+            slashes.sizeDelta = new Vector2(60f, 0f);
+            Text text = Words(slashes, bold, size, color, "///");
+            text.text = "///";
+            text.fontStyle = FontStyle.Italic;
+            text.alignment = TextAnchor.MiddleRight;
+        }
+
+        private static Button ArrowButton(RectTransform parent, string name, int index, Sprite icon)
+        {
+            RectTransform arrow = Ensure(parent, name, index);
+            Picture(arrow, icon, White);
+            Image image = arrow.GetComponent<Image>();
+            image.raycastTarget = true;
+            Size(arrow, 18f, 18f);
+            Button button = arrow.GetComponent<Button>();
+            if (button == null) button = arrow.gameObject.AddComponent<Button>();
+            Hover(button, image);
+            return button;
         }
 
         // ---------- Helpers ----------
@@ -678,15 +947,7 @@ namespace ConsoleCards.Editor.UI
             return text;
         }
 
-        private static void SetColor(UnityEngine.Object target, string property, Color color)
-        {
-            if (target == null) return;
-            SerializedObject so = new SerializedObject(target);
-            SetFloatColor(so, property, color);
-            so.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static void SetFloatColor(SerializedObject so, string property, Color color)
+        private static void SetColorValue(SerializedObject so, string property, Color color)
         {
             SerializedProperty p = so.FindProperty(property);
             if (p != null) p.colorValue = color;
@@ -702,6 +963,47 @@ namespace ConsoleCards.Editor.UI
         {
             SerializedProperty p = so.FindProperty(property);
             if (p != null) p.objectReferenceValue = value;
+        }
+
+        private static void SetBool(SerializedObject so, string property, bool value)
+        {
+            SerializedProperty p = so.FindProperty(property);
+            if (p != null) p.boolValue = value;
+        }
+
+        private static void Fit(RectTransform rect, bool width, bool height)
+        {
+            if (rect == null) return;
+            ContentSizeFitter fitter = rect.GetComponent<ContentSizeFitter>();
+            if (fitter == null) fitter = rect.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = width ? ContentSizeFitter.FitMode.PreferredSize : ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = height ? ContentSizeFitter.FitMode.PreferredSize : ContentSizeFitter.FitMode.Unconstrained;
+        }
+
+        // A column that sizes its children to their preferred heights and stretches them across.
+        private static void ColumnLayout(VerticalLayoutGroup column, int left, int right, int top, int bottom, float spacing)
+        {
+            column.padding = new RectOffset(left, right, top, bottom);
+            column.spacing = spacing;
+            column.childAlignment = TextAnchor.UpperLeft;
+            column.childControlWidth = true;
+            column.childControlHeight = true;
+            column.childForceExpandWidth = true;
+            column.childForceExpandHeight = false;
+        }
+
+        // A plain picture stretched over its rect (a rule line, a header plate).
+        private static void Stretched(RectTransform target, Sprite sprite, Color color)
+        {
+            if (target == null || sprite == null) return;
+            Image image = target.GetComponent<Image>();
+            if (image == null) image = target.gameObject.AddComponent<Image>();
+            image.enabled = true;
+            image.sprite = sprite;
+            image.type = Image.Type.Simple;
+            image.preserveAspect = false;
+            image.color = color;
+            image.raycastTarget = false;
         }
 
         private static Sprite Figma(string name)
