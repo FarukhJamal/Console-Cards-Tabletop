@@ -5317,6 +5317,31 @@ namespace ConsoleCards.Presentation.Composition
         public string StableId => host.trapFloorGameDefinition != null ? host.trapFloorGameDefinition.StableId ?? string.Empty : "trap-floor";
         public string DisplayName => host.trapFloorGameDefinition != null ? host.trapFloorGameDefinition.DisplayName : "Trap Floor";
         public GameDefinition Game => host.trapFloorGameDefinition;
+
+        // SEAT-1: the game's Seat Pieces Layout asset as the factory's data; null (the built-in places) without one.
+        private TrapFloorSeatPiecesLayout SeatPiecesLayout()
+        {
+            TrapFloorSeatPiecesDefinition definition = Game != null ? Game.SeatPieces : null;
+            if (definition == null) return null;
+            try
+            {
+                return new TrapFloorSeatPiecesLayout(
+                    definition.StartingAbilitiesSide,
+                    definition.StartingAbilitiesTowardBoard,
+                    definition.StartingAbilitiesOutward,
+                    definition.StartingAbilitiesGap,
+                    definition.StartingAbilitiesTurn,
+                    definition.HandZoneTowardBoard,
+                    definition.HandZoneOutward,
+                    definition.ActionStackTowardBoard,
+                    definition.ActionStackOutward);
+            }
+            catch (ArgumentException exception)
+            {
+                Debug.LogWarning($"[Layout] The seat pieces layout '{definition.name}' could not be read ({exception.Message}); the built-in places are used.");
+                return null;
+            }
+        }
         public bool HasCode => true;
 
         // One table setup per mode, from the rule set in play and your cards. With a deck of yours chosen (L2-5) that
@@ -5384,6 +5409,8 @@ namespace ConsoleCards.Presentation.Composition
                 TrapFloorTemplateFactory.FloorCountFor(gameDefinition.Grid) - 1);
             // LAYOUT-1: dealt with the players' table layout (the one being arranged, else the saved one).
             TrapFloorTableLayout tableLayout = LayoutForDeal();
+            // SEAT-1: the pieces beside every Console follow the game's seat pieces layout asset.
+            TrapFloorSeatPiecesLayout seatPieces = SeatPiecesLayout();
             for (int i = 0; i < gameDefinition.Modes.Count; i++)
             {
                 TrapFloorTemplateDefinition template;
@@ -5396,14 +5423,18 @@ namespace ConsoleCards.Presentation.Composition
                         host.GetConsoleLayout(),
                         floorIndex,
                         tableLayout,
-                        DealPlayerCount);
+                        DealPlayerCount,
+                        seatPieces);
                 }
-                catch (Exception exception) when (tableLayout != null)
+                catch (Exception exception) when (tableLayout != null || seatPieces != null)
                 {
                     // A layout that no longer fits never stops a deal: the default places are used.
-                    Debug.LogWarning($"[Layout] The table layout could not be used ({exception.Message}); the default layout is used.");
-                    host.ShowMessage("The saved table layout could not be used here, so the default layout is used.");
+                    Debug.LogWarning($"[Layout] The table layout or the seat pieces layout could not be used ({exception.Message}); the default places are used.");
+                    host.ShowMessage(tableLayout != null
+                        ? "The saved table layout could not be used here, so the default layout is used."
+                        : "The seat pieces layout does not fit, so the built-in places are used.");
                     tableLayout = null;
+                    seatPieces = null;
                     template = TrapFloorTemplateFactory.CreateStandardFourPlayer(
                         host.authoritativeRandomValueSource,
                         gameDefinition,

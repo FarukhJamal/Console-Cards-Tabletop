@@ -53,9 +53,6 @@ namespace ConsoleCards.Games.TrapFloor
         // ConsoleAdjacentPlacement with its Standard settings (gap, pile size, clearance and margin rules).
         // Right side: Controller Deck, then the Hand zone; left side: Action stack, then the staging row (the Avatar's starting Abilities).
         private const double ControllerDeckAlongZ = 0d;
-        private const double HandZoneAlongZ = 0d;
-        private const double ActionStackAlongZ = 0d;
-        private const double StartingAbilityStagingAlongZ = -1.1d;
         // Each seat's Controller Deck rests in a bay marked Draw (default maximum pile height).
         private static readonly GameTemplatePileStyle ControllerDeckPileStyle =
             new GameTemplatePileStyle(GameTemplateBayMark.Draw);
@@ -156,7 +153,8 @@ namespace ConsoleCards.Games.TrapFloor
         /// <summary>
         /// PLACE-1 (owner, 2026-10-21): as above, for <paramref name="playerCount"/> players (2, 3 or 4 within the
         /// game's authored range). Only those seats are dealt; the shared Controller deck and the Ability deck hold
-        /// one set per player.
+        /// one set per player. SEAT-1: <paramref name="seatPiecesLayout"/> places the pieces beside every Console
+        /// (null: the built-in places).
         /// </summary>
         public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
             IRandomValueSource randomValueSource,
@@ -165,7 +163,8 @@ namespace ConsoleCards.Games.TrapFloor
             ConsoleLayoutData consoleLayout,
             int floorIndex,
             TrapFloorTableLayout tableLayout,
-            int playerCount)
+            int playerCount,
+            TrapFloorSeatPiecesLayout seatPiecesLayout = null)
         {
             if (randomValueSource == null) throw new ArgumentNullException(nameof(randomValueSource));
             if (gameDefinition == null) throw new ArgumentNullException(nameof(gameDefinition));
@@ -195,7 +194,10 @@ namespace ConsoleCards.Games.TrapFloor
             ConsoleAdjacentPlacement adjacentPlacement = new ConsoleAdjacentPlacement(
                 consoleLayout,
                 ConsoleAdjacentPlacementSettings.Standard);
-            TrapFloorSeatPieces seatPieces = CreateSeatPieces(adjacentPlacement, MaximumStartingAbilityCount(avatars, playerCount));
+            TrapFloorSeatPieces seatPieces = CreateSeatPieces(
+                adjacentPlacement,
+                MaximumStartingAbilityCount(avatars, playerCount),
+                seatPiecesLayout ?? TrapFloorSeatPiecesLayout.Default);
             GameTemplateId templateId = new GameTemplateId(
                 string.Equals(activeMode.StableId, gameDefinition.DefaultModeStableId, StringComparison.OrdinalIgnoreCase)
                     ? gameDefinitionId
@@ -1294,7 +1296,8 @@ namespace ConsoleCards.Games.TrapFloor
                     consolePose,
                     seatPieces.Staging[i],
                     i,
-                    ability.Orientation);
+                    ability.Orientation,
+                    seatPieces.StagingTurnDegrees);
                 objects.Add(CreatePlayerCard(abilityId, abilityDefinitionId, seatId, stagingPose));
                 labels.Add(abilityId, ability.DisplayName);
             }
@@ -1335,30 +1338,62 @@ namespace ConsoleCards.Games.TrapFloor
             TabletopPose consolePose,
             ConsoleLocalRect stagingRect,
             int abilityIndex,
-            CardOrientation orientation)
+            CardOrientation orientation,
+            float turnDegrees)
         {
             TabletopPose centre = ConsoleAdjacentPlacement.ToTablePose(consolePose, stagingRect);
             float orientationOffset = orientation == CardOrientation.Landscape ? 90f : 0f;
             return new TabletopPose(
                 centre.Position,
-                consolePose.RotationDegrees + orientationOffset,
+                consolePose.RotationDegrees + orientationOffset + turnDegrees,
                 consolePose.Layer,
                 abilityIndex);
         }
 
-        // The pieces beside every Console, in console-local space; the same for every seat.
-        private static TrapFloorSeatPieces CreateSeatPieces(ConsoleAdjacentPlacement placement, int stagingCount)
+        // The pieces beside every Console, in console-local space; the same for every seat. SEAT-1: the hand zone,
+        // the action stack and the starting Abilities follow the seat pieces layout (z toward the board, x outward).
+        private static TrapFloorSeatPieces CreateSeatPieces(
+            ConsoleAdjacentPlacement placement,
+            int stagingCount,
+            TrapFloorSeatPiecesLayout layout)
         {
             // Piles sit in bays (bay footprint); the hand zone and staged cards use the card footprint.
             ConsoleLocalRect controllerDeck = placement.PlaceBeside(ConsoleSide.Right, ControllerDeckAlongZ, null, true);
-            ConsoleLocalRect handZone = placement.PlaceBeside(ConsoleSide.Right, HandZoneAlongZ, controllerDeck);
-            ConsoleLocalRect actionStack = placement.PlaceBeside(ConsoleSide.Left, ActionStackAlongZ, null, true);
-            IReadOnlyList<ConsoleLocalRect> staging = placement.PlaceRow(
+            ConsoleLocalRect handZone = MoveOutward(
+                placement.PlaceBeside(ConsoleSide.Right, layout.HandZoneTowardBoard, controllerDeck),
+                ConsoleSide.Right,
+                layout.HandZoneOutward);
+            ConsoleLocalRect actionStack = MoveOutward(
+                placement.PlaceBeside(ConsoleSide.Left, layout.ActionStackTowardBoard, null, true),
                 ConsoleSide.Left,
-                StartingAbilityStagingAlongZ,
-                stagingCount,
-                actionStack);
-            return new TrapFloorSeatPieces(controllerDeck, handZone, actionStack, staging);
+                layout.ActionStackOutward);
+            // A row going outward past the pile on its side, each card the layout's gap from the one before.
+            ConsoleSide side = layout.StartingAbilitiesSide;
+            ConsoleLocalRect innerPiece = side == ConsoleSide.Left ? actionStack : handZone;
+            List<ConsoleLocalRect> staging = new List<ConsoleLocalRect>(stagingCount);
+            for (int i = 0; i < stagingCount; i++)
+            {
+                staging.Add(i == 0
+                    ? MoveOutward(
+                        placement.PlaceBeside(side, layout.StartingAbilitiesTowardBoard, innerPiece),
+                        side,
+                        layout.StartingAbilitiesOutward)
+                    : MoveOutward(staging[i - 1], side, staging[i - 1].Width + layout.StartingAbilitiesGap));
+            }
+
+            return new TrapFloorSeatPieces(
+                controllerDeck,
+                handZone,
+                actionStack,
+                staging,
+                layout.StartingAbilitiesTurnDegrees);
+        }
+
+        private static ConsoleLocalRect MoveOutward(ConsoleLocalRect rect, ConsoleSide side, double outward)
+        {
+            return outward == 0d
+                ? rect
+                : new ConsoleLocalRect(rect.CenterX + ((int)side * outward), rect.CenterZ, rect.Width, rect.Depth);
         }
 
         // Build-time check: every seat's Console shape and pieces, the board and the table surface.
@@ -1425,18 +1460,21 @@ namespace ConsoleCards.Games.TrapFloor
                 ConsoleLocalRect controllerDeck,
                 ConsoleLocalRect handZone,
                 ConsoleLocalRect actionStack,
-                IReadOnlyList<ConsoleLocalRect> staging)
+                IReadOnlyList<ConsoleLocalRect> staging,
+                float stagingTurnDegrees)
             {
                 ControllerDeck = controllerDeck;
                 HandZone = handZone;
                 ActionStack = actionStack;
                 Staging = staging;
+                StagingTurnDegrees = stagingTurnDegrees;
             }
 
             public ConsoleLocalRect ControllerDeck { get; }
             public ConsoleLocalRect HandZone { get; }
             public ConsoleLocalRect ActionStack { get; }
             public IReadOnlyList<ConsoleLocalRect> Staging { get; }
+            public float StagingTurnDegrees { get; }
         }
 
         private sealed class TrapFloorAvatarSetup
