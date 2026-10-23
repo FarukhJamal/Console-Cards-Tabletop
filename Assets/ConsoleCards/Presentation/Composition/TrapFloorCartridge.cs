@@ -5318,14 +5318,14 @@ namespace ConsoleCards.Presentation.Composition
         public string DisplayName => host.trapFloorGameDefinition != null ? host.trapFloorGameDefinition.DisplayName : "Trap Floor";
         public GameDefinition Game => host.trapFloorGameDefinition;
 
-        // SEAT-1: the game's Seat Pieces Layout asset as the factory's data; null (the built-in places) without one.
-        private TrapFloorSeatPiecesLayout SeatPiecesLayout()
+        // SETUP-1 / SEAT-1: the game's Table Setup asset as the factory's data; null (the built-in places) without one.
+        internal TrapFloorTableSetup TableSetup()
         {
-            TrapFloorSeatPiecesDefinition definition = Game != null ? Game.SeatPieces : null;
+            TrapFloorSeatPiecesDefinition definition = Game != null ? Game.TableSetup : null;
             if (definition == null) return null;
             try
             {
-                return new TrapFloorSeatPiecesLayout(
+                TrapFloorSeatPiecesLayout seatPieces = new TrapFloorSeatPiecesLayout(
                     definition.StartingAbilitiesSide,
                     definition.StartingAbilitiesTowardBoard,
                     definition.StartingAbilitiesOutward,
@@ -5335,13 +5335,38 @@ namespace ConsoleCards.Presentation.Composition
                     definition.HandZoneOutward,
                     definition.ActionStackTowardBoard,
                     definition.ActionStackOutward);
+                return new TrapFloorTableSetup(
+                    definition.BoardMatSize.x,
+                    definition.BoardMatSize.y,
+                    SetupPoint(definition.BoardCentre),
+                    new[]
+                    {
+                        SetupPose(definition.Player1Console),
+                        SetupPose(definition.Player2Console),
+                        SetupPose(definition.Player3Console),
+                        SetupPose(definition.Player4Console),
+                    },
+                    SetupPose(definition.ControllerDeck),
+                    SetupPose(definition.AbilityDeck),
+                    SetupPose(definition.AbilityDiscard),
+                    SetupPoint(definition.XAxisDie),
+                    SetupPoint(definition.YAxisDie),
+                    SetupPoint(definition.DirectionDie),
+                    seatPieces);
             }
             catch (ArgumentException exception)
             {
-                Debug.LogWarning($"[Layout] The seat pieces layout '{definition.name}' could not be read ({exception.Message}); the built-in places are used.");
+                Debug.LogWarning($"[Layout] The table setup '{definition.name}' could not be read ({exception.Message}); the built-in places are used.");
                 return null;
             }
         }
+
+        private static TableCoordinate SetupPoint(Vector2 point) => new TableCoordinate(point.x, point.y);
+
+        private static TabletopPose SetupPose(TrapFloorTablePlace place) =>
+            place != null
+                ? new TabletopPose(SetupPoint(place.Position), place.Turn, 0, 0)
+                : throw new ArgumentException("A table setup place is missing.");
         public bool HasCode => true;
 
         // One table setup per mode, from the rule set in play and your cards. With a deck of yours chosen (L2-5) that
@@ -5409,8 +5434,8 @@ namespace ConsoleCards.Presentation.Composition
                 TrapFloorTemplateFactory.FloorCountFor(gameDefinition.Grid) - 1);
             // LAYOUT-1: dealt with the players' table layout (the one being arranged, else the saved one).
             TrapFloorTableLayout tableLayout = LayoutForDeal();
-            // SEAT-1: the pieces beside every Console follow the game's seat pieces layout asset.
-            TrapFloorSeatPiecesLayout seatPieces = SeatPiecesLayout();
+            // SETUP-1: the game's default table setup (its Table Setup asset), else the built-in places.
+            TrapFloorTableSetup tableSetup = TableSetup();
             for (int i = 0; i < gameDefinition.Modes.Count; i++)
             {
                 TrapFloorTemplateDefinition template;
@@ -5424,17 +5449,17 @@ namespace ConsoleCards.Presentation.Composition
                         floorIndex,
                         tableLayout,
                         DealPlayerCount,
-                        seatPieces);
+                        tableSetup);
                 }
-                catch (Exception exception) when (tableLayout != null || seatPieces != null)
+                catch (Exception exception) when (tableLayout != null || tableSetup != null)
                 {
                     // A layout that no longer fits never stops a deal: the default places are used.
-                    Debug.LogWarning($"[Layout] The table layout or the seat pieces layout could not be used ({exception.Message}); the default places are used.");
+                    Debug.LogWarning($"[Layout] The table layout or the table setup could not be used ({exception.Message}); the built-in places are used.");
                     host.ShowMessage(tableLayout != null
                         ? "The saved table layout could not be used here, so the default layout is used."
-                        : "The seat pieces layout does not fit, so the built-in places are used.");
+                        : "The table setup does not fit, so the built-in places are used.");
                     tableLayout = null;
-                    seatPieces = null;
+                    tableSetup = null;
                     template = TrapFloorTemplateFactory.CreateStandardFourPlayer(
                         host.authoritativeRandomValueSource,
                         gameDefinition,

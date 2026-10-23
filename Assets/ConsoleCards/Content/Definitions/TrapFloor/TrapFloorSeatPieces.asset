@@ -12,6 +12,32 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 32e34ab133bb46b5bd4d253f888136cf, type: 3}
   m_Name: TrapFloorSeatPieces
   m_EditorClassIdentifier: 
+  boardCentre: {x: 0, y: 0}
+  boardMatSize: {x: 14, y: 9.6}
+  player1Console:
+    position: {x: 0, y: -7.5}
+    turn: 0
+  player2Console:
+    position: {x: -9.7, y: 0}
+    turn: 90
+  player3Console:
+    position: {x: 0, y: 7.5}
+    turn: 180
+  player4Console:
+    position: {x: 9.7, y: 0}
+    turn: 270
+  controllerDeck:
+    position: {x: 5.2, y: -5.45}
+    turn: 0
+  abilityDeck:
+    position: {x: -4.75, y: 0}
+    turn: 0
+  abilityDiscard:
+    position: {x: -4.75, y: 2}
+    turn: 0
+  xAxisDie: {x: -5.9, y: -3.6}
+  yAxisDie: {x: -5, y: -3.6}
+  directionDie: {x: -4.1, y: -3.6}
   startingAbilitiesSide: -1
   startingAbilitiesTowardBoard: 0.9
   startingAbilitiesOutward: 0

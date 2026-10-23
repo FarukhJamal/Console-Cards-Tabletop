@@ -153,8 +153,9 @@ namespace ConsoleCards.Games.TrapFloor
         /// <summary>
         /// PLACE-1 (owner, 2026-10-21): as above, for <paramref name="playerCount"/> players (2, 3 or 4 within the
         /// game's authored range). Only those seats are dealt; the shared Controller deck and the Ability deck hold
-        /// one set per player. SEAT-1: <paramref name="seatPiecesLayout"/> places the pieces beside every Console
-        /// (null: the built-in places).
+        /// one set per player. SETUP-1: <paramref name="tableSetup"/> is the game's default table setup (the board,
+        /// the Consoles, the shared piles, the dice and the pieces beside every Console); the saved table layout still
+        /// wins over it. Null: the built-in places.
         /// </summary>
         public static TrapFloorTemplateDefinition CreateStandardFourPlayer(
             IRandomValueSource randomValueSource,
@@ -164,15 +165,17 @@ namespace ConsoleCards.Games.TrapFloor
             int floorIndex,
             TrapFloorTableLayout tableLayout,
             int playerCount,
-            TrapFloorSeatPiecesLayout seatPiecesLayout = null)
+            TrapFloorTableSetup tableSetup = null)
         {
             if (randomValueSource == null) throw new ArgumentNullException(nameof(randomValueSource));
             if (gameDefinition == null) throw new ArgumentNullException(nameof(gameDefinition));
             int floorCount = FloorCountFor(gameDefinition.Grid);
             if (floorIndex < 0 || floorIndex >= floorCount) throw new ArgumentOutOfRangeException(nameof(floorIndex));
-            if (floorIndex > 0 || (tableLayout != null && tableLayout.BoardCenter.HasValue))
+            TableCoordinate? boardCenter = tableLayout?.BoardCenter
+                ?? (tableSetup != null ? tableSetup.BoardCenter : (TableCoordinate?)null);
+            if (floorIndex > 0 || boardCenter.HasValue)
             {
-                gameDefinition = WithFloorGrid(gameDefinition, floorIndex, tableLayout?.BoardCenter);
+                gameDefinition = WithFloorGrid(gameDefinition, floorIndex, boardCenter);
             }
 
             ModeDefinitionData activeMode = ValidateAndResolveMode(gameDefinition, selectedModeStableId, playerCount);
@@ -197,7 +200,7 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorSeatPieces seatPieces = CreateSeatPieces(
                 adjacentPlacement,
                 MaximumStartingAbilityCount(avatars, playerCount),
-                seatPiecesLayout ?? TrapFloorSeatPiecesLayout.Default);
+                tableSetup != null ? tableSetup.SeatPieces : TrapFloorSeatPiecesLayout.Default);
             GameTemplateId templateId = new GameTemplateId(
                 string.Equals(activeMode.StableId, gameDefinition.DefaultModeStableId, StringComparison.OrdinalIgnoreCase)
                     ? gameDefinitionId
@@ -229,7 +232,7 @@ namespace ConsoleCards.Games.TrapFloor
             // TABLE-1 (owner, 2026-10-21, as in the playtest): one Controller deck for everyone beside the board.
             ContainerId controllerDeckId = CreateSharedControllerDeck(
                 controllerInputCards, playerCount, grid, randomValueSource, containers, memberships, objects, labels,
-                tableLayout?.ControllerDeck);
+                tableLayout?.ControllerDeck ?? SetupPlace(tableSetup, setup => setup.ControllerDeck));
 
             for (int seatIndex = 0; seatIndex < playerCount; seatIndex++)
             {
@@ -244,7 +247,7 @@ namespace ConsoleCards.Games.TrapFloor
                     mainSlot,
                     sideSlots,
                     controllerDeckId,
-                    tableLayout?.SeatConsole(seatIndex),
+                    tableLayout?.SeatConsole(seatIndex) ?? ConsolePoseFor(layoutSeat, tableSetup),
                     seats,
                     containers,
                     memberships,
@@ -259,9 +262,15 @@ namespace ConsoleCards.Games.TrapFloor
             TabletopObjectId floorfallXAxisDieId = new TabletopObjectId(CreateGuid(60, 1));
             TabletopObjectId floorfallYAxisDieId = new TabletopObjectId(CreateGuid(60, 2));
             TableCoordinate xAxisDie = tableLayout?.DieX?.Position
+                ?? tableSetup?.XAxisDie
                 ?? new TableCoordinate(FloorfallDiceX - (FloorfallDiceSpacing * 0.5d), FloorfallDiceY);
             TableCoordinate yAxisDie = tableLayout?.DieY?.Position
+                ?? tableSetup?.YAxisDie
                 ?? new TableCoordinate(FloorfallDiceX + (FloorfallDiceSpacing * 0.5d), FloorfallDiceY);
+            // SETUP-1: the d4 follows a saved Y die; otherwise it has its own place in the table setup.
+            TableCoordinate directionDie = tableLayout?.DieY == null && tableSetup != null
+                ? tableSetup.DirectionDie
+                : new TableCoordinate(yAxisDie.X + FloorfallDiceSpacing, yAxisDie.Y);
             objects.Add(CreateFloorfallDie(floorfallXAxisDieId, dieDefinitionId, xAxisDie.X, xAxisDie.Y));
             objects.Add(CreateFloorfallDie(floorfallYAxisDieId, dieDefinitionId, yAxisDie.X, yAxisDie.Y));
             // D4-1 (owner, 2026-10-21): the d4 the Blind trap rolls for its direction lies beside the floor dice
@@ -269,20 +278,24 @@ namespace ConsoleCards.Games.TrapFloor
             objects.Add(CreateFloorfallDie(
                 new TabletopObjectId(CreateGuid(60, 3)),
                 blindDieDefinitionId,
-                yAxisDie.X + FloorfallDiceSpacing,
-                yAxisDie.Y,
+                directionDie.X,
+                directionDie.Y,
                 BlindDieSideCount));
 
             ContainerId abilityDeckId = CreateAbilityDeck(
                 gameDefinition, playerCount, grid, randomValueSource, containers, memberships, objects, labels,
-                tableLayout?.AbilityDeck);
-            ContainerId abilityDiscardId = CreateAbilityDiscard(grid, containers, memberships, tableLayout?.AbilityDiscard);
+                tableLayout?.AbilityDeck ?? SetupPlace(tableSetup, setup => setup.AbilityDeck));
+            ContainerId abilityDiscardId = CreateAbilityDiscard(
+                grid,
+                containers,
+                memberships,
+                tableLayout?.AbilityDiscard ?? SetupPlace(tableSetup, setup => setup.AbilityDiscard));
 
             TabletopBounds boardBounds = CreateBoardBounds(grid);
             // A saved layout is the players' own choice of places: the default seat check does not apply to it.
             if (!adjacentPlacement.UsesFallbackShape && (tableLayout == null || !tableLayout.HasSeatPlaces))
             {
-                CheckSeatPlacement(adjacentPlacement, seatPieces, playerLayout, boardBounds);
+                CheckSeatPlacement(adjacentPlacement, seatPieces, playerLayout, boardBounds, tableSetup);
             }
             GameTemplate template = new GameTemplate(
                 templateId,
@@ -1401,7 +1414,8 @@ namespace ConsoleCards.Games.TrapFloor
             ConsoleAdjacentPlacement placement,
             TrapFloorSeatPieces pieces,
             PlayerLayoutDefinition playerLayout,
-            TabletopBounds boardBounds)
+            TabletopBounds boardBounds,
+            TrapFloorTableSetup tableSetup)
         {
             List<ConsoleAdjacentPlacementItem> items = new List<ConsoleAdjacentPlacementItem>
             {
@@ -1410,7 +1424,7 @@ namespace ConsoleCards.Games.TrapFloor
             for (int seatIndex = 0; seatIndex < playerLayout.OccupiedSeatCount; seatIndex++)
             {
                 playerLayout.TryGetSeat(seatIndex, out PlayerSeatLayoutEntry layoutSeat);
-                TabletopPose consolePose = GetConsolePose(layoutSeat);
+                TabletopPose consolePose = ConsolePoseFor(layoutSeat, tableSetup);
                 for (int i = 0; i < placement.ConsoleShape.Count; i++)
                 {
                     items.Add(new ConsoleAdjacentPlacementItem(
@@ -1624,19 +1638,64 @@ namespace ConsoleCards.Games.TrapFloor
         }
 
         /// <summary>
+        /// SETUP-1: where a seat's Console goes by default: its place in the table setup (found by the 4-player
+        /// layout seat it comes from, so 2 or 3 players keep their sides), else the built-in place.
+        /// </summary>
+        public static TabletopPose ConsolePoseFor(PlayerSeatLayoutEntry layoutSeat, TrapFloorTableSetup tableSetup)
+        {
+            if (tableSetup != null
+                && layoutSeat != null
+                && tableSetup.TryGetConsole(StandardSeatIndexOf(layoutSeat), out TabletopPose pose))
+            {
+                return pose;
+            }
+
+            return GetConsolePose(layoutSeat);
+        }
+
+        // The 4-player layout seat a (possibly fewer-player) layout seat was made from; -1 when none matches.
+        private static int StandardSeatIndexOf(PlayerSeatLayoutEntry layoutSeat)
+        {
+            PlayerLayoutDefinition standard = PlayerLayoutPresets.StandardFourPlayer;
+            TableCoordinate anchor = layoutSeat.ConsoleAnchorPose.Position;
+            for (int i = 0; i < standard.OccupiedSeatCount; i++)
+            {
+                if (!standard.TryGetSeat(i, out PlayerSeatLayoutEntry seat)) continue;
+                TableCoordinate candidate = seat.ConsoleAnchorPose.Position;
+                if (Math.Abs(candidate.X - anchor.X) < 1e-6d && Math.Abs(candidate.Y - anchor.Y) < 1e-6d) return i;
+            }
+
+            return -1;
+        }
+
+        private static TabletopPose? SetupPlace(TrapFloorTableSetup tableSetup, Func<TrapFloorTableSetup, TabletopPose> place)
+        {
+            return tableSetup != null ? place(tableSetup) : (TabletopPose?)null;
+        }
+
+        /// <summary>
         /// T-2 (owner, 2026-10-23: "resize the table to a default point where the maximum number of players can be
         /// seated"): half the table's width and depth (around the board's centre) that the playmat and every seat of
         /// the 4-player layout need, with a margin.
         /// </summary>
         public static void TableHalfSizeForMostPlayers(out double halfWidth, out double halfDepth)
         {
-            halfWidth = PlayMatWidth * 0.5d;
-            halfDepth = PlayMatDepth * 0.5d;
+            TableHalfSizeForMostPlayers(null, out halfWidth, out halfDepth);
+        }
+
+        /// <summary>SETUP-1: as above, for the game's table setup (null: the built-in places).</summary>
+        public static void TableHalfSizeForMostPlayers(
+            TrapFloorTableSetup tableSetup,
+            out double halfWidth,
+            out double halfDepth)
+        {
+            halfWidth = (tableSetup != null ? tableSetup.BoardMatWidth : PlayMatWidth) * 0.5d;
+            halfDepth = (tableSetup != null ? tableSetup.BoardMatDepth : PlayMatDepth) * 0.5d;
             PlayerLayoutDefinition layout = PlayerLayoutPresets.StandardFourPlayer;
             for (int i = 0; i < layout.OccupiedSeatCount; i++)
             {
                 if (!layout.TryGetSeat(i, out PlayerSeatLayoutEntry seat)) continue;
-                TabletopPose pose = GetConsolePose(seat);
+                TabletopPose pose = ConsolePoseFor(seat, tableSetup);
                 double radians = pose.RotationDegrees * (Math.PI / 180d);
                 double cos = Math.Abs(Math.Cos(radians));
                 double sin = Math.Abs(Math.Sin(radians));

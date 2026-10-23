@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates.Definitions;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace ConsoleCards.Definitions
 {
@@ -93,9 +94,9 @@ namespace ConsoleCards.Definitions
         [SerializeField] private Texture2D boardMatPicture;
         [Tooltip("Art key for the playmat picture (doc 24, A2). A pack or upload can replace it by its key.")]
         [SerializeField] private string boardMatPictureReference;
-        [Tooltip("SEAT-1: where the pieces beside every Console go (starting Abilities, hand zone, action stack). "
-            + "Empty: the built-in places. Used by Trap Floor.")]
-        [SerializeField] private TrapFloorSeatPiecesDefinition seatPieces;
+        [Tooltip("SETUP-1: the game's default table setup: the board, the Consoles, the shared piles, the dice and the "
+            + "pieces beside every Console. Empty: the built-in places. Used by Trap Floor.")]
+        [SerializeField, FormerlySerializedAs("seatPieces")] private TrapFloorSeatPiecesDefinition tableSetup;
 
         public string StableId => stableId;
         public string DisplayName => displayName;
@@ -110,7 +111,7 @@ namespace ConsoleCards.Definitions
         public IReadOnlyList<string> BoardCardBackReferences => boardCardBackReferences;
         public Texture2D BoardMatPicture => boardMatPicture;
         public string BoardMatPictureReference => boardMatPictureReference;
-        public TrapFloorSeatPiecesDefinition SeatPieces => seatPieces;
+        public TrapFloorSeatPiecesDefinition TableSetup => tableSetup;
         public IReadOnlyList<GameContentSet> ContentSets => contentSets;
 
         /// <summary>The game's own frame style, else the platform's default (null when neither exists).</summary>
