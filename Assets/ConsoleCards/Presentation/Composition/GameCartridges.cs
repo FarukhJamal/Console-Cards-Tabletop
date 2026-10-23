@@ -172,6 +172,12 @@ namespace ConsoleCards.Presentation.Composition
         Vector2 BoardMatSize { get; }
 
         /// <summary>
+        /// BOARD-1: the playmat picture drawn on the board (without its grid: the game draws the spaces); null for
+        /// none.
+        /// </summary>
+        Texture2D BoardMatPicture { get; }
+
+        /// <summary>
         /// T-2: half the table's width and depth (table units, around the table's centre) the game needs with its most
         /// players; false when the game does not say (the table stays as it is).
         /// </summary>
@@ -478,6 +484,8 @@ namespace ConsoleCards.Presentation.Composition
         public int BoardRemovedSpaces => 0;
 
         public Vector2 BoardMatSize => Vector2.zero;
+
+        public Texture2D BoardMatPicture => null;
 
         public bool TryGetTableNeed(out Vector2 halfSize)
         {

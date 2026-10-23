@@ -110,41 +110,70 @@ namespace ConsoleCards.Presentation.Composition
         private void ApplyTemplateBoardMat(BoxCollider boardCollider)
         {
             if (boardMatPrefab == null || !ActiveCartridge.TryGetBoardGrid(out GridDefinitionData floor)) return;
-            // MAT-2 (owner, 2026-10-22: "board 6x6 visually and cards on 5x5"): the mat keeps the first floor's size.
-            // A smaller floor's tiles lie on its spaces from the first row and column; the removed row(s) and
-            // column(s) stay as empty spaces. A resize from the board menu keeps only its space size here.
+            // MAT-2 (owner, 2026-10-22: "board 6x6 visually and cards on 5x5"): the board keeps the first floor's spaces;
+            // a smaller floor's tiles lie on them from the first row and column. BOARD-1 (owner, 2026-10-23): the spaces
+            // fill the game's playmat like the printed board (Trap Floor: 10 x 6), and the board menu's Columns and
+            // Rows (+ / -) set them exactly; the floor's tiles always land on spaces.
             int removed = Math.Max(0, ActiveCartridge.BoardRemovedSpaces);
-            BoardGrid grid = templateBoardGrid.HasValue
-                ? templateBoardGrid.Value.WithSize(floor.Columns + removed, floor.Rows + removed)
-                : new BoardGrid(
-                    floor.Columns + removed,
-                    floor.Rows + removed,
-                    (float)floor.CellWidth,
-                    (float)floor.CellHeight,
-                    (float)Math.Max(floor.HorizontalSpacing, 0d),
-                    BoardGrid.Standard.Frame);
+            int floorColumns = floor.Columns + removed;
+            int floorRows = floor.Rows + removed;
+            Vector2 playMat = ActiveCartridge.BoardMatSize;
+            float spaceWidth = (float)floor.CellWidth;
+            float spaceDepth = (float)floor.CellHeight;
+            float gap = (float)Math.Max(floor.HorizontalSpacing, 0d);
+            BoardGrid grid = templateBoardGrid ?? new BoardGrid(
+                playMat.x > 0f ? SpacesFitting(playMat.x, spaceWidth, gap, floorColumns) : floorColumns,
+                playMat.y > 0f ? SpacesFitting(playMat.y, spaceDepth, gap, floorRows) : floorRows,
+                spaceWidth,
+                spaceDepth,
+                gap,
+                playMat.x > 0f ? PlayMatSpaceFrame : BoardGrid.Standard.Frame);
             if (templateBoardMat == null) templateBoardMat = CreateBoardMatInstance($"{ActiveCartridge.DisplayName} Board Mat", grid);
             else templateBoardMat.Apply(grid);
             templateBoardMat.SetSurfaceEnabled(false); // the board's own surface holds the floor tiles
             Transform board = boardCollider.transform;
             Vector3 top = board.TransformPoint(boardCollider.center + (Vector3.up * (boardCollider.size.y * 0.5f)));
-            // MAT-2: the mat's centre moves half the removed spaces along the grid's columns and rows, so its first
-            // space stays under the floor's first tile.
-            Vector3 shift = (coordinateConverter.WorldXAxisPerTableUnit * (float)(removed * floor.ColumnPitch * 0.5d))
-                + (coordinateConverter.WorldYAxisPerTableUnit * (float)(removed * floor.RowPitch * 0.5d));
+            // The spaces move so the floor's first tile lies on a space: the floor's first column and row sit
+            // (spaces - floor spaces) / 2 spaces in, rounded down (MAT-2's half space per removed row is the same rule).
+            float shiftColumns = SpaceShift(grid.Columns, floor.Columns, floorColumns);
+            float shiftRows = SpaceShift(grid.Rows, floor.Rows, floorRows);
+            Vector3 shift = (coordinateConverter.WorldXAxisPerTableUnit * (float)(shiftColumns * floor.ColumnPitch))
+                + (coordinateConverter.WorldYAxisPerTableUnit * (float)(shiftRows * floor.RowPitch));
             templateBoardMat.transform.SetPositionAndRotation(
                 top + shift - (Vector3.up * templateBoardMat.Thickness),
                 board.rotation);
-            // T-1 (owner, 2026-10-23): the game's playmat (Trap Floor: 35 x 24") stays centred on the board while
-            // MAT-2 moves only the spaces. Where the mat reaches past the board, its own surface holds what is put there.
-            Vector2 playMat = ActiveCartridge.BoardMatSize;
-            if (playMat.x > grid.Width || playMat.y > grid.Depth)
+            // T-1: the game's playmat (Trap Floor: 35 x 24") stays centred on the board while only the spaces move.
+            // Where the mat reaches past the board, its own surface holds what is put there.
+            if (playMat.x > 0f && playMat.y > 0f)
             {
                 Vector3 back = templateBoardMat.transform.InverseTransformVector(-shift);
                 templateBoardMat.SetMatSize(playMat.x, playMat.y, new Vector2(back.x, back.z));
-                templateBoardMat.SetSurfaceEnabled(true);
+                if (playMat.x > grid.Width || playMat.y > grid.Depth) templateBoardMat.SetSurfaceEnabled(true);
             }
+
+            templateBoardMat.SetMatPicture(ActiveCartridge.BoardMatPicture);
             if (gameBoardVisualRoot != null) gameBoardVisualRoot.gameObject.SetActive(false);
+        }
+
+        // BOARD-1: how many spaces of this size fit along the playmat (a margin inside each edge), at least the floor's,
+        // with the floor's odd/even so the two stay centred on one another.
+        private const float PlayMatSpaceMargin = 1f;
+
+        // On a playmat the spaces need only a thin frame (the picture is the board's border).
+        private const float PlayMatSpaceFrame = 0.1f;
+
+        private static int SpacesFitting(float matLength, float space, float gap, int atLeast)
+        {
+            int fit = Mathf.FloorToInt((matLength - (2f * PlayMatSpaceMargin) + gap) / Mathf.Max(0.01f, space + gap));
+            if (fit > atLeast && (fit - atLeast) % 2 != 0) fit--;
+            return Mathf.Max(atLeast, fit);
+        }
+
+        // How far (in spaces) the spaces' centre moves so the floor's first tile lies on a space.
+        private static float SpaceShift(int spaces, int floorSpaces, int firstFloorSpaces)
+        {
+            int inset = Mathf.FloorToInt((spaces - firstFloorSpaces) * 0.5f);
+            return ((spaces - floorSpaces) * 0.5f) - inset;
         }
 
         internal bool TryFindBoardUnderPointer(Vector2 screenPosition, out BoardId boardId, out GameBoardMatView view)
@@ -450,8 +479,15 @@ namespace ConsoleCards.Presentation.Composition
             if (boardId.IsEmpty)
             {
                 templateBoardGrid = grid; // a table setting for the game's own board
-                templateBoardMat?.Apply(grid);
-                templateBoardMat?.SetSurfaceEnabled(false);
+                if (gameBoardPhysicalSurface is BoxCollider boardCollider)
+                {
+                    ApplyTemplateBoardMat(boardCollider); // BOARD-1: laid out again (spaces on the tiles, the playmat)
+                }
+                else
+                {
+                    templateBoardMat?.Apply(grid);
+                    templateBoardMat?.SetSurfaceEnabled(false);
+                }
             }
             else
             {

@@ -88,6 +88,11 @@ namespace ConsoleCards.Definitions
         [Tooltip("The border, icon tabs and frame variants drawn on this game's cards (FRAME-1). Empty uses the "
             + "platform's default frame style (Resources/CardFrames).")]
         [SerializeField] private CardFrameStyle cardFrameStyle;
+        [Tooltip("BOARD-1: the playmat picture the game's board lies on, without a grid (the game draws the spaces). "
+            + "Empty: a plain board.")]
+        [SerializeField] private Texture2D boardMatPicture;
+        [Tooltip("Art key for the playmat picture (doc 24, A2). A pack or upload can replace it by its key.")]
+        [SerializeField] private string boardMatPictureReference;
 
         public string StableId => stableId;
         public string DisplayName => displayName;
@@ -100,6 +105,8 @@ namespace ConsoleCards.Definitions
         public RuleSetDefinition DefaultRuleSet => defaultRuleSet;
         public IReadOnlyList<Texture2D> BoardCardBacks => boardCardBacks;
         public IReadOnlyList<string> BoardCardBackReferences => boardCardBackReferences;
+        public Texture2D BoardMatPicture => boardMatPicture;
+        public string BoardMatPictureReference => boardMatPictureReference;
         public IReadOnlyList<GameContentSet> ContentSets => contentSets;
 
         /// <summary>The game's own frame style, else the platform's default (null when neither exists).</summary>

@@ -383,6 +383,10 @@ namespace ConsoleCards.Presentation.Composition
             (float)TrapFloorTemplateFactory.PlayMatWidth,
             (float)TrapFloorTemplateFactory.PlayMatDepth);
 
+        // BOARD-1 (owner, 2026-10-23): the owner's printed board with its grid taken out
+        // (Content/Art/Boards/TrapFloorPlaymat.png, set on the Trap Floor game definition).
+        public Texture2D BoardMatPicture => host.BoardMatArt(Game);
+
         // T-2: the table holds the playmat and all four seats.
         public bool TryGetTableNeed(out Vector2 halfSize)
         {

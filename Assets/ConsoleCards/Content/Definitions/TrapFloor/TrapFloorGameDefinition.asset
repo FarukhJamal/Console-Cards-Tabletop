@@ -133,3 +133,5 @@ MonoBehaviour:
   - trap-floor/backs/floor-back-red.png
   - trap-floor/backs/floor-back-blue.png
   - trap-floor/backs/floor-back-yellow.png
+  boardMatPicture: {fileID: 2800000, guid: 976a83f70e2240b42a32bcf19fe6163c, type: 3}
+  boardMatPictureReference: trap-floor/board/playmat.png

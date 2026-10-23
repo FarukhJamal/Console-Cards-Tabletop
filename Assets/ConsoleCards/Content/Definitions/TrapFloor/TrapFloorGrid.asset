@@ -17,7 +17,7 @@ MonoBehaviour:
   columns: 6
   cellWidth: 1
   cellHeight: 1.4
-  horizontalSpacing: 0.1
-  verticalSpacing: 0.1
+  horizontalSpacing: 0.14
+  verticalSpacing: 0.14
   origin: {x: 0, y: 0}
   layoutMetadata: Centered rectangular Floor Card grid.

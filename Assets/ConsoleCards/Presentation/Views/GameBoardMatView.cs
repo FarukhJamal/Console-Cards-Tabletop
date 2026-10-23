@@ -26,6 +26,17 @@ namespace ConsoleCards.Presentation.Views
         private Vector2 matSize;
         private Vector2 matCentre;
 
+        // BOARD-1 (owner, 2026-10-23): a game's playmat picture (Trap Floor: the printed 35 x 24" board with its grid
+        // taken out) lies on the mat, and the spaces become thin outlines in the printed grid's colour, laid out by
+        // the grid so any number of columns and rows fits.
+        private static readonly Color PictureOutlineColour = new Color(0.33f, 0.90f, 0.78f, 1f);
+        private const float PictureOutlineWidth = 0.025f;
+        private Texture2D picture;
+        private Transform pictureQuad;
+        private Material pictureMaterial;
+        private Material outlineMaterial;
+        private readonly List<Transform> outlineSpaces = new List<Transform>();
+
         public BoardGrid Grid { get; private set; }
         public bool HasGrid => hasGrid;
         public float Thickness => thickness;
@@ -39,10 +50,18 @@ namespace ConsoleCards.Presentation.Views
             hasGrid = true;
             frame.localRotation = Quaternion.identity;
             LayOutMat(new Vector2(grid.Width, grid.Depth), Vector2.zero);
+            LayOutSpaces();
+        }
 
+        // The spaces for the grid: the authored space copies, or (with a playmat picture) outlines. Objects are made
+        // only when the grid grows past what was shown before, then kept and reused.
+        private void LayOutSpaces()
+        {
             spaceTemplate.SetActive(false);
+            BoardGrid grid = Grid;
             int count = grid.Columns * grid.Rows;
-            while (spaces.Count < count)
+            bool outlines = picture != null;
+            while (!outlines && spaces.Count < count)
             {
                 GameObject space = Instantiate(spaceTemplate, spacesRoot, false);
                 space.name = "Space";
@@ -52,7 +71,7 @@ namespace ConsoleCards.Presentation.Views
             for (int i = 0; i < spaces.Count; i++)
             {
                 GameObject space = spaces[i];
-                bool used = i < count;
+                bool used = !outlines && i < count;
                 if (space.activeSelf != used) space.SetActive(used);
                 if (!used) continue;
                 grid.SpaceCentre(i % grid.Columns, i / grid.Columns, out float x, out float z);
@@ -60,6 +79,136 @@ namespace ConsoleCards.Presentation.Views
                 space.transform.localRotation = Quaternion.identity;
                 space.transform.localScale = new Vector3(grid.SpaceWidth, 1f, grid.SpaceDepth);
             }
+
+            while (outlines && outlineSpaces.Count < count) outlineSpaces.Add(CreateOutlineSpace());
+            for (int i = 0; i < outlineSpaces.Count; i++)
+            {
+                Transform outline = outlineSpaces[i];
+                bool used = outlines && i < count;
+                if (outline.gameObject.activeSelf != used) outline.gameObject.SetActive(used);
+                if (!used) continue;
+                grid.SpaceCentre(i % grid.Columns, i / grid.Columns, out float x, out float z);
+                outline.localPosition = new Vector3(x, thickness + 0.0015f, z);
+                outline.localRotation = Quaternion.identity;
+                LayOutOutline(outline, grid.SpaceWidth, grid.SpaceDepth);
+            }
+        }
+
+        // One space outline: four thin bars round the space (near, far, left, right).
+        private Transform CreateOutlineSpace()
+        {
+            if (outlineMaterial == null)
+            {
+                Renderer edge = FindSpaceRenderer("Edge");
+                outlineMaterial = new Material(edge != null ? edge.sharedMaterial : frame.GetComponent<Renderer>().sharedMaterial)
+                {
+                    name = "Board Space Outline",
+                };
+                SetColour(outlineMaterial, PictureOutlineColour);
+                if (outlineMaterial.HasProperty("_EmissionColor"))
+                {
+                    outlineMaterial.EnableKeyword("_EMISSION");
+                    outlineMaterial.SetColor("_EmissionColor", PictureOutlineColour * 0.6f);
+                }
+            }
+
+            Transform root = new GameObject("Space Outline").transform;
+            root.SetParent(spacesRoot, false);
+            for (int side = 0; side < 4; side++)
+            {
+                Transform bar = CreateFlatQuad($"Bar {side}", outlineMaterial).transform;
+                bar.SetParent(root, false);
+            }
+
+            return root;
+        }
+
+        private static void LayOutOutline(Transform outline, float width, float depth)
+        {
+            float w = PictureOutlineWidth;
+            for (int side = 0; side < outline.childCount && side < 4; side++)
+            {
+                Transform bar = outline.GetChild(side);
+                bool across = side < 2; // near and far bars run across the space; left and right run along it
+                float offset = across ? ((depth - w) * 0.5f * (side == 0 ? -1f : 1f)) : ((width - w) * 0.5f * (side == 2 ? -1f : 1f));
+                bar.localPosition = across ? new Vector3(0f, 0f, offset) : new Vector3(offset, 0f, 0f);
+                bar.localRotation = Quaternion.Euler(90f, 0f, 0f); // a flat quad facing up
+                bar.localScale = across ? new Vector3(width, w, 1f) : new Vector3(w, depth, 1f);
+            }
+        }
+
+        /// <summary>
+        /// BOARD-1: draws <paramref name="texture"/> over the whole mat (null: the plain mat and the authored spaces).
+        /// The picture follows the mat's size and centre.
+        /// </summary>
+        public void SetMatPicture(Texture2D texture)
+        {
+            if (!IsComplete) return;
+            bool changed = !ReferenceEquals(picture, texture);
+            picture = texture;
+            if (picture != null && pictureQuad == null)
+            {
+                pictureMaterial = new Material(frame.GetComponent<Renderer>().sharedMaterial) { name = "Board Playmat" };
+                pictureQuad = CreateFlatQuad("Playmat Picture", pictureMaterial).transform;
+                pictureQuad.SetParent(transform, false);
+            }
+
+            if (pictureMaterial != null && changed)
+            {
+                pictureMaterial.SetTexture("_BaseMap", picture);
+                pictureMaterial.SetTexture("_MainTex", picture);
+                SetColour(pictureMaterial, Color.white);
+                if (pictureMaterial.HasProperty("_Smoothness")) pictureMaterial.SetFloat("_Smoothness", 0.2f);
+            }
+
+            LayOutPicture();
+            if (changed && hasGrid) LayOutSpaces();
+        }
+
+        private void LayOutPicture()
+        {
+            if (pictureQuad == null) return;
+            bool shown = picture != null;
+            if (pictureQuad.gameObject.activeSelf != shown) pictureQuad.gameObject.SetActive(shown);
+            pictureQuad.localPosition = new Vector3(matCentre.x, thickness + 0.0005f, matCentre.y);
+            pictureQuad.localRotation = Quaternion.Euler(90f, 0f, 0f); // picture top toward the mat's far side
+            pictureQuad.localScale = new Vector3(matSize.x, matSize.y, 1f);
+        }
+
+        // A built-in quad without its collider (the mat's own surface takes the clicks), casting no shadow.
+        private static GameObject CreateFlatQuad(string name, Material material)
+        {
+            GameObject quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            quad.name = name;
+            Collider collider = quad.GetComponent<Collider>();
+            if (collider != null) Destroy(collider);
+            MeshRenderer renderer = quad.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            return quad;
+        }
+
+        private Renderer FindSpaceRenderer(string name)
+        {
+            Renderer[] renderers = spaceTemplate.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                if (renderers[i] != null && renderers[i].name == name) return renderers[i];
+            }
+
+            return null;
+        }
+
+        private static void SetColour(Material material, Color colour)
+        {
+            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", colour);
+            if (material.HasProperty("_Color")) material.SetColor("_Color", colour);
+        }
+
+        private void OnDestroy()
+        {
+            if (pictureMaterial != null) Destroy(pictureMaterial);
+            if (outlineMaterial != null) Destroy(outlineMaterial);
         }
 
         /// <summary>
@@ -81,6 +230,7 @@ namespace ConsoleCards.Presentation.Views
             frame.localScale = new Vector3(size.x, thickness, size.y);
             surface.center = new Vector3(centre.x, thickness * 0.5f, centre.y);
             surface.size = new Vector3(size.x, thickness, size.y);
+            LayOutPicture();
         }
 
         public void SetSurfaceEnabled(bool enabled)

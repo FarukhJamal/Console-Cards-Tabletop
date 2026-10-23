@@ -70,6 +70,10 @@ namespace ConsoleCards.Presentation.Composition
         internal Texture2D AvatarArt(AvatarDefinition avatar) =>
             avatar == null ? null : Art(avatar.ArtworkReference, avatar.Artwork);
 
+        // BOARD-1: a game's playmat picture (its built-in art, or a pack's or your picture with the same key).
+        internal Texture2D BoardMatArt(GameDefinition game) =>
+            game == null ? null : Art(game.BoardMatPictureReference, game.BoardMatPicture);
+
         // Owner, 2026-10-23 ("the avatar cards look squished"): a card whose front picture is wider than tall is a
         // landscape card. It is drawn wide with its picture upright, and a landscape Console slot does not turn it again.
         // Worked out once per card kind.
