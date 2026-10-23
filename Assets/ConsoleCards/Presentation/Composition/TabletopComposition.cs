@@ -989,7 +989,9 @@ namespace ConsoleCards.Presentation.Composition
                         gameTemplatesPanelError ?? "Empty Table startup failed.");
                 }
 
-                ProfilePanel.OfferProfileChoiceAtStart(); // doc 28, P2: with several profiles, ask who is playing
+                // UI-2 (owner, 2026-10-24): the game opens on the front end's main menu (the user journey); its Player
+                // profile screen is where you pick who is playing.
+                GameSelectPanel.OpenFrontEnd(FrontEndPage.Home);
             }
             catch (Exception exception)
             {

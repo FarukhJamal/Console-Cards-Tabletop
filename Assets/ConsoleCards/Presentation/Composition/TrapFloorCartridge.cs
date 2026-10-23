@@ -1562,7 +1562,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.ShowMessage(
                     $"ROUND {host.trapFloorTurnState.CurrentRound} — "
                     + $"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} turn.{reactivated}{setAside}");
-                ShowNextRoundEffectsPopup(host.trapFloorTurnState.ActivePlayerId); // NEXT-1
+                // NEXT-1 popup off (owner, 2026-10-24): the effects show on the player card's Status chip.
             }
             else if (host.trapFloorTurnState.IsCurrentFloorFailed)
             {
@@ -1585,7 +1585,7 @@ namespace ConsoleCards.Presentation.Composition
                     $"{skip}{FormatPlayerName(next).ToUpperInvariant()}'S TURN{effects}: draw up to {handLimit} Controller Cards "
                         + "and 3 Abilities to buy, then move or use an Ability.",
                     FeedbackSeverity.Info);
-                ShowNextRoundEffectsPopup(next); // NEXT-1
+                // NEXT-1 popup off (owner, 2026-10-24): the effects show on the player card's Status chip.
             }
 
             // KEYS-1: a player knocked out may leave everyone still in on the Grand Exit (not only a move wins).

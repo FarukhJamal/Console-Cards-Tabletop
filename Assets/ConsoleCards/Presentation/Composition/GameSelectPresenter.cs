@@ -75,6 +75,20 @@ namespace ConsoleCards.Presentation.Composition
         internal string pendingDeckName = string.Empty;
         internal List<ObjectDefinitionId> pendingDeckCards;
 
+        // UI-2: the front end screen to open on next (null: the one shown). Kept across the scene reload a profile
+        // switch makes, so the front end comes back on the Player profile screen.
+        internal static FrontEndPage? pendingFrontEndPage;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetFrontEndPage() => pendingFrontEndPage = null;
+
+        /// <summary>UI-2: the front end at start (the main menu, or Player profile after a profile switch).</summary>
+        internal bool OpenFrontEnd(FrontEndPage page)
+        {
+            if (!pendingFrontEndPage.HasValue) pendingFrontEndPage = page;
+            return OpenGameSelect();
+        }
+
         internal bool OpenGameSelect()
         {
             host.EnsureContentArt();
@@ -114,6 +128,10 @@ namespace ConsoleCards.Presentation.Composition
                     Start = StartSelectedGame,
                     Delete = host.PlayerGamesPanel.DeleteSelectedPlayerGame,
                     Close = CloseGameSelect,
+                    PlayAs = PlayAsFromFrontEnd,
+                    CycleAvatar = CycleFrontEndAvatar,
+                    Sandbox = StartSandbox,
+                    Exit = ExitGame,
                 };
             }
 
@@ -129,7 +147,9 @@ namespace ConsoleCards.Presentation.Composition
 
             if (entry.PlayerGame != null)
             {
-                return host.runtimeUi.ShowGameSelect(host.PlayerGamesPanel.PlayerGameSelectModel(entry, rows, status), gameSelectActions);
+                GameSelectModel mine = host.PlayerGamesPanel.PlayerGameSelectModel(entry, rows, status);
+                AddFrontEnd(mine, entry);
+                return host.runtimeUi.ShowGameSelect(mine, gameSelectActions);
             }
 
             bool isEmpty = entry.Game == null;
@@ -166,8 +186,91 @@ namespace ConsoleCards.Presentation.Composition
                         ? "Choose a game and a mode, make it yours if you like, then Start."
                         : $"{entry.Name} cannot be played yet; you can already make its cards and decks yours.",
             };
+            AddFrontEnd(model, entry);
             if (!host.runtimeUi.ShowGameSelect(model, gameSelectActions)) return false;
             return true;
+        }
+
+        // UI-2: what the front end shows besides the New table… choices: the profiles and avatar, and the players.
+        private void AddFrontEnd(GameSelectModel model, GameSelectEntry entry)
+        {
+            model.OpenAt = pendingFrontEndPage;
+            pendingFrontEndPage = null;
+            model.IsEmptyTable = entry.Game == null && entry.PlayerGame == null;
+            ProfileService service = host.EnsureProfile();
+            List<ProfileInfo> saved = service.List();
+            List<ProfileRowModel> profiles = new List<ProfileRowModel>(saved.Count);
+            for (int i = 0; i < saved.Count; i++)
+            {
+                bool isActive = string.Equals(saved[i].id, service.Active.id, StringComparison.OrdinalIgnoreCase);
+                ProfileRowModel row = new ProfileRowModel(saved[i].id, saved[i].displayName, string.Empty, isActive);
+                if (isActive) profiles.Insert(0, row);
+                else profiles.Add(row);
+            }
+
+            model.Profiles = profiles;
+            PersonaSet personas = host.PersonaSetForProfile;
+            if (personas != null && personas.AvatarCount > 0)
+            {
+                model.AvatarPicture = personas.Avatar(service.Active.avatar);
+                model.AvatarName = personas.AvatarName(service.Active.avatar);
+                model.CanChangeAvatar = !personas.CharacterCustomizer && personas.AvatarCount > 1;
+            }
+
+            gameSelectActions.Customize = personas != null && personas.CharacterCustomizer
+                ? () => OpenFromGameSelect(host.PersonaPanel.Open)
+                : (Action)null;
+            int count = model.IsEmptyTable ? 0 : Mathf.Clamp(ChosenPlayerCount(entry), 0, FrontEndView.PlayerRowCount);
+            string[] names = new string[count];
+            Color[] colors = new Color[count];
+            string[] colorNames = new string[count];
+            for (int i = 0; i < count; i++)
+            {
+                names[i] = i == 0 ? service.Active.displayName : $"Player {i + 1}";
+                colors[i] = PlayerSeatColor(i);
+                colorNames[i] = PlayerColorName(i);
+            }
+
+            model.PlayerCount = count;
+            model.PlayerNames = names;
+            model.PlayerColors = colors;
+            model.PlayerColorNames = colorNames;
+        }
+
+        // UI-2: the avatar arrows on the Player profile screen (saved in the profile at once).
+        private void CycleFrontEndAvatar(int step)
+        {
+            PersonaSet personas = host.PersonaSetForProfile;
+            if (personas == null || personas.AvatarCount == 0) return;
+            ProfileService service = host.EnsureProfile();
+            int next = PersonaSet.Wrap(service.Active.avatar + step, personas.AvatarCount);
+            ShowGameSelect(service.SaveAvatar(next, out string error)
+                ? $"Your avatar is now {personas.AvatarName(next)}."
+                : $"Could not save your avatar: {error}.");
+        }
+
+        // UI-2: SANDBOX starts an Empty Table.
+        private void StartSandbox()
+        {
+            gameSelectEntryId = EmptyTableEntryId;
+            StartSelectedGame();
+        }
+
+        // UI-2: playing as another profile reloads the table; the front end comes back on Player profile.
+        private void PlayAsFromFrontEnd(string profileId)
+        {
+            pendingFrontEndPage = FrontEndPage.Profile;
+            host.runtimeUi?.CloseGameSelect();
+            host.ProfilePanel.PlayAsProfile(profileId);
+        }
+
+        private static void ExitGame()
+        {
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            UnityEngine.Application.Quit();
+#endif
         }
 
         // ---------- the games ----------

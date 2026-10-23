@@ -285,39 +285,8 @@ namespace ConsoleCards.Presentation.Composition
         // PLACE-1: playerCount (0: keep the game's current count) is how many players a game's table is dealt for.
         internal void RequestTableReplacement(TabletopSessionSelection selection, int playerCount = 0)
         {
-            if (!host.IsInitialized || !HasCurrentTableContent())
-            {
-                TryReplaceTable(selection, playerCount);
-                return;
-            }
-
-            string replacementName = ReplacementDisplayName(selection);
-            // MODE-1 / DIR-1: Cancel keeps the game in play, so the New table… choices waiting for the deal are dropped.
-            Action CancelReplacement = () =>
-            {
-                host.TrapFloorGame.PendingWinMode = null;
-                host.TrapFloorGame.PendingAnticlockwise = null;
-                host.ContextMenus.CloseContextMenu();
-            };
-            host.runtimeUi.ShowContextMenu(
-                new Vector2(Screen.width * 0.5f, Screen.height * 0.5f),
-                "REPLACE CURRENT TABLE?",
-                $"The current table contains content. Loading {replacementName} will replace it and establish a new Reset baseline.",
-                new[]
-                {
-                    new PopupActionOption(
-                        selection.Kind == TabletopSessionKind.EmptyCustom
-                            ? "Clear Table"
-                            : $"Load {replacementName}",
-                        true,
-                        () => TryReplaceTable(selection, playerCount)),
-                    new PopupActionOption(
-                        "Cancel",
-                        true,
-                        CancelReplacement),
-                },
-                CancelReplacement,
-                host.ContextMenus.DismissPopupFromSecondary);
+            // Owner, 2026-10-24: no "Replace current table?" question; the choice was already made in New table…
+            TryReplaceTable(selection, playerCount);
         }
 
         // PLACE-1: deals the game's table for playerCount players (0: its current count). When the table cannot be

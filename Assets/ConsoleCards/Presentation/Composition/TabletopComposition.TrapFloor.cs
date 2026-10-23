@@ -343,24 +343,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (trapFloorTurnState.IsCurrentFloorFailed) return;
             RulesCardPanel.RaiseHint(HintTriggers.TurnStart, trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn ? "player" : "floor");
-            if (trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn)
-            {
-                PlayerId active = trapFloorTurnState.ActivePlayerId;
-                string colour = TryGetSeatIndex(active, out int seat) ? $" ({PlayerColorName(seat)})" : string.Empty;
-                runtimeUi.ShowFeedbackBanner(new FeedbackBannerModel(
-                    FeedbackEventKind.TurnStart,
-                    $"{FormatPlayerName(active).ToUpperInvariant()}{colour} — YOUR TURN",
-                    $"ROUND {trapFloorTurnState.CurrentRound}",
-                    FeedbackColour(active)));
-            }
-            else if (trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
-            {
-                runtimeUi.ShowFeedbackBanner(new FeedbackBannerModel(
-                    FeedbackEventKind.RoundStart,
-                    "FLOOR TURN",
-                    $"{FormatPlayerName(trapFloorTurnState.FloorOperatorPlayerId)} rolls the floor",
-                    new Color(0.878f, 0.325f, 0.122f)));
-            }
+            // Owner, 2026-10-24: no big turn banner in the middle; the round bar shows whose turn it is.
         }
 
         private void AnnounceActivity(TrapFloorActivityEntry entry)

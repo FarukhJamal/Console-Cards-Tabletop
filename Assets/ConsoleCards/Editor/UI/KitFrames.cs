@@ -20,6 +20,12 @@ namespace ConsoleCards.Editor.UI
         // The 2x exports are drawn at 1440 wide; the UI scales from 1920: one export pixel is 2/3 of a UI unit.
         private const float FramePixelsPerUnit = 1.5f;
 
+        // Popups and menus: the orange frame's corner plates a little smaller, so titles clear them (owner, 2026-10-24).
+        private const float OrangePixelsPerUnit = 2f;
+
+        // A header title starts right of the corner plate.
+        private const float TitleInset = 40f;
+
         private const string GreyFrame = "Rules";
         private const string OrangeFrame = "Player Profile";
         private const string RoundBar = "Top";
@@ -109,7 +115,7 @@ namespace ConsoleCards.Editor.UI
                         break;
                 }
 
-                QuietPanelParts(fill.transform.parent);
+                QuietPanelParts(fill.transform.parent, counted);
             }
 
             // The Log's tab opens it: the same frame.
@@ -125,11 +131,12 @@ namespace ConsoleCards.Editor.UI
         private static void SetFrame(Image image, string frame, Action counted)
         {
             Sprite sprite = Frame(frame);
-            if (sprite == null || image.sprite == sprite) return;
+            float scale = frame == OrangeFrame ? OrangePixelsPerUnit : FramePixelsPerUnit;
+            if (sprite == null || (image.sprite == sprite && Mathf.Approximately(image.pixelsPerUnitMultiplier, scale))) return;
             image.sprite = sprite;
             image.color = Color.white;
             image.type = Image.Type.Sliced;
-            image.pixelsPerUnitMultiplier = FramePixelsPerUnit;
+            image.pixelsPerUnitMultiplier = scale;
             counted();
         }
 
@@ -148,8 +155,16 @@ namespace ConsoleCards.Editor.UI
 
         // The frame draws the panel: its drop shadow goes, and the old orange header band and the cream body
         // turn clear (they keep catching clicks).
-        private static void QuietPanelParts(Transform panel)
+        private static void QuietPanelParts(Transform panel, Action counted)
         {
+            // The header's title moves right of the frame's corner plate (it sat under it).
+            Transform title = panel != null ? panel.Find("Header/Title") : null;
+            if (title is RectTransform titleRect && titleRect.offsetMin.x < TitleInset)
+            {
+                titleRect.offsetMin = new Vector2(TitleInset, titleRect.offsetMin.y);
+                counted();
+            }
+
             if (panel == null) return;
             for (int i = 0; i < panel.childCount; i++)
             {

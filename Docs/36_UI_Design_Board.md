@@ -203,3 +203,21 @@ footer "House rules: 1 change" with < FOLD >; the Log and + TOOLBOX use small sc
 only the keys. Kept though not drawn in V5: the table tools (a small screwed bar above the Controls bar), the
 Floorfall details (above the buttons while a Floorfall is on), and rule headings in the list. "In hand" shows the
 number of cards (a hand is private, so card names are not shown).
+
+## 9. UI-2 — the front end (the Milanote user journey, 2026-10-24)
+
+The owner's Milanote board sets the flow: Main menu → Player profile → Game library → Game details → Game setup (1) →
+Players (2) → Review (3) → the table (V5). Built as one prefab, `Final/UI/FrontEnd.prefab` (FrontEndView), from the
+kit exports: Top_Console (top bar), Menu / Menu_Selected (menu entries and player rows), Player Profile and Avatar
+(frames), Profile_entry / Selected_Profile_entry (profiles, setup rows), Game Entry / Selected Game Entry (library),
+Button_Enabled / Button_disabled (CONTINUE / BACK), Frame_move (chips and pickers), Square (icon boxes, player badges).
+The background picture is the owner's export `Content/UI/Figma/Components/Background.png`; until it is there the
+screens sit on the kit's dark colour.
+
+What each screen does with the game: PLAY → Player profile (click a profile to play as it; the avatar arrows change
+your avatar) → CONTINUE → library (click a game) → SELECT → details → START SETUP → the New table… choices as rows
+(mode, players, win mode, turns, deck) → players (seat colours; add or remove a player) → review → START GAME deals the
+table. CREATE opens Card art, Card editor or Deck editor. SANDBOX starts an Empty Table. TABLE (top bar) or Esc on the
+main menu goes back to the table as it is; GUIDE opens the help; EXIT leaves the game. Not wired yet: SETTINGS (not on
+the bar), per-player names and pawn colours (the seats keep "Player n" and their colour), the details page's
+screenshots and feature tiles (no data yet; it shows the game's picture, rules and deck).

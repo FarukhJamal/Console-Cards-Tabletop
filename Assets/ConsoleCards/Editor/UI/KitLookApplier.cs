@@ -103,6 +103,8 @@ namespace ConsoleCards.Editor.UI
             PrepareKitSprites();
             KitFrames.Prepare();
             V5Hud.Prepare();
+            FrontEndBuilder.Prepare();
+            int frontEnd = FrontEndBuilder.BuildOrRefresh(); // UI-2: the front end prefab, built once
             Dictionary<Font, Font> fonts = FontMap();
             Report report = new Report();
             string[] paths = Directory.GetFiles(UiKit.FinalUiFolder, "*.prefab", SearchOption.TopDirectoryOnly);
@@ -115,7 +117,8 @@ namespace ConsoleCards.Editor.UI
             AssetDatabase.SaveAssets();
             Debug.Log($"[UI-1] Kit look: {report.Prefabs} prefabs changed; {report.Fonts} labels to Oxanium, "
                 + $"{report.Sprites} panel sprites, {report.Colors} colours, {report.Moves} moved to the V5 layout, "
-                + $"{report.Frames} Figma frames, {report.V5} table HUD prefabs laid out as the Figma V5 screen.");
+                + $"{report.Frames} Figma frames, {report.V5} table HUD prefabs laid out as the Figma V5 screen; front end "
+                + (frontEnd > 0 ? "built or refreshed." : "unchanged."));
         }
 
         private static void ApplyToPrefab(string path, Dictionary<Font, Font> fonts, Report report)

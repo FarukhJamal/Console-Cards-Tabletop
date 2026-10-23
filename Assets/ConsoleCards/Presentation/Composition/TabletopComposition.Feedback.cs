@@ -183,14 +183,8 @@ namespace ConsoleCards.Presentation.Composition
                 RecordHandoverLine(string.IsNullOrEmpty(subtitle) ? title : $"{title} — {subtitle}");
             }
 
-            if (!fullFeedback && kind != FeedbackEventKind.TurnStart && kind != FeedbackEventKind.RoundStart)
-            {
-                runtimeUi.ShowFeedbackMessage(string.IsNullOrEmpty(subtitle) ? title : $"{title} — {subtitle}",
-                    FeedbackSeverity.Info); // Minimal: a message instead of a banner
-                return;
-            }
-
-            runtimeUi.ShowFeedbackBanner(new FeedbackBannerModel(kind, title, subtitle, accent));
+            // Owner, 2026-10-24: no big banners in the middle of the screen (turns, eliminated, ...); the line above
+            // goes to the Log, and the turn shows on the round bar and the player card.
         }
     }
 }

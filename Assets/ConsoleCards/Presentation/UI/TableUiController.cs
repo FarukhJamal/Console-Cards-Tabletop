@@ -49,6 +49,8 @@ namespace ConsoleCards.Presentation.UI
         private bool cardEditorEntryWarned;
         private DeckEditorPanelView deckEditorPanelView;
         private GameSelectPanelView gameSelectPanelView;
+        private FrontEndView frontEndView; // UI-2: the front end shows the New table… choices as the user journey
+        private bool frontEndMissing;
         private GameSavePanelView gameSavePanelView;
         private bool saveGameEntryWarned;
         private bool deckEditorEntryWarned;
@@ -302,6 +304,7 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>Shows or refreshes the game selection menu (L2-4). False when its prefab is missing.</summary>
         public bool ShowGameSelect(GameSelectModel model, GameSelectActions actions)
         {
+            if (!frontEndMissing && ShowFrontEnd(model, actions)) return true;
             try
             {
                 EnsureService();
@@ -330,7 +333,44 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
-        public bool IsGameSelectOpen => IsVisible(gameSelectPanelView);
+        public bool IsGameSelectOpen => IsVisible(gameSelectPanelView) || IsVisible(frontEndView);
+
+        // UI-2 (owner, 2026-10-24): the front end (main menu, profile, library, details, setup, players, review).
+        private bool ShowFrontEnd(GameSelectModel model, GameSelectActions actions)
+        {
+            try
+            {
+                EnsureService();
+                if (frontEndView == null || !frontEndView.IsAcquired)
+                {
+                    ReleaseView(tabletopPopupView);
+                    popupLayer.SetActive(false);
+                    ReleaseModalViews();
+                    componentToolboxView?.CloseToolbox();
+                    HideGameTemplatesPanel();
+                    frontEndView = uiService.AcquireCached<FrontEndView>(UiPrefabIds.FrontEnd);
+                    frontEndView.ValidateReferences();
+                }
+
+                modalLayer.SetActive(true);
+                frontEndView.Bind(model, actions, OpenGuideFromFrontEnd);
+                frontEndView.Show();
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                frontEndMissing = true;
+                Debug.LogWarning("The front end is missing: run Console Cards > UI > Apply Kit Look (UI-1). " + exception.Message);
+                return false;
+            }
+        }
+
+        private void OpenGuideFromFrontEnd()
+        {
+            ReleaseView(frontEndView);
+            SetModalLayerOffUnlessHandover();
+            OpenHelp();
+        }
 
         /// <summary>Binds the Table menu's "Save table as a game…" row (doc 29); null hides it.</summary>
         public void ShowSaveGameEntry(Action openSaveGame)
@@ -381,6 +421,7 @@ namespace ConsoleCards.Presentation.UI
 
         public void CloseGameSelect()
         {
+            ReleaseView(frontEndView);
             ReleaseView(gameSelectPanelView);
             SetModalLayerOffUnlessHandover();
         }
@@ -933,7 +974,7 @@ namespace ConsoleCards.Presentation.UI
             if (modalLayer != null && !IsVisible(hotSeatHandoverView) && !IsVisible(contentArtPanelView)
                 && !IsVisible(ruleProposalPanelView) && !IsVisible(profilePanelView) && !IsVisible(personaPanelView)
                 && !IsVisible(cardEditorPanelView)
-                && !IsVisible(deckEditorPanelView) && !IsVisible(gameSelectPanelView)
+                && !IsVisible(deckEditorPanelView) && !IsVisible(gameSelectPanelView) && !IsVisible(frontEndView)
                 && !IsVisible(gameSavePanelView) && !IsVisible(tablePanelView))
             {
                 modalLayer.SetActive(false);
@@ -1304,6 +1345,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(cardEditorPanelView);
             ReleaseView(deckEditorPanelView);
             ReleaseView(gameSelectPanelView);
+            ReleaseView(frontEndView);
             ReleaseView(gameSavePanelView);
             ReleaseView(tablePanelView);
             ReleaseView(hintStripView);
@@ -1442,6 +1484,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(cardEditorPanelView);
             ReleaseView(deckEditorPanelView);
             ReleaseView(gameSelectPanelView);
+            ReleaseView(frontEndView);
             ReleaseView(gameSavePanelView);
             ReleaseView(quantityPopupView);
             ReleaseView(cardInspectPopupView);

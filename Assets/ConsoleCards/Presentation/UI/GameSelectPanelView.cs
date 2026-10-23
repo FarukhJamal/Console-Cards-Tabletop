@@ -37,6 +37,19 @@ namespace ConsoleCards.Presentation.UI
         public string DeleteText = "Delete game";
         public string StartText = "Start";
         public string Status = string.Empty;
+
+        // UI-2 front end (owner, 2026-10-24: the Milanote user journey).
+        /// <summary>The screen to open on (null: stay on the screen shown).</summary>
+        public FrontEndPage? OpenAt;
+        public bool IsEmptyTable;
+        public IReadOnlyList<ProfileRowModel> Profiles = Array.Empty<ProfileRowModel>();
+        public Texture AvatarPicture;
+        public string AvatarName = string.Empty;
+        public bool CanChangeAvatar;
+        public int PlayerCount;
+        public IReadOnlyList<string> PlayerNames = Array.Empty<string>();
+        public IReadOnlyList<Color> PlayerColors = Array.Empty<Color>();
+        public IReadOnlyList<string> PlayerColorNames = Array.Empty<string>();
     }
 
     /// <summary>The game selection menu's actions, supplied by the game.</summary>
@@ -55,6 +68,13 @@ namespace ConsoleCards.Presentation.UI
         public Action Start;
         public Action Delete;
         public Action Close;
+
+        // UI-2 front end.
+        public Action<string> PlayAs;
+        public Action<int> CycleAvatar;
+        public Action Customize;
+        public Action Sandbox;
+        public Action Exit;
     }
 
     /// <summary>

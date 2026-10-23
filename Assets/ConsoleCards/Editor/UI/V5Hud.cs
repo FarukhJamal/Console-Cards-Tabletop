@@ -642,6 +642,19 @@ namespace ConsoleCards.Editor.UI
                 if (words != null) words.text = "+  TOOLBOX";
             }
 
+            // The open Toolbox ends above the Log (it ran down over it) and starts level with the Rules card.
+            foreach (string path in new[] { "PanelGroup/Panel", "PanelGroup/PanelShadow" })
+            {
+                RectTransform panel = Find(root, path);
+                if (panel == null) continue;
+                panel.anchorMin = Vector2.zero;
+                panel.anchorMax = new Vector2(0f, 1f);
+                panel.offsetMin = new Vector2(Margin, 125f + 110f + 12f);
+                panel.offsetMax = new Vector2(Margin + 564f, -127f);
+            }
+
+            Off(Find(root, "PanelGroup/PanelShadow"));
+
             RectTransform placing = Find(root, "PlacingCard");
             if (placing != null)
             {
