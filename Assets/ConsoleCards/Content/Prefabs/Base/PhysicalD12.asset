@@ -16,40 +16,41 @@ MonoBehaviour:
   readOppositeSupportingFace: 0
   visualPrefab: {fileID: 4934466853842467482, guid: 3290e97a1eff5ba4888afb360c9c56c2, type: 3}
   visualSize: 0.283
+  skin: {fileID: 2100000, guid: 61bec4de465d4309bf9f4d3a0aeec1ae, type: 2}
   faces:
   - value: 1
-    outwardNormal: {x: 0.276393, y: 0.447214, z: 0.850651}
-    planeDistance: 0.3
-  - value: 2
-    outwardNormal: {x: -0.894427, y: -0.447213, z: 0}
-    planeDistance: 0.3
-  - value: 3
     outwardNormal: {x: 0, y: 1, z: 0}
     planeDistance: 0.3
+  - value: 2
+    outwardNormal: {x: 0.72361, y: 0.44721, z: 0.52573}
+    planeDistance: 0.3
+  - value: 3
+    outwardNormal: {x: 0.27639, y: -0.44721, z: -0.85065}
+    planeDistance: 0.3
   - value: 4
-    outwardNormal: {x: 0.723607, y: -0.447213, z: -0.525732}
+    outwardNormal: {x: 0.72361, y: 0.44721, z: -0.52573}
     planeDistance: 0.3
   - value: 5
-    outwardNormal: {x: -0.276393, y: -0.447214, z: 0.850651}
+    outwardNormal: {x: -0.89443, y: 0.44721, z: 0}
     planeDistance: 0.3
   - value: 6
-    outwardNormal: {x: -0.723607, y: 0.447213, z: -0.525732}
+    outwardNormal: {x: -0.27639, y: 0.44721, z: -0.85065}
     planeDistance: 0.3
   - value: 7
-    outwardNormal: {x: 0.723607, y: -0.447213, z: 0.525731}
+    outwardNormal: {x: 0.27639, y: -0.44721, z: 0.85065}
     planeDistance: 0.3
   - value: 8
-    outwardNormal: {x: 0.276393, y: 0.447214, z: -0.850651}
+    outwardNormal: {x: 0.89443, y: -0.44721, z: 0}
     planeDistance: 0.3
   - value: 9
-    outwardNormal: {x: -0.723607, y: 0.447213, z: 0.525731}
+    outwardNormal: {x: -0.72361, y: -0.44721, z: 0.52573}
     planeDistance: 0.3
   - value: 10
-    outwardNormal: {x: 0, y: -1, z: 0}
+    outwardNormal: {x: -0.27639, y: 0.44721, z: 0.85065}
     planeDistance: 0.3
   - value: 11
-    outwardNormal: {x: 0.894427, y: 0.447213, z: 0}
+    outwardNormal: {x: -0.72361, y: -0.44721, z: -0.52573}
     planeDistance: 0.3
   - value: 12
-    outwardNormal: {x: -0.276393, y: -0.447213, z: -0.850651}
+    outwardNormal: {x: 0, y: -1, z: 0}
     planeDistance: 0.3

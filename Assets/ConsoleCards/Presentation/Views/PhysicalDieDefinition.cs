@@ -23,6 +23,9 @@ namespace ConsoleCards.Presentation.Views
         [Header("Supplied Visual")]
         [SerializeField] private GameObject visualPrefab;
         [SerializeField] private float visualSize = 0.6f;
+        [Tooltip("SKIN-1: the die's own skin (a material with the face numbers painted to match the faces above). "
+            + "Empty keeps the visual prefab's material.")]
+        [SerializeField] private Material skin;
         public int SideCount => sideCount;
 
         public bool TryRead(Quaternion rotation, out int value)
@@ -83,6 +86,8 @@ namespace ConsoleCards.Presentation.Views
             {
                 throw new InvalidOperationException($"Physical d{sideCount} visual prefab requires a root MeshFilter and MeshRenderer.");
             }
+
+            if (skin != null) visualRenderer.sharedMaterial = skin;
 
             if (visualCollider == null || visualCollider.sharedMesh == null)
             {

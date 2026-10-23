@@ -16,16 +16,17 @@ MonoBehaviour:
   readOppositeSupportingFace: 1
   visualPrefab: {fileID: 7775085678995213916, guid: ecebc87658eb28348a15e027ac7e537a, type: 3}
   visualSize: 0.315
+  skin: {fileID: 2100000, guid: 1805b279998e40668d4ad6e269a0b07e, type: 2}
   faces:
   - value: 1
-    outwardNormal: {x: 0, y: -1, z: 0}
+    outwardNormal: {x: -0.8134, y: 0.34202, z: -0.47053}
     planeDistance: 0.16
   - value: 2
-    outwardNormal: {x: 0.813402, y: 0.342021, z: -0.47053}
+    outwardNormal: {x: 0.81419, y: 0.34202, z: -0.46916}
     planeDistance: 0.16
   - value: 3
-    outwardNormal: {x: 0.000791, y: 0.34202, z: 0.939692}
+    outwardNormal: {x: -0.00079, y: 0.34202, z: 0.93969}
     planeDistance: 0.16
   - value: 4
-    outwardNormal: {x: -0.814193, y: 0.34202, z: -0.469162}
+    outwardNormal: {x: 0, y: -1, z: 0}
     planeDistance: 0.16
