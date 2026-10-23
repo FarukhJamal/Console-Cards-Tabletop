@@ -461,8 +461,9 @@ namespace ConsoleCards.Presentation.Views.Containers
                     continue;
                 }
 
-                // In the tray a lifted card also owns the strip it has risen into.
-                float lowerDepth = pickHalfDepths[i];
+                // In the tray a lifted card also owns the strip it has risen into, and every card owns the part
+                // its fan lowering shows below the row (BUILD-4), whether it is lowered right now or not.
+                float lowerDepth = pickHalfDepths[i] + TrayFanDropAt(i, center);
                 float upperDepth = lowerDepth + (trayRig != null ? TrayRise(card) : 0f);
                 if (Mathf.Abs(localPoint.x - ((i - center) * layoutPitch)) <= halfWidth
                     && localPoint.z >= -lowerDepth
@@ -1041,6 +1042,14 @@ namespace ConsoleCards.Presentation.Views.Containers
             return card != null && trayMotions.TryGetValue(card.ObjectId, out TrayMotion motion)
                 ? Mathf.Clamp(motion.Position.z, 0f, MaximumTrayRise())
                 : 0f;
+        }
+
+        // How far the fan lowers card i of the tray row (0 outside the tray or with a straight row).
+        private float TrayFanDropAt(int index, float center)
+        {
+            if (trayRig == null || !TrayFan || center <= 0f) return 0f;
+            float fan = Mathf.Clamp((index - center) / center, -1f, 1f);
+            return trayFanDrop * fan * fan;
         }
 
         private float MaximumTrayRise()

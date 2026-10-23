@@ -62,6 +62,21 @@ namespace ConsoleCards.Presentation.Interaction
 
             Physics.SyncTransforms();
             Ray ray = TargetCamera.ScreenPointToRay(screenPosition);
+            // BUILD-4 (owner, 2026-10-23, video: a card at the hand's lower edge flickered up and down under a still
+            // pointer): the hand tray lies in front of the table, so its own pick by resting strips decides first.
+            // A card that straightens and rises when hovered then keeps the hover even after its collider has moved
+            // out from under the pointer.
+            HandView trayHand = HandPicker;
+            if (trayHand != null
+                && trayHand.IsBound
+                && trayHand.TrayRig != null
+                && trayHand.TryPickCard(ray, out CardView trayCard)
+                && (IsHidden == null || !IsHidden(trayCard)))
+            {
+                view = trayCard;
+                return true;
+            }
+
             int hitCount = Physics.RaycastNonAlloc(
                 ray,
                 hitBuffer,
