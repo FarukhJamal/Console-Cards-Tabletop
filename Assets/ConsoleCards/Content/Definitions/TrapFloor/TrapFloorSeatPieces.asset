@@ -27,10 +27,10 @@ MonoBehaviour:
     position: {x: 9.7, y: 0}
     turn: 270
   controllerDeck:
-    position: {x: 5.2, y: -5.45}
+    position: {x: 5.2, y: -5.75}
     turn: 0
   abilityDeck:
-    position: {x: -4.75, y: 0}
+    position: {x: -8, y: 0}
     turn: 0
   abilityDiscard:
     position: {x: -4.75, y: 2}

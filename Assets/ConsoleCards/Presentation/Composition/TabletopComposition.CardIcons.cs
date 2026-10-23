@@ -29,6 +29,9 @@ namespace ConsoleCards.Presentation.Composition
         private const float CardFrameLift = 0.00012f;
         private const float CardTabLift = 0.0002f;
         private const float CardSymbolLift = 0.00028f;
+        // BUILD-1: the alpha-clipped material the frame, tabs and symbols copy. It lives in Content/Resources so a
+        // player build keeps the shader's alpha-clip variant (a keyword switched on only from code is stripped).
+        private const string CardFaceLayerResourcePath = "CardFrames/CardFaceLayer";
         private const int CardFacePartCount = 4;
 
         private readonly Dictionary<string, Mesh> cardIconMeshes = new Dictionary<string, Mesh>(StringComparer.Ordinal);
@@ -395,7 +398,10 @@ namespace ConsoleCards.Presentation.Composition
 
             if (cardFaceLayerBase == null)
             {
-                cardFaceLayerBase = faceRenderer != null ? CardArtBaseMaterial(faceRenderer.sharedMaterial) : null;
+                Material shipped = Resources.Load<Material>(CardFaceLayerResourcePath);
+                cardFaceLayerBase = shipped != null
+                    ? shipped
+                    : faceRenderer != null ? CardArtBaseMaterial(faceRenderer.sharedMaterial) : null;
             }
 
             if (cardFaceLayerBase == null)
