@@ -165,6 +165,18 @@ namespace ConsoleCards.Presentation.Composition
         /// </summary>
         int BoardRemovedSpaces { get; }
 
+        /// <summary>
+        /// T-1: the size (table units) of the playmat the board's spaces lie on, centred on the board; zero: the mat is
+        /// just its spaces with their frame.
+        /// </summary>
+        Vector2 BoardMatSize { get; }
+
+        /// <summary>
+        /// T-2: half the table's width and depth (table units, around the table's centre) the game needs with its most
+        /// players; false when the game does not say (the table stays as it is).
+        /// </summary>
+        bool TryGetTableNeed(out Vector2 halfSize);
+
         /// <summary>A board piece's view was made (the game may mark it, for example for move targets).</summary>
         void OnBoardPieceViewCreated(TabletopObjectId objectId, CardVisualReferences references);
 
@@ -464,6 +476,14 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         public int BoardRemovedSpaces => 0;
+
+        public Vector2 BoardMatSize => Vector2.zero;
+
+        public bool TryGetTableNeed(out Vector2 halfSize)
+        {
+            halfSize = Vector2.zero;
+            return false;
+        }
 
         public void OnBoardPieceViewCreated(TabletopObjectId objectId, CardVisualReferences references)
         {

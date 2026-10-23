@@ -74,6 +74,9 @@ namespace ConsoleCards.Presentation.Composition
             return visual;
         }
 
+        // A card's length over its width (2.5 x 3.5"): a landscape card is that much wider and that much shorter.
+        private const float LandscapeCardStretch = 1.4f;
+
         internal CardView CreateCardView(
             CardInstanceState card,
             string label,
@@ -99,16 +102,26 @@ namespace ConsoleCards.Presentation.Composition
             createdView.Bind(card, host.coordinateConverter);
             if (host.ActiveCartridge.IsBoardTile(card.BaseState.Id))
             {
-                // CART-1b: a game's board tile (for example a floor tile) is drawn smaller and the game may mark it.
-                clone.transform.localScale = Vector3.one * host.floorCardVisualScale;
+                // CART-1b: the game may mark its board tiles. T-1 (owner, 2026-10-23): a floor tile is a full-size card
+                // (2.5 x 3.5"), no longer drawn smaller.
                 host.ActiveCartridge.OnBoardPieceViewCreated(card.BaseState.Id, createdVisualReferences);
             }
 
-            else if (host.CardSizeClassOf(card) == CardSizeClass.Large)
+            else
             {
-                // Hero/avatar-size card: wider and longer (model and click box), never taller, so the slot
-                // alone decides its height on the Console.
-                clone.transform.localScale = new Vector3(host.largeCardVisualScale, 1f, host.largeCardVisualScale);
+                // Hero/avatar-size card: wider and longer (model and click box), never taller, so the slot alone decides
+                // its height on the Console; it fills the Console's screen (Main slot). Owner, 2026-10-23 ("squished"):
+                // a card with a landscape picture (the Avatar cards' new art) is the same card lying on its side, so the
+                // picture keeps its shape and stands upright.
+                float size = host.CardSizeClassOf(card) == CardSizeClass.Large ? host.largeCardVisualScale : 1f;
+                if (host.IsLandscapeCard(card.BaseState.DefinitionId))
+                {
+                    clone.transform.localScale = new Vector3(size * LandscapeCardStretch, 1f, size / LandscapeCardStretch);
+                }
+                else if (size != 1f)
+                {
+                    clone.transform.localScale = new Vector3(size, 1f, size);
+                }
             }
 
             host.Registry.cardVisualReferences.Add(createdVisualReferences);

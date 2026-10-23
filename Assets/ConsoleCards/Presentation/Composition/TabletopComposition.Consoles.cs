@@ -591,6 +591,13 @@ namespace ConsoleCards.Presentation.Composition
         // matching icon (a card matched by its Console symbol alone keeps the slot orientation).
         private float CardTurnInSlot(CardView card, ConsoleSlotView slot)
         {
+            // A landscape card (owner, 2026-10-23) is already wide: in a landscape slot it lies straight, picture upright.
+            if (slot != null && slot.OrientationOffsetDegrees != 0f && card != null && card.CardState != null
+                && IsLandscapeCard(card.CardState.BaseState.DefinitionId))
+            {
+                return -slot.OrientationOffsetDegrees;
+            }
+
             CardDefinition definition = ConsoleCardDefinition(card);
             if (definition == null || !definition.HasEdgeSymbols || !TryGetSlotLayout(slot, out ConsoleLayoutSlotData data))
             {

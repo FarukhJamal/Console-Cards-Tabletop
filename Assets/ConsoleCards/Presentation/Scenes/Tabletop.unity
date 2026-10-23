@@ -1848,7 +1848,7 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.1
-  far clip plane: 100
+  far clip plane: 300
   field of view: 50
   orthographic: 0
   orthographic size: 5
@@ -2221,7 +2221,7 @@ MonoBehaviour:
   initialPitchDegrees: 78
   initialYawDegrees: 0
   tabletopHeight: 14.3
-  perspectiveFieldOfView: 50
+  perspectiveFieldOfView: 30
   topDownUsesOrthographic: 1
   kickFrequency: 26
   glanceStrength: 0.35
@@ -2229,7 +2229,7 @@ MonoBehaviour:
   maximumOrthographicSize: 20
   initialOrthographicSize: 5
   minimumDistance: 3
-  maximumDistance: 32
+  maximumDistance: 90
   zoomSpeed: 22.5
   orbitDegreesPerPixel: 0.18
   panDistanceScale: 0.085

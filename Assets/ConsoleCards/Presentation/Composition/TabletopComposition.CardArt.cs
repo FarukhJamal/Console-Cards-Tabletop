@@ -70,6 +70,22 @@ namespace ConsoleCards.Presentation.Composition
         internal Texture2D AvatarArt(AvatarDefinition avatar) =>
             avatar == null ? null : Art(avatar.ArtworkReference, avatar.Artwork);
 
+        // Owner, 2026-10-23 ("the avatar cards look squished"): a card whose front picture is wider than tall is a
+        // landscape card. It is drawn wide with its picture upright, and a landscape Console slot does not turn it again.
+        // Worked out once per card kind.
+        private readonly Dictionary<ObjectDefinitionId, bool> landscapeCards = new Dictionary<ObjectDefinitionId, bool>();
+
+        internal bool IsLandscapeCard(ObjectDefinitionId definitionId)
+        {
+            if (landscapeCards.TryGetValue(definitionId, out bool landscape)) return landscape;
+            Texture2D art = TryGetCardLook(definitionId, out CardDefinition definition)
+                ? FrontArt(definition)
+                : TryGetAvatarLook(definitionId, out AvatarDefinition avatar) ? AvatarArt(avatar) : null;
+            landscape = art != null && art.width > art.height;
+            landscapeCards[definitionId] = landscape;
+            return landscape;
+        }
+
         // The player profile (doc 28): the one used last, or a new "Player 1". Choosing another profile comes with the
         // profile screen; until then the stores are made once for this profile.
         internal ProfileService EnsureProfile()

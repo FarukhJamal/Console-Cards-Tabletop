@@ -228,7 +228,6 @@ namespace ConsoleCards.Presentation.Composition
         [SerializeField, Min(0f)] internal float boardJoinDistance = 0.8f;
         [SerializeField] internal float feedbackDuration = 0.18f;
         [SerializeField] internal float shuffleCompression = 0.06f;
-        [SerializeField] internal float floorCardVisualScale = 0.62f;
         [Tooltip("Scale of Large (hero/avatar) cards relative to a Standard card (doc 24).")]
         [SerializeField] internal float largeCardVisualScale = 1.486f;
         [Tooltip("Player feedback (doc 25): announcement banners, the message stack and the turn ping.")]
@@ -975,6 +974,10 @@ namespace ConsoleCards.Presentation.Composition
 
             try
             {
+                // Card pictures seen at a low camera angle stay sharp (owner, 2026-10-23: "pixelated"): anisotropic
+                // filtering on every texture, as Tabletop Simulator does.
+                QualitySettings.anisotropicFiltering = AnisotropicFiltering.ForceEnable;
+                Texture.SetGlobalAnisotropicFilteringLimits(8, 16);
                 SessionService.InitializeRuntimeUi();
                 AdoptCatalogGameBoard(); // C3c: the board comes from the catalog when it has one
                 EnsureContentArt(); // your pictures and the active pack load before the first table

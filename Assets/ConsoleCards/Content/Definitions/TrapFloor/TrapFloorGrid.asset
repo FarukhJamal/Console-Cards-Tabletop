@@ -15,9 +15,9 @@ MonoBehaviour:
   stableId: trap-floor-grid
   rows: 6
   columns: 6
-  cellWidth: 0.72
-  cellHeight: 1
-  horizontalSpacing: 0
-  verticalSpacing: 0
+  cellWidth: 1
+  cellHeight: 1.4
+  horizontalSpacing: 0.1
+  verticalSpacing: 0.1
   origin: {x: 0, y: 0}
   layoutMetadata: Centered rectangular Floor Card grid.

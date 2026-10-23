@@ -88,11 +88,44 @@ namespace ConsoleCards.Presentation.Composition
         {
             try
             {
+                GrowTableForGame();
                 ArrangeSeatsAlongEdge(true);
             }
             catch (Exception exception)
             {
                 Debug.LogException(exception, this);
+            }
+        }
+
+        // T-2 (owner, 2026-10-23): pieces keep their real size; the table grows instead, to hold the game with its most
+        // players (the Classic table becomes a Rectangle; a built shape keeps its shape). Never smaller; a table
+        // model stays as it is. For this table only (the saved table is not changed).
+        private void GrowTableForGame()
+        {
+            if (tableSpec == null || tableSpec.shape == TableShape.Model || !FindClassicTable()) return;
+            if (!ActiveCartridge.TryGetTableNeed(out Vector2 half) || half.x <= 0f || half.y <= 0f) return;
+            float needWidth = 2f * half.x;
+            float needDepth = 2f * half.y;
+            bool classic = tableSpec.shape == TableShape.Classic;
+            TableSpec grown = TableSpec.DefaultFor(classic ? TableShape.Rectangle : tableSpec.shape, needWidth, needDepth);
+            bool holds = classic
+                ? classicFrame.ClassicSize.x >= needWidth && classicFrame.ClassicSize.y >= needDepth
+                : tableSpec.width >= grown.width && tableSpec.depth >= grown.depth;
+            if (holds) return;
+            grown.edge = tableSpec.edge;
+            grown.edgeHeight = tableSpec.edgeHeight;
+            grown.edgeWidth = tableSpec.edgeWidth;
+            if (!classic) grown.cornerRadius = tableSpec.cornerRadius;
+            grown.Clamp();
+            TableSpec previous = tableSpec;
+            if (TryChangeTable(grown, out string note))
+            {
+                GrowFrom(previous, grown);
+                ShowMessage($"The table grew to {grown.width:0.#} × {grown.depth:0.#} so every seat fits.{note}");
+            }
+            else
+            {
+                Debug.LogWarning($"[{TableArea}] The table could not grow for this game: {note}", this);
             }
         }
 

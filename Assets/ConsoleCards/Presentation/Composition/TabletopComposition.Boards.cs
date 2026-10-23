@@ -135,6 +135,15 @@ namespace ConsoleCards.Presentation.Composition
             templateBoardMat.transform.SetPositionAndRotation(
                 top + shift - (Vector3.up * templateBoardMat.Thickness),
                 board.rotation);
+            // T-1 (owner, 2026-10-23): the game's playmat (Trap Floor: 35 x 24") stays centred on the board while
+            // MAT-2 moves only the spaces. Where the mat reaches past the board, its own surface holds what is put there.
+            Vector2 playMat = ActiveCartridge.BoardMatSize;
+            if (playMat.x > grid.Width || playMat.y > grid.Depth)
+            {
+                Vector3 back = templateBoardMat.transform.InverseTransformVector(-shift);
+                templateBoardMat.SetMatSize(playMat.x, playMat.y, new Vector2(back.x, back.z));
+                templateBoardMat.SetSurfaceEnabled(true);
+            }
             if (gameBoardVisualRoot != null) gameBoardVisualRoot.gameObject.SetActive(false);
         }
 

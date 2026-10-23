@@ -15,7 +15,7 @@ MonoBehaviour:
   sideCount: 12
   readOppositeSupportingFace: 0
   visualPrefab: {fileID: 4934466853842467482, guid: 3290e97a1eff5ba4888afb360c9c56c2, type: 3}
-  visualSize: 0.6
+  visualSize: 0.283
   faces:
   - value: 1
     outwardNormal: {x: 0.276393, y: 0.447214, z: 0.850651}

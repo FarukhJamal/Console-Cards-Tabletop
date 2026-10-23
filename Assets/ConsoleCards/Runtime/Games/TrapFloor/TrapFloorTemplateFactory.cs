@@ -32,6 +32,23 @@ namespace ConsoleCards.Games.TrapFloor
         public const int MinimumFloorSize = 3;
 
         private const double PlayerConsoleRadius = 6.1d;
+
+        /// <summary>
+        /// T-1 (owner, 2026-10-23): the floor lies on a 35 x 24" playmat. One table unit is 2.5", a card's width, so a
+        /// 2.5 x 3.5" card is 1 x 1.4.
+        /// </summary>
+        public const double PlayMatWidth = 14d;
+        public const double PlayMatDepth = 9.6d;
+
+        // Each Console stands this far out from the playmat's edge (to its middle: half a Console's depth with its
+        // card slots, 2.48, plus a gap).
+        private const double ConsoleOutsidePlayMat = 2.7d;
+
+        // T-2: how far a seat reaches from its Console's middle: across (the Console with its piles, hand and starting
+        // Abilities beside it) and deep (the Console with its card slots); and the table's margin past the pieces.
+        private const double SeatReachAcross = 7.5d;
+        private const double SeatReachDeep = 2.6d;
+        private const double TableEdgeMargin = 0.5d;
         // Trap Floor's placement choices beside each Console (console-local along-z). Positions come from
         // ConsoleAdjacentPlacement with its Standard settings (gap, pile size, clearance and margin rules).
         // Right side: Controller Deck, then the Hand zone; left side: Action stack, then the staging row (the Avatar's starting Abilities).
@@ -42,8 +59,10 @@ namespace ConsoleCards.Games.TrapFloor
         // Each seat's Controller Deck rests in a bay marked Draw (default maximum pile height).
         private static readonly GameTemplatePileStyle ControllerDeckPileStyle =
             new GameTemplatePileStyle(GameTemplateBayMark.Draw);
-        private const double FloorfallDiceX = 3.45d;
-        private const double FloorfallDiceY = 3.45d;
+        // T-1: on the playmat, left of the 6x6 floor (full-size tiles) below the Ability piles, clear of the Consoles
+        // (collapsed tiles are set aside on the right).
+        private const double FloorfallDiceX = -5.45d;
+        private const double FloorfallDiceY = -3.6d;
         private const double FloorfallDiceSpacing = 0.9d;
         // The Blind trap's direction die (doc 18; TrapFloorAbilityResolution requires a d4).
         private const int BlindDieSideCount = 4;
@@ -1375,9 +1394,10 @@ namespace ConsoleCards.Games.TrapFloor
                 }
             }
 
+            // T-2: no fixed table edge here; the table grows to hold every seat when the game starts.
             ConsoleAdjacentPlacementReport report = ConsoleAdjacentPlacement.Check(
                 items,
-                playerLayout.TableBounds,
+                null,
                 placement.Settings);
             if (!report.Passes)
             {
@@ -1560,7 +1580,46 @@ namespace ConsoleCards.Games.TrapFloor
         public static TabletopPose GetConsolePose(PlayerSeatLayoutEntry layoutSeat)
         {
             if (layoutSeat == null) throw new ArgumentNullException(nameof(layoutSeat));
-            return ProjectToRadius(layoutSeat.ConsoleAnchorPose, PlayerConsoleRadius);
+            // T-1: each Console stands outside the playmat (the circle grows only along the seat's direction).
+            TabletopPose anchor = layoutSeat.ConsoleAnchorPose;
+            return ProjectToRadius(anchor, Math.Max(PlayerConsoleRadius, PlayMatEdgeDistance(anchor.Position) + ConsoleOutsidePlayMat));
+        }
+
+        /// <summary>
+        /// T-2 (owner, 2026-10-23: "resize the table to a default point where the maximum number of players can be
+        /// seated"): half the table's width and depth (around the board's centre) that the playmat and every seat of
+        /// the 4-player layout need, with a margin.
+        /// </summary>
+        public static void TableHalfSizeForMostPlayers(out double halfWidth, out double halfDepth)
+        {
+            halfWidth = PlayMatWidth * 0.5d;
+            halfDepth = PlayMatDepth * 0.5d;
+            PlayerLayoutDefinition layout = PlayerLayoutPresets.StandardFourPlayer;
+            for (int i = 0; i < layout.OccupiedSeatCount; i++)
+            {
+                if (!layout.TryGetSeat(i, out PlayerSeatLayoutEntry seat)) continue;
+                TabletopPose pose = GetConsolePose(seat);
+                double radians = pose.RotationDegrees * (Math.PI / 180d);
+                double cos = Math.Abs(Math.Cos(radians));
+                double sin = Math.Abs(Math.Sin(radians));
+                halfWidth = Math.Max(halfWidth, Math.Abs(pose.Position.X) + (cos * SeatReachAcross) + (sin * SeatReachDeep));
+                halfDepth = Math.Max(halfDepth, Math.Abs(pose.Position.Y) + (sin * SeatReachAcross) + (cos * SeatReachDeep));
+            }
+
+            halfWidth += TableEdgeMargin;
+            halfDepth += TableEdgeMargin;
+        }
+
+        // From the board's centre to the playmat's edge, in the direction of the point.
+        private static double PlayMatEdgeDistance(TableCoordinate point)
+        {
+            double length = Math.Sqrt((point.X * point.X) + (point.Y * point.Y));
+            if (length <= 0d) return 0d;
+            double dx = Math.Abs(point.X) / length;
+            double dy = Math.Abs(point.Y) / length;
+            double toSide = dx > 1e-9d ? (PlayMatWidth * 0.5d) / dx : double.PositiveInfinity;
+            double toEnd = dy > 1e-9d ? (PlayMatDepth * 0.5d) / dy : double.PositiveInfinity;
+            return Math.Min(toSide, toEnd);
         }
 
         private static TabletopPose ProjectToRadius(TabletopPose pose, double radius)

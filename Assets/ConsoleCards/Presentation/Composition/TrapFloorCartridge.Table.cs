@@ -378,6 +378,19 @@ namespace ConsoleCards.Presentation.Composition
         // one column fewer; the board keeps the first floor's size, and the removed spaces stay empty.
         public int BoardRemovedSpaces => host.trapFloorTemplate != null ? Math.Max(0, host.trapFloorTemplate.FloorIndex) : 0;
 
+        // T-1 (owner, 2026-10-23): the floor lies on a 35 x 24" playmat.
+        public Vector2 BoardMatSize => new Vector2(
+            (float)TrapFloorTemplateFactory.PlayMatWidth,
+            (float)TrapFloorTemplateFactory.PlayMatDepth);
+
+        // T-2: the table holds the playmat and all four seats.
+        public bool TryGetTableNeed(out Vector2 halfSize)
+        {
+            TrapFloorTemplateFactory.TableHalfSizeForMostPlayers(out double halfWidth, out double halfDepth);
+            halfSize = new Vector2((float)halfWidth, (float)halfDepth);
+            return true;
+        }
+
         // Floor tiles light as move targets (Rush, Dodge, Spring, Crane).
         public void OnBoardPieceViewCreated(TabletopObjectId objectId, CardVisualReferences references)
         {

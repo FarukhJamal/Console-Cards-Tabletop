@@ -22,6 +22,10 @@ namespace ConsoleCards.Presentation.Views
         private readonly List<GameObject> spaces = new List<GameObject>();
         private bool hasGrid;
 
+        // T-1: the mat's own size and centre (mat-local); the spaces area with its frame unless SetMatSize says more.
+        private Vector2 matSize;
+        private Vector2 matCentre;
+
         public BoardGrid Grid { get; private set; }
         public bool HasGrid => hasGrid;
         public float Thickness => thickness;
@@ -33,11 +37,8 @@ namespace ConsoleCards.Presentation.Views
             if (!grid.IsValid || !IsComplete) return;
             Grid = grid;
             hasGrid = true;
-            frame.localPosition = new Vector3(0f, thickness * 0.5f, 0f);
             frame.localRotation = Quaternion.identity;
-            frame.localScale = new Vector3(grid.Width, thickness, grid.Depth);
-            surface.center = new Vector3(0f, thickness * 0.5f, 0f);
-            surface.size = new Vector3(grid.Width, thickness, grid.Depth);
+            LayOutMat(new Vector2(grid.Width, grid.Depth), Vector2.zero);
 
             spaceTemplate.SetActive(false);
             int count = grid.Columns * grid.Rows;
@@ -59,6 +60,27 @@ namespace ConsoleCards.Presentation.Views
                 space.transform.localRotation = Quaternion.identity;
                 space.transform.localScale = new Vector3(grid.SpaceWidth, 1f, grid.SpaceDepth);
             }
+        }
+
+        /// <summary>
+        /// T-1 (owner, 2026-10-23: the play area is a 35 x 24" playmat): the mat is drawn this big (never smaller than
+        /// its spaces with their frame), centred on <paramref name="localCentre"/> (mat-local x/z); the spaces stay
+        /// where they are.
+        /// </summary>
+        public void SetMatSize(float width, float depth, Vector2 localCentre)
+        {
+            if (!hasGrid || !IsComplete) return;
+            LayOutMat(new Vector2(Mathf.Max(width, Grid.Width), Mathf.Max(depth, Grid.Depth)), localCentre);
+        }
+
+        private void LayOutMat(Vector2 size, Vector2 centre)
+        {
+            matSize = size;
+            matCentre = centre;
+            frame.localPosition = new Vector3(centre.x, thickness * 0.5f, centre.y);
+            frame.localScale = new Vector3(size.x, thickness, size.y);
+            surface.center = new Vector3(centre.x, thickness * 0.5f, centre.y);
+            surface.size = new Vector3(size.x, thickness, size.y);
         }
 
         public void SetSurfaceEnabled(bool enabled)
@@ -83,7 +105,7 @@ namespace ConsoleCards.Presentation.Views
         {
             if (!hasGrid) return false;
             Vector3 local = transform.InverseTransformPoint(worldPoint);
-            return Mathf.Abs(local.x) <= Grid.Width * 0.5f && Mathf.Abs(local.z) <= Grid.Depth * 0.5f;
+            return Mathf.Abs(local.x - matCentre.x) <= matSize.x * 0.5f && Mathf.Abs(local.z - matCentre.y) <= matSize.y * 0.5f;
         }
     }
 }

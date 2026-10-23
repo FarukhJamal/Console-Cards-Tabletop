@@ -60,8 +60,6 @@ namespace ConsoleCards.Presentation.Composition
                     "The game Board visual must be a child of its authored physical surface.");
             }
 
-            ValidateFiniteGreaterThanZero(floorCardVisualScale, nameof(floorCardVisualScale));
-            ValidateFiniteGreaterThanZero(largeCardVisualScale, nameof(largeCardVisualScale));
             ValidateCardPrefabReferences();
             ValidateTemplatePrefabReferences();
             ValidatePreInitializationState();
