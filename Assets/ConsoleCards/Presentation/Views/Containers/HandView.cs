@@ -40,6 +40,9 @@ namespace ConsoleCards.Presentation.Views.Containers
         // one before it. It must clear a card's frame and icon layer, which can stand up to 0.0101 above the visible
         // card front (the face plate's top), or that layer shows through the next card of the fan.
         [SerializeField] private float trayCardStep = 0.02f;
+        // A tray card closer than this (tray units) to its stacking height takes it at once (BUILD-3); a card still
+        // coming in from the table eases all the way.
+        private const float TrayDepthSnapRange = 1f;
         [SerializeField] private float trayResponse = 14f;
         [SerializeField] private float trayDragResponse = 30f;
         [SerializeField] private float trayHandoffDuration = 0.28f;
@@ -916,7 +919,13 @@ namespace ConsoleCards.Presentation.Views.Containers
                     (selected ? traySelectedRise : hovered ? trayHoverRise : 0f) - (straight ? 0f : trayFanDrop * fan * fan));
                 float targetScale = selected ? traySelectedScale : hovered ? trayHoverScale : 1f;
                 Quaternion targetRotation = straight ? Quaternion.identity : Quaternion.AngleAxis(trayFanDegrees * fan, Vector3.up);
-                motion.Position = Vector3.Lerp(motion.Position, targetPosition, settle);
+                Vector3 eased = Vector3.Lerp(motion.Position, targetPosition, settle);
+                // BUILD-3 (owner, 2026-10-23: "when they go down, they're overlapped for a second, and then they go
+                // down under it"): a card already in the tray takes its stacking height at once, so it slides back
+                // under its neighbours (or rises over them) instead of popping under at the end of the move. The
+                // height is toward the camera, so only the overlap order changes, not where the card shows.
+                if (Mathf.Abs(eased.y - targetPosition.y) < TrayDepthSnapRange) eased.y = targetPosition.y;
+                motion.Position = eased;
                 motion.Rotation = Quaternion.Slerp(motion.Rotation, targetRotation, settle);
                 motion.Scale = Mathf.Lerp(motion.Scale, targetScale, settle);
                 trayMotions[cardId] = motion;
