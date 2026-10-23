@@ -61,14 +61,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.99215686, g: 0.972549, b: 0.9019608, a: 1}
+  m_Color: {r: 0.28368795, g: 0.30871925, b: 0.32540676, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 5cb90a2e9f9620241b8a0628b9decb55, type: 3}
+  m_Sprite: {fileID: 21300000, guid: be0dfea7fc554d943b67d71e3d75ceb7, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -201,7 +201,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Text
   m_Material: {fileID: 0}
-  m_Color: {r: 0.8784314, g: 0.3254902, b: 0.12156863, a: 1}
+  m_Color: {r: 1, g: 0.48235294, b: 0.18039216, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -209,7 +209,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: 34e39a6c24545df4abd51b42203173b0, type: 3}
+    m_Font: {fileID: 12800000, guid: ad4532f3e9c4c0543b7e0b5863034d9d, type: 3}
     m_FontSize: 16
     m_FontStyle: 0
     m_BestFit: 0
@@ -396,7 +396,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Text
   m_Material: {fileID: 0}
-  m_Color: {r: 0.11372549, g: 0.11372549, b: 0.12156863, a: 1}
+  m_Color: {r: 0.9098039, g: 0.9254902, b: 0.92941177, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -404,7 +404,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: 96b513ef20e39c04c8edfec1618f3e64, type: 3}
+    m_Font: {fileID: 12800000, guid: ad4532f3e9c4c0543b7e0b5863034d9d, type: 3}
     m_FontSize: 13
     m_FontStyle: 0
     m_BestFit: 0
@@ -559,7 +559,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Text
   m_Material: {fileID: 0}
-  m_Color: {r: 0.11372549, g: 0.11372549, b: 0.12156863, a: 1}
+  m_Color: {r: 0.9098039, g: 0.9254902, b: 0.92941177, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -567,7 +567,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: 5b2ba6d6f635d314390d33cb900a6d28, type: 3}
+    m_Font: {fileID: 12800000, guid: 48b0c5504f075524787af6cf00c4d7d7, type: 3}
     m_FontSize: 16
     m_FontStyle: 0
     m_BestFit: 0

@@ -58,7 +58,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Text
   m_Material: {fileID: 0}
-  m_Color: {r: 0.11372549, g: 0.11372549, b: 0.12156863, a: 1}
+  m_Color: {r: 0.9098039, g: 0.9254902, b: 0.92941177, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -66,7 +66,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: 96b513ef20e39c04c8edfec1618f3e64, type: 3}
+    m_Font: {fileID: 12800000, guid: ad4532f3e9c4c0543b7e0b5863034d9d, type: 3}
     m_FontSize: 15
     m_FontStyle: 0
     m_BestFit: 0
@@ -211,13 +211,14 @@ MonoBehaviour:
   button: {fileID: 3483883130419857647}
   label: {fileID: 1269577354280660692}
   layoutElement: {fileID: 68948657869202406}
-  eligibleSurface: {r: 0.99215686, g: 0.972549, b: 0.9019608, a: 1}
+  cardSize: {x: 148, y: 214}
+  eligibleSurface: {r: 0.13333334, g: 0.14509805, b: 0.15294118, a: 1}
   selectedSurface: {r: 0.9490196, g: 0.65882355, b: 0.11372549, a: 1}
-  ineligibleSurface: {r: 0.8862745, g: 0.84313726, b: 0.7058824, a: 0.92}
+  ineligibleSurface: {r: 0.18039216, g: 0.2, b: 0.20784314, a: 0.92}
   eligibleArtwork: {r: 1, g: 1, b: 1, a: 1}
   ineligibleArtwork: {r: 0.55, g: 0.55, b: 0.55, a: 0.75}
-  eligibleText: {r: 0.11372549, g: 0.11372549, b: 0.12156863, a: 1}
-  ineligibleText: {r: 0.2901961, g: 0.2901961, b: 0.2901961, a: 1}
+  eligibleText: {r: 0.9098039, g: 0.9254902, b: 0.92941177, a: 1}
+  ineligibleText: {r: 0.60784316, g: 0.6431373, b: 0.654902, a: 1}
 --- !u!222 &3853635218906740556
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -239,14 +240,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.99215686, g: 0.972549, b: 0.9019608, a: 1}
+  m_Color: {r: 0.13333334, g: 0.14509805, b: 0.15294118, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 93900499b01b66f42b34e385cf480459, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 5271be9c8e7352f499644c2e3484e9cb, type: 3}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1

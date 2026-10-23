@@ -1,6 +1,6 @@
 # 36 — UI Design Board (UI-0)
 
-Version 0.1 · 2026-10-23 · Status: draft for the owner's approval. Source: the designer's Figma file (owner's copy,
+Version 0.3 · 2026-10-23 · Status: UI-1 started (start screen approved; Oxanium added; restyle in place; owner exports the frame art). Source: the designer's Figma file (owner's copy,
 "🕹️Game: Console Cards (Copy)", page **UI Kit**: frame **V5** and section **UI Components**). Read only; nothing in the
 file was changed.
 
@@ -52,7 +52,7 @@ Player colours in text: Blue, Red, Green, Yellow (as in "Blue found a Key.").
 | **Game cards** (Frame 387): TRAP FLOOR, TOWER CLASH, COLOR CONTROL, with picture, text, "2–4 Players" | The game list in New table… (GameSelectPanel). Tower Clash and Color Control are placeholders until those games exist. |
 | **Player Profile** + **Avatar** (ALEX, < > picker) + BACK / CONTINUE | The profile panel and Avatar choice, as one step before choosing a game. |
 
-## 4. Not in the Figma file yet (to ask the designer, or we style them from the kit)
+## 4. Screens the designer did not draw (now designed from the kit, §7)
 
 These screens exist in the game but have no design. Unless the designer sends them, they get the kit's look (panel,
 rows, buttons, orange end caps for popups):
@@ -89,3 +89,107 @@ rows, buttons, orange end caps for popups):
 | UI-4 | Game cards, Player Profile and Avatar step; text pass (no code words, one glossary) |
 | UI-5 | Table looks (card colours, dice, leaning die, camera framing) |
 | CUT-2 | Remove the dead code |
+
+## 7. Screens added in Figma from the kit (2026-10-23)
+
+Owner, 2026-10-23: "Can you design them by using UI Kit?" Added on the **UI Kit** page of the owner's copy, to the right
+of the kit, in four sections. Everything reuses the kit's own pieces (the corner plates, buttons, panel colours, the
+Oxanium font, the menu bar, game cards, profile and avatar panels) and new local components: **Button/Primary**,
+**Button/Secondary** (from END TURN and SKIP TURN), **Chip/Amber, Cyan, Red, Dark**, **Row/Default**, **Row/Selected**
+and **Card/Slot**. Card pictures are the kit's cyan placeholders.
+
+| Section | Frames |
+|---|---|
+| Kit components (Claude) | The components above |
+| Centre popups (Claude) | Trap NOW, Trap NEXT ROUND, Key, Ability, Friend, Collapse, Starting next phase, This turn, Warning with Undo, Confirm |
+| Notifications, menus, cards and shop (Claude) | Turn banner, event toast (kit Log), warning toast, loss toast, right-click menu, amount popup, payment card fan, card inspect, Shop |
+| Screens (Claude) | Start (PLAY / CREATE / SANDBOX), Play — Players (profile + avatar), Play — Choose game (game cards + setup: difficulty, win mode, players, turns, deck), Settings, Guide, in-game Table panel (shapes with **Hexagon**, size, "fit the players") |
+
+Rules for these frames:
+- **Orange frame** = a popup that asks something or a menu screen; **grey frame** = a tool panel (right-click menu,
+  amount, card inspect, table, guide).
+- The main button is always **Button/Primary** on the right; the way out (Cancel, Reject, Back, Not yet) is
+  **Button/Secondary** on its left.
+- Popups are 520 wide (payment 940, shop 760); text 16 body, 24 title, 14 muted subtitle.
+
+Still to design: the CREATE screens (card editor, deck editor, save table as a game). They come with UI-3.
+
+Assets: the picture parts are taken from Figma as PNG renders when each stage needs them (figma.com downloads are not
+allowed in this session; renders through the Figma connection work).
+
+## 8. UI-1 — the kit look and the notifications (2026-10-23)
+
+Owner's choices (2026-10-23): **restyle the existing Final UI prefabs in place** (layout and hand edits stay);
+**the owner exports the frame art from Figma** (the Figma connection is at its monthly limit); **notifications move to
+the V5 layout**.
+
+**Built: Console Cards > UI > Apply Kit Look (UI-1)** (`Editor/UI/KitLookApplier.cs`). One click restyles every
+prefab in `Content/Prefabs/Final/UI/`; running it again changes nothing.
+
+| Part | Old | Kit |
+|---|---|---|
+| Labels | Silkscreen Bold, Chakra Petch Bold / Medium, Arial | Oxanium Bold (titles, bold) / Medium (body) |
+| Panels, rows, buttons, chips, pills | cream sprites with a thick black outline (`Toolbox/Sprites/*Outlined`) | `Content/UI/Kit/Kit*.png`: dark fill with a thin light border (panel `#222527`, row `#292E2F`, button `#1C1F1F`) |
+| Selected row | pale yellow | `#1C3C3D` |
+| Orange headers, amber chips | — | stay orange / amber; dark words stay dark on amber |
+| Teal accents | `#2FA58A` | kit cyan `#06EFF0` |
+| Main buttons (Go green) | `#1F7A66` | `#138A8C` with light words |
+| Words | ink on cream | `#E8ECED` on dark; muted `#9BA4A7` |
+| Drop shadows | solid ink, offset | soft black (50 %) |
+| Icons drawn in ink | dark | light |
+
+Colours set by code at run time (player colours, state colours that are not the old palette) are kept.
+
+**V5 places:** the Log (tab and panel) and the toasts move to the **bottom left**; the banner moves under the hint
+bar (the hint bar already sits under the round bar).
+
+A builder that makes a missing prefab still makes it in the old look: run *Apply Kit Look* after it.
+
+### Frames from the owner's Figma exports (2026-10-24)
+
+The owner exported the kit's components into `Content/UI/Figma/Components/` (2x, each with an empty version and a
+`_reference` version with words). *Apply Kit Look* now also puts the frames on (`Editor/UI/KitFrames.cs`):
+
+| Frame (export) | Goes on |
+|---|---|
+| `Rules.png` (grey, corner plates with screws) | the outer panel of table cards: Rules card, Trap Floor status card, Help card, Toolbox panel |
+| `Player Profile.png` (orange frame) | the outer panel of popups and menus: right-click menu, amount, card inspect, Shop, payment and reveal popups, profile, persona, card and deck editors, New table…, Save table as a game, table panel, rule proposals, hot-seat handover, the Table menu |
+| `Top.png` (end-capped bar) | the round strip (turn strip) and the banner |
+| `Controls.png` | the controls strip |
+| `Hint.png` | the hint bar |
+| `Log.png` (cyan) | the Log panel and its tab |
+
+A framed panel loses its drop shadow, and the old orange header band and cream body turn clear (the words stay). Nested
+panels inside a popup keep the plain dark kit panel. Buttons, rows and chips keep the kit shapes because the game
+colours them while playing (selected, active, warnings).
+
+The screens Claude designed in Figma are saved as reference pictures in `Content/UI/Figma/Screens/` (renders made
+while designing on 2026-10-23); the owner does not need to export them.
+
+Still from the kit, for UI-2 and UI-3: the Player Card (`Container_Player_card`, `Status`, `Red`), the Top menu bar
+(`Top_Console`), menu items and game entries (`Menu`, `Menu_Selected`, `Game Entry`, `Selected Game Entry`), the
+profile rows and Avatar, the icons (Undo, Redo, Shop, Table, players, arrows, edit, add) and the pointers and dots.
+
+### UI-1c — the table screen follows the Figma V5 frame (2026-10-24)
+
+The owner compared the game with V5 and asked to follow the Figma. `Editor/UI/V5Hud.cs` (part of *Apply Kit Look*)
+now places and skins each table piece as in `Figma/Components/Reference.png`, using the exports at their drawn size
+(28 px margins on the 1920 canvas):
+
+| V5 piece | Prefab | Export | Place |
+|---|---|---|---|
+| Top bar: dot, game, Undo, Redo, SHOP, TABLE | SessionBar/Bar | Top, Undo, Redo, ShopIcon, TableIcon, cyan_on ellipse | top left, 87 high |
+| Round bar: ROUND over the turn, Keys | TrapFloorHud/TurnStrip | Top, V5_Dot | top, 728 wide, centre +195 |
+| Hint bar | HintStrip/Card | V5_HintBar (Hint without the baked badge) | under the round bar, 72 high |
+| Rules card | RulesCard/Card, RulesLine | Rules, Rule_Entry, V5_Bullet, Status | left, from y 127, 461 wide |
+| Player card | TrapFloorHud/StatusCard | Rules, Container_Player_card | top right, 358 wide |
+| END TURN / actions | ActionRow | Button_Enabled | in the player card |
+| Log | ActivityLog/Panel | Log | bottom left, 413 x 96 (grows to 300) |
+| + TOOLBOX | ComponentToolbox/OpenButton | Toolbox_Button | bottom left, 196 x 55 |
+| Controls | ToolBar/Bar | Controls, Frame_move, Line | bottom right, 87 high |
+
+Where our game has more than V5 shows, it keeps it in the same style: the tool buttons sit at the end of the Controls
+bar; Later / Got it stay on the hint bar as dark chips. Not in V5, so hidden: the status line ("Empty Table | Objects 0")
+and the Log's tab. Still to do (UI-2): the round bar's player list (Blue, Red, Green, Yellow) and the player card's rows
+(Avatar, Keys, Status, In hand, Floor), which need the game to report those values.
+

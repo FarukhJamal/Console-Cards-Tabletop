@@ -33,6 +33,19 @@ namespace ConsoleCards.Presentation.UI
             public Text label;
         }
 
+        /// <summary>V5 (owner, 2026-10-24): one key in its box and what it does, on the Controls bar.</summary>
+        [Serializable]
+        public sealed class KeyChip
+        {
+            public GameObject root;
+            public Text key;
+            public Text action;
+            public GameObject divider;
+        }
+
+        private const string KeyOpen = "<b><color=#F2A81D>";
+        private const string KeyClose = "</color></b>";
+
         [SerializeField] private ToolButton[] tools = new ToolButton[0];
         [SerializeField] private Color idleFill = new Color(0.992f, 0.973f, 0.902f, 1f);
         [SerializeField] private Color activeFill = new Color(0.949f, 0.659f, 0.114f, 1f);
@@ -41,6 +54,10 @@ namespace ConsoleCards.Presentation.UI
         [Header("Keys strip")]
         [SerializeField] private GameObject keysStrip;
         [SerializeField] private Text keysLabel;
+        [Tooltip("Optional (V5): the keys as chips, as many as fit keyChipsWidth; set by Apply Kit Look (UI-1).")]
+        [SerializeField] private KeyChip[] keyChips = new KeyChip[0];
+        [SerializeField] private float keyChipsWidth = 560f;
+        [SerializeField] private float keyChipPadding = 40f;
         [SerializeField] private Button keysToggle;
         [SerializeField] private Button helpButton;
         [Tooltip("Optional (owner, 2026-10-19): switches the hand tray between a fan and a straight row.")]
@@ -220,6 +237,7 @@ namespace ConsoleCards.Presentation.UI
                 bool active = tool.kind == kind;
                 if (tool.fill != null) tool.fill.color = active ? activeFill : idleFill;
                 if (tool.icon != null) tool.icon.color = active ? activeIcon : idleIcon;
+                if (tool.label != null) tool.label.color = active ? activeIcon : idleIcon;
             }
         }
 
@@ -244,6 +262,39 @@ namespace ConsoleCards.Presentation.UI
             if (ReferenceEquals(text, shownKeys)) return;
             shownKeys = text;
             keysLabel.text = text ?? string.Empty;
+            if (keyChips != null && keyChips.Length > 0) ShowKeyChips(text ?? string.Empty);
+        }
+
+        // The keys text is "<key> what it does" pairs; the chips show the first ones that fit the bar.
+        private void ShowKeyChips(string text)
+        {
+            float used = 0f;
+            int shown = 0;
+            int at = 0;
+            while (shown < keyChips.Length)
+            {
+                KeyChip chip = keyChips[shown];
+                int open = text.IndexOf(KeyOpen, at, StringComparison.Ordinal);
+                if (chip == null || chip.root == null || chip.key == null || chip.action == null || open < 0) break;
+                int close = text.IndexOf(KeyClose, open, StringComparison.Ordinal);
+                if (close < 0) break;
+                int next = text.IndexOf(KeyOpen, close, StringComparison.Ordinal);
+                int end = next < 0 ? text.Length : next;
+                chip.key.text = text.Substring(open + KeyOpen.Length, close - open - KeyOpen.Length).ToUpperInvariant();
+                chip.action.text = text.Substring(close + KeyClose.Length, end - close - KeyClose.Length).Trim();
+                float width = chip.key.preferredWidth + chip.action.preferredWidth + keyChipPadding;
+                if (shown > 0 && used + width > keyChipsWidth) break;
+                used += width;
+                chip.root.SetActive(true);
+                if (chip.divider != null) chip.divider.SetActive(shown > 0);
+                shown++;
+                at = end;
+            }
+
+            for (int i = shown; i < keyChips.Length; i++)
+            {
+                if (keyChips[i] != null && keyChips[i].root != null) keyChips[i].root.SetActive(false);
+            }
         }
 
         /// <summary>The player's own show/hide choice for the keys strip.</summary>

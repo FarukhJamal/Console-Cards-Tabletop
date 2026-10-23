@@ -19,8 +19,22 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private ScrollRect scroll;
         [SerializeField] private string collapsedText = "WHAT HAPPENED  (L)";
         [SerializeField] private string expandedText = "HIDE  (L)";
+        [Header("V5: always on, the newest lines (set by Apply Kit Look)")]
+        [Tooltip("Above 0 the panel stays open at this height while collapsed and L or a click grows it.")]
+        [SerializeField] private float peekHeight;
+        [SerializeField] private RectTransform panelRect;
+        [SerializeField] private Button panelButton;
+        [SerializeField] private GameObject header;
+        [SerializeField] private RectTransform viewport;
+        [SerializeField] private float peekInset = 16f;
 
         private bool expanded;
+        private bool fullSizeKnown;
+        private float fullHeight;
+        private Vector2 fullViewportMin;
+        private Vector2 fullViewportMax;
+
+        private bool Peeks => peekHeight > 0f && panelRect != null && viewport != null;
 
         public bool IsExpanded => expanded;
 
@@ -37,6 +51,12 @@ namespace ConsoleCards.Presentation.UI
             ValidateReferences();
             toggleButton.onClick.RemoveListener(Toggle);
             toggleButton.onClick.AddListener(Toggle);
+            if (panelButton != null)
+            {
+                panelButton.onClick.RemoveListener(Toggle);
+                panelButton.onClick.AddListener(Toggle);
+            }
+
             SetExpanded(false);
         }
 
@@ -45,7 +65,7 @@ namespace ConsoleCards.Presentation.UI
         {
             RequireAcquired();
             body.text = text ?? string.Empty;
-            if (expanded && scroll != null)
+            if ((expanded || Peeks) && scroll != null)
             {
                 scroll.verticalNormalizedPosition = 1f;
             }
@@ -54,8 +74,29 @@ namespace ConsoleCards.Presentation.UI
         public void SetExpanded(bool open)
         {
             expanded = open;
-            panel.SetActive(open);
+            panel.SetActive(open || Peeks);
             toggleLabel.text = open ? expandedText : collapsedText;
+            if (Peeks)
+            {
+                if (!fullSizeKnown)
+                {
+                    fullSizeKnown = true;
+                    fullHeight = panelRect.sizeDelta.y;
+                    fullViewportMin = viewport.offsetMin;
+                    fullViewportMax = viewport.offsetMax;
+                }
+
+                panelRect.sizeDelta = new Vector2(panelRect.sizeDelta.x, open ? fullHeight : peekHeight);
+                if (header != null) header.SetActive(open);
+                viewport.offsetMin = open ? fullViewportMin : new Vector2(peekInset, peekInset);
+                viewport.offsetMax = open ? fullViewportMax : new Vector2(-peekInset, -peekInset);
+                if (scroll != null)
+                {
+                    Canvas.ForceUpdateCanvases();
+                    scroll.verticalNormalizedPosition = 1f;
+                }
+            }
+
             if (open && scroll != null)
             {
                 Canvas.ForceUpdateCanvases();
@@ -68,6 +109,7 @@ namespace ConsoleCards.Presentation.UI
         public override void Unbind()
         {
             if (toggleButton != null) toggleButton.onClick.RemoveListener(Toggle);
+            if (panelButton != null) panelButton.onClick.RemoveListener(Toggle);
         }
 
         private void Update()
