@@ -118,9 +118,10 @@ namespace ConsoleCards.Presentation.UI
 
         public void HideGameTemplatesPanel()
         {
-            gameTemplatesPanelView?.Release();
-            screenLayer?.SetActive(false);
-            root?.ClearSelectedUiObject();
+            // Unity-aware null checks: on leaving Play mode these may already be destroyed (?. does not see that).
+            if (gameTemplatesPanelView != null) gameTemplatesPanelView.Release();
+            if (screenLayer != null) screenLayer.SetActive(false);
+            if (root != null) root.ClearSelectedUiObject();
         }
 
         /// <summary>
