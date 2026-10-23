@@ -61,6 +61,7 @@ MonoBehaviour:
   hoverScale: 1.025
   selectedScale: 1.06
   interactionResponse: 18
+  trayCardStep: 0.02
 --- !u!65 &650100
 BoxCollider:
   m_ObjectHideFlags: 0

@@ -36,7 +36,10 @@ namespace ConsoleCards.Presentation.Views.Containers
         [SerializeField] private float trayHoverScale = 1.15f;
         [SerializeField] private float traySelectedScale = 1.2f;
         [SerializeField] private float trayHoverSpread = 0.35f;
-        [SerializeField] private float trayCardStep = 0.004f;
+        // BUILD-2 (owner, 2026-10-23: "they are overlapped"): each tray card sits this far toward the camera above the
+        // one before it. It must clear a card's frame and icon layer, which can stand up to 0.0101 above the visible
+        // card front (the face plate's top), or that layer shows through the next card of the fan.
+        [SerializeField] private float trayCardStep = 0.02f;
         [SerializeField] private float trayResponse = 14f;
         [SerializeField] private float trayDragResponse = 30f;
         [SerializeField] private float trayHandoffDuration = 0.28f;

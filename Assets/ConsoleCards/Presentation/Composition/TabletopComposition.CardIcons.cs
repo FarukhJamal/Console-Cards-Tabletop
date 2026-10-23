@@ -25,10 +25,11 @@ namespace ConsoleCards.Presentation.Composition
         // Badges without a frame: size and inset from the edge, as parts of the card's shorter side.
         private const float CardIconSizePart = 0.17f;
         private const float CardIconInsetPart = 0.05f;
-        // Heights above the face: words 0.0001, then frame, tabs and symbols; all under the next card in a pile.
-        private const float CardFrameLift = 0.00012f;
-        private const float CardTabLift = 0.0002f;
-        private const float CardSymbolLift = 0.00028f;
+        // Heights above the visible face: frame, tabs and symbols; all under the next card in a pile or the hand fan.
+        // BUILD-2: enough apart that the depth buffer keeps them in order at table distance.
+        private const float CardFrameLift = 0.002f;
+        private const float CardTabLift = 0.0025f;
+        private const float CardSymbolLift = 0.003f;
         // BUILD-1: the alpha-clipped material the frame, tabs and symbols copy. It lives in Content/Resources so a
         // player build keeps the shader's alpha-clip variant (a keyword switched on only from code is stripped).
         private const string CardFaceLayerResourcePath = "CardFrames/CardFaceLayer";
@@ -127,7 +128,7 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // The card front in face-root space: half width (x) and half length (z) of the face plate, and the height of
-        // its top surface (the supplied card model's top when it is higher).
+        // the visible front (the supplied card model's top; the face plate's only when it is shown or there is no model).
         private bool TryGetCardIconFrame(
             CardVisualReferences references,
             Transform faceRoot,
@@ -147,7 +148,10 @@ namespace ConsoleCards.Presentation.Composition
             Vector3 max = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
             AddCardIconBounds(plateFilter, faceRoot, ref min, ref max);
             half = new Vector2(Mathf.Max(Mathf.Abs(min.x), Mathf.Abs(max.x)), Mathf.Max(Mathf.Abs(min.z), Mathf.Abs(max.z)));
-            top = max.y;
+            // BUILD-2: a hidden face plate (the supplied card model shows the face instead) does not set the height,
+            // or the frame floats above the visible face and shows through the card laid over it.
+            float plateTop = max.y;
+            bool hasModel = false;
 
             IReadOnlyList<Renderer> supplied = references.SuppliedModelRenderers;
             for (int i = 0; i < supplied.Count; i++)
@@ -160,8 +164,10 @@ namespace ConsoleCards.Presentation.Composition
                 Vector3 modelMax = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
                 AddCardIconBounds(modelFilter, faceRoot, ref modelMin, ref modelMax);
                 top = Mathf.Max(top, modelMax.y);
+                hasModel = true;
             }
 
+            if (!hasModel || plate.enabled) top = Mathf.Max(top, plateTop);
             return half.x > 0.0001f && half.y > 0.0001f && !float.IsInfinity(top);
         }
 
