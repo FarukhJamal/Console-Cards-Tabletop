@@ -65,6 +65,7 @@ namespace ConsoleCards.Presentation.UI
         private GameObject gameEntryTemplate;
         private RectTransform tabHighlight;
         private RectTransform addProfileRow;
+        private string highlightTab;
 
         private sealed class GameEntryParts
         {
@@ -148,6 +149,7 @@ namespace ConsoleCards.Presentation.UI
         private void Update()
         {
             if (model == null) return;
+            if (highlightTab != null) PlaceHighlight();
             Keyboard keyboard = Keyboard.current;
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) Back();
         }
@@ -322,14 +324,20 @@ namespace ConsoleCards.Presentation.UI
                 Tint("TopBar/Tabs/" + tab + "/Label", tab == active ? activeTab : idleTab);
             }
 
-            if (tabHighlight != null && buttons.TryGetValue("TopBar/Tabs/" + active, out Button tabButton) && tabButton != null)
-            {
-                // Under the active tab: the tabs are laid out first (on the first show they were not yet).
-                RectTransform tabs = (RectTransform)tabHighlight.parent;
-                LayoutRebuilder.ForceRebuildLayoutImmediate(tabs);
-                RectTransform tabRect = (RectTransform)tabButton.transform;
-                tabHighlight.anchoredPosition = new Vector2(tabRect.localPosition.x, tabHighlight.anchoredPosition.y);
-            }
+            // Placed on the next frame the view is shown: while it is being bound it is still hidden, and hidden tabs
+            // are not laid out (the underline sat left of PLAY on the first show).
+            highlightTab = "TopBar/Tabs/" + active;
+            if (isActiveAndEnabled) PlaceHighlight();
+        }
+
+        private void PlaceHighlight()
+        {
+            if (tabHighlight == null || !buttons.TryGetValue(highlightTab, out Button tabButton) || tabButton == null) return;
+            RectTransform tabs = (RectTransform)tabHighlight.parent;
+            LayoutRebuilder.ForceRebuildLayoutImmediate(tabs);
+            RectTransform tabRect = (RectTransform)tabButton.transform;
+            tabHighlight.anchoredPosition = new Vector2(tabRect.localPosition.x, tabHighlight.anchoredPosition.y);
+            highlightTab = null;
         }
 
         private void RenderProfile()
