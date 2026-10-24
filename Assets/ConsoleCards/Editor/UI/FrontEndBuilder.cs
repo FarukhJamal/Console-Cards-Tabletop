@@ -13,7 +13,7 @@ namespace ConsoleCards.Editor.UI
     /// UI-2 (owner, 2026-10-24: the Milanote user journey; second pass "notice the difference in placement, font size,
     /// asset usage"): builds the front end prefab as the board's screens, measured from the mock screens (1920x1080):
     /// the brand pill and the Top_Console bar (GUIDE, SETTINGS, TABLE, EXIT with icons); Main menu (Menu entries with
-    /// glyphs, PLAY lit); Player profile (orange frame, the active profile expanded in a cyan frame with its name box
+    /// glyphs, lit only under the pointer); Player profile (orange frame, the active profile expanded in a cyan frame with its name box
     /// and CUSTOMIZE AVATAR, the other profiles as Menu rows, the Avatar frame with arrows and page dots); Game library
     /// (Game Entry rows, the chosen one in cyan, detail panel with picture, text and a stats strip); Game details (back
     /// chip, title, tagline, stats pill, picture panel, IN THE BOX, START SETUP); Game setup, Players and Review (step
@@ -27,7 +27,7 @@ namespace ConsoleCards.Editor.UI
         public const string BackgroundName = "Background";
 
         // Raise when the screens change: a prefab built by an older version is built again.
-        private const int Version = 3;
+        private const int Version = 4;
         private const string WhitePlate = "Assets/ConsoleCards/Content/UI/Kit/KitAccent.png";
 
         private static readonly Color White = UiKit.Hex("e8eced");
@@ -596,7 +596,8 @@ namespace ConsoleCards.Editor.UI
         private static void MenuEntry(RectTransform menu, string name, float y, string title, string line, string icon, bool lit)
         {
             RectTransform entry = TopLeft(name, menu, 0f, y, 681f, 136f);
-            Image plate = Plate(entry, Figma(lit ? "Menu_Selected" : "Menu"), 213f / 136f);
+            // Owner, 2026-10-25: plain until the pointer is over it (the board shows the hover state).
+            Image plate = Plate(entry, Figma("Menu"), 213f / 136f);
             Button button = entry.gameObject.AddComponent<Button>();
             button.targetGraphic = plate;
             button.transition = Selectable.Transition.SpriteSwap;
@@ -605,7 +606,7 @@ namespace ConsoleCards.Editor.UI
             states.pressedSprite = Figma("Menu_Selected");
             button.spriteState = states;
             Sprite glyph = icon.StartsWith("V5_", StringComparison.Ordinal) ? Derived(icon) : Figma(icon);
-            Picture(TopLeft("Glyph", entry, 74f, 42f, 52f, 52f), glyph, lit ? Cyan : Muted, -1f, -1f);
+            Picture(TopLeft("Glyph", entry, 74f, 42f, 52f, 52f), glyph, White, -1f, -1f);
             Words(TopLeft("Title", entry, 172f, 24f, 420f, 42f), bold, 34, White, TextAnchor.MiddleLeft, title);
             Words(TopLeft("Line", entry, 172f, 68f, 420f, 46f), medium, 15, White, TextAnchor.UpperLeft, line);
             Picture(Node("Chevron", entry, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
@@ -706,9 +707,15 @@ namespace ConsoleCards.Editor.UI
             string title, string line, bool chevron)
         {
             RectTransform button = TopLeft(name, page, x, y, width, height);
-            Image plate = Plate(button, sprite, 213f / height);
+            Image plate = Plate(button, Figma("Menu"), 213f / height);
             Button press = button.gameObject.AddComponent<Button>();
             press.targetGraphic = plate;
+            // Owner, 2026-10-25: plain until hovered; the teal or cyan look is the hover and press state.
+            press.transition = Selectable.Transition.SpriteSwap;
+            SpriteState states = press.spriteState;
+            states.highlightedSprite = sprite;
+            states.pressedSprite = sprite;
+            press.spriteState = states;
             float glyph = Mathf.Min(48f, height * 0.42f);
             Picture(Node("Play", button, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
                 new Vector2(58f, 0f), new Vector2(glyph, glyph)), Derived("V5_I_Play"), Cyan, -1f, -1f);
