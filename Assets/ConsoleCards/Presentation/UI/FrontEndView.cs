@@ -388,18 +388,28 @@ namespace ConsoleCards.Presentation.UI
             SetActive("Pages/Profile/Avatar/Next", model.CanChangeAvatar);
         }
 
-        // The page dots under the avatar: one per avatar (at most the prefab's dots; with more avatars each dot stands
-        // for a share of them), the current one cyan.
+        // The page dots under the avatar: one per avatar (copies of the prefab's first dot are added when there are more
+        // avatars than dots, up to MaxAvatarDots), the current one cyan; each arrow click moves it one dot.
+        private const int MaxAvatarDots = 12;
+
         private void ShowAvatarDots()
         {
-            int dots = avatarDots.Count;
-            int count = Mathf.Max(1, model.AvatarCount);
-            int shown = Mathf.Min(count, dots);
-            int current = count <= dots ? model.AvatarIndex : model.AvatarIndex * dots / count;
-            for (int i = 0; i < dots; i++)
+            if (avatarDots.Count == 0) return;
+            int count = Mathf.Clamp(model.AvatarCount, 1, MaxAvatarDots);
+            while (avatarDots.Count < count)
+            {
+                Image copy = Instantiate(avatarDots[0], avatarDots[0].transform.parent, false);
+                copy.name = "Dot" + avatarDots.Count;
+                avatarDots.Add(copy);
+            }
+
+            int current = model.AvatarCount <= MaxAvatarDots
+                ? model.AvatarIndex
+                : model.AvatarIndex * MaxAvatarDots / model.AvatarCount;
+            for (int i = 0; i < avatarDots.Count; i++)
             {
                 Image dot = avatarDots[i];
-                bool visible = i < shown;
+                bool visible = i < count;
                 if (dot.gameObject.activeSelf != visible) dot.gameObject.SetActive(visible);
                 dot.color = i == current ? activeTab : new Color(idleTab.r, idleTab.g, idleTab.b, 0.35f);
             }
