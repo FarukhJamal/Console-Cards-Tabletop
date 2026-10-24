@@ -216,6 +216,8 @@ namespace ConsoleCards.Presentation.Composition
                 model.AvatarPicture = personas.Avatar(service.Active.avatar);
                 model.AvatarName = personas.AvatarName(service.Active.avatar);
                 model.CanChangeAvatar = !personas.CharacterCustomizer && personas.AvatarCount > 1;
+                model.AvatarCount = personas.AvatarCount;
+                model.AvatarIndex = PersonaSet.Wrap(service.Active.avatar, personas.AvatarCount);
             }
 
             gameSelectActions.Customize = personas != null && personas.CharacterCustomizer

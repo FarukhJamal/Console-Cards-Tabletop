@@ -66,6 +66,7 @@ namespace ConsoleCards.Presentation.UI
         private RectTransform tabHighlight;
         private RectTransform addProfileRow;
         private string highlightTab;
+        private readonly List<Image> avatarDots = new List<Image>();
 
         private sealed class GameEntryParts
         {
@@ -382,8 +383,26 @@ namespace ConsoleCards.Presentation.UI
             SetText("Pages/Profile/Avatar/Name", Upper(model.ProfileName));
             ShowAvatar(Picture("Pages/Profile/Avatar/Picture"), model.AvatarPicture != null ? model.AvatarPicture : fallbackAvatar, idleTab);
             SetText("Pages/Profile/Avatar/AvatarName", model.AvatarName);
+            ShowAvatarDots();
             SetActive("Pages/Profile/Avatar/Previous", model.CanChangeAvatar);
             SetActive("Pages/Profile/Avatar/Next", model.CanChangeAvatar);
+        }
+
+        // The page dots under the avatar: one per avatar (at most the prefab's dots; with more avatars each dot stands
+        // for a share of them), the current one cyan.
+        private void ShowAvatarDots()
+        {
+            int dots = avatarDots.Count;
+            int count = Mathf.Max(1, model.AvatarCount);
+            int shown = Mathf.Min(count, dots);
+            int current = count <= dots ? model.AvatarIndex : model.AvatarIndex * dots / count;
+            for (int i = 0; i < dots; i++)
+            {
+                Image dot = avatarDots[i];
+                bool visible = i < shown;
+                if (dot.gameObject.activeSelf != visible) dot.gameObject.SetActive(visible);
+                dot.color = i == current ? activeTab : new Color(idleTab.r, idleTab.g, idleTab.b, 0.35f);
+            }
         }
 
         private void RenderLibrary()
@@ -571,6 +590,19 @@ namespace ConsoleCards.Presentation.UI
             gameEntryTemplate.SetActive(false);
             tabHighlight = Require("TopBar/Tabs/Highlight") as RectTransform;
             addProfileRow = Require("Pages/Profile/Panel/Add") as RectTransform;
+            Transform dotsRow = transform.Find("Pages/Profile/Avatar/Dots");
+            if (dotsRow != null)
+            {
+                foreach (Transform dot in dotsRow)
+                {
+                    Image image = dot.GetComponent<Image>();
+                    if (image == null) continue;
+                    // One white dot for all (the exported dots have their colour baked in, so a tint could not
+                    // switch them); the colour says which one is current.
+                    if (discSprite != null) image.sprite = discSprite;
+                    avatarDots.Add(image);
+                }
+            }
             Transform active = Require("Pages/Profile/Panel/Active");
             profileRows[0] = new ProfileRowParts
             {

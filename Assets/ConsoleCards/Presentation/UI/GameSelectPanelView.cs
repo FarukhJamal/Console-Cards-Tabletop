@@ -46,6 +46,8 @@ namespace ConsoleCards.Presentation.UI
         public Texture AvatarPicture;
         public string AvatarName = string.Empty;
         public bool CanChangeAvatar;
+        public int AvatarIndex;
+        public int AvatarCount;
         public int PlayerCount;
         public IReadOnlyList<string> PlayerNames = Array.Empty<string>();
         public IReadOnlyList<Color> PlayerColors = Array.Empty<Color>();
