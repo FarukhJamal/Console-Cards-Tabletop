@@ -220,7 +220,17 @@ namespace ConsoleCards.Editor.UI
 
         // Screens whose design changed after they may already have been built (owner, 2026-10-25: Game details as in
         // the reference). An older prefab is not rebuilt (it holds the owner's edits): only the new parts are added.
-        private static readonly Dictionary<string, int> Designs = new Dictionary<string, int> { { "FE_Details", 2 } };
+        private static readonly Dictionary<string, int> Designs = new Dictionary<string, int>
+        {
+            { "FE_Details", 2 },
+            { "FE_Players", 2 },
+            { "FE_Review", 2 },
+        };
+
+        // Review, design 2 (owner, 2026-10-25: overlapping): the text clears the picture, the two columns have a gap.
+        private const float ReviewTextY = 324f;
+        private static readonly Vector2 ReviewCell = new Vector2(300f, 26f);
+        private static readonly Vector2 ReviewCellSpacing = new Vector2(68f, 4f);
         private const string DesignLabel = "FrontEndDesign";
 
         private static bool HasDesign(GameObject asset, int design)
@@ -252,6 +262,8 @@ namespace ConsoleCards.Editor.UI
                 try
                 {
                     if (design.Key == "FE_Details") UpgradeDetails((RectTransform)root.transform);
+                    if (design.Key == "FE_Players") UpgradePlayers(root.transform);
+                    if (design.Key == "FE_Review") UpgradeReview(root.transform);
                     PrefabUtility.SaveAsPrefabAsset(root, path);
                 }
                 finally
@@ -300,6 +312,63 @@ namespace ConsoleCards.Editor.UI
                 {
                     box.sizeDelta = new Vector2(box.sizeDelta.x, needed);
                 }
+            }
+        }
+
+        // Players design 2: colour arrows in each pawn box.
+        private static void UpgradePlayers(Transform page)
+        {
+            for (int i = 0; i < FrontEndView.PlayerRowCount; i++)
+            {
+                RectTransform pawn = page.Find("Rows/Row" + i + "/PawnBox") as RectTransform;
+                if (pawn != null && pawn.Find("Previous") == null) PawnArrows(pawn);
+            }
+        }
+
+        // Review design 2: values that were left as first built are moved apart (anything the owner changed stays);
+        // COMPONENTS IN TABLE gets the list of the game's components.
+        private static void UpgradeReview(Transform page)
+        {
+            RectTransform text = page.Find("Text") as RectTransform;
+            if (text != null && Mathf.Approximately(text.anchoredPosition.y, -312f)) text.anchoredPosition = new Vector2(text.anchoredPosition.x, -ReviewTextY);
+            Transform grid = page.Find("Settings/Grid");
+            GridLayoutGroup cells = grid != null ? grid.GetComponent<GridLayoutGroup>() : null;
+            if (cells != null && cells.cellSize == new Vector2(330f, 26f) && cells.spacing == new Vector2(8f, 4f))
+            {
+                cells.cellSize = ReviewCell;
+                cells.spacing = ReviewCellSpacing;
+            }
+
+            RectTransform parts = page.Find("Components") as RectTransform;
+            if (parts != null && parts.Find("Items") == null) ComponentItems(parts);
+        }
+
+        // Pawn colour arrows at the two ends of a pawn box.
+        private static void PawnArrows(RectTransform pawn)
+        {
+            ArrowButton(Node("Previous", pawn, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
+                new Vector2(10f, 0f), new Vector2(22f, 22f)), Figma("leftArrowIcon"));
+            ArrowButton(Node("Next", pawn, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                new Vector2(-10f, 0f), new Vector2(22f, 22f)), Figma("RightArrowIcon"));
+        }
+
+        // COMPONENTS IN TABLE: up to six items side by side (icon, name, "x 20"); icons from Details' IconSet.
+        private static void ComponentItems(RectTransform parts)
+        {
+            RectTransform items = TopLeft("Items", parts, 30f, 52f, parts.rect.width > 1f ? parts.rect.width - 60f : 668f, 38f);
+            Row(items, 6f, TextAnchor.MiddleLeft).childForceExpandWidth = true;
+            for (int i = 0; i < FrontEndView.BoxRowCount; i++)
+            {
+                RectTransform item = Node("Item" + i, items);
+                item.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+                Picture(TopLeft("Icon", item, 0f, 6f, 26f, 26f), Derived("V5_I_Tile"), Pale, -1f, -1f);
+                Text label = Words(Node("Label", item, new Vector2(0f, 0.5f), Vector2.one, new Vector2(0f, 1f), new Vector2(32f, 0f),
+                    new Vector2(-32f, 0f)), medium, 11, Muted, TextAnchor.LowerLeft, "Component");
+                label.resizeTextForBestFit = true;
+                label.resizeTextMinSize = 8;
+                label.resizeTextMaxSize = 11;
+                Words(Node("Count", item, Vector2.zero, new Vector2(1f, 0.5f), new Vector2(0f, 0f), new Vector2(32f, 0f),
+                    new Vector2(-32f, 0f)), bold, 13, White, TextAnchor.UpperLeft, "x 1");
             }
         }
 
@@ -675,6 +744,7 @@ namespace ConsoleCards.Editor.UI
                 RectTransform pawn = TopLeft("PawnBox", row, 538f, 8f, 168f, 76f);
                 Plate(pawn, Figma("Frame_move"), 1.5f).raycastTarget = false;
                 Picture(TopLeft("Pawn", pawn, 66f, 12f, 36f, 52f), Derived("V5_I_Pawn"), Color.white, -1f, -1f);
+                PawnArrows(pawn);
             }
 
             RectTransform addRow = Node("AddRow", rows);
@@ -707,7 +777,7 @@ namespace ConsoleCards.Editor.UI
             RectTransform page = Page(pages, "Review");
             BackChip(page, "<  BACK TO PLAYERS", 75f, 152f, 212f);
             StepTitle(page, "R E V I E W   S E T U P");
-            Words(TopLeft("Text", page, 76f, 312f, 760f, 44f), medium, 15, White, TextAnchor.UpperLeft,
+            Words(TopLeft("Text", page, 76f, ReviewTextY, 760f, 44f), medium, 15, White, TextAnchor.UpperLeft,
                 "Check your game settings and players before starting.\nYou can go back and make changes anytime.");
 
             RectTransform settings = TopLeft("Settings", page, 61f, 370f, 728f, 160f);
@@ -715,8 +785,8 @@ namespace ConsoleCards.Editor.UI
             PanelHeader(settings, "GAME SETTINGS");
             RectTransform grid = TopLeft("Grid", settings, 30f, 60f, 668f, 84f);
             GridLayoutGroup cells = grid.gameObject.AddComponent<GridLayoutGroup>();
-            cells.cellSize = new Vector2(330f, 26f);
-            cells.spacing = new Vector2(8f, 4f);
+            cells.cellSize = ReviewCell;
+            cells.spacing = ReviewCellSpacing;
             string[] icons = { "V5_I_Mode", "playersIcon", "V5_I_Bars", "V5_I_Cards", "V5_I_Clock" };
             string[] labels = { "Mode", "Players", "Win mode", "Deck Set", "Turns" };
             for (int i = 0; i < 5; i++) SummaryRow(grid, "Cell" + i, icons[i], labels[i]);
@@ -743,6 +813,7 @@ namespace ConsoleCards.Editor.UI
             Plate(parts, Figma("Player Profile"), 2.5f);
             PanelHeader(parts, "COMPONENTS IN TABLE", false);
             Words(TopLeft("Text", parts, 30f, 52f, 668f, 36f), medium, 14, White, TextAnchor.MiddleLeft, string.Empty);
+            ComponentItems(parts);
 
             Cta(page, "Start", 61f, 940f, 728f, 104f, Derived("V5_CyanFrame"), "START GAME", "Load the game and begin playing.", false);
         }

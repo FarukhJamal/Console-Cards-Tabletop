@@ -367,17 +367,42 @@ namespace ConsoleCards.Presentation.Composition
             targetConsole.Bind(runtimeConsole, targetConsole.LayoutAnchor, orderedSlots);
         }
 
-        internal static Color PlayerSeatColor(int playerIndex)
+        // Owner, 2026-10-25 (front end Players step): each seat can pick its colour; seat -> colour, null = in seat order.
+        private static int[] seatColourOrder;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetSeatColours() => seatColourOrder = null;
+
+        internal static int SeatColourCount => PlayerColors.Length;
+
+        /// <summary>Sets which colour each seat plays (applied when a table starts; null puts them back in seat order).</summary>
+        internal static void SetSeatColourOrder(int[] order)
         {
-            return playerIndex >= 0 && playerIndex < PlayerColors.Length
-                ? PlayerColors[playerIndex]
+            seatColourOrder = order != null ? (int[])order.Clone() : null;
+        }
+
+        private static int SeatColourIndex(int playerIndex)
+        {
+            return seatColourOrder != null && playerIndex >= 0 && playerIndex < seatColourOrder.Length
+                ? seatColourOrder[playerIndex]
+                : playerIndex;
+        }
+
+        internal static Color PlayerSeatColor(int playerIndex) => ColourByIndex(SeatColourIndex(playerIndex));
+
+        internal static string PlayerColorName(int playerIndex) => ColourNameByIndex(SeatColourIndex(playerIndex));
+
+        internal static Color ColourByIndex(int colourIndex)
+        {
+            return colourIndex >= 0 && colourIndex < PlayerColors.Length
+                ? PlayerColors[colourIndex]
                 : new Color(0.75f, 0.75f, 0.75f);
         }
 
-        internal static string PlayerColorName(int playerIndex)
+        internal static string ColourNameByIndex(int colourIndex)
         {
-            return playerIndex >= 0 && playerIndex < PlayerColorNames.Length
-                ? PlayerColorNames[playerIndex]
+            return colourIndex >= 0 && colourIndex < PlayerColorNames.Length
+                ? PlayerColorNames[colourIndex]
                 : "GREY";
         }
 

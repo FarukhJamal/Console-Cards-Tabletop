@@ -56,6 +56,9 @@ namespace ConsoleCards.Presentation.UI
         public IReadOnlyList<FrontEndBoxItem> BoxItems = Array.Empty<FrontEndBoxItem>();
         public IReadOnlyList<Texture> Gallery = Array.Empty<Texture>();
         public IReadOnlyList<FrontEndFeature> Features = Array.Empty<FrontEndFeature>();
+        /// <summary>The chosen deck's short name (the Review grid); <see cref="Deck"/> is the full line.</summary>
+        public string DeckName = string.Empty;
+        public bool CanChangeColours;
     }
 
     /// <summary>One line of IN THE BOX on Game details. <see cref="Icon"/> names a picture in the screen's IconSet.</summary>
@@ -111,6 +114,8 @@ namespace ConsoleCards.Presentation.UI
         public Action Customize;
         public Action Sandbox;
         public Action Exit;
+        /// <summary>The pawn arrows on the Players step: seat index, -1 or +1.</summary>
+        public Action<int, int> CycleSeatColour;
     }
 
     /// <summary>

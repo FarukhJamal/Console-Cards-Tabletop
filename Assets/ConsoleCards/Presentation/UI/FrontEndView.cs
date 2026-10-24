@@ -219,6 +219,13 @@ namespace ConsoleCards.Presentation.UI
 
             On("Pages/Details/Back", () => Go(FrontEndPage.Library));
             On("Pages/Details/Start", () => Go(FrontEndPage.Setup));
+            for (int i = 0; i < PlayerRowCount; i++)
+            {
+                int seat = i;
+                On("Pages/Players/Rows/Row" + i + "/PawnBox/Previous", () => actions?.CycleSeatColour?.Invoke(seat, -1));
+                On("Pages/Players/Rows/Row" + i + "/PawnBox/Next", () => actions?.CycleSeatColour?.Invoke(seat, 1));
+            }
+
             On("Pages/Details/Media/Previous", () => StepGallery(-1));
             On("Pages/Details/Media/Next", () => StepGallery(1));
             for (int i = 0; i < GalleryThumbCount; i++)
@@ -496,7 +503,7 @@ namespace ConsoleCards.Presentation.UI
             RenderStepTitle("Review");
             Summary("Pages/Review/Settings/Grid/Cell", true);
             RenderPlayers(reviewPlayers);
-            SetText("Pages/Review/Components/Text", model.Deck);
+            RenderComponents();
             SetText("Pages/Review/Start/Line", $"Load {model.GameName} and begin playing.");
             SetInteractable("Pages/Review/Start", model.CanStart);
         }
@@ -511,8 +518,8 @@ namespace ConsoleCards.Presentation.UI
         private void Summary(string prefix, bool reviewOrder = false)
         {
             string[] values = reviewOrder
-                ? new[] { model.ModeName, model.PlayersText, model.WinModeText, model.Deck, model.TurnsText }
-                : new[] { model.ModeName, model.PlayersText, model.WinModeText, model.TurnsText, model.Deck };
+                ? new[] { model.ModeName, model.PlayersText, model.WinModeText, DeckShort(), model.TurnsText }
+                : new[] { model.ModeName, model.PlayersText, model.WinModeText, model.TurnsText, DeckShort() };
             bool[] shown = reviewOrder
                 ? new[] { model.ShowMode, model.ShowPlayers, model.ShowWinMode, true, model.ShowTurns }
                 : new[] { model.ShowMode, model.ShowPlayers, model.ShowWinMode, model.ShowTurns, true };
@@ -521,6 +528,28 @@ namespace ConsoleCards.Presentation.UI
                 SetActive(prefix + i, shown[i]);
                 SetText(prefix + i + "/Value", values[i]);
             }
+        }
+
+        private string DeckShort() => model.DeckName.Length > 0 ? model.DeckName : model.Deck;
+
+        // COMPONENTS IN TABLE: the same items as IN THE BOX, side by side; the deck line when there are none.
+        private void RenderComponents()
+        {
+            IReadOnlyList<FrontEndBoxItem> items = model.BoxItems;
+            bool listed = transform.Find("Pages/Review/Components/Items") != null;
+            for (int i = 0; i < BoxRowCount; i++)
+            {
+                string item = "Pages/Review/Components/Items/Item" + i;
+                bool shown = i < items.Count;
+                SetActive(item, shown);
+                if (!shown) continue;
+                SetText(item + "/Label", items[i].Label);
+                SetText(item + "/Count", "x " + items[i].Count);
+                ShowIcon(item + "/Icon", items[i].Icon);
+            }
+
+            SetActive("Pages/Review/Components/Text", items.Count == 0 || !listed);
+            SetText("Pages/Review/Components/Text", model.Deck);
         }
 
         private void RenderPlayers(PlayerRowParts[] rows)
@@ -540,6 +569,11 @@ namespace ConsoleCards.Presentation.UI
                 if (row.controller != null) row.controller.text = row.pawn != null ? "Controller: " + colourName : colourName;
                 if (row.dot != null) row.dot.color = colour;
                 if (row.pawn != null) row.pawn.color = colour;
+                if (rows == playerRows)
+                {
+                    SetInteractable("Pages/Players/Rows/Row" + i + "/PawnBox/Previous", model.CanChangeColours);
+                    SetInteractable("Pages/Players/Rows/Row" + i + "/PawnBox/Next", model.CanChangeColours);
+                }
                 if (row.avatar != null) ShowAvatar(row.avatar, i == 0 ? model.AvatarPicture : null, colour);
             }
         }

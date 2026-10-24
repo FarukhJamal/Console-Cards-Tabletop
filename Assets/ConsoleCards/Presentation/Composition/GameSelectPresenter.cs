@@ -126,13 +126,14 @@ namespace ConsoleCards.Presentation.Composition
                     OpenCardArt = () => OpenFromGameSelect(host.OpenCardArtPanel),
                     OpenCardEditor = OpenCardEditorFromGameSelect,
                     OpenDeckEditor = OpenDeckEditorFromGameSelect,
-                    Start = StartSelectedGame,
+                    Start = StartWithChosenColours,
                     Delete = host.PlayerGamesPanel.DeleteSelectedPlayerGame,
                     Close = CloseGameSelect,
                     PlayAs = PlayAsFromFrontEnd,
                     CycleAvatar = CycleFrontEndAvatar,
                     Sandbox = StartSandbox,
                     Exit = ExitGame,
+                    CycleSeatColour = CycleFrontEndColour,
                 };
             }
 
@@ -227,18 +228,25 @@ namespace ConsoleCards.Presentation.Composition
             string[] names = new string[count];
             Color[] colors = new Color[count];
             string[] colorNames = new string[count];
+            int[] order = FrontEndColours();
             for (int i = 0; i < count; i++)
             {
                 names[i] = i == 0 ? service.Active.displayName : $"Player {i + 1}";
-                colors[i] = PlayerSeatColor(i);
-                colorNames[i] = PlayerColorName(i);
+                colors[i] = ColourByIndex(i < order.Length ? order[i] : i);
+                colorNames[i] = ColourNameByIndex(i < order.Length ? order[i] : i);
             }
 
             model.PlayerCount = count;
             model.PlayerNames = names;
             model.PlayerColors = colors;
             model.PlayerColorNames = colorNames;
+            model.CanChangeColours = count > 0 && order.Length > 1;
             AddGameDetails(model, entry.Game);
+            if (entry.Game != null)
+            {
+                List<DeckChoice> decks = DeckChoices(entry);
+                model.DeckName = decks[ChosenDeckIndex(entry, decks)].Name;
+            }
         }
 
         // Owner, 2026-10-25: Game details as in the reference: IN THE BOX as a list, a strip of pictures and three
@@ -319,6 +327,38 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             return label.Length > 0 ? label : "Cards";
+        }
+
+        // Owner, 2026-10-25: the pawn arrows on the Players step pick each seat's colour. Taking a colour another seat has
+        // swaps the two, so colours stay different; the table uses them from the next Start.
+        private int[] frontEndColours;
+
+        private int[] FrontEndColours()
+        {
+            if (frontEndColours == null || frontEndColours.Length != SeatColourCount)
+            {
+                frontEndColours = new int[SeatColourCount];
+                for (int i = 0; i < frontEndColours.Length; i++) frontEndColours[i] = i;
+            }
+
+            return frontEndColours;
+        }
+
+        private void CycleFrontEndColour(int seat, int step)
+        {
+            int[] order = FrontEndColours();
+            if (seat < 0 || seat >= order.Length || order.Length < 2) return;
+            int next = ((order[seat] + step) % order.Length + order.Length) % order.Length;
+            int other = Array.IndexOf(order, next);
+            if (other >= 0) order[other] = order[seat];
+            order[seat] = next;
+            ShowGameSelect(string.Empty);
+        }
+
+        private void StartWithChosenColours()
+        {
+            SetSeatColourOrder(FrontEndColours());
+            StartSelectedGame();
         }
 
         // UI-2: the avatar arrows on the Player profile screen (saved in the profile at once).
