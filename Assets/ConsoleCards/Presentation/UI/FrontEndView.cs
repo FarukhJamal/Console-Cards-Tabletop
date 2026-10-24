@@ -30,7 +30,7 @@ namespace ConsoleCards.Presentation.UI
     public sealed class FrontEndView : ReusableUiView
     {
         public const int ProfileRowCount = 4;
-        public const int PlayerRowCount = 6;
+        public const int PlayerRowCount = 8;
         public const int BoxRowCount = 6;
         public const int GalleryThumbCount = 3;
         public const int FeatureTileCount = 3;
@@ -74,6 +74,8 @@ namespace ConsoleCards.Presentation.UI
         private int galleryFirst;
         private int galleryChosen;
         private string galleryGame;
+        // The Players step rows (inside Viewport since FE_Players design 3, scrollable).
+        private string playerRowsPath = "Pages/Players/Rows";
 
         private sealed class GameEntryParts
         {
@@ -222,8 +224,8 @@ namespace ConsoleCards.Presentation.UI
             for (int i = 0; i < PlayerRowCount; i++)
             {
                 int seat = i;
-                On("Pages/Players/Rows/Row" + i + "/PawnBox/Previous", () => actions?.CycleSeatColour?.Invoke(seat, -1));
-                On("Pages/Players/Rows/Row" + i + "/PawnBox/Next", () => actions?.CycleSeatColour?.Invoke(seat, 1));
+                On(playerRowsPath + "/Row" + i + "/PawnBox/Previous", () => actions?.CycleSeatColour?.Invoke(seat, -1));
+                On(playerRowsPath + "/Row" + i + "/PawnBox/Next", () => actions?.CycleSeatColour?.Invoke(seat, 1));
             }
 
             On("Pages/Details/Media/Previous", () => StepGallery(-1));
@@ -243,8 +245,8 @@ namespace ConsoleCards.Presentation.UI
             On("Pages/Setup/Continue", () => Go(FrontEndPage.Players));
 
             On("Pages/Players/Back", () => Go(FrontEndPage.Setup));
-            On("Pages/Players/Rows/AddRow/Add", () => actions?.CyclePlayers?.Invoke(1));
-            On("Pages/Players/Rows/AddRow/Remove", () => actions?.CyclePlayers?.Invoke(-1));
+            On(playerRowsPath + "/AddRow/Add", () => actions?.CyclePlayers?.Invoke(1));
+            On(playerRowsPath + "/AddRow/Remove", () => actions?.CyclePlayers?.Invoke(-1));
             On("Pages/Players/Continue", () => Go(FrontEndPage.Review));
 
             On("Pages/Review/Back", () => Go(FrontEndPage.Players));
@@ -310,7 +312,7 @@ namespace ConsoleCards.Presentation.UI
                 case FrontEndPage.Players:
                     RenderStepTitle("Players");
                     RenderPlayers(playerRows);
-                    SetActive("Pages/Players/Rows/AddRow", model.CanChangePlayers);
+                    SetActive(playerRowsPath + "/AddRow", model.CanChangePlayers);
                     break;
                 case FrontEndPage.Review:
                     RenderReview();
@@ -571,8 +573,8 @@ namespace ConsoleCards.Presentation.UI
                 if (row.pawn != null) row.pawn.color = colour;
                 if (rows == playerRows)
                 {
-                    SetInteractable("Pages/Players/Rows/Row" + i + "/PawnBox/Previous", model.CanChangeColours);
-                    SetInteractable("Pages/Players/Rows/Row" + i + "/PawnBox/Next", model.CanChangeColours);
+                    SetInteractable(playerRowsPath + "/Row" + i + "/PawnBox/Previous", model.CanChangeColours);
+                    SetInteractable(playerRowsPath + "/Row" + i + "/PawnBox/Next", model.CanChangeColours);
                 }
                 if (row.avatar != null) ShowAvatar(row.avatar, i == 0 ? model.AvatarPicture : null, colour);
             }
@@ -684,10 +686,12 @@ namespace ConsoleCards.Presentation.UI
                 };
             }
 
+            if (transform.Find("Pages/Players/Viewport/Rows") != null) playerRowsPath = "Pages/Players/Viewport/Rows";
             for (int i = 0; i < PlayerRowCount; i++)
             {
-                playerRows[i] = PlayerRow(Require("Pages/Players/Rows/Row" + i));
-                reviewPlayers[i] = PlayerRow(Require("Pages/Review/Players/Tiles/Tile" + i));
+                // Seats 7 and 8 exist once Apply Kit Look has added them; until then the screen shows six.
+                playerRows[i] = PlayerRow(transform.Find(playerRowsPath + "/Row" + i));
+                reviewPlayers[i] = PlayerRow(transform.Find("Pages/Review/Players/Tiles/Tile" + i));
             }
 
             resolved = true;
@@ -695,6 +699,7 @@ namespace ConsoleCards.Presentation.UI
 
         private static PlayerRowParts PlayerRow(Transform row)
         {
+            if (row == null) return null;
             Transform badge = row.Find("Badge");
             Transform avatar = row.Find("Avatar");
             Transform name = row.Find("NameBox/Name") ?? row.Find("Name");

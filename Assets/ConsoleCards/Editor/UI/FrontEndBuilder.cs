@@ -223,14 +223,15 @@ namespace ConsoleCards.Editor.UI
         private static readonly Dictionary<string, int> Designs = new Dictionary<string, int>
         {
             { "FE_Details", 2 },
-            { "FE_Players", 2 },
-            { "FE_Review", 2 },
+            { "FE_Players", 3 },
+            { "FE_Review", 3 },
         };
 
         // Review, design 2 (owner, 2026-10-25: overlapping): the text clears the picture, the two columns have a gap.
         private const float ReviewTextY = 324f;
         private static readonly Vector2 ReviewCell = new Vector2(300f, 26f);
         private static readonly Vector2 ReviewCellSpacing = new Vector2(68f, 4f);
+        private const float ReviewTileSpacing = 34f;
         private const string DesignLabel = "FrontEndDesign";
 
         private static bool HasDesign(GameObject asset, int design)
@@ -315,14 +316,127 @@ namespace ConsoleCards.Editor.UI
             }
         }
 
-        // Players design 2: colour arrows in each pawn box.
+        // Players design 3: colour arrows in each pawn box; up to eight seats (new rows copy the last one, so they keep
+        // the owner's styling); the rows scroll inside a Viewport (owner, 2026-10-25: "scrollable … maximum of 8 players").
         private static void UpgradePlayers(Transform page)
         {
+            RectTransform rows = (page.Find("Viewport/Rows") ?? page.Find("Rows")) as RectTransform;
+            if (rows == null) return;
+            AddMissingCopies(rows, "Row", FrontEndView.PlayerRowCount);
             for (int i = 0; i < FrontEndView.PlayerRowCount; i++)
             {
-                RectTransform pawn = page.Find("Rows/Row" + i + "/PawnBox") as RectTransform;
+                RectTransform pawn = rows.Find("Row" + i + "/PawnBox") as RectTransform;
                 if (pawn != null && pawn.Find("Previous") == null) PawnArrows(pawn);
             }
+
+            if (rows.parent == page) ScrollRows((RectTransform)page, rows);
+        }
+
+        // Copies the last existing child named prefix+n until there are count of them (P7, Player 7 ...).
+        private static void AddMissingCopies(Transform parent, string prefix, int count)
+        {
+            Transform last = null;
+            for (int i = 0; i < count; i++)
+            {
+                Transform existing = parent.Find(prefix + i);
+                if (existing != null)
+                {
+                    last = existing;
+                    continue;
+                }
+
+                if (last == null) return;
+                GameObject copy = Object.Instantiate(last.gameObject, parent, false);
+                copy.name = prefix + i;
+                copy.transform.SetSiblingIndex(last.GetSiblingIndex() + 1);
+                Transform badge = copy.transform.Find("Badge/Label");
+                if (badge != null && badge.GetComponent<Text>() != null) badge.GetComponent<Text>().text = "P" + (i + 1);
+                Transform name = copy.transform.Find("NameBox/Name") ?? copy.transform.Find("Name");
+                if (name != null && name.GetComponent<Text>() != null) name.GetComponent<Text>().text = "Player " + (i + 1);
+                last = copy.transform;
+            }
+        }
+
+        // Puts Rows (unchanged inside) in a Viewport that takes its place and clips it; a thin bar at the right.
+        private static void ScrollRows(RectTransform page, RectTransform rows)
+        {
+            RectTransform viewport = Node("Viewport", page, rows.anchorMin, rows.anchorMax, rows.pivot, rows.anchoredPosition,
+                rows.sizeDelta);
+            viewport.SetSiblingIndex(rows.GetSiblingIndex());
+            viewport.gameObject.AddComponent<RectMask2D>();
+            viewport.gameObject.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0f); // takes the drag and the wheel
+            float height = rows.rect.height;
+            rows.SetParent(viewport, false);
+            rows.anchorMin = new Vector2(0f, 1f);
+            rows.anchorMax = Vector2.one;
+            rows.pivot = new Vector2(0.5f, 1f);
+            rows.anchoredPosition = Vector2.zero;
+            rows.sizeDelta = new Vector2(0f, height);
+            if (rows.GetComponent<ContentSizeFitter>() == null)
+            {
+                rows.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
+
+            ScrollRect scroll = viewport.gameObject.AddComponent<ScrollRect>();
+            scroll.content = rows;
+            scroll.viewport = viewport;
+            scroll.horizontal = false;
+            scroll.vertical = true;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = 40f;
+            Rect area = viewport.rect;
+            RectTransform bar = Node("Scrollbar", page, viewport.anchorMin, viewport.anchorMin, new Vector2(0f, 1f),
+                viewport.anchoredPosition + new Vector2((1f - viewport.pivot.x) * area.width + 10f, (1f - viewport.pivot.y) * area.height),
+                new Vector2(6f, area.height));
+            scroll.verticalScrollbar = ScrollBar(bar, Scrollbar.Direction.BottomToTop);
+            scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+        }
+
+        // The Review players strip scrolls sideways inside its panel (the panel clips it; a thin bar under the tiles).
+        private static void ScrollTiles(RectTransform panel, RectTransform tiles)
+        {
+            if (panel.GetComponent<ScrollRect>() != null) return;
+            Rect box = panel.rect;
+            float left = tiles.anchoredPosition.x;
+            float top = -tiles.anchoredPosition.y;
+            float width = tiles.sizeDelta.x;
+            float height = tiles.sizeDelta.y;
+            RectTransform view = TopLeft("Viewport", panel, left, top, width, height);
+            view.SetSiblingIndex(tiles.GetSiblingIndex());
+            RectMask2D mask = panel.gameObject.AddComponent<RectMask2D>();
+            mask.padding = new Vector4(left - 6f, 4f, Mathf.Max(0f, box.width - left - width - 6f), 0f);
+            if (tiles.GetComponent<ContentSizeFitter>() == null)
+            {
+                tiles.gameObject.AddComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
+
+            ScrollRect scroll = panel.gameObject.AddComponent<ScrollRect>();
+            scroll.content = tiles;
+            scroll.viewport = view;
+            scroll.horizontal = true;
+            scroll.vertical = false;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = 40f;
+            scroll.horizontalScrollbar = ScrollBar(TopLeft("Scrollbar", panel, left, top + height - 8f, width, 5f),
+                Scrollbar.Direction.LeftToRight);
+            scroll.horizontalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+        }
+
+        private static Scrollbar ScrollBar(RectTransform rect, Scrollbar.Direction direction)
+        {
+            Sprite plate = AssetDatabase.LoadAssetAtPath<Sprite>(WhitePlate);
+            Image track = rect.gameObject.AddComponent<Image>();
+            track.sprite = plate;
+            track.color = new Color(1f, 1f, 1f, 0.08f);
+            RectTransform handle = Stretched("Handle", Stretched("Sliding Area", rect));
+            Image grip = handle.gameObject.AddComponent<Image>();
+            grip.sprite = plate;
+            grip.color = Cyan;
+            Scrollbar bar = rect.gameObject.AddComponent<Scrollbar>();
+            bar.handleRect = handle;
+            bar.targetGraphic = grip;
+            bar.direction = direction;
+            return bar;
         }
 
         // Review design 2: values that were left as first built are moved apart (anything the owner changed stays);
@@ -339,8 +453,45 @@ namespace ConsoleCards.Editor.UI
                 cells.spacing = ReviewCellSpacing;
             }
 
+            RectTransform panel = page.Find("Players") as RectTransform;
+            RectTransform tiles = panel != null ? panel.Find("Tiles") as RectTransform : null;
+            if (tiles != null)
+            {
+                AddMissingCopies(tiles, "Tile", FrontEndView.PlayerRowCount);
+                HorizontalLayoutGroup strip = tiles.GetComponent<HorizontalLayoutGroup>();
+                if (strip != null && Mathf.Approximately(strip.spacing, 14f)) strip.spacing = ReviewTileSpacing;
+                ScrollTiles(panel, tiles);
+            }
+
             RectTransform parts = page.Find("Components") as RectTransform;
             if (parts != null && parts.Find("Items") == null) ComponentItems(parts);
+            else if (parts != null) FixComponentItems(parts.Find("Items"));
+        }
+
+        // Design 2 left the items with no height (the text and icons drifted); they fill the strip, icon centred.
+        private static void FixComponentItems(Transform items)
+        {
+            HorizontalLayoutGroup row = items.GetComponent<HorizontalLayoutGroup>();
+            if (row == null || row.childForceExpandHeight) return;
+            row.childForceExpandHeight = true;
+            foreach (Transform item in items)
+            {
+                RectTransform icon = item.Find("Icon") as RectTransform;
+                if (icon != null) Place(icon, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), Vector2.zero, new Vector2(26f, 26f));
+                Text label = item.Find("Label") != null ? item.Find("Label").GetComponent<Text>() : null;
+                if (label != null) label.resizeTextMaxSize = label.fontSize = 12;
+                Text count = item.Find("Count") != null ? item.Find("Count").GetComponent<Text>() : null;
+                if (count != null) count.fontSize = 14;
+            }
+        }
+
+        private static void Place(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 position, Vector2 size)
+        {
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+            rect.pivot = pivot;
+            rect.anchoredPosition = position;
+            rect.sizeDelta = size;
         }
 
         // Pawn colour arrows at the two ends of a pawn box.
@@ -356,19 +507,22 @@ namespace ConsoleCards.Editor.UI
         private static void ComponentItems(RectTransform parts)
         {
             RectTransform items = TopLeft("Items", parts, 30f, 52f, parts.rect.width > 1f ? parts.rect.width - 60f : 668f, 38f);
-            Row(items, 6f, TextAnchor.MiddleLeft).childForceExpandWidth = true;
+            HorizontalLayoutGroup strip = Row(items, 6f, TextAnchor.MiddleLeft);
+            strip.childForceExpandWidth = true;
+            strip.childForceExpandHeight = true;
             for (int i = 0; i < FrontEndView.BoxRowCount; i++)
             {
                 RectTransform item = Node("Item" + i, items);
                 item.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-                Picture(TopLeft("Icon", item, 0f, 6f, 26f, 26f), Derived("V5_I_Tile"), Pale, -1f, -1f);
+                Picture(Node("Icon", item, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), Vector2.zero,
+                    new Vector2(26f, 26f)), Derived("V5_I_Tile"), Pale, -1f, -1f);
                 Text label = Words(Node("Label", item, new Vector2(0f, 0.5f), Vector2.one, new Vector2(0f, 1f), new Vector2(32f, 0f),
-                    new Vector2(-32f, 0f)), medium, 11, Muted, TextAnchor.LowerLeft, "Component");
+                    new Vector2(-32f, 0f)), medium, 12, Muted, TextAnchor.LowerLeft, "Component");
                 label.resizeTextForBestFit = true;
                 label.resizeTextMinSize = 8;
-                label.resizeTextMaxSize = 11;
+                label.resizeTextMaxSize = 12;
                 Words(Node("Count", item, Vector2.zero, new Vector2(1f, 0.5f), new Vector2(0f, 0f), new Vector2(32f, 0f),
-                    new Vector2(-32f, 0f)), bold, 13, White, TextAnchor.UpperLeft, "x 1");
+                    new Vector2(-32f, 0f)), bold, 14, White, TextAnchor.UpperLeft, "x 1");
             }
         }
 
@@ -769,6 +923,7 @@ namespace ConsoleCards.Editor.UI
             Words(TopLeft("Text", info, 160f, 62f, 150f, 120f), medium, 14, White, TextAnchor.UpperLeft,
                 "Each player uses a Console Controller to interact with cards and the table.");
 
+            ScrollRows(page, rows);
             Cta(page, "Continue", 73f, 904f, 737f, 114f, Derived("V5_CyanFrame"), "CONTINUE", "Review your setup.", false);
         }
 
@@ -795,7 +950,7 @@ namespace ConsoleCards.Editor.UI
             Plate(players, Figma("Player Profile"), 2.5f);
             PanelHeader(players, "PLAYERS");
             RectTransform tiles = TopLeft("Tiles", players, 30f, 58f, 668f, 180f);
-            Row(tiles, 14f, TextAnchor.UpperLeft);
+            Row(tiles, ReviewTileSpacing, TextAnchor.UpperLeft);
             for (int i = 0; i < FrontEndView.PlayerRowCount; i++)
             {
                 RectTransform tile = Node("Tile" + i, tiles);
@@ -808,6 +963,8 @@ namespace ConsoleCards.Editor.UI
                 Picture(TopLeft("Dot", tile, 16f, 148f, 14f, 18f), Derived("V5_I_Pawn"), Color.white, -1f, -1f);
                 Words(TopLeft("Controller", tile, 34f, 146f, 66f, 22f), medium, 11, Muted, TextAnchor.MiddleLeft, "BLUE");
             }
+
+            ScrollTiles(players, tiles);
 
             RectTransform parts = TopLeft("Components", page, 61f, 818f, 728f, 98f);
             Plate(parts, Figma("Player Profile"), 2.5f);
