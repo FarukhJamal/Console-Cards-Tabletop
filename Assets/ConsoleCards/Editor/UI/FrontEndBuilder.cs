@@ -18,16 +18,37 @@ namespace ConsoleCards.Editor.UI
     /// (Game Entry rows, the chosen one in cyan, detail panel with picture, text and a stats strip); Game details (back
     /// chip, title, tagline, stats pill, picture panel, IN THE BOX, START SETUP); Game setup, Players and Review (step
     /// 1-2-3 pill, game thumbnail, Menu rows with orange pickers, summary panels) and START GAME.
-    /// Run by Console Cards > UI > Apply Kit Look (UI-1): built when missing or made by an older version of this
-    /// builder; each run refreshes the background picture (Content/UI/Figma/Components/Background.png).
+    /// Each screen is its own prefab in Final/UI/FrontEnd/ (FE_TopBar, FE_Stepper, FE_MainMenu, FE_Create,
+    /// FE_Profile, FE_Library, FE_Details, FE_Setup, FE_Players, FE_Review), nested in FrontEnd.prefab.
+    /// Run by Console Cards > UI > Apply Kit Look (UI-1): a screen is built only when its prefab is missing (delete it
+    /// to build it again from the design); each run refreshes the background picture
+    /// (Content/UI/Figma/Components/Background.png). "Apply Kit Look Again" rebuilds every screen.
     /// </summary>
     public static class FrontEndBuilder
     {
         public const string PrefabPath = UiKit.FinalUiFolder + "FrontEnd.prefab";
         public const string BackgroundName = "Background";
 
-        // Raise when the screens change: a prefab built by an older version is built again.
-        private const int Version = 4;
+        // Owner, 2026-10-25: each screen is its own prefab (FrontEnd/FE_*.prefab), nested in FrontEnd.prefab, so its
+        // anchors can be edited. Screens are built only when missing (delete one to build it again from the design);
+        // FrontEnd.prefab made before the split (version below this) is put together again once.
+        private const int Version = 5;
+        public const string ScreensFolder = UiKit.FinalUiFolder + "FrontEnd/";
+
+        // Screen prefab file, the object's name in FrontEnd, where it sits, whether it starts shown.
+        private static readonly (string File, string Name, bool InPages, bool Shown)[] Screens =
+        {
+            ("FE_TopBar", "TopBar", false, true),
+            ("FE_Stepper", "Stepper", true, false),
+            ("FE_MainMenu", "Home", true, true),
+            ("FE_Create", "Create", true, false),
+            ("FE_Profile", "Profile", true, false),
+            ("FE_Library", "Library", true, false),
+            ("FE_Details", "Details", true, false),
+            ("FE_Setup", "Setup", true, false),
+            ("FE_Players", "Players", true, false),
+            ("FE_Review", "Review", true, false),
+        };
         private const string WhitePlate = "Assets/ConsoleCards/Content/UI/Kit/KitAccent.png";
 
         private static readonly Color White = UiKit.Hex("e8eced");
@@ -103,14 +124,16 @@ namespace ConsoleCards.Editor.UI
         }
 
         /// <summary>Builds the prefab when it is missing or older, refreshes the background, points the catalog at it.</summary>
-        public static int BuildOrRefresh()
+        public static int BuildOrRefresh(bool again = false)
         {
             if (Figma("Top_Console") == null || Figma("Menu") == null || Derived("V5_CyanFrame") == null) return 0;
             bold = UiKit.RequireFont("Oxanium-Bold.ttf");
             medium = UiKit.RequireFont("Oxanium-Medium.ttf");
             int changes = 0;
+            int screens = BuildScreens(again);
+            changes += screens;
             FrontEndView existing = File.Exists(PrefabPath) ? AssetDatabase.LoadAssetAtPath<FrontEndView>(PrefabPath) : null;
-            if (existing == null || existing.BuiltVersion < Version)
+            if (again || screens > 0 || existing == null || existing.BuiltVersion < Version)
             {
                 Build();
                 changes++;
@@ -155,6 +178,56 @@ namespace ConsoleCards.Editor.UI
             }
         }
 
+        // Each screen as its own prefab asset; an existing one is kept (it may have the owner's edits).
+        private static int BuildScreens(bool again)
+        {
+            if (!AssetDatabase.IsValidFolder(ScreensFolder.TrimEnd('/')))
+            {
+                AssetDatabase.CreateFolder(UiKit.FinalUiFolder.TrimEnd('/'), "FrontEnd");
+            }
+
+            int built = 0;
+            foreach (var (file, name, _, _) in Screens)
+            {
+                string path = ScreensFolder + file + ".prefab";
+                if (!again && File.Exists(path)) continue;
+                GameObject holder = new GameObject("Holder", typeof(RectTransform));
+                holder.layer = 5;
+                try
+                {
+                    RectTransform rect = (RectTransform)holder.transform;
+                    UiKit.Stretch(rect);
+                    BuildScreen(name, rect);
+                    Transform screen = holder.transform.Find(name);
+                    PrefabUtility.SaveAsPrefabAsset(screen.gameObject, path);
+                    built++;
+                }
+                finally
+                {
+                    Object.DestroyImmediate(holder);
+                }
+            }
+
+            return built;
+        }
+
+        private static void BuildScreen(string name, RectTransform holder)
+        {
+            switch (name)
+            {
+                case "TopBar": TopBar(holder); break;
+                case "Stepper": Stepper(holder); break;
+                case "Home": Home(holder); break;
+                case "Create": Create(holder); break;
+                case "Profile": Profile(holder); break;
+                case "Library": Library(holder); break;
+                case "Details": Details(holder); break;
+                case "Setup": Setup(holder); break;
+                case "Players": Players(holder); break;
+                case "Review": Review(holder); break;
+            }
+        }
+
         private static void Build()
         {
             GameObject go = new GameObject("FrontEnd", typeof(RectTransform));
@@ -171,17 +244,16 @@ namespace ConsoleCards.Editor.UI
                 backgroundImage.raycastTarget = true; // the table behind does not take clicks
                 background.gameObject.AddComponent<AspectRatioFitter>().aspectMode = AspectRatioFitter.AspectMode.None;
 
-                TopBar(root);
-                RectTransform pages = Stretched("Pages", root);
-                Stepper(pages);
-                Home(pages);
-                Create(pages);
-                Profile(pages);
-                Library(pages);
-                Details(pages);
-                Setup(pages);
-                Players(pages);
-                Review(pages);
+                RectTransform pages = null;
+                foreach (var (file, name, inPages, shown) in Screens)
+                {
+                    if (inPages && pages == null) pages = Stretched("Pages", root);
+                    GameObject screen = AssetDatabase.LoadAssetAtPath<GameObject>(ScreensFolder + file + ".prefab");
+                    if (screen == null) throw new InvalidOperationException($"The front end screen {file} could not be built.");
+                    GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(screen, inPages ? pages : root);
+                    instance.name = name;
+                    instance.SetActive(shown);
+                }
 
                 RectTransform status = Node("Status", root, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f),
                     new Vector2(0f, 8f), new Vector2(-200f, 24f));
@@ -262,7 +334,6 @@ namespace ConsoleCards.Editor.UI
                 Fit(Words(Node("Label", step), medium, 15, White, TextAnchor.MiddleLeft, labels[i]));
             }
 
-            stepper.gameObject.SetActive(false);
         }
 
         // ---------- Screens ----------
@@ -564,9 +635,7 @@ namespace ConsoleCards.Editor.UI
 
         private static RectTransform Page(RectTransform pages, string name)
         {
-            RectTransform page = Stretched(name, pages);
-            page.gameObject.SetActive(name == "Home");
-            return page;
+            return Stretched(name, pages); // shown or hidden by FrontEnd (and the view)
         }
 
         private static void PageTitle(RectTransform page, string title, string subtitle, float x, float y, int size)

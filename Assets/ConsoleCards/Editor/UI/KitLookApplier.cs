@@ -89,6 +89,7 @@ namespace ConsoleCards.Editor.UI
             public int Moves;
             public int Frames;
             public int V5;
+            public int Kept;
 
             public void AddFrame() => Frames++;
 
@@ -97,31 +98,84 @@ namespace ConsoleCards.Editor.UI
             public int Changes => Fonts + Sprites + Colors + Moves + Frames + V5;
         }
 
+        // Owner, 2026-10-25: the prefabs are the owner's to edit (anchors, sizes) once styled: a prefab styled by this
+        // command gets this asset label and is left alone afterwards; "Apply Kit Look Again" styles everything anew.
+        private const string StyledLabel = "ConsoleCardsKitLook";
+
         [MenuItem("Console Cards/UI/Apply Kit Look (UI-1)")]
-        public static void ApplyAll()
+        public static void ApplyAll() => Run(false);
+
+        [MenuItem("Console Cards/UI/Apply Kit Look Again (overwrites your UI edits)")]
+        public static void ApplyAgain()
+        {
+            if (!EditorUtility.DisplayDialog(
+                    "Apply Kit Look again",
+                    "This styles every Final UI prefab again and rebuilds the front end screens from the design. "
+                    + "Anchors, sizes and other changes you made to them are lost. Commit your work first.",
+                    "Overwrite my edits",
+                    "Cancel"))
+            {
+                return;
+            }
+
+            Run(true);
+        }
+
+        private static void Run(bool again)
         {
             PrepareKitSprites();
             KitFrames.Prepare();
             V5Hud.Prepare();
             FrontEndBuilder.Prepare();
-            int frontEnd = FrontEndBuilder.BuildOrRefresh(); // UI-2: the front end prefab, built once
+            int frontEnd = FrontEndBuilder.BuildOrRefresh(again); // UI-2: the front end screens, each built once
             Dictionary<Font, Font> fonts = FontMap();
             Report report = new Report();
             string[] paths = Directory.GetFiles(UiKit.FinalUiFolder, "*.prefab", SearchOption.TopDirectoryOnly);
             Array.Sort(paths, StringComparer.Ordinal);
             foreach (string file in paths)
             {
-                ApplyToPrefab(file.Replace('\\', '/'), fonts, report);
+                ApplyToPrefab(file.Replace('\\', '/'), fonts, report, again);
             }
 
             AssetDatabase.SaveAssets();
             Debug.Log($"[UI-1] Kit look: {report.Prefabs} prefabs changed; {report.Fonts} labels to Oxanium, "
                 + $"{report.Sprites} panel sprites, {report.Colors} colours, {report.Moves} moved to the V5 layout, "
-                + $"{report.Frames} Figma frames, {report.V5} table HUD prefabs laid out as the Figma V5 screen; front end "
+                + $"{report.Frames} Figma frames, {report.V5} table HUD prefabs laid out as the Figma V5 screen; "
+                + $"{report.Kept} already styled and left as you edited them; front end "
                 + (frontEnd > 0 ? "built or refreshed." : "unchanged."));
         }
 
-        private static void ApplyToPrefab(string path, Dictionary<Font, Font> fonts, Report report)
+        private static void ApplyToPrefab(string path, Dictionary<Font, Font> fonts, Report report, bool again)
+        {
+            if (!again && IsStyled(path))
+            {
+                report.Kept++;
+                return;
+            }
+
+            ApplyToPrefabContents(path, fonts, report);
+            MarkStyled(path);
+        }
+
+        private static bool IsStyled(string path)
+        {
+            GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            return asset != null && Array.IndexOf(AssetDatabase.GetLabels(asset), StyledLabel) >= 0;
+        }
+
+        private static void MarkStyled(string path)
+        {
+            GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (asset == null) return;
+            string[] labels = AssetDatabase.GetLabels(asset);
+            if (Array.IndexOf(labels, StyledLabel) >= 0) return;
+            string[] more = new string[labels.Length + 1];
+            labels.CopyTo(more, 0);
+            more[labels.Length] = StyledLabel;
+            AssetDatabase.SetLabels(asset, more);
+        }
+
+        private static void ApplyToPrefabContents(string path, Dictionary<Font, Font> fonts, Report report)
         {
             GameObject root = PrefabUtility.LoadPrefabContents(path);
             try
