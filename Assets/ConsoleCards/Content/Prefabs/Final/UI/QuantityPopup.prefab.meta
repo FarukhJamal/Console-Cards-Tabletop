@@ -1,5 +1,7 @@
 fileFormatVersion: 2
 guid: 38fad47b503044cc818b2194af8014c1
+labels:
+- ConsoleCardsKitLook
 PrefabImporter:
   externalObjects: {}
   userData: 
