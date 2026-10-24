@@ -31,6 +31,9 @@ namespace ConsoleCards.Presentation.UI
     {
         public const int ProfileRowCount = 4;
         public const int PlayerRowCount = 6;
+        public const int BoxRowCount = 6;
+        public const int GalleryThumbCount = 3;
+        public const int FeatureTileCount = 3;
         private const float ProfileRowTop = 296f;
         private const float ProfileRowPitch = 109f;
 
@@ -67,6 +70,10 @@ namespace ConsoleCards.Presentation.UI
         private RectTransform addProfileRow;
         private string highlightTab;
         private readonly List<Image> avatarDots = new List<Image>();
+        private readonly Dictionary<string, Image> detailIcons = new Dictionary<string, Image>();
+        private int galleryFirst;
+        private int galleryChosen;
+        private string galleryGame;
 
         private sealed class GameEntryParts
         {
@@ -212,6 +219,13 @@ namespace ConsoleCards.Presentation.UI
 
             On("Pages/Details/Back", () => Go(FrontEndPage.Library));
             On("Pages/Details/Start", () => Go(FrontEndPage.Setup));
+            On("Pages/Details/Media/Previous", () => StepGallery(-1));
+            On("Pages/Details/Media/Next", () => StepGallery(1));
+            for (int i = 0; i < GalleryThumbCount; i++)
+            {
+                int thumb = i;
+                On("Pages/Details/Media/Thumb" + i, () => ChooseThumb(thumb));
+            }
 
             On("Pages/Setup/Back", () => Go(FrontEndPage.Details));
             Picker("Pages/Setup/Options/Column/Mode", step => actions?.CycleMode?.Invoke(step));
@@ -458,8 +472,9 @@ namespace ConsoleCards.Presentation.UI
             SetText("Pages/Details/Stats/Cell0/Label", model.PlayersText.Length > 0 ? model.PlayersText : count);
             SetText("Pages/Details/Stats/Cell1/Label", model.ShowMode ? model.ModeName : "Free play");
             SetText("Pages/Details/Stats/Cell2/Label", model.ShowWinMode ? model.WinModeText : "Tabletop");
-            SetText("Pages/Details/Box/Text", model.Deck);
-            ShowPicture(Picture("Pages/Details/Media/Picture"), model.Picture);
+            RenderBox();
+            RenderGallery();
+            RenderFeatures();
             SetText("Pages/Details/Start/Line", $"Configure your {model.GameName} session.");
             SetInteractable("Pages/Details/Start", model.CanStart);
         }
@@ -702,6 +717,107 @@ namespace ConsoleCards.Presentation.UI
             string path = t.name;
             for (Transform at = t.parent; at != null && at != transform; at = at.parent) path = at.name + "/" + path;
             return path;
+        }
+
+        // IN THE BOX: a row per kind of component (icon from the screen's IconSet); a game the player made shows its deck line.
+        private void RenderBox()
+        {
+            IReadOnlyList<FrontEndBoxItem> items = model.BoxItems;
+            for (int i = 0; i < BoxRowCount; i++)
+            {
+                string row = "Pages/Details/Box/Row" + i;
+                bool shown = i < items.Count;
+                SetActive(row, shown);
+                if (!shown) continue;
+                SetText(row + "/Label", items[i].Label);
+                SetText(row + "/Count", "x " + items[i].Count);
+                ShowIcon(row + "/Icon", items[i].Icon);
+            }
+
+            // A Details screen built before the list (FE_Details older than design 2) has only the text and one picture.
+            bool listed = transform.Find("Pages/Details/Box/Row0") != null;
+            SetActive("Pages/Details/Box/Text", items.Count == 0 || !listed);
+            SetText("Pages/Details/Box/Text", model.Deck);
+            ShowPicture(Picture("Pages/Details/Media/Picture"), model.Picture);
+        }
+
+        // Three pictures at a time; the arrows move the chosen one (cyan outline) and scroll when it leaves the strip.
+        private void RenderGallery()
+        {
+            IReadOnlyList<Texture> gallery = model.Gallery;
+            if (!string.Equals(galleryGame, model.GameName, StringComparison.Ordinal))
+            {
+                galleryGame = model.GameName;
+                galleryFirst = 0;
+                galleryChosen = 0;
+            }
+
+            if (gallery.Count == 0 && model.Picture != null) gallery = new[] { model.Picture };
+            galleryChosen = Mathf.Clamp(galleryChosen, 0, Mathf.Max(0, gallery.Count - 1));
+            galleryFirst = Mathf.Clamp(galleryFirst, 0, Mathf.Max(0, gallery.Count - GalleryThumbCount));
+            for (int i = 0; i < GalleryThumbCount; i++)
+            {
+                string thumb = "Pages/Details/Media/Thumb" + i;
+                int index = galleryFirst + i;
+                bool shown = index < gallery.Count || (i == 0 && gallery.Count == 0);
+                SetActive(thumb, shown);
+                if (!shown) continue;
+                ShowPicture(Picture(thumb + "/Mask/Picture"), index < gallery.Count ? gallery[index] : null);
+                SetActive(thumb + "/Selected", index == galleryChosen && gallery.Count > 0);
+            }
+
+            SetInteractable("Pages/Details/Media/Previous", galleryChosen > 0);
+            SetInteractable("Pages/Details/Media/Next", galleryChosen < gallery.Count - 1);
+        }
+
+        private void StepGallery(int step)
+        {
+            int count = model.Gallery.Count;
+            if (count == 0) return;
+            galleryChosen = Mathf.Clamp(galleryChosen + step, 0, count - 1);
+            if (galleryChosen < galleryFirst) galleryFirst = galleryChosen;
+            if (galleryChosen >= galleryFirst + GalleryThumbCount) galleryFirst = galleryChosen - GalleryThumbCount + 1;
+            RenderGallery();
+        }
+
+        private void ChooseThumb(int thumb)
+        {
+            if (galleryFirst + thumb >= model.Gallery.Count) return;
+            galleryChosen = galleryFirst + thumb;
+            RenderGallery();
+        }
+
+        private void RenderFeatures()
+        {
+            IReadOnlyList<FrontEndFeature> features = model.Features;
+            for (int i = 0; i < FeatureTileCount; i++)
+            {
+                string tile = "Pages/Details/Media/Feature" + i;
+                bool shown = i < features.Count;
+                SetActive(tile, shown);
+                if (!shown) continue;
+                SetText(tile + "/Title", features[i].Title);
+                SetText(tile + "/Line", features[i].Line);
+                ShowIcon(tile + "/Icon", features[i].Icon);
+            }
+        }
+
+        // Copies a picture (sprite and colour) from Pages/Details/Box/IconSet, so the icons are edited in the prefab.
+        private void ShowIcon(string path, string icon)
+        {
+            Transform target = transform.Find(path);
+            Image image = target != null ? target.GetComponent<Image>() : null;
+            if (image == null) return;
+            if (!detailIcons.TryGetValue(icon, out Image source))
+            {
+                Transform found = transform.Find("Pages/Details/Box/IconSet/" + icon);
+                source = found != null ? found.GetComponent<Image>() : null;
+                detailIcons[icon] = source;
+            }
+
+            if (source == null) return;
+            image.sprite = source.sprite;
+            image.color = source.color;
         }
 
         private RawImage Picture(string path) => pictures.TryGetValue(path, out RawImage image) ? image : null;

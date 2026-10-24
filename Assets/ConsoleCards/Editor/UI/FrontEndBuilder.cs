@@ -56,6 +56,8 @@ namespace ConsoleCards.Editor.UI
         private static readonly Color Cyan = UiKit.Hex("06eff0");
         private static readonly Color Dark = UiKit.Hex("16191a");
         private static readonly Color Orange = UiKit.Hex("ff7b2e");
+        private static readonly Color Pale = UiKit.Hex("c9ced0");
+        private static readonly Color Gold = UiKit.Hex("f2b632");
         private static readonly Color Backdrop = UiKit.Hex("101314");
         private static readonly Color TitleShadow = new Color(0.05f, 0.06f, 0.07f, 0.95f);
 
@@ -91,12 +93,14 @@ namespace ConsoleCards.Editor.UI
             { "V5_CyanPill", new Vector4(20f, 20f, 20f, 20f) },
             { "V5_OrangeLine", new Vector4(16f, 16f, 16f, 16f) },
             { "V5_CyanLine", new Vector4(16f, 16f, 16f, 16f) },
+            { "V5_GreyPill", new Vector4(20f, 20f, 20f, 20f) },
+            { "V5_GreyLine", new Vector4(16f, 16f, 16f, 16f) },
         };
 
         private static readonly string[] Icons =
         {
             "Play", "Cube", "Book", "Gear", "Door", "Person", "Lock", "Clock", "Pad", "Dots", "Bars", "Cards", "Key", "Pawn",
-            "Diamond", "Plus", "Ring", "Disc", "Mode",
+            "Diamond", "Plus", "Ring", "Disc", "Mode", "Tile", "Console",
         };
 
         private static Font bold;
@@ -132,6 +136,7 @@ namespace ConsoleCards.Editor.UI
             int changes = 0;
             int screens = BuildScreens(again);
             changes += screens;
+            changes += UpgradeScreens();
             FrontEndView existing = File.Exists(PrefabPath) ? AssetDatabase.LoadAssetAtPath<FrontEndView>(PrefabPath) : null;
             if (again || screens > 0 || existing == null || existing.BuiltVersion < Version)
             {
@@ -191,6 +196,7 @@ namespace ConsoleCards.Editor.UI
             {
                 string path = ScreensFolder + file + ".prefab";
                 if (!again && File.Exists(path)) continue;
+
                 GameObject holder = new GameObject("Holder", typeof(RectTransform));
                 holder.layer = 5;
                 try
@@ -199,7 +205,8 @@ namespace ConsoleCards.Editor.UI
                     UiKit.Stretch(rect);
                     BuildScreen(name, rect);
                     Transform screen = holder.transform.Find(name);
-                    PrefabUtility.SaveAsPrefabAsset(screen.gameObject, path);
+                    GameObject saved = PrefabUtility.SaveAsPrefabAsset(screen.gameObject, path);
+                    if (Designs.TryGetValue(file, out int design)) AssetDatabase.SetLabels(saved, new[] { DesignLabel + design });
                     built++;
                 }
                 finally
@@ -209,6 +216,107 @@ namespace ConsoleCards.Editor.UI
             }
 
             return built;
+        }
+
+        // Screens whose design changed after they may already have been built (owner, 2026-10-25: Game details as in
+        // the reference). An older prefab is not rebuilt (it holds the owner's edits): only the new parts are added.
+        private static readonly Dictionary<string, int> Designs = new Dictionary<string, int> { { "FE_Details", 2 } };
+        private const string DesignLabel = "FrontEndDesign";
+
+        private static bool HasDesign(GameObject asset, int design)
+        {
+            return Array.IndexOf(AssetDatabase.GetLabels(asset), DesignLabel + design) >= 0;
+        }
+
+        private static void MarkDesign(string path, int design)
+        {
+            GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (asset == null) return;
+            List<string> labels = new List<string>(AssetDatabase.GetLabels(asset));
+            labels.RemoveAll(label => label.StartsWith(DesignLabel, StringComparison.Ordinal));
+            labels.Add(DesignLabel + design);
+            AssetDatabase.SetLabels(asset, labels.ToArray());
+        }
+
+        // Owner, 2026-10-25: "I don't want to overwrite my changes". A screen made with an older design gets only the
+        // new parts added; everything already in it (positions, sizes, anchors, texts, sprites) is left as it is.
+        private static int UpgradeScreens()
+        {
+            int upgraded = 0;
+            foreach (KeyValuePair<string, int> design in Designs)
+            {
+                string path = ScreensFolder + design.Key + ".prefab";
+                GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (asset == null || HasDesign(asset, design.Value)) continue;
+                GameObject root = PrefabUtility.LoadPrefabContents(path);
+                try
+                {
+                    if (design.Key == "FE_Details") UpgradeDetails((RectTransform)root.transform);
+                    PrefabUtility.SaveAsPrefabAsset(root, path);
+                }
+                finally
+                {
+                    PrefabUtility.UnloadPrefabContents(root);
+                }
+
+                MarkDesign(path, design.Value);
+                Debug.Log($"Console Cards: added the new parts to {path} (your edits are kept).");
+                upgraded++;
+            }
+
+            return upgraded;
+        }
+
+        // Game details design 2: grey info pill, picture strip with arrows, feature tiles, IN THE BOX rows and icons.
+        private static void UpgradeDetails(RectTransform page)
+        {
+            Transform stats = page.Find("Stats");
+            Image pill = stats != null ? stats.GetComponent<Image>() : null;
+            if (pill != null && pill.sprite == Derived("V5_OrangePill")) pill.sprite = Derived("V5_GreyPill");
+
+            RectTransform media = page.Find("Media") as RectTransform;
+            if (media != null && media.Find("Thumb0") == null)
+            {
+                Transform picture = media.Find("Picture");
+                if (picture != null) picture.gameObject.SetActive(false);
+                Rect area = media.rect;
+                MediaParts(media, area.width > 1f ? area.width / 830f : 1f, area.height > 1f ? area.height / 296f : 1f);
+            }
+
+            RectTransform box = page.Find("Box") as RectTransform;
+            if (box != null && box.Find("Row0") == null)
+            {
+                for (int i = 0; i < FrontEndView.BoxRowCount; i++)
+                {
+                    RectTransform row = Node("Row" + i, box, new Vector2(0f, 1f), Vector2.one, new Vector2(0.5f, 1f),
+                        new Vector2(0f, -(62f + i * 49f)), new Vector2(-52f, 40f));
+                    BoxRowParts(row);
+                }
+
+                IconSet(box);
+                // Six rows need this much room; a box the owner made taller keeps its height.
+                float needed = 62f + FrontEndView.BoxRowCount * 49f + 12f;
+                if (Mathf.Approximately(box.anchorMin.y, box.anchorMax.y) && box.sizeDelta.y < needed)
+                {
+                    box.sizeDelta = new Vector2(box.sizeDelta.x, needed);
+                }
+            }
+        }
+
+        // The picture strip and feature tiles, measured on an 830x296 panel (scaled to the panel's own size).
+        private static void MediaParts(RectTransform media, float sx, float sy)
+        {
+            GalleryArrow(TopLeft("Previous", media, 18f * sx, 72f * sy, 24f, 24f), Figma("leftArrowIcon"));
+            GalleryArrow(TopLeft("Next", media, 788f * sx, 72f * sy, 24f, 24f), Figma("RightArrowIcon"));
+            for (int i = 0; i < FrontEndView.GalleryThumbCount; i++)
+            {
+                Thumb(media, "Thumb" + i, (50f + i * 252f) * sx, 15f * sy, 232f * sx, 138f * sy);
+            }
+
+            for (int i = 0; i < FrontEndView.FeatureTileCount; i++)
+            {
+                FeatureTile(media, "Feature" + i, (17f + i * 270f) * sx, 168f * sy, 257f * sx, 107f * sy);
+            }
         }
 
         private static void BuildScreen(string name, RectTransform holder)
@@ -488,16 +596,24 @@ namespace ConsoleCards.Editor.UI
             Shade(title);
             Words(TopLeft("Tagline", page, 106f, 300f, 800f, 26f), medium, 19, White, TextAnchor.MiddleLeft, string.Empty);
             Words(TopLeft("Text", page, 102f, 338f, 580f, 100f), medium, 17, White, TextAnchor.UpperLeft, string.Empty);
-            StatsPill(page, 91f, 451f, 559f, 46f);
+            // Owner, 2026-10-25: the info pill has no orange highlight in the reference (a plain grey outline).
+            StatsPill(page, 91f, 451f, 559f, 46f, Derived("V5_GreyPill"));
 
-            RectTransform media = TopLeft("Media", page, 71f, 518f, 826f, 285f);
+            // The reference: a strip of three pictures with arrows, then three feature tiles.
+            RectTransform media = TopLeft("Media", page, 71f, 518f, 830f, 296f);
             Plate(media, Figma("Player Profile"), 2f);
-            Framed(media, "Picture", 30f, 22f, 766f, 241f, Derived("V5_CyanLine"));
+            MediaParts(media, 1f, 1f);
 
+            // IN THE BOX: one row per kind of component; the box grows with its rows.
             RectTransform box = TopLeft("Box", page, 1533f, 126f, 326f, 324f);
             Plate(box, Figma("Player Profile"), 2.5f);
-            Words(TopLeft("Title", box, 26f, 20f, 280f, 28f), bold, 16, White, TextAnchor.MiddleLeft, "IN THE BOX");
-            Words(TopLeft("Text", box, 26f, 58f, 276f, 240f), medium, 15, White, TextAnchor.UpperLeft, string.Empty);
+            VerticalLayoutGroup lines = Column(box, 9f);
+            lines.padding = new RectOffset(26, 26, 18, 22);
+            box.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            Size(Words(Node("Title", box), bold, 16, White, TextAnchor.MiddleLeft, "IN THE BOX").rectTransform, -1f, 30f);
+            for (int i = 0; i < FrontEndView.BoxRowCount; i++) BoxRow(box, "Row" + i);
+            Words(Node("Text", box), medium, 15, White, TextAnchor.UpperLeft, string.Empty).gameObject.SetActive(false);
+            IconSet(box);
 
             Cta(page, "Start", 71f, 838f, 826f, 124f, Figma("Menu_Selected"), "START SETUP", "Configure your session.", false);
         }
@@ -741,10 +857,10 @@ namespace ConsoleCards.Editor.UI
         }
 
         // Three parts in an orange pill, split by rules: players, mode, deck (Game details).
-        private static void StatsPill(RectTransform page, float x, float y, float width, float height)
+        private static void StatsPill(RectTransform page, float x, float y, float width, float height, Sprite outline = null)
         {
             RectTransform pill = TopLeft("Stats", page, x, y, width, height);
-            Plate(pill, Derived("V5_OrangePill"), 1.5f).raycastTarget = false;
+            Plate(pill, outline != null ? outline : Derived("V5_OrangePill"), 1.5f).raycastTarget = false;
             HorizontalLayoutGroup row = Row(pill, 18f, TextAnchor.MiddleLeft);
             row.padding = new RectOffset(16, 16, 0, 0);
             string[] icons = { "playersIcon", "V5_I_Clock", "V5_I_Cards" };
@@ -757,6 +873,95 @@ namespace ConsoleCards.Editor.UI
                 Picture(Node("Icon", cell), glyph, White, 20f, 20f);
                 Fit(Words(Node("Label", cell), bold, 14, White, TextAnchor.MiddleLeft, "1 - 4 Players"));
             }
+        }
+
+        // A picture in the Game details strip: the picture (cropped to fill), a grey outline, the cyan one when chosen.
+        private static void Thumb(RectTransform parent, string name, float x, float y, float width, float height)
+        {
+            RectTransform thumb = TopLeft(name, parent, x, y, width, height);
+            Image hit = thumb.gameObject.AddComponent<Image>();
+            hit.color = new Color(0f, 0f, 0f, 0.35f);
+            thumb.gameObject.AddComponent<Button>().targetGraphic = hit;
+            RectTransform mask = Stretched("Mask", thumb);
+            mask.offsetMin = new Vector2(3f, 3f);
+            mask.offsetMax = new Vector2(-3f, -3f);
+            mask.gameObject.AddComponent<RectMask2D>();
+            RectTransform picture = Node("Picture", mask, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                Vector2.zero, new Vector2(width, height));
+            RawImage image = picture.gameObject.AddComponent<RawImage>();
+            image.raycastTarget = false;
+            image.color = new Color(1f, 1f, 1f, 0.08f);
+            AspectRatioFitter fitter = picture.gameObject.AddComponent<AspectRatioFitter>();
+            fitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+            fitter.aspectRatio = width / height;
+            Plate(Stretched("Frame", thumb), Derived("V5_GreyLine"), 1.5f).raycastTarget = false;
+            RectTransform chosen = Stretched("Selected", thumb);
+            chosen.offsetMin = new Vector2(-2f, -2f);
+            chosen.offsetMax = new Vector2(2f, 2f);
+            Plate(chosen, Derived("V5_CyanLine"), 1.5f).raycastTarget = false;
+            chosen.gameObject.SetActive(false);
+        }
+
+        // An orange chevron that turns cyan on hover.
+        private static void GalleryArrow(RectTransform rect, Sprite icon)
+        {
+            Image image = rect.gameObject.AddComponent<Image>();
+            image.sprite = icon;
+            image.preserveAspect = true;
+            Button button = rect.gameObject.AddComponent<Button>();
+            Hover(button, image);
+            ColorBlock colors = button.colors;
+            colors.normalColor = Orange;
+            colors.selectedColor = Orange;
+            button.colors = colors;
+        }
+
+        // A feature tile: thin orange outline, an icon, a title and a short line.
+        private static void FeatureTile(RectTransform parent, string name, float x, float y, float width, float height)
+        {
+            RectTransform tile = TopLeft(name, parent, x, y, width, height);
+            Image plate = Plate(tile, Derived("V5_OrangePill"), 1.5f);
+            plate.color = new Color(0.62f, 0.62f, 0.62f, 1f);
+            plate.raycastTarget = false;
+            Picture(Node("Icon", tile, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(18f, 0f),
+                new Vector2(54f, 54f)), Derived("V5_I_Tile"), Pale, -1f, -1f);
+            Words(TopLeft("Title", tile, 92f, 24f, width - 104f, 24f), bold, 14, White, TextAnchor.MiddleLeft, "Feature");
+            Text line = Words(TopLeft("Line", tile, 92f, 50f, width - 104f, 40f), medium, 12, Muted, TextAnchor.UpperLeft,
+                string.Empty);
+            line.horizontalOverflow = HorizontalWrapMode.Wrap;
+        }
+
+        // An IN THE BOX row: icon, name, "x 20" at the right.
+        private static void BoxRow(RectTransform box, string name)
+        {
+            RectTransform row = Node(name, box);
+            Size(row, -1f, 40f);
+            BoxRowParts(row);
+        }
+
+        private static void BoxRowParts(RectTransform row)
+        {
+            Picture(Node("Icon", row, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(8f, 0f),
+                new Vector2(30f, 30f)), Derived("V5_I_Tile"), Pale, -1f, -1f);
+            Words(Node("Label", row, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0f, 0.5f), new Vector2(64f, 0f),
+                new Vector2(-124f, 0f)), medium, 15, White, TextAnchor.MiddleLeft, "Component");
+            Words(Node("Count", row, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), Vector2.zero,
+                new Vector2(60f, 0f)), medium, 15, White, TextAnchor.MiddleRight, "x 1");
+        }
+
+        // The pictures the rows and tiles use, by name (hidden; swap a sprite or colour here to change an icon).
+        private static void IconSet(RectTransform parent)
+        {
+            RectTransform set = Node("IconSet", parent);
+            set.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            string[] names = { "Tiles", "Cards", "Abilities", "Keys", "Pawns", "Console" };
+            string[] icons = { "V5_I_Tile", "V5_I_Cards", "V5_I_Diamond", "V5_I_Key", "V5_I_Pawn", "V5_I_Console" };
+            for (int i = 0; i < names.Length; i++)
+            {
+                Picture(Node(names[i], set), Derived(icons[i]), names[i] == "Keys" ? Gold : Pale, -1f, -1f);
+            }
+
+            set.gameObject.SetActive(false);
         }
 
         private static void PanelHeader(RectTransform panel, string title, bool edit = true)

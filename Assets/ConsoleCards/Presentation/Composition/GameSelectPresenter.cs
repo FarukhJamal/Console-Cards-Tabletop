@@ -238,6 +238,87 @@ namespace ConsoleCards.Presentation.Composition
             model.PlayerNames = names;
             model.PlayerColors = colors;
             model.PlayerColorNames = colorNames;
+            AddGameDetails(model, entry.Game);
+        }
+
+        // Owner, 2026-10-25: Game details as in the reference: IN THE BOX as a list, a strip of pictures and three
+        // feature tiles, all counted from the game's definition (a game the player made keeps its deck line).
+        private void AddGameDetails(GameSelectModel model, GameDefinition game)
+        {
+            if (game == null) return;
+            int tiles = 0;
+            int actions = 0;
+            int keys = 0;
+            List<FrontEndBoxItem> box = new List<FrontEndBoxItem>(6);
+            List<FrontEndBoxItem> others = new List<FrontEndBoxItem>(2);
+            HashSet<string> counted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> keyCards = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<Texture> gallery = new List<Texture>(6);
+            Texture2D cover = GamePicture(game);
+            if (cover != null) gallery.Add(cover);
+            for (int s = 0; s < game.ContentSets.Count; s++)
+            {
+                GameContentSet set = game.ContentSets[s];
+                if (set == null) continue;
+                bool floor = string.Equals(set.Role, "floor", StringComparison.OrdinalIgnoreCase);
+                int setCards = 0;
+                int other = 0;
+                bool pictured = false;
+                for (int c = 0; c < set.Cards.Count; c++)
+                {
+                    CardDefinition card = set.Cards[c];
+                    if (card == null) continue;
+                    if (string.Equals(card.Category, "Key", StringComparison.OrdinalIgnoreCase)) keyCards.Add(card.StableId);
+                    if (!pictured && gallery.Count < 6 && card.RepresentedControllerInput == null)
+                    {
+                        Texture2D art = host.UsesTableArt(game) ? host.FrontArt(card) : card.FrontArtwork;
+                        if (art != null && !gallery.Contains(art)) gallery.Add(art);
+                        pictured = true;
+                    }
+
+                    if (floor) setCards += card.Quantity;
+                    else if (!counted.Add(card.StableId)) continue;
+                    else if (card.RepresentedControllerInput != null) actions += card.Quantity;
+                    else other += card.Quantity;
+                }
+
+                if (floor) tiles += set.DrawCount > 0 ? set.DrawCount : setCards;
+                if (other > 0) others.Add(new FrontEndBoxItem("Abilities", SetLabel(set.DisplayName, game.DisplayName), other));
+            }
+
+            keys = keyCards.Count;
+            if (tiles > 0) box.Add(new FrontEndBoxItem("Tiles", "Floor Tiles", tiles));
+            if (actions > 0) box.Add(new FrontEndBoxItem("Cards", "Action Cards", actions));
+            box.AddRange(others);
+            if (keys > 0) box.Add(new FrontEndBoxItem("Keys", "Keys", keys));
+            box.Add(new FrontEndBoxItem("Pawns", "Player Pawns", game.MaximumPlayers));
+            if (game.ConsoleConfiguration != null) box.Add(new FrontEndBoxItem("Console", "Consoles", game.MaximumPlayers));
+            if (box.Count > FrontEndView.BoxRowCount) box.RemoveRange(FrontEndView.BoxRowCount, box.Count - FrontEndView.BoxRowCount);
+
+            List<FrontEndFeature> features = new List<FrontEndFeature>(3);
+            if (tiles > 0) features.Add(new FrontEndFeature("Tiles", "Dynamic Tiles", "Every move can change the floor."));
+            if (actions > 0) features.Add(new FrontEndFeature("Cards", "Action Cards", "Pay costs with Controller cards."));
+            if (keys > 0) features.Add(new FrontEndFeature("Keys", "Collect Keys", "Find the keys and reach the exit."));
+            if (features.Count < 3 && others.Count > 0)
+            {
+                features.Add(new FrontEndFeature("Abilities", others[0].Label, "Each avatar brings its own powers."));
+            }
+
+            model.BoxItems = box;
+            model.Gallery = gallery;
+            model.Features = features;
+        }
+
+        // "Trap Floor Abilities" -> "Abilities" (the game's name is already the title).
+        private static string SetLabel(string setName, string gameName)
+        {
+            string label = setName ?? string.Empty;
+            if (!string.IsNullOrEmpty(gameName) && label.StartsWith(gameName, StringComparison.OrdinalIgnoreCase))
+            {
+                label = label.Substring(gameName.Length).Trim();
+            }
+
+            return label.Length > 0 ? label : "Cards";
         }
 
         // UI-2: the avatar arrows on the Player profile screen (saved in the profile at once).

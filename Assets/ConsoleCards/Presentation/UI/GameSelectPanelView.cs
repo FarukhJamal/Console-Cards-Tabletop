@@ -52,6 +52,40 @@ namespace ConsoleCards.Presentation.UI
         public IReadOnlyList<string> PlayerNames = Array.Empty<string>();
         public IReadOnlyList<Color> PlayerColors = Array.Empty<Color>();
         public IReadOnlyList<string> PlayerColorNames = Array.Empty<string>();
+        // Owner, 2026-10-25: Game details as in the reference (IN THE BOX list, pictures, three feature tiles).
+        public IReadOnlyList<FrontEndBoxItem> BoxItems = Array.Empty<FrontEndBoxItem>();
+        public IReadOnlyList<Texture> Gallery = Array.Empty<Texture>();
+        public IReadOnlyList<FrontEndFeature> Features = Array.Empty<FrontEndFeature>();
+    }
+
+    /// <summary>One line of IN THE BOX on Game details. <see cref="Icon"/> names a picture in the screen's IconSet.</summary>
+    public readonly struct FrontEndBoxItem
+    {
+        public FrontEndBoxItem(string icon, string label, int count)
+        {
+            Icon = icon ?? string.Empty;
+            Label = label ?? string.Empty;
+            Count = count;
+        }
+
+        public string Icon { get; }
+        public string Label { get; }
+        public int Count { get; }
+    }
+
+    /// <summary>One feature tile under the pictures on Game details (icon from the IconSet, a title, a line).</summary>
+    public readonly struct FrontEndFeature
+    {
+        public FrontEndFeature(string icon, string title, string line)
+        {
+            Icon = icon ?? string.Empty;
+            Title = title ?? string.Empty;
+            Line = line ?? string.Empty;
+        }
+
+        public string Icon { get; }
+        public string Title { get; }
+        public string Line { get; }
     }
 
     /// <summary>The game selection menu's actions, supplied by the game.</summary>
