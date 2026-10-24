@@ -91,6 +91,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal bool OpenGameSelect()
         {
+            if (!pendingFrontEndPage.HasValue) pendingFrontEndPage = FrontEndPage.Library; // New table… from the game
             host.EnsureContentArt();
             host.TrapFloorGame.PendingWinMode = null; // MODE-1: a choice from a menu left without dealing is dropped
             host.TrapFloorGame.PendingAnticlockwise = null;

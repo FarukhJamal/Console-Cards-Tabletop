@@ -125,7 +125,7 @@ namespace ConsoleCards.Presentation.UI
             floorfallDiceLabel.text = floorfall.Dice;
             floorfallCoordinateLabel.text = floorfall.Coordinate;
             floorfallTargetLabel.text = floorfall.Target;
-            actionsTitle.SetActive(actions.Count > 0);
+            actionsTitle.SetActive(actions.Count > 0 && (cardRows == null || !cardRows.activeSelf)); // V5: no title
             actionsRoot.gameObject.SetActive(actions.Count > 0);
             BindActions(actions);
             base.Show();

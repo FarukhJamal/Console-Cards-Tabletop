@@ -444,7 +444,8 @@ namespace ConsoleCards.Presentation.Composition
         internal void FeedbackLine(string message, FeedbackSeverity severity)
         {
             RecordHandoverLine(message);
-            runtimeUi.ShowFeedbackMessage(message, severity);
+            // Owner, 2026-10-24: the Log already shows the line; only warnings also pop up as a message.
+            if (severity == FeedbackSeverity.Warning) runtimeUi.ShowFeedbackMessage(message, severity);
         }
 
         internal string PlayerLabel(PlayerId player)

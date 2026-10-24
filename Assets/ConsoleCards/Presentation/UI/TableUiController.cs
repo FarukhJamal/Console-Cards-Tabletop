@@ -165,6 +165,7 @@ namespace ConsoleCards.Presentation.UI
             componentToolboxView.Show();
             interactionGuideView.Bind();
             interactionGuideView.Show();
+            interactionGuideView.SetStripVisible(hintsVisible && !IsVisible(toolBarView)); // the Controls bar has the keys
             HideTrapFloorStatus();
             statusMessageView.SetMessage(statusMessage);
             root.ClearSelectedUiObject();
