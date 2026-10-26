@@ -72,7 +72,7 @@
         "UpdateDelay": 10
     },
     "EncryptionConfig": {
-        "EnableEncryption": false
+        "EnableEncryption": true
     },
     "NetworkConditions": {
         "Enabled": false,

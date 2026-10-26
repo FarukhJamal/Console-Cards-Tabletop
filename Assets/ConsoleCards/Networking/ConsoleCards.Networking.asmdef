@@ -1,0 +1,19 @@
+{
+  "name": "ConsoleCards.Networking",
+  "rootNamespace": "ConsoleCards.Networking",
+  "references": [
+    "ConsoleCards.Core",
+    "ConsoleCards.Application",
+    "Fusion.Unity",
+    "Photon.Realtime"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
