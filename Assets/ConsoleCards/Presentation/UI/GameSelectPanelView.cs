@@ -118,6 +118,8 @@ namespace ConsoleCards.Presentation.UI
         public Action Exit;
         /// <summary>The pawn arrows on the Players step: seat index, -1 or +1.</summary>
         public Action<int, int> CycleSeatColour;
+        /// <summary>CREATE > TABLE: the table's shape, size and edge (Table tools).</summary>
+        public Action OpenTableTools;
     }
 
     /// <summary>

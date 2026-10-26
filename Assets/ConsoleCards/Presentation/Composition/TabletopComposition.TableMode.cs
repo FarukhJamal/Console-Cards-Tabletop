@@ -78,6 +78,18 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
+        // Owner, 2026-10-26: the table's shape, size and edge are made from CREATE on the front end; closing Table
+        // tools (Done or Cancel) goes back there.
+        private bool tableModeReturnsToFrontEnd;
+
+        /// <summary>Opens Table tools from the front end; false when there is no table to change.</summary>
+        internal bool OpenTableToolsFromFrontEnd()
+        {
+            OpenTableMode();
+            tableModeReturnsToFrontEnd = tableModeStart != null;
+            return tableModeReturnsToFrontEnd;
+        }
+
         private void OpenTableMode()
         {
             if (runtimeUi == null || !FindClassicTable()) return;
@@ -370,6 +382,9 @@ namespace ConsoleCards.Presentation.Composition
             if (cameraController != null && !cameraController.ShowBoardView()) cameraController.ShowDefaultView();
             RefreshTableShapeEntry();
             ShowMessage(message);
+            if (!tableModeReturnsToFrontEnd) return;
+            tableModeReturnsToFrontEnd = false;
+            GameSelectPanel.ReturnToGameSelect();
         }
 
         // LAYOUT-1: back to the play view after arranging the table (as Table mode does when it closes).

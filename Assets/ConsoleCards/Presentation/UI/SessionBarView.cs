@@ -96,6 +96,12 @@ namespace ConsoleCards.Presentation.UI
         [Tooltip("The Table menu row \"Arrange table…\" that opens the custom table layout.")]
         [SerializeField] private Button arrangeTableButton;
 
+        [Header("Settings (owner, 2026-10-26; optional, added by Apply Kit Look)")]
+        [Tooltip("SETTINGS on the bar: opens the settings menu (Rules card, Hints, Tips, Hot-seat, Hands on table, Full feedback).")]
+        [SerializeField] private Button settingsButton;
+        [Tooltip("The menu that holds the view settings, moved out of the Table menu.")]
+        [SerializeField] private RectTransform settingsMenu;
+
         [Header("Shop (doc 18 §15.4; optional, added by Add Missing Table Menu Rows)")]
         [Tooltip("The Shop entry on the bar: the shop icon and the word Shop, between Redo and Table.")]
         [SerializeField] private Button shopButton;
@@ -144,7 +150,11 @@ namespace ConsoleCards.Presentation.UI
         private Action openSaveGame;
         private Action openShop;
 
-        public bool IsMenuOpen => menu != null && menu.gameObject.activeSelf;
+        public bool IsMenuOpen => (menu != null && menu.gameObject.activeSelf) || IsSettingsOpen;
+
+        private bool IsTableMenuOpen => menu != null && menu.gameObject.activeSelf;
+
+        private bool IsSettingsOpen => settingsMenu != null && settingsMenu.gameObject.activeSelf;
 
         public void ValidateReferences()
         {
@@ -202,6 +212,7 @@ namespace ConsoleCards.Presentation.UI
             undoButton.onClick.AddListener(HandleUndo);
             redoButton.onClick.AddListener(HandleRedo);
             tableButton.onClick.AddListener(ToggleMenu);
+            if (settingsButton != null) settingsButton.onClick.AddListener(ToggleSettings);
             menuBlocker.onClick.AddListener(CloseMenu);
             newTableButton.onClick.AddListener(HandleNewTable);
             resetButton.onClick.AddListener(HandleReset);
@@ -538,10 +549,12 @@ namespace ConsoleCards.Presentation.UI
 
         public void OpenMenu()
         {
-            if (menu == null || IsMenuOpen)
+            if (menu == null || IsTableMenuOpen)
             {
                 return;
             }
+
+            CloseMenu();
 
             beforeMenuOpen?.Invoke();
             HideTip();
@@ -562,6 +575,11 @@ namespace ConsoleCards.Presentation.UI
             if (menu != null)
             {
                 menu.gameObject.SetActive(false);
+            }
+
+            if (settingsMenu != null)
+            {
+                settingsMenu.gameObject.SetActive(false);
             }
 
             if (menuBlocker != null)
@@ -619,7 +637,24 @@ namespace ConsoleCards.Presentation.UI
                 return;
             }
 
-            if (IsMenuOpen) ScrollMenu();
+            if (IsTableMenuOpen) ScrollMenu();
+        }
+
+        // Owner, 2026-10-26: the view settings have their own menu under SETTINGS on the bar.
+        private void ToggleSettings()
+        {
+            if (settingsMenu == null) return;
+            if (IsSettingsOpen)
+            {
+                CloseMenu();
+                return;
+            }
+
+            CloseMenu();
+            beforeMenuOpen?.Invoke();
+            HideTip();
+            menuBlocker.gameObject.SetActive(true);
+            settingsMenu.gameObject.SetActive(true);
         }
 
         // Mouse wheel (or Up / Down keys) while the Table menu is open: slides the menu so every row can be reached,
@@ -664,7 +699,7 @@ namespace ConsoleCards.Presentation.UI
 
         private void ToggleMenu()
         {
-            if (IsMenuOpen)
+            if (IsTableMenuOpen)
             {
                 CloseMenu();
             }
@@ -931,6 +966,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(undoButton);
             Clear(redoButton);
             Clear(tableButton);
+            Clear(settingsButton);
             Clear(menuBlocker);
             Clear(newTableButton);
             Clear(resetButton);

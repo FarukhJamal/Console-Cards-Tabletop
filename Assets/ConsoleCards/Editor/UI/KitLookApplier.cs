@@ -137,11 +137,14 @@ namespace ConsoleCards.Editor.UI
                 ApplyToPrefab(file.Replace('\\', '/'), fonts, report, again);
             }
 
+            // Owner, 2026-10-26: later changes are added to styled prefabs too, once each, keeping their edits.
+            int upgraded = V5Hud.UpgradeStyled();
+
             AssetDatabase.SaveAssets();
             Debug.Log($"[UI-1] Kit look: {report.Prefabs} prefabs changed; {report.Fonts} labels to Oxanium, "
                 + $"{report.Sprites} panel sprites, {report.Colors} colours, {report.Moves} moved to the V5 layout, "
                 + $"{report.Frames} Figma frames, {report.V5} table HUD prefabs laid out as the Figma V5 screen; "
-                + $"{report.Kept} already styled and left as you edited them; front end "
+                + $"{report.Kept} already styled and left as you edited them ({upgraded} given new parts); front end "
                 + (frontEnd > 0 ? "built or refreshed." : "unchanged."));
         }
 

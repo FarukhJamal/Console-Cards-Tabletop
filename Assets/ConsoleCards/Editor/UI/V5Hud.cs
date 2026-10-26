@@ -149,6 +149,149 @@ namespace ConsoleCards.Editor.UI
             if (Snapshot(root) != before) counted();
         }
 
+        // ---------- Upgrades of prefabs already styled (and maybe edited by the owner) ----------
+
+        // Owner, 2026-10-26: SETTINGS and SAVE on the top bar. The view settings (Rules card, Hints, Tips, Hot-seat,
+        // Hands on table, Full feedback) move from the Table menu into a Settings menu; Save table as a game is a
+        // button on the bar; the Table menu loses the editors, the profile and the shape and edge rows (Table tools
+        // has them all). Done once (a label marks it); nothing else in the prefab changes.
+        private const string SessionBarDesignLabel = "SessionBarDesign2";
+
+        private static readonly string[] SettingsRows =
+        {
+            "RulesCardRow", "HintsRow", "TipsRow", "HotSeatRow", "HandsOnTableRow", "FeedbackRow",
+        };
+
+        private static readonly string[] RetiredTableMenuRows =
+        {
+            "SettingsRule", "CardArtRule", "CardArtRow", "CardEditorRow", "DeckEditorRow", "ProfileRow", "SaveGameRow",
+            "TableShapeRow", "TableEdgeRow",
+        };
+
+        /// <summary>Adds what later designs need to styled prefabs, once each; returns how many changed.</summary>
+        public static int UpgradeStyled()
+        {
+            string path = UiKit.FinalUiFolder + "SessionBar.prefab";
+            int changed = 0;
+            if (Upgrade(path, SessionBarDesignLabel, SessionBarMenus))
+            {
+                Debug.Log($"Console Cards: {path} has SETTINGS and SAVE on the bar now (your other edits are kept).");
+                changed++;
+            }
+
+            if (Upgrade(path, SessionBarMainMenuLabel, SessionBarMainMenu))
+            {
+                Debug.Log($"Console Cards: {path}: the Table menu's first row is Main menu now.");
+                changed++;
+            }
+
+            return changed;
+        }
+
+        // Owner, 2026-10-26: New table… goes back to the main menu (games are chosen on the front end).
+        private const string SessionBarMainMenuLabel = "SessionBarDesign3";
+
+        private static bool SessionBarMainMenu(GameObject root)
+        {
+            Text label = Find(root.transform, "Bar/TableMenu/NewTableRow/Label")?.GetComponent<Text>();
+            if (label == null) return false;
+            label.text = "Main menu";
+            return true;
+        }
+
+        // Runs one change on a prefab that has not had it yet (its label), and marks it.
+        private static bool Upgrade(string path, string label, Func<GameObject, bool> change)
+        {
+            GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (asset == null || Array.IndexOf(AssetDatabase.GetLabels(asset), label) >= 0) return false;
+            GameObject root = PrefabUtility.LoadPrefabContents(path);
+            try
+            {
+                if (!change(root)) return false;
+                PrefabUtility.SaveAsPrefabAsset(root, path);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+
+            asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            List<string> labels = new List<string>(AssetDatabase.GetLabels(asset)) { label };
+            AssetDatabase.SetLabels(asset, labels.ToArray());
+            return true;
+        }
+
+        private static bool SessionBarMenus(GameObject root)
+        {
+            RectTransform bar = Find(root.transform, "Bar");
+            RectTransform table = Find(bar, "TableButton");
+            RectTransform tableMenu = Find(bar, "TableMenu");
+            SessionBarView view = root.GetComponent<SessionBarView>();
+            if (bar == null || table == null || tableMenu == null || view == null) return false;
+
+            RectTransform save = Find(bar, "SaveButton") ?? CopyBarButton(table, "SaveButton", "SAVE", Derived("V5_I_Cube"));
+            save.SetSiblingIndex(table.GetSiblingIndex());
+            RectTransform settings = Find(bar, "SettingsButton")
+                ?? CopyBarButton(table, "SettingsButton", "SETTINGS", Derived("V5_I_Gear"));
+            settings.SetSiblingIndex(table.GetSiblingIndex());
+
+            RectTransform settingsMenu = Find(bar, "SettingsMenu");
+            if (settingsMenu == null)
+            {
+                settingsMenu = (RectTransform)UnityEngine.Object.Instantiate(tableMenu.gameObject, bar, false).transform;
+                settingsMenu.name = "SettingsMenu";
+                for (int i = settingsMenu.childCount - 1; i >= 0; i--)
+                {
+                    string child = settingsMenu.GetChild(i).name;
+                    if (child == "Shadow" || child == "Fill" || child == "Header" || child == "HeaderRule") continue;
+                    UnityEngine.Object.DestroyImmediate(settingsMenu.GetChild(i).gameObject);
+                }
+
+                Text title = Find(settingsMenu, "Header/Title")?.GetComponent<Text>();
+                if (title != null) title.text = "SETTINGS";
+                foreach (string row in SettingsRows)
+                {
+                    Transform moved = tableMenu.Find(row);
+                    if (moved != null) moved.SetParent(settingsMenu, false);
+                }
+
+                settingsMenu.gameObject.SetActive(false);
+            }
+
+            foreach (string row in RetiredTableMenuRows)
+            {
+                Transform retired = tableMenu.Find(row);
+                if (retired != null) retired.gameObject.SetActive(false);
+            }
+
+            Text tools = Find(tableMenu, "TableToolsRow/Label")?.GetComponent<Text>();
+            if (tools != null) tools.text = "Table shape, edge and size…";
+
+            // The settings menu drops under SETTINGS (the Table menu under TABLE).
+            LayoutRebuilder.ForceRebuildLayoutImmediate(bar);
+            settingsMenu.anchoredPosition = tableMenu.anchoredPosition
+                + new Vector2(settings.anchoredPosition.x - table.anchoredPosition.x, 0f);
+
+            SerializedObject so = new SerializedObject(view);
+            SetReference(so, "settingsButton", settings.GetComponent<Button>());
+            SetReference(so, "settingsMenu", settingsMenu);
+            SetReference(so, "saveGameButton", save.GetComponent<Button>());
+            so.ApplyModifiedPropertiesWithoutUndo();
+            return true;
+        }
+
+        // A copy of the TABLE button with its own word and icon (same look, hover and size).
+        private static RectTransform CopyBarButton(RectTransform model, string name, string word, Sprite icon)
+        {
+            RectTransform copy = (RectTransform)UnityEngine.Object.Instantiate(model.gameObject, model.parent, false).transform;
+            copy.name = name;
+            Text label = Find(copy, "Label")?.GetComponent<Text>();
+            if (label != null) label.text = word;
+            Image picture = Find(copy, "Icon")?.GetComponent<Image>();
+            if (picture != null && icon != null) picture.sprite = icon;
+            return copy;
+        }
+
         // ---------- Pieces ----------
 
         // Top bar: cyan dot and game name, Undo, Redo, SHOP, TABLE on the Top bar; no boxes around them.
@@ -427,7 +570,9 @@ namespace ConsoleCards.Editor.UI
             Tint(Find(card, "HeaderRule"), Clear);
             RectTransform body = Find(card, "Body");
             Tint(body, Clear);
-            Size(body, -1f, 345f);
+            // Owner, 2026-10-26: 20 less than before, so the taller footer (FOLD clear of the corner) does not push the
+            // card down into the activity log when the log is open.
+            Size(body, -1f, 325f);
             VerticalLayoutGroup lines = Find(card, "Body/Lines")?.GetComponent<VerticalLayoutGroup>();
             if (lines != null) lines.spacing = 10f;
 

@@ -225,6 +225,7 @@ namespace ConsoleCards.Editor.UI
             { "FE_Details", 2 },
             { "FE_Players", 4 },
             { "FE_Review", 3 },
+            { "FE_Create", 2 },
         };
 
         // Review, design 2 (owner, 2026-10-25: overlapping): the text clears the picture, the two columns have a gap.
@@ -265,6 +266,7 @@ namespace ConsoleCards.Editor.UI
                     if (design.Key == "FE_Details") UpgradeDetails((RectTransform)root.transform);
                     if (design.Key == "FE_Players") UpgradePlayers(root.transform);
                     if (design.Key == "FE_Review") UpgradeReview(root.transform);
+                    if (design.Key == "FE_Create") UpgradeCreate(root.transform);
                     PrefabUtility.SaveAsPrefabAsset(root, path);
                 }
                 finally
@@ -314,6 +316,21 @@ namespace ConsoleCards.Editor.UI
                     box.sizeDelta = new Vector2(box.sizeDelta.x, needed);
                 }
             }
+        }
+
+        // Create design 2 (owner, 2026-10-26): the table's shape, size and edge are made here, not during play.
+        private static void UpgradeCreate(Transform page)
+        {
+            RectTransform menu = page.Find("Menu") as RectTransform;
+            if (menu != null && menu.Find("Table") == null) TableEntry(menu);
+        }
+
+        // TABLE beside CARD ART (a second column, so the BACK button stays clear): opens Table tools.
+        private static void TableEntry(RectTransform menu)
+        {
+            MenuEntry(menu, "Table", 0f, "TABLE", "Shape, size and edge\nof your table.", "TableIcon", false);
+            RectTransform entry = (RectTransform)menu.Find("Table");
+            entry.anchoredPosition = new Vector2(711f, entry.anchoredPosition.y);
         }
 
         // Players design 3: colour arrows in each pawn box; up to eight seats (new rows copy the last one, so they keep
@@ -697,6 +714,7 @@ namespace ConsoleCards.Editor.UI
             MenuEntry(menu, "CardArt", 0f, "CARD ART", "Your own pictures\non the cards.", "editIcon", true);
             MenuEntry(menu, "CardEditor", 157f, "CARD EDITOR", "Change the cards\nand add new ones.", "V5_I_Cards", false);
             MenuEntry(menu, "DeckEditor", 312f, "DECK EDITOR", "Build the decks\nyou play with.", "V5_I_Cards", false);
+            TableEntry(menu);
             BackButton(page, 79f, 900f, "BACK");
         }
 

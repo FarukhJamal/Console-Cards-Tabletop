@@ -124,6 +124,7 @@ namespace ConsoleCards.Presentation.UI
             model = selectModel ?? throw new ArgumentNullException(nameof(selectModel));
             actions = selectActions ?? throw new ArgumentNullException(nameof(selectActions));
             openGuide = guide;
+            ShowBackdropOnly(false);
             if (model.OpenAt.HasValue) page = model.OpenAt.Value;
             if (page >= FrontEndPage.Details && model.IsEmptyTable) page = FrontEndPage.Library;
             BindButtons();
@@ -156,9 +157,23 @@ namespace ConsoleCards.Presentation.UI
             Render();
         }
 
+        /// <summary>
+        /// Owner, 2026-10-26: CREATE's editors open over the front end's background; while they are open the top bar,
+        /// the screens and the status line are hidden and Esc is left to the editor.
+        /// </summary>
+        public void ShowBackdropOnly(bool backdrop)
+        {
+            backdropOnly = backdrop;
+            SetActive("TopBar", !backdrop);
+            SetActive("Pages", !backdrop);
+            SetActive("Status", !backdrop);
+        }
+
+        private bool backdropOnly;
+
         private void Update()
         {
-            if (model == null) return;
+            if (model == null || backdropOnly) return;
             if (highlightTab != null) PlaceHighlight();
             Keyboard keyboard = Keyboard.current;
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) Back();
@@ -205,6 +220,7 @@ namespace ConsoleCards.Presentation.UI
             On("Pages/Create/Menu/CardArt", () => actions?.OpenCardArt?.Invoke());
             On("Pages/Create/Menu/CardEditor", () => actions?.OpenCardEditor?.Invoke());
             On("Pages/Create/Menu/DeckEditor", () => actions?.OpenDeckEditor?.Invoke());
+            On("Pages/Create/Menu/Table", () => actions?.OpenTableTools?.Invoke());
             On("Pages/Create/Back", () => Go(FrontEndPage.Home));
 
             On("Pages/Profile/Panel/Active", () => actions?.OpenProfile?.Invoke());

@@ -244,6 +244,7 @@ namespace ConsoleCards.Presentation.UI
         public void ShowCardArtEntry(Action openCardArt)
         {
             EnsureSessionBarView();
+            openCardArt = null; // owner, 2026-10-26: the editors are on the front end's CREATE, not the Table menu
             if (!sessionBarView.BindCardArt(openCardArt) && openCardArt != null && !cardArtWarned)
             {
                 cardArtWarned = true;
@@ -256,6 +257,7 @@ namespace ConsoleCards.Presentation.UI
         public void ShowCardEditorEntry(Action openCardEditor)
         {
             EnsureSessionBarView();
+            openCardEditor = null; // owner, 2026-10-26: CREATE on the front end only
             if (!sessionBarView.BindCardEditor(openCardEditor) && openCardEditor != null && !cardEditorEntryWarned)
             {
                 cardEditorEntryWarned = true;
@@ -337,8 +339,28 @@ namespace ConsoleCards.Presentation.UI
         public bool IsGameSelectOpen => IsVisible(gameSelectPanelView) || IsVisible(frontEndView);
 
         // UI-2 (owner, 2026-10-24): the front end (main menu, profile, library, details, setup, players, review).
+        // Owner, 2026-10-26: CREATE's editors (card art, card editor, deck editor) open over the front end's
+        // background, not over the table: the front end stays, showing only its background, under the editor.
+        private bool frontEndBackdrop;
+
+        /// <summary>Keeps the front end open as a background only (true when it is open).</summary>
+        public bool ShowFrontEndBackdrop()
+        {
+            if (!IsVisible(frontEndView)) return false;
+            frontEndBackdrop = true;
+            frontEndView.ShowBackdropOnly(true);
+            frontEndView.transform.SetAsFirstSibling();
+            return true;
+        }
+
+        /// <summary>True when the front end shows only its background and nothing has opened over it.</summary>
+        public bool IsFrontEndBackdropAlone => frontEndBackdrop && IsVisible(frontEndView)
+            && !IsVisible(contentArtPanelView) && !IsVisible(cardEditorPanelView) && !IsVisible(deckEditorPanelView)
+            && !IsVisible(profilePanelView) && !IsVisible(personaPanelView) && !IsVisible(gameSavePanelView);
+
         private bool ShowFrontEnd(GameSelectModel model, GameSelectActions actions)
         {
+            frontEndBackdrop = false;
             try
             {
                 EnsureService();
@@ -422,6 +444,7 @@ namespace ConsoleCards.Presentation.UI
 
         public void CloseGameSelect()
         {
+            frontEndBackdrop = false;
             ReleaseView(frontEndView);
             ReleaseView(gameSelectPanelView);
             SetModalLayerOffUnlessHandover();
@@ -431,6 +454,7 @@ namespace ConsoleCards.Presentation.UI
         public void ShowDeckEditorEntry(Action openDeckEditor)
         {
             EnsureSessionBarView();
+            openDeckEditor = null; // owner, 2026-10-26: CREATE on the front end only
             if (!sessionBarView.BindDeckEditor(openDeckEditor) && openDeckEditor != null && !deckEditorEntryWarned)
             {
                 deckEditorEntryWarned = true;
@@ -481,6 +505,7 @@ namespace ConsoleCards.Presentation.UI
         public void ShowProfileEntry(string profileName, Action openProfiles)
         {
             EnsureSessionBarView();
+            openProfiles = null; // owner, 2026-10-26: the profile is chosen on the front end, not during play
             if (!sessionBarView.BindProfile(profileName, openProfiles) && openProfiles != null && !profileEntryWarned)
             {
                 profileEntryWarned = true;
@@ -496,6 +521,7 @@ namespace ConsoleCards.Presentation.UI
         public void ShowTableShapeEntry(string label, Func<string> cycleShape)
         {
             EnsureSessionBarView();
+            cycleShape = null; // owner, 2026-10-26: shape and edge are chosen in one menu (Table tools)
             if (!sessionBarView.BindTableShape(label, cycleShape) && cycleShape != null && !tableShapeEntryWarned)
             {
                 tableShapeEntryWarned = true;
@@ -508,6 +534,7 @@ namespace ConsoleCards.Presentation.UI
         public void ShowTableEdgeEntry(string label, Func<string> cycleEdge)
         {
             EnsureSessionBarView();
+            cycleEdge = null; // owner, 2026-10-26: shape and edge are chosen in one menu (Table tools)
             if (!sessionBarView.BindTableEdge(label, cycleEdge) && cycleEdge != null && !tableEdgeEntryWarned)
             {
                 tableEdgeEntryWarned = true;
@@ -588,6 +615,7 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>Binds the Table menu's "Table tools…" row (T3), which opens Table mode; null hides it.</summary>
         public void ShowTableToolsEntry(Action openTableTools)
         {
+            openTableTools = null; // owner, 2026-10-26: the table is made from CREATE > TABLE on the front end
             EnsureSessionBarView();
             if (!sessionBarView.BindTableTools(openTableTools) && openTableTools != null && !tableToolsEntryWarned)
             {
@@ -1485,7 +1513,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(cardEditorPanelView);
             ReleaseView(deckEditorPanelView);
             ReleaseView(gameSelectPanelView);
-            ReleaseView(frontEndView);
+            if (!frontEndBackdrop) ReleaseView(frontEndView);
             ReleaseView(gameSavePanelView);
             ReleaseView(quantityPopupView);
             ReleaseView(cardInspectPopupView);

@@ -97,7 +97,9 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (host.GameSelectPanel.OpenGameSelect()) return;
+            // Owner, 2026-10-26: the Table menu's first row goes back to the main menu (the front end), where a
+            // game is chosen (PLAY), the editors and the table are made (CREATE), or a Sandbox starts.
+            if (host.GameSelectPanel.OpenFrontEnd(FrontEndPage.Home)) return;
             host.gameTemplatesPanelVisible = true;
             RefreshGameTemplatesPanelUi();
         }

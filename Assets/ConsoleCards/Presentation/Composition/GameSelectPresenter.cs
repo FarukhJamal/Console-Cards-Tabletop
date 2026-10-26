@@ -134,6 +134,7 @@ namespace ConsoleCards.Presentation.Composition
                     Sandbox = StartSandbox,
                     Exit = ExitGame,
                     CycleSeatColour = CycleFrontEndColour,
+                    OpenTableTools = OpenTableToolsFromFrontEnd,
                 };
             }
 
@@ -989,8 +990,27 @@ namespace ConsoleCards.Presentation.Composition
         internal void OpenFromGameSelect(Action open)
         {
             returnToGameSelect = true;
-            host.runtimeUi?.CloseGameSelect();
+            // Owner, 2026-10-26: from the front end, the editor opens over its background, not over the table.
+            bool backdrop = host.runtimeUi != null && host.runtimeUi.ShowFrontEndBackdrop();
+            if (!backdrop) host.runtimeUi?.CloseGameSelect();
             open();
+            if (backdrop && host.runtimeUi.IsFrontEndBackdropAlone)
+            {
+                // Nothing opened (for example no game has cards to edit): the front end comes back as it was.
+                returnToGameSelect = false;
+                ShowGameSelect(string.Empty);
+            }
+        }
+
+        // Owner, 2026-10-26: CREATE > TABLE opens Table tools over the table (it changes the table you see); Done or
+        // Cancel comes back to the front end.
+        private void OpenTableToolsFromFrontEnd()
+        {
+            returnToGameSelect = true;
+            host.runtimeUi?.CloseGameSelect();
+            if (host.OpenTableToolsFromFrontEnd()) return;
+            returnToGameSelect = false;
+            ShowGameSelect("There is no table here to change.");
         }
 
         internal void OpenCardEditorFromGameSelect()
