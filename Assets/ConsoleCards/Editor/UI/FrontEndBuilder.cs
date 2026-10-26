@@ -223,7 +223,7 @@ namespace ConsoleCards.Editor.UI
         private static readonly Dictionary<string, int> Designs = new Dictionary<string, int>
         {
             { "FE_Details", 2 },
-            { "FE_Players", 3 },
+            { "FE_Players", 4 },
             { "FE_Review", 3 },
         };
 
@@ -320,6 +320,14 @@ namespace ConsoleCards.Editor.UI
         // the owner's styling); the rows scroll inside a Viewport (owner, 2026-10-25: "scrollable … maximum of 8 players").
         private static void UpgradePlayers(Transform page)
         {
+            // Design 4 (owner, 2026-10-26: overlapping): the text clears the game picture, if it was left as first built.
+            RectTransform text = page.Find("Text") as RectTransform;
+            if (text != null && Mathf.Approximately(text.anchoredPosition.y, -308f))
+            {
+                text.anchoredPosition = new Vector2(text.anchoredPosition.x, -ReviewTextY);
+                text.sizeDelta = new Vector2(text.sizeDelta.x, 40f);
+            }
+
             RectTransform rows = (page.Find("Viewport/Rows") ?? page.Find("Rows")) as RectTransform;
             if (rows == null) return;
             AddMissingCopies(rows, "Row", FrontEndView.PlayerRowCount);
@@ -873,7 +881,7 @@ namespace ConsoleCards.Editor.UI
             RectTransform page = Page(pages, "Players");
             BackChip(page, "<  BACK TO CONFIG", 75f, 152f, 212f);
             StepTitle(page, "P L A Y E R   S E T U P");
-            Words(TopLeft("Text", page, 76f, 308f, 760f, 44f), medium, 15, White, TextAnchor.UpperLeft,
+            Words(TopLeft("Text", page, 76f, ReviewTextY, 760f, 40f), medium, 15, White, TextAnchor.UpperLeft,
                 "Each seat plays in its colour. Player 1 is your profile;\nthe other seats are local players at this table.");
 
             RectTransform rows = TopLeft("Rows", page, 73f, 362f, 737f, 520f);

@@ -58,6 +58,8 @@ namespace ConsoleCards.Presentation.UI
         public IReadOnlyList<FrontEndFeature> Features = Array.Empty<FrontEndFeature>();
         /// <summary>The chosen deck's short name (the Review grid); <see cref="Deck"/> is the full line.</summary>
         public string DeckName = string.Empty;
+        /// <summary>The chosen deck's name and size, under DECK SET on the Setup step.</summary>
+        public string DeckDetail = string.Empty;
         public bool CanChangeColours;
     }
 

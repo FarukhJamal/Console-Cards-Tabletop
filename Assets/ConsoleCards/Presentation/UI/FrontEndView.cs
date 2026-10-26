@@ -495,7 +495,8 @@ namespace ConsoleCards.Presentation.UI
             Row("Pages/Setup/Options/Column/Players", model.ShowPlayers, model.PlayersText, model.CanChangePlayers);
             Row("Pages/Setup/Options/Column/WinMode", model.ShowWinMode, model.WinModeText, model.ShowWinMode);
             Row("Pages/Setup/Options/Column/Turns", model.ShowTurns, model.TurnsText, model.ShowTurns);
-            Row("Pages/Setup/Options/Column/Deck", true, model.Deck, model.CanChangeDeck);
+            Row("Pages/Setup/Options/Column/Deck", true, DeckShort(), model.CanChangeDeck);
+            SetText("Pages/Setup/Options/Column/Deck/Hint", model.DeckDetail.Length > 0 ? model.DeckDetail : "Choose the card set to use.");
             Summary("Pages/Setup/Summary/Rows/Row");
             SetInteractable("Pages/Setup/Continue", model.CanStart);
         }

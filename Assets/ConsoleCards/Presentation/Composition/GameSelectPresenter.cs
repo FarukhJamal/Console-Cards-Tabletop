@@ -242,11 +242,41 @@ namespace ConsoleCards.Presentation.Composition
             model.PlayerColorNames = colorNames;
             model.CanChangeColours = count > 0 && order.Length > 1;
             AddGameDetails(model, entry.Game);
-            if (entry.Game != null)
+            AddDeckSet(model, entry);
+        }
+
+        // Owner, 2026-10-26: Deck Set in one word. The game's own deck is Standard (None on an Empty Table), a deck of
+        // yours is Custom (Custom 2, Custom 3 ... when there are several); the deck's name and size go in the detail.
+        private void AddDeckSet(GameSelectModel model, GameSelectEntry entry)
+        {
+            if (entry.PlayerGame != null)
             {
-                List<DeckChoice> decks = DeckChoices(entry);
-                model.DeckName = decks[ChosenDeckIndex(entry, decks)].Name;
+                model.DeckName = "Custom";
+                model.DeckDetail = DeckDetail(model.Deck);
+                return;
             }
+
+            List<DeckChoice> decks = DeckChoices(entry);
+            int index = ChosenDeckIndex(entry, decks);
+            DeckChoice choice = decks[index];
+            if (index == 0)
+            {
+                model.DeckName = entry.Game == null ? "None" : "Standard";
+                model.DeckDetail = entry.Game == null ? "No deck; bring components from the Toolbox." : DeckDetail(model.Deck);
+                return;
+            }
+
+            model.DeckName = decks.Count > 2 ? $"Custom {index}" : "Custom";
+            model.DeckDetail = $"{choice.Name}, {choice.Cards} card{(choice.Cards == 1 ? string.Empty : "s")}";
+        }
+
+        // "Deck: Trap Floor deck, 37 cards · 2 decks of yours" -> "Trap Floor deck, 37 cards".
+        private static string DeckDetail(string line)
+        {
+            string detail = line ?? string.Empty;
+            if (detail.StartsWith("Deck: ", StringComparison.Ordinal)) detail = detail.Substring(6);
+            int dot = detail.IndexOf(" · ", StringComparison.Ordinal);
+            return dot > 0 ? detail.Substring(0, dot) : detail;
         }
 
         // Owner, 2026-10-25: Game details as in the reference: IN THE BOX as a list, a strip of pictures and three
