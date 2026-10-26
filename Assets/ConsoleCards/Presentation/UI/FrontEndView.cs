@@ -171,12 +171,25 @@ namespace ConsoleCards.Presentation.UI
 
         private bool backdropOnly;
 
+        // Owner, 2026-10-26: leaving the game's window (Esc to free the mouse, clicking another window) must never
+        // take the player to the table. Esc counts only while the game has focus, and not just after it comes back.
+        private int ignoreEscapeUntilFrame;
+
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            ignoreEscapeUntilFrame = Time.frameCount + 2;
+        }
+
         private void Update()
         {
             if (model == null || backdropOnly) return;
             if (highlightTab != null) PlaceHighlight();
             Keyboard keyboard = Keyboard.current;
-            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) Back();
+            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame
+                && UnityEngine.Application.isFocused && Time.frameCount > ignoreEscapeUntilFrame)
+            {
+                Back();
+            }
         }
 
         private void Back()
@@ -184,8 +197,7 @@ namespace ConsoleCards.Presentation.UI
             switch (page)
             {
                 case FrontEndPage.Home:
-                    actions?.Close?.Invoke();
-                    break;
+                    break; // owner, 2026-10-26: the main menu is the first screen; the table is reached with TABLE
                 case FrontEndPage.Create:
                 case FrontEndPage.Profile:
                     Go(FrontEndPage.Home);

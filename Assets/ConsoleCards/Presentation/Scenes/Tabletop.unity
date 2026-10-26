@@ -777,6 +777,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: ConsoleCards.Presentation::ConsoleCards.Presentation.UI.StatusMessageView
   messageLabel: {fileID: 114222}
+  showOnTable: 0
 --- !u!114 &114222
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2369,6 +2370,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bb39d2163c1e4973999216a415d4ca07, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  trapFloorGameDefinition: {fileID: 11400000, guid: 5e5f408633e24bd6bc2b38a0b430ffb3, type: 2}
   targetCamera: {fileID: 839904108}
   cameraInputAdapter: {fileID: 1862448553}
   objectInputAdapter: {fileID: 2100000022}
@@ -2484,7 +2486,6 @@ MonoBehaviour:
   componentLibrary: {fileID: 11400000, guid: d06fab8dbefc4b7fbdaa0ceecbbffd0b, type: 2}
   runtimeUi: {fileID: 114010}
   sceneControllerMappingArea: {fileID: 0}
-  trapFloorGameDefinition: {fileID: 11400000, guid: 5e5f408633e24bd6bc2b38a0b430ffb3, type: 2}
   interactionLayerMask:
     serializedVersion: 2
     m_Bits: 256
@@ -2508,7 +2509,6 @@ MonoBehaviour:
   boardJoinDistance: 0.8
   feedbackDuration: 0.18
   shuffleCompression: 0.06
-  floorCardVisualScale: 0.62
   largeCardVisualScale: 1.486
   playerFeedback: 1
   hotSeatMode: 0
@@ -3170,7 +3170,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 97527819d2123914e933acdd1bc4b406, type: 2}
+  - {fileID: 2100000, guid: fc1db8c1f58a9e540a4dff8eed015f12, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

@@ -163,7 +163,7 @@ namespace ConsoleCards.Presentation.TableSurface
             float edgeHeight = clean.edgeHeight * unit;
             float edgeWidth = (clean.edge == TableEdge.WoodenRail ? 1.6f : 1f) * clean.edgeWidth * unit;
             bool hasEdge = builder.BuildEdge(outline, clean.edge, edgeHeight, edgeWidth, thickness, textureSize.x, edgeMesh);
-            if (hasEdge) edgeRenderer.sharedMaterial = clean.edge == TableEdge.WoodenRail ? WoodMaterial(sides) : sides;
+            if (hasEdge) edgeRenderer.sharedMaterial = clean.edge == TableEdge.WoodenRail ? WoodMaterial(sides) : EdgeMaterial(body, sides);
             edge.SetActive(hasEdge);
 
             bool hasGlow = clean.edge == TableEdge.Neon;
@@ -384,6 +384,18 @@ namespace ConsoleCards.Presentation.TableSurface
         }
 
         // The theme's teal, glowing (URP Lit emission), made once.
+        // LOOK-2 (owner, 2026-10-27: "the classic and other tables the same orange"): the edge uses the Classic table's
+        // rim material itself (Content/Environment/ConsoleTableEdge.mat after Console Cards > Look > Use Console Table
+        // Top), so one material sets every table's edge. A rim material with a picture is laid out for the classic
+        // model only and would look scrambled here, so then the plain black body is used, as before.
+        private static Material EdgeMaterial(Material rim, Material sides)
+        {
+            if (rim == null) return sides;
+            bool picture = (rim.HasProperty("_BaseMap") && rim.GetTexture("_BaseMap") != null)
+                || (rim.HasProperty("_MainTex") && rim.GetTexture("_MainTex") != null);
+            return picture ? sides : rim;
+        }
+
         private Material NeonMaterial(Material body)
         {
             if (neonMaterial != null || body == null) return neonMaterial != null ? neonMaterial : body;
@@ -415,6 +427,9 @@ namespace ConsoleCards.Presentation.TableSurface
             if (bodyMaterial.HasProperty("_BumpMap")) bodyMaterial.SetTexture("_BumpMap", null);
             if (bodyMaterial.HasProperty("_BaseColor")) bodyMaterial.SetColor("_BaseColor", BodyColour);
             if (bodyMaterial.HasProperty("_Color")) bodyMaterial.SetColor("_Color", BodyColour);
+            // LOOK-2b: the Classic rim may be the self-lit orange edge material; the body is never self-lit.
+            bodyMaterial.DisableKeyword("_EMISSION");
+            if (bodyMaterial.HasProperty("_EmissionColor")) bodyMaterial.SetColor("_EmissionColor", Color.black);
             return bodyMaterial;
         }
 
