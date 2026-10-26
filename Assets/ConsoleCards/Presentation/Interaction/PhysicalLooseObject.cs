@@ -167,6 +167,9 @@ namespace ConsoleCards.Presentation.Interaction
 
         public bool IsHeld => held;
 
+        /// <summary>MP-2: the player whose computer simulates and commits this piece.</summary>
+        public PlayerId Controller => actor;
+
         public bool IsGliding => gliding;
 
         /// <summary>POL-5: 0..1, how hard a shaken die wobbles (Shift held = 1).</summary>
@@ -347,6 +350,7 @@ namespace ConsoleCards.Presentation.Interaction
         public bool BeginHold()
         {
             if (held) return true;
+            if (authority.IsHeldElsewhere(view.BoundState.PhysicalState)) return false; // MP-2: another player holds it
             if (gliding) EndGlide();
             carryRaise = 0f;
             actor = authority.Actor;
@@ -408,6 +412,19 @@ namespace ConsoleCards.Presentation.Interaction
             restTimer = 0f;
             cockedNudges = 0;
             releaseMotion.Reset();
+            return true;
+        }
+
+        /// <summary>
+        /// MP-2: another computer's player carries this piece: it chases the pose they hold it at (sent ten times a
+        /// second), with the same collisions as a piece held here. False when it is not held.
+        /// </summary>
+        internal bool FollowRemote(Vector3 position, Quaternion rotation)
+        {
+            if (!held || body == null) return false;
+            heldTargetPosition = position;
+            heldBaseRotation = rotation;
+            hasHeldTarget = true;
             return true;
         }
 
@@ -1241,6 +1258,7 @@ namespace ConsoleCards.Presentation.Interaction
             RestoreContainedSmoothing();
             if (view.BoundState.PhysicalState == null)
             {
+                if (!authority.MayCommitFirstState) return; // MP-2: online, a new piece's first resting place is the host's
                 PhysicalObjectState initial;
                 if (!authority.Surfaces.TryResolveAuthoredLooseObject(
                         view.BoundState.Pose,

@@ -48,7 +48,13 @@ namespace ConsoleCards.Editor.UI
             ("FE_Setup", "Setup", true, false),
             ("FE_Players", "Players", true, false),
             ("FE_Review", "Review", true, false),
+            ("FE_Lobby", "Lobby", true, false), // MP-2: online play
+            ("FE_Room", "Room", true, false),
         };
+
+        // MP-2: screens added after FrontEnd.prefab may have been edited by the owner. Building one does not put the
+        // front end together again: InsertMissingScreens adds it to the existing FrontEnd.prefab and nothing else.
+        private static readonly HashSet<string> AddedLater = new HashSet<string> { "FE_Lobby", "FE_Room" };
         private const string WhitePlate = "Assets/ConsoleCards/Content/UI/Kit/KitAccent.png";
 
         private static readonly Color White = UiKit.Hex("e8eced");
@@ -144,6 +150,7 @@ namespace ConsoleCards.Editor.UI
                 changes++;
             }
 
+            changes += InsertMissingScreens();
             changes += RefreshBackground();
             FrontEndView view = AssetDatabase.LoadAssetAtPath<FrontEndView>(PrefabPath);
             if (view != null)
@@ -207,7 +214,7 @@ namespace ConsoleCards.Editor.UI
                     Transform screen = holder.transform.Find(name);
                     GameObject saved = PrefabUtility.SaveAsPrefabAsset(screen.gameObject, path);
                     if (Designs.TryGetValue(file, out int design)) AssetDatabase.SetLabels(saved, new[] { DesignLabel + design });
-                    built++;
+                    if (!AddedLater.Contains(file)) built++;
                 }
                 finally
                 {
@@ -226,6 +233,7 @@ namespace ConsoleCards.Editor.UI
             { "FE_Players", 4 },
             { "FE_Review", 3 },
             { "FE_Create", 2 },
+            { "FE_Profile", 2 }, // MP-2: PLAY ONLINE beside CONTINUE
         };
 
         // Review, design 2 (owner, 2026-10-25: overlapping): the text clears the picture, the two columns have a gap.
@@ -267,6 +275,7 @@ namespace ConsoleCards.Editor.UI
                     if (design.Key == "FE_Players") UpgradePlayers(root.transform);
                     if (design.Key == "FE_Review") UpgradeReview(root.transform);
                     if (design.Key == "FE_Create") UpgradeCreate(root.transform);
+                    if (design.Key == "FE_Profile") UpgradeProfile((RectTransform)root.transform);
                     PrefabUtility.SaveAsPrefabAsset(root, path);
                 }
                 finally
@@ -316,6 +325,60 @@ namespace ConsoleCards.Editor.UI
                     box.sizeDelta = new Vector2(box.sizeDelta.x, needed);
                 }
             }
+        }
+
+        // MP-2: the screens FrontEnd.prefab does not have yet (Lobby, Room) are added to it; nothing else in it changes.
+        private static int InsertMissingScreens()
+        {
+            if (!File.Exists(PrefabPath)) return 0;
+            int added = 0;
+            GameObject root = PrefabUtility.LoadPrefabContents(PrefabPath);
+            try
+            {
+                Transform pages = root.transform.Find("Pages");
+                if (pages == null) return 0;
+                foreach (var (file, name, inPages, shown) in Screens)
+                {
+                    if (!inPages || pages.Find(name) != null) continue;
+                    GameObject screen = AssetDatabase.LoadAssetAtPath<GameObject>(ScreensFolder + file + ".prefab");
+                    if (screen == null) continue;
+                    GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(screen, pages);
+                    instance.name = name;
+                    instance.SetActive(shown);
+                    added++;
+                }
+
+                if (added > 0) PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+
+            if (added > 0) Debug.Log($"Console Cards: added {added} new screen(s) (online Lobby and Room) to {PrefabPath} (your edits are kept).");
+            return added;
+        }
+
+        // Profile design 2 (MP-2): PLAY ONLINE beside CONTINUE (play here). Placed after CONTINUE wherever it was moved.
+        private static void UpgradeProfile(RectTransform page)
+        {
+            if (page.Find("Online") == null) OnlineEntry(page);
+        }
+
+        private static void OnlineEntry(RectTransform page)
+        {
+            float x = 850f;
+            float y = 965f;
+            float height = 88f;
+            RectTransform next = page.Find("Continue") as RectTransform;
+            if (next != null && next.anchorMin == new Vector2(0f, 1f) && next.anchorMax == new Vector2(0f, 1f) && next.pivot == new Vector2(0f, 1f))
+            {
+                x = next.anchoredPosition.x + next.sizeDelta.x + 20f;
+                y = -next.anchoredPosition.y;
+                height = next.sizeDelta.y;
+            }
+
+            Cta(page, "Online", x, y, 420f, height, Derived("V5_CyanFrame"), "PLAY ONLINE", null, true);
         }
 
         // Create design 2 (owner, 2026-10-26): the table's shape, size and edge are made here, not during play.
@@ -581,6 +644,8 @@ namespace ConsoleCards.Editor.UI
                 case "Setup": Setup(holder); break;
                 case "Players": Players(holder); break;
                 case "Review": Review(holder); break;
+                case "Lobby": Lobby(holder); break;
+                case "Room": Room(holder); break;
             }
         }
 
@@ -791,6 +856,140 @@ namespace ConsoleCards.Editor.UI
 
             BackButton(page, 68f, 965f, "BACK");
             Cta(page, "Continue", 368f, 965f, 462f, 88f, Derived("V5_CyanFrame"), "CONTINUE", null, true);
+            OnlineEntry(page); // MP-2
+        }
+
+        // MP-2 (owner, 2026-10-26: "join a server or create your own… privacy… friends or the world"): make a room
+        // (its name; public in the list or private by code), join by code, and the open rooms of this region.
+        private static void Lobby(RectTransform pages)
+        {
+            RectTransform page = Page(pages, "Lobby");
+            PageTitle(page, "PLAY ONLINE", "J O I N   A   T A B L E   O R   M A K E   Y O U R   O W N", 103f, 167f, 92);
+            Words(TopLeft("Status", page, 110f, 300f, 1700f, 30f), medium, 18, Cyan, TextAnchor.MiddleLeft, "Connecting…");
+
+            RectTransform create = TopLeft("Create", page, 68f, 350f, 652f, 404f);
+            Plate(create, Figma("Avatar"), 2f);
+            Words(TopLeft("Title", create, 44f, 26f, 560f, 44f), bold, 30, White, TextAnchor.MiddleLeft, "MAKE A ROOM");
+            Words(TopLeft("Hint", create, 44f, 70f, 560f, 24f), medium, 15, White, TextAnchor.MiddleLeft,
+                "You host it; your friends join with its code.");
+            Field(create, "Name", 44f, 112f, 564f, 60f, "Room name", 32);
+            RectTransform privacy = TopLeft("Privacy", create, 44f, 188f, 564f, 60f);
+            Image privacyPlate = Plate(privacy, Figma("Frame_move"), 1.5f);
+            privacy.gameObject.AddComponent<Button>().targetGraphic = privacyPlate;
+            Picture(TopLeft("Icon", privacy, 18f, 19f, 22f, 22f), Derived("V5_I_Lock"), Muted, -1f, -1f);
+            Words(TopLeft("Label", privacy, 56f, 0f, 490f, 60f), bold, 16, White, TextAnchor.MiddleLeft, "PUBLIC  ·  in the room list");
+            Cta(create, "Make", 20f, 278f, 612f, 100f, Derived("V5_CyanFrame"), "CREATE ROOM", null, true);
+
+            RectTransform join = TopLeft("Join", page, 68f, 776f, 652f, 172f);
+            Plate(join, Figma("Avatar"), 2f);
+            Words(TopLeft("Title", join, 44f, 22f, 560f, 40f), bold, 26, White, TextAnchor.MiddleLeft, "JOIN BY CODE");
+            Field(join, "Code", 44f, 82f, 380f, 60f, "eu-K7PQ2X", 16);
+            RectTransform go = TopLeft("Go", join, 440f, 82f, 168f, 60f);
+            Image goPlate = Plate(go, Figma("Frame_move"), 1.5f);
+            go.gameObject.AddComponent<Button>().targetGraphic = goPlate;
+            Words(Stretched("Label", go), bold, 18, Cyan, TextAnchor.MiddleCenter, "JOIN");
+
+            RectTransform rooms = TopLeft("Rooms", page, 760f, 350f, 1090f, 598f);
+            Plate(rooms, Figma("Avatar"), 2f);
+            Words(TopLeft("Title", rooms, 44f, 26f, 900f, 44f), bold, 30, White, TextAnchor.MiddleLeft, "OPEN ROOMS");
+            Words(TopLeft("Empty", rooms, 44f, 100f, 1000f, 40f), medium, 17, Muted, TextAnchor.MiddleLeft,
+                "No open rooms here yet: make one, or join a friend's with its code.");
+            for (int i = 0; i < FrontEndView.RoomRowCount; i++)
+            {
+                RectTransform row = TopLeft("Row" + i, rooms, 20f, 90f + i * 82f, 1050f, 72f);
+                Image plate = Plate(row, Figma("Menu"), 213f / 72f);
+                Button press = row.gameObject.AddComponent<Button>();
+                press.targetGraphic = plate;
+                press.transition = Selectable.Transition.SpriteSwap;
+                SpriteState states = press.spriteState;
+                states.highlightedSprite = Figma("Menu_Selected");
+                states.pressedSprite = Figma("Menu_Selected");
+                press.spriteState = states;
+                Words(TopLeft("Title", row, 60f, 0f, 620f, 72f), bold, 20, White, TextAnchor.MiddleLeft, "ROOM");
+                Words(TopLeft("Detail", row, 690f, 0f, 300f, 72f), medium, 15, Muted, TextAnchor.MiddleRight, string.Empty);
+                row.gameObject.SetActive(false);
+            }
+
+            BackButton(page, 68f, 965f, "BACK");
+        }
+
+        // MP-2: the room: its name and code (COPY), the players (seat, colour, READY, host, away), your colour and seat,
+        // READY, the host's CHOOSE GAME (the usual Library to START), LEAVE.
+        private static void Room(RectTransform pages)
+        {
+            RectTransform page = Page(pages, "Room");
+            PageTitle(page, "ROOM", "O N L I N E   R O O M", 103f, 167f, 92);
+            RectTransform code = TopLeft("Code", page, 110f, 296f, 640f, 56f);
+            Plate(code, Figma("Frame_move"), 1.5f).raycastTarget = false;
+            Words(TopLeft("Label", code, 20f, 0f, 470f, 56f), bold, 20, Cyan, TextAnchor.MiddleLeft, "CODE");
+            RectTransform copy = TopLeft("Copy", code, 500f, 8f, 128f, 40f);
+            Image copyPlate = Plate(copy, Derived("V5_OrangePill"), 1.5f);
+            copy.gameObject.AddComponent<Button>().targetGraphic = copyPlate;
+            Words(Stretched("Label", copy), bold, 13, White, TextAnchor.MiddleCenter, "COPY");
+            Words(TopLeft("Status", page, 780f, 296f, 1060f, 56f), medium, 17, White, TextAnchor.MiddleLeft, string.Empty);
+
+            RectTransform list = TopLeft("Players", page, 68f, 380f, 1000f, 560f);
+            Plate(list, Figma("Avatar"), 2f);
+            Words(TopLeft("Title", list, 44f, 22f, 900f, 44f), bold, 30, White, TextAnchor.MiddleLeft, "PLAYERS");
+            for (int i = 0; i < FrontEndView.MemberRowCount; i++)
+            {
+                RectTransform row = TopLeft("Row" + i, list, 30f, 80f + i * 58f, 940f, 52f);
+                Plate(row, Figma("Menu"), 213f / 52f).raycastTarget = false;
+                Picture(TopLeft("Dot", row, 40f, 16f, 20f, 20f), Derived("V5_I_Disc"), White, -1f, -1f);
+                Words(TopLeft("Badge", row, 76f, 0f, 60f, 52f), bold, 18, Cyan, TextAnchor.MiddleLeft, "P" + (i + 1));
+                Words(TopLeft("Name", row, 140f, 0f, 430f, 52f), bold, 20, White, TextAnchor.MiddleLeft, "PLAYER");
+                Words(TopLeft("Tags", row, 580f, 0f, 320f, 52f), medium, 14, Muted, TextAnchor.MiddleRight, string.Empty);
+                row.gameObject.SetActive(false);
+            }
+
+            RectTransform controls = TopLeft("Controls", page, 1100f, 380f, 750f, 560f);
+            Plate(controls, Figma("Avatar"), 2f);
+            Words(TopLeft("Game", controls, 40f, 26f, 670f, 60f), bold, 20, White, TextAnchor.UpperLeft, "The host chooses the game.");
+            RoomPicker(controls, "Colour", 40f, 104f, "YOUR COLOUR", true);
+            RoomPicker(controls, "Seat", 40f, 190f, "YOUR SEAT", false);
+            Cta(controls, "Ready", 20f, 290f, 710f, 100f, Derived("V5_CyanFrame"), "PRESS WHEN READY", null, false);
+            Cta(controls, "Choose", 20f, 410f, 710f, 100f, Derived("V5_CyanFrame"), "CHOOSE GAME", null, true);
+
+            RectTransform leave = TopLeft("Leave", page, 68f, 965f, 281f, 88f);
+            Image leavePlate = Plate(leave, Figma("Menu"), 213f / 88f);
+            leave.gameObject.AddComponent<Button>().targetGraphic = leavePlate;
+            Row(leave, 16f, TextAnchor.MiddleCenter);
+            Picture(Node("Arrow", leave), Figma("leftArrowIcon"), White, 18f, 18f);
+            Fit(Words(Node("Label", leave), bold, 20, White, TextAnchor.MiddleCenter, "LEAVE"));
+        }
+
+        // A row with a label and "<  value  >" (the room's colour and seat pickers).
+        private static void RoomPicker(RectTransform parent, string name, float x, float y, string label, bool dot)
+        {
+            RectTransform row = TopLeft(name, parent, x, y, 670f, 70f);
+            Plate(row, Figma("Frame_move"), 1.5f).raycastTarget = false;
+            Words(TopLeft("Label", row, 20f, 0f, 220f, 70f), bold, 15, Muted, TextAnchor.MiddleLeft, label);
+            ArrowButton(TopLeft("Previous", row, 260f, 20f, 30f, 30f), Figma("leftArrowIcon"));
+            if (dot) Picture(TopLeft("Dot", row, 310f, 25f, 20f, 20f), Derived("V5_I_Disc"), White, -1f, -1f);
+            Words(TopLeft("Value", row, dot ? 340f : 310f, 0f, 260f, 70f), bold, 18, White, TextAnchor.MiddleLeft, string.Empty);
+            ArrowButton(TopLeft("Next", row, 620f, 20f, 30f, 30f), Figma("RightArrowIcon"));
+        }
+
+        // A one-line text box (the room's name, a room code).
+        private static void Field(RectTransform parent, string name, float x, float y, float width, float height, string hint, int limit)
+        {
+            RectTransform box = TopLeft(name, parent, x, y, width, height);
+            Image plate = Plate(box, Figma("Frame_move"), 1.5f);
+            RectTransform textRect = Stretched("Text", box);
+            textRect.offsetMin = new Vector2(18f, 0f);
+            textRect.offsetMax = new Vector2(-18f, 0f);
+            Text text = Words(textRect, bold, 20, White, TextAnchor.MiddleLeft, string.Empty);
+            text.supportRichText = false;
+            RectTransform hintRect = Stretched("Placeholder", box);
+            hintRect.offsetMin = new Vector2(18f, 0f);
+            hintRect.offsetMax = new Vector2(-18f, 0f);
+            Text placeholder = Words(hintRect, medium, 18, Muted, TextAnchor.MiddleLeft, hint);
+            InputField field = box.gameObject.AddComponent<InputField>();
+            field.targetGraphic = plate;
+            field.textComponent = text;
+            field.placeholder = placeholder;
+            field.characterLimit = limit;
+            field.lineType = InputField.LineType.SingleLine;
         }
 
         private static void Library(RectTransform pages)

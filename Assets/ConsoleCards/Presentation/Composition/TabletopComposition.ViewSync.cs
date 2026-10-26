@@ -50,11 +50,11 @@ namespace ConsoleCards.Presentation.Composition
     /// </summary>
     public sealed partial class TabletopComposition
     {
-        // One computer: every seat plays here (hot-seat). With multiplayer this becomes "the seats this computer
-        // plays"; the view sync then shows other computers' gestures from the accepted state.
+        // One computer: every seat plays here (hot-seat). Online (MP-2) the seats this computer plays; the view sync
+        // then shows other computers' gestures from the accepted state.
         internal bool IsPlayerOnThisComputer(PlayerId playerId)
         {
-            return true;
+            return online == null || online.IsLocalPlayer(playerId);
         }
 
         // A Toolbox piece, deck, stack, discard pile or Console was made (placed, duplicated, a card-on-card stack,

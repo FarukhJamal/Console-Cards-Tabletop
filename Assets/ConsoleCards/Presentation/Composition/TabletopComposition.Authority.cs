@@ -69,13 +69,17 @@ namespace ConsoleCards.Presentation.Composition
             get
             {
                 if (tableAuthority == null) tableAuthority = CreateTableAuthority();
-                return tableAuthority;
+                return replicatedAuthority; // MP-2: offline it passes every command straight to the local door
             }
         }
 
         private LocalTableAuthority CreateTableAuthority()
         {
             LocalTableAuthority authority = new LocalTableAuthority();
+
+            // MP-2: the door shared with other computers (TabletopComposition.Online.cs) wraps the local one. Made first,
+            // so it hears each accepted command before the views and the game do.
+            replicatedAuthority = new ReplicatedTableAuthority(authority, () => matchState, BeginCommandScope, EndCommandScope);
 
             // R2: views follow accepted changes, not the code that asked for them; panels redraw when something
             // changed (R2c).

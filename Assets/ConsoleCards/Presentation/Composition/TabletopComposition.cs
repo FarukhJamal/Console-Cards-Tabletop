@@ -1004,6 +1004,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private void OnDestroy()
         {
+            online?.Dispose(); // MP-2: leaves the room cleanly (a profile switch reloads the scene)
             Shutdown();
             DestroyTableMarks(); // drawing tool: the lines and labels go with the table
             ResetTableCursor();
@@ -1065,6 +1066,7 @@ namespace ConsoleCards.Presentation.Composition
                 UpdateHotSeat();
             }
 
+            online?.Tick(); // MP-2: the room's messages and the shared table
             if (SessionService.HandleRedoShortcut()) return;
             if (SessionService.HandleUndoShortcut()) return;
             HandleHandTrayShortcut();

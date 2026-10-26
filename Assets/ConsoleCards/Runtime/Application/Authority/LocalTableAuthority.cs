@@ -12,6 +12,8 @@ namespace ConsoleCards.Application.Authority
     {
         private readonly Dictionary<Type, object> handlers = new Dictionary<Type, object>(32);
         private readonly Dictionary<Type, object> observers = new Dictionary<Type, object>(32);
+        // MP-2: the same handlers without the types (a command that arrived from another computer); true = accepted.
+        private readonly Dictionary<Type, Func<object, bool>> untyped = new Dictionary<Type, Func<object, bool>>(32);
 
         /// <inheritdoc />
         public event Action<object> CommandAccepted;
@@ -20,6 +22,11 @@ namespace ConsoleCards.Application.Authority
         public void Register<TCommand, TResult>(Func<TCommand, TResult> handler) where TCommand : class
         {
             handlers[typeof(TCommand)] = handler ?? throw new ArgumentNullException(nameof(handler));
+            untyped[typeof(TCommand)] = command =>
+            {
+                handler((TCommand)command);
+                return true;
+            };
         }
 
         /// <summary>
@@ -33,7 +40,7 @@ namespace ConsoleCards.Application.Authority
             if (handler == null) throw new ArgumentNullException(nameof(handler));
             if (accepted == null) throw new ArgumentNullException(nameof(accepted));
             ObserverSlot<TCommand, TResult> slot = SlotFor<TCommand, TResult>();
-            handlers[typeof(TCommand)] = (Func<TCommand, TResult>)(command =>
+            Func<TCommand, TResult> wrapped = command =>
             {
                 TResult result = handler(command);
                 if (accepted(result))
@@ -43,7 +50,30 @@ namespace ConsoleCards.Application.Authority
                 }
 
                 return result;
-            });
+            };
+            handlers[typeof(TCommand)] = wrapped;
+            untyped[typeof(TCommand)] = command => accepted(wrapped((TCommand)command));
+        }
+
+        /// <summary>MP-2: true when a handler is set up for this command type.</summary>
+        public bool HasHandlerFor(Type commandType)
+        {
+            return commandType != null && untyped.ContainsKey(commandType);
+        }
+
+        /// <summary>
+        /// MP-2: runs a command whose type is known only at run time (one that arrived from another computer), through
+        /// the same handler, events and listeners as <see cref="Submit{TCommand,TResult}"/>. True when it was accepted.
+        /// </summary>
+        public bool SubmitObject(object command)
+        {
+            if (command == null) throw new ArgumentNullException(nameof(command));
+            if (!untyped.TryGetValue(command.GetType(), out Func<object, bool> handler))
+            {
+                throw new InvalidOperationException($"No table handler is set up for {command.GetType().Name}.");
+            }
+
+            return handler(command);
         }
 
         /// <inheritdoc />

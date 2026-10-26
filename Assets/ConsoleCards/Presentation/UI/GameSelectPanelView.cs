@@ -61,6 +61,8 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>The chosen deck's name and size, under DECK SET on the Setup step.</summary>
         public string DeckDetail = string.Empty;
         public bool CanChangeColours;
+        /// <summary>MP-2: the Lobby and Room screens (null: online play is not in this build's front end).</summary>
+        public OnlineScreenModel Online;
     }
 
     /// <summary>One line of IN THE BOX on Game details. <see cref="Icon"/> names a picture in the screen's IconSet.</summary>
@@ -120,6 +122,17 @@ namespace ConsoleCards.Presentation.UI
         public Action<int, int> CycleSeatColour;
         /// <summary>CREATE > TABLE: the table's shape, size and edge (Table tools).</summary>
         public Action OpenTableTools;
+
+        // MP-2: online play (PLAY ONLINE, the Lobby and the Room).
+        public Action OpenOnline;
+        /// <summary>The room's name and whether it is private.</summary>
+        public Action<string, bool> CreateRoom;
+        /// <summary>A room's code (from the list or typed).</summary>
+        public Action<string> JoinRoom;
+        public Action LeaveRoom;
+        public Action ToggleReady;
+        public Action<int> CycleOnlineColour;
+        public Action<int> CycleOnlineSeat;
     }
 
     /// <summary>

@@ -26,7 +26,9 @@ namespace ConsoleCards.Application.UseCases
             boardId = BoardId.Empty;
             if (!IsValid(matchState, context, out CommandResult failure)) return failure;
             if (!grid.IsValid) return CommandResult.Failure(CommandResultStatus.Invalid);
-            BoardId id = BoardId.New();
+            // MP-2: the board's ID comes from the command's ID, so every computer that runs this command makes the same
+            // board (one board per command; a command ID is never used twice).
+            BoardId id = context.Id.IsEmpty ? BoardId.New() : new BoardId(context.Id.Value);
             matchState.AddPlacedBoard(new PlacedBoardState(id, pose, grid, surfaceHeight));
             boardId = id;
             return CommandResult.Accepted(matchState.AdvanceRevision(

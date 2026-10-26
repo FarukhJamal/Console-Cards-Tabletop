@@ -328,6 +328,10 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
+            // MP-2: in online play a joined computer asks the host for a new table; the deal's seed is shared.
+            if (host.HasOnline && !host.Online.AllowTableReplacement(selection)) return false;
+            if (host.HasOnline) host.Online.PrepareTableBuild();
+
             if (selection.Kind == TabletopSessionKind.GameTemplate
                 && host.Cartridges.TryGetTemplateSetup(selection.GameTemplateId, out _, out _))
             {
@@ -344,11 +348,14 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             List<PlayerId> activePlayerIds = CreateDefaultActivePlayers(selection);
+            PlayerId requestingPlayerId = tableActionActorId;
+            MatchId matchId = MatchId.New();
+            if (host.HasOnline) host.Online.OverrideTablePlayers(selection, activePlayerIds, ref requestingPlayerId, ref matchId); // MP-2: the room's seats
             TabletopSessionBootstrapRequest request = new TabletopSessionBootstrapRequest(
-                tableActionActorId,
+                requestingPlayerId,
                 selection,
                 activePlayerIds,
-                MatchId.New());
+                matchId);
             TabletopSessionBootstrapResult result = sessionBootstrapService.TryCreate(
                 request,
                 host.sessionTemplateCatalog);
@@ -377,7 +384,7 @@ namespace ConsoleCards.Presentation.Composition
                     candidateContext = candidateCartridge.CreateTemplateContext(
                         result.Session,
                         candidateSetup,
-                        tableActionActorId);
+                        requestingPlayerId); // MP-2: this computer's seat (offline: the first, as before)
                 }
             }
             catch (Exception exception)
@@ -507,6 +514,7 @@ namespace ConsoleCards.Presentation.Composition
 
         public void ResetTable()
         {
+            if (!host.MayChangeWholeTable("Reset")) return; // MP-2
             host.EnsureInitialized();
             MatchState previousMatch = host.activeSession.CurrentMatch;
             SessionUndoSnapshot previousSnapshot = CaptureUndoSnapshot();
@@ -538,6 +546,7 @@ namespace ConsoleCards.Presentation.Composition
 
         public bool UndoLatestAction(PlayerId requestingPlayerId)
         {
+            if (!host.MayChangeWholeTable("Undo")) return false; // MP-2: the host's Undo is everyone's
             if (!IsActiveSessionPlayer(requestingPlayerId)
                 || !CanUndoCurrentAction()
                 || !host.undoHistory.TryPeekUndo(
@@ -626,6 +635,7 @@ namespace ConsoleCards.Presentation.Composition
 
         public bool RedoLatestAction(PlayerId requestingPlayerId)
         {
+            if (!host.MayChangeWholeTable("Redo")) return false; // MP-2
             if (!IsActiveSessionPlayer(requestingPlayerId)
                 || !CanRedoCurrentAction()
                 || !host.undoHistory.TryPeekRedo(
@@ -768,7 +778,11 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void HandleAuthoritativeActionAccepted(AuthoritativeActionAcceptance acceptance)
         {
-            host.pileCountCheckPending = true; // landing taps and small-stack tidy-up (TabletopComposition.Stacking.cs)
+            // MP-2: a move's follow-ups (tidying a stack, a die on a Console arrow, a card on a board space, the game's
+            // own reaction) are made by the computer of the player who moved; the other computers get them as changes.
+            bool madeHere = !host.IsOnlineTable
+                || (!host.Replicated.Replaying && host.IsPlayerOnThisComputer(acceptance.ActorPlayerId));
+            if (madeHere) host.pileCountCheckPending = true; // landing taps and small-stack tidy-up (TabletopComposition.Stacking.cs)
 
             if (acceptance.Kind == AuthoritativeActionKind.TransferCard
                 || acceptance.Kind == AuthoritativeActionKind.DrawCards)
@@ -776,10 +790,11 @@ namespace ConsoleCards.Presentation.Composition
                 host.RefreshAcceptedCardFaces(); // a Hand turns arriving cards face up (H1b)
             }
 
-            host.ActiveCartridge.OnActionAccepted(acceptance); // CART-1b: the game follows its own moves (landing, guided moves)
+            if (madeHere) host.ActiveCartridge.OnActionAccepted(acceptance); // CART-1b: the game follows its own moves (landing, guided moves)
 
-            if (acceptance.Kind == AuthoritativeActionKind.MoveObject
-                || acceptance.Kind == AuthoritativeActionKind.PhysicalObjectSettled)
+            if (madeHere
+                && (acceptance.Kind == AuthoritativeActionKind.MoveObject
+                    || acceptance.Kind == AuthoritativeActionKind.PhysicalObjectSettled))
             {
                 host.consoleDieCheckPending = true; // C3d: a die may have come to rest on a Console D-pad arrow
                 host.boardSnapCheckPending = true; // C3e: a card may have come to rest on a board space
@@ -904,6 +919,7 @@ namespace ConsoleCards.Presentation.Composition
         /// </summary>
         internal bool RecordTableMarkStep(string description)
         {
+            if (host.HasOnline) host.Online.MarkDirty(); // MP-2: drawings go to the other computers with the table
             if (!host.IsInitialized
                 || host.rebuildingFromUndo
                 || host.undoBatchActive

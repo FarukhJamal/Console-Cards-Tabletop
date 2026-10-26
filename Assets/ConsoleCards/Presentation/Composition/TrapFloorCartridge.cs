@@ -3527,8 +3527,12 @@ namespace ConsoleCards.Presentation.Composition
         internal GameContent BuildTrapFloorContent(bool useChosenDeck)
         {
             host.EnsureContentArt();
-            GameContent content = new GameContent(host.trapFloorGameDefinition, host.contentArt.LoadPlayerCards(), host.contentArt.LoadPlayerDecks(),
-                useChosenDeck ? host.GameSelectPanel.ChosenDeckIdOf(Game) : null);
+            // MP-2: in an online room every computer deals from the game's own cards (yours are not shared yet).
+            bool stock = host.UseStockContent;
+            GameContent content = new GameContent(host.trapFloorGameDefinition,
+                stock ? new PlayerCardsFile() : host.contentArt.LoadPlayerCards(),
+                stock ? new PlayerDecksFile() : host.contentArt.LoadPlayerDecks(),
+                useChosenDeck && !stock ? host.GameSelectPanel.ChosenDeckIdOf(Game) : null);
             for (int i = 0; i < content.Warnings.Count; i++)
             {
                 Debug.LogWarning($"[Your cards] {content.Warnings[i]}", host);

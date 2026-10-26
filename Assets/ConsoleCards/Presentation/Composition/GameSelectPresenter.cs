@@ -85,6 +85,7 @@ namespace ConsoleCards.Presentation.Composition
         /// <summary>UI-2: the front end at start (the main menu, or Player profile after a profile switch).</summary>
         internal bool OpenFrontEnd(FrontEndPage page)
         {
+            if (page == FrontEndPage.Home && host.HasOnline && host.Online.InRoom) page = FrontEndPage.Room; // MP-2: back to the room
             if (!pendingFrontEndPage.HasValue) pendingFrontEndPage = page;
             return OpenGameSelect();
         }
@@ -135,6 +136,13 @@ namespace ConsoleCards.Presentation.Composition
                     Exit = ExitGame,
                     CycleSeatColour = CycleFrontEndColour,
                     OpenTableTools = OpenTableToolsFromFrontEnd,
+                    OpenOnline = () => host.Online.OpenLobby(),
+                    CreateRoom = (title, isPrivate) => host.Online.CreateRoom(title, isPrivate),
+                    JoinRoom = code => host.Online.JoinRoom(code),
+                    LeaveRoom = () => host.Online.LeaveRoom(),
+                    ToggleReady = () => host.Online.ToggleReady(),
+                    CycleOnlineColour = step => host.Online.CycleColour(step),
+                    CycleOnlineSeat = step => host.Online.CycleSeat(step),
                 };
             }
 
@@ -237,11 +245,34 @@ namespace ConsoleCards.Presentation.Composition
                 colorNames[i] = ColourNameByIndex(i < order.Length ? order[i] : i);
             }
 
+            // MP-2: in an online room the seats are the room's players, in their seat order and chosen colours.
+            bool inRoom = host.HasOnline && host.Online.InRoom;
+            if (inRoom) host.Online.FillSeats(names, colors, colorNames);
             model.PlayerCount = count;
             model.PlayerNames = names;
             model.PlayerColors = colors;
             model.PlayerColorNames = colorNames;
-            model.CanChangeColours = count > 0 && order.Length > 1;
+            model.CanChangeColours = count > 0 && order.Length > 1 && !inRoom;
+            model.Online = host.Online.BuildScreenModel();
+            if (inRoom)
+            {
+                model.CanChangePlayers = false; // everyone in the room plays (more than the game's seats watch)
+                if (!host.Online.IsHosting)
+                {
+                    model.CanStart = false;
+                    model.Status = "The host chooses the game and starts it for everyone.";
+                }
+                else if (!model.Online.AllReady)
+                {
+                    model.CanStart = false;
+                    model.Status = "Waiting for everyone in the room to press READY.";
+                }
+                else if (entry.PlayerGame != null)
+                {
+                    model.CanStart = false;
+                    model.Status = "Games you made cannot be played online yet: choose another game.";
+                }
+            }
             AddGameDetails(model, entry.Game);
             AddDeckSet(model, entry);
         }
@@ -640,6 +671,7 @@ namespace ConsoleCards.Presentation.Composition
         internal int ChosenPlayerCount(GameSelectEntry entry)
         {
             if (!PlayerRange(entry, out int fewest, out int most)) return 0;
+            if (host.HasOnline && host.Online.InRoom) return Mathf.Clamp(host.Online.MemberCount, fewest, most); // MP-2
             int count = gameSelectPlayerCount > 0
                 ? gameSelectPlayerCount
                 : entry.PlayerGame != null
@@ -723,6 +755,19 @@ namespace ConsoleCards.Presentation.Composition
             List<GameSelectEntry> entries = GameSelectEntries();
             GameSelectEntry entry = FindGameSelectEntry(entries, gameSelectEntryId);
             if (entry == null) return;
+            bool online = host.HasOnline && host.Online.InRoom; // MP-2: the host starts the room's game for everyone
+            if (online && !host.Online.IsHosting)
+            {
+                ShowGameSelect("The host chooses the game and starts it for everyone.", entries);
+                return;
+            }
+
+            if (online && entry.PlayerGame != null)
+            {
+                ShowGameSelect("Games you made cannot be played online yet: choose another game.", entries);
+                return;
+            }
+
             if (entry.PlayerGame != null)
             {
                 // Doc 29: a game you made starts as an Empty Table, then its table is laid out.
@@ -781,6 +826,16 @@ namespace ConsoleCards.Presentation.Composition
                 host.TrapFloorGame.PendingAnticlockwise = ChosenAnticlockwise();
                 gameSelectWinMode = -1;
                 gameSelectTurns = -1;
+            }
+
+            if (online)
+            {
+                int seats = entry.Game == null ? host.Online.MemberCount : ChosenPlayerCount(entry);
+                if (!host.Online.PrepareHostedStart(seats, entry.Name, out string problem))
+                {
+                    ShowGameSelect(problem, entries);
+                    return;
+                }
             }
 
             returnToGameSelect = false;

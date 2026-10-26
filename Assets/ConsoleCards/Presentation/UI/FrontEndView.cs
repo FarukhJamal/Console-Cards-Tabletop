@@ -17,6 +17,10 @@ namespace ConsoleCards.Presentation.UI
         Setup = 5,
         Players = 6,
         Review = 7,
+
+        // MP-2: online play (FE_Lobby, FE_Room). A front end made before them has neither; it works as before.
+        Lobby = 8,
+        Room = 9,
     }
 
     /// <summary>
@@ -27,7 +31,7 @@ namespace ConsoleCards.Presentation.UI
     /// An authored Final UI prefab (Console Cards > UI > Apply Kit Look builds it); the parts are found by name once,
     /// when the view is first used.
     /// </summary>
-    public sealed class FrontEndView : ReusableUiView
+    public sealed partial class FrontEndView : ReusableUiView
     {
         public const int ProfileRowCount = 4;
         public const int PlayerRowCount = 8;
@@ -49,7 +53,7 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Color idleTab = new Color(0.91f, 0.925f, 0.929f, 1f);
         [SerializeField, HideInInspector] private int builtVersion;
 
-        private readonly GameObject[] pages = new GameObject[8];
+        private readonly GameObject[] pages = new GameObject[Enum.GetNames(typeof(FrontEndPage)).Length];
         private readonly List<GameEntryParts> gameEntries = new List<GameEntryParts>();
         private readonly ProfileRowParts[] profileRows = new ProfileRowParts[ProfileRowCount];
         private readonly PlayerRowParts[] playerRows = new PlayerRowParts[PlayerRowCount];
@@ -126,7 +130,8 @@ namespace ConsoleCards.Presentation.UI
             openGuide = guide;
             ShowBackdropOnly(false);
             if (model.OpenAt.HasValue) page = model.OpenAt.Value;
-            if (page >= FrontEndPage.Details && model.IsEmptyTable) page = FrontEndPage.Library;
+            if (page >= FrontEndPage.Details && page <= FrontEndPage.Review && model.IsEmptyTable) page = FrontEndPage.Library;
+            if (pages[(int)page] == null) page = FrontEndPage.Home; // an online screen this front end does not have
             BindButtons();
             Render();
         }
@@ -153,6 +158,12 @@ namespace ConsoleCards.Presentation.UI
         public void Go(FrontEndPage target)
         {
             if (model == null) return;
+            if (pages[(int)target] == null)
+            {
+                SetText("Status", "The online screens are not in the front end yet: run Console Cards > UI > Apply Kit Look (UI-1).");
+                return;
+            }
+
             page = target;
             Render();
         }
@@ -202,6 +213,14 @@ namespace ConsoleCards.Presentation.UI
                 case FrontEndPage.Profile:
                     Go(FrontEndPage.Home);
                     break;
+                case FrontEndPage.Lobby:
+                    Go(FrontEndPage.Profile);
+                    break;
+                case FrontEndPage.Room:
+                    break; // LEAVE leaves the room; Esc does not
+                case FrontEndPage.Library:
+                    Go(PlayPage);
+                    break;
                 default:
                     Go(page - 1);
                     break;
@@ -217,7 +236,7 @@ namespace ConsoleCards.Presentation.UI
                 if (button != null) button.onClick.RemoveAllListeners();
             }
 
-            On("TopBar/Tabs/Play", () => Go(FrontEndPage.Profile));
+            On("TopBar/Tabs/Play", () => Go(PlayPage));
             On("TopBar/Tabs/Create", () => Go(FrontEndPage.Create));
             On("TopBar/Tabs/Sandbox", () => actions?.Sandbox?.Invoke());
             On("TopBar/Right/Guide", () => openGuide?.Invoke());
@@ -225,7 +244,7 @@ namespace ConsoleCards.Presentation.UI
             On("TopBar/Right/Table", () => actions?.Close?.Invoke());
             On("TopBar/Right/Exit", () => actions?.Exit?.Invoke());
 
-            On("Pages/Home/Menu/Play", () => Go(FrontEndPage.Profile));
+            On("Pages/Home/Menu/Play", () => Go(PlayPage));
             On("Pages/Home/Menu/Create", () => Go(FrontEndPage.Create));
             On("Pages/Home/Menu/Sandbox", () => actions?.Sandbox?.Invoke());
 
@@ -244,7 +263,7 @@ namespace ConsoleCards.Presentation.UI
             On("Pages/Profile/Back", () => Go(FrontEndPage.Home));
             On("Pages/Profile/Continue", () => Go(FrontEndPage.Library));
 
-            On("Pages/Library/Back", () => Go(FrontEndPage.Profile));
+            On("Pages/Library/Back", () => Go(PlayPage));
             On("Pages/Library/Select", SelectFromLibrary);
 
             On("Pages/Details/Back", () => Go(FrontEndPage.Library));
@@ -281,6 +300,7 @@ namespace ConsoleCards.Presentation.UI
             On("Pages/Review/Settings/Edit", () => Go(FrontEndPage.Setup));
             On("Pages/Review/Players/Edit", () => Go(FrontEndPage.Players));
             On("Pages/Review/Start", () => actions?.Start?.Invoke());
+            BindOnlineButtons(); // MP-2
         }
 
         private void On(string path, Action click)
@@ -318,7 +338,7 @@ namespace ConsoleCards.Presentation.UI
                 if (pages[i] != null) pages[i].SetActive(i == (int)page);
             }
 
-            bool stepped = page >= FrontEndPage.Setup;
+            bool stepped = page >= FrontEndPage.Setup && page <= FrontEndPage.Review;
             SetActive("Pages/Stepper", stepped);
             if (stepped) RenderStepper();
             RenderTabs();
@@ -344,6 +364,12 @@ namespace ConsoleCards.Presentation.UI
                     break;
                 case FrontEndPage.Review:
                     RenderReview();
+                    break;
+                case FrontEndPage.Lobby:
+                    RenderLobby();
+                    break;
+                case FrontEndPage.Room:
+                    RenderRoom();
                     break;
             }
         }
@@ -654,7 +680,9 @@ namespace ConsoleCards.Presentation.UI
             string[] names = Enum.GetNames(typeof(FrontEndPage));
             for (int i = 0; i < names.Length; i++)
             {
-                pages[i] = Require("Pages/" + names[i]).gameObject;
+                // MP-2: the online screens are optional (a front end made before them works without them).
+                Transform optional = IsOnlinePage((FrontEndPage)i) ? transform.Find("Pages/" + names[i]) : null;
+                pages[i] = IsOnlinePage((FrontEndPage)i) ? (optional != null ? optional.gameObject : null) : Require("Pages/" + names[i]).gameObject;
             }
 
             foreach (Button button in GetComponentsInChildren<Button>(true))

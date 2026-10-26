@@ -100,8 +100,9 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- house rules (doc 23, R3) ----------
 
+        // MP-2: in an online room every computer plays the game's default rules (house rules are not shared yet).
         internal RuleSetDefinition ActiveRuleSet =>
-            activeRuleSet != null ? activeRuleSet : host.TableGame != null ? host.TableGame.DefaultRuleSet : null;
+            activeRuleSet != null && !host.UseStockContent ? activeRuleSet : host.TableGame != null ? host.TableGame.DefaultRuleSet : null;
 
         // Index in the pick list: 0 is the default set, then the saved sets oldest first.
         internal int ActiveRuleSetIndex => activeRuleSet == null ? 0 : host.houseRuleSets.IndexOf(activeRuleSet) + 1;

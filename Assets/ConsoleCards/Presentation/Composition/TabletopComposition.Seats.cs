@@ -192,7 +192,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 PlayerId candidate = matchState.GetSeat(
                     seats[(localIndex + step + count) % count].SeatId).OccupantPlayerId;
-                if (candidate.IsEmpty || candidate == localPlayerId) continue;
+                if (candidate.IsEmpty || candidate == localPlayerId || !IsPlayerOnThisComputer(candidate)) continue; // MP-2: only seats played here
                 BeginSeatSwitch(candidate, false);
                 return;
             }
@@ -283,6 +283,12 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void SetHotSeatMode(bool on)
         {
+            if (on && IsOnlineTable)
+            {
+                ShowMessage("Hot-seat is off in online play: each computer plays its own seat.");
+                return;
+            }
+
             hotSeatMode = on;
             handSeatSyncFailedFor = PlayerId.Empty;
             ShowMessage(on
@@ -561,8 +567,11 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // "Player 2": the seat a player sits in; a player without a seat is a participating player.
+        // MP-2: online, the name the seat's player plays under.
         internal string FormatPlayerName(PlayerId player) =>
-            TryGetGameSeat(player, out CartridgeSeat seat) ? $"Player {seat.LayoutSeatIndex + 1}" : "Participating Player";
+            TryGetGameSeat(player, out CartridgeSeat seat)
+                ? OnlinePlayerName(player) ?? $"Player {seat.LayoutSeatIndex + 1}"
+                : "Participating Player";
 
         // How many cards a draw from this deck can take: the deck's cards, up to the room in the hand it fills.
         internal int AvailableDrawableCount(ContainerId sourceDeckContainerId)

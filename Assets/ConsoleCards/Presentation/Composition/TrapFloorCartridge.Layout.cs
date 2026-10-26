@@ -67,6 +67,7 @@ namespace ConsoleCards.Presentation.Composition
         // The layout being arranged (a preview deal), else the saved one, else none (the default places).
         internal TrapFloorTableLayout LayoutForDeal()
         {
+            if (host.UseStockContent) return null; // MP-2: online every computer deals the game's own layout
             if (layoutPreview != null) return layoutPreview;
             try
             {

@@ -34,6 +34,53 @@ namespace ConsoleCards.Presentation.Interaction
         public PhysicalTabletopSurfaces Surfaces { get; }
         public PhysicalInteractionConfig InteractionConfig { get; }
         public PlayerId Actor => actor();
+
+        /// <summary>
+        /// MP-2: who plays on this computer (null: everyone, offline). A piece is simulated and committed only by the
+        /// computer of the player who controls it; the others show its accepted states and the poses they are sent.
+        /// </summary>
+        public Func<PlayerId, bool> IsLocalPlayer { get; set; }
+
+        /// <summary>MP-2: false on a joined computer: a new piece's first resting place is the host's to commit.</summary>
+        public Func<bool> MayCommitInitialState { get; set; }
+
+        internal bool MayCommitFirstState => MayCommitInitialState == null || MayCommitInitialState();
+
+        /// <summary>MP-2: true when another computer's player holds the piece (it cannot be taken from them).</summary>
+        internal bool IsHeldElsewhere(PhysicalObjectState state) =>
+            state != null && state.Mode == PhysicalObjectMode.Held && IsLocalPlayer != null && !IsLocalPlayer(state.ControllingPlayerId);
+
+        /// <summary>MP-2: the pieces held on this computer and where they are (no allocation). Returns how many.</summary>
+        public int CopyHeldPoses(TabletopObjectId[] ids, Vector3[] positions, Quaternion[] rotations)
+        {
+            int count = 0;
+            for (int i = 0; i < objects.Count && count < ids.Length; i++)
+            {
+                PhysicalLooseObject physical = objects[i];
+                if (physical == null || !physical.IsHeld || !physical.OwnsLooseTransform || physical.Body == null) continue;
+                if (IsLocalPlayer != null && !IsLocalPlayer(physical.Controller)) continue;
+                ids[count] = physical.View.ObjectId;
+                positions[count] = physical.Body.position;
+                rotations[count] = physical.Body.rotation;
+                count++;
+            }
+
+            return count;
+        }
+
+        /// <summary>MP-2: a piece another computer's player is carrying moves towards where they hold it.</summary>
+        public bool FollowRemote(TabletopObjectId id, Vector3 position, Quaternion rotation)
+        {
+            for (int i = 0; i < objects.Count; i++)
+            {
+                PhysicalLooseObject physical = objects[i];
+                if (physical == null || physical.View == null || !physical.View.IsBound || !physical.View.ObjectId.Equals(id)) continue;
+                if (IsLocalPlayer == null || IsLocalPlayer(physical.Controller)) return false;
+                return physical.FollowRemote(position, rotation);
+            }
+
+            return false;
+        }
         public void StopAnimation(Transform transform) => stopAnimation(transform);
         public void Register(TabletopObjectView view)
         {
@@ -61,6 +108,7 @@ namespace ConsoleCards.Presentation.Interaction
             int? value,
             AuthoritativeActionRecordMode recordMode)
         {
+            if (IsLocalPlayer != null && !IsLocalPlayer(state.ControllingPlayerId)) return false; // MP-2: its own computer commits it
             if (!view.IsBound || !match.ContainsObject(view.ObjectId)
                 || !ReferenceEquals(view.BoundState, match.GetObject(view.ObjectId))) return false;
             return tableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(new CommitPhysicalObjectCommand(

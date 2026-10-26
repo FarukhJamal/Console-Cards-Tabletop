@@ -79,11 +79,12 @@ namespace ConsoleCards.Presentation.Composition
             physicalAuthority = new LocalPhysicalObjectAuthority(matchState, activeSession.Request.ActivePlayerIds,
                 () => localPlayerId, targetCamera, physicalSurfaceQuery, target => presentationTransitions.Stop(target, false),
                 TableAuthority, physicalInteraction);
+            ConnectPhysicsToOnline(); // MP-2: a piece's physics runs on the computer of the player who moves it
             if (authoritativeRandomValueSource == null)
             {
                 authoritativeRandomValueSource = new SystemRandomValueSource();
             }
-            componentIdentitySource = new GuidTabletopComponentIdentitySource();
+            componentIdentitySource = commandIds; // MP-2: inside a command, IDs come from the command (new GUIDs otherwise)
             componentCreationUseCase = new CreateTabletopComponentUseCase(componentIdentitySource, physicalSurfaceQuery,
                 physicalSurfaceQuery.ResolveContainerSurfaceHeight, GetConsoleLayout().CardSlotCapacities);
             cardBatchCreationUseCase = new CreateGenericCardBatchUseCase(componentIdentitySource, physicalSurfaceQuery);
