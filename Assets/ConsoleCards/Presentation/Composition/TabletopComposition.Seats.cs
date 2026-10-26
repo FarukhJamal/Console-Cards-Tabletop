@@ -417,6 +417,22 @@ namespace ConsoleCards.Presentation.Composition
             handoverLogCount++;
         }
 
+        // Owner, 2026-10-26: the on-screen log shows only what happened in play ("Player 2 took Rush."), never table
+        // or setup messages ("The table grew…"); those stay in the hot-seat summary. Games write here (GameplayLog).
+        private readonly string[] gameplayLog = new string[HandoverLogSize];
+        private readonly int[] gameplayLogRound = new int[HandoverLogSize];
+        private long gameplayLogCount;
+
+        /// <summary>A line for the on-screen log: one thing that happened in play, with what it means.</summary>
+        internal void GameplayLog(string line)
+        {
+            if (string.IsNullOrEmpty(line)) return;
+            gameplayLog[gameplayLogCount % HandoverLogSize] = line;
+            gameplayLogRound[gameplayLogCount % HandoverLogSize] = ActiveCartridge.CurrentRound;
+            gameplayLogCount++;
+            shownActivityLogCount = -1; // redrawn on the next frame
+        }
+
         // F4: the "What happened" text, newest first, with the round each line happened in. Built only when the
         // log changes.
         private void RefreshActivityLog()
@@ -424,14 +440,15 @@ namespace ConsoleCards.Presentation.Composition
             shownActivityLogCount = handoverLogCount;
             if (activityLogUnavailable || runtimeUi == null) return;
             activityLogText.Clear();
-            long oldest = Math.Max(0L, handoverLogCount - Math.Min(ActivityLogLines, HandoverLogSize));
-            for (long i = handoverLogCount - 1; i >= oldest; i--)
+            long oldest = Math.Max(0L, gameplayLogCount - Math.Min(ActivityLogLines, HandoverLogSize));
+            for (long i = gameplayLogCount - 1; i >= oldest; i--)
             {
                 int slot = (int)(i % HandoverLogSize);
                 if (activityLogText.Length > 0) activityLogText.Append('\n');
-                int round = handoverLogRound[slot];
+                int round = gameplayLogRound[slot];
                 if (round > 0) activityLogText.Append("<color=#e0531f><b>R").Append(round).Append("</b></color>  ");
-                activityLogText.Append(handoverLog[slot]);
+                // Owner, 2026-10-26 (V5 reference "Blue found a Key."): a player's name is written in their colour.
+                AppendColourNames(activityLogText, gameplayLog[slot]);
             }
 
             if (activityLogText.Length == 0) activityLogText.Append("Nothing yet.");
@@ -439,6 +456,74 @@ namespace ConsoleCards.Presentation.Composition
             {
                 activityLogUnavailable = true;
             }
+        }
+
+        // "Player 2 found a Key." -> "Player 2" in that seat's colour (the colour the player chose); a colour word
+        // ("Blue", "RED") in its colour too. Whole words only, so "Redo" stays as it is.
+        private static void AppendColourNames(StringBuilder text, string line)
+        {
+            if (string.IsNullOrEmpty(line)) return;
+            int start = 0;
+            for (int i = 0; i <= line.Length; i++)
+            {
+                if (i < line.Length && char.IsLetter(line[i])) continue;
+                int end = i;
+                int seat = i - start == 6 && string.CompareOrdinal(line, start, "Player", 0, 6) == 0 ? SeatNumberAfter(line, i, out end) : -1;
+                if (seat >= 0)
+                {
+                    text.Append("<color=#").Append(ColorUtility.ToHtmlStringRGB(PlayerSeatColor(seat))).Append('>')
+                        .Append(line, start, end - start).Append("</color>");
+                    i = end;
+                    if (i < line.Length) text.Append(line[i]);
+                    start = i + 1;
+                    continue;
+                }
+
+                if (i > start)
+                {
+                    int colour = ColourWordIndex(line, start, i - start);
+                    if (colour >= 0)
+                    {
+                        text.Append("<color=#").Append(ColorUtility.ToHtmlStringRGB(ColourByIndex(colour))).Append('>')
+                            .Append(line, start, i - start).Append("</color>");
+                    }
+                    else
+                    {
+                        text.Append(line, start, i - start);
+                    }
+                }
+
+                if (i < line.Length) text.Append(line[i]);
+                start = i + 1;
+            }
+        }
+
+        // "Player 3": the seat index (2) when a space and a number follow the word; end = just after the number.
+        private static int SeatNumberAfter(string line, int wordEnd, out int end)
+        {
+            end = wordEnd;
+            if (wordEnd + 1 >= line.Length || line[wordEnd] != ' ' || !char.IsDigit(line[wordEnd + 1])) return -1;
+            int number = 0;
+            int i = wordEnd + 1;
+            while (i < line.Length && char.IsDigit(line[i]) && number < 100) number = (number * 10) + (line[i++] - '0');
+            if (i < line.Length && char.IsLetter(line[i])) return -1;
+            end = i;
+            return number - 1;
+        }
+
+        private static int ColourWordIndex(string line, int start, int length)
+        {
+            for (int c = 0; c < SeatColourCount; c++)
+            {
+                string name = ColourNameByIndex(c);
+                if (name.Length == length && string.Compare(line, start, name, 0, length, StringComparison.OrdinalIgnoreCase) == 0
+                    && char.IsUpper(line[start]))
+                {
+                    return c;
+                }
+            }
+
+            return -1;
         }
 
         internal void FeedbackLine(string message, FeedbackSeverity severity)

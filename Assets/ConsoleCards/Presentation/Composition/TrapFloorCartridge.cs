@@ -524,6 +524,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.ShowMessage(result.PlacedInHand
                     ? $"Bought {name} from {from} into {buyerName}'s hand."
                     : $"Bought {name} from {from}. {buyerName}'s hand is full, so it is beside their Console.");
+                host.GameplayLog($"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} bought the {name} ability card.");
             }
         }
         // ---------- from TabletopComposition.TrapFloor.cs ----------
@@ -2888,6 +2889,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             host.RefreshCardContentVisibility();
+            host.GameplayLog($"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} took {prizeName}.");
             host.FeedbackLine( // always shown
                 $"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} took {prizeName}. "
                     + "It stays under the pawn and comes to the hand when the pawn moves off this tile.",

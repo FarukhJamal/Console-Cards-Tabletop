@@ -392,6 +392,9 @@ namespace ConsoleCards.Editor.UI
             return view;
         }
 
+        private const int RulesBottomPadding = 38;
+        private const int RulesFooterRight = 16;
+
         // Rules card (left): "RULES · TRAP FLOOR ///", the rows, footer "House rules: 1 change" and < FOLD >.
         private static void RulesCard(GameObject root)
         {
@@ -399,7 +402,8 @@ namespace ConsoleCards.Editor.UI
             RectTransform card = Find(t, "Card");
             if (card == null) return;
             Place(card, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(Margin, -127f), new Vector2(461f, card.sizeDelta.y));
-            Column(card, 26, 26, 22, 22, 12f);
+            // Owner, 2026-10-26: the < FOLD > pill clears the frame's bottom corner piece.
+            Column(card, 26, 26, 22, RulesBottomPadding, 12f);
             Skin(Find(card, "Fill"), Figma("Rules"), ExportScale);
             Off(Find(card, "Shadow"));
             RectTransform header = Find(card, "Header");
@@ -429,7 +433,7 @@ namespace ConsoleCards.Editor.UI
 
             // Footer: the house rules line, then < FOLD > (previous set, fold, next set).
             RectTransform footer = Ensure(card, "Footer", body != null ? body.GetSiblingIndex() + 1 : -1);
-            Row(footer, 2, 0, 10f);
+            Row(footer, 2, RulesFooterRight, 10f);
             Size(footer, -1f, 44f);
             Text info = Words(Ensure(footer, "Info", 0), medium, 16, Muted, "House rules: 1 change");
             Flexible((RectTransform)info.transform);

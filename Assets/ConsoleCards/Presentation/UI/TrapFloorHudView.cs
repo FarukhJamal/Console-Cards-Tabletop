@@ -27,6 +27,7 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private PlayerSlot[] playerSlots = new PlayerSlot[0];
         [SerializeField] private Sprite activeDot;
         [SerializeField] private Sprite idleDot;
+        private const float ActiveDotScale = 1.6f;
         [Tooltip("Optional: the player card rows; while shown the old detail lines hide.")]
         [SerializeField] private GameObject cardRows;
         [SerializeField] private Text cardTitle;
@@ -195,9 +196,32 @@ namespace ConsoleCards.Presentation.UI
                     slot.dot.color = player.Color;
                     Sprite sprite = player.Active ? activeDot : idleDot;
                     if (sprite != null) slot.dot.sprite = sprite;
+                    // Owner, 2026-10-26 (V5 reference): the turn player's ringed dot is larger than the others, and the
+                    // row makes room for it so it never runs into the name.
+                    SizeDot(slot.dot, player.Active);
                 }
             }
         }
+
+        // The dot's own size (its LayoutElement) grows for the turn player; the first size seen is the normal one.
+        private void SizeDot(Image dot, bool active)
+        {
+            LayoutElement element = dot.GetComponent<LayoutElement>();
+            if (element == null) return;
+            if (!dotSizes.TryGetValue(element, out float normal))
+            {
+                normal = element.preferredWidth;
+                dotSizes[element] = normal;
+            }
+
+            float size = active ? normal * ActiveDotScale : normal;
+            element.minWidth = size;
+            element.preferredWidth = size;
+            element.minHeight = size;
+            element.preferredHeight = size;
+        }
+
+        private readonly Dictionary<LayoutElement, float> dotSizes = new Dictionary<LayoutElement, float>();
 
         // V5: the turn player's card (Avatar, Keys, Status, In hand, Floor); without one the old lines show.
         private void ShowCard(TrapFloorPlayerCardModel card)

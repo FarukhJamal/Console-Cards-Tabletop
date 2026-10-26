@@ -346,6 +346,63 @@ namespace ConsoleCards.Presentation.Composition
             // Owner, 2026-10-24: no big turn banner in the middle; the round bar shows whose turn it is.
         }
 
+        // Owner, 2026-10-26 (V5 reference "Blue found a Key.", "Red is Overcharged: +1 move next turn."): what happened,
+        // and what it means, for the on-screen log; the player's name is drawn in their colour there.
+        private string PlayLogLine(TrapFloorActivityEntry entry, string who, string name)
+        {
+            switch (entry.Kind)
+            {
+                case TrapFloorActivityKind.RevealedFloorContent:
+                    if (entry.ContentCategory == TrapFloorFloorContentCategory.Trap)
+                        return entry.TrapSuppressed ? $"{who} landed on {name}; it did no harm." : $"{who} landed on a trap: {name}.";
+                    if (string.Equals(name, "Overcharged", StringComparison.OrdinalIgnoreCase))
+                        return $"{who} is Overcharged: +1 move next turn.";
+                    if (entry.ContentCategory == TrapFloorFloorContentCategory.Key) return $"{who} found {name}.";
+                    if (entry.ContentCategory == TrapFloorFloorContentCategory.Entry) return $"{who} found the Grand Exit.";
+                    if (entry.ContentCategory == TrapFloorFloorContentCategory.SecretExit) return $"{who} found the Secret Exit.";
+                    if (entry.ContentCategory == TrapFloorFloorContentCategory.Ability) return $"{who} found the {name} ability card.";
+                    return $"{who} found {name}.";
+                case TrapFloorActivityKind.SafelyRevealedTrap:
+                    return $"{who} revealed {name} safely.";
+                case TrapFloorActivityKind.ClaimedKey:
+                    return $"{who} took {name}: it counts for the team.";
+                case TrapFloorActivityKind.CollapsedFloor:
+                    return entry.HasCoordinate ? $"Tile {entry.Coordinate} collapsed: it is a hole now." : "A tile collapsed.";
+                case TrapFloorActivityKind.PlayerEliminated:
+                    return entry.ContentDefinitionId.IsEmpty ? $"{who} is out for this floor." : $"{who} is out for this floor ({name}).";
+                case TrapFloorActivityKind.AllPlayersEliminated:
+                    return "Everyone is out: the floor is lost.";
+                case TrapFloorActivityKind.PlayersReactivated:
+                    return "Everyone is back in.";
+                case TrapFloorActivityKind.PlayerEscaped:
+                    return $"{who} escaped.";
+                case TrapFloorActivityKind.WonGame:
+                    return trapFloorTemplate == null || trapFloorTemplate.IsLastFloor ? "The team won the game!" : "The team won the floor.";
+                case TrapFloorActivityKind.UsedShield:
+                    return $"{who} used Shield: the trap is blocked.";
+                case TrapFloorActivityKind.UsedDodge:
+                    return $"{who} used Dodge: move to a lit tile.";
+                case TrapFloorActivityKind.UsedCheck:
+                    return $"{who} used Check: the trap is harmless.";
+                case TrapFloorActivityKind.UsedDisarm:
+                    return $"{who} used Disarm on {name}.";
+                case TrapFloorActivityKind.UsedRush:
+                    return $"{who} used Rush: move to a lit tile.";
+                case TrapFloorActivityKind.BlindApplied:
+                    return $"{who} is Blind: next move only in the rolled direction.";
+                case TrapFloorActivityKind.BlindDirectionRolled:
+                    return $"{who} rolled the Blind direction.";
+                case TrapFloorActivityKind.SlowApplied:
+                    return $"{who} is Slow: -1 move next turn.";
+                case TrapFloorActivityKind.StickyApplied:
+                    return $"{who} is Stuck: no move next turn.";
+                case TrapFloorActivityKind.SkippedTurn:
+                    return $"{who} skipped their turn.";
+                default:
+                    return string.Empty;
+            }
+        }
+
         private void AnnounceActivity(TrapFloorActivityEntry entry)
         {
             PlayerId actor = entry.ActorPlayerId;
@@ -356,6 +413,7 @@ namespace ConsoleCards.Presentation.Composition
             RulesCardPanel.RaiseHint(HintTriggers.GameActivity, entry.Kind.ToString());
             if (entry.Kind == TrapFloorActivityKind.RevealedFloorContent)
                 RulesCardPanel.RaiseHint(HintTriggers.ContentRevealed, entry.ContentCategory.ToString());
+            GameplayLog(PlayLogLine(entry, who, name));
             switch (entry.Kind)
             {
                 case TrapFloorActivityKind.RevealedFloorContent:
