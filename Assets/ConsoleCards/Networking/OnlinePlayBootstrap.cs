@@ -16,11 +16,35 @@ namespace ConsoleCards.Networking
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void Register()
         {
+            FusionMultiplayerSession.Closing = false;
             MultiplayerSessions.Reset();
             MultiplayerSessions.SetFactory(() => new FusionMultiplayerSession());
+            // MP-2: leaving the game (or Play mode in the Editor) closes the connection; nothing reconnects after it.
+            UnityEngine.Application.quitting -= LeaveOnQuit;
+            UnityEngine.Application.quitting += LeaveOnQuit;
+        }
+
+        private static void LeaveOnQuit()
+        {
+            FusionMultiplayerSession.Closing = true;
+            MultiplayerSessions.Current?.Disconnect();
         }
 
 #if UNITY_EDITOR
+        // Stopping Play mode: this comes before the runner is destroyed (whose shutdown would otherwise look like a
+        // lost connection and start getting back into the room, in edit mode).
+        [InitializeOnLoadMethod]
+        private static void WatchPlayMode()
+        {
+            EditorApplication.playModeStateChanged -= OnPlayModeChanged;
+            EditorApplication.playModeStateChanged += OnPlayModeChanged;
+        }
+
+        private static void OnPlayModeChanged(PlayModeStateChange change)
+        {
+            if (change == PlayModeStateChange.ExitingPlayMode) LeaveOnQuit();
+        }
+
         private const string CheckMenu = "Console Cards/Online/Check Connection (Play mode)";
         private const string LeaveMenu = "Console Cards/Online/Leave (Play mode)";
 

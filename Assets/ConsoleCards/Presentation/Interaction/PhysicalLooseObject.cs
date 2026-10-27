@@ -165,6 +165,13 @@ namespace ConsoleCards.Presentation.Interaction
 
         public TabletopObjectView View => view;
 
+        /// <summary>
+        /// MP-2 (owner, 2026-10-27: "collapsing floor is happening automatically"): how many times a player's roll, throw
+        /// or let-go of this die came to rest here (also cocked). A die that only settled again (a table brought up to
+        /// date, physics waking it) does not count, so a game asking for a roll waits for a real one.
+        /// </summary>
+        public int PlayerRolls { get; private set; }
+
         public bool IsHeld => held;
 
         /// <summary>MP-2: the player whose computer simulates and commits this piece.</summary>
@@ -947,6 +954,7 @@ namespace ConsoleCards.Presentation.Interaction
                                     : AuthoritativeActionRecordMode.None);
                         userActionActive = false;
                         compoundActionActive = false;
+                        if (cockedAccepted && rolledByPlayer) PlayerRolls++;
                         if (cockedAccepted && rolledByPlayer) DieCocked?.Invoke(this); // known issue fixed: a visible sign
                         return; // Still cocked after nudges: record the actual resting pose and unresolved status.
                     }
@@ -964,6 +972,7 @@ namespace ConsoleCards.Presentation.Interaction
                             : AuthoritativeActionRecordMode.None);
                 userActionActive = false;
                 compoundActionActive = false;
+                if (settledAccepted && playerAction) PlayerRolls++;
                 if (settledAccepted && playerAction && value.HasValue) DieSettled?.Invoke(this, value.Value);
             }
             else if (Time.unscaledTime >= nextCheckpoint)

@@ -598,6 +598,14 @@ namespace ConsoleCards.Presentation.Composition
         private bool askedXDie;
         private bool askedYDie;
 
+        // MP-2: each asked die's body and its player-roll count when the roll was asked (PhysicalLooseObject.PlayerRolls).
+        private PhysicalLooseObject askedXDieBody;
+        private PhysicalLooseObject askedYDieBody;
+        private PhysicalLooseObject askedBlindDieBody;
+        private int askedXDieRolls;
+        private int askedYDieRolls;
+        private int askedBlindDieRolls;
+
         private PhysicalObjectState DiePhysicalState(TabletopObjectId dieId) =>
             host.matchState != null && host.matchState.Dice.TryGetValue(dieId, out DieState die)
                 ? die.BaseState.PhysicalState
@@ -609,29 +617,89 @@ namespace ConsoleCards.Presentation.Composition
             askedYDie = yDie;
             askedXDieState = DiePhysicalState(host.trapFloorTemplate.FloorfallXAxisDieId);
             askedYDieState = DiePhysicalState(host.trapFloorTemplate.FloorfallYAxisDieId);
+            MarkPlayerRolls(host.trapFloorTemplate.FloorfallXAxisDieId, ref askedXDieBody, ref askedXDieRolls);
+            MarkPlayerRolls(host.trapFloorTemplate.FloorfallYAxisDieId, ref askedYDieBody, ref askedYDieRolls);
+        }
+
+        // MP-2: remembers how many player rolls the die has had, so only a later one counts.
+        private void MarkPlayerRolls(TabletopObjectId dieId, ref PhysicalLooseObject body, ref int rolls)
+        {
+            body = host.Registry.TryGetDieView(dieId, out DieView view) ? view.PhysicalObject : null;
+            rolls = body != null ? body.PlayerRolls : 0;
+        }
+
+        // MP-2 (owner, 2026-10-27: "collapsing floor is happening automatically… maybe the already placed dice"): true
+        // only when a player on this computer rolled, threw or let go of the die since it was asked for. A die that just
+        // settled again (the table rebuilt from another computer's update, physics waking it) is not a roll. A rebuilt
+        // die (a new body) starts counting from now.
+        private bool PlayerRolledSince(TabletopObjectId dieId, ref PhysicalLooseObject body, ref int rolls)
+        {
+            PhysicalLooseObject now = host.Registry.TryGetDieView(dieId, out DieView view) ? view.PhysicalObject : null;
+            if (now == null) return false;
+            if (!ReferenceEquals(now, body))
+            {
+                body = now;
+                rolls = now.PlayerRolls;
+                return false;
+            }
+
+            return now.PlayerRolls != rolls;
         }
 
         // True once every asked floor die was rolled and lies still (the others only need to lie still).
         private bool FloorDiceRolledAsAsked()
         {
-            return DieRolledAsAsked(host.trapFloorTemplate.FloorfallXAxisDieId, askedXDie, ref askedXDieState, "column")
-                & DieRolledAsAsked(host.trapFloorTemplate.FloorfallYAxisDieId, askedYDie, ref askedYDieState, "row");
+            return DieRolledAsAsked(host.trapFloorTemplate.FloorfallXAxisDieId, askedXDie, ref askedXDieState,
+                    ref askedXDieBody, ref askedXDieRolls, "column")
+                & DieRolledAsAsked(host.trapFloorTemplate.FloorfallYAxisDieId, askedYDie, ref askedYDieState,
+                    ref askedYDieBody, ref askedYDieRolls, "row");
         }
 
-        private bool DieRolledAsAsked(TabletopObjectId dieId, bool asked, ref PhysicalObjectState askedState, string name)
+        private bool DieRolledAsAsked(TabletopObjectId dieId, bool asked, ref PhysicalObjectState askedState,
+            ref PhysicalLooseObject askedBody, ref int askedRolls, string name)
         {
             PhysicalObjectState state = DiePhysicalState(dieId);
             if (state == null) return false;
             if (!asked) return state.Mode == PhysicalObjectMode.Sleeping;
-            if (ReferenceEquals(state, askedState)) return false;
+            if (NotRolledHere(state, askedState)) return false;
+            if (!PlayerRolledSince(dieId, ref askedBody, ref askedRolls))
+            {
+                // Moved without a player's roll here: that resting place is the new starting point.
+                if (state.Mode == PhysicalObjectMode.Sleeping || state.Mode == PhysicalObjectMode.SleepingUnresolved) askedState = state;
+                return false;
+            }
+
             if (state.Mode == PhysicalObjectMode.SleepingUnresolved)
             {
                 askedState = state;
+                MarkPlayerRolls(dieId, ref askedBody, ref askedRolls); // the next roll counts
                 host.FeedbackLine($"The {name} die is cocked: roll it again.", FeedbackSeverity.Warning); // DICE-2: always shown
                 return false;
             }
 
             return state.Mode == PhysicalObjectMode.Sleeping;
+        }
+
+        // MP-2 (owner, 2026-10-27: "collapsing floor is happening automatically"): a die is not rolled when its state is
+        // the one asked for, or the same pose (that state copied to this computer with a whole table, a new object), and
+        // a die another computer's player threw is resolved on that computer (its result comes here as changes).
+        private bool NotRolledHere(PhysicalObjectState state, PhysicalObjectState askedState)
+        {
+            if (ReferenceEquals(state, askedState)) return true;
+            if (state != null && askedState != null
+                && state.Mode == askedState.Mode
+                && state.Position.X == askedState.Position.X
+                && state.Position.Y == askedState.Position.Y
+                && state.Position.Z == askedState.Position.Z
+                && state.Rotation.X == askedState.Rotation.X
+                && state.Rotation.Y == askedState.Rotation.Y
+                && state.Rotation.Z == askedState.Rotation.Z
+                && state.Rotation.W == askedState.Rotation.W)
+            {
+                return true;
+            }
+
+            return state != null && !host.IsPlayerOnThisComputer(state.ControllingPlayerId);
         }
 
         internal void CompletePhysicalFloorfallIfSettled()
@@ -933,6 +1001,7 @@ namespace ConsoleCards.Presentation.Composition
             host.physicalBlindDirectionActor = actor;
             host.physicalBlindDirectionDieId = dieId;
             askedBlindDieState = DiePhysicalState(dieId);
+            MarkPlayerRolls(dieId, ref askedBlindDieBody, ref askedBlindDieRolls);
             RefreshTrapFloorStatusUi();
             host.FeedbackLine(
                 $"BLIND — {FormatPlayerName(actor)}, roll the d4: it sets the only direction you may move this turn.",
@@ -1092,6 +1161,7 @@ namespace ConsoleCards.Presentation.Composition
             host.physicalBlindDirectionActor = actor;
             host.physicalBlindDirectionDieId = dieId;
             askedBlindDieState = DiePhysicalState(dieId); // DICE-1: the player rolls it
+            MarkPlayerRolls(dieId, ref askedBlindDieBody, ref askedBlindDieRolls);
             host.ShowMessage($"BLIND — {FormatPlayerName(actor)}, roll the d4 for your direction.");
             return true;
         }
@@ -1118,10 +1188,17 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (ReferenceEquals(physicalState, askedBlindDieState)) return; // DICE-1: not rolled yet
+            if (NotRolledHere(physicalState, askedBlindDieState)) return; // DICE-1: not rolled yet (MP-2: or rolled elsewhere)
+            if (!PlayerRolledSince(host.physicalBlindDirectionDieId, ref askedBlindDieBody, ref askedBlindDieRolls))
+            {
+                askedBlindDieState = physicalState; // MP-2: settled again without a player's roll
+                return;
+            }
+
             if (physicalState.Mode == PhysicalObjectMode.SleepingUnresolved)
             {
                 askedBlindDieState = physicalState;
+                MarkPlayerRolls(host.physicalBlindDirectionDieId, ref askedBlindDieBody, ref askedBlindDieRolls);
                 host.FeedbackLine("The d4 is cocked: roll it again.", FeedbackSeverity.Warning); // DICE-2: always shown
                 return;
             }
@@ -4670,6 +4747,8 @@ namespace ConsoleCards.Presentation.Composition
             return actions;
         }
 
+        private static readonly Action NoAction = () => { };
+
         internal List<PopupActionOption> BuildTrapFloorTurnActions()
         {
             List<PopupActionOption> actions = new List<PopupActionOption>();
@@ -4687,6 +4766,18 @@ namespace ConsoleCards.Presentation.Composition
                     FloorEndedActionLabel(),
                     true,
                     () => ShowFloorEnded(won)));
+                return actions;
+            }
+
+            if (host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                && !host.IsPlayerOnThisComputer(host.trapFloorTurnState.ActivePlayerId))
+            {
+                // MP-2 (found testing, 2026-10-27): online, the turn's buttons belong to the computer that plays the seat
+                // (pressing them here was refused with "rejected: None").
+                actions.Add(new PopupActionOption(
+                    $"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} is playing this turn",
+                    false,
+                    NoAction));
                 return actions;
             }
 

@@ -57,6 +57,8 @@ namespace ConsoleCards.Presentation.Composition
         private string roomGame = string.Empty;
         private bool roomStarted;
         private string notice;
+        private string roomNotice; // shown on the Room screen for a few seconds
+        private float roomNoticeUntil;
         private readonly List<Member> members = new List<Member>(MaxMembers);
         private readonly List<Waiting> waiting = new List<Waiting>(4);
         private readonly Queue<Incoming> inbox = new Queue<Incoming>(32);
@@ -258,7 +260,8 @@ namespace ConsoleCards.Presentation.Composition
         internal void Dispose()
         {
             if (session == null) return;
-            if (InRoom) LeaveRoom();
+            if (InRoom && !hosting) SendSmall(MsgBye);
+            session.Disconnect(); // the scene is going (Play mode ends, or a profile switch reloads it): no reconnecting
             if (subscribed)
             {
                 session.Changed -= OnSessionChanged;
@@ -280,6 +283,7 @@ namespace ConsoleCards.Presentation.Composition
             bool isIn = now == MultiplayerSessionState.InRoom || now == MultiplayerSessionState.Reconnecting;
             MultiplayerSessionState before = lastState;
             lastState = now;
+            if (now != before) roomNotice = null;
 
             if (now == MultiplayerSessionState.InRoom && before != MultiplayerSessionState.InRoom)
             {
@@ -350,6 +354,7 @@ namespace ConsoleCards.Presentation.Composition
             if (hadTable)
             {
                 host.ShowMessage($"{why} The table stays on this computer, offline.");
+                if (IsFrontEndOpen()) host.runtimeUi.KeepPanelsOnNextRefresh(); // LEAVE on the Room screen goes to the Lobby
                 if (host.IsInitialized) host.SessionService.ShowActiveSessionUi(); // the seats' names and Undo come back
             }
 
@@ -808,6 +813,15 @@ namespace ConsoleCards.Presentation.Composition
 
         private bool IsFrontEndOpen() => host.runtimeUi != null && host.runtimeUi.IsGameSelectOpen;
 
+        /// <summary>Shows a line on the Room screen (and goes back to it).</summary>
+        internal void ShowRoomNotice(string text)
+        {
+            if (!InRoom) return;
+            roomNotice = text;
+            roomNoticeUntil = Time.unscaledTime + 10f;
+            ShowFrontEnd(FrontEndPage.Room, null);
+        }
+
         private void ShowFrontEnd(FrontEndPage page, string status)
         {
             if (host.runtimeUi == null) return;
@@ -839,6 +853,7 @@ namespace ConsoleCards.Presentation.Composition
 
             MultiplayerSessionState state = session.State;
             model.Status = !string.IsNullOrEmpty(notice) && state != MultiplayerSessionState.InRoom ? notice + "  " + session.Status : session.Status;
+            if (!string.IsNullOrEmpty(roomNotice) && InRoom && Time.unscaledTime < roomNoticeUntil) model.Status = roomNotice;
             model.Connected = state == MultiplayerSessionState.InLobby;
             model.Busy = state == MultiplayerSessionState.Connecting || state == MultiplayerSessionState.JoiningRoom
                 || state == MultiplayerSessionState.Reconnecting;

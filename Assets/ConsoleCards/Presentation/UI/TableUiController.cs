@@ -147,7 +147,18 @@ namespace ConsoleCards.Presentation.UI
             EnsureSessionBarView();
             EnsureInteractionGuideView();
             HideGameTemplatesPanel();
-            CloseTabletopPopup();
+            if (keepPanelsOnce)
+            {
+                // MP-2: the table changed under an open front end or editor (online play): only the table's popups go.
+                keepPanelsOnce = false;
+                ReleaseView(tabletopPopupView);
+                if (popupLayer != null) popupLayer.SetActive(false);
+            }
+            else
+            {
+                CloseTabletopPopup();
+            }
+
             hudLayer.SetActive(true);
             sessionBarView.Bind(
                 sessionTitle,
@@ -1337,6 +1348,14 @@ namespace ConsoleCards.Presentation.UI
                 dismiss,
                 secondaryDismiss);
         }
+
+        private bool keepPanelsOnce;
+
+        /// <summary>
+        /// MP-2: the next <see cref="ShowActiveSession"/> keeps the front end and the editors open (the table was
+        /// brought up to date from another computer while this player was looking at a menu).
+        /// </summary>
+        public void KeepPanelsOnNextRefresh() => keepPanelsOnce = true;
 
         public void CloseTabletopPopup()
         {

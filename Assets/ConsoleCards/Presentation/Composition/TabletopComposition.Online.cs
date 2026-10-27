@@ -212,6 +212,7 @@ namespace ConsoleCards.Presentation.Composition
                 ShowTableMarks(snapshot.TableMarks);
                 InitializeActiveSession(false);
                 undoHistory.EstablishBaseline(SessionService.CaptureUndoSnapshot());
+                if (runtimeUi != null && runtimeUi.IsGameSelectOpen) runtimeUi.KeepPanelsOnNextRefresh(); // the menu stays open
                 SessionService.ShowActiveSessionUi();
                 return true;
             }

@@ -43,6 +43,11 @@ namespace ConsoleCards.Networking
         private readonly List<OnlineRoomListing> rooms = new List<OnlineRoomListing>();
         private static readonly System.Random CodeRandom = new System.Random();
 
+        /// <summary>Set while the game (or Play mode in the Editor) is ending: nothing connects or reconnects then.</summary>
+        internal static bool Closing;
+
+        private static bool Stopped => Closing || !UnityEngine.Application.isPlaying;
+
         public MultiplayerSessionState State => state;
         public string Status => status;
         public string Region => region;
@@ -79,6 +84,7 @@ namespace ConsoleCards.Networking
 
         private async Task ConnectToLobbyAsync(int tryNumber)
         {
+            if (Stopped) return; // never while the game ends or in edit mode (leaving Play mode)
             Set(MultiplayerSessionState.Connecting, "Connecting…");
             await CloseRunner();
             if (tryNumber != attempt) return;
@@ -185,10 +191,11 @@ namespace ConsoleCards.Networking
 
         private async Task EnterRoomAsync(int tryNumber, GameMode mode, bool again)
         {
+            if (Stopped) return; // never while the game ends or in edit mode (leaving Play mode)
             Set(again ? MultiplayerSessionState.Reconnecting : MultiplayerSessionState.JoiningRoom,
                 again ? "Connection lost: getting back into the room…" : mode == GameMode.Host ? "Making the room…" : "Joining " + roomCode + "…");
             await CloseRunner();
-            if (tryNumber != attempt) return;
+            if (tryNumber != attempt || Stopped) return;
 
             string roomRegion = RegionOf(roomCode);
             NetworkRunner created = NewRunner();
@@ -256,7 +263,7 @@ namespace ConsoleCards.Networking
                 float wait = RetrySeconds[retry++];
                 Set(MultiplayerSessionState.Reconnecting, $"Connection lost: trying again in {wait:0} s…");
                 await Task.Delay(TimeSpan.FromSeconds(wait));
-                if (tryNumber != attempt) return;
+                if (tryNumber != attempt || Stopped) return;
                 _ = EnterRoomAsync(++attempt, GameMode.Client, true);
                 return;
             }
@@ -374,7 +381,41 @@ namespace ConsoleCards.Networking
             state = newState;
             status = newStatus;
             if (changed) Debug.Log("[Online] " + newStatus);
-            Changed?.Invoke();
+            Raise(Changed);
+        }
+
+        // Listeners run inside Fusion's callbacks and our own async steps, where an exception would vanish silently: each
+        // one is caught and logged so a problem in the game's code shows in the Console.
+        private static void Raise(Action listeners)
+        {
+            if (listeners == null) return;
+            foreach (Delegate listener in listeners.GetInvocationList())
+            {
+                try
+                {
+                    ((Action)listener)();
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(exception);
+                }
+            }
+        }
+
+        private static void Raise<T>(Action<T> listeners, T value)
+        {
+            if (listeners == null) return;
+            foreach (Delegate listener in listeners.GetInvocationList())
+            {
+                try
+                {
+                    ((Action<T>)listener)(value);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(exception);
+                }
+            }
         }
 
         private string DescribeLobby()
@@ -505,8 +546,26 @@ namespace ConsoleCards.Networking
         void INetworkRunnerCallbacks.OnShutdown(NetworkRunner sender, ShutdownReason shutdownReason)
         {
             if (sender != runner) return; // a runner we closed ourselves
+            if (state == MultiplayerSessionState.JoiningRoom || state == MultiplayerSessionState.Reconnecting
+                || state == MultiplayerSessionState.Connecting)
+            {
+                // Still starting (found testing, 2026-10-27: a reconnect to a room the host had closed ended as
+                // "Disconnected"): the start's own result says what happened (RoomFailed: "the room has closed").
+                return;
+            }
+
             runner = null;
             rooms.Clear();
+            if (Stopped)
+            {
+                // The game (or Play mode) is ending and took the runner with it: no getting back in.
+                roomCode = string.Empty;
+                hosting = false;
+                region = string.Empty;
+                Set(MultiplayerSessionState.Offline, "Offline.");
+                return;
+            }
+
             if (state == MultiplayerSessionState.InRoom && !hosting && !string.IsNullOrEmpty(roomCode))
             {
                 // The connection to the host broke: get back in (the same seat waits for us).
@@ -544,20 +603,33 @@ namespace ConsoleCards.Networking
         void INetworkRunnerCallbacks.OnPlayerJoined(NetworkRunner sender, PlayerRef player)
         {
             if (sender != runner || !sender.IsServer || player == sender.LocalPlayer) return;
-            ConnectionJoined?.Invoke(player.RawEncoded);
+            Raise(ConnectionJoined, player.RawEncoded);
         }
 
         void INetworkRunnerCallbacks.OnPlayerLeft(NetworkRunner sender, PlayerRef player)
         {
             if (sender != runner || !sender.IsServer || player == sender.LocalPlayer) return;
-            ConnectionLeft?.Invoke(player.RawEncoded);
+            Raise(ConnectionLeft, player.RawEncoded);
         }
 
         void INetworkRunnerCallbacks.OnReliableDataReceived(NetworkRunner sender, PlayerRef player, ReliableKey key, ReadOnlySpan<byte> data)
         {
             if (sender != runner) return;
             byte[] copy = data.ToArray();
-            MessageReceived?.Invoke(sender.IsServer ? player.RawEncoded : -1, copy);
+            Action<int, byte[]> listeners = MessageReceived;
+            if (listeners == null) return;
+            int from = sender.IsServer ? player.RawEncoded : -1;
+            foreach (Delegate listener in listeners.GetInvocationList())
+            {
+                try
+                {
+                    ((Action<int, byte[]>)listener)(from, copy);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(exception);
+                }
+            }
         }
 
         void INetworkRunnerCallbacks.OnConnectRequest(NetworkRunner sender, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)

@@ -438,6 +438,15 @@ namespace ConsoleCards.Presentation.Composition
         // UI-2: SANDBOX starts an Empty Table.
         private void StartSandbox()
         {
+            if (host.HasOnline && host.Online.InRoom)
+            {
+                // MP-2 (found testing, 2026-10-27): SANDBOX in a room started an Empty Table for everyone at once.
+                host.Online.ShowRoomNotice(host.Online.IsHosting
+                    ? "SANDBOX is for playing on your own: LEAVE the room first. For an Empty Table with the room, choose it with CHOOSE GAME."
+                    : "SANDBOX is for playing on your own: LEAVE the room first.");
+                return;
+            }
+
             gameSelectEntryId = EmptyTableEntryId;
             StartSelectedGame();
         }
