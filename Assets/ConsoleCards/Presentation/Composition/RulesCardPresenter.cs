@@ -100,9 +100,33 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- house rules (doc 23, R3) ----------
 
-        // MP-2: in an online room every computer plays the game's default rules (house rules are not shared yet).
+        // MP-4: online the host's house rules are shared with the room (its choice comes with the table).
         internal RuleSetDefinition ActiveRuleSet =>
-            activeRuleSet != null && !host.UseStockContent ? activeRuleSet : host.TableGame != null ? host.TableGame.DefaultRuleSet : null;
+            activeRuleSet != null ? activeRuleSet : host.TableGame != null ? host.TableGame.DefaultRuleSet : null;
+
+        /// <summary>MP-4: the ID of the house-rule set in play (empty: the game's default rules).</summary>
+        internal string ActiveRuleSetId => activeRuleSet != null ? activeRuleSet.StableId : string.Empty;
+
+        /// <summary>
+        /// MP-4: the house-rule sets are read again (the room's saves came or went), then the set with this ID is in
+        /// play (empty or not found: the game's default rules).
+        /// </summary>
+        internal void ReloadHouseRules(string activeStableId)
+        {
+            host.houseRuleSets.Clear();
+            houseRuleRecords.Clear();
+            houseRulesStore = null;
+            houseRulesLoaded = false;
+            activeRuleSet = null;
+            EnsureHouseRulesLoaded();
+            if (string.IsNullOrEmpty(activeStableId)) return;
+            for (int i = 0; i < host.houseRuleSets.Count; i++)
+            {
+                if (!string.Equals(host.houseRuleSets[i].StableId, activeStableId, StringComparison.Ordinal)) continue;
+                activeRuleSet = host.houseRuleSets[i];
+                return;
+            }
+        }
 
         // Index in the pick list: 0 is the default set, then the saved sets oldest first.
         internal int ActiveRuleSetIndex => activeRuleSet == null ? 0 : host.houseRuleSets.IndexOf(activeRuleSet) + 1;

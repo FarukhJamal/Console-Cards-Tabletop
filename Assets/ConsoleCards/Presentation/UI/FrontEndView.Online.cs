@@ -120,7 +120,26 @@ namespace ConsoleCards.Presentation.UI
         {
             if (model?.Online == null || string.IsNullOrEmpty(model.Online.RoomCode)) return;
             GUIUtility.systemCopyBuffer = model.Online.RoomCode;
-            SetText("Pages/Room/Status", $"Copied {model.Online.RoomCode}: send it to your friends, they type it in JOIN BY CODE.");
+            SetText("Pages/Room/Status", $"Copied {model.Online.RoomCode}: friends type it in JOIN BY CODE.");
+        }
+
+        // MP-P (owner, 2026-10-27): the Players step's line said "local players at this table" in an online room too.
+        private string offlinePlayersIntro;
+
+        private void RenderPlayersIntro()
+        {
+            const string path = "Pages/Players/Text";
+            if (!texts.TryGetValue(path, out Text text) || text == null) return;
+            if (offlinePlayersIntro == null) offlinePlayersIntro = text.text;
+            text.text = model.Online != null && model.Online.InRoom
+                ? "Each seat plays in its colour. The room's players sit in their seat order;\nthe host plays any seat left open."
+                : offlinePlayersIntro;
+        }
+
+        // MP-P (owner, 2026-10-27): a long status or room name shrinks to stay inside its place.
+        private void FitLine(string path)
+        {
+            if (texts.TryGetValue(path, out Text text)) FitText.Shrink(text);
         }
 
         private string FieldText(string path)
@@ -146,6 +165,7 @@ namespace ConsoleCards.Presentation.UI
         {
             OnlineScreenModel online = model.Online;
             if (online == null) return;
+            FitLine("Pages/Lobby/Status");
             SetText("Pages/Lobby/Status", online.Status);
             InputField name = Field("Pages/Lobby/Create/Name");
             if (name != null && string.IsNullOrEmpty(name.text)) name.text = online.DefaultRoomTitle;
@@ -177,6 +197,8 @@ namespace ConsoleCards.Presentation.UI
             SetText("Pages/Room/Title", Upper(online.RoomTitle.Length > 0 ? online.RoomTitle : "ROOM"));
             SetText("Pages/Room/Subtitle", online.IsHost ? "Y O U   H O S T   T H I S   R O O M" : "O N L I N E   R O O M");
             SetText("Pages/Room/Code/Label", "CODE  " + online.RoomCode + (online.RoomPrivate ? "  ·  PRIVATE" : "  ·  PUBLIC"));
+            FitLine("Pages/Room/Status");
+            FitLine("Pages/Room/Title");
             SetText("Pages/Room/Status", online.Status);
             IReadOnlyList<OnlineMemberRow> members = online.Members;
             for (int i = 0; i < MemberRowCount; i++)

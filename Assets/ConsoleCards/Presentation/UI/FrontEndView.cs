@@ -359,6 +359,7 @@ namespace ConsoleCards.Presentation.UI
                     break;
                 case FrontEndPage.Players:
                     RenderStepTitle("Players");
+                    RenderPlayersIntro();
                     RenderPlayers(playerRows);
                     SetActive(playerRowsPath + "/AddRow", model.CanChangePlayers);
                     break;

@@ -23,6 +23,7 @@ namespace ConsoleCards.Presentation.UI
             RequireAcquired();
             ValidateReferences();
             Unbind();
+            FitText.Shrink(label); // MP-P: a long label shrinks to fit its button instead of running past it
             label.text = option.Label;
             button.interactable = option.Enabled;
             button.onClick.AddListener(option.Selected.Invoke);

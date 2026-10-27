@@ -5,6 +5,7 @@ using System.Text;
 using ConsoleCards.Application.Authority;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates;
+using ConsoleCards.Presentation.Content;
 using ConsoleCards.Presentation.UI;
 using UnityEngine;
 
@@ -41,6 +42,9 @@ namespace ConsoleCards.Presentation.Composition
         private const byte MsgCheck = 12;
         private const byte MsgDeal = 13;
         private const byte MsgBye = 14;
+        private const byte MsgContent = 15; // MP-4: the host's game saves (not numbered: it can be large)
+        private const byte MsgUndo = 16; // MP-5: a joined player's Undo / Redo, run by the host
+        private const byte MsgNotice = 17; // MP-5: a line from the host for one player
 
         // This computer in a room: the same while the game runs (a lost connection keeps it, a restart does not).
         private static Guid clientKey = Guid.NewGuid();
@@ -77,6 +81,7 @@ namespace ConsoleCards.Presentation.Composition
             public int Connection = -1; // host only
             public float LeftAt = -1f; // host only
             public long SentSeq; // host only: ordered messages sent to this computer
+            public string ContentHash = string.Empty; // host only: the host content this computer has (MP-4)
             public readonly Inbox FromClient = new Inbox(); // host only: ordered messages from it
         }
 
@@ -262,6 +267,7 @@ namespace ConsoleCards.Presentation.Composition
             if (session == null) return;
             if (InRoom && !hosting) SendSmall(MsgBye);
             session.Disconnect(); // the scene is going (Play mode ends, or a profile switch reloads it): no reconnecting
+            ContentPackStore.RoomRoot = null; // MP-4: the next scene reads the profile's own saves
             if (subscribed)
             {
                 session.Changed -= OnSessionChanged;
@@ -293,9 +299,10 @@ namespace ConsoleCards.Presentation.Composition
             {
                 LeftRoom(session.Status);
             }
-            else if (now == MultiplayerSessionState.Reconnecting && before == MultiplayerSessionState.InRoom && sharedTable)
+            else if (now == MultiplayerSessionState.Reconnecting && before == MultiplayerSessionState.InRoom)
             {
-                host.ShowMessage("Connection lost: getting back into the room… (your moves wait until you are back)");
+                if (sharedTable) host.ShowMessage("Connection lost: getting back into the room… (your moves wait until you are back)");
+                hostLossCheck = true; // MP-5: next frame (not inside the session's own call): the next player may take over
             }
 
             RefreshFrontEnd();
@@ -304,6 +311,14 @@ namespace ConsoleCards.Presentation.Composition
         private void EnteredRoom(bool again)
         {
             hosting = session.IsHost;
+            if (hosting && again && takingOver)
+            {
+                TookOverRoom(); // MP-5: the host left and this computer hosts the room now
+                RefreshFrontEnd();
+                return;
+            }
+
+            takingOver = false;
             welcomed = false;
             clientInbox.Reset();
             clientSeq = 0;
@@ -344,6 +359,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             bool hadTable = sharedTable;
             StopSharing();
+            ForgetRoomContent(); // MP-4: back to this profile's own cards, decks and rules
             members.Clear();
             waiting.Clear();
             inbox.Clear();
@@ -414,6 +430,12 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
+            if (hostLossCheck)
+            {
+                hostLossCheck = false;
+                if (session.State == MultiplayerSessionState.Reconnecting) HostMayHaveLeft();
+            }
+
             if (hosting) TickHostRoom(now);
             TickTable(now);
         }
@@ -475,6 +497,9 @@ namespace ConsoleCards.Presentation.Composition
                     BroadcastRoster();
                     RefreshFrontEnd();
                     break;
+                case MsgUndo:
+                    HostUndo(member, data);
+                    break;
                 case MsgBye:
                     if (!sharedTable) members.Remove(member);
                     else
@@ -509,6 +534,7 @@ namespace ConsoleCards.Presentation.Composition
             Guid key = ReadGuid(reader);
             string name = Clean(reader.ReadString(), 24);
             int colour = reader.ReadInt32();
+            string contentHash = reader.BaseStream.Position < reader.BaseStream.Length ? reader.ReadString() : string.Empty;
             if (protocol != Protocol || !string.Equals(version, UnityEngine.Application.version, StringComparison.Ordinal))
             {
                 Kick(connection, $"This room plays version {UnityEngine.Application.version} of the game and yours is {version}: both need the same version.");
@@ -535,15 +561,18 @@ namespace ConsoleCards.Presentation.Composition
                 session.Disconnect(member.Connection); // the same computer's old connection
             }
 
-            member.Name = name.Length > 0 ? name : "Player";
+            member.Name = UniqueName(member, name.Length > 0 ? name : "Player");
             member.Connection = connection;
             member.Connected = true;
             member.LeftAt = -1f;
             member.SentSeq = 0;
             member.FromClient.Reset();
+            member.ContentHash = contentHash;
             BeginMessage(MsgWelcome);
             SendTo(member);
             BroadcastRoster();
+            RefreshHostContent(); // MP-4: the host's content goes first, then the table dealt with it
+            SendContent(member);
             if (sharedTable)
             {
                 SendTable(member);
@@ -576,6 +605,12 @@ namespace ConsoleCards.Presentation.Composition
                     break;
                 case MsgRoster:
                     ReadRoster(data);
+                    break;
+                case MsgContent:
+                    ReadContent(data);
+                    break;
+                case MsgNotice:
+                    ReadNotice(data);
                     break;
                 case MsgKick:
                     {
@@ -630,6 +665,7 @@ namespace ConsoleCards.Presentation.Composition
             writer.Write(ProfileName());
             Member me = Me();
             writer.Write(me != null ? me.Colour : 0);
+            writer.Write(roomContentHash); // MP-4: the host's content this computer already has
             SendToHost();
         }
 
@@ -801,6 +837,25 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         private string DefaultRoomTitle() => ProfileName() + "'s table";
+
+        // MP-P (found testing, 2026-10-27: two players both called "Player 1" made the log unreadable): a name already
+        // used in the room gets a number ("Player 1 (2)").
+        private string UniqueName(Member member, string name)
+        {
+            string candidate = name;
+            for (int n = 2; n <= MaxMembers + 1 && NameTaken(candidate, member); n++) candidate = $"{name} ({n})";
+            return candidate;
+        }
+
+        private bool NameTaken(string name, Member except)
+        {
+            for (int i = 0; i < members.Count; i++)
+            {
+                if (members[i] != except && string.Equals(members[i].Name, name, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+
+            return false;
+        }
 
         private static string Clean(string text, int length)
         {

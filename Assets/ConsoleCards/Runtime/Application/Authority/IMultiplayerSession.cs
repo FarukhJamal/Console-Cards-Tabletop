@@ -111,6 +111,12 @@ namespace ConsoleCards.Application.Authority
         /// <summary>Host: sends bytes to one computer in the room.</summary>
         void SendTo(int connection, byte[] data, int offset, int count);
 
+        /// <summary>MP-5: the host has gone and this computer is next: it hosts the same room code (the table goes on).</summary>
+        void TakeOverRoom();
+
+        /// <summary>MP-5: the host has gone and another computer takes over: keep trying to get back in for a while.</summary>
+        void ExpectNewHost(float seconds);
+
         /// <summary>Host: closes one computer's connection (a room that is full, a different game version).</summary>
         void Disconnect(int connection);
 

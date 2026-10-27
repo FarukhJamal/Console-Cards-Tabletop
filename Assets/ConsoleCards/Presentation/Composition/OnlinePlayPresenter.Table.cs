@@ -8,6 +8,7 @@ using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.Presentation.Interaction;
+using ConsoleCards.Presentation.Saving;
 using ConsoleCards.Presentation.TableSurface;
 using UnityEngine;
 
@@ -32,6 +33,9 @@ namespace ConsoleCards.Presentation.Composition
         public int[] Colours;
         public TableSpec Table;
         public long Revision;
+        public string ContentHash; // MP-4: the host content the table was dealt with
+        public string RuleSetId; // MP-4: the host's house rules in play (empty: the game's default rules)
+        public string PlayerGame; // MP-4: a game the host made (its save, JSON), else empty
     }
 
     internal sealed class OnlineTablePacket
@@ -200,6 +204,7 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < members.Count; i++) members[i].Ready = members[i].IsHost; // the next game asks again
             StartSharing(true);
             BroadcastRoster();
+            SendContentToRoom(); // MP-4: everyone gets the host's content before the table dealt with it
             return true;
         }
 
@@ -539,6 +544,9 @@ namespace ConsoleCards.Presentation.Composition
                 Colours = currentColours,
                 Table = table != null ? table.Copy() : null,
                 Revision = host.matchState.Revision,
+                ContentHash = hosting ? hostContentHash : roomContentHash,
+                RuleSetId = host.RulesCardPanel.ActiveRuleSetId,
+                PlayerGame = host.PlayerGamesPanel.activePlayerGame != null ? JsonUtility.ToJson(host.PlayerGamesPanel.activePlayerGame) : string.Empty,
             };
         }
 
@@ -588,6 +596,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             OnlineTablePacket packet = TableWire.Read(message, 9, message.Length - 9, true) as OnlineTablePacket;
             if (packet == null || packet.Setup == null) return;
+            if (!HasContentFor(packet)) return; // MP-4: dealt once the host's content is here
             if (!sharedTable) StartSharing(false);
             ApplyPacket(packet);
         }
@@ -681,15 +690,32 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             host.trapFloorNextFloorIndex = setup.FloorIndex;
+            if (!hosting) host.RulesCardPanel.ReloadHouseRules(setup.RuleSetId); // MP-4: the host's house rules
             try
             {
                 bool built = host.SessionService.TryReplaceTable(selection, setup.DealPlayers);
                 if (!built) error = host.gameTemplatesPanelError ?? "the table could not be set up";
+                if (built && !hosting) UseHostsPlayerGame(setup.PlayerGame);
                 return built;
             }
             finally
             {
                 host.trapFloorNextFloorIndex = 0;
+            }
+        }
+
+        // MP-4: a game the host made is shown as that game here too (its name and written rules); its pieces come from
+        // the host's table, never laid out a second time.
+        private void UseHostsPlayerGame(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return;
+            try
+            {
+                host.PlayerGamesPanel.activePlayerGame = JsonUtility.FromJson<PlayerGameFile>(json);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[Online] The host's game could not be read: {exception.Message}");
             }
         }
 

@@ -26,9 +26,20 @@ namespace ConsoleCards.Presentation.Content
             RootFolder = rootFolder ?? throw new ArgumentNullException(nameof(rootFolder));
         }
 
-        /// <summary>The game saves of the active profile.</summary>
+        /// <summary>
+        /// MP-4 (owner, 2026-10-27): while this computer is in someone else's online room, the host's game saves (copied
+        /// here into a temporary folder for the room) are read instead of the profile's, so every computer deals the
+        /// host's cards, decks, pictures, house rules and layout. Null outside a room; nothing is written to the profile.
+        /// </summary>
+        public static string RoomRoot;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ForgetRoomRoot() => RoomRoot = null;
+
+        /// <summary>The game saves of the active profile (or of the online room, see <see cref="RoomRoot"/>).</summary>
         public static ContentPackStore ForProfile(ProfileService profiles)
         {
+            if (!string.IsNullOrEmpty(RoomRoot)) return new ContentPackStore(RoomRoot);
             if (profiles == null) throw new ArgumentNullException(nameof(profiles));
             profiles.EnsureActive();
             return new ContentPackStore(profiles.GamesFolder);

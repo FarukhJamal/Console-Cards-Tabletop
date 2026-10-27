@@ -15,6 +15,8 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button gotItButton;
         [SerializeField] private Button laterButton;
 
+        private const int MaxHintCharacters = 90;
+
         public void ValidateReferences()
         {
             if (kindLabel == null || textLabel == null || gotItButton == null || laterButton == null)
@@ -30,7 +32,8 @@ namespace ConsoleCards.Presentation.UI
             ValidateReferences();
             RemoveListeners();
             kindLabel.text = string.IsNullOrEmpty(kind) ? "TIP" : kind;
-            textLabel.text = text ?? string.Empty;
+            FitText.Shrink(textLabel); // MP-P (owner, 2026-10-27: "the hints are too big"): short, and always inside the strip
+            textLabel.text = FitText.Concise(text, MaxHintCharacters);
             if (gotIt != null) gotItButton.onClick.AddListener(() => gotIt());
             if (later != null) laterButton.onClick.AddListener(() => later());
         }

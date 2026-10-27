@@ -87,10 +87,40 @@ namespace ConsoleCards.Presentation.Composition
         internal CommandScopedIdentitySource CommandIds => commandIds;
 
         /// <summary>
-        /// In a room every computer deals from the game's own cards, rules and layout (your cards, decks, house rules and
-        /// saved layout are not shared yet), so all of them deal the same table.
+        /// MP-4 (owner, 2026-10-27): no longer used to hold back your content. In a room every computer deals from the
+        /// host's cards, decks, pictures, house rules and layout: a joined computer reads the host's game saves, copied to
+        /// it for the room (<see cref="ContentPackStore.RoomRoot"/>), so all of them deal the same table.
         /// </summary>
-        internal bool UseStockContent => online != null && online.InRoom;
+        internal bool UseStockContent => false;
+
+        /// <summary>
+        /// MP-4: the game saves in use changed (the room's arrived, or this computer left the room): pictures, saved
+        /// layouts and the game's cards are read again from the store now in use, and the cards on the table redrawn.
+        /// </summary>
+        internal void ReloadContentStores()
+        {
+            if (contentArt != null)
+            {
+                contentArt.Library.Changed -= HandleArtChanged;
+                contentArt.Library.TextureReleased -= HandleArtTextureReleased;
+                contentArt.Dispose();
+                contentArt = null;
+            }
+
+            TrapFloorGame.ForgetLayoutStore();
+            if (TableGame == null) return;
+            EnsureContentArt();
+            try
+            {
+                SessionService.RegisterGameTemplates();
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[Online] The room's cards could not be read: {exception.Message}");
+            }
+
+            if (IsInitialized) RefreshAllCardArt();
+        }
 
         // ---------- the door's command scope ----------
 

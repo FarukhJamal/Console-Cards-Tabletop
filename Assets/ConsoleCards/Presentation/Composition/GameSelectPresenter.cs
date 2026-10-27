@@ -442,8 +442,8 @@ namespace ConsoleCards.Presentation.Composition
             {
                 // MP-2 (found testing, 2026-10-27): SANDBOX in a room started an Empty Table for everyone at once.
                 host.Online.ShowRoomNotice(host.Online.IsHosting
-                    ? "SANDBOX is for playing on your own: LEAVE the room first. For an Empty Table with the room, choose it with CHOOSE GAME."
-                    : "SANDBOX is for playing on your own: LEAVE the room first.");
+                    ? "Sandbox is solo: LEAVE first, or pick Empty Table in CHOOSE GAME."
+                    : "Sandbox is solo: LEAVE the room first.");
                 return;
             }
 
@@ -771,14 +771,15 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (online && entry.PlayerGame != null)
-            {
-                ShowGameSelect("Games you made cannot be played online yet: choose another game.", entries);
-                return;
-            }
-
             if (entry.PlayerGame != null)
             {
+                // MP-4: a game you made is played online too: the room gets your content and your table.
+                if (online && !host.Online.PrepareHostedStart(ChosenPlayerCount(entry), entry.Name, out string notReady))
+                {
+                    ShowGameSelect(notReady, entries);
+                    return;
+                }
+
                 // Doc 29: a game you made starts as an Empty Table, then its table is laid out.
                 pendingDeckCards = null;
                 pendingPlayerGame = entry.PlayerGame;

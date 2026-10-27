@@ -546,6 +546,12 @@ namespace ConsoleCards.Presentation.Composition
 
         public bool UndoLatestAction(PlayerId requestingPlayerId)
         {
+            if (host.IsOnlineTable && host.Online.IsClientTable && !host.Online.ApplyingTable)
+            {
+                host.Online.AskHostToUndo(false); // MP-5: a joined player's Undo is run by the host, for their own moves
+                return false;
+            }
+
             if (!host.MayChangeWholeTable("Undo")) return false; // MP-2: the host's Undo is everyone's
             if (!IsActiveSessionPlayer(requestingPlayerId)
                 || !CanUndoCurrentAction()
@@ -555,6 +561,8 @@ namespace ConsoleCards.Presentation.Composition
             {
                 return false;
             }
+
+            if (host.IsOnlineTable && !host.Online.MayUndo(transaction, false)) return false; // MP-5: your own moves only
 
 #if CONSOLECARDS_LOG_UNDO
             Debug.Log(
@@ -635,6 +643,12 @@ namespace ConsoleCards.Presentation.Composition
 
         public bool RedoLatestAction(PlayerId requestingPlayerId)
         {
+            if (host.IsOnlineTable && host.Online.IsClientTable && !host.Online.ApplyingTable)
+            {
+                host.Online.AskHostToUndo(true); // MP-5
+                return false;
+            }
+
             if (!host.MayChangeWholeTable("Redo")) return false; // MP-2
             if (!IsActiveSessionPlayer(requestingPlayerId)
                 || !CanRedoCurrentAction()
@@ -644,6 +658,8 @@ namespace ConsoleCards.Presentation.Composition
             {
                 return false;
             }
+
+            if (host.IsOnlineTable && !host.Online.MayUndo(transaction, true)) return false; // MP-5
 
             long redoRevision;
             try

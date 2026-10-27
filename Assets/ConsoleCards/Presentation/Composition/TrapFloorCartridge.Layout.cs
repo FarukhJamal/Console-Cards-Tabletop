@@ -33,6 +33,9 @@ namespace ConsoleCards.Presentation.Composition
         private const string BoardRole = "board";
 
         private TableLayoutStore layoutStore;
+
+        /// <summary>MP-4: the saved layouts are read again from the store in use (the room's or the profile's).</summary>
+        internal void ForgetLayoutStore() => layoutStore = null;
         private TrapFloorTableLayout layoutPreview;
         private Action openArrangeTableAction;
         private bool arranging;

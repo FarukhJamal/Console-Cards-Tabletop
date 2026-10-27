@@ -4747,7 +4747,14 @@ namespace ConsoleCards.Presentation.Composition
             return actions;
         }
 
-        private static readonly Action NoAction = () => { };
+        private static void GreyOut(List<PopupActionOption> actions)
+        {
+            for (int i = 0; i < actions.Count; i++)
+            {
+                PopupActionOption action = actions[i];
+                if (action.Enabled) actions[i] = new PopupActionOption(action.Label, false, action.Selected);
+            }
+        }
 
         internal List<PopupActionOption> BuildTrapFloorTurnActions()
         {
@@ -4766,18 +4773,6 @@ namespace ConsoleCards.Presentation.Composition
                     FloorEndedActionLabel(),
                     true,
                     () => ShowFloorEnded(won)));
-                return actions;
-            }
-
-            if (host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
-                && !host.IsPlayerOnThisComputer(host.trapFloorTurnState.ActivePlayerId))
-            {
-                // MP-2 (found testing, 2026-10-27): online, the turn's buttons belong to the computer that plays the seat
-                // (pressing them here was refused with "rejected: None").
-                actions.Add(new PopupActionOption(
-                    $"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} is playing this turn",
-                    false,
-                    NoAction));
                 return actions;
             }
 
@@ -4876,6 +4871,9 @@ namespace ConsoleCards.Presentation.Composition
                     "End Turn" + applies,
                     true,
                     () => RequestEndTurn(false)));
+                // MP-P (owner, 2026-10-27: "why the button text is being changed?"): online, the turn's buttons belong
+                // to the computer that plays the seat; here they keep their words and are greyed out.
+                if (!host.IsPlayerOnThisComputer(host.trapFloorTurnState.ActivePlayerId)) GreyOut(actions);
                 return actions;
             }
 

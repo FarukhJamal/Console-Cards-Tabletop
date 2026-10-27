@@ -245,12 +245,38 @@ namespace ConsoleCards.Networking
             }
 
             retry = 0;
-            Set(MultiplayerSessionState.InRoom, mode == GameMode.Host
+            bool tookOver = takingOver && mode == GameMode.Host;
+            takingOver = false;
+            newHostUntil = 0f;
+            Set(MultiplayerSessionState.InRoom, tookOver
+                ? "The host left: you host the room now."
+                : mode == GameMode.Host
                 ? $"Room {roomCode} is open{(roomPrivate ? " (private: share the code)" : string.Empty)}."
                 : again ? "Back in the room." : $"In room {roomCode}.");
         }
 
         private int retry;
+
+        // MP-5 (owner, 2026-10-27: "if the host leaves, another player takes over"): while a new host is expected, a
+        // room that is gone is tried again; the player taking over hosts the same code (or joins it when the old room
+        // is still there: only its own connection had dropped).
+        private float newHostUntil;
+        private bool takingOver;
+        private const float TakeOverRetrySeconds = 1.5f;
+
+        public void TakeOverRoom()
+        {
+            if (string.IsNullOrEmpty(roomCode) || Stopped) return;
+            takingOver = true;
+            newHostUntil = Time.realtimeSinceStartup + 30f;
+            hosting = true;
+            _ = EnterRoomAsync(++attempt, GameMode.Host, true);
+        }
+
+        public void ExpectNewHost(float seconds)
+        {
+            newHostUntil = Mathf.Max(newHostUntil, Time.realtimeSinceStartup + Mathf.Max(0f, seconds));
+        }
 
         // A client that lost its room tries again a few times; a room that is gone (the host left) ends the tries.
         private async Task RoomFailed(int tryNumber, GameMode mode, bool again, string why, ShutdownReason reason)
@@ -258,6 +284,26 @@ namespace ConsoleCards.Networking
             bool gone = reason == ShutdownReason.GameNotFound || reason == ShutdownReason.GameClosed
                 || reason == ShutdownReason.GameIsFull || reason == ShutdownReason.IncompatibleConfiguration
                 || reason == ShutdownReason.GameIdAlreadyExists;
+            if (again && Time.realtimeSinceStartup < newHostUntil && reason != ShutdownReason.GameIsFull
+                && reason != ShutdownReason.IncompatibleConfiguration)
+            {
+                // MP-5: the room is changing hosts. The player taking over hosts it once the old room has gone, and
+                // joins it if it is still there; the others try to join until the new host has opened it.
+                GameMode next = !takingOver ? GameMode.Client
+                    : reason == ShutdownReason.GameIdAlreadyExists ? GameMode.Client
+                    : reason == ShutdownReason.GameNotFound || reason == ShutdownReason.GameClosed ? GameMode.Host
+                    : mode;
+                Set(MultiplayerSessionState.Reconnecting, takingOver
+                    ? "The host left: you are taking over the room…"
+                    : "The host left: waiting for the next host…");
+                await Task.Delay(TimeSpan.FromSeconds(TakeOverRetrySeconds));
+                if (tryNumber != attempt || Stopped) return;
+                hosting = next == GameMode.Host;
+                _ = EnterRoomAsync(++attempt, next, true);
+                return;
+            }
+
+            takingOver = false;
             if (mode == GameMode.Client && again && !gone && retry < RetrySeconds.Length)
             {
                 float wait = RetrySeconds[retry++];
