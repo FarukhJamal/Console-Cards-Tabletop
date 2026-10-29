@@ -51,6 +51,8 @@ namespace ConsoleCards.Presentation.UI
         private GameSelectPanelView gameSelectPanelView;
         private FrontEndView frontEndView; // UI-2: the front end shows the New table… choices as the user journey
         private bool frontEndMissing;
+        private TitleIntroView titleIntroView; // owner, 2026-10-28: the room with the console, before the main menu
+        private bool titleIntroMissing;
         private GameSavePanelView gameSavePanelView;
         private bool saveGameEntryWarned;
         private bool deckEditorEntryWarned;
@@ -234,6 +236,24 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
+        private bool lookSettingsWarned;
+
+        /// <summary>V1/V5/V6/V7: binds the SETTINGS rows Light, Colours, Quality and Room sound.</summary>
+        public void ShowLookSettings(
+            string light, Action nextLight,
+            string colours, Action nextColours,
+            string quality, Action nextQuality,
+            string roomSound, Action nextRoomSound)
+        {
+            EnsureSessionBarView();
+            if (!sessionBarView.BindLookSettings(light, nextLight, colours, nextColours, quality, nextQuality, roomSound, nextRoomSound)
+                && !lookSettingsWarned)
+            {
+                lookSettingsWarned = true;
+                Debug.LogWarning("The SETTINGS menu has no Light, Colours, Quality and Room sound rows: run Console Cards > UI > Apply Kit Look (UI-1).");
+            }
+        }
+
         public void ShowViewSettings(
             bool handsOnTableAvailable,
             bool handsOnTable,
@@ -397,6 +417,43 @@ namespace ConsoleCards.Presentation.UI
                 Debug.LogWarning("The front end is missing: run Console Cards > UI > Apply Kit Look (UI-1). " + exception.Message);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Owner, 2026-10-28: the title intro plays over the main menu (which is open under it) once per run. Without
+        /// its prefab the game opens on the main menu as before.
+        /// </summary>
+        public void ShowTitleIntro()
+        {
+            if (titleIntroMissing) return;
+            try
+            {
+                EnsureService();
+                titleIntroView = uiService.AcquireCached<TitleIntroView>(UiPrefabIds.TitleIntro);
+            }
+            catch (InvalidOperationException exception)
+            {
+                titleIntroMissing = true;
+                Debug.Log("No title intro: run Console Cards > UI > Build Title Intro to add it. " + exception.Message);
+                return;
+            }
+
+            if (!titleIntroView.ShouldPlay)
+            {
+                ReleaseView(titleIntroView);
+                return;
+            }
+
+            titleIntroView.transform.SetAsLastSibling();
+            titleIntroView.Show();
+            if (!titleIntroView.gameObject.activeInHierarchy)
+            {
+                Debug.LogWarning("The title intro's UI layer is hidden, so the intro is skipped.");
+                ReleaseView(titleIntroView);
+                return;
+            }
+
+            titleIntroView.Bind(() => ReleaseView(titleIntroView));
         }
 
         private void OpenGuideFromFrontEnd()

@@ -96,6 +96,13 @@ namespace ConsoleCards.Presentation.UI
         [Tooltip("The Table menu row \"Arrange table…\" that opens the custom table layout.")]
         [SerializeField] private Button arrangeTableButton;
 
+        [Header("Look (V1/V5/V6/V7, owner 2026-10-27; optional, added by Apply Kit Look)")]
+        [Tooltip("The SETTINGS rows Light, Colours, Quality and Room sound, in that order: each press picks the next value.")]
+        [SerializeField] private Button[] lookButtons = new Button[0];
+        [SerializeField] private Text[] lookLabels = new Text[0];
+        private readonly Action[] lookActions = new Action[LookRowCount];
+        private const int LookRowCount = 4;
+
         [Header("Settings (owner, 2026-10-26; optional, added by Apply Kit Look)")]
         [Tooltip("SETTINGS on the bar: opens the settings menu (Rules card, Hints, Tips, Hot-seat, Hands on table, Full feedback).")]
         [SerializeField] private Button settingsButton;
@@ -989,6 +996,38 @@ namespace ConsoleCards.Presentation.UI
             Clear(deckEditorButton);
             Clear(saveGameButton);
             Clear(shopButton);
+        }
+
+        /// <summary>
+        /// V1/V5/V6/V7: binds the SETTINGS rows Light, Colours, Quality and Room sound (each shows its value and picks
+        /// the next one on a press). False when the prefab does not have the rows yet.
+        /// </summary>
+        public bool BindLookSettings(
+            string light, Action nextLight,
+            string colours, Action nextColours,
+            string quality, Action nextQuality,
+            string roomSound, Action nextRoomSound)
+        {
+            RequireAcquired();
+            if (lookButtons == null || lookLabels == null || lookButtons.Length < LookRowCount || lookLabels.Length < LookRowCount)
+                return false;
+            lookActions[0] = nextLight;
+            lookActions[1] = nextColours;
+            lookActions[2] = nextQuality;
+            lookActions[3] = nextRoomSound;
+            string[] words = { light, colours, quality, roomSound };
+            for (int i = 0; i < LookRowCount; i++)
+            {
+                Button button = lookButtons[i];
+                if (button == null) continue;
+                Clear(button);
+                Action action = lookActions[i];
+                button.gameObject.SetActive(action != null);
+                if (lookLabels[i] != null) lookLabels[i].text = words[i] ?? string.Empty;
+                if (action != null) button.onClick.AddListener(() => action());
+            }
+
+            return true;
         }
 
         private static void Clear(Button button)

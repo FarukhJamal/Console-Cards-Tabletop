@@ -257,6 +257,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.SetHandsOnTable,
                 host.fullFeedback,
                 host.SetFullFeedback);
+            host.RefreshLookSettingsUi(); // V1/V5/V6/V7: Light, Colours, Quality, Room sound
             RefreshUndoUi();
             host.ActiveCartridge.RefreshStatusUi();
             host.RulesCardPanel.RefreshGameHints();

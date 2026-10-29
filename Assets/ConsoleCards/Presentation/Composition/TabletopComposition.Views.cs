@@ -394,15 +394,17 @@ namespace ConsoleCards.Presentation.Composition
 
         internal static Color ColourByIndex(int colourIndex)
         {
-            return colourIndex >= 0 && colourIndex < PlayerColors.Length
-                ? PlayerColors[colourIndex]
+            Color[] colours = LookSettings.ColourBlind ? ColourBlindPlayerColors : PlayerColors; // V6
+            return colourIndex >= 0 && colourIndex < colours.Length
+                ? colours[colourIndex]
                 : new Color(0.75f, 0.75f, 0.75f);
         }
 
         internal static string ColourNameByIndex(int colourIndex)
         {
-            return colourIndex >= 0 && colourIndex < PlayerColorNames.Length
-                ? PlayerColorNames[colourIndex]
+            string[] names = LookSettings.ColourBlind ? ColourBlindPlayerColorNames : PlayerColorNames; // V6
+            return colourIndex >= 0 && colourIndex < names.Length
+                ? names[colourIndex]
                 : "GREY";
         }
 

@@ -979,6 +979,7 @@ namespace ConsoleCards.Presentation.Composition
                 QualitySettings.anisotropicFiltering = AnisotropicFiltering.ForceEnable;
                 Texture.SetGlobalAnisotropicFilteringLimits(8, 16);
                 SessionService.InitializeRuntimeUi();
+                EnsureLook(); // V1/V5/V6/V7: the light preset, room sound and quality level of this computer
                 AdoptCatalogGameBoard(); // C3c: the board comes from the catalog when it has one
                 EnsureContentArt(); // your pictures and the active pack load before the first table
                 SessionService.PrepareTemplateCatalog();
@@ -992,6 +993,7 @@ namespace ConsoleCards.Presentation.Composition
                 // UI-2 (owner, 2026-10-24): the game opens on the front end's main menu (the user journey); its Player
                 // profile screen is where you pick who is playing.
                 GameSelectPanel.OpenFrontEnd(FrontEndPage.Home);
+                runtimeUi?.ShowTitleIntro(); // owner, 2026-10-28: the room and the console first, over the main menu
             }
             catch (Exception exception)
             {
@@ -1005,6 +1007,7 @@ namespace ConsoleCards.Presentation.Composition
         private void OnDestroy()
         {
             online?.Dispose(); // MP-2: leaves the room cleanly (a profile switch reloads the scene)
+            ReleaseLook(); // V1: the runtime light and volume; the project's SSAO back as it was
             Shutdown();
             DestroyTableMarks(); // drawing tool: the lines and labels go with the table
             ResetTableCursor();
@@ -1376,6 +1379,17 @@ namespace ConsoleCards.Presentation.Composition
         };
 
         private static readonly string[] PlayerColorNames = { "BLUE", "RED", "GREEN", "YELLOW" };
+
+        // V6 (owner, 2026-10-27): seat colours people with colour blindness tell apart (Okabe and Ito), in SETTINGS.
+        private static readonly Color[] ColourBlindPlayerColors =
+        {
+            new Color(0f, 0.447f, 0.698f),
+            new Color(0.835f, 0.369f, 0f),
+            new Color(0.941f, 0.894f, 0.259f),
+            new Color(0.8f, 0.475f, 0.655f),
+        };
+
+        private static readonly string[] ColourBlindPlayerColorNames = { "BLUE", "VERMILION", "YELLOW", "PINK" };
 
         internal readonly struct GameObjectActivationSnapshot
         {

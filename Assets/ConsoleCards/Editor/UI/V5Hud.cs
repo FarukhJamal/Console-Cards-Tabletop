@@ -185,6 +185,12 @@ namespace ConsoleCards.Editor.UI
                 changed++;
             }
 
+            if (Upgrade(path, SessionBarLookLabel, SessionBarLook))
+            {
+                Debug.Log($"Console Cards: {path}: SETTINGS has Light, Colours, Quality and Room sound rows now.");
+                changed++;
+            }
+
             return changed;
         }
 
@@ -197,6 +203,54 @@ namespace ConsoleCards.Editor.UI
             if (label == null) return false;
             label.text = "Main menu";
             return true;
+        }
+
+        // Owner, 2026-10-27 (V1, V5, V6, V7): SETTINGS gets Light, Colours, Quality and Room sound rows, copies of the
+        // Table menu's seat row added under the view settings. Nothing else in the prefab changes.
+        private const string SessionBarLookLabel = "SessionBarDesign4";
+
+        private static readonly string[] LookRows = { "LightRow", "ColoursRow", "QualityRow", "RoomSoundRow" };
+        private static readonly string[] LookWords = { "Light: Day", "Colours: Standard", "Quality: High", "Room sound: On" };
+
+        private static bool SessionBarLook(GameObject root)
+        {
+            RectTransform bar = Find(root.transform, "Bar");
+            RectTransform model = Find(bar, "TableMenu/SeatRow");
+            RectTransform settingsMenu = Find(bar, "SettingsMenu");
+            SessionBarView view = root.GetComponent<SessionBarView>();
+            if (model == null || settingsMenu == null || view == null) return false;
+
+            Button[] buttons = new Button[LookRows.Length];
+            Text[] labels = new Text[LookRows.Length];
+            for (int i = 0; i < LookRows.Length; i++)
+            {
+                RectTransform row = Find(settingsMenu, LookRows[i]);
+                if (row == null)
+                {
+                    row = (RectTransform)UnityEngine.Object.Instantiate(model.gameObject, settingsMenu, false).transform;
+                    row.name = LookRows[i];
+                    row.SetAsLastSibling();
+                }
+
+                row.gameObject.SetActive(true);
+                buttons[i] = row.GetComponent<Button>();
+                labels[i] = Find(row, "Label")?.GetComponent<Text>();
+                if (labels[i] != null) labels[i].text = LookWords[i];
+            }
+
+            SerializedObject so = new SerializedObject(view);
+            SetArray(so, "lookButtons", buttons);
+            SetArray(so, "lookLabels", labels);
+            so.ApplyModifiedPropertiesWithoutUndo();
+            return true;
+        }
+
+        private static void SetArray(SerializedObject so, string property, UnityEngine.Object[] values)
+        {
+            SerializedProperty p = so.FindProperty(property);
+            if (p == null || !p.isArray) return;
+            p.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++) p.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
         }
 
         // Runs one change on a prefab that has not had it yet (its label), and marks it.
