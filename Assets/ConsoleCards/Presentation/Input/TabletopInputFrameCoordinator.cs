@@ -39,6 +39,11 @@ namespace ConsoleCards.Presentation.Input
         private Vector2 middleTapPressPosition;
         private float middleTapPressedAt;
 
+        // HUD-B board 7B: the Pan and Measure tools (and Space + drag) take the left button from the pieces.
+        private Func<bool> pointerToolTakesLeft;
+        private Func<bool> pointerToolPans;
+        private bool pointerToolHeld;
+
         public bool IsInitialized => isInitialized;
 
         public TabletopCameraInputAdapter CameraInputAdapter => cameraInputAdapter;
@@ -107,6 +112,17 @@ namespace ConsoleCards.Presentation.Input
         }
 
         /// <summary>
+        /// HUD-B board 7B: while <paramref name="takesLeft"/> is true a left press on the table is the tool's, not a
+        /// pick-up; while <paramref name="pans"/> is true too, that drag moves the camera.
+        /// </summary>
+        internal void ConfigurePointerTools(Func<bool> takesLeft, Func<bool> pans)
+        {
+            pointerToolTakesLeft = takesLeft;
+            pointerToolPans = pans;
+            pointerToolHeld = false;
+        }
+
+        /// <summary>
         /// POL-0 diagnostics: when true, a click on the table that a menu or panel took is written to the Console
         /// (and Editor.log) with the name of what took it, so clicks that need a second try can be traced.
         /// </summary>
@@ -116,6 +132,9 @@ namespace ConsoleCards.Presentation.Input
         {
             tablePingRequested = null;
             pingToolActive = null;
+            pointerToolTakesLeft = null;
+            pointerToolPans = null;
+            pointerToolHeld = false;
             middleTapPending = false;
             suppressObjectPointerUntilRelease = false;
             secondaryPointerPressed = null;
@@ -231,6 +250,25 @@ namespace ConsoleCards.Presentation.Input
                 cancelPressedThisFrame = false;
                 rotateDelta = 0f;
                 flipPressedThisFrame = false;
+            }
+
+            if (selectPressedThisFrame
+                && pointerToolTakesLeft != null
+                && pointerToolTakesLeft()
+                && !HasActiveObjectInteraction()
+                && !IsInsideObjectInputBlockingGuiRect(screenPosition))
+            {
+                pointerToolHeld = true;
+            }
+
+            if (pointerToolHeld)
+            {
+                // The press is the tool's: the pieces do not see it; with Pan (or Space) the drag moves the camera.
+                if (pointerToolPans != null && pointerToolPans()) dragHeld = selectHeld || selectPressedThisFrame;
+                if (selectReleasedThisFrame || !selectHeld) pointerToolHeld = false;
+                selectPressedThisFrame = false;
+                selectHeld = false;
+                selectReleasedThisFrame = false;
             }
 
             bool secondaryPressedThisFrame = Mouse.current != null

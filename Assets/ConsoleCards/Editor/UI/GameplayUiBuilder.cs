@@ -2117,6 +2117,7 @@ namespace ConsoleCards.Editor.UI
 
             SerializedObject so = new SerializedObject(view);
             so.FindProperty("guidePanel").objectReferenceValue = card.gameObject;
+            so.FindProperty("controlsStrip").objectReferenceValue = strip.gameObject;
             so.FindProperty("toggleButton").objectReferenceValue = toggle;
             so.FindProperty("toggleButtonLabel").objectReferenceValue = toggleLabel;
             so.FindProperty("closeButton").objectReferenceValue = closeButton;

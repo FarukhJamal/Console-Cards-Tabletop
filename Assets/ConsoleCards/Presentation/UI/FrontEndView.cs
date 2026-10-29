@@ -148,6 +148,7 @@ namespace ConsoleCards.Presentation.UI
             }
 
             for (int i = 0; i < gameEntries.Count; i++) gameEntries[i].button.onClick.RemoveAllListeners();
+            for (int i = 0; i < boardTiles.Count; i++) boardTiles[i].button.onClick.RemoveAllListeners();
             for (int i = 0; i < profileRows.Length; i++)
             {
                 if (profileRows[i] != null && profileRows[i].button != null) profileRows[i].button.onClick.RemoveAllListeners();
@@ -199,6 +200,7 @@ namespace ConsoleCards.Presentation.UI
         {
             if (model == null || backdropOnly) return;
             if (highlightTab != null) PlaceHighlight();
+            UpdateBoard(); // boards 1–3: a click on a Library tile opens its sheet a moment later
             Keyboard keyboard = Keyboard.current;
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame
                 && UnityEngine.Application.isFocused && Time.frameCount > ignoreEscapeUntilFrame)
@@ -224,7 +226,7 @@ namespace ConsoleCards.Presentation.UI
                 case FrontEndPage.Room:
                     break; // LEAVE leaves the room; Esc does not
                 case FrontEndPage.Library:
-                    Go(PlayPage);
+                    Go(HasBoardLibrary ? FrontEndPage.Home : PlayPage);
                     break;
                 default:
                     Go(page - 1);
@@ -268,11 +270,15 @@ namespace ConsoleCards.Presentation.UI
             On("Pages/Profile/Back", () => Go(FrontEndPage.Home));
             On("Pages/Profile/Continue", () => Go(FrontEndPage.Library));
 
-            On("Pages/Library/Back", () => Go(PlayPage));
+            On("Pages/Library/Back", () => Go(HasBoardLibrary ? FrontEndPage.Home : PlayPage));
             On("Pages/Library/Select", SelectFromLibrary);
 
             On("Pages/Details/Back", () => Go(FrontEndPage.Library));
-            On("Pages/Details/Start", () => Go(FrontEndPage.Setup));
+            On("Pages/Details/Start", () =>
+            {
+                if (HasBoardSheet) actions?.Start?.Invoke(); // board 3: the sheet has the whole setup
+                else Go(FrontEndPage.Setup);
+            });
             for (int i = 0; i < PlayerRowCount; i++)
             {
                 int seat = i;
@@ -307,6 +313,8 @@ namespace ConsoleCards.Presentation.UI
             On("Pages/Review/Start", () => actions?.Start?.Invoke());
             BindOnlineButtons(); // MP-2
             BindSettingsButtons();
+            BindCreateButtons(); // CREATE (board 4)
+            BindBoardButtons(); // boards 1–3
         }
 
         private void On(string path, Action click)
@@ -351,14 +359,19 @@ namespace ConsoleCards.Presentation.UI
             SetText("Status", model.Status);
             switch (page)
             {
+                case FrontEndPage.Home:
+                    RenderBoardHome();
+                    break;
                 case FrontEndPage.Profile:
                     RenderProfile();
                     break;
                 case FrontEndPage.Library:
-                    RenderLibrary();
+                    if (HasBoardLibrary) RenderBoardLibrary();
+                    else RenderLibrary();
                     break;
                 case FrontEndPage.Details:
-                    RenderDetails();
+                    if (HasBoardSheet) RenderBoardSheet();
+                    else RenderDetails();
                     break;
                 case FrontEndPage.Setup:
                     RenderSetup();
@@ -380,6 +393,9 @@ namespace ConsoleCards.Presentation.UI
                     break;
                 case FrontEndPage.Settings:
                     RenderSettings();
+                    break;
+                case FrontEndPage.Create:
+                    RenderCreate();
                     break;
             }
         }
@@ -416,6 +432,7 @@ namespace ConsoleCards.Presentation.UI
             // are not laid out (the underline sat left of PLAY on the first show).
             highlightTab = "TopBar/Tabs/" + active;
             if (isActiveAndEnabled) PlaceHighlight();
+            RenderBoardTabs();
         }
 
         private void PlaceHighlight()
@@ -425,6 +442,12 @@ namespace ConsoleCards.Presentation.UI
             LayoutRebuilder.ForceRebuildLayoutImmediate(tabs);
             RectTransform tabRect = (RectTransform)tabButton.transform;
             tabHighlight.anchoredPosition = new Vector2(tabRect.localPosition.x, tabHighlight.anchoredPosition.y);
+            // Board top bar (no layout): the underline is as wide as its tab.
+            if (tabHighlight.GetComponent<LayoutElement>() == null)
+            {
+                tabHighlight.sizeDelta = new Vector2(tabRect.rect.width, tabHighlight.sizeDelta.y);
+            }
+
             highlightTab = null;
         }
 

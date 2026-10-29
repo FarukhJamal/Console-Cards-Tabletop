@@ -76,5 +76,5 @@ MonoBehaviour:
     outwardNormal: {x: -0.18759, y: 0.79465, z: -0.57735}
     planeDistance: 0.3
   visualPrefab: {fileID: 4496108222292689800, guid: 78ee2af48c37ffa409b99fdd19a582e8, type: 3}
-  visualSize: 0.5
+  visualSize: 0.7
   skin: {fileID: 2100000, guid: 64db31f64eff4c768d9fb81db974ab3d, type: 2}

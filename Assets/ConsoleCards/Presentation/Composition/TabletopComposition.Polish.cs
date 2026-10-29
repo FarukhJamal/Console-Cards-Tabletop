@@ -894,7 +894,14 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (IsPointerOnDrawablePile()) ShuffleDeck(hoverPileId);
+            if (IsPointerOnDrawablePile())
+            {
+                ShuffleDeck(hoverPileId);
+                return;
+            }
+
+            // HUD-B board 7B: with nothing to roll or shuffle under the pointer, R opens the rulebook.
+            if (!rulebookReading && runtimeUi != null && !runtimeUi.HudKeysBlocked()) runtimeUi.OpenRulebook();
         }
 
         private void DeleteByKey()

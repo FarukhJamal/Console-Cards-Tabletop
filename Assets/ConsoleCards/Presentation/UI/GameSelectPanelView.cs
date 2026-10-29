@@ -68,6 +68,46 @@ namespace ConsoleCards.Presentation.UI
         public string ColoursText = string.Empty;
         public string QualityText = string.Empty;
         public string RoomSoundText = string.Empty;
+        /// <summary>CREATE › YOUR GAMES (board 4): the games this profile made, newest first.</summary>
+        public IReadOnlyList<FrontEndMyGame> MyGames = Array.Empty<FrontEndMyGame>();
+
+        // Boards 1–3 (Home, Library, Game sheet).
+        /// <summary>Home's CONTINUE card: a game table is behind the front end (CONTINUE goes back to it).</summary>
+        public bool ContinueInProgress;
+        /// <summary>Home's card shows at all (the table in progress, or the game played last with PLAY AGAIN).</summary>
+        public bool ContinueShown;
+        public string ContinueName = string.Empty;
+        public string ContinueLine = string.Empty;
+        public string ContinueSubLine = string.Empty;
+        public Texture ContinuePicture;
+        /// <summary>The Library's tiles (the games, then yours; not the Empty Table, which is SANDBOX).</summary>
+        public IReadOnlyList<FrontEndLibraryTile> LibraryTiles = Array.Empty<FrontEndLibraryTile>();
+        /// <summary>The Game sheet's words: a short line about the game and its first rules.</summary>
+        public string Tagline = string.Empty;
+        public IReadOnlyList<string> HowToPlay = Array.Empty<string>();
+    }
+
+    /// <summary>A game on the Library (board 2): its tag (2–4 PLAYERS, YOUR GAME), a line, and whether it was played last.</summary>
+    public readonly struct FrontEndLibraryTile
+    {
+        public FrontEndLibraryTile(string id, string name, string line, string tag, bool mine, Texture picture, bool chosen)
+        {
+            Id = id ?? string.Empty;
+            Name = name ?? string.Empty;
+            Line = line ?? string.Empty;
+            Tag = tag ?? string.Empty;
+            Mine = mine;
+            Picture = picture;
+            Chosen = chosen;
+        }
+
+        public string Id { get; }
+        public string Name { get; }
+        public string Line { get; }
+        public string Tag { get; }
+        public bool Mine { get; }
+        public Texture Picture { get; }
+        public bool Chosen { get; }
     }
 
     /// <summary>One line of IN THE BOX on Game details. <see cref="Icon"/> names a picture in the screen's IconSet.</summary>
@@ -98,6 +138,24 @@ namespace ConsoleCards.Presentation.UI
         public string Icon { get; }
         public string Title { get; }
         public string Line { get; }
+    }
+
+    /// <summary>One game you made, on CREATE › YOUR GAMES: its name and "2–4 players · changed 3 days ago".</summary>
+    public readonly struct FrontEndMyGame
+    {
+        public FrontEndMyGame(string id, string name, string detail, bool deleteArmed)
+        {
+            Id = id ?? string.Empty;
+            Name = name ?? string.Empty;
+            Detail = detail ?? string.Empty;
+            DeleteArmed = deleteArmed;
+        }
+
+        public string Id { get; }
+        public string Name { get; }
+        public string Detail { get; }
+        /// <summary>DELETE was pressed once: the next press deletes.</summary>
+        public bool DeleteArmed { get; }
     }
 
     /// <summary>The game selection menu's actions, supplied by the game.</summary>
@@ -144,6 +202,15 @@ namespace ConsoleCards.Presentation.UI
         public Action<int> CycleColours;
         public Action<int> CycleQuality;
         public Action<int> CycleRoomSound;
+        // CREATE (board 4): MAKE A GAME, and PLAY / EDIT / Copy / Rename / Delete for a game you made (by its id).
+        public Action MakeGame;
+        public Action<string> PlayMyGame;
+        public Action<string> EditMyGame;
+        public Action<string> CopyMyGame;
+        public Action<string, string> RenameMyGame;
+        public Action<string> DeleteMyGame;
+        /// <summary>Home (board 1): PLAY AGAIN starts the game played last with its last settings.</summary>
+        public Action PlayAgain;
     }
 
     /// <summary>

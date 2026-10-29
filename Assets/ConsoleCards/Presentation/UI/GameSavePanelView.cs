@@ -7,7 +7,7 @@ namespace ConsoleCards.Presentation.UI
     /// <summary>What the "Save table as a game" panel shows (doc 29).</summary>
     public sealed class GameSaveModel
     {
-        public string Title = "SAVE TABLE AS A GAME";
+        public string Title = "MAKE A GAME"; // board 13 (owner, 2026-10-30)
         public string Summary = string.Empty;
         public string Name = string.Empty;
         public string Description = string.Empty;
@@ -33,6 +33,24 @@ namespace ConsoleCards.Presentation.UI
         public string PickText = string.Empty;
         public string ActionAText = string.Empty;
         public string ActionBText = string.Empty;
+
+        // Board 13 (owner, 2026-10-30): about how long it takes, which steps are done, and WHAT GETS SAVED.
+        public int Minutes = 20;
+        public bool[] StepsDone = new bool[StepCount];
+        public System.Collections.Generic.IReadOnlyList<GameSaveRow> SavedRows = Array.Empty<GameSaveRow>();
+    }
+
+    /// <summary>One line of WHAT GETS SAVED: "Decks" · "2 decks".</summary>
+    public readonly struct GameSaveRow
+    {
+        public GameSaveRow(string label, string value)
+        {
+            Label = label ?? string.Empty;
+            Value = value ?? string.Empty;
+        }
+
+        public string Label { get; }
+        public string Value { get; }
     }
 
     /// <summary>The words typed in the save panel, handed back with every action so nothing typed is lost.</summary>
@@ -61,6 +79,8 @@ namespace ConsoleCards.Presentation.UI
         public Action<int, GameSaveTyped> CyclePick;
         public Action<GameSaveTyped> ActionA;
         public Action<GameSaveTyped> ActionB;
+        /// <summary>ABOUT: the next (+1) or previous (-1) play time.</summary>
+        public Action<int, GameSaveTyped> CycleMinutes;
     }
 
     /// <summary>
@@ -70,7 +90,7 @@ namespace ConsoleCards.Presentation.UI
     /// In steps (L2-6b, DEAL-1; added to the prefab by Create Missing Gameplay UI Prefabs): 1 Deck, 2 Cards, 3 Deal, 4 Save, with
     /// Back and Next. A prefab without the steps shows the Save step only.
     /// </summary>
-    public sealed class GameSavePanelView : ReusableUiView
+    public sealed partial class GameSavePanelView : ReusableUiView
     {
         [SerializeField] private Button dismissOverlayButton;
         [SerializeField] private Button closeButton;
@@ -152,6 +172,7 @@ namespace ConsoleCards.Presentation.UI
             saveOverLabel.text = model.SaveOverText;
             statusLabel.text = model.Status;
             BindSteps(model);
+            BindBoard(model); // board 13: the rules list, the preview, WHAT GETS SAVED, the step marks, ABOUT
 
             dismissOverlayButton.onClick.AddListener(HandleClose);
             closeButton.onClick.AddListener(HandleClose);
@@ -217,6 +238,7 @@ namespace ConsoleCards.Presentation.UI
 
         public override void Unbind()
         {
+            UnbindBoard();
             RemoveListeners();
             actions = null;
         }

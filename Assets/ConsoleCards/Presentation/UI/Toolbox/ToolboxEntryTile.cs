@@ -38,6 +38,14 @@ namespace ConsoleCards.Presentation.UI.Toolbox
         [SerializeField] private Color shadowColor = Color.black;
         [SerializeField] private Color selectedShadowColor = Color.black;
 
+        [Header("Board 8 (optional): one tile per size, and the RECENT copies")]
+        [Tooltip("Not 0: this tile always places this value (a d6 tile: 6). Several tiles may then share one entry.")]
+        [SerializeField] private int fixedValue;
+        [Tooltip("The detail line's first words for this tile (d6 · six-sided die); empty: the entry's name.")]
+        [SerializeField] private string detailTitle = string.Empty;
+        [Tooltip("A copy on the RECENT shelf (shown only while its piece is among the recent ones).")]
+        [SerializeField] private bool recentCopy;
+
         [Header("Optional quantity counter")]
         [SerializeField] private Button minusButton;
         [SerializeField] private Button plusButton;
@@ -68,6 +76,15 @@ namespace ConsoleCards.Presentation.UI.Toolbox
         public bool HasChoices => choices != null && choices.Length > 0;
 
         public int Count => count;
+
+        public int FixedValue => fixedValue;
+
+        public string DetailTitle => detailTitle;
+
+        public bool IsRecentCopy => recentCopy;
+
+        /// <summary>The piece this tile places, for the RECENT list: the entry and its fixed value.</summary>
+        public string RecentKey => fixedValue != 0 ? entryId + "|" + fixedValue : entryId;
 
         public void ValidateReferences()
         {
@@ -130,8 +147,11 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             }
         }
 
+        private bool isSelected;
+
         public void SetSelected(bool selected)
         {
+            isSelected = selected;
             fill.color = selected ? selectedFillColor : fillColor;
             if (shadow != null)
             {
@@ -139,9 +159,17 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             }
         }
 
+        /// <summary>Board 8: a tile under the pointer looks chosen (teal with a cyan edge) until the pointer leaves.</summary>
+        public void SetHovered(bool hovered)
+        {
+            if (isSelected) return;
+            fill.color = hovered ? selectedFillColor : fillColor;
+            if (shadow != null) shadow.color = hovered ? selectedShadowColor : shadowColor;
+        }
+
         private void Pick()
         {
-            int value = HasCounter ? count : HasChoices ? choices[choiceIndex].Value : 0;
+            int value = fixedValue != 0 ? fixedValue : HasCounter ? count : HasChoices ? choices[choiceIndex].Value : 0;
             picked?.Invoke(this, value);
         }
 

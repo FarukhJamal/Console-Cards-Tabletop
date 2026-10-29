@@ -63,6 +63,14 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>Shows or hides the controls strip (Hints switch). The help card stays reachable from the Table menu.</summary>
         public void SetStripVisible(bool visible)
         {
+            // Older prefabs were built without this reference, so the strip could never be hidden (owner, 2026-10-30:
+            // it showed under HUD-B's END TURN). The builder names it ControlsStrip, a child of the root.
+            if (controlsStrip == null)
+            {
+                Transform strip = transform.Find("ControlsStrip");
+                if (strip != null) controlsStrip = strip.gameObject;
+            }
+
             if (controlsStrip != null)
             {
                 controlsStrip.SetActive(visible);

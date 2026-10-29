@@ -50,7 +50,7 @@ namespace ConsoleCards.Presentation.Composition
     /// (R1d: moved out of TabletopComposition; the table reaches it as <c>PlayerGamesPanel</c> and it
     /// reaches the table through <c>host</c>.)
     /// </summary>
-    internal sealed class PlayerGamesPresenter
+    internal sealed partial class PlayerGamesPresenter
     {
         private readonly TabletopComposition host;
 
@@ -107,6 +107,7 @@ namespace ConsoleCards.Presentation.Composition
             saveMaximumPlayers = from != null ? from.maximumPlayers : 4;
             saveStep = GameSaveModel.DeckStep;
             saveDeal = from != null && DealRule.TryParse(from.deal, out DealRule deal) ? deal : null;
+            saveMinutes = from != null && from.minutes > 0 ? from.minutes : 20;
             ShowGameSave(string.Empty);
         }
 
@@ -125,6 +126,7 @@ namespace ConsoleCards.Presentation.Composition
                     CyclePick = CycleSaveDeck,
                     ActionA = SaveStepActionA,
                     ActionB = SaveStepActionB,
+                    CycleMinutes = CycleSaveMinutes,
                 };
             }
 
@@ -151,6 +153,7 @@ namespace ConsoleCards.Presentation.Composition
                         : "Starting this game lays the table out exactly like this. Hands and cards in Console slots are not saved.",
             };
             FillSaveStep(model, deck, deckOnTable);
+            FillBoardParts(model, table, deck, deckOnTable); // board 13
             if (!host.runtimeUi.ShowGameSave(model, gameSaveActions))
             {
                 host.ShowMessage("The Save table as a game panel is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs.");
@@ -227,6 +230,7 @@ namespace ConsoleCards.Presentation.Composition
                 table = table,
                 deck = gameDeck,
                 deal = saveDeal != null ? saveDeal.ToNotation() : string.Empty,
+                minutes = saveMinutes,
             };
             if (!PlayerGames().Save(game, out string error))
             {

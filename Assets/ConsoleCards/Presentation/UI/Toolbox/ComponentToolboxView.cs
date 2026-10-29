@@ -4,6 +4,7 @@ using ConsoleCards.Definitions;
 using ConsoleCards.Presentation.Catalog;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace ConsoleCards.Presentation.UI.Toolbox
@@ -67,6 +68,10 @@ namespace ConsoleCards.Presentation.UI.Toolbox
         [SerializeField] private float wordOffset = 14f;
         [SerializeField] private string onHint = string.Empty;
         [SerializeField] private string offHint = string.Empty;
+        [Tooltip("Board 6 (optional): the knob's colour on and off.")]
+        [SerializeField] private Image knobImage;
+        [SerializeField] private Color knobOnColor = Color.white;
+        [SerializeField] private Color knobOffColor = Color.white;
 
         public bool IsComplete =>
             row != null && button != null && fill != null && knob != null && word != null && hint != null;
@@ -84,6 +89,7 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             word.text = on ? "ON" : "OFF";
             word.color = on ? onWordColor : offWordColor;
             hint.text = on ? onHint : offHint;
+            if (knobImage != null) knobImage.color = on ? knobOnColor : knobOffColor;
         }
     }
 
@@ -186,6 +192,36 @@ namespace ConsoleCards.Presentation.UI.Toolbox
         [SerializeField] private Color chipSelectedFill = Color.green;
         [SerializeField] private Color chipSelectedText = Color.white;
 
+        [Header("Colour-B Toolbox (TOOL-B, optional): search, a detail line, tiles in a grid")]
+        [SerializeField] private InputField searchField;
+        [SerializeField] private Text detailLabel;
+        [SerializeField, TextArea(2, 4)] private string detailIdle =
+            "Pick a piece, then click the table to place it; keep clicking for more. Right-click or Esc stops.";
+        [SerializeField] private string detailHow = "Click the table to place it; keep clicking for more. Right-click or Esc stops.";
+        [Tooltip("Lay the tiles out in a grid at runtime (a tile wider than one cell takes two), so a search closes the gaps.")]
+        [SerializeField] private bool flowTiles;
+        [SerializeField] private float flowCell = 120f;
+        [SerializeField] private float flowGap = 10f;
+        [SerializeField] private int flowColumns = 4;
+        [SerializeField] private float flowTop;
+        [SerializeField] private Color tabNoMatchText = new Color(0.42f, 0.455f, 0.467f, 1f);
+
+        [Header("Board 8 (optional): RECENT, the table tools, the placing chip, the detail under the tiles")]
+        [Tooltip("The shelf of RECENT copies (-1: none). A copy shows while its piece is among the last ones placed.")]
+        [SerializeField] private int recentShelfIndex = -1;
+        [SerializeField] private int recentLimit = 8;
+        [SerializeField] private Button[] tableToolButtons = Array.Empty<Button>();
+        [SerializeField] private TableToolKind[] tableToolKinds = Array.Empty<TableToolKind>();
+        [Tooltip("The placing words: {0} the piece, {1} its turn in degrees.")]
+        [SerializeField] private string placingFormat = "{0} · rotation {1}°";
+        [Tooltip("The placing chip sits beside the pointer (board 8) instead of staying where it was made.")]
+        [SerializeField] private bool placingFollowsPointer;
+        [SerializeField] private Vector2 placingPointerOffset = new Vector2(48f, 0f);
+        [Tooltip("When set, the tiles' viewport is only as tall as its rows (up to viewportMaxHeight) and this box sits under it.")]
+        [SerializeField] private RectTransform detailBox;
+        [SerializeField] private float viewportMaxHeight = 520f;
+        [SerializeField] private float detailGap = 21f;
+
         private readonly Dictionary<string, ComponentCatalogEntry> entriesById =
             new Dictionary<string, ComponentCatalogEntry>(StringComparer.Ordinal);
         private Action<ComponentCatalogEntry, int> place;
@@ -197,6 +233,10 @@ namespace ConsoleCards.Presentation.UI.Toolbox
         private bool handOn;
         private Action<bool> panelOpenChanged;
         private bool placingHintVisible = true;
+        private Action<TableToolKind> chooseTableTool;
+        private readonly List<string> recent = new List<string>();
+        private bool recentLoaded;
+        private const string RecentPref = "ConsoleCards.ToolboxRecent";
 
         public void ValidateReferences()
         {
@@ -294,9 +334,306 @@ namespace ConsoleCards.Presentation.UI.Toolbox
                 shelves[i].EmptyState.SetActive(shelves[i].Tiles.Count == 0);
             }
 
+            for (int i = 0; i < tableToolButtons.Length; i++)
+            {
+                if (tableToolButtons[i] == null || i >= tableToolKinds.Length) continue;
+                TableToolKind kind = tableToolKinds[i];
+                tableToolButtons[i].onClick.AddListener(() => PickTableTool(kind));
+            }
+
+            LoadRecent();
+            BindSearchAndDetail();
             SelectTab(0);
             CloseToolbox();
             ClearPlacementHint();
+        }
+
+        // ---------- board 8: the table tools, RECENT ----------
+
+        /// <summary>What the TABLE TOOLS buttons do (choose that tool; the Toolbox closes). Null hides them.</summary>
+        public void SetTableTools(Action<TableToolKind> choose)
+        {
+            chooseTableTool = choose;
+            for (int i = 0; i < tableToolButtons.Length; i++)
+            {
+                if (tableToolButtons[i] != null) tableToolButtons[i].gameObject.SetActive(choose != null);
+            }
+        }
+
+        private void PickTableTool(TableToolKind kind)
+        {
+            Action<TableToolKind> choose = chooseTableTool;
+            CloseToolbox();
+            choose?.Invoke(kind);
+        }
+
+        private void LoadRecent()
+        {
+            if (recentLoaded) return;
+            recentLoaded = true;
+            recent.Clear();
+            string saved = PlayerPrefs.GetString(RecentPref, string.Empty);
+            if (saved.Length == 0) return;
+            string[] keys = saved.Split(';');
+            for (int i = 0; i < keys.Length && recent.Count < recentLimit; i++)
+            {
+                if (keys[i].Length > 0 && !recent.Contains(keys[i])) recent.Add(keys[i]);
+            }
+        }
+
+        private void RememberRecent(ToolboxEntryTile tile)
+        {
+            if (recentShelfIndex < 0 || tile == null) return;
+            string key = tile.RecentKey;
+            recent.Remove(key);
+            recent.Insert(0, key);
+            while (recent.Count > Mathf.Max(1, recentLimit)) recent.RemoveAt(recent.Count - 1);
+            PlayerPrefs.SetString(RecentPref, string.Join(";", recent));
+            ApplySearch();
+        }
+
+        // RECENT's count is the number of recent pieces shown on it.
+        private void RefreshRecentCount()
+        {
+            if (recentShelfIndex < 0 || recentShelfIndex >= shelves.Length) return;
+            int shown = 0;
+            IReadOnlyList<ToolboxEntryTile> tiles = shelves[recentShelfIndex].Tiles;
+            for (int t = 0; t < tiles.Count; t++)
+            {
+                if (tiles[t].gameObject.activeSelf) shown++;
+            }
+
+            for (int i = 0; i < tabs.Length; i++)
+            {
+                if (tabs[i].ShelfIndex != recentShelfIndex) continue;
+                Transform count = tabs[i].Label.transform.parent.Find("Count");
+                Text label = count != null ? count.GetComponent<Text>() : null;
+                if (label != null) label.text = shown.ToString();
+            }
+        }
+
+        // ---------- TOOL-B: search, the detail line, the grid ----------
+
+        private string query = string.Empty;
+
+        private void BindSearchAndDetail()
+        {
+            for (int i = 0; i < shelves.Length; i++)
+            {
+                for (int t = 0; t < shelves[i].Tiles.Count; t++)
+                {
+                    ToolboxTileHover hover = shelves[i].Tiles[t].GetComponent<ToolboxTileHover>();
+                    if (hover != null) hover.Bind(ShowDetail);
+                }
+            }
+
+            query = string.Empty;
+            if (searchField != null)
+            {
+                searchField.SetTextWithoutNotify(string.Empty);
+                searchField.onValueChanged.AddListener(Search);
+            }
+
+            ApplySearch();
+        }
+
+        private void ShowDetail(ToolboxEntryTile tile)
+        {
+            if (detailLabel == null) return;
+            if (tile == null || !entriesById.TryGetValue(tile.EntryId, out ComponentCatalogEntry entry))
+            {
+                detailLabel.text = detailIdle;
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(tile.DetailTitle))
+            {
+                detailLabel.text = $"<b><color=#E8ECED>{tile.DetailTitle}</color></b>\n{detailHow}";
+                return;
+            }
+
+            detailLabel.text = string.IsNullOrEmpty(entry.Description)
+                ? $"<b><color=#E8ECED>{entry.DisplayName}</color></b>\n{detailHow}"
+                : $"<b><color=#E8ECED>{entry.DisplayName}</color></b>  ·  {entry.Description}\n{detailHow}";
+        }
+
+        private void Search(string text)
+        {
+            query = text == null ? string.Empty : text.Trim();
+            ApplySearch();
+        }
+
+        // Tiles that match the words show (all when there are none); a tab with no match is dimmed, and the open tab
+        // moves to the first one with a match.
+        private void ApplySearch()
+        {
+            for (int i = 0; i < shelves.Length; i++)
+            {
+                int shown = 0;
+                for (int t = 0; t < shelves[i].Tiles.Count; t++)
+                {
+                    ToolboxEntryTile tile = shelves[i].Tiles[t];
+                    bool match = Matches(tile);
+                    if (tile.gameObject.activeSelf != match) tile.gameObject.SetActive(match);
+                    if (match) shown++;
+                }
+
+                shelves[i].EmptyState.SetActive(shown == 0);
+                if (flowTiles) Flow(shelves[i], i == recentShelfIndex);
+            }
+
+            RefreshRecentCount();
+
+            if (query.Length > 0 && !TabHasMatch(tabIndex))
+            {
+                for (int i = 0; i < tabs.Length; i++)
+                {
+                    if (TabHasMatch(i))
+                    {
+                        SelectTab(i);
+                        break;
+                    }
+                }
+            }
+
+            FollowSearchWithChip();
+            RefreshTabColours();
+            ScrollToTop();
+            int visible = VisibleShelfIndex();
+            if (visible >= 0) FitViewportToTiles(shelves[visible]);
+        }
+
+        private int VisibleShelfIndex()
+        {
+            if (tabs.Length == 0) return -1;
+            ToolboxTab tab = tabs[Mathf.Clamp(tabIndex, 0, tabs.Length - 1)];
+            if (tab.ShelfIndex >= 0) return tab.ShelfIndex;
+            return gameChips.Length > 0 ? gameChips[Mathf.Clamp(chipIndex, 0, gameChips.Length - 1)].ShelfIndex : -1;
+        }
+
+        // On the Game boxes tab, the chip moves to a game with a match when the shown one has none.
+        private void FollowSearchWithChip()
+        {
+            if (query.Length == 0 || tabs[tabIndex].ShelfIndex >= 0 || gameChips.Length == 0) return;
+            if (ShelfHasMatch(gameChips[Mathf.Clamp(chipIndex, 0, gameChips.Length - 1)].ShelfIndex)) return;
+            for (int c = 0; c < gameChips.Length; c++)
+            {
+                if (!ShelfHasMatch(gameChips[c].ShelfIndex)) continue;
+                chipIndex = c;
+                RefreshShelves();
+                return;
+            }
+        }
+
+        private void ScrollToTop()
+        {
+            ScrollRect scroll = contentViewport != null ? contentViewport.GetComponent<ScrollRect>() : null;
+            if (scroll != null) scroll.verticalNormalizedPosition = 1f;
+        }
+
+        private bool Matches(ToolboxEntryTile tile)
+        {
+            if (tile.IsRecentCopy && !recent.Contains(tile.RecentKey)) return false; // RECENT: only the recent pieces
+            if (query.Length == 0) return true;
+            if (!entriesById.TryGetValue(tile.EntryId, out ComponentCatalogEntry entry)) return false;
+            return (entry.DisplayName != null && entry.DisplayName.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                || (entry.Description != null && entry.Description.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                || (!string.IsNullOrEmpty(tile.DetailTitle)
+                    && tile.DetailTitle.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private bool TabHasMatch(int index)
+        {
+            ToolboxTab tab = tabs[index];
+            if (tab.ShelfIndex >= 0) return ShelfHasMatch(tab.ShelfIndex);
+            for (int i = 0; i < gameChips.Length; i++)
+            {
+                if (ShelfHasMatch(gameChips[i].ShelfIndex)) return true;
+            }
+
+            return false;
+        }
+
+        private bool ShelfHasMatch(int shelf)
+        {
+            IReadOnlyList<ToolboxEntryTile> tiles = shelves[shelf].Tiles;
+            for (int t = 0; t < tiles.Count; t++)
+            {
+                if (tiles[t].gameObject.activeSelf) return true;
+            }
+
+            return false;
+        }
+
+        private void RefreshTabColours()
+        {
+            for (int i = 0; i < tabs.Length; i++)
+            {
+                bool selected = i == tabIndex;
+                tabs[i].Label.color = selected ? tabSelectedText
+                    : query.Length > 0 && !TabHasMatch(i) ? tabNoMatchText
+                    : tabText;
+            }
+        }
+
+        private readonly List<ToolboxEntryTile> flowOrder = new List<ToolboxEntryTile>();
+
+        // The shown tiles of a shelf in rows of flowColumns cells; a tile wider than a cell and a half takes two.
+        // RECENT lays its tiles out newest first.
+        private void Flow(ToolboxShelf shelf, bool byRecency = false)
+        {
+            int column = 0;
+            float y = flowTop;
+            float rowHeight = 0f;
+            int columns = Mathf.Max(1, flowColumns);
+            flowOrder.Clear();
+            for (int t = 0; t < shelf.Tiles.Count; t++) flowOrder.Add(shelf.Tiles[t]);
+            if (byRecency) flowOrder.Sort((a, b) => RecentRank(a).CompareTo(RecentRank(b)));
+            for (int t = 0; t < flowOrder.Count; t++)
+            {
+                ToolboxEntryTile tile = flowOrder[t];
+                if (!tile.gameObject.activeSelf) continue;
+                RectTransform rect = (RectTransform)tile.transform;
+                int span = rect.sizeDelta.x > flowCell * 1.5f ? Mathf.Min(2, columns) : 1;
+                if (column + span > columns)
+                {
+                    column = 0;
+                    y += rowHeight + flowGap;
+                    rowHeight = 0f;
+                }
+
+                rect.anchoredPosition = new Vector2(column * (flowCell + flowGap), -y);
+                rowHeight = Mathf.Max(rowHeight, rect.sizeDelta.y);
+                column += span;
+            }
+
+            shelfHeights[shelf] = y + rowHeight;
+        }
+
+        private readonly Dictionary<ToolboxShelf, float> shelfHeights = new Dictionary<ToolboxShelf, float>();
+
+        private int RecentRank(ToolboxEntryTile tile)
+        {
+            int rank = recent.IndexOf(tile.RecentKey);
+            return rank < 0 ? int.MaxValue : rank;
+        }
+
+        // Board 8: the tiles' viewport is as tall as the shown shelf's rows (up to its most) and the detail box sits
+        // right under it.
+        private void FitViewportToTiles(ToolboxShelf shown)
+        {
+            if (detailBox == null || contentViewport == null || shown == null) return;
+            float height = shelfHeights.TryGetValue(shown, out float rows) ? rows : viewportMaxHeight;
+            if (height <= 0f) height = 120f; // the empty line
+            RectTransform shelfRect = shown.Root.transform as RectTransform;
+            float top = shelfRect != null ? -shelfRect.anchoredPosition.y : 0f;
+            height = Mathf.Min(viewportMaxHeight, height + top);
+            contentViewport.anchorMin = new Vector2(0f, 1f);
+            contentViewport.anchorMax = new Vector2(1f, 1f);
+            contentViewport.pivot = new Vector2(0.5f, 1f);
+            contentViewport.offsetMin = new Vector2(0f, -height);
+            contentViewport.offsetMax = Vector2.zero;
+            detailBox.anchoredPosition = new Vector2(detailBox.anchoredPosition.x, -(height + detailGap));
         }
 
         private void BindHandSwitch(ComponentToolboxBindings bindings)
@@ -421,7 +758,16 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             openButton.gameObject.SetActive(false);
             placingCard.SetActive(true);
             placingControls.SetActive(placingHintVisible);
-            placingSubtitle.text = $"{placementSubject} · rotation {Mathf.RoundToInt(rotationDegrees)}°";
+            string subject = placementSubject;
+            if (placingFollowsPointer)
+            {
+                // Board 8 words: "d6  click to place · Esc stops" (the chip has its own stop words).
+                int cut = subject.IndexOf(" · ", StringComparison.Ordinal);
+                if (cut > 0) subject = subject.Substring(0, cut);
+            }
+
+            placingSubtitle.text = string.Format(placingFormat, subject, Mathf.RoundToInt(rotationDegrees));
+            FollowPointer();
             if (placingIcon != null)
             {
                 placingIcon.gameObject.SetActive(icon != null);
@@ -453,9 +799,41 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             }
         }
 
+        private void LateUpdate()
+        {
+            if (placingFollowsPointer && placingCard != null && placingCard.activeSelf) FollowPointer();
+        }
+
+        // The placing chip beside the pointer, kept on the screen.
+        private void FollowPointer()
+        {
+            if (!placingFollowsPointer || placingCard == null || Mouse.current == null) return;
+            RectTransform chip = placingCard.transform as RectTransform;
+            RectTransform parent = chip != null ? chip.parent as RectTransform : null;
+            if (parent == null) return;
+            Canvas canvas = chip.GetComponentInParent<Canvas>();
+            UnityEngine.Camera eye = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, Mouse.current.position.ReadValue(), eye,
+                    out Vector2 local))
+            {
+                return;
+            }
+
+            Rect area = parent.rect;
+            Vector2 size = chip.rect.size;
+            Vector2 at = local + placingPointerOffset;
+            if (at.x + size.x > area.xMax) at.x = local.x - placingPointerOffset.x - size.x;
+            at.y = Mathf.Clamp(at.y, area.yMin + size.y * 0.5f, area.yMax - size.y * 0.5f);
+            chip.anchorMin = chip.anchorMax = new Vector2(0.5f, 0.5f);
+            chip.pivot = new Vector2(0f, 0.5f);
+            chip.anchoredPosition = at - parent.rect.center;
+        }
+
         public override void Unbind()
         {
             Clear(openButton);
+            for (int i = 0; i < tableToolButtons.Length; i++) Clear(tableToolButtons[i]);
+            chooseTableTool = null;
             Clear(closeButton);
             Clear(handSwitch?.Button);
             setHand = null;
@@ -487,6 +865,17 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             place = null;
             beforeOpen = null;
             selectedTile = null;
+            if (searchField != null) searchField.onValueChanged.RemoveListener(Search);
+            for (int i = 0; i < shelves.Length; i++)
+            {
+                if (shelves[i] == null) continue;
+                for (int t = 0; t < shelves[i].Tiles.Count; t++)
+                {
+                    ToolboxEntryTile tile = shelves[i].Tiles[t];
+                    ToolboxTileHover hover = tile != null ? tile.GetComponent<ToolboxTileHover>() : null;
+                    if (hover != null) hover.Bind(null);
+                }
+            }
         }
 
         // Every Toolbox entry of the library has exactly one tile and every tile names a Toolbox entry.
@@ -513,7 +902,9 @@ namespace ConsoleCards.Presentation.UI.Toolbox
                 for (int t = 0; t < shelves[i].Tiles.Count; t++)
                 {
                     string id = shelves[i].Tiles[t].EntryId;
-                    if (!entriesById.ContainsKey(id) || !tiled.Add(id))
+                    // Board 8: a size tile (d6) and a RECENT copy share their entry with other tiles.
+                    bool shared = shelves[i].Tiles[t].FixedValue != 0 || shelves[i].Tiles[t].IsRecentCopy;
+                    if (!entriesById.ContainsKey(id) || (!tiled.Add(id) && !shared))
                     {
                         throw new InvalidOperationException(
                             $"Toolbox tile {shelves[i].Tiles[t].name} has no Toolbox entry, or repeats one. " + SyncHint);
@@ -545,7 +936,10 @@ namespace ConsoleCards.Presentation.UI.Toolbox
 
             selectedTile = tile;
             tile.SetSelected(true);
-            place(entry, value);
+            ShowDetail(tile);
+            Action<ComponentCatalogEntry, int> placing = place;
+            RememberRecent(tile);
+            placing(entry, value);
         }
 
         private void SelectTab(int index)
@@ -562,6 +956,8 @@ namespace ConsoleCards.Presentation.UI.Toolbox
                 }
             }
 
+            RefreshTabColours();
+            ShowDetail(null);
             RefreshShelves();
         }
 
@@ -582,12 +978,16 @@ namespace ConsoleCards.Presentation.UI.Toolbox
                 shelves[i].Root.SetActive(i == visibleShelf);
             }
 
+            if (visibleShelf >= 0 && visibleShelf < shelves.Length) FitViewportToTiles(shelves[visibleShelf]);
+
             for (int i = 0; i < gameChips.Length; i++)
             {
                 bool selected = i == chipIndex;
                 gameChips[i].Fill.color = selected ? chipSelectedFill : chipFill;
                 gameChips[i].Label.color = selected ? chipSelectedText : chipText;
             }
+
+            ScrollToTop(); // a shorter shelf never opens scrolled past its end
         }
 
         private static void Clear(Button target)

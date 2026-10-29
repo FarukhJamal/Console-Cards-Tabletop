@@ -47,6 +47,9 @@ namespace ConsoleCards.Presentation.Saving
         /// </summary>
         public string deal = string.Empty;
 
+        /// <summary>About how long a game takes, in minutes (Make a game › ABOUT); 0: not said.</summary>
+        public int minutes;
+
         public PlayerGameFile Normalised()
         {
             if (table == null) table = new SavedTable();

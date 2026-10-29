@@ -1474,7 +1474,7 @@ namespace ConsoleCards.Presentation.Composition
                 }));
             options.Add(new PopupActionOption("Not yet", true, close));
             host.runtimeUi.ShowContextMenu(
-                new Vector2((Screen.width * 0.5f) - 200f, Screen.height * 0.66f),
+                TurnPromptPosition(),
                 skipped ? "SKIP TURN?" : "END TURN?",
                 body,
                 options.ToArray(),
@@ -4841,15 +4841,8 @@ namespace ConsoleCards.Presentation.Composition
                         }));
                 }
 
-                // TURN-2 (owner, 2026-10-22, gameplay reference): drawing the Controller hand up to the limit is one row.
-                if (!purchasePending && TryGetHandDrawNeed(out int handNeed, out bool blindNoDraw))
-                {
-                    int limit = host.trapFloorTemplate.GameDefinition.ControllerConfiguration.MaximumHandSize;
-                    actions.Add(new PopupActionOption(
-                        blindNoDraw ? "Blind: no draw this turn" : $"Draw up to {limit} (+{handNeed})",
-                        !blindNoDraw,
-                        DrawUpToHandLimitForTurn));
-                }
+                // TURN-2's "Draw up to 10 (+n)" row is gone (owner, 2026-10-30): players draw from the deck's own
+                // hover menu (Draw 1–9), as at a real table.
 
                 // Owner, 2026-10-20: a waiting trap and a Reaction that can stop it: offered in the turn menu too.
                 if (!purchasePending && CountUsableReactions(host.trapFloorTurnState.ActivePlayerId) > 0)
@@ -4863,10 +4856,7 @@ namespace ConsoleCards.Presentation.Composition
                 // F3: End Turn says when it will apply waiting Traps, and asks first.
                 int waiting = PendingEndTurnEffects(host.trapFloorTurnState.ActivePlayerId, null);
                 string applies = waiting > 0 ? $" (applies {waiting})" : string.Empty;
-                actions.Add(new PopupActionOption(
-                    "Skip Turn" + applies,
-                    true,
-                    () => RequestEndTurn(true)));
+                // Owner, 2026-10-30: Skip Turn did the same as End Turn, so only End Turn is offered.
                 actions.Add(new PopupActionOption(
                     "End Turn" + applies,
                     true,
@@ -4926,7 +4916,7 @@ namespace ConsoleCards.Presentation.Composition
             int handLimit = host.trapFloorTemplate.GameDefinition.ControllerConfiguration.MaximumHandSize;
             int moveTiles = MoveAllowance(out _);
             string standardGuidance =
-                $"Draw up to {handLimit} if needed\n"
+                $"Draw up to {handLimit} if needed (hover the deck)\n"
                 + (TryGetAbilityOfferAction(out _) ? $"Draw {AbilityOfferSize} from the Ability deck and buy any you can pay for\n" : string.Empty)
                 + $"Move up to {moveTiles} tile{(moveTiles == 1 ? string.Empty : "s")} "
                 + "in one straight line (they light while you hold your pawn); landing flips a tile. "
@@ -4949,7 +4939,7 @@ namespace ConsoleCards.Presentation.Composition
             if (!isBlind)
             {
                 string availableActions = isSticky
-                    ? $"Draw up to {handLimit} if needed\nAction ability / {shopWord}Skip"
+                    ? $"Draw up to {handLimit} if needed (hover the deck)\nAction ability / {shopWord}End Turn"
                     : standardGuidance;
                 return string.IsNullOrEmpty(movementGuidance)
                     ? availableActions
@@ -5254,6 +5244,15 @@ namespace ConsoleCards.Presentation.Composition
                 new[] { new PopupActionOption("OK", true, close) },
                 close,
                 _ => close());
+        }
+
+        // Owner, 2026-10-30: with the colour-B HUD the END TURN? check opens on the right, above END TURN, so the table
+        // stays in view (the popup keeps itself on screen); the V5 HUD keeps it in the middle.
+        private Vector2 TurnPromptPosition()
+        {
+            return host.runtimeUi != null && host.runtimeUi.IsTableHudShown
+                ? new Vector2(Screen.width * 0.70f, Screen.height * 0.58f)
+                : new Vector2((Screen.width * 0.5f) - 200f, Screen.height * 0.66f);
         }
 
         internal string CurrentTrapFloorPlayerStatesText()

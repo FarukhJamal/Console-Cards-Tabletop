@@ -12,6 +12,10 @@ namespace ConsoleCards.Presentation.UI
         Ping = 2,
         Flick = 3,
         Draw = 4,
+        /// <summary>HUD-B board 7B: a drag moves the camera (Space + drag does too, with any tool).</summary>
+        Pan = 5,
+        /// <summary>HUD-B board 7B: a drag measures on the table.</summary>
+        Measure = 6,
     }
 
     /// <summary>

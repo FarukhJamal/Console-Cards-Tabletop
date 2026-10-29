@@ -15,7 +15,7 @@ namespace ConsoleCards.Editor.UI
     /// <para>Console Cards > UI > Table HUD B: Turn Off points the game back at the V5 HUD and the old Shop and payment
     /// popups (the prefabs are kept); Create Missing Table HUD (HUD-B) turns it on again.</para>
     /// </summary>
-    public static class TableHudBuilder
+    public static partial class TableHudBuilder
     {
         public const string Folder = TableNoticeBuilder.Folder;
         public const string HudPath = Folder + "TableHud.prefab";
@@ -65,6 +65,7 @@ namespace ConsoleCards.Editor.UI
         /// <summary>Makes the missing HUD-B prefabs and turns HUD-B on, unless it was turned off on this computer.</summary>
         public static void Build()
         {
+            AddMissingHandTrayRow(); // Settings › Show hand works with either HUD
             if (EditorPrefs.GetBool(OffPreference, false))
             {
                 Debug.Log("[HUD-B] Off on this computer (Table HUD B: Turn Off); Create Missing Table HUD turns it on again.");
@@ -77,10 +78,14 @@ namespace ConsoleCards.Editor.UI
             circle = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
             Directory.CreateDirectory(Folder);
 
-            Save<TableHudView>(HudPath, "TableHud", BuildHud);
+            BuildHudBoard(); // HUD-B to board 7B (TableHudBuilder.Hud7.cs; the older BuildHud is kept for reference)
             Save<TableRulebookView>(RulebookPath, "TableRulebook", BuildRulebook);
             Save<ActionAbilityPurchasePopupView>(ShopDrawerPath, "ShopDrawer", BuildShopDrawer);
             Save<FocusedCardSelectionView>(PaymentStripPath, "PaymentStrip", BuildPaymentStrip);
+            BuildMenus(); // MENU-1: the Esc menu and Settings
+            BuildRulebookObject(); // BOOK-1: the rulebook as a book on the table
+            BuildToolboxB(); // TOOL-B: the Toolbox in colour B (board 8)
+            BuildMakeGame(); // MAKE-B: Save table as a game in colour B (board 13)
 
             AssignCatalogEntry(UiPrefabIds.TableHud, AssetDatabase.LoadAssetAtPath<TableHudView>(HudPath),
                 UiLayer.Hud, UiRetention.CachedSingleInstance);
@@ -94,6 +99,76 @@ namespace ConsoleCards.Editor.UI
                 UiRetention.CachedSingleInstance);
             AssetDatabase.SaveAssets();
             Debug.Log("[HUD-B] Created any missing table HUD prefabs (Final UI/Notices) and turned the colour-B HUD on.");
+        }
+
+        // Owner, 2026-10-30: Show / Hide Hand moved from the turn actions into Settings. The new row is a copy of the
+        // Hands on table row next to it (so it keeps that row's look), retitled; nothing else in the prefab changes.
+        private static void AddMissingHandTrayRow()
+        {
+            if (!File.Exists(SessionUiBuilder.PrefabPath)) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(SessionUiBuilder.PrefabPath);
+            try
+            {
+                SessionBarView view = root.GetComponent<SessionBarView>();
+                if (view == null) return;
+                SerializedObject so = new SerializedObject(view);
+                SerializedProperty target = so.FindProperty("handTraySwitch");
+                SerializedProperty source = so.FindProperty("handsOnTableSwitch");
+                if (target == null || source == null) return;
+                if (target.FindPropertyRelative("row").objectReferenceValue != null) return;
+                GameObject sourceRow = source.FindPropertyRelative("row").objectReferenceValue as GameObject;
+                if (sourceRow == null)
+                {
+                    Debug.LogWarning("[HUD-B] SessionBar has no Hands on table row to copy; Settings gets no Show hand row.");
+                    return;
+                }
+
+                GameObject row = Object.Instantiate(sourceRow, sourceRow.transform.parent, false);
+                row.name = "HandTrayRow";
+                row.transform.SetSiblingIndex(sourceRow.transform.GetSiblingIndex() + 1);
+                target.FindPropertyRelative("row").objectReferenceValue = row;
+                foreach (string field in new[] { "button", "fill", "knob", "word", "hint" })
+                {
+                    Component from = source.FindPropertyRelative(field).objectReferenceValue as Component;
+                    target.FindPropertyRelative(field).objectReferenceValue = Twin(from, sourceRow.transform, row.transform);
+                }
+
+                foreach (string field in new[] { "onFill", "offFill", "onWordColor", "offWordColor" })
+                {
+                    target.FindPropertyRelative(field).colorValue = source.FindPropertyRelative(field).colorValue;
+                }
+
+                foreach (string field in new[] { "knobOffset", "wordOffset" })
+                {
+                    target.FindPropertyRelative(field).floatValue = source.FindPropertyRelative(field).floatValue;
+                }
+
+                target.FindPropertyRelative("onHint").stringValue = "Your hand is up (H)";
+                target.FindPropertyRelative("offHint").stringValue = "Hand tucked away (H)";
+                Object word = target.FindPropertyRelative("word").objectReferenceValue;
+                Object hint = target.FindPropertyRelative("hint").objectReferenceValue;
+                foreach (Text text in row.GetComponentsInChildren<Text>(true))
+                {
+                    if (text != word && text != hint && text.text == "Hands on table") text.text = "Show hand";
+                }
+
+                so.ApplyModifiedPropertiesWithoutUndo();
+                PrefabUtility.SaveAsPrefabAsset(root, SessionUiBuilder.PrefabPath);
+                Debug.Log("[HUD-B] Added the Show hand switch to Settings (" + SessionUiBuilder.PrefabPath + ").");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+        }
+
+        // The component in the copy that sits where `from` sits in the original row.
+        private static Component Twin(Component from, Transform original, Transform copy)
+        {
+            if (from == null) return null;
+            string path = from.transform == original ? string.Empty : AnimationUtility.CalculateTransformPath(from.transform, original);
+            Transform at = path.Length == 0 ? copy : copy.Find(path);
+            return at != null ? at.GetComponent(from.GetType()) : null;
         }
 
         [MenuItem("Console Cards/UI/Table HUD B: Turn Off (back to the V5 HUD)")]
@@ -120,6 +195,14 @@ namespace ConsoleCards.Editor.UI
             if (shop != null)
             {
                 AssignCatalogEntry(UiPrefabIds.ActionAbilityPurchase, shop, UiLayer.Modal, UiRetention.CachedSingleInstance);
+            }
+
+            SetToolboxPrefab(AssetDatabase.LoadAssetAtPath<ConsoleCards.Presentation.UI.Toolbox.ComponentToolboxView>(
+                ConsoleCards.Editor.Toolbox.ComponentToolboxBuilder.PrefabPath)); // TOOL-B: the old Toolbox again
+            GameSavePanelView makeGame = AssetDatabase.LoadAssetAtPath<GameSavePanelView>(GameplayUiBuilder.GameSavePanelPath);
+            if (makeGame != null)
+            {
+                AssignCatalogEntry(UiPrefabIds.GameSavePanel, makeGame, UiLayer.Modal, UiRetention.CachedSingleInstance);
             }
 
             FocusedCardSelectionView selection =

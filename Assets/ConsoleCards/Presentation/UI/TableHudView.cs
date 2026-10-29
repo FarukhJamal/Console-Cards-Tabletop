@@ -23,6 +23,8 @@ namespace ConsoleCards.Presentation.UI
         public Action ToggleHandStyle;
         /// <summary>True while the log is on screen at all (open or folded): then L is the log's own key.</summary>
         public Func<bool> IsLogShown;
+        /// <summary>Board 7B: true while a menu, panel or popup is open; then B and Enter are not the HUD's.</summary>
+        public Func<bool> KeysBlocked;
     }
 
     /// <summary>
@@ -69,6 +71,10 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Text hintText;
         [SerializeField] private Button hintGotIt;
         [SerializeField] private Button hintClose;
+        [Tooltip("Board 7B (optional): the hint is one line, one step at a time; this shows which step (1/3).")]
+        [SerializeField] private Text hintCount;
+        [Tooltip("Board 7B (optional): a press on the hint shows its next step.")]
+        [SerializeField] private Button hintNext;
 
         [Header("Rail")]
         [SerializeField] private RailTool[] tools = new RailTool[0];
@@ -90,6 +96,11 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private GameObject playerChip;
         [SerializeField] private Image playerDot;
         [SerializeField] private Text playerText;
+        [Tooltip("Board 7B (optional): the chip's edge, in the player's colour.")]
+        [SerializeField] private Graphic playerEdge;
+        [Tooltip("Board 7B (optional): the player's state (OVERCHARGED +1) as a yellow tag.")]
+        [SerializeField] private GameObject playerStatusTag;
+        [SerializeField] private Text playerStatusText;
 
         [Header("Bottom right: the turn's actions")]
         [SerializeField] private RectTransform actionsRoot;
@@ -183,6 +194,7 @@ namespace ConsoleCards.Presentation.UI
 
             hintGotIt.onClick.AddListener(PressGotIt);
             hintClose.onClick.AddListener(PressLater);
+            if (hintNext != null) hintNext.onClick.AddListener(NextHintStep);
             primaryButton.onClick.AddListener(PressPrimary);
             actionTemplate.gameObject.SetActive(false);
             gameLabel.text = gameTitle ?? string.Empty;
@@ -192,6 +204,7 @@ namespace ConsoleCards.Presentation.UI
 
         public override void Unbind()
         {
+            ForgetClosedHint();
             RemoveListeners();
             actions = null;
             tipGotIt = null;
@@ -230,6 +243,12 @@ namespace ConsoleCards.Presentation.UI
             }
 
             statusHint = hint ?? string.Empty;
+            // A closed hint comes back on the next turn or round, even with the same words.
+            if (dismissedHint.Length > 0 && (turnLabel.text != dismissedTurn || roundNumber.text != dismissedRound))
+            {
+                dismissedHint = string.Empty;
+            }
+
             ShowActions(turnActions);
             RefreshHint();
         }
@@ -260,6 +279,7 @@ namespace ConsoleCards.Presentation.UI
             ShowPips(null);
             ShowPlayer(null, null);
             statusHint = string.Empty;
+            ForgetClosedHint();
             ShowActions(null);
             RefreshHint();
         }
@@ -294,6 +314,19 @@ namespace ConsoleCards.Presentation.UI
             RefreshHint();
         }
 
+        /// <summary>
+        /// Hides the hint bar while something else uses its place (the Toolbox panel, which has its own guidance and
+        /// sits under the HUD's layer); the hint and any tip come back when it is shown again.
+        /// </summary>
+        public void SetHintHidden(bool hidden)
+        {
+            if (hintHidden == hidden) return;
+            hintHidden = hidden;
+            RefreshHint();
+        }
+
+        private bool hintHidden;
+
         private void RefreshHint()
         {
             string tag;
@@ -303,13 +336,23 @@ namespace ConsoleCards.Presentation.UI
                 tag = tipKind;
                 text = tipText;
             }
+            else if (hintCount != null)
+            {
+                // Board 7B: one step of the turn's hint at a time, its tag naming the step.
+                SplitHintSteps();
+                int step = hintSteps.Count > 0 ? Mathf.Clamp(hintStep, 0, hintSteps.Count - 1) : 0;
+                text = hintSteps.Count > 0 ? hintSteps[step] : string.Empty;
+                tag = roundEnded ? "ROUND END" : StepTag(text);
+            }
             else
             {
                 tag = roundEnded ? "ROUND END" : "HINT";
                 text = statusHint;
             }
 
-            bool shown = text.Length > 0;
+            // Owner, 2026-10-30: "you can't close the hints": × hides the turn's hint until the next one.
+            bool dismissed = !tipShown && dismissedHint.Length > 0;
+            bool shown = text.Length > 0 && !hintHidden && !dismissed;
             if (hintBar.activeSelf != shown) hintBar.SetActive(shown);
             if (!shown) return;
             hintTag.text = tag;
@@ -318,7 +361,82 @@ namespace ConsoleCards.Presentation.UI
             hintTagFill.color = roundEnded && !tipShown ? roundEndTag : hintTagTeal;
             hintTag.color = roundEnded && !tipShown ? orange : hintTagWords;
             hintGotIt.gameObject.SetActive(tipShown && tipGotIt != null);
-            hintClose.gameObject.SetActive(tipShown);
+            hintClose.gameObject.SetActive(true);
+            if (hintCount != null)
+            {
+                bool counted = !tipShown && hintSteps.Count > 1;
+                if (hintCount.gameObject.activeSelf != counted) hintCount.gameObject.SetActive(counted);
+                if (counted) hintCount.text = $"{Mathf.Clamp(hintStep, 0, hintSteps.Count - 1) + 1}/{hintSteps.Count}";
+            }
+
+            if (hintNext != null) hintNext.interactable = !tipShown && hintSteps.Count > 1;
+        }
+
+        // ---------- the one-line hint's steps (board 7B) ----------
+
+        private readonly List<string> hintSteps = new List<string>();
+        private string splitHint;
+        private int hintStep;
+
+        // The turn's hint, one step per line, each made short (brackets dropped, one sentence, ~64 letters).
+        private void SplitHintSteps()
+        {
+            if (string.Equals(splitHint, statusHint, StringComparison.Ordinal)) return;
+            splitHint = statusHint;
+            hintStep = 0;
+            hintSteps.Clear();
+            if (string.IsNullOrEmpty(statusHint)) return;
+            string[] lines = statusHint.Replace("\r", string.Empty).Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = FitText.Concise(WithoutBrackets(lines[i]), 64).Trim().TrimEnd('.');
+                if (line.Length > 0) hintSteps.Add(line);
+            }
+        }
+
+        // "Draw up to 10 if needed (hover the deck)" → "Draw up to 10 if needed".
+        private static string WithoutBrackets(string line)
+        {
+            int open = line.IndexOf('(');
+            while (open >= 0)
+            {
+                int close = line.IndexOf(')', open);
+                if (close < 0) break;
+                line = line.Remove(open, close - open + 1);
+                open = line.IndexOf('(');
+            }
+
+            return line.Replace("  ", " ").Replace(" ;", ";").Replace(" ,", ",").Replace(" .", ".").Trim();
+        }
+
+        private void NextHintStep()
+        {
+            if (tipShown || hintSteps.Count < 2) return;
+            hintStep = (hintStep + 1) % hintSteps.Count;
+            RefreshHint();
+        }
+
+        // DRAW PHASE, MOVE PHASE…: named by the step's first word.
+        private static string StepTag(string step)
+        {
+            if (string.IsNullOrEmpty(step)) return "HINT";
+            int end = 0;
+            while (end < step.Length && char.IsLetter(step[end])) end++;
+            string verb = end > 0 ? step.Substring(0, end).ToLowerInvariant() : string.Empty;
+            switch (verb)
+            {
+                case "draw": return "DRAW PHASE";
+                case "move": return "MOVE PHASE";
+                case "roll": return "ROLL PHASE";
+                case "buy": return "SHOP PHASE";
+                case "play": return "PLAY PHASE";
+                case "deal": return "DEAL PHASE";
+                case "take":
+                case "claim":
+                case "collect": return "PRIZE";
+                case "end": return "END TURN";
+                default: return "YOUR TURN";
+            }
         }
 
         private void PressGotIt()
@@ -328,8 +446,28 @@ namespace ConsoleCards.Presentation.UI
             gotIt?.Invoke();
         }
 
+        private string dismissedHint = string.Empty;
+
+        private void ForgetClosedHint()
+        {
+            dismissedHint = string.Empty;
+            dismissedTurn = string.Empty;
+            dismissedRound = string.Empty;
+        }
+        private string dismissedTurn = string.Empty;
+        private string dismissedRound = string.Empty;
+
         private void PressLater()
         {
+            if (!tipShown)
+            {
+                dismissedHint = statusHint;
+                dismissedTurn = turnLabel.text;
+                dismissedRound = roundNumber.text;
+                RefreshHint();
+                return;
+            }
+
             Action later = tipLater;
             HideTip();
             later?.Invoke();
@@ -490,8 +628,16 @@ namespace ConsoleCards.Presentation.UI
 
                 TrapFloorHudPlayer player = players[i];
                 Color colour = player.Color;
-                pip.color = player.Active ? colour : new Color(colour.r, colour.g, colour.b, 0.5f);
+                pip.color = player.Active ? colour : new Color(colour.r, colour.g, colour.b, 0.45f);
                 pip.rectTransform.localScale = player.Active ? normal * activePipScale : normal;
+                // Board 7B: the turn player's pip has a ring in its colour (a "Ring" behind it, when the prefab has one).
+                Transform ring = pip.transform.Find("Ring");
+                if (ring != null)
+                {
+                    if (ring.gameObject.activeSelf != player.Active) ring.gameObject.SetActive(player.Active);
+                    Image ringImage = ring.GetComponent<Image>();
+                    if (ringImage != null) ringImage.color = colour;
+                }
             }
         }
 
@@ -501,6 +647,23 @@ namespace ConsoleCards.Presentation.UI
             if (playerChip.activeSelf != shown) playerChip.SetActive(shown);
             if (!shown) return;
             playerDot.color = colour ?? Color.white;
+            if (playerEdge != null) playerEdge.color = colour ?? Color.white;
+            if (playerStatusTag != null)
+            {
+                // Board 7B: NAME · Keys 1/3, and the state as its own yellow tag.
+                string line = $"<b>{card.Title}</b>";
+                if (!string.IsNullOrEmpty(card.Keys))
+                {
+                    line += $"  <color=#9BA4A7>· Keys</color>  <b>{card.Keys.Replace(" / ", "/")}</b>";
+                }
+
+                playerText.text = line;
+                bool status = !string.IsNullOrEmpty(card.Status);
+                if (playerStatusTag.activeSelf != status) playerStatusTag.SetActive(status);
+                if (status && playerStatusText != null) playerStatusText.text = card.Status.ToUpperInvariant();
+                return;
+            }
+
             string text = card.Title;
             if (!string.IsNullOrEmpty(card.Avatar)) text += $"  ·  {card.Avatar}";
             if (!string.IsNullOrEmpty(card.Keys)) text += $"  ·  Keys {card.Keys}";
@@ -516,13 +679,21 @@ namespace ConsoleCards.Presentation.UI
         // not also read the same key press in its own Update this frame.
         private void LateUpdate()
         {
-            if (actions?.ToggleLog == null || Keyboard.current == null || !Keyboard.current.lKey.wasPressedThisFrame) return;
-            if (Keyboard.current.leftCtrlKey.isPressed || Keyboard.current.rightCtrlKey.isPressed) return;
-            if (actions.IsLogShown != null && actions.IsLogShown()) return;
+            Keyboard keyboard = Keyboard.current;
+            if (actions == null || keyboard == null) return;
+            bool l = keyboard.lKey.wasPressedThisFrame;
+            bool b = keyboard.bKey.wasPressedThisFrame;
+            bool enter = keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame;
+            if (!l && !b && !enter) return;
+            if (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed) return;
             EventSystem current = EventSystem.current;
             GameObject selected = current != null ? current.currentSelectedGameObject : null;
             if (selected != null && selected.GetComponent<InputField>() != null) return;
-            actions.ToggleLog();
+            if (l && actions.ToggleLog != null && (actions.IsLogShown == null || !actions.IsLogShown())) actions.ToggleLog();
+            // Board 7B: B opens the Toolbox, Enter is END TURN (not while a menu, panel or popup is open).
+            if ((!b && !enter) || (actions.KeysBlocked != null && actions.KeysBlocked())) return;
+            if (b && actions.OpenToolbox != null && toolboxButton.gameObject.activeInHierarchy) actions.OpenToolbox();
+            if (enter && primaryButton.gameObject.activeInHierarchy && primaryButton.interactable) PressPrimary();
         }
 
         // ---------- helpers ----------
@@ -576,7 +747,7 @@ namespace ConsoleCards.Presentation.UI
             Button[] buttons =
             {
                 logoButton, menuButton, settingsButton, undoButton, redoButton, rulebookButton, toolboxButton,
-                logButton, helpButton, shopButton, hintGotIt, hintClose, primaryButton, handStyleButton,
+                logButton, helpButton, shopButton, hintGotIt, hintClose, primaryButton, handStyleButton, hintNext,
             };
             for (int i = 0; i < buttons.Length; i++)
             {

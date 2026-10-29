@@ -50,7 +50,7 @@ namespace ConsoleCards.Presentation.Composition
     /// (R1d: moved out of TabletopComposition; the table reaches it as <c>GameSelectPanel</c> and it
     /// reaches the table through <c>host</c>.)
     /// </summary>
-    internal sealed class GameSelectPresenter
+    internal sealed partial class GameSelectPresenter
     {
         private readonly TabletopComposition host;
 
@@ -147,6 +147,12 @@ namespace ConsoleCards.Presentation.Composition
                     CycleColours = step => ChangeLook(host.ToggleColourBlind),
                     CycleQuality = step => ChangeLook(() => host.NextQuality(step)),
                     CycleRoomSound = step => ChangeLook(host.ToggleRoomSound),
+                    MakeGame = MakeGameFromFrontEnd, // CREATE (board 4)
+                    PlayMyGame = PlayMyGame,
+                    EditMyGame = EditMyGame,
+                    CopyMyGame = CopyMyGame,
+                    RenameMyGame = RenameMyGame,
+                    DeleteMyGame = DeleteMyGame,
                 };
             }
 
@@ -164,6 +170,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 GameSelectModel mine = host.PlayerGamesPanel.PlayerGameSelectModel(entry, rows, status);
                 AddFrontEnd(mine, entry);
+                FillBoardScreens(mine, entries, entry); // boards 1–3
                 return host.runtimeUi.ShowGameSelect(mine, gameSelectActions);
             }
 
@@ -202,6 +209,7 @@ namespace ConsoleCards.Presentation.Composition
                         : $"{entry.Name} cannot be played yet; you can already make its cards and decks yours.",
             };
             AddFrontEnd(model, entry);
+            FillBoardScreens(model, entries, entry); // boards 1–3
             if (!host.runtimeUi.ShowGameSelect(model, gameSelectActions)) return false;
             return true;
         }
@@ -211,6 +219,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             model.OpenAt = pendingFrontEndPage;
             pendingFrontEndPage = null;
+            FillMyGames(model); // CREATE › YOUR GAMES
             model.LightText = LookSettings.LightName(LookSettings.Light);
             model.ColoursText = LookSettings.ColourBlind ? "Colour-blind" : "Standard";
             model.QualityText = LookSettings.QualityName(LookSettings.Quality);

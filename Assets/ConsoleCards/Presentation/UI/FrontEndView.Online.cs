@@ -67,7 +67,9 @@ namespace ConsoleCards.Presentation.UI
 
         private bool InOnlineRoom => model != null && model.Online != null && model.Online.InRoom;
 
-        private FrontEndPage PlayPage => InOnlineRoom ? FrontEndPage.Room : FrontEndPage.Profile;
+        // Boards 1–3: PLAY goes straight to the Library (the profile is the top bar's "Playing as").
+        private FrontEndPage PlayPage => InOnlineRoom ? FrontEndPage.Room
+            : HasBoardLibrary ? FrontEndPage.Library : FrontEndPage.Profile;
 
         private static bool IsOnlinePage(FrontEndPage target) => target == FrontEndPage.Lobby || target == FrontEndPage.Room;
 

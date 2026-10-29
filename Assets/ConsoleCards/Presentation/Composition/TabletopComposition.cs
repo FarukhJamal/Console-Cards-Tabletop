@@ -432,7 +432,6 @@ namespace ConsoleCards.Presentation.Composition
         internal HandView handView;
         // Camera hand tray: created once, reused across session rebuilds (keeps its collapsed state).
         private HandTrayRig handTrayRig;
-        private Action toggleHandTrayAction;
         // Pile bays (doc 21): each pile's bay and the seat whose Console its mouth faces.
         private readonly List<PileBayView> pileBays = new List<PileBayView>();
         private readonly List<SeatId> pileBayOwnerSeats = new List<SeatId>();
@@ -614,6 +613,7 @@ namespace ConsoleCards.Presentation.Composition
                     Keys,
                     Feel.PingTapSeconds,
                     () => activeTool == TableToolKind.Ping); // UX-1, POL-0 keys, TOOLS-1 Ping tool
+                inputFrameCoordinator.ConfigurePointerTools(PointerToolTakesLeft, PointerToolPans); // HUD-B
                 uiInputConfiguredByComposition = true;
                 ConfigureDeveloperControlsInputBlockIfNeeded();
 
@@ -697,6 +697,7 @@ namespace ConsoleCards.Presentation.Composition
                     Keys,
                     Feel.PingTapSeconds,
                     () => activeTool == TableToolKind.Ping); // UX-1, POL-0 keys, TOOLS-1 Ping tool
+                inputFrameCoordinator.ConfigurePointerTools(PointerToolTakesLeft, PointerToolPans); // HUD-B
                 uiInputConfiguredByComposition = true;
                 ConfigureDeveloperControlsInputBlockIfNeeded();
                 inputFrameCoordinator.ConfigureSelectionPresenter(selectionPresenter);
@@ -728,6 +729,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void Shutdown(bool preserveTemplateContext)
         {
+            PutDownRulebookObject(); // BOOK-1: before the table's input is taken down
             ActiveCartridge.OnTableShutdown(); // CART-1a
             if (!rebuildingFromUndo)
             {
@@ -1212,24 +1214,37 @@ namespace ConsoleCards.Presentation.Composition
 
             handTrayRig.SetCollapsed(!handTrayRig.IsCollapsed);
             ShowMessage(handTrayRig.IsCollapsed ? "Hand collapsed (H to show)." : "Hand shown.");
+            RefreshHandTraySetting();
+        }
+
+        // MENU-1: EXIT GAME in the Esc menu (Play mode stops in the editor).
+        internal void ExitGameFromTable()
+        {
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            UnityEngine.Application.Quit();
+#endif
+        }
+
+        // Owner, 2026-10-30: showing or hiding the hand is a setting (Settings › Hand), not a turn button; H still works.
+        internal void RefreshHandTraySetting()
+        {
+            if (runtimeUi == null) return;
+            bool available = handTrayRig != null && handView != null && handView.IsTrayMode;
+            runtimeUi.ShowHandTraySetting(available, available && !handTrayRig.IsCollapsed, SetHandTrayShown);
+        }
+
+        private void SetHandTrayShown(bool shown)
+        {
+            if (handTrayRig == null || handView == null || !handView.IsTrayMode) return;
+            if (handTrayRig.IsCollapsed == shown) ToggleHandTray();
         }
 
         internal List<PopupActionOption> AddHandTrayToggleAction(
             List<PopupActionOption> actions)
         {
-            if (handTrayRig != null && handView != null && handView.IsTrayMode)
-            {
-                if (toggleHandTrayAction == null)
-                {
-                    toggleHandTrayAction = ToggleHandTray;
-                }
-
-                actions.Add(new PopupActionOption(
-                    handTrayRig.IsCollapsed ? "Show Hand (H)" : "Hide Hand (H)",
-                    true,
-                    toggleHandTrayAction));
-            }
-
+            // Owner, 2026-10-30: the Show / Hide Hand button left the turn actions for Settings › Hand (H still works).
             return actions;
         }
 

@@ -131,5 +131,7 @@ namespace ConsoleCards.Presentation.UI
         public const string TableMilestone = "platform.table-milestone"; // POP-2
         public const string TableHud = "platform.table-hud"; // HUD-B
         public const string TableRulebook = "platform.table-rulebook"; // HUD-B
+        public const string TablePauseMenu = "platform.table-pause-menu"; // MENU-1
+        public const string TableSettings = "platform.table-settings"; // MENU-1
     }
 }

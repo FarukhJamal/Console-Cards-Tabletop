@@ -144,6 +144,7 @@ namespace ConsoleCards.Presentation.Composition
             if (!RebuildPresentationFor(templateContext, PlayerId.Empty, false, "Hands on table"))
             {
                 handsOnTable = before;
+                SessionService.ShowActiveSessionUi(); // the switch shows what stayed (MENU-1)
                 return;
             }
 
@@ -286,6 +287,7 @@ namespace ConsoleCards.Presentation.Composition
             if (on && IsOnlineTable)
             {
                 ShowMessage("Hot-seat is off in online play: each computer plays its own seat.");
+                SessionService.ShowActiveSessionUi(); // the switch goes back to off (MENU-1)
                 return;
             }
 

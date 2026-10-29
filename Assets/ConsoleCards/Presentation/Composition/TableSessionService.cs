@@ -237,7 +237,15 @@ namespace ConsoleCards.Presentation.Composition
                 host.RulesCardPanel.SetRulesCardEnabled,
                 host.hintsEnabled,
                 host.RulesCardPanel.SetHintsEnabled);
+            host.RefreshRulebookObject(host.runtimeUi.RulebookRules); // BOOK-1: the book by your seat
             host.runtimeUi.ShowTipsSetting(host.tipsEnabled, host.RulesCardPanel.SetTipsEnabled);
+            host.runtimeUi.ShowLookActions( // board 6: LOOK and SOUND in the table's Settings
+                host.NextLightPreset,
+                host.NextQuality,
+                host.ToggleColourBlind,
+                host.ToggleRoomSound,
+                host.profiles != null && host.profiles.HasActive ? host.profiles.Active.displayName : string.Empty);
+            if (isGameSession) host.runtimeUi.CountGameStarted(sessionTitle + "|" + sessionSubtitle);
             host.runtimeUi.ShowPlaySettings(
                 host.ActiveCartridge.Seats.Count > 0 && host.activeSession.Selection.Kind != TabletopSessionKind.EmptyCustom,
                 $"Seat: {host.PlayerLabel(host.localPlayerId)}",
@@ -257,6 +265,8 @@ namespace ConsoleCards.Presentation.Composition
                 host.SetHandsOnTable,
                 host.fullFeedback,
                 host.SetFullFeedback);
+            host.RefreshHandTraySetting(); // owner, 2026-10-30: Settings › Hand shows or hides the hand tray
+            host.runtimeUi.SetPauseExits(OpenGameTemplatesPanel, host.ExitGameFromTable); // MENU-1: the Esc menu
             host.RefreshLookSettingsUi(); // V1/V5/V6/V7: Light, Colours, Quality, Room sound
             RefreshUndoUi();
             host.ActiveCartridge.RefreshStatusUi();
@@ -418,6 +428,7 @@ namespace ConsoleCards.Presentation.Composition
                 ShowActiveSessionUi();
                 host.ArrangeSeatsAtStart(); // CART-1c: on a bigger or other-shaped table the seats start at its edge
                 host.GameSelectPanel.OnTableReplaced(selection); // L2-5: a deck of yours chosen for an Empty Table is placed now
+                host.GameSelectPanel.AfterTableReplaced(); // CREATE: MAKE A GAME / EDIT open the save steps
                 return true;
             }
             catch (Exception exception)

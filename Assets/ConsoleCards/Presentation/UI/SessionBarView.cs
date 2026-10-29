@@ -63,6 +63,8 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private ToolboxSwitch hotSeatSwitch = new ToolboxSwitch();
         [SerializeField] private ToolboxSwitch handsOnTableSwitch = new ToolboxSwitch();
         [SerializeField] private ToolboxSwitch fullFeedbackSwitch = new ToolboxSwitch();
+        [Tooltip("Optional (owner, 2026-10-30): show or hide the hand tray. Added by Create Missing Table HUD (HUD-B).")]
+        [SerializeField] private ToolboxSwitch handTraySwitch = new ToolboxSwitch();
         [SerializeField] private Button cardArtButton;
 
         [Header("Card editor (L2-2; optional, added by Add Missing Table Menu Rows)")]
@@ -396,7 +398,7 @@ namespace ConsoleCards.Presentation.UI
 
             Clear(saveGameButton);
             openSaveGame = openSaveGameAction;
-            saveGameButton.gameObject.SetActive(openSaveGame != null);
+            saveGameButton.gameObject.SetActive(openSaveGame != null && !barHidden); // HUD-B: the Esc menu has it
             saveGameButton.onClick.AddListener(HandleSaveGame);
             return true;
         }
@@ -598,10 +600,39 @@ namespace ConsoleCards.Presentation.UI
                 }
 
                 hiddenBarParts.Clear();
+                if (saveGameButton != null) saveGameButton.gameObject.SetActive(openSaveGame != null);
             }
         }
 
         public bool IsBarHidden => barHidden;
+
+        /// <summary>
+        /// The Hand switch in Settings (owner, 2026-10-30): shows or hides the hand tray. Not available (no tray) hides
+        /// the row. False when the prefab lacks the row.
+        /// </summary>
+        public bool BindHandTray(bool available, bool shown, Action<bool> setShown)
+        {
+            RequireAcquired();
+            if (handTraySwitch == null || !handTraySwitch.IsComplete) return false;
+            Clear(handTraySwitch.Button);
+            setHandTray = available ? setShown : null;
+            handTrayOn = shown;
+            handTraySwitch.Row.SetActive(setHandTray != null);
+            handTraySwitch.Show(handTrayOn);
+            handTraySwitch.Button.onClick.AddListener(FlipHandTray);
+            return true;
+        }
+
+        private Action<bool> setHandTray;
+        private bool handTrayOn;
+
+        private void FlipHandTray()
+        {
+            if (setHandTray == null) return;
+            handTrayOn = !handTrayOn;
+            handTraySwitch.Show(handTrayOn);
+            setHandTray(handTrayOn);
+        }
 
         /// <summary>HUD-B: opens the Settings menu (the bar's SETTINGS button does the same).</summary>
         public void OpenSettingsMenu()

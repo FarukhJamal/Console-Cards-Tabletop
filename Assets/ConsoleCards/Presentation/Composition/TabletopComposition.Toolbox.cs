@@ -143,6 +143,9 @@ namespace ConsoleCards.Presentation.Composition
                 case ComponentCatalogKind.Console:
                     BeginToolboxPlacement(TabletopComponentKind.Console);
                     break;
+                case ComponentCatalogKind.Die when value < 0:
+                    BeginDiceSetPlacement(); // board 8: "Dice set…"
+                    break;
                 case ComponentCatalogKind.Die:
                     BeginToolboxPlacement(TabletopComponentKind.Die, value);
                     break;
@@ -445,6 +448,60 @@ namespace ConsoleCards.Presentation.Composition
                 ? $"Added d{dieSideCount}."
                 : $"Added {ToolboxComponentLabel(componentKind)}.");
             return result;
+        }
+
+        // Board 8 "Dice set…": one click places a d4, d6, d8, d10, d12 and d20 side by side (one Undo step).
+        private static readonly int[] DiceSetSizes = { 4, 6, 8, 10, 12, 20 };
+
+        private void BeginDiceSetPlacement()
+        {
+            EnsureInitialized();
+            if (componentPlacementController == null)
+            {
+                throw new InvalidOperationException("Component placement is not configured.");
+            }
+
+            ContextMenus.CloseContextMenu();
+            GameObject previewRoot = CreateToolboxPlacementPreview(TabletopComponentKind.Die, 6);
+            float rotation = localSeatLayout != null ? localSeatLayout.PlayerZonePose.RotationDegrees : 0f;
+            componentPlacementController.BeginCustomComponentPlacement(
+                TabletopComponentKind.Die,
+                previewRoot,
+                rotation,
+                0,
+                toolboxSpawnSequence * ToolboxPhysicalOrderStride,
+                CommitDiceSet);
+            ShowPlacementHint("Dice set");
+        }
+
+        private bool CommitDiceSet(TabletopPose pose)
+        {
+            double step = (WorldPerCardWidth() * 0.55f) / Mathf.Max(0.0001f, worldUnitsPerTableUnit);
+            double turn = pose.RotationDegrees * Math.PI / 180d;
+            double across = Math.Cos(turn);
+            double along = Math.Sin(turn);
+            bool any = false;
+            SessionService.BeginUndoBatch();
+            try
+            {
+                for (int i = 0; i < DiceSetSizes.Length; i++)
+                {
+                    double offset = (i - ((DiceSetSizes.Length - 1) * 0.5d)) * step;
+                    TabletopPose at = new TabletopPose(
+                        new TableCoordinate(pose.Position.X + (offset * across), pose.Position.Y - (offset * along)),
+                        pose.RotationDegrees,
+                        pose.Layer,
+                        pose.LocalOrder + i);
+                    any |= AddToolboxComponentAtPose(TabletopComponentKind.Die, DiceSetSizes[i], at, quiet: true).Succeeded;
+                }
+            }
+            finally
+            {
+                SessionService.EndUndoBatch();
+            }
+
+            if (any) ShowMessage("Added a dice set: d4, d6, d8, d10, d12 and d20.");
+            return any;
         }
 
         private bool CommitToolboxPlacement(

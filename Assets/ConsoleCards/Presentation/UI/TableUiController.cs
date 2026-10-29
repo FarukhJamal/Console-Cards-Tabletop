@@ -9,7 +9,7 @@ namespace ConsoleCards.Presentation.UI
     /// Prototype feature facade. It binds Platform and current Game-specific Views without adding
     /// feature knowledge to the generic root or UI service.
     /// </summary>
-    public sealed class TableUiController : MonoBehaviour
+    public sealed partial class TableUiController : MonoBehaviour
     {
         [SerializeField] private TableUiRoot root;
         [SerializeField] private GameObject screenLayer;
@@ -164,6 +164,7 @@ namespace ConsoleCards.Presentation.UI
             ComponentToolboxBindings componentToolboxBindings)
         {
             ValidateReferences();
+            RememberTableRows(sessionTitle, sessionSubtitle, openGameTemplates, resetSession, clearTable); // MENU-1
             EnsureComponentToolboxView();
             EnsureSessionBarView();
             EnsureInteractionGuideView();
@@ -193,6 +194,7 @@ namespace ConsoleCards.Presentation.UI
                 BeforeTableMenuOpens);
             sessionBarView.Show();
             componentToolboxView.Bind(componentToolboxBindings, BeforeToolboxOpens);
+            componentToolboxView.SetTableTools(kind => hudChooseTool?.Invoke(kind)); // board 8: TABLE TOOLS
             componentToolboxView.SetPanelOpenListener(HandleToolboxPanelOpenChanged);
             componentToolboxView.Show();
             interactionGuideView.Bind();
@@ -215,6 +217,8 @@ namespace ConsoleCards.Presentation.UI
             bool hintsOn,
             Action<bool> setHints)
         {
+            RememberHints(hintsOn, setHints); // MENU-1
+            RememberRulesCard(rules != null, rulesCardOn, setRulesCard); // board 6
             EnsureSessionBarView();
             sessionBarView.BindTableSettings(rules != null, rulesCardOn, setRulesCard, hintsOn, setHints, OpenHelp);
             ShowRulesCard(rules, rulesCardOn);
@@ -232,6 +236,7 @@ namespace ConsoleCards.Presentation.UI
             bool hotSeatOn,
             Action<bool> setHotSeat)
         {
+            RememberPlay(available, seatText, nextSeat, hotSeatOn, setHotSeat); // MENU-1
             EnsureSessionBarView();
             if (!sessionBarView.BindPlaySettings(available, seatText, nextSeat, hotSeatOn, setHotSeat)
                 && available
@@ -247,6 +252,7 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>Binds the Table menu's Tips switch (doc 23 §10); warns once when the prefab lacks the row.</summary>
         public void ShowTipsSetting(bool tipsOn, Action<bool> setTips)
         {
+            RememberTips(tipsOn, setTips); // MENU-1
             EnsureSessionBarView();
             if (!sessionBarView.BindTips(tipsOn, setTips) && !tipsSettingWarned)
             {
@@ -269,6 +275,21 @@ namespace ConsoleCards.Presentation.UI
             sessionBarView.BindLookSettings(light, nextLight, colours, nextColours, quality, nextQuality, roomSound, nextRoomSound);
         }
 
+        /// <summary>Settings › Hand (owner, 2026-10-30): show or hide the hand tray; warns once without the row.</summary>
+        public void ShowHandTraySetting(bool available, bool shown, Action<bool> setShown)
+        {
+            RememberHandTray(available, shown, setShown); // MENU-1
+            EnsureSessionBarView();
+            if (!sessionBarView.BindHandTray(available, shown, setShown) && available && !handTraySettingWarned)
+            {
+                handTraySettingWarned = true;
+                Debug.LogWarning(
+                    "Settings has no Hand switch: run Console Cards > UI > Create Missing Table HUD (HUD-B).");
+            }
+        }
+
+        private bool handTraySettingWarned;
+
         public void ShowViewSettings(
             bool handsOnTableAvailable,
             bool handsOnTable,
@@ -276,6 +297,7 @@ namespace ConsoleCards.Presentation.UI
             bool fullFeedback,
             Action<bool> setFullFeedback)
         {
+            RememberView(handsOnTableAvailable, handsOnTable, setHandsOnTable, fullFeedback, setFullFeedback); // MENU-1
             EnsureSessionBarView();
             if (!sessionBarView.BindViewSettings(handsOnTableAvailable, handsOnTable, setHandsOnTable, fullFeedback, setFullFeedback)
                 && !viewSettingsWarned)
@@ -444,6 +466,7 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>Binds the Table menu's "Save table as a game…" row (doc 29); null hides it.</summary>
         public void ShowSaveGameEntry(Action openSaveGame)
         {
+            pauseSaveGame = openSaveGame; // MENU-1: SAVE TABLE AS A GAME in the Esc menu
             EnsureSessionBarView();
             if (!sessionBarView.BindSaveGame(openSaveGame) && openSaveGame != null && !saveGameEntryWarned)
             {
@@ -911,7 +934,11 @@ namespace ConsoleCards.Presentation.UI
 
         public void SetSelectionCount(int count) => VisibleToolBar()?.SetSelectionCount(count);
 
-        public void SetHandStyle(bool fan) => VisibleToolBar()?.SetHandStyle(fan);
+        public void SetHandStyle(bool fan)
+        {
+            recHandFan = fan; // board 6: LOOK › Hand as a fan
+            VisibleToolBar()?.SetHandStyle(fan);
+        }
 
         public void ShowSelectionBox(Vector2 screenA, Vector2 screenB) => VisibleToolBar()?.ShowSelectionBox(screenA, screenB);
 
@@ -1079,7 +1106,8 @@ namespace ConsoleCards.Presentation.UI
                 && !IsVisible(ruleProposalPanelView) && !IsVisible(profilePanelView) && !IsVisible(personaPanelView)
                 && !IsVisible(cardEditorPanelView)
                 && !IsVisible(deckEditorPanelView) && !IsVisible(gameSelectPanelView) && !IsVisible(frontEndView)
-                && !IsVisible(gameSavePanelView) && !IsVisible(tablePanelView) && !IsVisible(rulebookView))
+                && !IsVisible(gameSavePanelView) && !IsVisible(tablePanelView) && !IsVisible(rulebookView)
+                && !IsVisible(pauseMenuView) && !IsVisible(tableSettingsView))
             {
                 modalLayer.SetActive(false);
             }
@@ -1089,6 +1117,7 @@ namespace ConsoleCards.Presentation.UI
         public void ShowRulesCard(RulesCardModel rules, bool visible)
         {
             rulebookRules = rules; // HUD-B: the rulebook reads the same rules, shown or not
+            if (rules != null) physicalRulebookRules?.Invoke(rules); // BOOK-1: the book on the table, too
             if (UsesTableHud)
             {
                 rulesCardShown = false;
@@ -1492,6 +1521,8 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(feedbackBannerView);
             ReleaseView(feedbackMessageStackView);
             ReleaseView(hotSeatHandoverView);
+            ReleaseView(pauseMenuView); // MENU-1
+            ReleaseView(tableSettingsView);
             ReleaseView(activityLogView);
             ReleaseView(contentArtPanelView);
             ReleaseView(ruleProposalPanelView);
@@ -1545,8 +1576,8 @@ namespace ConsoleCards.Presentation.UI
             tableHudView.Bind(
                 new TableHudActions
                 {
-                    OpenMenu = () => sessionBarView?.OpenMenu(),
-                    OpenSettings = () => sessionBarView?.OpenSettingsMenu(),
+                    OpenMenu = OpenMenuFromHud, // MENU-1: the Esc menu (the old Table menu without its prefab)
+                    OpenSettings = OpenSettingsFromHud,
                     Undo = undo,
                     Redo = redo,
                     ChooseTool = kind => hudChooseTool?.Invoke(kind),
@@ -1557,6 +1588,7 @@ namespace ConsoleCards.Presentation.UI
                     OpenShop = () => hudShop?.Invoke(),
                     ToggleHandStyle = () => hudHandStyle?.Invoke(),
                     IsLogShown = IsLogOnScreen,
+                    KeysBlocked = HudKeysBlocked,
                 },
                 title);
             tableHudView.Show();
@@ -1579,6 +1611,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(rulesCardView);
             if (activityLogView != null && activityLogView.IsAcquired && !IsLogShown()) activityLogView.Hide();
             tableHudView.SetRulebookAvailable(rulebookRules != null);
+            tableHudView.SetHintHidden(componentToolboxView != null && componentToolboxView.IsPanelOpen);
         }
 
         private bool IsLogShown() =>
@@ -1605,7 +1638,15 @@ namespace ConsoleCards.Presentation.UI
         }
 
         /// <summary>Opens the rulebook (HUD-B): the book button, or the rulebook lying on the table.</summary>
+        /// <summary>The rulebook: the book on the table when there is one (BOOK-1), else the screen rulebook.</summary>
         public void OpenRulebook()
+        {
+            if (rulebookRules != null && physicalRulebookOpen != null && physicalRulebookOpen()) return;
+            OpenScreenRulebook();
+        }
+
+        /// <summary>The full screen rulebook (search, tabs, house rules).</summary>
+        public void OpenScreenRulebook()
         {
             if (rulebookRules == null || rulebookMissing) return;
             try
@@ -1808,6 +1849,7 @@ namespace ConsoleCards.Presentation.UI
         private void HandleToolboxPanelOpenChanged(bool open)
         {
             sessionBarView?.SetShiftedForPanel(open);
+            if (UsesTableHud) tableHudView.SetHintHidden(open); // the panel sits where the hint bar is
             if (rulesCardShown && rulesCardView != null && rulesCardView.IsAcquired)
             {
                 if (open)

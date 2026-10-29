@@ -159,6 +159,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (activeTool == TableToolKind.Draw && kind != TableToolKind.Draw) CancelDraw();
+            if (kind != TableToolKind.Measure) HideMeasure(); // HUD-B: the measured line goes with its tool
             activeTool = kind;
             if (kind != TableToolKind.Select && !Keys.SelectModifierHeld) CancelSelectPress();
             if (kind == TableToolKind.Draw && toolSelection.Count > 0) ClearToolSelection(); // the panel sits where the selection buttons do
@@ -225,11 +226,14 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!IsInitialized) return;
             bool interacting = interactionRouter != null && interactionRouter.HasActiveInteraction;
-            if (!interacting && !toolsHadInteraction && !IsTypingInUi())
+            if (!interacting && !toolsHadInteraction && !IsTypingInUi() && !rulebookReading) // BOOK-1: Esc is the book's
             {
                 if (Keys.GroupSelectionPressedThisFrame && toolSelection.Count > 0) GroupToolSelection();
                 else if (Keys.CancelPressedThisFrame) StepBackTool();
+                else HandleToolKeys(); // HUD-B: V, P, M
             }
+
+            UpdateMeasure();
 
             toolsHadInteraction = interacting;
             PruneToolSelection();
@@ -240,6 +244,7 @@ namespace ConsoleCards.Presentation.Composition
         // Esc: first the selection goes, then the tool goes back to Grab.
         private void StepBackTool()
         {
+            if (runtimeUi != null && (runtimeUi.IsPauseMenuOpen || runtimeUi.IsTableSettingsOpen)) return; // MENU-1
             if (componentPlacementController != null && componentPlacementController.IsActive) return;
             if (toolSelection.Count > 0)
             {
@@ -247,7 +252,13 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (activeTool != TableToolKind.Grab) ChooseTool(TableToolKind.Grab);
+            if (activeTool != TableToolKind.Grab)
+            {
+                ChooseTool(TableToolKind.Grab);
+                return;
+            }
+
+            runtimeUi?.TryOpenPauseMenuFromEsc(); // MENU-1: with nothing else to step back from, Esc is the Esc menu
         }
 
         private void RefreshToolBarState()
@@ -274,6 +285,8 @@ namespace ConsoleCards.Presentation.Composition
                 case TableToolKind.Ping: return keysPing;
                 case TableToolKind.Flick: return keysFlick;
                 case TableToolKind.Draw: return keysDraw;
+                case TableToolKind.Pan: return KeyName("Drag") + " move the camera   " + KeyName("Esc") + " back to Grab";
+                case TableToolKind.Measure: return KeyName("Drag") + " measure   " + KeyName("Esc") + " back to Grab";
                 default:
                     if (Keys.SelectModifierHeld) return keysSelect;
                     return IsPointerOnDrawablePile() ? keysPile : keysGrab; // POL-4: over a deck or stack
@@ -291,9 +304,14 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- Selecting (ITabletopSelectHandler) ----------
 
+        // A press that a menu took (or that lands the frame a menu closes, e.g. MAIN MENU's second press) is not a
+        // selection: it would close the front end it just opened.
+        private bool TableCoveredByUi => runtimeUi != null && runtimeUi.IsTableBehindMenu;
+
         bool ITabletopSelectHandler.WantsSelect()
         {
             return IsInitialized
+                && !TableCoveredByUi
                 && tableModeStart == null
                 && (componentPlacementController == null || !componentPlacementController.IsActive)
                 && (activeTool == TableToolKind.Select || Keys.SelectModifierHeld);
@@ -304,6 +322,7 @@ namespace ConsoleCards.Presentation.Composition
         bool ITabletopSelectHandler.WantsBoxOnEmptyTable()
         {
             return IsInitialized
+                && !TableCoveredByUi
                 && tableModeStart == null
                 && (componentPlacementController == null || !componentPlacementController.IsActive)
                 && (activeTool == TableToolKind.Grab || activeTool == TableToolKind.Select)
@@ -735,6 +754,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             CancelDraw(); // a line being drawn does not carry over to a rebuilt table (the drawings themselves stay)
             CancelSelectPress();
+            HideMeasure();
             toolSelection.Clear();
             shownToolSelectionCount = -1;
             if (boardFeedback != null) boardFeedback.HideSelection();

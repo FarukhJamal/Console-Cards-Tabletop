@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: ConsoleCards.Presentation::ConsoleCards.Presentation.UI.UiPrefabCatalog
   entries:
   - id: platform.component-toolbox
-    prefab: {fileID: 659198539153712646, guid: 568cd389194843d7896795f9591ca4b4, type: 3}
+    prefab: {fileID: 5051607085220279116, guid: dfd0f4b9b59cb264388e62f8b6a12470, type: 3}
     layer: 1
     retention: 0
   - id: platform.tabletop-popup
@@ -30,11 +30,11 @@ MonoBehaviour:
     layer: 3
     retention: 0
   - id: platform.action-ability-purchase
-    prefab: {fileID: 7964997745369819829, guid: 0690fcf4abc54bfbbb4c9ea674d1aeb8, type: 3}
+    prefab: {fileID: 4635575031075453348, guid: ea0bee3633fafd442814999698b4af12, type: 3}
     layer: 3
     retention: 0
   - id: platform.focused-card-selection
-    prefab: {fileID: 2041643355706426548, guid: aed5640bee094cd7a7534e5ab96f71a3, type: 3}
+    prefab: {fileID: 789964445817602866, guid: 1cd35715ce4d13f43be2311d3b6e3314, type: 3}
     layer: 3
     retention: 0
   - id: platform.interaction-guide
@@ -138,7 +138,7 @@ MonoBehaviour:
     layer: 3
     retention: 0
   - id: platform.game-save-panel
-    prefab: {fileID: 1101922016561863838, guid: 9423fde988a50a143b400353b616003d, type: 3}
+    prefab: {fileID: 601950055417945099, guid: 6655f2a9e59ec8b478c47c524a3c3c80, type: 3}
     layer: 3
     retention: 0
   - id: platform.table-panel
@@ -172,4 +172,20 @@ MonoBehaviour:
   - id: platform.table-milestone
     prefab: {fileID: 5254851874795338757, guid: 2b47624a4c2494047965ef9956313970, type: 3}
     layer: 1
+    retention: 0
+  - id: platform.table-hud
+    prefab: {fileID: 7117548558055220292, guid: 0042263a2c1a1fa479c09173891eb063, type: 3}
+    layer: 1
+    retention: 0
+  - id: platform.table-rulebook
+    prefab: {fileID: 5012343662163043968, guid: 19a60925b381af34abd043c7088ba3ac, type: 3}
+    layer: 3
+    retention: 0
+  - id: platform.table-pause-menu
+    prefab: {fileID: 8292759656303657137, guid: 62ece3d1b835d944aa8c530ce823c6cc, type: 3}
+    layer: 3
+    retention: 0
+  - id: platform.table-settings
+    prefab: {fileID: 4218542881571259255, guid: 813051769529f6d44bceac02589837cf, type: 3}
+    layer: 3
     retention: 0
