@@ -993,7 +993,6 @@ namespace ConsoleCards.Presentation.Composition
                 // UI-2 (owner, 2026-10-24): the game opens on the front end's main menu (the user journey); its Player
                 // profile screen is where you pick who is playing.
                 GameSelectPanel.OpenFrontEnd(FrontEndPage.Home);
-                runtimeUi?.ShowTitleIntro(); // owner, 2026-10-28: the room and the console first, over the main menu
             }
             catch (Exception exception)
             {

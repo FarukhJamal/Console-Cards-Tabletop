@@ -126,6 +126,5 @@ namespace ConsoleCards.Presentation.UI
         public const string ToolBar = "platform.tool-bar";
         public const string TableOverlay = "platform.table-overlay";
         public const string FrontEnd = "platform.front-end";
-        public const string TitleIntro = "platform.title-intro";
     }
 }
