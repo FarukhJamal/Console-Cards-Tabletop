@@ -71,7 +71,18 @@ namespace ConsoleCards.Intro.Editor
                 MakeMaterials();
                 EditorUtility.DisplayProgressBar("Build Intro Scene", "The room", 0.45f);
                 Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-                BuildScene();
+                try
+                {
+                    BuildScene();
+                }
+                catch (System.Exception exception)
+                {
+                    Debug.LogException(exception);
+                    EditorUtility.DisplayDialog("Build Intro Scene", "The build stopped and nothing was saved:\n" + exception.Message
+                        + "\n\nSend this message (or the Console's red line) to Claude.", "OK");
+                    return;
+                }
+
                 EditorUtility.DisplayProgressBar("Build Intro Scene", "Saving", 0.9f);
                 EditorSceneManager.SaveScene(scene, ScenePath);
                 PutFirstInBuild();
@@ -656,8 +667,14 @@ namespace ConsoleCards.Intro.Editor
             spot.shadows = LightShadows.Soft;
             spot.shadowStrength = 0.9f;
             spot.shadowNearPlane = 0.2f;
+            // The shadow quality tier can only be set through the serialized field outside Play mode.
             UniversalAdditionalLightData data = spot.GetUniversalAdditionalLightData();
-            if (data != null) data.additionalLightsShadowResolutionTier = UniversalAdditionalLightData.AdditionalLightsShadowResolutionTierHigh;
+            SerializedProperty tier = data != null ? new SerializedObject(data).FindProperty("m_AdditionalLightsShadowResolutionTier") : null;
+            if (tier != null)
+            {
+                tier.intValue = UniversalAdditionalLightData.AdditionalLightsShadowResolutionTierHigh;
+                tier.serializedObject.ApplyModifiedPropertiesWithoutUndo();
+            }
 
             MakeLight("Floor Lamp", lights, LightType.Point, new Vector3(-4.35f, 1.62f, -3.55f), Hex("#ffb46b"), 2.2f, 5f);
             pulse.Add(MakeLight("LED Column L", lights, LightType.Point, new Vector3(-1.55f, 1.7f, -4f), Hex("#06eff0"), 1.5f, 3.8f));
