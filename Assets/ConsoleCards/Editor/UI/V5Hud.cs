@@ -185,9 +185,11 @@ namespace ConsoleCards.Editor.UI
                 changed++;
             }
 
-            if (Upgrade(path, SessionBarLookLabel, SessionBarLook))
+            // Owner, 2026-10-29: Light, Colours, Quality and Room sound are on the main menu's SETTINGS, not here. A
+            // SessionBar that got the rows (SessionBarDesign4) has them switched off; one without them is not changed.
+            if (Upgrade(path, SessionBarLookOffLabel, SessionBarLookOff))
             {
-                Debug.Log($"Console Cards: {path}: SETTINGS has Light, Colours, Quality and Room sound rows now.");
+                Debug.Log($"Console Cards: {path}: the Light, Colours, Quality and Room sound rows are off (they are on the main menu's SETTINGS now).");
                 changed++;
             }
 
@@ -205,54 +207,27 @@ namespace ConsoleCards.Editor.UI
             return true;
         }
 
-        // Owner, 2026-10-27 (V1, V5, V6, V7): SETTINGS gets Light, Colours, Quality and Room sound rows, copies of the
-        // Table menu's seat row added under the view settings. Nothing else in the prefab changes.
-        private const string SessionBarLookLabel = "SessionBarDesign4";
+        // Owner, 2026-10-29: the rows SessionBarDesign4 added to SETTINGS (2026-10-27) are switched off, not deleted;
+        // the settings are on the main menu's SETTINGS. Nothing else in the prefab changes.
+        private const string SessionBarLookOffLabel = "SessionBarDesign5";
 
-        private static readonly string[] LookRows = { "LightRow", "ColoursRow", "QualityRow", "RoomSoundRow" };
-        private static readonly string[] LookWords = { "Light: Day", "Colours: Standard", "Quality: High", "Room sound: On" };
-
-        private static bool SessionBarLook(GameObject root)
+        private static bool SessionBarLookOff(GameObject root)
         {
-            RectTransform bar = Find(root.transform, "Bar");
-            RectTransform model = Find(bar, "TableMenu/SeatRow");
-            RectTransform settingsMenu = Find(bar, "SettingsMenu");
-            SessionBarView view = root.GetComponent<SessionBarView>();
-            if (model == null || settingsMenu == null || view == null) return false;
-
-            Button[] buttons = new Button[LookRows.Length];
-            Text[] labels = new Text[LookRows.Length];
-            for (int i = 0; i < LookRows.Length; i++)
+            RectTransform settingsMenu = Find(root.transform, "Bar/SettingsMenu");
+            if (settingsMenu == null) return false;
+            bool changed = false;
+            foreach (string name in LookRows)
             {
-                RectTransform row = Find(settingsMenu, LookRows[i]);
-                if (row == null)
-                {
-                    row = (RectTransform)UnityEngine.Object.Instantiate(model.gameObject, settingsMenu, false).transform;
-                    row.name = LookRows[i];
-                    row.SetAsLastSibling();
-                }
-
-                row.gameObject.SetActive(true);
-                buttons[i] = row.GetComponent<Button>();
-                labels[i] = Find(row, "Label")?.GetComponent<Text>();
-                if (labels[i] != null) labels[i].text = LookWords[i];
+                Transform row = settingsMenu.Find(name);
+                if (row == null || !row.gameObject.activeSelf) continue;
+                row.gameObject.SetActive(false);
+                changed = true;
             }
 
-            SerializedObject so = new SerializedObject(view);
-            SetArray(so, "lookButtons", buttons);
-            SetArray(so, "lookLabels", labels);
-            so.ApplyModifiedPropertiesWithoutUndo();
-            return true;
+            return changed;
         }
 
-        private static void SetArray(SerializedObject so, string property, UnityEngine.Object[] values)
-        {
-            SerializedProperty p = so.FindProperty(property);
-            if (p == null || !p.isArray) return;
-            p.arraySize = values.Length;
-            for (int i = 0; i < values.Length; i++) p.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
-        }
-
+        private static readonly string[] LookRows = { "LightRow", "ColoursRow", "QualityRow", "RoomSoundRow" };
         // Runs one change on a prefab that has not had it yet (its label), and marks it.
         private static bool Upgrade(string path, string label, Func<GameObject, bool> change)
         {

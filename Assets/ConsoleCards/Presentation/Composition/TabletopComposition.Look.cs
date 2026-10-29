@@ -40,10 +40,7 @@ namespace ConsoleCards.Presentation.Composition
         private AudioClip roomSoundClip;
         private ScriptableRendererFeature ambientOcclusion;
         private bool ambientOcclusionWasActive;
-        private Action nextLightAction;
-        private Action nextColoursAction;
-        private Action nextQualityAction;
-        private Action nextRoomSoundAction;
+        private bool coloursPending;
 
         private struct LightLook
         {
@@ -307,61 +304,56 @@ namespace ConsoleCards.Presentation.Composition
             return clip;
         }
 
-        // ---------- SETTINGS rows ----------
+        // ---------- the main menu's SETTINGS (owner, 2026-10-29) ----------
 
+        // The table's SETTINGS menu no longer has these rows (they are on the main menu): a SessionBar that has them
+        // hides them.
         internal void RefreshLookSettingsUi()
         {
-            if (runtimeUi == null) return;
-            nextLightAction ??= NextLightPreset;
-            nextColoursAction ??= ToggleColourBlind;
-            nextQualityAction ??= NextQuality;
-            nextRoomSoundAction ??= ToggleRoomSound;
-            runtimeUi.ShowLookSettings(
-                "Light: " + LookSettings.LightName(LookSettings.Light), nextLightAction,
-                LookSettings.ColourBlind ? "Colours: Colour-blind" : "Colours: Standard", nextColoursAction,
-                "Quality: " + LookSettings.QualityName(LookSettings.Quality), nextQualityAction,
-                LookSettings.RoomSound ? "Room sound: On" : "Room sound: Off", nextRoomSoundAction);
+            runtimeUi?.ShowLookSettings(null, null, null, null, null, null, null, null);
         }
 
-        private void NextLightPreset()
+        internal void NextLightPreset(int step)
         {
-            LookSettings.Light = (LightPreset)(((int)LookSettings.Light + 1) % 3);
+            LookSettings.Light = (LightPreset)Wrap((int)LookSettings.Light + step, 3);
             ApplyLook();
-            RefreshLookSettingsUi();
-            ShowMessage($"Light: {LookSettings.LightName(LookSettings.Light)}.");
         }
 
-        private void NextQuality()
+        internal void NextQuality(int step)
         {
-            LookSettings.Quality = (GraphicsQuality)(((int)LookSettings.Quality + 1) % 3);
+            LookSettings.Quality = (GraphicsQuality)Wrap((int)LookSettings.Quality + step, 3);
             ApplyLook();
-            RefreshLookSettingsUi();
-            ShowMessage($"Quality: {LookSettings.QualityName(LookSettings.Quality)}.");
         }
 
-        private void ToggleRoomSound()
+        internal void ToggleRoomSound()
         {
             LookSettings.RoomSound = !LookSettings.RoomSound;
             ApplyRoomSound();
-            RefreshLookSettingsUi();
         }
 
-        // The seat colours change on the pieces, the HUD and the log: the table's view is made again (the game itself
-        // does not change).
-        private void ToggleColourBlind()
+        // The seat colours are on the pieces, the HUD and the log: the table behind the main menu is made again when
+        // the player goes back to it (TABLE), or a new table is made with them. The game itself does not change.
+        internal void ToggleColourBlind()
         {
             LookSettings.ColourBlind = !LookSettings.ColourBlind;
-            string said = LookSettings.ColourBlind
-                ? "Colour-blind colours: blue, vermilion, yellow and pink."
-                : "Standard colours: blue, red, green and yellow.";
-            if (IsInitialized && activeSession != null && templateContext != null && !seatSwitchPending && !rebuildingFromUndo)
-            {
-                if (RebuildPresentationFor(templateContext, PlayerId.Empty, false, "Colours")) ShowMessage(said);
-                return;
-            }
-
-            RefreshLookSettingsUi();
-            ShowMessage(said + " They show on the next table.");
+            coloursPending = !coloursPending;
         }
+
+        internal void ForgetPendingColours() => coloursPending = false;
+
+        internal void ApplyPendingColours()
+        {
+            if (!coloursPending) return;
+            coloursPending = false;
+            if (!IsInitialized || activeSession == null || templateContext == null || seatSwitchPending || rebuildingFromUndo) return;
+            if (RebuildPresentationFor(templateContext, PlayerId.Empty, false, "Colours"))
+            {
+                ShowMessage(LookSettings.ColourBlind
+                    ? "Colour-blind colours: blue, vermilion, yellow and pink."
+                    : "Standard colours: blue, red, green and yellow.");
+            }
+        }
+
+        private static int Wrap(int value, int count) => ((value % count) + count) % count;
     }
 }

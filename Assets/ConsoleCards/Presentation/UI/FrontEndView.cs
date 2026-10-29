@@ -21,6 +21,10 @@ namespace ConsoleCards.Presentation.UI
         // MP-2: online play (FE_Lobby, FE_Room). A front end made before them has neither; it works as before.
         Lobby = 8,
         Room = 9,
+
+        // Owner, 2026-10-29: the main menu's SETTINGS (FE_Settings: light, colours, quality, room sound). Optional:
+        // a front end made before it opens the player profile there, as before.
+        Settings = 10,
     }
 
     /// <summary>
@@ -211,6 +215,7 @@ namespace ConsoleCards.Presentation.UI
                     break; // owner, 2026-10-26: the main menu is the first screen; the table is reached with TABLE
                 case FrontEndPage.Create:
                 case FrontEndPage.Profile:
+                case FrontEndPage.Settings:
                     Go(FrontEndPage.Home);
                     break;
                 case FrontEndPage.Lobby:
@@ -240,7 +245,7 @@ namespace ConsoleCards.Presentation.UI
             On("TopBar/Tabs/Create", () => Go(FrontEndPage.Create));
             On("TopBar/Tabs/Sandbox", () => actions?.Sandbox?.Invoke());
             On("TopBar/Right/Guide", () => openGuide?.Invoke());
-            On("TopBar/Right/Settings", () => actions?.OpenProfile?.Invoke());
+            On("TopBar/Right/Settings", OpenSettings);
             On("TopBar/Right/Table", () => actions?.Close?.Invoke());
             On("TopBar/Right/Exit", () => actions?.Exit?.Invoke());
 
@@ -301,6 +306,7 @@ namespace ConsoleCards.Presentation.UI
             On("Pages/Review/Players/Edit", () => Go(FrontEndPage.Players));
             On("Pages/Review/Start", () => actions?.Start?.Invoke());
             BindOnlineButtons(); // MP-2
+            BindSettingsButtons();
         }
 
         private void On(string path, Action click)
@@ -371,6 +377,9 @@ namespace ConsoleCards.Presentation.UI
                     break;
                 case FrontEndPage.Room:
                     RenderRoom();
+                    break;
+                case FrontEndPage.Settings:
+                    RenderSettings();
                     break;
             }
         }
@@ -682,8 +691,9 @@ namespace ConsoleCards.Presentation.UI
             for (int i = 0; i < names.Length; i++)
             {
                 // MP-2: the online screens are optional (a front end made before them works without them).
-                Transform optional = IsOnlinePage((FrontEndPage)i) ? transform.Find("Pages/" + names[i]) : null;
-                pages[i] = IsOnlinePage((FrontEndPage)i) ? (optional != null ? optional.gameObject : null) : Require("Pages/" + names[i]).gameObject;
+                bool isOptional = IsOnlinePage((FrontEndPage)i) || (FrontEndPage)i == FrontEndPage.Settings;
+                Transform optional = isOptional ? transform.Find("Pages/" + names[i]) : null;
+                pages[i] = isOptional ? (optional != null ? optional.gameObject : null) : Require("Pages/" + names[i]).gameObject;
             }
 
             foreach (Button button in GetComponentsInChildren<Button>(true))

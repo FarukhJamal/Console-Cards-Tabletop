@@ -143,6 +143,10 @@ namespace ConsoleCards.Presentation.Composition
                     ToggleReady = () => host.Online.ToggleReady(),
                     CycleOnlineColour = step => host.Online.CycleColour(step),
                     CycleOnlineSeat = step => host.Online.CycleSeat(step),
+                    CycleLight = step => ChangeLook(() => host.NextLightPreset(step)),
+                    CycleColours = step => ChangeLook(host.ToggleColourBlind),
+                    CycleQuality = step => ChangeLook(() => host.NextQuality(step)),
+                    CycleRoomSound = step => ChangeLook(host.ToggleRoomSound),
                 };
             }
 
@@ -207,6 +211,10 @@ namespace ConsoleCards.Presentation.Composition
         {
             model.OpenAt = pendingFrontEndPage;
             pendingFrontEndPage = null;
+            model.LightText = LookSettings.LightName(LookSettings.Light);
+            model.ColoursText = LookSettings.ColourBlind ? "Colour-blind" : "Standard";
+            model.QualityText = LookSettings.QualityName(LookSettings.Quality);
+            model.RoomSoundText = LookSettings.RoomSound ? "On" : "Off";
             model.IsEmptyTable = entry.Game == null && entry.PlayerGame == null;
             ProfileService service = host.EnsureProfile();
             List<ProfileInfo> saved = service.List();
@@ -764,6 +772,7 @@ namespace ConsoleCards.Presentation.Composition
             List<GameSelectEntry> entries = GameSelectEntries();
             GameSelectEntry entry = FindGameSelectEntry(entries, gameSelectEntryId);
             if (entry == null) return;
+            host.ForgetPendingColours(); // the new table is made with the colours chosen on SETTINGS
             bool online = host.HasOnline && host.Online.InRoom; // MP-2: the host starts the room's game for everyone
             if (online && !host.Online.IsHosting)
             {
@@ -1050,6 +1059,14 @@ namespace ConsoleCards.Presentation.Composition
         {
             returnToGameSelect = false;
             host.runtimeUi?.CloseGameSelect();
+            host.ApplyPendingColours(); // a colour change made on SETTINGS shows on the table now
+        }
+
+        // The main menu's SETTINGS: the change, then the screen again with the new values.
+        private void ChangeLook(Action change)
+        {
+            change();
+            ShowGameSelect(string.Empty);
         }
 
         internal void OpenFromGameSelect(Action open)

@@ -234,8 +234,6 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
-        private bool lookSettingsWarned;
-
         /// <summary>V1/V5/V6/V7: binds the SETTINGS rows Light, Colours, Quality and Room sound.</summary>
         public void ShowLookSettings(
             string light, Action nextLight,
@@ -243,13 +241,10 @@ namespace ConsoleCards.Presentation.UI
             string quality, Action nextQuality,
             string roomSound, Action nextRoomSound)
         {
+            // Owner, 2026-10-29: these settings are on the main menu's SETTINGS; a SessionBar with the rows hides them
+            // (null actions), one without them needs nothing.
             EnsureSessionBarView();
-            if (!sessionBarView.BindLookSettings(light, nextLight, colours, nextColours, quality, nextQuality, roomSound, nextRoomSound)
-                && !lookSettingsWarned)
-            {
-                lookSettingsWarned = true;
-                Debug.LogWarning("The SETTINGS menu has no Light, Colours, Quality and Room sound rows: run Console Cards > UI > Apply Kit Look (UI-1).");
-            }
+            sessionBarView.BindLookSettings(light, nextLight, colours, nextColours, quality, nextQuality, roomSound, nextRoomSound);
         }
 
         public void ShowViewSettings(

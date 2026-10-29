@@ -63,6 +63,11 @@ namespace ConsoleCards.Presentation.UI
         public bool CanChangeColours;
         /// <summary>MP-2: the Lobby and Room screens (null: online play is not in this build's front end).</summary>
         public OnlineScreenModel Online;
+        // Owner, 2026-10-29: the main menu's SETTINGS screen (the value shown between each row's < >).
+        public string LightText = string.Empty;
+        public string ColoursText = string.Empty;
+        public string QualityText = string.Empty;
+        public string RoomSoundText = string.Empty;
     }
 
     /// <summary>One line of IN THE BOX on Game details. <see cref="Icon"/> names a picture in the screen's IconSet.</summary>
@@ -133,6 +138,12 @@ namespace ConsoleCards.Presentation.UI
         public Action ToggleReady;
         public Action<int> CycleOnlineColour;
         public Action<int> CycleOnlineSeat;
+
+        // Owner, 2026-10-29: the main menu's SETTINGS screen, -1 or +1.
+        public Action<int> CycleLight;
+        public Action<int> CycleColours;
+        public Action<int> CycleQuality;
+        public Action<int> CycleRoomSound;
     }
 
     /// <summary>

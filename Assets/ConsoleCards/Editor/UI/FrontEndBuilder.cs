@@ -50,11 +50,12 @@ namespace ConsoleCards.Editor.UI
             ("FE_Review", "Review", true, false),
             ("FE_Lobby", "Lobby", true, false), // MP-2: online play
             ("FE_Room", "Room", true, false),
+            ("FE_Settings", "Settings", true, false), // V1/V5/V6/V7 (owner, 2026-10-29): SETTINGS on the main menu
         };
 
         // MP-2: screens added after FrontEnd.prefab may have been edited by the owner. Building one does not put the
         // front end together again: InsertMissingScreens adds it to the existing FrontEnd.prefab and nothing else.
-        private static readonly HashSet<string> AddedLater = new HashSet<string> { "FE_Lobby", "FE_Room" };
+        private static readonly HashSet<string> AddedLater = new HashSet<string> { "FE_Lobby", "FE_Room", "FE_Settings" };
         private const string WhitePlate = "Assets/ConsoleCards/Content/UI/Kit/KitAccent.png";
 
         private static readonly Color White = UiKit.Hex("e8eced");
@@ -355,7 +356,7 @@ namespace ConsoleCards.Editor.UI
                 PrefabUtility.UnloadPrefabContents(root);
             }
 
-            if (added > 0) Debug.Log($"Console Cards: added {added} new screen(s) (online Lobby and Room) to {PrefabPath} (your edits are kept).");
+            if (added > 0) Debug.Log($"Console Cards: added {added} new screen(s) (online Lobby and Room, Settings) to {PrefabPath} (your edits are kept).");
             return added;
         }
 
@@ -646,6 +647,7 @@ namespace ConsoleCards.Editor.UI
                 case "Review": Review(holder); break;
                 case "Lobby": Lobby(holder); break;
                 case "Room": Room(holder); break;
+                case "Settings": Settings(holder); break;
             }
         }
 
@@ -956,6 +958,24 @@ namespace ConsoleCards.Editor.UI
             Row(leave, 16f, TextAnchor.MiddleCenter);
             Picture(Node("Arrow", leave), Figma("leftArrowIcon"), White, 18f, 18f);
             Fit(Words(Node("Label", leave), bold, 20, White, TextAnchor.MiddleCenter, "LEAVE"));
+        }
+
+        // Owner, 2026-10-29: the look and sound settings on the main menu's SETTINGS (not in the table's menu): Light,
+        // Colours, Quality and Room sound, each a row with "<  value  >"; BACK to the main menu.
+        private static void Settings(RectTransform pages)
+        {
+            RectTransform page = Page(pages, "Settings");
+            PageTitle(page, "SETTINGS", "L O O K   A N D   S O U N D", 103f, 167f, 92);
+            RectTransform panel = TopLeft("Panel", page, 68f, 300f, 758f, 472f);
+            Plate(panel, Figma("Avatar"), 2f);
+            Words(TopLeft("Title", panel, 44f, 26f, 670f, 44f), bold, 30, White, TextAnchor.MiddleLeft, "LOOK AND SOUND");
+            Words(TopLeft("Hint", panel, 44f, 68f, 670f, 24f), medium, 15, Muted, TextAnchor.MiddleLeft,
+                "Kept on this computer; used at every table.");
+            RoomPicker(panel, "Light", 44f, 108f, "LIGHT", false);
+            RoomPicker(panel, "Colours", 44f, 194f, "COLOURS", false);
+            RoomPicker(panel, "Quality", 44f, 280f, "QUALITY", false);
+            RoomPicker(panel, "RoomSound", 44f, 366f, "ROOM SOUND", false);
+            BackButton(page, 68f, 965f, "BACK");
         }
 
         // A row with a label and "<  value  >" (the room's colour and seat pickers).
