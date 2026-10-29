@@ -161,3 +161,15 @@ MonoBehaviour:
     prefab: {fileID: 5839328499895730681, guid: bd94bd03f7925c640944b627cae54d35, type: 3}
     layer: 3
     retention: 0
+  - id: platform.table-choice-chip
+    prefab: {fileID: 5213955543850977946, guid: 74406f4d7f7b86446b6519017b6e92bf, type: 3}
+    layer: 1
+    retention: 0
+  - id: platform.table-warning
+    prefab: {fileID: 6141177645768840944, guid: 9cd4330651d4d7948896f8eb2f0fabdd, type: 3}
+    layer: 4
+    retention: 0
+  - id: platform.table-milestone
+    prefab: {fileID: 5254851874795338757, guid: 2b47624a4c2494047965ef9956313970, type: 3}
+    layer: 1
+    retention: 0
