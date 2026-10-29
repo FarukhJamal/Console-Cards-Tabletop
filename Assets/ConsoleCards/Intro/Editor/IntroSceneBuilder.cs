@@ -1046,22 +1046,25 @@ namespace ConsoleCards.Intro.Editor
             PrefabUtility.UnpackPrefabInstance(go, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
             go.name = name;
             Strip(go);
+            // Keep the model's own rotation: it is what stands it the right way up (its top up), as in the game.
+            Quaternion own = prefab.transform.rotation;
             go.transform.position = Vector3.zero;
-            go.transform.rotation = Quaternion.identity;
+            go.transform.rotation = own;
             Quaternion lie = Quaternion.identity;
             Bounds b = BoundsOf(go);
             if (flat)
             {
+                // Only turn it when its thinnest side is not already up.
                 Vector3 s = b.size;
-                if (s.x <= s.y && s.x <= s.z) lie = Quaternion.Euler(0f, 0f, 90f);
-                else if (s.z <= s.x && s.z <= s.y) lie = Quaternion.Euler(90f, 0f, 0f);
-                go.transform.rotation = lie;
+                if (s.x < s.y && s.x <= s.z) lie = Quaternion.Euler(0f, 0f, 90f);
+                else if (s.z < s.y && s.z < s.x) lie = Quaternion.Euler(90f, 0f, 0f);
+                go.transform.rotation = lie * own;
                 b = BoundsOf(go);
             }
 
             if (longAxis == Axis.X && b.size.z > b.size.x) lie = Quaternion.Euler(0f, 90f, 0f) * lie;
             if (longAxis == Axis.Z && b.size.x > b.size.z) lie = Quaternion.Euler(0f, 90f, 0f) * lie;
-            go.transform.rotation = Quaternion.Euler(0f, yaw, 0f) * lie;
+            go.transform.rotation = Quaternion.Euler(0f, yaw, 0f) * lie * own;
             b = BoundsOf(go);
             float longest = longAxis == Axis.None ? Mathf.Max(b.size.x, b.size.y, b.size.z) : Mathf.Max(b.size.x, b.size.z);
             if (longest > 1e-6f) go.transform.localScale *= size / longest;
