@@ -100,6 +100,15 @@ namespace ConsoleCards.Presentation.Composition
             return host.trapFloorTemplate.GridRows - 1;
         }
 
+        // POP-2: seconds before the floor-end chip deals the next floor by itself (dealing cannot be undone).
+        private const float FloorEndedAutoDealSeconds = 5f;
+
+        // POP-2: the floor is still over (lost, or won through an exit); false after an Undo took that back.
+        private bool IsFloorEnded() =>
+            host.trapFloorTurnState != null
+            && (host.trapFloorTurnState.IsCurrentFloorFailed
+                || (host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsWon));
+
         internal string FloorEndedActionLabel()
         {
             if (host.trapFloorTemplate == null || host.trapFloorTemplate.IsLastFloor) return "Play Again";
@@ -147,6 +156,40 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             string body = string.IsNullOrEmpty(detail) ? next : $"{detail}\n{next}";
+
+            // POP-2 (owner, 2026-10-29: "Starting floor 2 is too big"): a chip at the top centre. A next floor deals
+            // itself after a short countdown (Esc or hovering stops it; Not yet closes it, the turn menu still offers
+            // it); the last floor waits for Play Again.
+            int nextColumns = 0;
+            int nextRows = 0;
+            if (!last) nextRows = NextFloorSize(out nextColumns);
+            string chipTitle = last
+                ? won ? "You win the game" : "Game over"
+                : $"Floor {number + 1} of {floor.FloorCount}";
+            string chipDetail = last
+                ? (string.IsNullOrEmpty(detail) ? next : detail)
+                : $"{nextColumns}×{nextRows}, dealt fresh"
+                    + (string.IsNullOrEmpty(detail) ? string.Empty : $" · {detail}");
+            if (host.runtimeUi.ShowTableMilestone(new TableMilestoneModel(
+                    last ? (won ? "GAME WON" : "GAME LOST") : $"FLOOR {number} {(won ? "WON" : "LOST")}",
+                    won ? TableNoticeTone.Won : TableNoticeTone.Danger,
+                    chipTitle,
+                    chipDetail,
+                    last ? FloorEndedActionLabel() : "Start",
+                    () =>
+                    {
+                        host.runtimeUi?.CloseTableMilestone();
+                        if (!IsFloorEnded()) return; // Undo took the floor's end back while the chip waited
+                        if (last) DealFloor(0);
+                        else DealFloor(floor.FloorIndex + 1);
+                    },
+                    "Not yet",
+                    () => host.runtimeUi?.CloseTableMilestone(),
+                    last || host.IsOnlineTable ? 0f : FloorEndedAutoDealSeconds))) // online: no countdown; a player presses Start
+            {
+                return;
+            }
+
             Action close = () => host.runtimeUi?.CloseTabletopPopup();
             host.runtimeUi.ShowContextMenu(
                 new Vector2((Screen.width * 0.5f) - 200f, Screen.height * 0.66f),

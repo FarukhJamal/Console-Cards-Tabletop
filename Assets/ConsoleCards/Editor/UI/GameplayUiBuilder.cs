@@ -245,6 +245,7 @@ namespace ConsoleCards.Editor.UI
                 UiRetention.CachedSingleInstance);
             AssetDatabase.SaveAssets();
             Debug.Log("[Gameplay UI] Created any missing Final UI gameplay prefabs and pointed the UI prefab catalog at them.");
+            TableNoticeBuilder.Build(); // POP-2: the table notices (choice chip, warning line, floor-end chip)
         }
 
         private static void Save<T>(string path, string name, System.Action<RectTransform, T> build, bool stretch)

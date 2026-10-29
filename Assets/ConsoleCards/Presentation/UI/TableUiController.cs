@@ -69,6 +69,16 @@ namespace ConsoleCards.Presentation.UI
         private bool tipsSettingWarned;
         private bool cardArtWarned;
         private bool shopEntryWarned;
+        // POP-2 (owner approved Popups v2, 2026-10-29): notices on the table instead of centre popups.
+        private TableChoiceChipView choiceChipView;
+        private TableWarningView tableWarningView;
+        private TableMilestoneView tableMilestoneView;
+        private bool choiceChipMissing;
+        private bool tableWarningMissing;
+        private bool tableMilestoneMissing;
+        private UnityEngine.Camera anchorCamera;
+        private TableAnchorResolver anchorResolver;
+        private Action warningUndo;
 
         public IRuntimeUiService UiService
         {
@@ -1093,6 +1103,8 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>Adds a message to the message stack (doc 25). False when the prefab is missing.</summary>
         public bool ShowFeedbackMessage(string message, FeedbackSeverity severity)
         {
+            // POP-2: a warning is the short yellow line at the top of the table, with UNDO when it asks for Undo.
+            if (severity == FeedbackSeverity.Warning && TryShowTableWarning(message)) return true;
             if (!EnsureFeedbackViews()) return false;
             feedbackMessageStackView.Push(message, severity);
             return true;
@@ -1279,6 +1291,7 @@ namespace ConsoleCards.Presentation.UI
 
         public void ShowFocusedCardSelection(FocusedCardSelectionModel model)
         {
+            ReleaseView(choiceChipView); // POP-2: a payment replaces a choice chip, as it replaced the reveal
             ReleaseView(tabletopPopupView);
             popupLayer.SetActive(false);
             ReleaseModalViews();
@@ -1291,6 +1304,8 @@ namespace ConsoleCards.Presentation.UI
 
         public void ShowFocusedCardReveal(FocusedCardRevealModel model)
         {
+            if (TryShowChoiceChip(model)) return; // POP-2: beside the tile, when the tile is on the table
+            ReleaseView(choiceChipView);
             ReleaseView(tabletopPopupView);
             popupLayer.SetActive(false);
             ReleaseModalViews();
@@ -1303,6 +1318,7 @@ namespace ConsoleCards.Presentation.UI
 
         public void CloseFocusedCardSelection()
         {
+            ReleaseView(choiceChipView);
             ReleaseView(focusedCardSelectionView);
             if (!IsVisible(quantityPopupView)
                 && !IsVisible(cardInspectPopupView)
@@ -1380,6 +1396,8 @@ namespace ConsoleCards.Presentation.UI
 
         public void ClearActiveSessionTransientUi()
         {
+            ReleaseView(choiceChipView); // POP-2: a new table, a handover or an Undo rebuild ends a waiting choice
+            ReleaseView(tableMilestoneView);
             sessionBarView?.CloseMenu();
             componentToolboxView?.CloseToolbox();
             componentToolboxView?.ClearPlacementHint();
@@ -1412,7 +1430,121 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(hintStripView);
             ReleaseView(toolBarView);
             ReleaseView(tableOverlayView);
+            ReleaseView(choiceChipView);
+            ReleaseView(tableWarningView);
+            ReleaseView(tableMilestoneView);
             CloseTabletopPopup();
+        }
+
+        // ---------- POP-2: table notices (owner approved "Popups v2", 2026-10-29; doc 38) ----------
+
+        /// <summary>
+        /// Where pieces lie on the table, so reveals can sit beside their tile. Without it (or without the POP-2
+        /// prefabs) reveals use the centre popup as before.
+        /// </summary>
+        public void SetTableAnchors(UnityEngine.Camera worldCamera, TableAnchorResolver resolver)
+        {
+            anchorCamera = worldCamera;
+            anchorResolver = resolver;
+        }
+
+        /// <summary>What the warning line's UNDO button does (null: no button).</summary>
+        public void SetWarningUndo(Action undo) => warningUndo = undo;
+
+        /// <summary>The floor's end as a chip at the top centre. False when its prefab is missing.</summary>
+        public bool ShowTableMilestone(TableMilestoneModel model)
+        {
+            if (model == null) throw new ArgumentNullException(nameof(model));
+            if (tableMilestoneMissing) return false;
+            try
+            {
+                EnsureService();
+                if (tableMilestoneView == null || !tableMilestoneView.IsAcquired)
+                {
+                    tableMilestoneView = uiService.AcquireCached<TableMilestoneView>(UiPrefabIds.TableMilestone);
+                }
+
+                tableMilestoneView.Show();
+                tableMilestoneView.Bind(model, IsModalLayerOnCheck);
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                tableMilestoneMissing = true;
+                Debug.LogWarning(
+                    "The floor-end chip is missing, so the floor's end uses the old popup: run Console Cards > UI > "
+                    + "Create Missing Table Notices (POP-2). " + exception.Message);
+                return false;
+            }
+        }
+
+        public void CloseTableMilestone() => ReleaseView(tableMilestoneView);
+
+        private bool TryShowChoiceChip(FocusedCardRevealModel model)
+        {
+            if (model == null || choiceChipMissing || anchorResolver == null || anchorCamera == null) return false;
+            if (!anchorResolver(model.CardId, out _)) return false;
+            try
+            {
+                EnsureService();
+                if (choiceChipView == null || !choiceChipView.IsAcquired)
+                {
+                    choiceChipView = uiService.AcquireCached<TableChoiceChipView>(UiPrefabIds.TableChoiceChip);
+                }
+
+                choiceChipView.ValidateReferences();
+            }
+            catch (InvalidOperationException exception)
+            {
+                choiceChipMissing = true;
+                Debug.LogWarning(
+                    "The choice chip is missing, so reveals use the centre popup: run Console Cards > UI > "
+                    + "Create Missing Table Notices (POP-2). " + exception.Message);
+                return false;
+            }
+
+            ReleaseView(tabletopPopupView);
+            popupLayer.SetActive(false);
+            ReleaseModalViews();
+            componentToolboxView?.CloseToolbox();
+            SetModalLayerOffUnlessHandover();
+            choiceChipView.Show();
+            choiceChipView.Bind(model, anchorCamera, anchorResolver, IsModalLayerOnCheck);
+            return true;
+        }
+
+        // POP-2: while a modal panel is open (hot-seat cover, payment, a menu screen) the notices wait: Enter does not
+        // press them and the floor-end countdown pauses. One cached delegate, so nothing is allocated per frame.
+        private Func<bool> modalLayerOnCheck;
+
+        private Func<bool> IsModalLayerOnCheck => modalLayerOnCheck ??= IsModalLayerOn;
+
+        private bool IsModalLayerOn() => modalLayer != null && modalLayer.activeInHierarchy;
+
+        private bool TryShowTableWarning(string message)
+        {
+            if (tableWarningMissing || string.IsNullOrWhiteSpace(message)) return false;
+            try
+            {
+                EnsureService();
+                if (tableWarningView == null || !tableWarningView.IsAcquired)
+                {
+                    tableWarningView = uiService.AcquireCached<TableWarningView>(UiPrefabIds.TableWarning);
+                }
+
+                Action fix = warningUndo != null && TableNoticeText.MentionsUndo(message) ? warningUndo : null;
+                tableWarningView.Show();
+                tableWarningView.ShowWarning(message, "Undo", fix);
+                return true;
+            }
+            catch (InvalidOperationException exception)
+            {
+                tableWarningMissing = true;
+                Debug.LogWarning(
+                    "The yellow warning line is missing, so warnings use the message stack: run Console Cards > UI > "
+                    + "Create Missing Table Notices (POP-2). " + exception.Message);
+                return false;
+            }
         }
 
         private void EnsureService()

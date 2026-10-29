@@ -157,6 +157,35 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (runtimeUi == null) return;
             overlayShown = runtimeUi.ShowTableOverlay(targetCamera);
+            // POP-2: reveals sit beside their tile, and a warning that asks for Undo carries an UNDO button.
+            runtimeUi.SetTableAnchors(targetCamera, TryGetTableAnchor);
+            runtimeUi.SetWarningUndo(SessionService.HandleUndoButtonPressed);
+        }
+
+        // POP-2: where a piece lies on the table now (its view's position); false when it has no view.
+        private bool TryGetTableAnchor(TabletopObjectId objectId, out Vector3 worldPosition)
+        {
+            if (!objectId.IsEmpty)
+            {
+                if (Registry.TryGetCardView(objectId, out CardView cardView)
+                    && cardView != null
+                    && cardView.gameObject.activeInHierarchy)
+                {
+                    worldPosition = cardView.transform.position;
+                    return true;
+                }
+
+                if (Registry.TryGetPawnView(objectId, out PawnView pawnView)
+                    && pawnView != null
+                    && pawnView.gameObject.activeInHierarchy)
+                {
+                    worldPosition = pawnView.transform.position;
+                    return true;
+                }
+            }
+
+            worldPosition = default;
+            return false;
         }
 
         // Called from ClearGestures (a new table, shutdown): nothing carried over.
