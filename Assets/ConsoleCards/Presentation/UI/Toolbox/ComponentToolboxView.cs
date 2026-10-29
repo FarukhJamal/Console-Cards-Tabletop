@@ -363,6 +363,19 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             panelOpenChanged = listener;
         }
 
+        /// <summary>HUD-B: the + TOOLBOX button stays hidden (the HUD has its own Toolbox button); the panel still opens.</summary>
+        public void SetLauncherHidden(bool hidden)
+        {
+            launcherHidden = hidden;
+            if (openButton == null) return;
+            bool show = !hidden
+                && (panel == null || !panel.activeSelf)
+                && (placingCard == null || !placingCard.activeSelf);
+            openButton.gameObject.SetActive(show);
+        }
+
+        private bool launcherHidden;
+
         public void OpenToolbox()
         {
             beforeOpen?.Invoke();
@@ -384,7 +397,7 @@ namespace ConsoleCards.Presentation.UI.Toolbox
 
             if (openButton != null)
             {
-                openButton.gameObject.SetActive(placingCard == null || !placingCard.activeSelf);
+                openButton.gameObject.SetActive(!launcherHidden && (placingCard == null || !placingCard.activeSelf));
             }
 
             ClearSelectedUiObject();
@@ -434,7 +447,7 @@ namespace ConsoleCards.Presentation.UI.Toolbox
                 selectedTile = null;
             }
 
-            if (openButton != null && panel != null && !panel.activeSelf)
+            if (!launcherHidden && openButton != null && panel != null && !panel.activeSelf)
             {
                 openButton.gameObject.SetActive(true);
             }

@@ -11,12 +11,9 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b6025025f1a24d9a9ba9ac75eedf1001, type: 3}
   m_Name: PhysicalD6
-  m_EditorClassIdentifier:
+  m_EditorClassIdentifier: 
   sideCount: 6
   readOppositeSupportingFace: 0
-  visualPrefab: {fileID: 7480525804154556286, guid: cc2e145304a0b1e44aa1567da9218354, type: 3}
-  visualSize: 0.252
-  skin: {fileID: 2100000, guid: 83466fca824f48cda30cf82426c921a9, type: 2}
   faces:
   - value: 1
     outwardNormal: {x: 0, y: 0, z: -1}
@@ -36,3 +33,6 @@ MonoBehaviour:
   - value: 6
     outwardNormal: {x: 0, y: -1, z: 0}
     planeDistance: 0.3
+  visualPrefab: {fileID: 7480525804154556286, guid: cc2e145304a0b1e44aa1567da9218354, type: 3}
+  visualSize: 0.5
+  skin: {fileID: 2100000, guid: 83466fca824f48cda30cf82426c921a9, type: 2}

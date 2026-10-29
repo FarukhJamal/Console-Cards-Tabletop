@@ -79,6 +79,17 @@ namespace ConsoleCards.Presentation.UI
         private UnityEngine.Camera anchorCamera;
         private TableAnchorResolver anchorResolver;
         private Action warningUndo;
+        // HUD-B (owner, 2026-10-29: colour B, the table first): the new HUD and the rulebook.
+        private TableHudView tableHudView;
+        private TableRulebookView rulebookView;
+        private bool tableHudMissing;
+        private bool rulebookMissing;
+        private RulesCardModel rulebookRules;
+        private Action<TableToolKind> hudChooseTool;
+        private Action hudShop;
+        private Action hudHandStyle;
+        // Bottom right, the HUD's turn actions; the tool bar's Draw panel and selection buttons move left of them.
+        private static readonly Vector2 ToolPanelShift = new Vector2(-300f, 0f);
 
         public IRuntimeUiService UiService
         {
@@ -189,6 +200,7 @@ namespace ConsoleCards.Presentation.UI
             interactionGuideView.SetStripVisible(hintsVisible && !IsVisible(toolBarView)); // the Controls bar has the keys
             HideTrapFloorStatus();
             statusMessageView.SetMessage(statusMessage);
+            ShowTableHud(sessionTitle, undo, redo); // HUD-B, when its prefab is there
             root.ClearSelectedUiObject();
         }
 
@@ -720,6 +732,8 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>Binds the Shop entry on the session bar (doc 18 §15.4); null hides it.</summary>
         public void ShowShopEntry(Action openShop)
         {
+            hudShop = openShop;
+            if (UsesTableHud) tableHudView.SetShopVisible(openShop != null);
             EnsureSessionBarView();
             if (!sessionBarView.BindShop(openShop) && openShop != null && !shopEntryWarned)
             {
@@ -776,6 +790,7 @@ namespace ConsoleCards.Presentation.UI
                 }
 
                 modalLayer.SetActive(true);
+                ruleProposalPanelView.transform.SetAsLastSibling(); // HUD-B: over the rulebook it was opened from
                 ruleProposalPanelView.Bind(model, actions);
                 ruleProposalPanelView.Show();
                 return true;
@@ -794,6 +809,13 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>Shows one hint in the hint strip (doc 23 §10). False when its prefab is missing (warned once).</summary>
         public bool ShowHint(string kind, string text, Action gotIt, Action later)
         {
+            if (UsesTableHud)
+            {
+                ReleaseView(hintStripView);
+                tableHudView.ShowTip(kind, text, gotIt, later);
+                return true;
+            }
+
             try
             {
                 EnsureService();
@@ -820,7 +842,7 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
-        public bool IsHintShown => IsVisible(hintStripView);
+        public bool IsHintShown => IsVisible(hintStripView) || (UsesTableHud && tableHudView.IsTipShown);
 
         /// <summary>
         /// Shows the tool bar (TOOLS-1) with its keys strip; while it is shown the old controls strip stays hidden.
@@ -844,6 +866,14 @@ namespace ConsoleCards.Presentation.UI
                 toolBarView.Bind(chooseTool, toggleKeysStrip, OpenHelp, groupSelection, clearSelection, toggleHandStyle);
                 toolBarView.SetKeysAllowed(hintsVisible);
                 toolBarView.Show();
+                hudChooseTool = chooseTool;
+                hudHandStyle = toggleHandStyle;
+                if (UsesTableHud)
+                {
+                    toolBarView.SetButtonsHidden(true, ToolPanelShift); // HUD-B: the rail has the tools
+                    tableHudView.SetToolsVisible(true);
+                    tableHudView.SetHandStyleVisible(toggleHandStyle != null);
+                }
                 interactionGuideView?.SetStripVisible(false);
                 return true;
             }
@@ -863,9 +893,17 @@ namespace ConsoleCards.Presentation.UI
 
         public bool IsToolBarShown => IsVisible(toolBarView);
 
-        public void SetActiveTool(TableToolKind kind) => VisibleToolBar()?.SetActiveTool(kind);
+        public void SetActiveTool(TableToolKind kind)
+        {
+            VisibleToolBar()?.SetActiveTool(kind);
+            if (UsesTableHud) tableHudView.SetActiveTool(kind);
+        }
 
-        public void SetToolEnabled(TableToolKind kind, bool enabled) => VisibleToolBar()?.SetToolEnabled(kind, enabled);
+        public void SetToolEnabled(TableToolKind kind, bool enabled)
+        {
+            VisibleToolBar()?.SetToolEnabled(kind, enabled);
+            if (UsesTableHud) tableHudView.SetToolEnabled(kind, enabled);
+        }
 
         public void SetToolKeys(string text) => VisibleToolBar()?.SetKeys(text);
 
@@ -934,6 +972,7 @@ namespace ConsoleCards.Presentation.UI
         public void HideHint()
         {
             ReleaseView(hintStripView);
+            if (UsesTableHud) tableHudView.HideTip();
         }
 
         public void CloseRuleProposal()
@@ -968,6 +1007,8 @@ namespace ConsoleCards.Presentation.UI
                 }
 
                 activityLogView.SetText(text);
+                // HUD-B: the log stays out of the way until the rail's Log button opens it.
+                if (UsesTableHud && !IsLogShown()) activityLogView.Hide();
                 return true;
             }
             catch (InvalidOperationException exception)
@@ -1038,7 +1079,7 @@ namespace ConsoleCards.Presentation.UI
                 && !IsVisible(ruleProposalPanelView) && !IsVisible(profilePanelView) && !IsVisible(personaPanelView)
                 && !IsVisible(cardEditorPanelView)
                 && !IsVisible(deckEditorPanelView) && !IsVisible(gameSelectPanelView) && !IsVisible(frontEndView)
-                && !IsVisible(gameSavePanelView) && !IsVisible(tablePanelView))
+                && !IsVisible(gameSavePanelView) && !IsVisible(tablePanelView) && !IsVisible(rulebookView))
             {
                 modalLayer.SetActive(false);
             }
@@ -1047,6 +1088,17 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>Shows the rules card with these rules, or hides it (null rules or switched off).</summary>
         public void ShowRulesCard(RulesCardModel rules, bool visible)
         {
+            rulebookRules = rules; // HUD-B: the rulebook reads the same rules, shown or not
+            if (UsesTableHud)
+            {
+                rulesCardShown = false;
+                ReleaseView(rulesCardView);
+                tableHudView.SetRulebookAvailable(rules != null);
+                if (rules == null && IsVisible(rulebookView)) CloseRulebook();
+                else if (rules != null && IsVisible(rulebookView)) rulebookView.Refresh(rules);
+                return;
+            }
+
             if (rules == null || !visible)
             {
                 rulesCardShown = false;
@@ -1072,7 +1124,7 @@ namespace ConsoleCards.Presentation.UI
         {
             hintsVisible = on;
             bool toolBarShown = IsVisible(toolBarView);
-            interactionGuideView?.SetStripVisible(on && !toolBarShown);
+            interactionGuideView?.SetStripVisible(on && !toolBarShown && !UsesTableHud);
             if (toolBarShown) toolBarView.SetKeysAllowed(on);
             componentToolboxView?.SetPlacingHintVisible(on);
         }
@@ -1083,11 +1135,17 @@ namespace ConsoleCards.Presentation.UI
             componentToolboxView?.OpenToolbox();
         }
 
-        public void SetUndoState(bool enabled, string label) =>
+        public void SetUndoState(bool enabled, string label)
+        {
             sessionBarView?.SetUndoState(enabled, label);
+            if (UsesTableHud) tableHudView.SetUndoEnabled(enabled);
+        }
 
-        public void SetRedoState(bool enabled, string label) =>
+        public void SetRedoState(bool enabled, string label)
+        {
             sessionBarView?.SetRedoState(enabled, label);
+            if (UsesTableHud) tableHudView.SetRedoEnabled(enabled);
+        }
 
         public void SetGameTemplatesError(string errorMessage) =>
             gameTemplatesPanelView.SetError(errorMessage);
@@ -1338,6 +1396,13 @@ namespace ConsoleCards.Presentation.UI
                 return;
             }
 
+            if (UsesTableHud)
+            {
+                ReleaseView(trapFloorHudView);
+                tableHudView.ShowStatus(status, floorfall, actions);
+                return;
+            }
+
             EnsureTrapFloorHudView();
             trapFloorHudView.Show(status, floorfall, actions);
         }
@@ -1353,11 +1418,22 @@ namespace ConsoleCards.Presentation.UI
                 return;
             }
 
+            if (UsesTableHud)
+            {
+                ReleaseView(trapFloorHudView);
+                tableHudView.ShowObjective(keyProgress, collapseStatus, isWon, actions);
+                return;
+            }
+
             EnsureTrapFloorHudView();
             trapFloorHudView.ShowObjective(keyProgress, collapseStatus, isWon, actions);
         }
 
-        public void HideTrapFloorStatus() => ReleaseView(trapFloorHudView);
+        public void HideTrapFloorStatus()
+        {
+            ReleaseView(trapFloorHudView);
+            if (UsesTableHud) tableHudView.ClearStatus();
+        }
 
         public void ShowMergeDestinationPopup(
             Vector2 screenPosition,
@@ -1433,7 +1509,148 @@ namespace ConsoleCards.Presentation.UI
             ReleaseView(choiceChipView);
             ReleaseView(tableWarningView);
             ReleaseView(tableMilestoneView);
+            ReleaseView(rulebookView);
+            ReleaseView(tableHudView);
             CloseTabletopPopup();
+        }
+
+        // ---------- HUD-B: the table HUD in colour B and the rulebook (owner, 2026-10-29; doc 40) ----------
+
+        private bool UsesTableHud => tableHudView != null && tableHudView.IsAcquired;
+
+        private void ShowTableHud(string title, Action undo, Action redo)
+        {
+            if (tableHudMissing) return;
+            try
+            {
+                EnsureService();
+                if (tableHudView == null || !tableHudView.IsAcquired)
+                {
+                    tableHudView = uiService.AcquireCached<TableHudView>(UiPrefabIds.TableHud);
+                }
+
+                tableHudView.ValidateReferences();
+            }
+            catch (InvalidOperationException exception)
+            {
+                ReleaseView(tableHudView); // a half-made HUD never takes over
+                tableHudView = null;
+                tableHudMissing = true;
+                Debug.LogWarning(
+                    "The colour-B table HUD is off (the V5 HUD shows): run Console Cards > UI > Create Missing Table HUD "
+                    + "(HUD-B). " + exception.Message);
+                return;
+            }
+
+            tableHudView.Bind(
+                new TableHudActions
+                {
+                    OpenMenu = () => sessionBarView?.OpenMenu(),
+                    OpenSettings = () => sessionBarView?.OpenSettingsMenu(),
+                    Undo = undo,
+                    Redo = redo,
+                    ChooseTool = kind => hudChooseTool?.Invoke(kind),
+                    OpenRulebook = OpenRulebook,
+                    OpenToolbox = () => componentToolboxView?.OpenToolbox(),
+                    ToggleLog = ToggleLog,
+                    OpenHelp = OpenHelp,
+                    OpenShop = () => hudShop?.Invoke(),
+                    ToggleHandStyle = () => hudHandStyle?.Invoke(),
+                    IsLogShown = IsLogOnScreen,
+                },
+                title);
+            tableHudView.Show();
+            tableHudView.SetShopVisible(hudShop != null);
+            tableHudView.SetToolsVisible(hudChooseTool != null && IsVisible(toolBarView));
+            tableHudView.SetHandStyleVisible(hudHandStyle != null && IsVisible(toolBarView));
+            ApplyTableHudMode();
+        }
+
+        // The old HUD's own look steps aside; its menus and panels stay, opened from the new HUD.
+        private void ApplyTableHudMode()
+        {
+            sessionBarView?.SetBarHidden(true);
+            componentToolboxView?.SetLauncherHidden(true);
+            if (IsVisible(toolBarView)) toolBarView.SetButtonsHidden(true, ToolPanelShift);
+            interactionGuideView?.SetStripVisible(false);
+            ReleaseView(trapFloorHudView);
+            ReleaseView(hintStripView);
+            rulesCardShown = false;
+            ReleaseView(rulesCardView);
+            if (activityLogView != null && activityLogView.IsAcquired && !IsLogShown()) activityLogView.Hide();
+            tableHudView.SetRulebookAvailable(rulebookRules != null);
+        }
+
+        private bool IsLogShown() =>
+            activityLogView != null && activityLogView.IsAcquired && activityLogView.gameObject.activeSelf
+            && activityLogView.IsExpanded;
+
+        // On screen at all (open or folded to its tab): then L belongs to the log itself.
+        private bool IsLogOnScreen() =>
+            activityLogView != null && activityLogView.IsAcquired && activityLogView.gameObject.activeSelf;
+
+        private void ToggleLog()
+        {
+            if (activityLogView == null || !activityLogView.IsAcquired) return;
+            if (IsLogShown())
+            {
+                activityLogView.SetExpanded(false);
+                activityLogView.Hide();
+            }
+            else
+            {
+                activityLogView.Show();
+                activityLogView.SetExpanded(true);
+            }
+        }
+
+        /// <summary>Opens the rulebook (HUD-B): the book button, or the rulebook lying on the table.</summary>
+        public void OpenRulebook()
+        {
+            if (rulebookRules == null || rulebookMissing) return;
+            try
+            {
+                EnsureService();
+                if (rulebookView == null || !rulebookView.IsAcquired)
+                {
+                    rulebookView = uiService.AcquireCached<TableRulebookView>(UiPrefabIds.TableRulebook);
+                }
+
+                rulebookView.ValidateReferences();
+            }
+            catch (InvalidOperationException exception)
+            {
+                ReleaseView(rulebookView);
+                rulebookView = null;
+                rulebookMissing = true;
+                Debug.LogWarning(
+                    "The rulebook is missing: run Console Cards > UI > Create Missing Table HUD (HUD-B). " + exception.Message);
+                return;
+            }
+
+            componentToolboxView?.CloseToolbox();
+            sessionBarView?.CloseMenu();
+            ReleaseView(tabletopPopupView);
+            if (popupLayer != null) popupLayer.SetActive(false);
+            ReleaseModalViews(); // like any panel: the open popups give way to the book
+            modalLayer.SetActive(true);
+            rulebookView.transform.SetAsLastSibling();
+            rulebookView.Show();
+            rulebookView.Bind(rulebookRules, CloseRulebook);
+        }
+
+        public bool IsRulebookOpen => IsVisible(rulebookView);
+
+        public void CloseRulebook()
+        {
+            ReleaseView(rulebookView);
+            if (!IsVisible(quantityPopupView)
+                && !IsVisible(cardInspectPopupView)
+                && !IsVisible(actionAbilityPurchasePopupView)
+                && !IsVisible(focusedCardSelectionView))
+            {
+                SetModalLayerOffUnlessHandover();
+            }
         }
 
         // ---------- POP-2: table notices (owner approved "Popups v2", 2026-10-29; doc 38) ----------

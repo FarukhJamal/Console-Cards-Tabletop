@@ -129,5 +129,7 @@ namespace ConsoleCards.Presentation.UI
         public const string TableChoiceChip = "platform.table-choice-chip"; // POP-2
         public const string TableWarning = "platform.table-warning"; // POP-2
         public const string TableMilestone = "platform.table-milestone"; // POP-2
+        public const string TableHud = "platform.table-hud"; // HUD-B
+        public const string TableRulebook = "platform.table-rulebook"; // HUD-B
     }
 }

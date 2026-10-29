@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ConsoleCards.Presentation.UI.Toolbox;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -158,6 +159,9 @@ namespace ConsoleCards.Presentation.UI
         private Action openShop;
 
         public bool IsMenuOpen => (menu != null && menu.gameObject.activeSelf) || IsSettingsOpen;
+
+        private readonly List<GameObject> hiddenBarParts = new List<GameObject>();
+        private bool barHidden;
 
         private bool IsTableMenuOpen => menu != null && menu.gameObject.activeSelf;
 
@@ -521,7 +525,7 @@ namespace ConsoleCards.Presentation.UI
             bool show = openShop != null;
             if (shopButton.gameObject.activeSelf != show)
             {
-                shopButton.gameObject.SetActive(show);
+                shopButton.gameObject.SetActive(show && !barHidden); // HUD-B: the rail has its own Shop button
                 LayoutRebuilder.MarkLayoutForRebuild(bar);
             }
 
@@ -552,6 +556,57 @@ namespace ConsoleCards.Presentation.UI
             }
 
             HideTip();
+        }
+
+        /// <summary>
+        /// HUD-B: hides the bar's own look and buttons (the new HUD has its own) while its Table menu and Settings
+        /// menu still open from <see cref="OpenMenu"/> and <see cref="OpenSettingsMenu"/>.
+        /// </summary>
+        public void SetBarHidden(bool hidden)
+        {
+            if (bar == null) return;
+            barHidden = hidden;
+            foreach (Graphic graphic in bar.GetComponents<Graphic>()) graphic.enabled = !hidden;
+            // The menus hang from the bar's corner: the bar keeps its size while its parts are hidden.
+            ContentSizeFitter fitter = bar.GetComponent<ContentSizeFitter>();
+            if (fitter != null) fitter.enabled = !hidden;
+            HorizontalLayoutGroup layout = bar.GetComponent<HorizontalLayoutGroup>();
+            if (layout != null) layout.enabled = !hidden;
+            for (int i = 0; i < bar.childCount; i++)
+            {
+                Transform child = bar.GetChild(i);
+                if ((menu != null && child == menu.transform) || (settingsMenu != null && child == settingsMenu.transform))
+                {
+                    continue;
+                }
+
+                if (hidden)
+                {
+                    if (child.gameObject.activeSelf)
+                    {
+                        hiddenBarParts.Add(child.gameObject);
+                        child.gameObject.SetActive(false);
+                    }
+                }
+            }
+
+            if (!hidden)
+            {
+                for (int i = 0; i < hiddenBarParts.Count; i++)
+                {
+                    if (hiddenBarParts[i] != null) hiddenBarParts[i].SetActive(true);
+                }
+
+                hiddenBarParts.Clear();
+            }
+        }
+
+        public bool IsBarHidden => barHidden;
+
+        /// <summary>HUD-B: opens the Settings menu (the bar's SETTINGS button does the same).</summary>
+        public void OpenSettingsMenu()
+        {
+            if (!IsSettingsOpen) ToggleSettings();
         }
 
         public void OpenMenu()

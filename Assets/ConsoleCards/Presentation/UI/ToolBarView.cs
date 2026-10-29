@@ -94,6 +94,7 @@ namespace ConsoleCards.Presentation.UI
         private string shownKeys;
         private bool keysWanted = true;
         private bool keysAllowed = true;
+        private bool buttonsHidden;
         private int shownCount = -1;
         private Canvas canvas;
         private Action<int> chooseDrawMode;
@@ -299,20 +300,85 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
+        /// <summary>
+        /// HUD-B: hides the tool buttons, the keys strip, Help and FAN / ROW (the new HUD's rail has the tools); the
+        /// selection buttons, the selection box and the Draw panel still show here when they are needed.
+        /// </summary>
+        public void SetButtonsHidden(bool hidden) => SetButtonsHidden(hidden, Vector2.zero);
+
+        /// <summary>As above; <paramref name="panelShift"/> moves the Draw panel and the selection buttons while hidden
+        /// (HUD-B: clear of the turn's actions bottom right).</summary>
+        public void SetButtonsHidden(bool hidden, Vector2 panelShift)
+        {
+            ShiftPanel(drawActions != null ? drawActions.transform as RectTransform : null, ref drawHome, ref drawHomeKnown,
+                hidden ? panelShift : Vector2.zero);
+            ShiftPanel(selectionActions != null ? selectionActions.transform as RectTransform : null, ref selectionHome,
+                ref selectionHomeKnown, hidden ? panelShift : Vector2.zero);
+            buttonsHidden = hidden;
+            Transform toolsParent = SharedToolParent();
+            for (int i = 0; i < tools.Length; i++)
+            {
+                if (tools[i]?.button != null && toolsParent == null) tools[i].button.gameObject.SetActive(!hidden);
+            }
+
+            if (toolsParent != null) toolsParent.gameObject.SetActive(!hidden);
+            if (keysToggle != null) keysToggle.gameObject.SetActive(!hidden);
+            if (helpButton != null) helpButton.gameObject.SetActive(!hidden);
+            if (handStyleButton != null) handStyleButton.gameObject.SetActive(!hidden && toggleHandStyle != null);
+            keysStrip.SetActive(keysWanted && keysAllowed && !hidden);
+            if (keysBar != null) keysBar.SetActive(keysWanted && keysAllowed && !hidden);
+        }
+
+        private Vector2 drawHome;
+        private bool drawHomeKnown;
+        private Vector2 selectionHome;
+        private bool selectionHomeKnown;
+
+        private static void ShiftPanel(RectTransform panel, ref Vector2 home, ref bool known, Vector2 shift)
+        {
+            if (panel == null) return;
+            if (!known)
+            {
+                home = panel.anchoredPosition;
+                known = true;
+            }
+
+            panel.anchoredPosition = home + shift;
+        }
+
+        // The tool buttons' own bar, when they share one that holds nothing else this view still needs.
+        private Transform SharedToolParent()
+        {
+            Transform parent = null;
+            for (int i = 0; i < tools.Length; i++)
+            {
+                if (tools[i]?.button == null) continue;
+                Transform candidate = tools[i].button.transform.parent;
+                if (parent == null) parent = candidate;
+                else if (candidate != parent) return null;
+            }
+
+            if (parent == null || parent == transform) return null;
+            if (selectionActions != null && selectionActions.transform.IsChildOf(parent)) return null;
+            if (drawActions != null && drawActions.transform.IsChildOf(parent)) return null;
+            if (selectionBox != null && selectionBox.IsChildOf(parent)) return null;
+            return parent;
+        }
+
         /// <summary>The player's own show/hide choice for the keys strip.</summary>
         public void SetKeysWanted(bool wanted)
         {
             keysWanted = wanted;
-            keysStrip.SetActive(keysWanted && keysAllowed);
-            if (keysBar != null) keysBar.SetActive(keysWanted && keysAllowed);
+            keysStrip.SetActive(keysWanted && keysAllowed && !buttonsHidden);
+            if (keysBar != null) keysBar.SetActive(keysWanted && keysAllowed && !buttonsHidden);
         }
 
         /// <summary>The Hints switch: with Hints off the keys strip stays hidden.</summary>
         public void SetKeysAllowed(bool allowed)
         {
             keysAllowed = allowed;
-            keysStrip.SetActive(keysWanted && keysAllowed);
-            if (keysBar != null) keysBar.SetActive(keysWanted && keysAllowed);
+            keysStrip.SetActive(keysWanted && keysAllowed && !buttonsHidden);
+            if (keysBar != null) keysBar.SetActive(keysWanted && keysAllowed && !buttonsHidden);
         }
 
         /// <summary>Shows the selection buttons while pieces are selected (TOOLS-1b: any component but boards and Consoles).</summary>

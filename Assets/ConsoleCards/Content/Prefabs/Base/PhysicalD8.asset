@@ -11,12 +11,9 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b6025025f1a24d9a9ba9ac75eedf1001, type: 3}
   m_Name: PhysicalD8
-  m_EditorClassIdentifier:
+  m_EditorClassIdentifier: 
   sideCount: 8
   readOppositeSupportingFace: 0
-  visualPrefab: {fileID: 7983296447845562172, guid: 3be1f75480e55f5438560d52f18275e8, type: 3}
-  visualSize: 0.252
-  skin: {fileID: 2100000, guid: e5e40716228e43278ae7c2343fac10fc, type: 2}
   faces:
   - value: 1
     outwardNormal: {x: 0, y: 0.79864, z: 0.60182}
@@ -42,3 +39,6 @@ MonoBehaviour:
   - value: 8
     outwardNormal: {x: 0, y: -0.79864, z: -0.60182}
     planeDistance: 0.3
+  visualPrefab: {fileID: 7983296447845562172, guid: 3be1f75480e55f5438560d52f18275e8, type: 3}
+  visualSize: 0.5
+  skin: {fileID: 2100000, guid: e5e40716228e43278ae7c2343fac10fc, type: 2}

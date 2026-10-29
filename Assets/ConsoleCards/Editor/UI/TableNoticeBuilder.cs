@@ -67,6 +67,7 @@ namespace ConsoleCards.Editor.UI
                 UiRetention.CachedSingleInstance);
             AssetDatabase.SaveAssets();
             Debug.Log("[POP-2] Created any missing table notices (Final UI/Notices) and pointed the UI prefab catalog at them.");
+            TableHudBuilder.Build(); // HUD-B: the colour-B HUD, the rulebook, the Shop drawer and the payment strip
         }
 
         private static void Save<T>(string path, string name, System.Action<RectTransform, T> build)
