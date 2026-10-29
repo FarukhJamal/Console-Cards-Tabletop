@@ -244,6 +244,7 @@ namespace ConsoleCards.Intro.Editor
             Lit("M_TVBezel", Hex("#0a0c0d"), 0.85f);
             Glow("M_TVScreen", Color.white, 0.16f, "center", Hex("#050607"));
             Glow("M_LedCyan", Hex("#06eff0"), 2.4f);
+            Glow("M_LedCyanDim", Hex("#06eff0"), 0.7f);
             Glow("M_LedOrange", Hex("#f2762e"), 1.8f);
             Glow("M_LedWarm", Hex("#ffb46b"), 3.2f);
             Glow("M_LampShade", Hex("#ffb46b"), 1.6f, null, Hex("#3a2a1a"));
@@ -362,13 +363,13 @@ namespace ConsoleCards.Intro.Editor
         {
             RenderSettings.skybox = null;
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = Hex("#1b2328");
-            RenderSettings.ambientEquatorColor = Hex("#14191b");
-            RenderSettings.ambientGroundColor = Hex("#0c0d0e");
+            RenderSettings.ambientSkyColor = Hex("#27323a");
+            RenderSettings.ambientEquatorColor = Hex("#1d2427");
+            RenderSettings.ambientGroundColor = Hex("#141415");
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
             RenderSettings.fogColor = Hex("#07090a");
-            RenderSettings.fogDensity = 0.055f;
+            RenderSettings.fogDensity = 0.045f;
             RenderSettings.defaultReflectionMode = DefaultReflectionMode.Custom;
             RenderSettings.reflectionIntensity = 1f;
         }
@@ -513,10 +514,10 @@ namespace ConsoleCards.Intro.Editor
             Led("Rim Inlay", table, IntroMeshes.FlatRing("RimInlay", 6, RIn + 0.055f, RIn + 0.075f, FeltY + 0.0462f, HexA0), M("M_LedOrange"));
             Led("Felt Line", table, IntroMeshes.FlatRing("FeltLine", 6, RIn - 0.03f, RIn - 0.012f, FeltY + 0.002f, HexA0), M("M_LedCyan"));
             Place("Apron", table, IntroMeshes.Prism("TableApron", 6, 1.12f, 0.56f, FeltY - 0.11f, HexA0, true), M("M_Charcoal"), Vector3.zero);
-            Led("Under Glow", table, IntroMeshes.FlatRing("UnderGlow", 6, ROut - 0.06f, ROut - 0.03f, FeltY - 0.111f, HexA0, false), M("M_LedCyan"));
+            Led("Under Glow", table, IntroMeshes.FlatRing("UnderGlow", 6, ROut - 0.06f, ROut - 0.03f, FeltY - 0.111f, HexA0, false), M("M_LedCyanDim"));
             Place("Pedestal", table, IntroMeshes.Frustum("Pedestal", 6, 0.24f, 0.2f, 0.08f, 0.56f, HexA0, false, true, false), M("M_Charcoal2"), Vector3.zero);
             Place("Base", table, IntroMeshes.Frustum("TableBase", 6, 0.62f, 0.58f, 0f, 0.08f, HexA0, false, true, false), M("M_Charcoal"), Vector3.zero);
-            Led("Base Line", table, IntroMeshes.FlatRing("BaseLine", 6, 0.5f, 0.52f, 0.081f, HexA0), M("M_LedCyan"));
+            Led("Base Line", table, IntroMeshes.FlatRing("BaseLine", 6, 0.5f, 0.52f, 0.081f, HexA0), M("M_LedCyanDim"));
             for (int i = 0; i < 6; i++)
             {
                 float a = HexA0 + i * Mathf.PI / 3f, r = ROut - 0.075f;
@@ -584,7 +585,7 @@ namespace ConsoleCards.Intro.Editor
                 for (int k = 0; k < 2; k++)
                 {
                     string die = dice[(cardIndex + k) % dice.Length];
-                    Model(ModelPath + "Dice Collection/Prefabs/" + die + ".prefab", g, "Die", At(0.12f + k * 0.05f, y + 0.003f, md - 0.09f), 0.024f, false, yaw + k * 35f + cardIndex * 20f, Axis.None);
+                    Model(ModelPath + "Dice Collection/Prefabs/" + die + ".prefab", g, "Die", At(0.12f + k * 0.06f, y + 0.003f, md - 0.09f), 0.034f, false, yaw + k * 35f + cardIndex * 20f, Axis.None);
                 }
 
                 if (seat.colour == "Red")
@@ -676,13 +677,16 @@ namespace ConsoleCards.Intro.Editor
                 tier.serializedObject.ApplyModifiedPropertiesWithoutUndo();
             }
 
-            MakeLight("Floor Lamp", lights, LightType.Point, new Vector3(-4.35f, 1.62f, -3.55f), Hex("#ffb46b"), 2.2f, 5f);
+            MakeLight("Floor Lamp", lights, LightType.Point, new Vector3(-4.35f, 1.62f, -3.55f), Hex("#ffb46b"), 3.2f, 6f);
+            MakeLight("Room Fill L", lights, LightType.Point, new Vector3(-3.2f, 2.4f, 0.6f), Hex("#ffcf9a"), 0.9f, 6f);
+            MakeLight("Room Fill R", lights, LightType.Point, new Vector3(3.2f, 2.4f, 0.6f), Hex("#9fd8ff"), 0.7f, 6f);
+            MakeLight("Floor Wash", lights, LightType.Point, new Vector3(0f, 1.2f, 2.2f), Hex("#ffd2a6"), 0.5f, 4f);
             pulse.Add(MakeLight("LED Column L", lights, LightType.Point, new Vector3(-1.55f, 1.7f, -4f), Hex("#06eff0"), 1.5f, 3.8f));
             pulse.Add(MakeLight("LED Column R", lights, LightType.Point, new Vector3(1.55f, 1.7f, -4f), Hex("#06eff0"), 1.5f, 3.8f));
             pulse.Add(MakeLight("Media LED", lights, LightType.Point, new Vector3(0f, 0.25f, -3.7f), Hex("#06eff0"), 1.0f, 2.6f));
             MakeLight("Shelf Glow L", lights, LightType.Point, new Vector3(-2.75f, 1.3f, -3.75f), Hex("#f2762e"), 1.2f, 2.8f);
             MakeLight("Shelf Glow R", lights, LightType.Point, new Vector3(2.75f, 1.3f, -3.75f), Hex("#f2762e"), 1.2f, 2.8f);
-            pulse.Add(MakeLight("Table Under Glow", lights, LightType.Point, new Vector3(0f, 0.45f, 0f), Hex("#06eff0"), 0.7f, 2.3f));
+            pulse.Add(MakeLight("Table Under Glow", lights, LightType.Point, new Vector3(0f, 0.45f, 0f), Hex("#06eff0"), 0.3f, 1.8f));
             consoleLight = MakeLight("Console Glow", lights, LightType.Point, focus.position + Vector3.up * 0.12f, Hex("#06eff0"), 0.25f, 1.1f);
             sweep = MakeLight("Button Sweep", lights, LightType.Point, focus.position + Vector3.up * 0.05f, Hex("#06eff0"), 0f, 0.35f);
 
@@ -764,7 +768,7 @@ namespace ConsoleCards.Intro.Editor
             dof.gaussianMaxRadius.Override(1f);
             dof.highQualitySampling.Override(true);
             ColorAdjustments colour = Add<ColorAdjustments>();
-            colour.postExposure.Override(0.35f);
+            colour.postExposure.Override(0.5f);
             colour.contrast.Override(8f);
             colour.saturation.Override(6f);
             FilmGrain grain = Add<FilmGrain>();
