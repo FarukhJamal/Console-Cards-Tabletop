@@ -121,6 +121,9 @@ namespace ConsoleCards.Presentation.Composition
                 BeginHandle = BeginTableHandle,
                 DragHandle = DragTableHandle,
                 EndHandle = EndTableHandle,
+                PickTop = PanelPickTop,
+                ToggleFitPlayers = PanelToggleFitPlayers,
+                SaveAsNew = PanelSaveAsNewTable,
             };
 
             TableSpec spec = handleSpec ?? tableSpec;
@@ -128,8 +131,12 @@ namespace ConsoleCards.Presentation.Composition
             TableShape shape = spec.shape;
             bool built = IsBuiltShape(shape);
             model.SelectedShape = Array.IndexOf(PanelShapes, shape);
-            model.ShowModels = NextCycleModel(-1) >= 0;
-            model.ModelText = shape == TableShape.Model ? TableShapeName(spec) : "Choose…";
+            model.ShowModels = NextCycleModel(-1) >= 0 || SavedTables().tables.Count > 0;
+            model.ModelText = !string.IsNullOrEmpty(spec.savedName) ? spec.savedName
+                : shape == TableShape.Model ? TableShapeName(spec) : "Choose…";
+            model.Top = spec.top;
+            model.FitPlayers = spec.fitPlayers;
+            model.ShowLook = true;
             SetField(model, TableField.Width, built, spec.width.ToString("0.0", CultureInfo.InvariantCulture));
             SetField(model, TableField.Depth, shape == TableShape.Rectangle || shape == TableShape.Oval,
                 spec.depth.ToString("0.0", CultureInfo.InvariantCulture));
@@ -163,8 +170,9 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- one change: checked, shown, pieces moved in, one Undo step ----------
 
-        private void ApplyTableModeChange(TableSpec candidate, string done)
+        private void ApplyTableModeChange(TableSpec candidate, string done, bool keepSavedName = false)
         {
+            if (!keepSavedName) candidate.savedName = string.Empty; // changed: no longer the table saved by that name
             candidate.Clamp();
             TableSpec previous = tableSpec;
             if (!TryChangeTable(candidate, out string note))
@@ -243,21 +251,27 @@ namespace ConsoleCards.Presentation.Composition
             ApplyTableModeChange(candidate, $"{TableSpec.Label(shape)} table.");
         }
 
+        // The table models, then the player's tables saved by name (SAVE AS NEW TABLE).
         private void PanelCycleModel(int direction)
         {
-            LoadTableModels();
-            List<int> choices = new List<int>();
-            for (int i = NextCycleModel(-1); i >= 0; i = NextCycleModel(i)) choices.Add(i);
+            List<TableSpec> choices = new List<TableSpec>();
+            CollectSavedTableChoices(choices);
             if (choices.Count == 0) return;
-            int current = tableSpec.shape == TableShape.Model
-                ? choices.IndexOf(tableModels.IndexOf(FindTableModel(tableSpec.modelId)))
-                : -1;
+            int current = IndexOfSavedChoice(choices, tableSpec);
             int next = current < 0
                 ? (direction > 0 ? 0 : choices.Count - 1)
                 : (current + direction + choices.Count) % choices.Count;
-            TableSpec candidate = ModelSpec(tableModels[choices[next]]);
-            KeepEdge(candidate);
-            ApplyTableModeChange(candidate, $"{TableShapeName(candidate)} table.{ModelFitNote()}");
+            TableSpec candidate = choices[next];
+            if (string.IsNullOrEmpty(candidate.savedName))
+            {
+                KeepEdge(candidate);
+                candidate.top = tableSpec.top;
+                candidate.fitPlayers = tableSpec.fitPlayers;
+                ApplyTableModeChange(candidate, $"{TableShapeName(candidate)} table.{ModelFitNote()}");
+                return;
+            }
+
+            ApplyTableModeChange(candidate, $"{candidate.savedName}.", true);
         }
 
         private void PanelStep(TableField field, int direction, bool big)
@@ -409,6 +423,8 @@ namespace ConsoleCards.Presentation.Composition
             candidate.edge = tableSpec.edge;
             candidate.edgeHeight = tableSpec.edgeHeight;
             candidate.edgeWidth = tableSpec.edgeWidth;
+            candidate.top = tableSpec.top; // board 12: the top's colour and Fit the players stay too
+            candidate.fitPlayers = tableSpec.fitPlayers;
         }
 
         private static float Snap(float value, float step) => Mathf.Round(value / step) * step;

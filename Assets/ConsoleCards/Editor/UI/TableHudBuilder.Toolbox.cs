@@ -33,7 +33,7 @@ namespace ConsoleCards.Editor.UI
     {
         public const string ToolboxPath = Folder + "TableToolbox.prefab";
         private const string ToolboxIcons = "Assets/ConsoleCards/Content/UI/Toolbox/Icons/";
-        private const string ToolboxLabel = "ToolboxBoard8";
+        private const string ToolboxLabel = "ToolboxBoard8b";
 
         private const float NavWidth = 285f;
         private const float Cell = 177f;
@@ -285,6 +285,40 @@ namespace ConsoleCards.Editor.UI
             detailText.supportRichText = true;
             detailText.lineSpacing = 1.1f;
 
+            // Colour of new pieces (board 8): your seat colour, white, blue, red, green, yellow.
+            RectTransform colourRow = Rect("PieceColours", right, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f),
+                Vector2.zero, new Vector2(0f, 42f));
+            Label(Rect("Title", colourRow, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), Vector2.zero,
+                new Vector2(260f, 0f)), medium, 18, Muted, TextAnchor.MiddleLeft, "Colour of new pieces");
+            Color[] swatchColours =
+            {
+                new Color(1f, 0.231f, 0.231f, 1f), new Color(0.910f, 0.925f, 0.929f, 1f), new Color(0.184f, 0.482f, 1f, 1f),
+                new Color(1f, 0.231f, 0.231f, 1f), new Color(0.184f, 0.831f, 0.420f, 1f), new Color(1f, 0.788f, 0.231f, 1f),
+            };
+            Button[] colourButtons = new Button[swatchColours.Length];
+            Image[] colourSwatches = new Image[swatchColours.Length];
+            GameObject[] colourRings = new GameObject[swatchColours.Length];
+            for (int i = 0; i < swatchColours.Length; i++)
+            {
+                RectTransform ring = Rect("Ring" + i, colourRow, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
+                    new Vector2(266f + (i * 48f), 0f), new Vector2(42f, 42f));
+                Image ringImage = Shape(ring, Cyan, circle);
+                ringImage.raycastTarget = false;
+                RectTransform inner = Rect("Gap", ring, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(-6f, -6f));
+                Shape(inner, Hex("222527"), circle).raycastTarget = false;
+                colourRings[i] = ring.gameObject;
+                ring.gameObject.SetActive(i == 1);
+                RectTransform swatch = Rect("Swatch" + i, colourRow, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
+                    new Vector2(271f + (i * 48f), 0f), new Vector2(32f, 32f));
+                colourSwatches[i] = Shape(swatch, swatchColours[i], circle);
+                colourSwatches[i].raycastTarget = true;
+                colourButtons[i] = swatch.gameObject.AddComponent<Button>();
+                colourButtons[i].targetGraphic = colourSwatches[i];
+            }
+
+            Label(Rect("Note", colourRow, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), Vector2.zero,
+                new Vector2(220f, 0f)), medium, 16, Muted, TextAnchor.MiddleRight, "Your seat colour first");
+
             // The Hand switch (an Empty Table), above TABLE TOOLS.
             RectTransform handRow = Rect("HandRow", nav, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f),
                 new Vector2(0f, 162f), new Vector2(0f, 76f));
@@ -368,6 +402,20 @@ namespace ConsoleCards.Editor.UI
             {
                 toolButtonArray.GetArrayElementAtIndex(i).objectReferenceValue = toolButtons[i];
                 toolKindArray.GetArrayElementAtIndex(i).enumValueIndex = (int)toolKinds[i];
+            }
+
+            so.FindProperty("pieceColourRow").objectReferenceValue = colourRow.gameObject;
+            SerializedProperty colourButtonArray = so.FindProperty("pieceColourButtons");
+            SerializedProperty colourSwatchArray = so.FindProperty("pieceColourSwatches");
+            SerializedProperty colourRingArray = so.FindProperty("pieceColourRings");
+            colourButtonArray.arraySize = colourButtons.Length;
+            colourSwatchArray.arraySize = colourSwatches.Length;
+            colourRingArray.arraySize = colourRings.Length;
+            for (int i = 0; i < colourButtons.Length; i++)
+            {
+                colourButtonArray.GetArrayElementAtIndex(i).objectReferenceValue = colourButtons[i];
+                colourSwatchArray.GetArrayElementAtIndex(i).objectReferenceValue = colourSwatches[i];
+                colourRingArray.GetArrayElementAtIndex(i).objectReferenceValue = colourRings[i];
             }
 
             SerializedProperty hand = so.FindProperty("handSwitch");

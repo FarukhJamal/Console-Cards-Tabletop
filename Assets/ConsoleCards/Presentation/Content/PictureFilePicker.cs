@@ -32,6 +32,25 @@ namespace ConsoleCards.Presentation.Content
 #endif
         }
 
+        /// <summary>
+        /// Card studio IMPORT A FOLDER OF PNGs: a folder in the Editor; in a Windows build the player picks one picture
+        /// and its folder is used.
+        /// </summary>
+        public static bool TryPickFolder(string title, out string folder)
+        {
+            folder = string.Empty;
+#if UNITY_EDITOR
+            folder = UnityEditor.EditorUtility.OpenFolderPanel(title, string.Empty, string.Empty);
+            return !string.IsNullOrEmpty(folder);
+#elif UNITY_STANDALONE_WIN
+            if (!TryPickWindows(title + " (pick any picture in it)", out string picture)) return false;
+            folder = System.IO.Path.GetDirectoryName(picture) ?? string.Empty;
+            return folder.Length > 0;
+#else
+            return false;
+#endif
+        }
+
 #if !UNITY_EDITOR && UNITY_STANDALONE_WIN
         private const int MaximumPathCharacters = 1024;
         private const int OfnPathMustExist = 0x00000800;

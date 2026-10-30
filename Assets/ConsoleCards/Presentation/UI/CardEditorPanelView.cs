@@ -88,6 +88,13 @@ namespace ConsoleCards.Presentation.UI
         public string ResetText = "Reset";
         public bool CanDelete;
         public string Status = string.Empty;
+        /// <summary>The last change was written (auto-save): the header shows its SAVED tick.</summary>
+        public bool Saved;
+        /// <summary>Card studio: the card plays large (avatar size); pictures of another shape are fitted, not cropped.</summary>
+        public bool Large;
+        public bool FitPicture;
+        public bool CanDuplicate;
+        public bool CanImport;
 
         /// <summary>
         /// The card's 8 icon places (ICON-1), in Top, Right, Bottom, Left, Top right, Bottom right, Bottom left, Top left
@@ -128,6 +135,16 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>The frame variant picker: -1 previous, +1 next (FRAME-1).</summary>
         public Action<int, CardEditorTyped> CycleFrame;
         public Action<CardEditorTyped> Save;
+        /// <summary>Auto-save: writes the card as typed (no panel refresh); true when it was saved.</summary>
+        public Func<CardEditorTyped, bool> AutoSave;
+        /// <summary>Card studio: STANDARD (false) or LARGE · AVATARS (true).</summary>
+        public Action<bool, CardEditorTyped> SetSize;
+        /// <summary>Card studio: CROP TO FILL (false) or FIT · ADD BORDER (true).</summary>
+        public Action<bool, CardEditorTyped> SetFit;
+        public Action<CardEditorTyped> Duplicate;
+        public Action<CardEditorTyped> ImportFolder;
+        /// <summary>UNDO: back to the card as it was when it was chosen.</summary>
+        public Action Undo;
         public Action Reset;
         public Action Delete;
         public Action Close;
@@ -196,6 +213,8 @@ namespace ConsoleCards.Presentation.UI
 
         [Header("Footer")]
         [SerializeField] private Text statusLabel;
+        [Tooltip("Auto-save: the SAVED tick in the header, shown after each change is written.")]
+        [SerializeField] private GameObject savedTick;
         [SerializeField] private Button deleteButton;
         [SerializeField] private Button resetButton;
         [SerializeField] private Text resetLabel;
@@ -234,12 +253,36 @@ namespace ConsoleCards.Presentation.UI
         [Tooltip("The card's shape (width : height), its best size and its smallest sharp size, in pixels.")]
         [SerializeField] private Vector2 bestSize = new Vector2(1500f, 2100f);
         [SerializeField] private Vector2 sharpSize = new Vector2(750f, 1050f);
+        [Tooltip("CARD SIZE: STANDARD, LARGE · AVATARS.")]
+        [SerializeField] private Button[] sizeButtons = Array.Empty<Button>();
+        [SerializeField] private Image[] sizeFills = Array.Empty<Image>();
+        [Tooltip("WHEN A PICTURE IS THE WRONG SHAPE: CROP TO FILL, FIT · ADD BORDER.")]
+        [SerializeField] private Button[] fitButtons = Array.Empty<Button>();
+        [SerializeField] private Image[] fitFills = Array.Empty<Image>();
+        [Tooltip("The size rows' values: best size, smallest sharp size (they change with LARGE).")]
+        [SerializeField] private Text bestSizeLabel;
+        [SerializeField] private Text sharpSizeLabel;
+        [SerializeField] private Text fitNoteLabel;
+        [SerializeField] private Button duplicateButton;
+        [SerializeField] private Button importButton;
+        [Tooltip("FRONT + BACK · ON THE TABLE · IN A CONSOLE: the buttons and the page each shows.")]
+        [SerializeField] private Button[] previewButtons = Array.Empty<Button>();
+        [SerializeField] private Image[] previewFills = Array.Empty<Image>();
+        [SerializeField] private GameObject[] previewPages = Array.Empty<GameObject>();
+        [SerializeField] private RawImage tableFront;
+        [SerializeField] private RawImage tableBack;
+        [SerializeField] private RawImage consoleCard;
+        [Tooltip("The cards on the table and Console pages, scaled up for a large card.")]
+        [SerializeField] private RectTransform tableCards;
+        [SerializeField] private RectTransform consoleCardHolder;
 
         private static readonly System.Text.StringBuilder FileWords = new System.Text.StringBuilder(64);
         private int filter;
         private int tab;
         private string selectedId = string.Empty;
         private Texture shownFront;
+        private int previewPage;
+        private bool shownLarge;
 
         private readonly List<CardEditorRowView> rowViews = new List<CardEditorRowView>();
         private readonly List<CardEditorDeckRowView> deckRowViews = new List<CardEditorDeckRowView>();
@@ -307,6 +350,7 @@ namespace ConsoleCards.Presentation.UI
             deleteButton.gameObject.SetActive(model.CanDelete);
             statusLabel.text = model.Status;
             RefreshPreviewWords();
+            ShowSaved(model.Saved);
             BindIcons(model);
             BindFrame(model);
 
@@ -337,6 +381,10 @@ namespace ConsoleCards.Presentation.UI
             nameInput.onValueChanged.AddListener(HandleTyping);
             descriptionInput.onValueChanged.AddListener(HandleTyping);
             costInput.onValueChanged.AddListener(HandleTyping);
+            codeInput.onEndEdit.AddListener(HandleTypingDone);
+            nameInput.onEndEdit.AddListener(HandleTypingDone);
+            descriptionInput.onEndEdit.AddListener(HandleTypingDone);
+            costInput.onEndEdit.AddListener(HandleTypingDone);
 
             float scrollPlace = scroll.verticalNormalizedPosition;
             bool keepPlace = rowViews.Count == model.Rows.Count && rowViews.Count > 0;
@@ -412,9 +460,13 @@ namespace ConsoleCards.Presentation.UI
                 undoButton.onClick.RemoveAllListeners();
                 undoButton.onClick.AddListener(() =>
                 {
-                    if (selectedId.Length > 0) actions?.Select?.Invoke(selectedId);
+                    CardEditorActions now = actions;
+                    if (now?.Undo != null) now.Undo();
+                    else if (selectedId.Length > 0) now?.Select?.Invoke(selectedId);
                 });
             }
+
+            BindStudioParts(model);
 
             if (doneButton != null)
             {
@@ -442,6 +494,90 @@ namespace ConsoleCards.Presentation.UI
             ShowWarning(model.Front);
             ShowTab(tab);
             ApplyFilter();
+        }
+
+        // Board 10's switches, DUPLICATE, IMPORT and the three preview pages. A panel made before them has none.
+        private void BindStudioParts(CardEditorModel model)
+        {
+            shownLarge = model.Large;
+            for (int i = 0; i < sizeButtons.Length; i++)
+            {
+                if (sizeButtons[i] == null) continue;
+                bool large = i == 1;
+                sizeButtons[i].onClick.RemoveAllListeners();
+                sizeButtons[i].onClick.AddListener(() => actions?.SetSize?.Invoke(large, Typed()));
+                if (i < sizeFills.Length && sizeFills[i] != null) sizeFills[i].color = large == model.Large ? tabOn : tabOff;
+            }
+
+            for (int i = 0; i < fitButtons.Length; i++)
+            {
+                if (fitButtons[i] == null) continue;
+                bool fit = i == 1;
+                fitButtons[i].onClick.RemoveAllListeners();
+                fitButtons[i].onClick.AddListener(() => actions?.SetFit?.Invoke(fit, Typed()));
+                if (i < fitFills.Length && fitFills[i] != null) fitFills[i].color = fit == model.FitPicture ? tabOn : tabOff;
+            }
+
+            // A large card has the same shape; its pictures want 1.4 times the pixels.
+            float scale = model.Large ? 1.4f : 1f;
+            if (bestSizeLabel != null) bestSizeLabel.text = $"{Mathf.RoundToInt(bestSize.x * scale)} × {Mathf.RoundToInt(bestSize.y * scale)} px";
+            if (sharpSizeLabel != null) sharpSizeLabel.text = $"{Mathf.RoundToInt(sharpSize.x * scale)} × {Mathf.RoundToInt(sharpSize.y * scale)} px";
+            if (fitNoteLabel != null)
+            {
+                fitNoteLabel.text = model.FitPicture
+                    ? "Pictures are never stretched: one of another shape is fitted whole, with a dark border."
+                    : "Pictures are never stretched: one of another shape is cropped to fill the card (the middle is kept).";
+            }
+
+            if (duplicateButton != null)
+            {
+                duplicateButton.onClick.RemoveAllListeners();
+                duplicateButton.onClick.AddListener(() => actions?.Duplicate?.Invoke(Typed()));
+                duplicateButton.interactable = model.CanDuplicate;
+            }
+
+            if (importButton != null)
+            {
+                importButton.onClick.RemoveAllListeners();
+                importButton.onClick.AddListener(() => actions?.ImportFolder?.Invoke(Typed()));
+                importButton.interactable = model.CanImport;
+            }
+
+            for (int i = 0; i < previewButtons.Length; i++)
+            {
+                if (previewButtons[i] == null) continue;
+                int which = i;
+                previewButtons[i].onClick.RemoveAllListeners();
+                previewButtons[i].onClick.AddListener(() => ShowPreviewPage(which));
+            }
+
+            ShowPicture(tableFront, model.Front);
+            ShowPicture(tableBack, model.Back);
+            ShowPicture(consoleCard, model.Front != null ? model.Front : model.Back);
+            ShowPreviewPage(previewPage);
+        }
+
+        private void ShowPicture(RawImage image, Texture picture)
+        {
+            if (image == null) return;
+            image.texture = picture;
+            CropToFill(image, picture);
+            image.color = picture != null ? Color.white : new Color(1f, 1f, 1f, 0.08f);
+        }
+
+        private void ShowPreviewPage(int which)
+        {
+            if (previewPages.Length == 0) return;
+            previewPage = Mathf.Clamp(which, 0, previewPages.Length - 1);
+            for (int i = 0; i < previewPages.Length; i++)
+            {
+                if (previewPages[i] != null && previewPages[i].activeSelf != (i == previewPage)) previewPages[i].SetActive(i == previewPage);
+                if (i < previewFills.Length && previewFills[i] != null) previewFills[i].color = i == previewPage ? tabOn : tabOff;
+            }
+
+            Vector3 size = shownLarge ? new Vector3(1.3f, 1.3f, 1f) : Vector3.one;
+            if (tableCards != null) tableCards.localScale = size;
+            if (consoleCardHolder != null) consoleCardHolder.localScale = size;
         }
 
         private void ShowTab(int which)
@@ -507,7 +643,13 @@ namespace ConsoleCards.Presentation.UI
             FileWords.Clear();
             // Oxanium has no tick or warning sign: the words say it.
             FileWords.Append(RightShape(picture) ? "<color=#2FD46B>OK</color> · " : "<color=#FFB21E>WRONG SHAPE</color> · ");
-            if (!string.IsNullOrEmpty(picture.name)) FileWords.Append(picture.name).Append(" · ");
+            string name = picture.name ?? string.Empty;
+            int slash = name.LastIndexOf('/');
+            if (slash >= 0) name = name.Substring(slash + 1);
+            // A picture of yours is stored under its card's key (…/front): say so instead of the key.
+            if (name == "front" || name == "back") name = "your picture";
+            if (name.Length > 22) name = name.Substring(0, 21) + "…";
+            if (name.Length > 0) FileWords.Append(name).Append(" · ");
             FileWords.Append(picture.width).Append(" × ").Append(picture.height);
             return FileWords.ToString();
         }
@@ -684,6 +826,10 @@ namespace ConsoleCards.Presentation.UI
             if (nameInput != null) nameInput.onValueChanged.RemoveAllListeners();
             if (descriptionInput != null) descriptionInput.onValueChanged.RemoveAllListeners();
             if (costInput != null) costInput.onValueChanged.RemoveAllListeners();
+            if (codeInput != null) codeInput.onEndEdit.RemoveAllListeners();
+            if (nameInput != null) nameInput.onEndEdit.RemoveAllListeners();
+            if (descriptionInput != null) descriptionInput.onEndEdit.RemoveAllListeners();
+            if (costInput != null) costInput.onEndEdit.RemoveAllListeners();
         }
 
         private static void Clear(Button button)
@@ -691,11 +837,41 @@ namespace ConsoleCards.Presentation.UI
             if (button != null) button.onClick.RemoveAllListeners();
         }
 
-        private void HandleTyping(string _) => RefreshPreviewWords();
-        private void HandleClose() => actions?.Close?.Invoke();
+        private void HandleTyping(string _)
+        {
+            RefreshPreviewWords();
+            ShowSaved(false);
+        }
+
+        // Auto-save: leaving a field writes the card as typed.
+        private void HandleTypingDone(string _)
+        {
+            CardEditorActions now = actions;
+            if (now?.AutoSave != null) ShowSaved(now.AutoSave(Typed()));
+        }
+
+        private void ShowSaved(bool saved)
+        {
+            if (savedTick != null && savedTick.activeSelf != saved) savedTick.SetActive(saved);
+        }
+
+        // Leaving the studio or choosing another card first saves what is typed.
+        private void HandleClose()
+        {
+            CardEditorActions now = actions;
+            now?.AutoSave?.Invoke(Typed());
+            now?.Close?.Invoke();
+        }
+
         private void HandlePreviousGame() => actions?.CycleGame?.Invoke(-1, Typed());
         private void HandleNextGame() => actions?.CycleGame?.Invoke(1, Typed());
-        private void HandleSelect(string id) => actions?.Select?.Invoke(id);
+        private void HandleSelect(string id)
+        {
+            CardEditorActions now = actions;
+            now?.AutoSave?.Invoke(Typed());
+            now?.Select?.Invoke(id);
+        }
+
         private void HandleNewCard() => actions?.NewCard?.Invoke(Typed());
         private void HandlePreviousWorksLike() => actions?.CycleWorksLike?.Invoke(-1, Typed());
         private void HandleNextWorksLike() => actions?.CycleWorksLike?.Invoke(1, Typed());

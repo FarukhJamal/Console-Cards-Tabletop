@@ -6,6 +6,22 @@ namespace ConsoleCards.Presentation.Feedback
     /// <summary>
     /// Shows the board feedback markers (doc 25, F2) from a small pool made once from the authored prefabs.
     /// Callers pass world positions every frame in reused lists; nothing is allocated while playing.
+    /// <para>Board 18 (owner, 2026-10-30): the marks are the platform's, the same for every game, and each has one
+    /// meaning. A game only says which tiles mean what:</para>
+    /// <list type="bullet">
+    /// <item><b>Turn piece</b> (<see cref="ShowTurnPiece"/>): whose piece acts, in that seat's colour.</item>
+    /// <item><b>Targets</b> and the <b>path</b> to one (<see cref="ShowTargets"/>): where you can act now (teal).</item>
+    /// <item><b>Reach</b> (<see cref="ShowReach"/>): a quiet hint of where you could go (teal dots).</item>
+    /// <item><b>Danger</b> (<see cref="ShowDanger"/>): known harm on a tile (red).</item>
+    /// <item><b>Disabled</b> (<see cref="ShowDisabled"/>): something made harmless (grey).</item>
+    /// <item><b>Event</b> (<see cref="ShowEvent"/>): the round's big moment on one tile (orange).</item>
+    /// <item><b>Flash</b> and <b>burst</b>: one-shot changes (a flip, a collapse).</item>
+    /// <item>Table-wide, for every piece of every game: <b>hover</b> (white), <b>landing</b>, <b>selection</b>,
+    /// <b>ping</b>, <b>aim</b> and <b>puff</b>.</item>
+    /// </list>
+    /// Trap Floor maps its rules onto these (a known trap is Danger, a disarmed one Disabled, the floor dice's tile
+    /// the Event, Rush and Dodge tiles Targets). With <see cref="BoardFeedbackSet.ColoursByMeaning"/> the colours
+    /// come from the meaning, not from the caller.
     /// </summary>
     public sealed class BoardFeedbackPresenter
     {
@@ -51,7 +67,7 @@ namespace ConsoleCards.Presentation.Feedback
             flashes = MakePool(set.FlipFlash, parent, FlashPool);
             bursts = MakePool(set.CollapseBurst, parent, BurstPool);
             reach = MakePool(set.ReachTile, parent, ReachPool);
-            neutralized = MakePool(set.MoveTarget, parent, NeutralizedPool);
+            neutralized = MakePool(set.DisabledMark, parent, NeutralizedPool);
             collapseTarget = Make(set.CollapseTarget, parent);
             if (set.MoveArrow != null)
             {
@@ -71,10 +87,10 @@ namespace ConsoleCards.Presentation.Feedback
             // TOOLS-1: an expanding ring when a ping lands, and the outlines around selected cards; both kept apart
             // from the game's markers so HideAll never hides them.
             pingRipples = MakePool(set.CollapseBurst, parent, PingPool);
-            selection = MakePool(set.MoveTarget, parent, SelectionPool);
+            selection = MakePool(set.SelectionOutline, parent, SelectionPool);
             // POL-1 to POL-3: the hover outline, the landing ghost and the landing puffs, also apart from HideAll.
-            hover = Make(set.MoveTarget, parent);
-            landing = Make(set.MoveTarget, parent);
+            hover = Make(set.HoverOutline, parent);
+            landing = Make(set.LandingGhost, parent);
             puffs = MakePool(set.CollapseBurst, parent, PuffPool);
         }
 
@@ -93,7 +109,7 @@ namespace ConsoleCards.Presentation.Feedback
         /// <summary>POL-3: an outline in the player's colour on the piece under the pointer.</summary>
         public void ShowHover(Vector3 position, float yawDegrees, Color colour, float size)
         {
-            hover?.ShowAt(position + (Vector3.up * set.TileMarkerLift), yawDegrees, colour, size);
+            hover?.ShowAt(position + (Vector3.up * set.TileMarkerLift), yawDegrees, Meaning(set.HoverColour, colour), size);
         }
 
         public void HideHover()
@@ -165,7 +181,10 @@ namespace ConsoleCards.Presentation.Feedback
 
         public BoardFeedbackSet Set => set;
 
-        public void ShowActivePawn(bool visible, Vector3 position, Color colour)
+        private Color Meaning(Color byMeaning, Color fromCaller) => set.ColoursByMeaning ? byMeaning : fromCaller;
+
+        /// <summary>Whose piece acts: a glow in the seat's colour on its tile (board 18, 1).</summary>
+        public void ShowTurnPiece(bool visible, Vector3 position, Color colour)
         {
             if (ring == null) return;
             if (!visible)
@@ -177,24 +196,28 @@ namespace ConsoleCards.Presentation.Feedback
             ring.Show(position + (Vector3.up * set.TileMarkerLift), colour);
         }
 
-        public void ShowTrapWarnings(List<Vector3> positions)
+        /// <summary>Known harm on these tiles (board 18, 5): flat on the tile, red.</summary>
+        public void ShowDanger(List<Vector3> positions)
         {
-            ShowPool(warnings, positions, Vector3.up * set.TrapWarningLift, new Color(0.94f, 0.28f, 0.24f, 1f));
+            ShowPool(warnings, positions, Vector3.up * set.TrapWarningLift, Meaning(set.DangerColour, new Color(0.94f, 0.28f, 0.24f, 1f)));
         }
 
         /// <summary>
-        /// The traps made harmless (known issue fixed 2026-10-20: their tint went on a hidden plate, so nothing showed).
+        /// Something made harmless on these tiles (board 18, 6), for Trap Floor a disarmed trap (known issue fixed
+        /// 2026-10-20: their tint went on a hidden plate, so nothing showed).
         /// </summary>
-        public void ShowNeutralized(List<Vector3> positions, Color colour)
+        public void ShowDisabled(List<Vector3> positions, Color colour)
         {
-            ShowPool(neutralized, positions, Vector3.up * set.TileMarkerLift, colour);
+            ShowPool(neutralized, positions, Vector3.up * set.TileMarkerLift, Meaning(set.DisabledColour, colour));
         }
 
-        public void ShowMoveTargets(List<Vector3> positions, Color colour, bool showArrow, Vector3 arrowFrom)
+        /// <summary>Where the piece can go or act now (board 18, 2), with the path to a single target (3).</summary>
+        public void ShowTargets(List<Vector3> positions, Color colour, bool showPath, Vector3 pathFrom)
         {
-            ShowPool(targets, positions, Vector3.up * set.TileMarkerLift, colour);
+            Color tint = Meaning(set.TargetColour, colour);
+            ShowPool(targets, positions, Vector3.up * set.TileMarkerLift, tint);
             if (arrow == null) return;
-            if (showArrow && positions.Count == 1) arrow.Show(arrowFrom, positions[0], colour);
+            if (showPath && positions.Count == 1) arrow.Show(pathFrom, positions[0], tint);
             else arrow.Hide();
         }
 
@@ -204,7 +227,7 @@ namespace ConsoleCards.Presentation.Feedback
         /// </summary>
         public void ShowReach(List<Vector3> positions, Color colour)
         {
-            ShowPool(reach, positions, Vector3.up * set.TileMarkerLift, colour);
+            ShowPool(reach, positions, Vector3.up * set.TileMarkerLift, Meaning(set.TargetColour, colour));
         }
 
         public void HideReach()
@@ -213,15 +236,15 @@ namespace ConsoleCards.Presentation.Feedback
         }
 
         /// <summary>
-        /// The tile the floor dice point at (the collapse target). Like reach, kept apart from the other markers:
-        /// <see cref="HideAll"/> leaves it; <see cref="HideCollapseTarget"/> takes it away.
+        /// The round's big moment on one tile (board 18, 7), for Trap Floor the tile the floor dice point at. Like
+        /// reach, kept apart from the other markers: <see cref="HideAll"/> leaves it; <see cref="HideEvent"/> takes it away.
         /// </summary>
-        public void ShowCollapseTarget(Vector3 position, Color colour)
+        public void ShowEvent(Vector3 position, Color colour)
         {
-            collapseTarget?.Show(position + (Vector3.up * set.TileMarkerLift), colour);
+            collapseTarget?.Show(position + (Vector3.up * set.TileMarkerLift), Meaning(set.EventColour, colour));
         }
 
-        public void HideCollapseTarget()
+        public void HideEvent()
         {
             collapseTarget?.Hide();
         }

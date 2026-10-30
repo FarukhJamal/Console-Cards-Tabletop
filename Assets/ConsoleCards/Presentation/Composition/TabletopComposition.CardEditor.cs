@@ -40,6 +40,10 @@ namespace ConsoleCards.Presentation.Composition
             public readonly ConsoleSymbol[] Icons = new ConsoleSymbol[CardDefinition.EdgeIconCount];
             // The frame variant ID (FRAME-1); empty: the game's default frame.
             public string Frame = string.Empty;
+            // Card studio (board 10): plays as a large (avatar-size) card; a picture of another shape is fitted with a
+            // border instead of cropped to fill.
+            public bool Large;
+            public bool FitPicture;
             // Copies in each of the player's decks, by deck ID (0 or missing: not in that deck).
             public readonly Dictionary<string, int> DeckCopies = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         }

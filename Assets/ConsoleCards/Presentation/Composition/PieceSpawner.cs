@@ -139,6 +139,7 @@ namespace ConsoleCards.Presentation.Composition
             selectionVisual.SetSelected(false);
             host.ApplySelectionHighlightHide(selectionVisual);
             createdView.Bind(pawn, host.coordinateConverter);
+            host.ApplyPieceColour(createdView); // board 8: the Toolbox colour it was placed with
             host.Registry.runtimePawnInstances.Add(new RuntimeObjectInstance(root, createdView, selectionVisual));
             return createdView;
         }
@@ -233,6 +234,7 @@ namespace ConsoleCards.Presentation.Composition
             host.ApplySelectionHighlightHide(selectionVisual);
             createdView.Bind(token, host.coordinateConverter);
             createdView.transform.localScale = Vector3.one * visualScale;
+            host.ApplyPieceColour(createdView);
             host.Registry.runtimeTokenInstances.Add(new RuntimeObjectInstance(root, createdView, selectionVisual));
             return createdView;
         }
@@ -323,6 +325,7 @@ namespace ConsoleCards.Presentation.Composition
             selectionVisual.SetSelected(false);
             host.ApplySelectionHighlightHide(selectionVisual);
             createdView.Bind(die, host.coordinateConverter);
+            host.ApplyPieceColour(createdView);
             host.Registry.runtimeDieInstances.Add(new RuntimeObjectInstance(root, createdView, selectionVisual));
             return createdView;
         }

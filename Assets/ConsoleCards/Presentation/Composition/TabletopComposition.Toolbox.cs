@@ -443,6 +443,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             toolboxSpawnSequence++;
+            RememberPieceColour(result); // board 8: Colour of new pieces
             // R2: the piece got its view from the table's view sync.
             if (!quiet) ShowMessage(componentKind == TabletopComponentKind.Die
                 ? $"Added d{dieSideCount}."

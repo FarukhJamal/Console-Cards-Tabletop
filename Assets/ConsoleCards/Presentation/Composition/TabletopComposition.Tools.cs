@@ -129,6 +129,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             BuildToolKeyTexts();
+            RefreshPieceColourChoice(); // board 8: the Toolbox's Colour of new pieces (the seat colour may change)
             if (handView != null) handView.TrayFan = handFan;
             bool hasTray = handView != null && handView.IsTrayMode;
             toolBarShown = runtimeUi.ShowToolBar(

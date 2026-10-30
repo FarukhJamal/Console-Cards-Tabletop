@@ -871,6 +871,12 @@ namespace ConsoleCards.Presentation.UI
         /// Shows the tool bar (TOOLS-1) with its keys strip; while it is shown the old controls strip stays hidden.
         /// False when its prefab is missing (warned once): then the old controls strip carries on as before.
         /// </summary>
+        /// <summary>Board 8: the Toolbox's Colour of new pieces (the first swatch is the seat colour).</summary>
+        public void ShowPieceColours(Color seatColour, int chosen, Action<int> choose)
+        {
+            if (componentToolboxView != null) componentToolboxView.SetPieceColours(seatColour, chosen, choose);
+        }
+
         public bool ShowToolBar(
             Action<TableToolKind> chooseTool,
             Action toggleKeysStrip,

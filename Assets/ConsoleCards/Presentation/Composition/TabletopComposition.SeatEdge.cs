@@ -102,7 +102,7 @@ namespace ConsoleCards.Presentation.Composition
         // model stays as it is. For this table only (the saved table is not changed).
         private void GrowTableForGame()
         {
-            if (tableSpec == null || tableSpec.shape == TableShape.Model || !FindClassicTable()) return;
+            if (tableSpec == null || tableSpec.shape == TableShape.Model || !tableSpec.fitPlayers || !FindClassicTable()) return;
             if (!ActiveCartridge.TryGetTableNeed(out Vector2 half) || half.x <= 0f || half.y <= 0f) return;
             float needWidth = 2f * half.x;
             float needDepth = 2f * half.y;

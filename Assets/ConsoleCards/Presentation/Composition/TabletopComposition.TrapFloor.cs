@@ -561,7 +561,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
-            boardFeedback.ShowActivePawn(pawnFound, pawnPosition, colour);
+            boardFeedback.ShowTurnPiece(pawnFound, pawnPosition, colour);
             boardFeedbackTraps.Clear();
             if (trapFloorAbilityResolutionState != null)
             {
@@ -578,7 +578,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
-            boardFeedback.ShowTrapWarnings(boardFeedbackTraps);
+            boardFeedback.ShowDanger(boardFeedbackTraps); // board 18: a known trap is Danger
             boardFeedbackNeutralized.Clear();
             if (trapFloorAbilityResolutionState != null)
             {
@@ -594,7 +594,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
-            boardFeedback.ShowNeutralized(boardFeedbackNeutralized, NeutralizedTrapColour);
+            boardFeedback.ShowDisabled(boardFeedbackNeutralized, NeutralizedTrapColour); // a disarmed trap is Disabled
             boardFeedbackTargets.Clear();
             IReadOnlyList<TabletopObjectId> targetIds = trapFloorAbilityResolutionState?.ActiveRushAssistance?.TargetFloorCardIds
                 ?? trapFloorAbilityResolutionState?.ActiveDodgeAssistance?.TargetFloorCardIds;
@@ -607,7 +607,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
-            boardFeedback.ShowMoveTargets(boardFeedbackTargets, colour, pawnFound, pawnPosition);
+            boardFeedback.ShowTargets(boardFeedbackTargets, colour, pawnFound, pawnPosition); // Rush and Dodge tiles are Targets
         }
 
         // ---------- board card backs and floor colours (moved from TabletopComposition.CardArt.cs) ----------

@@ -50,7 +50,7 @@ namespace ConsoleCards.Presentation.Composition
     /// (R1d: moved out of TabletopComposition; the table reaches it as <c>CardEditorPanel</c> and it
     /// reaches the table through <c>host</c>.)
     /// </summary>
-    internal sealed class CardEditorPresenter
+    internal sealed partial class CardEditorPresenter
     {
         private readonly TabletopComposition host;
 
@@ -108,6 +108,7 @@ namespace ConsoleCards.Presentation.Composition
 
             GameDefinition start = editorGame != null && editorGames.Contains(editorGame) ? editorGame : editorGames[0];
             ContentArtService previous = UseEditorGame(start);
+            TakeEditorUndo();
             ShowCardEditor(string.Empty);
             previous?.Dispose();
         }
@@ -173,6 +174,7 @@ namespace ConsoleCards.Presentation.Composition
             int index = Math.Max(0, editorGames.IndexOf(editorGame));
             GameDefinition next = editorGames[((index + step) % editorGames.Count + editorGames.Count) % editorGames.Count];
             ContentArtService previous = UseEditorGame(next);
+            TakeEditorUndo();
             ShowCardEditor($"Now editing {next.DisplayName}'s cards.");
             previous?.Dispose();
         }
@@ -194,14 +196,21 @@ namespace ConsoleCards.Presentation.Composition
                     CycleGame = CycleEditorGame,
                     Select = SelectEditorCard,
                     NewCard = NewEditorCard,
-                    CycleWorksLike = CycleEditorWorksLike,
-                    ToggleDeck = ToggleEditorDeck,
-                    ChangeDeckCopies = ChangeEditorDeckCopies,
+                    CycleWorksLike = (step, typed) => { CycleEditorWorksLike(step, typed); AutoSaveAfterChange(); },
+                    ToggleDeck = (deck, typed) => { ToggleEditorDeck(deck, typed); AutoSaveAfterChange(); },
+                    ChangeDeckCopies = (deck, step, typed) => { ChangeEditorDeckCopies(deck, step, typed); AutoSaveAfterChange(); },
                     NewDeck = NewEditorDeck,
-                    ChoosePicture = ChooseEditorPicture,
-                    ClearPicture = ClearEditorPicture,
-                    CycleIcon = CycleEditorIcon,
-                    CycleFrame = CycleEditorFrame,
+                    // Auto-save (owner, 2026-10-30): every change to the card is written at once.
+                    ChoosePicture = (front, typed) => { ChooseEditorPicture(front, typed); AutoSaveAfterChange(); },
+                    ClearPicture = (front, typed) => { ClearEditorPicture(front, typed); AutoSaveAfterChange(); },
+                    CycleIcon = (place, typed) => { CycleEditorIcon(place, typed); AutoSaveAfterChange(); },
+                    CycleFrame = (step, typed) => { CycleEditorFrame(step, typed); AutoSaveAfterChange(); },
+                    AutoSave = AutoSaveEditorCard,
+                    SetSize = (large, typed) => { SetEditorSize(large, typed); AutoSaveAfterChange(); },
+                    SetFit = (fit, typed) => { SetEditorFit(fit, typed); AutoSaveAfterChange(); },
+                    Duplicate = DuplicateEditorCard,
+                    ImportFolder = ImportEditorFolder,
+                    Undo = UndoEditorCard,
                     Save = SaveEditorCard,
                     Reset = ResetEditorCard,
                     Delete = DeleteEditorCard,
@@ -218,7 +227,10 @@ namespace ConsoleCards.Presentation.Composition
                 DeckSummary = EditorDeckSummary(gameName),
                 Rows = BuildEditorRows(),
                 Status = string.IsNullOrEmpty(status) ? CardEditorHint : status,
+                Saved = editorAutoSaved,
+                CanImport = PictureFilePicker.IsAvailable,
             };
+            editorLastStatus = status ?? string.Empty;
 
             CardEditorDraft draft = editorDraft;
             if (draft != null)
@@ -252,6 +264,9 @@ namespace ConsoleCards.Presentation.Composition
                 model.IconCells = EditorIconCells(draft);
                 model.CanChangeIcons = true;
                 FillEditorFrame(model, frameStyle, draft);
+                model.Large = draft.Large;
+                model.FitPicture = draft.FitPicture;
+                model.CanDuplicate = true;
             }
 
             if (!host.runtimeUi.ShowCardEditor(model, cardEditorActions))
@@ -306,6 +321,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void SelectEditorCard(string cardId)
         {
             DropUnsavedNewCard();
+            editorAutoSaved = false;
             CardDefinition card = FindEditorGameCard(cardId);
             if (card != null)
             {
@@ -317,12 +333,14 @@ namespace ConsoleCards.Presentation.Composition
                 if (record != null) editorDraft = DraftForRecord(record);
             }
 
+            TakeEditorUndo();
             ShowCardEditor(string.Empty);
         }
 
         internal void NewEditorCard(CardEditorTyped typed)
         {
             DropUnsavedNewCard();
+            editorAutoSaved = false;
             CardDefinition model = editorDraft != null ? FindEditorGameCard(editorDraft.WorksLikeId) : null;
             if (model == null && editorGameCards.Count > 0) model = editorGameCards[0];
             if (model == null) return;
@@ -337,7 +355,9 @@ namespace ConsoleCards.Presentation.Composition
             };
             CopyIcons(model, editorDraft.Icons); // a new card starts with the icons of the card it works like
             editorDraft.Frame = model.FrameVariant; // and its frame
-            ShowCardEditor("A new card. Give it a name, pick the card it works like and its pictures, then Save.");
+            editorDraft.Large = ModelIsLarge(model); // and its size
+            TakeEditorUndo();
+            ShowCardEditor("A new card. Give it a name, pick the card it works like and its pictures; each change is saved as you make it.");
         }
 
         // In a deck or not: the tick puts one copy in, or takes every copy out.
@@ -387,7 +407,7 @@ namespace ConsoleCards.Presentation.Composition
             editorDecks.decks.Add(deck);
             EditorArt.Store.SaveDecks(EditorArt.GameId, editorDecks);
             editorDraft.DeckCopies[deck.id] = 1;
-            ShowCardEditor($"Added {deck.name} with this card ticked in it. Save keeps the card there; decks are renamed in the deck editor.");
+            ShowCardEditor($"Added {deck.name} with this card ticked in it; decks are renamed in Decks.");
         }
 
         internal void CycleEditorWorksLike(int step, CardEditorTyped typed)
@@ -422,7 +442,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             string key = PlayerContent.DefaultArtKey(editorArtFolder, editorDraft.Id, front);
-            if (!EditorArt.SetUpload(key, path, out string message))
+            if (!StoreShapedPicture(key, path, editorDraft.FitPicture, out string message))
             {
                 ShowCardEditor(message);
                 return;
@@ -430,7 +450,7 @@ namespace ConsoleCards.Presentation.Composition
 
             if (front) editorDraft.FrontKey = key;
             else editorDraft.BackKey = key;
-            ShowCardEditor("Picture copied into your profile. Press Save to keep it on the card.");
+            ShowCardEditor(message);
         }
 
         internal void ClearEditorPicture(bool front, CardEditorTyped typed)
@@ -448,8 +468,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             ShowCardEditor(editorDraft.IsNew
-                ? "Picture cleared. Press Save to keep the change."
-                : "The game's picture is back. Press Save to keep the change.");
+                ? "Picture cleared."
+                : "The game's picture is back.");
         }
 
         // ICON-1: a click on an icon place shows the next icon there (None, Square ... Minus, None).
@@ -461,8 +481,8 @@ namespace ConsoleCards.Presentation.Composition
             editorDraft.Icons[place] = next;
             string where = IconPlaceName((CardIconPlace)place);
             ShowCardEditor(next == ConsoleSymbol.None
-                ? $"No icon at the {where}. Press Save to keep it."
-                : $"{next} at the {where}: the card fits Console slots marked {next} and turns so this icon points outward. Press Save to keep it.");
+                ? $"No icon at the {where}."
+                : $"{next} at the {where}: the card fits Console slots marked {next} and turns so this icon points outward.");
         }
 
         // ---------- frame (FRAME-1) ----------
@@ -505,7 +525,7 @@ namespace ConsoleCards.Presentation.Composition
             int index = string.IsNullOrEmpty(editorDraft.Frame) ? 0 : style.IndexOf(editorDraft.Frame) + 1;
             index = (((index + step) % count) + count) % count;
             editorDraft.Frame = index == 0 ? string.Empty : style.Variants[index - 1].Id;
-            ShowCardEditor($"Frame: {EditorFrameName(style, editorDraft.Frame)}. Press Save to keep it.");
+            ShowCardEditor($"Frame: {EditorFrameName(style, editorDraft.Frame)}.");
         }
 
         // None plus the 8 symbols.
@@ -548,17 +568,69 @@ namespace ConsoleCards.Presentation.Composition
             CardEditorDraft draft = editorDraft;
             if (draft == null) return;
             ApplyTyped(typed);
+            if (!TrySaveEditorDraft(draft, out string problem))
+            {
+                editorAutoSaved = false;
+                ShowCardEditor(problem);
+                return;
+            }
+
+            editorAutoSaved = true;
+            ShowCardEditor($"Saved {draft.Name}. Start a new table (Table > New table…) to play with it.");
+        }
+
+        // ---------- auto-save (owner, 2026-10-30: "do the saving part too") ----------
+
+        internal bool editorAutoSaved;
+        internal string editorLastStatus = string.Empty;
+
+        // Typing (when a field is left), choosing another card and leaving the studio save the card as it is typed. No
+        // panel refresh here: the view shows the tick itself, and the list catches up on the next refresh.
+        internal bool AutoSaveEditorCard(CardEditorTyped typed)
+        {
+            CardEditorDraft draft = editorDraft;
+            if (draft == null) return false;
+            ApplyTyped(typed);
+            if (IsUntouchedNewCard(draft)) return false;
+            editorAutoSaved = TrySaveEditorDraft(draft, out _);
+            return editorAutoSaved;
+        }
+
+        // After a picture, icon, frame, model or deck change: save and show the panel again with the tick (or why not).
+        internal void AutoSaveAfterChange()
+        {
+            CardEditorDraft draft = editorDraft;
+            if (draft == null || IsUntouchedNewCard(draft)) return;
+            if (TrySaveEditorDraft(draft, out string problem))
+            {
+                editorAutoSaved = true;
+                ShowCardEditor(editorLastStatus);
+                return;
+            }
+
+            editorAutoSaved = false;
+            ShowCardEditor("Not saved yet: " + problem);
+        }
+
+        // A new card nobody has named, described or given a picture yet is not saved on its own.
+        internal static bool IsUntouchedNewCard(CardEditorDraft draft) =>
+            draft.IsNew && !draft.IsSaved && string.Equals(draft.Name, "New card", StringComparison.Ordinal)
+            && string.IsNullOrEmpty(draft.FrontKey) && string.IsNullOrEmpty(draft.Description);
+
+        // Checks the card and writes it with its decks; false with the reason when it cannot be saved.
+        internal bool TrySaveEditorDraft(CardEditorDraft draft, out string problem)
+        {
             string name = draft.Name.Trim();
             if (name.Length == 0)
             {
-                ShowCardEditor("Give the card a name first.");
-                return;
+                problem = "Give the card a name first.";
+                return false;
             }
 
             if (!InputCostNotation.TryParse(draft.Cost, out InputCostData costData, out string costError))
             {
-                ShowCardEditor($"The cost could not be read: {costError}. Write it like Up + A/B/X/Y.");
-                return;
+                problem = $"The cost could not be read: {costError}. Write it like Up + A/B/X/Y.";
+                return false;
             }
 
             draft.Name = name;
@@ -566,23 +638,24 @@ namespace ConsoleCards.Presentation.Composition
             draft.Copies = Mathf.Clamp(draft.Copies, 0, CardEditorMaximumCopies);
             if (draft.IsNew && !TryCleanCode(draft, out string codeError))
             {
-                ShowCardEditor(codeError);
-                return;
+                problem = codeError;
+                return false;
             }
 
             if (draft.IsNew) SaveNewCardRecord(draft);
             else SaveGameCardChange(draft);
             if (!EditorArt.Store.SaveCards(EditorArt.GameId, editorCards))
             {
-                ShowCardEditor("Your cards could not be saved; the console says why.");
-                return;
+                problem = "Your cards could not be saved; the console says why.";
+                return false;
             }
 
             SaveDraftDecks(draft);
 
             draft.IsSaved = true;
             RemoveUnusedEditorPictures(draft.Id);
-            ShowCardEditor($"Saved {draft.Name}. Start a new table (Table > New table…) to play with it.");
+            problem = string.Empty;
+            return true;
         }
 
         internal void ResetEditorCard()
@@ -670,6 +743,8 @@ namespace ConsoleCards.Presentation.Composition
             record.backArtKey = SameArtKey(draft.BackKey, model?.BackArtworkReference) ? string.Empty : draft.BackKey;
             record.icons = CardDefinition.FormatEdgeSymbols(draft.Icons);
             record.frame = draft.Frame ?? string.Empty;
+            record.size = draft.Large == ModelIsLarge(model) ? string.Empty : PlayerContent.SizeWord(draft.Large ? CardSizeClass.Large : CardSizeClass.Standard);
+            record.fitPicture = draft.FitPicture;
         }
 
         // Only what differs from the game's card is kept; with nothing different the change is removed.
@@ -726,6 +801,14 @@ namespace ConsoleCards.Presentation.Composition
                 change.changeFrame = true;
                 change.frame = draft.Frame ?? string.Empty;
             }
+
+            if (draft.Large != ModelIsLarge(card))
+            {
+                change.changeSize = true;
+                change.size = PlayerContent.SizeWord(draft.Large ? CardSizeClass.Large : CardSizeClass.Standard);
+            }
+
+            change.fitPicture = draft.FitPicture;
 
             CardChangeRecord existing = FindEditorChange(card.StableId);
             if (existing != null) editorCards.changes.Remove(existing);
@@ -900,6 +983,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void RemoveEditorPicture(string key)
         {
             if (EditorArt.HasUpload(key)) EditorArt.RemoveUpload(key, out _);
+            RemoveEditorPictureSource(key);
         }
 
         internal void DropUnsavedNewCard()
@@ -939,6 +1023,10 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             draft.Frame = change != null && change.changeFrame ? change.frame ?? string.Empty : card.FrameVariant;
+            draft.Large = change != null && change.changeSize && PlayerContent.TryReadSize(change.size, out CardSizeClass changed)
+                ? changed == CardSizeClass.Large
+                : ModelIsLarge(card);
+            draft.FitPicture = change != null && change.fitPicture;
 
             FillDeckCopies(draft);
             return draft;
@@ -966,6 +1054,8 @@ namespace ConsoleCards.Presentation.Composition
             CardDefinition.TryParseEdgeSymbols(record.icons, out ConsoleSymbol[] icons);
             CopyIcons(icons, draft.Icons);
             draft.Frame = record.frame ?? string.Empty;
+            draft.Large = PlayerContent.TryReadSize(record.size, out CardSizeClass size) ? size == CardSizeClass.Large : ModelIsLarge(model);
+            draft.FitPicture = record.fitPicture;
             FillDeckCopies(draft);
             return draft;
         }

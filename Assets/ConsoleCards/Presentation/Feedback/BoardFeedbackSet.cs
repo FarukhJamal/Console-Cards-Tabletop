@@ -24,6 +24,22 @@ namespace ConsoleCards.Presentation.Feedback
         [SerializeField] private BoardFeedbackMarker collapseTarget;
         [Tooltip("The table ping (UX-1): a ring at the spot a player pings. Empty: the active-pawn ring is used.")]
         [SerializeField] private BoardFeedbackMarker tablePing;
+        [Header("Board feedback v2 (board 18): one look per meaning, for every game")]
+        [Tooltip("Under the pointer: a thin frame. Empty: the move-target marker is used.")]
+        [SerializeField] private BoardFeedbackMarker hoverOutline;
+        [Tooltip("Where a carried piece will land. Empty: the move-target marker is used.")]
+        [SerializeField] private BoardFeedbackMarker landingGhost;
+        [Tooltip("Around each selected piece. Empty: the move-target marker is used.")]
+        [SerializeField] private BoardFeedbackMarker selectionOutline;
+        [Tooltip("Something made harmless (a disarmed trap). Empty: the move-target marker is used.")]
+        [SerializeField] private BoardFeedbackMarker disabledMark;
+        [Tooltip("Board 18: the colours below follow the meaning of a mark, whichever game asks for it.")]
+        [SerializeField] private bool coloursByMeaning;
+        [SerializeField] private Color targetColour = new Color(0.024f, 0.937f, 0.941f, 1f);
+        [SerializeField] private Color dangerColour = new Color(1f, 0.231f, 0.231f, 1f);
+        [SerializeField] private Color eventColour = new Color(0.949f, 0.463f, 0.180f, 1f);
+        [SerializeField] private Color disabledColour = new Color(0.608f, 0.643f, 0.655f, 0.9f);
+        [SerializeField] private Color hoverColour = new Color(0.910f, 0.925f, 0.929f, 0.9f);
         [Header("Drawing tool (Final World prefabs)")]
         [Tooltip("A drawn line: a flat Line Renderer the drawing tool copies for each pen or highlighter line.")]
         [SerializeField] private LineRenderer tableMarkLine;
@@ -56,6 +72,16 @@ namespace ConsoleCards.Presentation.Feedback
         public BoardFeedbackMarker ReachTile => reachTile != null ? reachTile : moveTarget;
         public BoardFeedbackMarker CollapseTarget => collapseTarget != null ? collapseTarget : moveTarget;
         public BoardFeedbackMarker TablePing => tablePing != null ? tablePing : activePawnRing;
+        public BoardFeedbackMarker HoverOutline => hoverOutline != null ? hoverOutline : moveTarget;
+        public BoardFeedbackMarker LandingGhost => landingGhost != null ? landingGhost : moveTarget;
+        public BoardFeedbackMarker SelectionOutline => selectionOutline != null ? selectionOutline : moveTarget;
+        public BoardFeedbackMarker DisabledMark => disabledMark != null ? disabledMark : moveTarget;
+        public bool ColoursByMeaning => coloursByMeaning;
+        public Color TargetColour => targetColour;
+        public Color DangerColour => dangerColour;
+        public Color EventColour => eventColour;
+        public Color DisabledColour => disabledColour;
+        public Color HoverColour => hoverColour;
         public LineRenderer TableMarkLine => tableMarkLine;
         public TextMesh TableMarkLabel => tableMarkLabel;
         public Material TableMarkDashMaterial => tableMarkDashMaterial;

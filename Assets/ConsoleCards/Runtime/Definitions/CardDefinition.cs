@@ -80,6 +80,9 @@ namespace ConsoleCards.Definitions
         public string EffectMetadata => effectMetadata;
         public string ObjectiveMetadata => objectiveMetadata;
         public CardSizeClass SizeClass => sizeClass;
+
+        /// <summary>A runtime card (a player card or a changed one) at another size than its model (Card studio).</summary>
+        internal void OverrideSizeClass(CardSizeClass size) => sizeClass = size;
         public ConsoleSymbol ConsoleSymbol => consoleSymbol;
 
         /// <summary>The frame variant ID this card uses (FRAME-1); empty is the game's default frame.</summary>

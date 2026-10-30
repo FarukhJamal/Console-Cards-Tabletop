@@ -12,15 +12,25 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7b031530256f15f4bab1e0d3391d146c, type: 3}
   m_Name: BoardFeedbackSet
   m_EditorClassIdentifier: ConsoleCards.Presentation::ConsoleCards.Presentation.Feedback.BoardFeedbackSet
-  activePawnRing: {fileID: 7576449354998327246, guid: e5f017400b5a5b44dbab8d7b9b6eee9f, type: 3}
-  trapWarning: {fileID: 964643211873597222, guid: 62ebe3f9bfd7f764b9b4c15ad33c9590, type: 3}
-  moveTarget: {fileID: 1633411995851753619, guid: bf048f72bdd01754396213170250556f, type: 3}
-  flipFlash: {fileID: 5487600413670388041, guid: 62690c65b6aba1a4393e76e8d55f0c20, type: 3}
+  activePawnRing: {fileID: 7934336501883086067, guid: a4bd056506a202444a8a456f64593fca, type: 3}
+  trapWarning: {fileID: 1950684355039216650, guid: 1ddb4529aa8734344bfd0d7dbe2b786e, type: 3}
+  moveTarget: {fileID: 7183994229534512252, guid: 8032d0be0ef324e4ea05b3b38c67fe2c, type: 3}
+  flipFlash: {fileID: 5521949247932366178, guid: ff7bbdaf5192cd841a5e270f86069262, type: 3}
   collapseBurst: {fileID: 5715543963897390691, guid: 6f25baf7752f13a41be81c8e2a8132ea, type: 3}
-  moveArrow: {fileID: 7236128192900376613, guid: cb10e1e51b0802c4a9b171fd0e5e7578, type: 3}
-  reachTile: {fileID: 38101117697629613, guid: a8cd28d9cebb51d4e9da287ab4ec4eb6, type: 3}
-  collapseTarget: {fileID: 7698197071654375031, guid: d6b3c06323a07a244814a696f7b0491f, type: 3}
+  moveArrow: {fileID: 636788433619249651, guid: 2b06eda658cb26c42a6d1855993b4593, type: 3}
+  reachTile: {fileID: 519835323871117776, guid: 754135b9021b416409da03d222448b90, type: 3}
+  collapseTarget: {fileID: 7770020361346189764, guid: d0e9bafbc9cc21c44b4511b8dfc59aca, type: 3}
   tablePing: {fileID: 7057813581028574149, guid: 8a918c308f5c2d24a85e249b051108ad, type: 3}
+  hoverOutline: {fileID: 1806698264068362094, guid: d708b23c5934c224289892a14fce4150, type: 3}
+  landingGhost: {fileID: 5753800582658457788, guid: 0533095e497eda2459eca405ecfc74b0, type: 3}
+  selectionOutline: {fileID: 5707364798577266481, guid: 5e522cd5d61fd41478ffd914463ec1b3, type: 3}
+  disabledMark: {fileID: 2680272512096589298, guid: 7207a15a472138d4d856dc09f4da7415, type: 3}
+  coloursByMeaning: 1
+  targetColour: {r: 0.024, g: 0.937, b: 0.941, a: 1}
+  dangerColour: {r: 1, g: 0.231, b: 0.231, a: 1}
+  eventColour: {r: 0.949, g: 0.463, b: 0.18, a: 1}
+  disabledColour: {r: 0.608, g: 0.643, b: 0.655, a: 0.9}
+  hoverColour: {r: 0.91, g: 0.925, b: 0.929, a: 0.9}
   tableMarkLine: {fileID: 2536089930738328914, guid: 46a650878cf8fa4458a00677519a35eb, type: 3}
   tableMarkLabel: {fileID: 16438996261536252, guid: c07457b3ec1156f4398c7d7bdd025c54, type: 3}
   tableMarkDashMaterial: {fileID: 2100000, guid: 1da9405cd0d44ed42aef1a63e2728ef4, type: 2}
@@ -30,7 +40,7 @@ MonoBehaviour:
   labelHeight: 0.45
   eraserRadius: 0.3
   tileMarkerLift: 0.03
-  trapWarningLift: 0.9
+  trapWarningLift: 0.03
   trapKick: 0.06
   eliminatedKick: 0.12
   collapseKick: 0.1

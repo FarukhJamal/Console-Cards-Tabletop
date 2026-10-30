@@ -68,6 +68,46 @@ namespace ConsoleCards.Presentation.TableSurface
         public float edgeWidth = DefaultEdgeWidth;
         public float thickness = DefaultThickness;
 
+        /// <summary>Table (board 12): the colour of the top, 0 the table's own (see <see cref="TopLabel"/>).</summary>
+        public int top;
+
+        /// <summary>Table (board 12): the table grows when a game needs more room for its seats.</summary>
+        public bool fitPlayers = true;
+
+        /// <summary>The name it was saved under (SAVE AS NEW TABLE); empty for a table not saved by name.</summary>
+        public string savedName = string.Empty;
+
+        public const int TopCount = 5;
+
+        public static string TopLabel(int top) => top switch
+        {
+            1 => "Green felt",
+            2 => "Blue felt",
+            3 => "Red felt",
+            4 => "Walnut",
+            _ => "Slate",
+        };
+
+        /// <summary>The swatch colour shown for a top in the panel.</summary>
+        public static Color TopSwatch(int top) => top switch
+        {
+            1 => new Color(0.141f, 0.322f, 0.227f, 1f),
+            2 => new Color(0.137f, 0.224f, 0.357f, 1f),
+            3 => new Color(0.357f, 0.137f, 0.137f, 1f),
+            4 => new Color(0.353f, 0.231f, 0.141f, 1f),
+            _ => new Color(0.165f, 0.196f, 0.208f, 1f),
+        };
+
+        /// <summary>What the top's picture is multiplied by (the table's own felt keeps its look at 0).</summary>
+        public static Color TopTint(int top) => top switch
+        {
+            1 => new Color(0.55f, 1f, 0.68f, 1f),
+            2 => new Color(0.6f, 0.75f, 1f, 1f),
+            3 => new Color(1f, 0.55f, 0.55f, 1f),
+            4 => new Color(0.95f, 0.72f, 0.5f, 1f),
+            _ => Color.white,
+        };
+
         public TableSpec Copy() => (TableSpec)MemberwiseClone();
 
         /// <summary>The hexagon's depth (flat edge to flat edge) as a share of its width (corner to corner): √3 / 2.</summary>

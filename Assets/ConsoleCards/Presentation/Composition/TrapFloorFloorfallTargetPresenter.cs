@@ -34,15 +34,15 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (shownOn != null && shownOn != feedback) shownOn.HideCollapseTarget();
-            feedback.ShowCollapseTarget(tilePosition, TargetColor);
+            if (shownOn != null && shownOn != feedback) shownOn.HideEvent();
+            feedback.ShowEvent(tilePosition, TargetColor); // board 18: the collapse is the round's Event
             shownOn = feedback;
             CurrentTargetId = floorCardId;
         }
 
         public void Clear()
         {
-            shownOn?.HideCollapseTarget();
+            shownOn?.HideEvent();
             shownOn = null;
             CurrentTargetId = TabletopObjectId.Empty;
         }

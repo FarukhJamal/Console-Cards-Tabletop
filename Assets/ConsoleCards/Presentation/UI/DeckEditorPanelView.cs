@@ -38,6 +38,14 @@ namespace ConsoleCards.Presentation.UI
         public string FilterText = string.Empty;
         public IReadOnlyList<DeckEditorCardRowModel> Cards = Array.Empty<DeckEditorCardRowModel>();
         public bool HasChanges;
+        /// <summary>The last change was written (auto-save): the header shows its SAVED tick.</summary>
+        public bool Saved;
+        /// <summary>The size the deck should have; 0 and 0: no range (board 11: "Size 32 / 30–40").</summary>
+        public int RangeMinimum;
+        public int RangeMaximum;
+        /// <summary>BACK OF CARDS: the back of the deck's first card.</summary>
+        public Texture BackPicture;
+        public bool CanChangeBack;
         public string Status = string.Empty;
     }
 
@@ -55,6 +63,10 @@ namespace ConsoleCards.Presentation.UI
         public Action Undo;
         public Action Save;
         public Action Close;
+        /// <summary>The size range as typed ("30-40"); empty clears it.</summary>
+        public Action<string> SetRange;
+        /// <summary>BACK OF CARDS · CHANGE…: one picture for the back of every card in the deck.</summary>
+        public Action ChangeBack;
     }
 
     /// <summary>
@@ -92,6 +104,8 @@ namespace ConsoleCards.Presentation.UI
 
         [Header("Footer")]
         [SerializeField] private Text statusLabel;
+        [Tooltip("Auto-save: the SAVED tick in the header, shown after each change is written.")]
+        [SerializeField] private GameObject savedTick;
         [SerializeField] private Button undoButton;
         [SerializeField] private Button saveButton;
 
@@ -103,6 +117,17 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private InputField addSearch;
         [Tooltip("The deck's size, over the deck.")]
         [SerializeField] private Text sizeLabel;
+        [Tooltip("The size range after the size (\"30–40\"): typed, saved when the field is left.")]
+        [SerializeField] private InputField rangeInput;
+        [Tooltip("The bar under the deck's name: how full the deck is against its range.")]
+        [SerializeField] private GameObject sizeBar;
+        [SerializeField] private RectTransform sizeBarFill;
+        [SerializeField] private Image sizeBarFillImage;
+        [SerializeField] private RawImage backThumb;
+        [SerializeField] private Button changeBackButton;
+        [SerializeField] private Color barInRange = new Color(0.024f, 0.937f, 0.941f, 1f);
+        [SerializeField] private Color barShort = new Color(1f, 0.698f, 0.118f, 1f);
+        [SerializeField] private Color barOver = new Color(1f, 0.478f, 0.420f, 1f);
         [SerializeField] private Button shuffleTestButton;
         [Tooltip("DONE: saves and closes.")]
         [SerializeField] private Button doneButton;
@@ -157,6 +182,7 @@ namespace ConsoleCards.Presentation.UI
             filterLabel.text = model.FilterText;
             undoButton.interactable = model.HasChanges;
             statusLabel.text = model.Status;
+            if (savedTick != null && savedTick.activeSelf != model.Saved) savedTick.SetActive(model.Saved);
 
             dismissOverlayButton.onClick.AddListener(HandleClose);
             closeButton.onClick.AddListener(HandleClose);
@@ -249,6 +275,50 @@ namespace ConsoleCards.Presentation.UI
 
         // ---------- board 11 ----------
 
+        // The range after the size, the bar (teal in range, yellow short, red over) and BACK OF CARDS.
+        private void BindRange(DeckEditorModel model, int total)
+        {
+            if (rangeInput != null)
+            {
+                rangeInput.onEndEdit.RemoveAllListeners();
+                rangeInput.text = model.RangeMaximum <= 0
+                    ? string.Empty
+                    : model.RangeMinimum == model.RangeMaximum ? model.RangeMaximum.ToString() : $"{model.RangeMinimum}–{model.RangeMaximum}";
+                rangeInput.onEndEdit.AddListener(typed => actions?.SetRange?.Invoke(typed));
+            }
+
+            if (sizeBar != null)
+            {
+                bool shown = model.RangeMaximum > 0;
+                if (sizeBar.activeSelf != shown) sizeBar.SetActive(shown);
+                if (shown && sizeBarFill != null)
+                {
+                    float full = Mathf.Clamp01(total / (float)model.RangeMaximum);
+                    sizeBarFill.anchorMin = Vector2.zero;
+                    sizeBarFill.anchorMax = new Vector2(full, 1f);
+                    sizeBarFill.offsetMin = Vector2.zero;
+                    sizeBarFill.offsetMax = Vector2.zero;
+                    if (sizeBarFillImage != null)
+                    {
+                        sizeBarFillImage.color = total > model.RangeMaximum ? barOver : total < model.RangeMinimum ? barShort : barInRange;
+                    }
+                }
+            }
+
+            if (backThumb != null)
+            {
+                backThumb.texture = model.BackPicture;
+                backThumb.color = model.BackPicture != null ? Color.white : new Color(1f, 1f, 1f, 0.15f);
+            }
+
+            if (changeBackButton != null)
+            {
+                changeBackButton.onClick.RemoveAllListeners();
+                changeBackButton.onClick.AddListener(() => actions?.ChangeBack?.Invoke());
+                changeBackButton.interactable = model.CanChangeBack;
+            }
+        }
+
         private void BindBoard(DeckEditorModel model)
         {
             boardCards.Clear();
@@ -260,6 +330,7 @@ namespace ConsoleCards.Presentation.UI
             }
 
             if (sizeLabel != null) sizeLabel.text = $"Size <size=30><b>{total}</b></size>";
+            BindRange(model, total);
             titleLabel.text = "DECKS";
             filterButton.gameObject.SetActive(false); // every card is on the right
             while (addRows.Count < boardCards.Count)

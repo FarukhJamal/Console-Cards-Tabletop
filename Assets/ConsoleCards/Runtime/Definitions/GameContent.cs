@@ -249,6 +249,10 @@ namespace ConsoleCards.Definitions
                     change.changeBackArt && !string.IsNullOrWhiteSpace(change.backArtKey) ? change.backArtKey.Trim() : model.BackArtworkReference,
                     change.changeIcons ? ReadIcons(change.icons) : null,
                     change.changeFrame ? (change.frame ?? string.Empty).Trim() : null));
+                if (change.changeSize && PlayerContent.TryReadSize(change.size, out CardSizeClass changedSize))
+                {
+                    changedCards[model.StableId].OverrideSizeClass(changedSize);
+                }
             }
         }
 
@@ -299,6 +303,7 @@ namespace ConsoleCards.Definitions
                     string.IsNullOrWhiteSpace(record.backArtKey) ? model.BackArtworkReference : record.backArtKey.Trim(),
                     ReadIcons(record.icons),
                     (record.frame ?? string.Empty).Trim());
+                if (PlayerContent.TryReadSize(record.size, out CardSizeClass size)) card.OverrideSizeClass(size);
                 newCards.Add(card);
                 newCardModel.Add(id, model.StableId);
             }

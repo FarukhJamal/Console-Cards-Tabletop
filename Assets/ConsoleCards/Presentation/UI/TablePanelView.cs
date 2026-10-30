@@ -54,6 +54,17 @@ namespace ConsoleCards.Presentation.UI
             + "the bottom left, width, height; 0 to 1). Zero size: the whole screen, as before.")]
         [SerializeField] private Rect previewViewport = new Rect(0f, 0f, 0f, 0f);
 
+        // Board 12 (2026-10-30): TOP swatches, Fit the players, SAVE AS NEW TABLE. Optional.
+        [SerializeField] private GameObject lookRoot;
+        [SerializeField] private Button[] topButtons = Array.Empty<Button>();
+        [SerializeField] private GameObject[] topRings = Array.Empty<GameObject>();
+        [SerializeField] private Button fitButton;
+        [SerializeField] private Image fitTrack;
+        [SerializeField] private RectTransform fitKnob;
+        [SerializeField] private Button saveAsButton;
+        [SerializeField] private Color fitOn = new Color(0.075f, 0.541f, 0.549f, 1f);
+        [SerializeField] private Color fitOff = new Color(0.259f, 0.271f, 0.278f, 1f);
+
         private UnityEngine.Camera framedCamera;
         private Rect framedCameraRect;
 
@@ -133,6 +144,7 @@ namespace ConsoleCards.Presentation.UI
             previousEdgeButton.onClick.AddListener(() => actions?.CycleEdge?.Invoke(-1));
             nextEdgeButton.onClick.AddListener(() => actions?.CycleEdge?.Invoke(1));
 
+            BindLook(model);
             statusLabel.text = model.Status;
             undoButton.interactable = model.CanUndo;
             redoButton.interactable = model.CanRedo;
@@ -206,6 +218,39 @@ namespace ConsoleCards.Presentation.UI
         }
 
         private void OnDisable() => UnframeCamera();
+
+        private void BindLook(TablePanelModel model)
+        {
+            if (lookRoot != null && lookRoot.activeSelf != model.ShowLook) lookRoot.SetActive(model.ShowLook);
+            for (int i = 0; i < topButtons.Length; i++)
+            {
+                if (topButtons[i] == null) continue;
+                int top = i;
+                topButtons[i].onClick.RemoveAllListeners();
+                topButtons[i].onClick.AddListener(() => actions?.PickTop?.Invoke(top));
+                if (i < topRings.Length && topRings[i] != null && topRings[i].activeSelf != (i == model.Top)) topRings[i].SetActive(i == model.Top);
+            }
+
+            if (fitButton != null)
+            {
+                fitButton.onClick.RemoveAllListeners();
+                fitButton.onClick.AddListener(() => actions?.ToggleFitPlayers?.Invoke());
+            }
+
+            if (fitTrack != null) fitTrack.color = model.FitPlayers ? fitOn : fitOff;
+            if (fitKnob != null)
+            {
+                fitKnob.anchorMin = fitKnob.anchorMax = new Vector2(model.FitPlayers ? 1f : 0f, 0.5f);
+                fitKnob.pivot = new Vector2(model.FitPlayers ? 1f : 0f, 0.5f);
+                fitKnob.anchoredPosition = new Vector2(model.FitPlayers ? -4.5f : 4.5f, 0f);
+            }
+
+            if (saveAsButton != null)
+            {
+                saveAsButton.onClick.RemoveAllListeners();
+                saveAsButton.onClick.AddListener(() => actions?.SaveAsNew?.Invoke());
+            }
+        }
 
         public override void Unbind()
         {
@@ -314,6 +359,11 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>LAYOUT-1: false hides Undo and Redo.</summary>
         public bool ShowHistory = true;
 
+        /// <summary>Board 12: TOP (0 the table's own), Fit the players and SAVE AS NEW TABLE; false hides them.</summary>
+        public bool ShowLook;
+        public int Top;
+        public bool FitPlayers = true;
+
         /// <summary>LAYOUT-1: the Reset, Cancel and Done buttons' words; empty keeps the prefab's.</summary>
         public string ResetText = string.Empty;
         public string CancelText = string.Empty;
@@ -342,6 +392,10 @@ namespace ConsoleCards.Presentation.UI
         public Action Done;
 
         /// <summary>A size handle (its index) starts being dragged, moves to a screen point, and is let go.</summary>
+        public Action<int> PickTop;
+        public Action ToggleFitPlayers;
+        public Action SaveAsNew;
+
         public Action<int> BeginHandle;
         public Action<int, Vector2> DragHandle;
         public Action<int> EndHandle;

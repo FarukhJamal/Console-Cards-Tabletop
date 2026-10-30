@@ -1,3 +1,4 @@
+using ConsoleCards.Presentation.TableSurface;
 using ConsoleCards.Presentation.UI;
 using UnityEditor;
 using UnityEngine;
@@ -88,40 +89,40 @@ namespace ConsoleCards.Editor.UI
             for (int i = 0; i < 6; i++)
             {
                 float x = 17 + ((i % 3) * 143.5f);
-                float y = 43 + ((i / 3) * 86);
-                RectTransform tile = Box10(shapeHolder, "Shape" + i, x, y, 135, 78, EdRow, EdRowEdge);
+                float y = 41 + ((i / 3) * 70);
+                RectTransform tile = Box10(shapeHolder, "Shape" + i, x, y, 135, 64, EdRow, EdRowEdge);
                 shapeFills[i] = tile.GetComponent<Image>();
                 shapeButtons[i] = tile.gameObject.AddComponent<Button>();
                 shapeButtons[i].targetGraphic = shapeFills[i];
                 shapeButtons[i].transition = Selectable.Transition.None;
                 shapeIcons[i] = ShapeIcon(tile, i);
-                Txt(tile, "Label", 0, 46, 135, 22, bold, 11, Words, TextAnchor.MiddleCenter, shapes[i]);
+                Txt(tile, "Label", 0, 42, 135, 18, bold, 11, Words, TextAnchor.MiddleCenter, shapes[i]);
             }
 
 
             // The sizes: two to a line.
             string[] fields = { "WIDTH", "DEPTH", "CORNERS", "POINTS", "INNER SIZE", "EDGE HEIGHT", "EDGE WIDTH" };
             float[] fieldX = { 17, 236, 17, 17, 236, 17, 236 };
-            float[] fieldY = { 222, 222, 292, 292, 292, 362, 362 };
+            float[] fieldY = { 184, 184, 240, 240, 240, 296, 296 };
             GameObject[] fieldRows = new GameObject[7];
             Button[] minus = new Button[7];
             Button[] plus = new Button[7];
             InputField[] inputs = new InputField[7];
             for (int i = 0; i < fields.Length; i++)
             {
-                RectTransform row = Rect10(panel, fields[i].Replace(" ", string.Empty) + "Row", fieldX[i], fieldY[i], 203, 62);
-                Txt(row, "Name", 0, 0, 203, 16, bold, 11, Muted, TextAnchor.MiddleLeft, fields[i]);
-                minus[i] = Btn(row, "Minus", 0, 24, 34, 34, "−", 14);
-                inputs[i] = Field10(row, "Value", 40, 24, 123, 34, string.Empty, 15, false);
+                RectTransform row = Rect10(panel, fields[i].Replace(" ", string.Empty) + "Row", fieldX[i], fieldY[i], 203, 54);
+                Txt(row, "Name", 0, 0, 203, 14, bold, 11, Muted, TextAnchor.MiddleLeft, fields[i]);
+                minus[i] = Btn(row, "Minus", 0, 20, 34, 32, "−", 14);
+                inputs[i] = Field10(row, "Value", 40, 20, 123, 32, string.Empty, 15, false);
                 inputs[i].textComponent.alignment = TextAnchor.MiddleCenter;
                 inputs[i].textComponent.font = bold;
                 inputs[i].characterLimit = 8;
-                plus[i] = Btn(row, "Plus", 169, 24, 34, 34, "+", 14);
+                plus[i] = Btn(row, "Plus", 169, 20, 34, 32, "+", 14);
                 fieldRows[i] = row.gameObject;
             }
 
             // The edge.
-            RectTransform edgeRow = Rect10(panel, "EdgeRow", 17, 432, 422, 34);
+            RectTransform edgeRow = Rect10(panel, "EdgeRow", 17, 356, 422, 34);
             Txt(edgeRow, "Name", 0, 0, 80, 34, bold, 11, Muted, TextAnchor.MiddleLeft, "EDGE");
             Button previousEdge = Btn(edgeRow, "Previous", 90, 0, 34, 34, "‹", 13);
             Text edgeLabel = Txt(edgeRow, "Choice", 128, 0, 160, 34, bold, 13, Words, TextAnchor.MiddleCenter, "Orange + teal");
@@ -130,10 +131,41 @@ namespace ConsoleCards.Editor.UI
             edgeLabel.resizeTextMaxSize = 20;
             Button nextEdge = Btn(edgeRow, "Next", 292, 0, 34, 34, "›", 13);
 
-            Text status = Txt(panel, "Status", 17, 476, 330, 46, medium, 11, Muted, TextAnchor.MiddleLeft,
+            // TOP, Fit the players (board 12).
+            RectTransform look = Rect10(panel, "Look", 0, 398, 456, 82);
+            Txt(look, "TopTitle", 17, 0, 70, 30, bold, 11, Muted, TextAnchor.MiddleLeft, "TOP");
+            Button[] topButtons = new Button[TableSpec.TopCount];
+            GameObject[] topRings = new GameObject[TableSpec.TopCount];
+            for (int i = 0; i < TableSpec.TopCount; i++)
+            {
+                RectTransform swatch = Box10(look, "Top" + i, 90 + (i * 40), 0, 30, 30, TableSpec.TopSwatch(i), EdRowEdge);
+                topButtons[i] = swatch.gameObject.AddComponent<Button>();
+                topButtons[i].targetGraphic = swatch.GetComponent<Image>();
+                RectTransform ring = Box10(look, "TopRing" + i, 87 + (i * 40), -3, 36, 36, new Color(0f, 0f, 0f, 0f), Cyan);
+                ring.GetComponent<Image>().raycastTarget = false;
+                topRings[i] = ring.gameObject;
+                ring.gameObject.SetActive(i == 0);
+            }
+
+            RectTransform fit = Box10(look, "Fit", 17, 44, 42, 24, Hex("138a8c"), null);
+            Button fitButton = fit.gameObject.AddComponent<Button>();
+            fitButton.targetGraphic = fit.GetComponent<Image>();
+            RectTransform knob = Rect10(fit, "Knob", 21, 3, 18, 18);
+            Image knobImage = knob.gameObject.AddComponent<Image>();
+            knobImage.sprite = circle;
+            knobImage.color = Words;
+            knobImage.raycastTarget = false;
+            Txt(look, "FitTitle", 68, 40, 360, 18, bold, 13, Words, TextAnchor.MiddleLeft, "Fit the players");
+            Txt(look, "FitNote", 68, 58, 360, 16, medium, 11, Muted, TextAnchor.MiddleLeft, "Grows the table when a game needs room for more seats");
+
+            Text status = Txt(panel, "Status", 17, 474, 422, 22, medium, 11, Muted, TextAnchor.MiddleLeft,
                 "Changes show on the table at once.");
             status.horizontalOverflow = HorizontalWrapMode.Wrap;
-            Button reset = Btn(panel, "Reset", 357, 482, 82, 36, "RESET", 12);
+            status.resizeTextForBestFit = true;
+            status.resizeTextMinSize = 12;
+            status.resizeTextMaxSize = 16;
+            Button saveAs = Btn(panel, "SaveAs", 17, 498, 330, 34, "SAVE AS NEW TABLE", 12);
+            Button reset = Btn(panel, "Reset", 357, 498, 82, 34, "RESET", 12);
             Button close = Btn(panel, "Close", 0, 0, 10, 10, "×", 10);
             close.gameObject.SetActive(false);
 
@@ -172,6 +204,13 @@ namespace ConsoleCards.Editor.UI
             AssignArray(so.FindProperty("handles"), handles);
             AssignArray(so.FindProperty("shapeFills"), shapeFills);
             AssignArray(so.FindProperty("shapeIcons"), shapeIcons);
+            so.FindProperty("lookRoot").objectReferenceValue = look.gameObject;
+            AssignArray(so.FindProperty("topButtons"), topButtons);
+            AssignArray(so.FindProperty("topRings"), topRings);
+            so.FindProperty("fitButton").objectReferenceValue = fitButton;
+            so.FindProperty("fitTrack").objectReferenceValue = fit.GetComponent<Image>();
+            so.FindProperty("fitKnob").objectReferenceValue = knob;
+            so.FindProperty("saveAsButton").objectReferenceValue = saveAs;
             so.FindProperty("previewViewport").rectValue = new Rect(24f / 1280f, 92f / 720f, 760f / 1280f, 536f / 720f);
             so.FindProperty("shapeOn").colorValue = EdTeal;
             so.FindProperty("shapeOff").colorValue = EdRow;
@@ -194,7 +233,7 @@ namespace ConsoleCards.Editor.UI
             float[] heights = { 26, 26, 30, 32, 26, 32 };
             float width = widths[shape];
             float height = heights[shape];
-            RectTransform icon = Rect10(tile, "Icon", (135 - width) * 0.5f, 10 + ((32 - height) * 0.5f), width, height);
+            RectTransform icon = Rect10(tile, "Icon", (135 - width) * 0.5f, 6 + ((32 - height) * 0.5f), width, height);
             Image image = icon.gameObject.AddComponent<Image>();
             image.raycastTarget = false;
             image.color = EdFaint;

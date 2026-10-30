@@ -277,6 +277,14 @@ namespace ConsoleCards.Presentation.Content
 
         public bool HasUpload(string key) => FindUpload(ArtLibrary.NormalizeKey(key)) != null;
 
+        /// <summary>The file in the profile that holds the player's own picture for a key (Card studio: copies, re-shaping).</summary>
+        public bool TryGetUploadPath(string key, out string path)
+        {
+            ContentArtFile entry = FindUpload(ArtLibrary.NormalizeKey(key));
+            path = entry != null && game != null ? Path.Combine(Store.UploadsFolder(GameId), entry.file) : string.Empty;
+            return path.Length > 0 && File.Exists(path);
+        }
+
         /// <summary>Where the picture for this key comes from now, in words for the panel.</summary>
         public string SourceText(string key)
         {

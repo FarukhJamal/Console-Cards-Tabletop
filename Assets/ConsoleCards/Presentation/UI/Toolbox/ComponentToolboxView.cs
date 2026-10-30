@@ -178,6 +178,11 @@ namespace ConsoleCards.Presentation.UI.Toolbox
 
         [Header("Footer Hand switch (Empty Table, H-E)")]
         [SerializeField] private ToolboxSwitch handSwitch = new ToolboxSwitch();
+        [Header("Colour of new pieces (board 8)")]
+        [SerializeField] private GameObject pieceColourRow;
+        [SerializeField] private Button[] pieceColourButtons = Array.Empty<Button>();
+        [SerializeField] private Image[] pieceColourSwatches = Array.Empty<Image>();
+        [SerializeField] private GameObject[] pieceColourRings = Array.Empty<GameObject>();
         [SerializeField] private RectTransform contentViewport;
         [SerializeField] private float viewportBottomWithSwitch;
         [SerializeField] private float viewportBottomWithoutSwitch;
@@ -349,6 +354,27 @@ namespace ConsoleCards.Presentation.UI.Toolbox
         }
 
         // ---------- board 8: the table tools, RECENT ----------
+
+        /// <summary>
+        /// Board 8: "Colour of new pieces": the swatches (the first one shows the seat colour), which is chosen, and
+        /// what a click does. A Toolbox made before has no swatches.
+        /// </summary>
+        public void SetPieceColours(Color seatColour, int chosen, Action<int> choose)
+        {
+            if (pieceColourRow != null && pieceColourRow.activeSelf != (choose != null)) pieceColourRow.SetActive(choose != null);
+            if (pieceColourSwatches.Length > 0 && pieceColourSwatches[0] != null) pieceColourSwatches[0].color = seatColour;
+            for (int i = 0; i < pieceColourButtons.Length; i++)
+            {
+                if (pieceColourButtons[i] == null) continue;
+                int which = i;
+                pieceColourButtons[i].onClick.RemoveAllListeners();
+                if (choose != null) pieceColourButtons[i].onClick.AddListener(() => choose(which));
+                if (i < pieceColourRings.Length && pieceColourRings[i] != null && pieceColourRings[i].activeSelf != (i == chosen))
+                {
+                    pieceColourRings[i].SetActive(i == chosen);
+                }
+            }
+        }
 
         /// <summary>What the TABLE TOOLS buttons do (choose that tool; the Toolbox closes). Null hides them.</summary>
         public void SetTableTools(Action<TableToolKind> choose)

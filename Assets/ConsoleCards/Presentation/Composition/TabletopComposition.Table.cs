@@ -190,6 +190,11 @@ namespace ConsoleCards.Presentation.Composition
             if (spec.shape == TableShape.Classic || (spec.shape == TableShape.Model && IsBaseModel(spec.modelId)))
             {
                 ShowClassicTable();
+                if (baseTable != null && baseTable.PlayingArea != null && spec.top > 0)
+                {
+                    baseTable.PlayingArea.sharedMaterial = TopMaterial(spec.top);
+                }
+
                 return true;
             }
 
@@ -214,7 +219,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             SetBaseTable(BaseTableView.LegsOnly);
-            if (generatedTable.TryBuild(build, classicFrame, classicPlayingArea, classicBody, out error))
+            if (generatedTable.TryBuild(build, classicFrame, TopMaterial(spec.top), classicBody, out error))
             {
                 FitLegsUnder(generatedTable, build.thickness * classicFrame.WorldPerTableUnit);
                 Physics.SyncTransforms();
@@ -229,6 +234,11 @@ namespace ConsoleCards.Presentation.Composition
         // Classic: the whole base table.
         private void ShowClassicTable()
         {
+            if (baseTable != null && baseTable.PlayingArea != null && classicPlayingArea != null)
+            {
+                baseTable.PlayingArea.sharedMaterial = classicPlayingArea;
+            }
+
             if (generatedTable != null) generatedTable.Hide();
             HideModelTable();
             SetBaseTable(BaseTableView.Whole);

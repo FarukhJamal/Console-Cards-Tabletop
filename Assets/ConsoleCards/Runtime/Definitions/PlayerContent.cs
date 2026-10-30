@@ -62,6 +62,10 @@ namespace ConsoleCards.Definitions
         public string gameStableId = string.Empty;
         public List<PlayerDeckRecord> decks = new List<PlayerDeckRecord>();
 
+        /// <summary>The game's own deck: the size it should have (Decks, board 11); 0 and 0: no range.</summary>
+        public int gameDeckMinimum;
+        public int gameDeckMaximum;
+
         public bool IsEmpty => decks == null || decks.Count == 0;
 
         public PlayerDecksFile Normalised()
@@ -127,6 +131,15 @@ namespace ConsoleCards.Definitions
 
         /// <summary>The frame variant ID (FRAME-1) of the game's Card Frame Style; empty: the game's default frame.</summary>
         public string frame = string.Empty;
+
+        /// <summary>
+        /// Card size (Card studio, owner 2026-10-30): empty plays at the size of the card it works like, otherwise
+        /// <see cref="PlayerContent.StandardSize"/> or <see cref="PlayerContent.LargeSize"/>.
+        /// </summary>
+        public string size = string.Empty;
+
+        /// <summary>A picture of another shape is fitted with a border (true) instead of cropped to fill (Card studio).</summary>
+        public bool fitPicture;
     }
 
     /// <summary>
@@ -164,9 +177,16 @@ namespace ConsoleCards.Definitions
         public bool changeFrame;
         public string frame = string.Empty;
 
+        /// <summary>Another card size, as in <see cref="PlayerCardRecord.size"/>.</summary>
+        public bool changeSize;
+        public string size = string.Empty;
+
+        /// <summary>How a chosen picture of another shape was made to fit, as in <see cref="PlayerCardRecord.fitPicture"/>.</summary>
+        public bool fitPicture;
+
         public bool HasAnyChange =>
             changeName || changeDescription || changeQuantity || changeCost || changeFrontArt || changeBackArt
-            || changeIcons || changeFrame;
+            || changeIcons || changeFrame || changeSize;
     }
 
     /// <summary>A player's deck: a name and cards with counts, game cards or your own (used by games from L2-5).</summary>
@@ -175,6 +195,10 @@ namespace ConsoleCards.Definitions
     {
         public string id = string.Empty;
         public string name = string.Empty;
+
+        /// <summary>The size the deck should have (Decks, board 11: "Size 32 / 30–40"); 0 and 0: no range.</summary>
+        public int minimumCards;
+        public int maximumCards;
         public List<PlayerDeckEntry> cards = new List<PlayerDeckEntry>();
     }
 
@@ -187,6 +211,22 @@ namespace ConsoleCards.Definitions
 
     public static class PlayerContent
     {
+        public const string StandardSize = "standard";
+        public const string LargeSize = "large";
+
+        /// <summary>The size a saved size word names; false for empty or unknown words (the model card's size).</summary>
+        public static bool TryReadSize(string size, out CardSizeClass sizeClass)
+        {
+            string word = (size ?? string.Empty).Trim();
+            sizeClass = CardSizeClass.Standard;
+            if (string.Equals(word, StandardSize, StringComparison.OrdinalIgnoreCase)) return true;
+            if (!string.Equals(word, LargeSize, StringComparison.OrdinalIgnoreCase)) return false;
+            sizeClass = CardSizeClass.Large;
+            return true;
+        }
+
+        public static string SizeWord(CardSizeClass sizeClass) => sizeClass == CardSizeClass.Large ? LargeSize : StandardSize;
+
         internal static string FirstNonEmpty(string first, string second) =>
             !string.IsNullOrEmpty(first) ? first : second ?? string.Empty;
 

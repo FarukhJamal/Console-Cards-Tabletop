@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: ConsoleCards.Presentation::ConsoleCards.Presentation.UI.UiPrefabCatalog
   entries:
   - id: platform.component-toolbox
-    prefab: {fileID: 5051607085220279116, guid: dfd0f4b9b59cb264388e62f8b6a12470, type: 3}
+    prefab: {fileID: 5494505706688284875, guid: dfd0f4b9b59cb264388e62f8b6a12470, type: 3}
     layer: 1
     retention: 0
   - id: platform.tabletop-popup
@@ -114,23 +114,23 @@ MonoBehaviour:
     layer: 3
     retention: 1
   - id: platform.card-editor-panel
-    prefab: {fileID: 7569261114359807885, guid: caef0cf7db07da74aa77783d03bd2d8c, type: 3}
+    prefab: {fileID: 927002244549208873, guid: caef0cf7db07da74aa77783d03bd2d8c, type: 3}
     layer: 3
     retention: 0
   - id: platform.card-editor-row
-    prefab: {fileID: 3897284252616157463, guid: 15de90f6d98993245b8576ebaffdafbb, type: 3}
+    prefab: {fileID: 88021567044813780, guid: 15de90f6d98993245b8576ebaffdafbb, type: 3}
     layer: 3
     retention: 1
   - id: platform.card-editor-deck-row
-    prefab: {fileID: 4821376467160254109, guid: 0a8d60a53a0dcfb46bb83e42b3d4844d, type: 3}
+    prefab: {fileID: 387447101320985999, guid: 0a8d60a53a0dcfb46bb83e42b3d4844d, type: 3}
     layer: 3
     retention: 1
   - id: platform.deck-editor-panel
-    prefab: {fileID: 7236007032004692236, guid: 5c00bd3843574cc44984b26f599c7766, type: 3}
+    prefab: {fileID: 6457562133783205533, guid: 5c00bd3843574cc44984b26f599c7766, type: 3}
     layer: 3
     retention: 0
   - id: platform.deck-editor-card-row
-    prefab: {fileID: 3953738980317596637, guid: aeeef8baa4058ff498273bbdcd4280e7, type: 3}
+    prefab: {fileID: 8389137362140519152, guid: aeeef8baa4058ff498273bbdcd4280e7, type: 3}
     layer: 3
     retention: 1
   - id: platform.game-select-panel
@@ -142,7 +142,7 @@ MonoBehaviour:
     layer: 3
     retention: 0
   - id: platform.table-panel
-    prefab: {fileID: 7792926473232921954, guid: f063a006def2dd74c8f803a48f9eb734, type: 3}
+    prefab: {fileID: 2297223791772380053, guid: f063a006def2dd74c8f803a48f9eb734, type: 3}
     layer: 3
     retention: 0
   - id: platform.tool-bar

@@ -69,7 +69,7 @@ namespace ConsoleCards.Editor.UI
                 UiLayer.Modal, UiRetention.CachedSingleInstance);
         }
 
-        private const string EditorsLabel = "BoardEditors4";
+        private const string EditorsLabel = "BoardEditors7";
 
         // A prefab this builder made before its current version (no label) is made again once; one with the label is
         // kept (it may have been edited).
@@ -109,6 +109,7 @@ namespace ConsoleCards.Editor.UI
         {
             Button overlay = EditorPage(root);
             RectTransform header = EditorHeader(root, "CREATE ›", "CARD STUDIO", out Text title);
+            GameObject savedTick = SavedTick(header);
             Txt(header, "GameTitle", 726, 0, 50, 56, bold, 11, Muted, TextAnchor.MiddleRight, "GAME");
             Button previousGame = Btn(header, "PreviousGame", 784, 11, 34, 34, "‹", 13);
             Text game = Txt(header, "GameName", 822, 0, 136, 56, bold, 14, Words, TextAnchor.MiddleCenter, "TRAP FLOOR");
@@ -117,7 +118,8 @@ namespace ConsoleCards.Editor.UI
             game.resizeTextMaxSize = 21;
             Button nextGame = Btn(header, "NextGame", 962, 11, 34, 34, "›", 13);
             Line10(header, "Divider", 1010, 14, 1, 28, Edge);
-            Button undo = Btn(header, "Undo", 1024, 11, 168, 34, "UNDO CHANGES", 12);
+            savedTick.GetComponent<RectTransform>().anchoredPosition = new Vector2(1018f * P, 0f);
+            Button undo = Btn(header, "Undo", 1104, 11, 92, 34, "UNDO", 12);
 
             // The cards.
             RectTransform left = Box10(root, "Cards", 24, 92, 270, 536, EdPane, Edge);
@@ -138,21 +140,58 @@ namespace ConsoleCards.Editor.UI
                 filterLabels[i] = Txt(chip, "Label", 0, 0, filterW[i], 26, bold, 11, EdSoft, TextAnchor.MiddleCenter, filters[i]);
             }
 
-            ScrollRect cardsScroll = Scroll10(left, "List", 12, 122, 246, 350, 8f, out RectTransform rows);
+            ScrollRect cardsScroll = Scroll10(left, "List", 12, 122, 246, 300, 8f, out RectTransform rows);
+            Button import = Btn(left, "Import", 12, 432, 246, 40, "IMPORT A FOLDER OF PNGs…", 12);
             Button newCard = Btn(left, "NewCard", 12, 480, 246, 44, "+ NEW CARD", 13, EdBar, Edge, Cyan);
 
-            // Front and back.
+            // Front and back, on the table, in a Console.
             RectTransform middle = Box10(root, "Pictures", 310, 92, 540, 536, EdDark, Edge);
-            RectTransform seg = Box10(middle, "Showing", 110, 14, 320, 36, EdBar, Edge);
-            RectTransform segOn = Box10(seg, "FrontBack", 3, 3, 314, 30, EdTeal, null);
-            Txt(segOn, "Label", 0, 0, 314, 30, bold, 11, Words, TextAnchor.MiddleCenter, "FRONT + BACK");
-            RawImage front = CardSlot(middle, "Front", 28, 69, "FRONT", out Text blankName, out Text frontFile, out Button chooseFront,
+            Segments10(middle, "Showing", 70, 14, 400, 36, new[] { "FRONT + BACK", "ON THE TABLE", "IN A CONSOLE" },
+                out Button[] previewButtons, out Image[] previewFills);
+            GameObject[] previewPages = new GameObject[3];
+            RectTransform frontBack = Rect10(middle, "FrontBackPage", 0, 0, 540, 536);
+            previewPages[0] = frontBack.gameObject;
+            RawImage front = CardSlot(frontBack, "Front", 28, 69, "FRONT", out Text blankName, out Text frontFile, out Button chooseFront,
                 "REPLACE…", out Button clearFront, "REMOVE");
-            RawImage back = CardSlot(middle, "Back", 284, 69, "BACK", out _, out Text backFile, out Button chooseBack, "REPLACE…",
+            RawImage back = CardSlot(frontBack, "Back", 284, 69, "BACK", out _, out Text backFile, out Button chooseBack, "REPLACE…",
                 out Button clearBack, "USE DECK'S BACK");
-            Text hint = Txt(middle, "Hint", 20, 478, 500, 40, medium, 12, Muted, TextAnchor.MiddleCenter,
+            Text hint = Txt(frontBack, "Hint", 20, 478, 500, 40, medium, 12, Muted, TextAnchor.MiddleCenter,
                 "Drop-in pictures: REPLACE… picks a PNG for either side. The dashed line is the safe area:\nkeep words inside it, the corners are rounded off on the table.");
             hint.horizontalOverflow = HorizontalWrapMode.Wrap;
+
+            // ON THE TABLE: the front and the back lying on the table top, seen from above.
+            RectTransform onTable = Rect10(middle, "TablePage", 0, 0, 540, 536);
+            previewPages[1] = onTable.gameObject;
+            Box10(onTable, "Top", 20, 64, 500, 400, Hex("2a3235"), Hex("06eff0"));
+            RectTransform tableCards = Rect10(onTable, "Cards", 120, 124, 300, 280);
+            tableCards.pivot = new Vector2(0.5f, 0.5f);
+            tableCards.anchoredPosition += new Vector2(150f * P, -140f * P);
+            RawImage tableBack = MaskedCard(tableCards, "Back", 150, 46, 140, 196, 7f);
+            RawImage tableFront = MaskedCard(tableCards, "Front", 20, 40, 140, 196, -6f);
+            Text tableNote = Txt(onTable, "Note", 20, 478, 500, 40, medium, 12, Muted, TextAnchor.MiddleCenter,
+                "As it lies on the table: the corners are rounded off, the back is what the other players see.");
+            tableNote.horizontalOverflow = HorizontalWrapMode.Wrap;
+
+            // IN A CONSOLE: the card in a Console slot.
+            RectTransform inConsole = Rect10(middle, "ConsolePage", 0, 0, 540, 536);
+            previewPages[2] = inConsole.gameObject;
+            Box10(inConsole, "Console", 40, 130, 460, 250, Hex("1a1d1e"), Orange);
+            Box10(inConsole, "Slot", 180, 152, 180, 206, Hex("2b3033"), Cyan);
+            RectTransform consoleHolder = Rect10(inConsole, "Holder", 200, 160, 140, 196);
+            consoleHolder.pivot = new Vector2(0.5f, 0.5f);
+            consoleHolder.anchoredPosition += new Vector2(70f * P, -98f * P);
+            RawImage consoleCard = MaskedCard(consoleHolder, "Card", 0, 0, 140, 196, 0f);
+            for (int i = 0; i < 6; i++)
+            {
+                Dot10(inConsole, 400 + ((i % 2) * 34), 190 + ((i / 2) * 50), Cyan);
+                Dot10(inConsole, 72 + ((i % 2) * 34), 190 + ((i / 2) * 50), Orange);
+            }
+
+            Text consoleNote = Txt(inConsole, "Note", 20, 478, 500, 40, medium, 12, Muted, TextAnchor.MiddleCenter,
+                "In a Console slot: the card turns so its icons point outward.");
+            consoleNote.horizontalOverflow = HorizontalWrapMode.Wrap;
+            onTable.gameObject.SetActive(false);
+            inConsole.gameObject.SetActive(false);
 
             // The chosen card's settings.
             RectTransform right = Box10(root, "Settings", 866, 92, 390, 536, EdPane, Edge);
@@ -175,16 +214,20 @@ namespace ConsoleCards.Editor.UI
             // PICTURES
             RectTransform pictures = (RectTransform)tabPages[0].transform;
             Txt(pictures, "SizeTitle", 0, 0, 362, 18, bold, 11, Muted, TextAnchor.MiddleLeft, "CARD SIZE");
-            RectTransform sizeBox = Box10(pictures, "Size", 0, 26, 362, 132, EdRow, EdRowEdge);
+            Segments10(pictures, "CardSize", 0, 22, 362, 34, new[] { "STANDARD", "LARGE · AVATARS" }, out Button[] sizeButtons,
+                out Image[] sizeFills);
+            RectTransform sizeBox = Box10(pictures, "Size", 0, 64, 362, 124, EdRow, EdRowEdge);
             InfoRow(sizeBox, 0, "Shape", "5 : 7 portrait");
-            InfoRow(sizeBox, 1, "Best size", "1500 × 2100 px");
-            InfoRow(sizeBox, 2, "Smallest sharp size", "750 × 1050 px");
-            Button template = Btn(sizeBox, "Template", 10, 84, 342, 36, "GET THE TEMPLATE PNG", 12);
-            Txt(pictures, "ShapeTitle", 0, 172, 362, 18, bold, 11, Muted, TextAnchor.MiddleLeft, "WHEN A PICTURE IS THE WRONG SHAPE");
-            Text never = Txt(pictures, "Never", 0, 194, 362, 40, medium, 12, Muted, TextAnchor.UpperLeft,
+            Text bestSize = InfoRow(sizeBox, 1, "Best size", "1500 × 2100 px");
+            Text sharpSize = InfoRow(sizeBox, 2, "Smallest sharp size", "750 × 1050 px");
+            Button template = Btn(sizeBox, "Template", 10, 80, 342, 34, "GET THE TEMPLATE PNG", 12);
+            Txt(pictures, "ShapeTitle", 0, 198, 362, 18, bold, 11, Muted, TextAnchor.MiddleLeft, "WHEN A PICTURE IS THE WRONG SHAPE");
+            Segments10(pictures, "Fit", 0, 220, 362, 34, new[] { "CROP TO FILL", "FIT · ADD BORDER" }, out Button[] fitButtons,
+                out Image[] fitFills);
+            Text never = Txt(pictures, "Never", 0, 262, 362, 36, medium, 12, Muted, TextAnchor.UpperLeft,
                 "Pictures are never stretched: one of another shape is cropped to fill the card.");
             never.horizontalOverflow = HorizontalWrapMode.Wrap;
-            RectTransform warning = Box10(pictures, "Warning", 0, 242, 362, 76, EdWarnFill, EdWarnEdge);
+            RectTransform warning = Box10(pictures, "Warning", 0, 304, 362, 76, EdWarnFill, EdWarnEdge);
             Text warningWords = Txt(warning, "Label", 12, 8, 338, 60, medium, 12, EdWarnWords, TextAnchor.UpperLeft,
                 "This picture is not the card's shape.");
             warningWords.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -231,8 +274,9 @@ namespace ConsoleCards.Editor.UI
             tabPages[1].SetActive(false);
             tabPages[2].SetActive(false);
 
-            Button reset = Btn(right, "Reset", 14, 487, 250, 34, "RESET TO GAME'S", 12, EdBar, Edge, Words, out Text resetLabel);
-            Button delete = Btn(right, "Delete", 272, 487, 104, 34, "DELETE", 12, EdBar, Edge, EdRed);
+            Button duplicate = Btn(right, "Duplicate", 14, 487, 110, 34, "DUPLICATE", 12);
+            Button reset = Btn(right, "Reset", 130, 487, 150, 34, "RESET TO GAME'S", 12, EdBar, Edge, Words, out Text resetLabel);
+            Button delete = Btn(right, "Delete", 286, 487, 90, 34, "DELETE", 12, EdBar, Edge, EdRed);
 
             // BACK | note | DONE (a hidden SAVE for the view: DONE saves and closes).
             EditorFooter(root, out Button close, out Button done, out Text status,
@@ -273,6 +317,7 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("deckRowsRoot").objectReferenceValue = deckRows;
             so.FindProperty("newDeckButton").objectReferenceValue = newDeck;
             so.FindProperty("statusLabel").objectReferenceValue = status;
+            so.FindProperty("savedTick").objectReferenceValue = savedTick;
             so.FindProperty("deleteButton").objectReferenceValue = delete;
             so.FindProperty("resetButton").objectReferenceValue = reset;
             so.FindProperty("resetLabel").objectReferenceValue = resetLabel;
@@ -293,7 +338,58 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("templateButton").objectReferenceValue = template;
             so.FindProperty("undoButton").objectReferenceValue = undo;
             so.FindProperty("doneButton").objectReferenceValue = done;
+            AssignArray(so.FindProperty("sizeButtons"), sizeButtons);
+            AssignArray(so.FindProperty("sizeFills"), sizeFills);
+            AssignArray(so.FindProperty("fitButtons"), fitButtons);
+            AssignArray(so.FindProperty("fitFills"), fitFills);
+            so.FindProperty("bestSizeLabel").objectReferenceValue = bestSize;
+            so.FindProperty("sharpSizeLabel").objectReferenceValue = sharpSize;
+            so.FindProperty("fitNoteLabel").objectReferenceValue = never;
+            so.FindProperty("duplicateButton").objectReferenceValue = duplicate;
+            so.FindProperty("importButton").objectReferenceValue = import;
+            AssignArray(so.FindProperty("previewButtons"), previewButtons);
+            AssignArray(so.FindProperty("previewFills"), previewFills);
+            AssignArray(so.FindProperty("previewPages"), previewPages);
+            so.FindProperty("tableFront").objectReferenceValue = tableFront;
+            so.FindProperty("tableBack").objectReferenceValue = tableBack;
+            so.FindProperty("consoleCard").objectReferenceValue = consoleCard;
+            so.FindProperty("tableCards").objectReferenceValue = tableCards;
+            so.FindProperty("consoleCardHolder").objectReferenceValue = consoleHolder;
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // A row of choices in one bar (FRONT + BACK | ON THE TABLE | ...); the view colours the chosen one teal.
+        private static void Segments10(RectTransform parent, string name, float x, float y, float width, float height, string[] words,
+            out Button[] buttons, out Image[] fills)
+        {
+            RectTransform bar = Box10(parent, name, x, y, width, height, EdBar, Edge);
+            buttons = new Button[words.Length];
+            fills = new Image[words.Length];
+            float each = (width - 6f - ((words.Length - 1) * 4f)) / words.Length;
+            for (int i = 0; i < words.Length; i++)
+            {
+                RectTransform part = Box10(bar, "Choice" + i, 3 + (i * (each + 4f)), 3, each, height - 6, i == 0 ? EdTeal : new Color(0f, 0f, 0f, 0f), null);
+                fills[i] = part.GetComponent<Image>();
+                buttons[i] = part.gameObject.AddComponent<Button>();
+                buttons[i].targetGraphic = fills[i];
+                Txt(part, "Label", 0, 0, each, height - 6, bold, 11, Words, TextAnchor.MiddleCenter, words[i]);
+            }
+        }
+
+        // A card picture with rounded corners (a rounded mask), turned by degrees.
+        private static RawImage MaskedCard(RectTransform parent, string name, float x, float y, float width, float height, float turn)
+        {
+            RectTransform card = Rect10(parent, name, x, y, width, height);
+            card.localEulerAngles = new Vector3(0f, 0f, turn);
+            Image shape = card.gameObject.AddComponent<Image>();
+            shape.sprite = rounded;
+            shape.type = Image.Type.Sliced;
+            shape.raycastTarget = false;
+            card.gameObject.AddComponent<Mask>().showMaskGraphic = false;
+            RawImage picture = Rect("Picture", card, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero)
+                .gameObject.AddComponent<RawImage>();
+            picture.raycastTarget = false;
+            return picture;
         }
 
         // One side of the card: its picture (200 x 280), the FRONT / BACK tag, the dashed safe area, the file line and
@@ -311,6 +407,10 @@ namespace ConsoleCards.Editor.UI
             RectTransform chip = Box10(slot, "Tag", 8, 8, 46, 20, new Color(0.063f, 0.075f, 0.078f, 0.8f), null);
             Txt(chip, "Label", 0, 0, 46, 20, bold, 10, Words, TextAnchor.MiddleCenter, tag);
             file = Txt(parent, name + "File", x - 20, y + 288, 240, 20, medium, 12, Words, TextAnchor.MiddleCenter, "1500 × 2100");
+            file.horizontalOverflow = HorizontalWrapMode.Wrap;
+            file.resizeTextForBestFit = true;
+            file.resizeTextMinSize = 12;
+            file.resizeTextMaxSize = 18;
             float clearWidth = clearWords.Length > 8 ? 150 : 83;
             float total = 100 + 6 + clearWidth;
             float start = x + 100 - (total * 0.5f);
@@ -319,10 +419,10 @@ namespace ConsoleCards.Editor.UI
             return picture;
         }
 
-        private static void InfoRow(RectTransform box, int index, string key, string value)
+        private static Text InfoRow(RectTransform box, int index, string key, string value)
         {
             Txt(box, key.Replace(" ", string.Empty), 10, 8 + (index * 22), 200, 20, medium, 13, Muted, TextAnchor.MiddleLeft, key);
-            Txt(box, key.Replace(" ", string.Empty) + "Value", 160, 8 + (index * 22), 192, 20, bold, 13, Words, TextAnchor.MiddleRight, value);
+            return Txt(box, key.Replace(" ", string.Empty) + "Value", 160, 8 + (index * 22), 192, 20, bold, 13, Words, TextAnchor.MiddleRight, value);
         }
 
         // One card in the studio's list: a 28 x 39 picture, the name and what it is; the chosen one teal with a cyan bar.
@@ -404,6 +504,7 @@ namespace ConsoleCards.Editor.UI
         {
             Button overlay = EditorPage(root);
             RectTransform header = EditorHeader(root, "CREATE ›", "DECKS", out Text title);
+            GameObject savedTick = SavedTick(header);
             Txt(header, "GameTitle", 726, 0, 50, 56, bold, 11, Muted, TextAnchor.MiddleRight, "GAME");
             Button previousGame = Btn(header, "PreviousGame", 784, 11, 34, 34, "‹", 13);
             Text game = Txt(header, "GameName", 822, 0, 136, 56, bold, 14, Words, TextAnchor.MiddleCenter, "TRAP FLOOR");
@@ -412,7 +513,8 @@ namespace ConsoleCards.Editor.UI
             game.resizeTextMaxSize = 21;
             Button nextGame = Btn(header, "NextGame", 962, 11, 34, 34, "›", 13);
             Line10(header, "Divider", 1010, 14, 1, 28, Edge);
-            Button undo = Btn(header, "Undo", 1024, 11, 168, 34, "UNDO CHANGES", 12);
+            savedTick.GetComponent<RectTransform>().anchoredPosition = new Vector2(1018f * P, 0f);
+            Button undo = Btn(header, "Undo", 1104, 11, 92, 34, "UNDO", 12);
 
             // YOUR DECKS
             RectTransform left = Box10(root, "Decks", 24, 92, 250, 536, EdPane, Edge);
@@ -428,12 +530,23 @@ namespace ConsoleCards.Editor.UI
             deckName.textComponent.fontStyle = FontStyle.Bold;
             deckName.characterLimit = 40;
             Button rename = Btn(middle, "Rename", 262, 16, 84, 34, "RENAME", 12);
-            Text size = Txt(middle, "Size", 380, 14, 206, 38, medium, 13, Muted, TextAnchor.MiddleRight, "Size 32");
+            Text size = Txt(middle, "Size", 352, 14, 140, 38, medium, 13, Muted, TextAnchor.MiddleRight, "Size 32");
+            Txt(middle, "Slash", 494, 14, 12, 38, medium, 12, EdFaint, TextAnchor.MiddleCenter, "/");
+            InputField range = Field10(middle, "Range", 508, 18, 78, 30, "30–40", 12, false);
+            range.characterLimit = 9;
+            range.textComponent.color = EdFaint;
             RectTransform bar = Box10(middle, "Bar", 14, 64, 572, 6, Hex("2b3033"), null);
-            Box10(bar, "Fill", 0, 0, 572, 6, Cyan, null);
-            bar.gameObject.SetActive(false); // the games give no size range yet (board: Size 32 / 30–40)
+            RectTransform barFill = Box10(bar, "Fill", 0, 0, 572, 6, Cyan, null);
             ScrollRect cardScroll = Grid10(middle, "Cards", 14, 82, 572, 392, out RectTransform cardRows);
-            Text summary = Txt(middle, "Summary", 14, 492, 380, 30, bold, 11, Muted, TextAnchor.MiddleLeft, "TRAP FLOOR DECK · 37 CARDS");
+            Txt(middle, "BackTitle", 14, 492, 112, 30, bold, 11, Muted, TextAnchor.MiddleLeft, "BACK OF CARDS");
+            RectTransform backFrame = Box10(middle, "Back", 128, 492, 22, 30, EdRow, Orange);
+            RawImage backThumb = Rect10(backFrame, "Picture", 0, 0, 22, 30).gameObject.AddComponent<RawImage>();
+            backThumb.raycastTarget = false;
+            Button changeBack = Btn(middle, "ChangeBack", 158, 492, 90, 30, "CHANGE…", 12);
+            Text summary = Txt(middle, "Summary", 256, 492, 136, 30, bold, 10, EdFaint, TextAnchor.MiddleLeft, "TRAP FLOOR DECK · 37 CARDS");
+            summary.resizeTextForBestFit = true;
+            summary.resizeTextMinSize = 9;
+            summary.resizeTextMaxSize = 15;
             Button filter = Btn(middle, "Filter", 0, 0, 10, 10, "Show", 10, EdBar, Edge, Words, out Text filterLabel);
             filter.gameObject.SetActive(false);
             Button shuffle = Btn(middle, "ShuffleTest", 400, 492, 186, 30, "SHUFFLE TEST · DRAW 5", 12);
@@ -480,12 +593,19 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("cardRowsRoot").objectReferenceValue = cardRows;
             so.FindProperty("cardScroll").objectReferenceValue = cardScroll;
             so.FindProperty("statusLabel").objectReferenceValue = status;
+            so.FindProperty("savedTick").objectReferenceValue = savedTick;
             so.FindProperty("undoButton").objectReferenceValue = undo;
             so.FindProperty("saveButton").objectReferenceValue = save;
             so.FindProperty("addRowsRoot").objectReferenceValue = addRows;
             so.FindProperty("addRowTemplate").objectReferenceValue = template.gameObject;
             so.FindProperty("addSearch").objectReferenceValue = find;
             so.FindProperty("sizeLabel").objectReferenceValue = size;
+            so.FindProperty("rangeInput").objectReferenceValue = range;
+            so.FindProperty("sizeBar").objectReferenceValue = bar.gameObject;
+            so.FindProperty("sizeBarFill").objectReferenceValue = barFill;
+            so.FindProperty("sizeBarFillImage").objectReferenceValue = barFill.GetComponent<Image>();
+            so.FindProperty("backThumb").objectReferenceValue = backThumb;
+            so.FindProperty("changeBackButton").objectReferenceValue = changeBack;
             so.FindProperty("shuffleTestButton").objectReferenceValue = shuffle;
             so.FindProperty("doneButton").objectReferenceValue = done;
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -586,6 +706,23 @@ namespace ConsoleCards.Editor.UI
             Txt(header, "Crumb", 45, 0, 70, 56, medium, 13, Muted, TextAnchor.MiddleLeft, crumb);
             title = Txt(header, "Title", 120, 0, 300, 56, bold, 17, Words, TextAnchor.MiddleLeft, name);
             return header;
+        }
+
+        // Auto-save: a green tick (two bars; Oxanium has no check mark) and SAVED, shown after each change is written.
+        private static GameObject SavedTick(RectTransform header)
+        {
+            RectTransform group = Rect10(header, "Saved", 590, 0, 110, 56);
+            Image shortBar = Rect10(group, "TickShort", 4, 27, 8, 3).gameObject.AddComponent<Image>();
+            shortBar.color = EdGreen;
+            shortBar.raycastTarget = false;
+            shortBar.rectTransform.localEulerAngles = new Vector3(0f, 0f, -45f);
+            Image longBar = Rect10(group, "TickLong", 8, 33, 16, 3).gameObject.AddComponent<Image>();
+            longBar.color = EdGreen;
+            longBar.raycastTarget = false;
+            longBar.rectTransform.localEulerAngles = new Vector3(0f, 0f, 50f);
+            Txt(group, "Label", 28, 0, 80, 56, bold, 12, EdGreen, TextAnchor.MiddleLeft, "SAVED");
+            group.gameObject.SetActive(false);
+            return group.gameObject;
         }
 
         private static void Cap(RectTransform header, float x)

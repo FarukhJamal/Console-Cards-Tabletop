@@ -50,7 +50,7 @@ namespace ConsoleCards.Presentation.Composition
     /// (R1d: moved out of TabletopComposition; the table reaches it as <c>DeckEditorPanel</c> and it
     /// reaches the table through <c>host</c>.)
     /// </summary>
-    internal sealed class DeckEditorPresenter
+    internal sealed partial class DeckEditorPresenter
     {
         private readonly TabletopComposition host;
 
@@ -68,6 +68,25 @@ namespace ConsoleCards.Presentation.Composition
         internal bool deckEditorShowAll = true;
         internal bool deckEditorChanged;
         internal bool deckEditorCloseArmed;
+
+        // Auto-save (owner, 2026-10-30): each change is written at once; UNDO CHANGES goes back to the decks as they
+        // were when Decks opened (or the game was changed), from this copy.
+        internal string deckEditorUndoCards = string.Empty;
+        internal string deckEditorUndoDecks = string.Empty;
+        internal bool deckEditorUndoable;
+        internal bool deckEditorSaved;
+
+        internal void TakeDeckEditorSnapshot()
+        {
+            deckEditorUndoCards = JsonUtility.ToJson(host.CardEditorPanel.editorCards);
+            deckEditorUndoDecks = JsonUtility.ToJson(host.CardEditorPanel.editorDecks);
+            deckEditorUndoable = false;
+            deckEditorSaved = false;
+        }
+
+        internal bool WriteDeckEditorFiles() =>
+            host.CardEditorPanel.EditorArt.Store.SaveCards(host.CardEditorPanel.EditorArt.GameId, host.CardEditorPanel.editorCards)
+            & host.CardEditorPanel.EditorArt.Store.SaveDecks(host.CardEditorPanel.EditorArt.GameId, host.CardEditorPanel.editorDecks);
 
         // The deck editor opens from the game selection menu (L2-4) and, so decks can be looked at without starting
         // a new table, straight from the Table menu row "Deck editor…" (2026-10-18, owner request).
@@ -100,6 +119,7 @@ namespace ConsoleCards.Presentation.Composition
             deckEditorSelectedId = CardEditorPresenter.GameDeckId;
             deckEditorShowAll = true;
             deckEditorChanged = false;
+            TakeDeckEditorSnapshot();
             ShowDeckEditor(string.Empty);
             previous?.Dispose();
         }
@@ -108,6 +128,21 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (host.runtimeUi == null || host.CardEditorPanel.editorGame == null) return;
             deckEditorCloseArmed = false;
+            if (deckEditorChanged)
+            {
+                if (WriteDeckEditorFiles())
+                {
+                    deckEditorChanged = false;
+                    deckEditorUndoable = true;
+                    deckEditorSaved = true;
+                }
+                else
+                {
+                    deckEditorSaved = false;
+                    status = "The decks could not be saved; the console says why.";
+                }
+            }
+
             if (deckEditorActions == null)
             {
                 deckEditorActions = new DeckEditorActions
@@ -123,6 +158,8 @@ namespace ConsoleCards.Presentation.Composition
                     Undo = UndoDeckEditor,
                     Save = SaveDeckEditor,
                     Close = CloseDeckEditor,
+                    SetRange = SetDeckEditorRange,
+                    ChangeBack = ChangeDeckEditorBack,
                 };
             }
 
@@ -149,7 +186,7 @@ namespace ConsoleCards.Presentation.Composition
             if (string.IsNullOrEmpty(text))
             {
                 text = deckEditorChanged
-                    ? "Unsaved changes: Save keeps them, Undo changes drops them."
+                    ? "Not saved yet: the decks could not be written."
                     : isGameDeck
                         ? "The game's own deck: these copies are used in play from the next table you start."
                         : "Your deck. Games will use your decks in a later step (L2-5).";
@@ -166,9 +203,11 @@ namespace ConsoleCards.Presentation.Composition
                 Summary = $"{deckName.ToUpperInvariant()} · {total} CARD{(total == 1 ? string.Empty : "S")} · {different} DIFFERENT",
                 FilterText = deckEditorShowAll ? "Show: all cards" : "Show: this deck only",
                 Cards = rows,
-                HasChanges = deckEditorChanged,
+                HasChanges = deckEditorChanged || deckEditorUndoable,
+                Saved = deckEditorSaved,
                 Status = text,
             };
+            FillDeckBoard(model, deck, cards);
             if (!host.runtimeUi.ShowDeckEditor(model, deckEditorActions))
             {
                 host.ShowMessage("The deck editor is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs.");
@@ -222,6 +261,7 @@ namespace ConsoleCards.Presentation.Composition
             GameDefinition next = host.CardEditorPanel.editorGames[((index + step) % host.CardEditorPanel.editorGames.Count + host.CardEditorPanel.editorGames.Count) % host.CardEditorPanel.editorGames.Count];
             ContentArtService previous = host.CardEditorPanel.UseEditorGame(next);
             deckEditorSelectedId = CardEditorPresenter.GameDeckId;
+            TakeDeckEditorSnapshot();
             ShowDeckEditor($"Now showing {next.DisplayName}'s decks.");
             previous?.Dispose();
         }
@@ -243,7 +283,7 @@ namespace ConsoleCards.Presentation.Composition
             deckEditorSelectedId = deck.id;
             deckEditorShowAll = true;
             deckEditorChanged = true;
-            ShowDeckEditor($"Added {deck.name}. Use + to put cards in it, then Save.");
+            ShowDeckEditor($"Added {deck.name}. Use + to put cards in it.");
         }
 
         // A new deck of yours with the same cards and copies as the selected deck (the game's deck included).
@@ -264,7 +304,7 @@ namespace ConsoleCards.Presentation.Composition
             host.CardEditorPanel.editorDecks.decks.Add(copy);
             deckEditorSelectedId = copy.id;
             deckEditorChanged = true;
-            ShowDeckEditor($"Made {copy.name}. Change it as you like, then Save.");
+            ShowDeckEditor($"Made {copy.name}. Change it as you like.");
         }
 
         internal void RenameEditorDeck(string typedName)
@@ -286,7 +326,7 @@ namespace ConsoleCards.Presentation.Composition
 
             deck.name = name;
             deckEditorChanged = true;
-            ShowDeckEditor($"The deck is now called {name}. Save keeps the name.");
+            ShowDeckEditor($"The deck is now called {name}.");
         }
 
         internal void DeleteEditorDeck()
@@ -296,7 +336,7 @@ namespace ConsoleCards.Presentation.Composition
             host.CardEditorPanel.editorDecks.decks.Remove(deck);
             deckEditorSelectedId = CardEditorPresenter.GameDeckId;
             deckEditorChanged = true;
-            ShowDeckEditor($"Deleted {DeckName(deck)}. Save makes it final; Undo changes brings it back.");
+            ShowDeckEditor($"Deleted {DeckName(deck)}. Undo changes brings it back.");
         }
 
         internal void ToggleDeckEditorFilter()
@@ -322,10 +362,18 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void UndoDeckEditor()
         {
-            host.CardEditorPanel.editorCards = host.CardEditorPanel.EditorArt.Store.LoadCards(host.CardEditorPanel.EditorArt.GameId);
-            host.CardEditorPanel.editorDecks = host.CardEditorPanel.EditorArt.Store.LoadDecks(host.CardEditorPanel.EditorArt.GameId);
+            if (deckEditorUndoCards.Length > 0 && deckEditorUndoDecks.Length > 0)
+            {
+                host.CardEditorPanel.editorCards = JsonUtility.FromJson<PlayerCardsFile>(deckEditorUndoCards);
+                host.CardEditorPanel.editorDecks = JsonUtility.FromJson<PlayerDecksFile>(deckEditorUndoDecks);
+            }
+
             deckEditorChanged = false;
-            ShowDeckEditor("Changes dropped; the decks are as they were saved.");
+            deckEditorUndoable = false;
+            deckEditorSaved = WriteDeckEditorFiles();
+            ShowDeckEditor(deckEditorSaved
+                ? "Changes undone: the decks are as they were when you opened Decks."
+                : "The decks could not be saved; the console says why.");
         }
 
         internal void SaveDeckEditor()
