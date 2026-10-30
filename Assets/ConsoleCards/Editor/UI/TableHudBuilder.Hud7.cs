@@ -26,7 +26,7 @@ namespace ConsoleCards.Editor.UI
     /// </summary>
     public static partial class TableHudBuilder
     {
-        private const string HudLabel = "HudBoard7B3";
+        private const string HudLabel = "HudBoard7B4";
         private const string HudArt = "Assets/ConsoleCards/Content/UI/Board/Hud/";
         private const float K = 1.5f; // board pixels to the 1920 x 1080 canvas
 
@@ -220,9 +220,10 @@ namespace ConsoleCards.Editor.UI
             Button rulebook = Corner7(root, "Rulebook", 16f * K, "HudBook", Cyan, "R", "Rulebook · R");
             Button toolbox = Corner7(root, "Toolbox", 72f * K, "HudToolbox", Orange, "B", "Toolbox · B");
 
-            // ---------- bottom middle: the turn player's chip, above the hand ----------
-            RectTransform chip = Rect("Player", root, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                new Vector2(0f, 94f * K), new Vector2(300f, 26f * K));
+            // ---------- top right, beside the rail: the turn player's chip (owner, 2026-10-30: "move it to the right
+            // side alongside the right toolbar"; it grows to the left) ----------
+            RectTransform chip = Rect("Player", root, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
+                new Vector2(-((14f * K) + 72f + 12f), -14f * K), new Vector2(300f, 26f * K));
             Fill(chip, new Color(0.078f, 0.094f, 0.098f, 0.85f), pill != null ? pill : round, Hex("ff3b3b"), 1.5f);
             Graphic playerEdge = chip.Find("Edge")?.GetComponent<Graphic>();
             Row(chip.gameObject, 15, 9, 0, 0, 12f).childAlignment = TextAnchor.MiddleLeft;

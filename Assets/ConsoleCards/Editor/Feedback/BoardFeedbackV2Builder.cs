@@ -23,8 +23,10 @@ namespace ConsoleCards.Editor.Feedback
         private const string ShaderName = "Universal Render Pipeline/Particles/Unlit";
 
         // A tile (a floor card) in world units, as the older markers; pictures for it are 256 x 348.
-        private const float TileWidth = 0.72f;
-        private const float TileDepth = 0.98f;
+        // Owner, 2026-10-30 ("maybe you need to increase the size"): the marks reach a little past the tile.
+        private const float TileWidth = 0.72f * 1.12f;
+        private const float TileDepth = 0.98f * 1.12f;
+        private const string BuildLabel = "BoardFeedback18b"; // a prefab without it was made by an older pass: made again
         private const int TileW = 256;
         private const int TileH = 348;
         private const float Inset = 6f;
@@ -44,13 +46,13 @@ namespace ConsoleCards.Editor.Feedback
                 return Mathf.Clamp01(0.5f - d) * (0.28f + (0.6f * Mathf.Exp(d / 28f)));
             });
             // Lines are bold enough to read on a tile seen from a seat (a tile is ~30 px on a 1080p screen).
-            Paint("Fb2Frame", TileW, TileH, (x, y) => Band(TileDistance(x, y) + 7f, 7f));
+            Paint("Fb2Frame", TileW, TileH, (x, y) => Band(TileDistance(x, y) + 10f, 10f));
             Paint("Fb2Corners", TileW, TileH, (x, y) =>
             {
                 const float length = 66f;
                 bool nearX = x < Inset + length || x > TileW - Inset - length;
                 bool nearY = y < Inset + length || y > TileH - Inset - length;
-                return nearX && nearY ? Band(TileDistance(x, y) + 10f, 10f) : 0f;
+                return nearX && nearY ? Band(TileDistance(x, y) + 14f, 14f) : 0f;
             });
             Paint("Fb2Stripe", 256, 24, (x, y) => (Mathf.Repeat((x + y) / 10f, 2f) < 1f ? 1f : 0.4f));
             Paint("Fb2Bang", 96, 96, (x, y) =>
@@ -73,10 +75,14 @@ namespace ConsoleCards.Editor.Feedback
                         Mathf.Min(Segment(x, y, 100f, 230f, 186f, 250f), Segment(x, y, 186f, 250f, 214f, 300f))));
                 return TileDistance(x, y) < 0f ? Mathf.Clamp01(6f - d) * 0.9f : 0f;
             });
-            Paint("Fb2Dot", 64, 64, (x, y) =>
+            // Reach (owner, 2026-10-30: "change the colour of the dots to something visible on our cards"): a white dot
+            // with a dark ring reads on red, yellow and grey tiles alike.
+            PaintColour("Fb2Dot", 64, 64, (x, y) =>
             {
-                float d = Circle(x, y, 32f, 32f, 14f);
-                return Mathf.Clamp01(0.5f - d) * 0.75f + (Mathf.Clamp01(1f - ((d + 14f) / 30f)) * 0.25f);
+                float d = Circle(x, y, 32f, 32f, 15f);
+                float white = Mathf.Clamp01(0.5f - d);
+                float ring = Mathf.Clamp01(0.5f - (d - 6f)) * (1f - white);
+                return new Color(white, white, white, Mathf.Max(white, ring * 0.9f));
             });
             Paint("Fb2Sweep", TileW, TileH, (x, y) =>
             {
@@ -119,19 +125,19 @@ namespace ConsoleCards.Editor.Feedback
             }, 3.9f, 0.015f, 0.35f);
             // 4 Reach: a faint dot in the middle of the tile.
             BoardFeedbackMarker reach = Marker("Fb2_Reach", false, m =>
-                Flat("Dot", m.transform, dot, new Vector2(0.2f, 0.2f), 0f, Vector2.zero), 2.5f, 0f, 0.25f);
+                Flat("Dot", m.transform, dot, new Vector2(0.32f, 0.32f), 0f, Vector2.zero), 2.5f, 0f, 0.25f);
             // 5 Danger: a frame with a striped far edge and a "!" in the corner, flat on the tile.
             BoardFeedbackMarker danger = Marker("Fb2_Danger", false, m =>
             {
                 Flat("Frame", m.transform, frame, tile, 0f, Vector2.zero);
-                Flat("Stripe", m.transform, stripe, new Vector2(TileWidth - 0.05f, 0.07f), 0.002f, new Vector2(0f, (TileDepth * 0.5f) - 0.06f));
-                Flat("Bang", m.transform, bang, new Vector2(0.16f, 0.16f), 0.004f, new Vector2((TileWidth * 0.5f) - 0.12f, (TileDepth * 0.5f) - 0.2f));
+                Flat("Stripe", m.transform, stripe, new Vector2(TileWidth - 0.06f, 0.1f), 0.002f, new Vector2(0f, (TileDepth * 0.5f) - 0.08f));
+                Flat("Bang", m.transform, bang, new Vector2(0.24f, 0.24f), 0.004f, new Vector2((TileWidth * 0.5f) - 0.17f, (TileDepth * 0.5f) - 0.28f));
             }, 3.9f, 0f, 0.3f);
             // 6 Disabled: a grey tint with a crossed-out ring.
             BoardFeedbackMarker disabled = Marker("Fb2_Disabled", false, m =>
             {
                 Flat("Tint", m.transform, fill, tile, 0f, Vector2.zero);
-                Flat("Ban", m.transform, ban, new Vector2(0.3f, 0.3f), 0.003f, Vector2.zero);
+                Flat("Ban", m.transform, ban, new Vector2(0.42f, 0.42f), 0.003f, Vector2.zero);
             }, 0f, 0f, 0f);
             // 7 Event: a strong glow, a frame and cracks across the tile.
             BoardFeedbackMarker eventMark = Marker("Fb2_Event", false, m =>
@@ -188,7 +194,10 @@ namespace ConsoleCards.Editor.Feedback
 
         // ---------- pictures ----------
 
-        private static void Paint(string name, int width, int height, Func<float, float, float> alpha)
+        private static void Paint(string name, int width, int height, Func<float, float, float> alpha) =>
+            PaintColour(name, width, height, (x, y) => new Color(1f, 1f, 1f, alpha(x, y)));
+
+        private static void PaintColour(string name, int width, int height, Func<float, float, Color> colour)
         {
             string path = TexturePath + name + ".png";
             {
@@ -198,8 +207,7 @@ namespace ConsoleCards.Editor.Feedback
                 {
                     for (int x = 0; x < width; x++)
                     {
-                        float a = Mathf.Clamp01(alpha(x + 0.5f, y + 0.5f));
-                        pixels[(y * width) + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(a * 255f));
+                        pixels[(y * width) + x] = colour(x + 0.5f, y + 0.5f);
                     }
                 }
 
@@ -276,7 +284,8 @@ namespace ConsoleCards.Editor.Feedback
         {
             string path = PrefabPath + name + ".prefab";
             BoardFeedbackMarker existing = AssetDatabase.LoadAssetAtPath<BoardFeedbackMarker>(path);
-            if (existing != null) return existing;
+            if (existing != null && Array.IndexOf(AssetDatabase.GetLabels(existing.gameObject), BuildLabel) >= 0) return existing;
+            if (existing != null) AssetDatabase.DeleteAsset(path);
             GameObject root = new GameObject(name);
             try
             {
@@ -296,7 +305,9 @@ namespace ConsoleCards.Editor.Feedback
                 so.FindProperty("oneShotSeconds").floatValue = oneShotSeconds;
                 so.FindProperty("oneShotGrow").floatValue = grow;
                 so.ApplyModifiedPropertiesWithoutUndo();
-                return PrefabUtility.SaveAsPrefabAsset(root, path).GetComponent<BoardFeedbackMarker>();
+                GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, path);
+                AssetDatabase.SetLabels(saved, new[] { BuildLabel });
+                return saved.GetComponent<BoardFeedbackMarker>();
             }
             finally
             {
@@ -324,20 +335,21 @@ namespace ConsoleCards.Editor.Feedback
         {
             string path = PrefabPath + "Fb2_Path.prefab";
             BoardFeedbackArrow existing = AssetDatabase.LoadAssetAtPath<BoardFeedbackArrow>(path);
-            if (existing != null) return existing;
+            if (existing != null && Array.IndexOf(AssetDatabase.GetLabels(existing.gameObject), BuildLabel) >= 0) return existing;
+            if (existing != null) AssetDatabase.DeleteAsset(path);
             GameObject root = new GameObject("Fb2_Path");
             try
             {
                 LineRenderer renderer = root.AddComponent<LineRenderer>();
                 renderer.sharedMaterial = line;
                 renderer.textureMode = LineTextureMode.Stretch;
-                renderer.widthMultiplier = 0.06f;
+                renderer.widthMultiplier = 0.1f;
                 renderer.numCapVertices = 4;
                 renderer.useWorldSpace = true;
                 renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 renderer.receiveShadows = false;
                 renderer.alignment = LineAlignment.View;
-                Transform chevron = Flat("Head", root.transform, head, new Vector2(0.3f, 0.3f), 0f, Vector2.zero);
+                Transform chevron = Flat("Head", root.transform, head, new Vector2(0.42f, 0.42f), 0f, Vector2.zero);
                 BoardFeedbackArrow arrow = root.AddComponent<BoardFeedbackArrow>();
                 SerializedObject so = new SerializedObject(arrow);
                 so.FindProperty("line").objectReferenceValue = renderer;
@@ -346,7 +358,9 @@ namespace ConsoleCards.Editor.Feedback
                 so.FindProperty("arcHeight").floatValue = 0.15f;
                 so.FindProperty("dashScrollSpeed").floatValue = 0f;
                 so.ApplyModifiedPropertiesWithoutUndo();
-                return PrefabUtility.SaveAsPrefabAsset(root, path).GetComponent<BoardFeedbackArrow>();
+                GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, path);
+                AssetDatabase.SetLabels(saved, new[] { BuildLabel });
+                return saved.GetComponent<BoardFeedbackArrow>();
             }
             finally
             {

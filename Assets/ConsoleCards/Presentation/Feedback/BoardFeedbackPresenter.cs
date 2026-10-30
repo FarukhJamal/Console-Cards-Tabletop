@@ -227,7 +227,7 @@ namespace ConsoleCards.Presentation.Feedback
         /// </summary>
         public void ShowReach(List<Vector3> positions, Color colour)
         {
-            ShowPool(reach, positions, Vector3.up * set.TileMarkerLift, Meaning(set.TargetColour, colour));
+            ShowPool(reach, positions, Vector3.up * set.TileMarkerLift, Meaning(set.ReachColour, colour));
         }
 
         public void HideReach()

@@ -40,6 +40,8 @@ namespace ConsoleCards.Presentation.Feedback
         [SerializeField] private Color eventColour = new Color(0.949f, 0.463f, 0.180f, 1f);
         [SerializeField] private Color disabledColour = new Color(0.608f, 0.643f, 0.655f, 0.9f);
         [SerializeField] private Color hoverColour = new Color(0.910f, 0.925f, 0.929f, 0.9f);
+        [Tooltip("Reach dots (where a picked-up pawn can go): white with a dark ring, to read on every card.")]
+        [SerializeField] private Color reachColour = new Color(1f, 1f, 1f, 1f);
         [Header("Drawing tool (Final World prefabs)")]
         [Tooltip("A drawn line: a flat Line Renderer the drawing tool copies for each pen or highlighter line.")]
         [SerializeField] private LineRenderer tableMarkLine;
@@ -82,6 +84,7 @@ namespace ConsoleCards.Presentation.Feedback
         public Color EventColour => eventColour;
         public Color DisabledColour => disabledColour;
         public Color HoverColour => hoverColour;
+        public Color ReachColour => reachColour;
         public LineRenderer TableMarkLine => tableMarkLine;
         public TextMesh TableMarkLabel => tableMarkLabel;
         public Material TableMarkDashMaterial => tableMarkDashMaterial;

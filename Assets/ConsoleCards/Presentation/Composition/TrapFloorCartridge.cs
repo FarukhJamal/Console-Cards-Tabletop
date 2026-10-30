@@ -1719,6 +1719,12 @@ namespace ConsoleCards.Presentation.Composition
 
                 if (trap.Content.IsLaunchTrap)
                 {
+                    if (NeedsCraneRoll(trap.FloorCardId, trap.Content))
+                    {
+                        BeginCraneRoll(trap.FloorCardId); // CRANE-1: End Turn waits for the roll too
+                        return false;
+                    }
+
                     TrapFloorLaunchResult launch = host.trapFloorAbilityResolutionService.ResolveLaunchTrap(
                         host.matchState,
                         host.CreateCommandContext(player),
@@ -2167,6 +2173,13 @@ namespace ConsoleCards.Presentation.Composition
 
             if (floorCard.Content.IsLaunchTrap)
             {
+                // CRANE-1 (owner, 2026-10-30): the player rolls the two floor dice first; the Crane waits for them.
+                if (NeedsCraneRoll(floorCardId, floorCard.Content))
+                {
+                    BeginCraneRoll(floorCardId);
+                    return;
+                }
+
                 ResolveTrapFloorLaunchTrap(floorCardId, floorCard.Content);
                 return;
             }
@@ -2370,7 +2383,7 @@ namespace ConsoleCards.Presentation.Composition
                     return $"NOW: you are launched 1 tile {content.LaunchDirection.ToString().ToLowerInvariant()}; "
                         + "off the floor or onto a hole, you are out for this floor.";
                 case TrapFloorTrapEffectCategory.CraneDrop:
-                    return "NOW: roll the two floor dice (column, row), then Apply: the Crane drops your pawn there; "
+                    return "NOW: roll the two floor dice (column, row). The Crane drops your pawn on the tile they show; "
                         + "onto a hole, you are out for this floor.";
                 case TrapFloorTrapEffectCategory.BlindNextRound:
                     return "NEXT ROUND: you draw no Controller Cards, and you roll the d4 for the only direction you may move.";
@@ -2405,7 +2418,7 @@ namespace ConsoleCards.Presentation.Composition
                 floor.Content.DisplayName,
                 floor.Content.DisplayText,
                 body,
-                "Apply",
+                NeedsCraneRoll(trapId, floor.Content) ? "Roll the dice" : "Apply",
                 () =>
                 {
                     CloseFocusedSearchReveal();
@@ -5679,6 +5692,10 @@ namespace ConsoleCards.Presentation.Composition
         public void TickLate()
         {
             host.RefreshBoardCardBacksIfRoundChanged(); // the floor's backs change with the round
+            // CRANE-1 first: while the Crane waits for its roll, the floor dice belong to it (owner, 2026-10-30: the
+            // Crane roll was taken as a collapse roll and showed the collapse popup).
+            CompleteCraneRollIfSettled();
+            if (IsCraneRollAsked) return;
             CompletePhysicalFloorfallIfSettled();
             ArmFloorCollapseForFloorTurn(); // COLLAPSE-3
             ArmBlindDirectionForTurn(); // DICE-2
