@@ -419,6 +419,12 @@ namespace ConsoleCards.Presentation.Composition
             {
                 frontEndColours = new int[SeatColourCount];
                 for (int i = 0; i < frontEndColours.Length; i++) frontEndColours[i] = i;
+                int colour = host.EnsureProfile().Active.colour; // PROFILE-2: the player's colour on the first seat
+                if (colour > 0 && colour < frontEndColours.Length)
+                {
+                    frontEndColours[colour] = 0;
+                    frontEndColours[0] = colour;
+                }
             }
 
             return frontEndColours;
@@ -870,6 +876,7 @@ namespace ConsoleCards.Presentation.Composition
             returnToGameSelect = false;
             host.runtimeUi?.CloseGameSelect();
             host.gameIntroWanted = entry.Game != null; // CAM-1: the camera intro on the game's table
+            if (entry.Game != null || entry.PlayerGame != null) host.EnsureProfile().RecordGameStarted(entry.Name); // PROFILE-2
             host.SessionService.RequestTableReplacement(
                 entry.Game == null
                     ? TabletopSessionSelection.EmptyCustom

@@ -619,6 +619,7 @@ namespace ConsoleCards.Presentation.Composition
             askedYDieState = DiePhysicalState(host.trapFloorTemplate.FloorfallYAxisDieId);
             MarkPlayerRolls(host.trapFloorTemplate.FloorfallXAxisDieId, ref askedXDieBody, ref askedXDieRolls);
             MarkPlayerRolls(host.trapFloorTemplate.FloorfallYAxisDieId, ref askedYDieBody, ref askedYDieRolls);
+            floorDiceStillSince = -1f;
         }
 
         // MP-2: remembers how many player rolls the die has had, so only a later one counts.
@@ -646,8 +647,30 @@ namespace ConsoleCards.Presentation.Composition
             return now.PlayerRolls != rolls;
         }
 
-        // True once every asked floor die was rolled and lies still (the others only need to lie still).
+        // SMOOTH-1 (owner, 2026-10-31: "smooth or amplify that"): the result waits a moment after the dice come to
+        // rest, so the player sees the faces before the floor answers.
+        private const float DiceResultPauseSeconds = 0.5f;
+        private float floorDiceStillSince = -1f;
+
         private bool FloorDiceRolledAsAsked()
+        {
+            if (!FloorDiceStill())
+            {
+                floorDiceStillSince = -1f;
+                return false;
+            }
+
+            if (floorDiceStillSince < 0f)
+            {
+                floorDiceStillSince = Time.unscaledTime;
+                return false;
+            }
+
+            return Time.unscaledTime - floorDiceStillSince >= DiceResultPauseSeconds;
+        }
+
+        // True once every asked floor die was rolled and lies still (the others only need to lie still).
+        private bool FloorDiceStill()
         {
             return DieRolledAsAsked(host.trapFloorTemplate.FloorfallXAxisDieId, askedXDie, ref askedXDieState,
                     ref askedXDieBody, ref askedXDieRolls, "column")

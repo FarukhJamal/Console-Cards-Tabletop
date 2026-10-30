@@ -129,6 +129,7 @@ namespace ConsoleCards.Presentation.UI
         {
             RequireAcquired();
             Resolve();
+            if (model == null) StartFadeIn(); // SMOOTH-1: the front end fades in over the table instead of cutting to it
             model = selectModel ?? throw new ArgumentNullException(nameof(selectModel));
             actions = selectActions ?? throw new ArgumentNullException(nameof(selectActions));
             openGuide = guide;
@@ -170,6 +171,7 @@ namespace ConsoleCards.Presentation.UI
             }
 
             page = target;
+            ShowSwitch(false); // PROFILE-2: the switch list closes when the screen changes
             Render();
         }
 
@@ -197,8 +199,31 @@ namespace ConsoleCards.Presentation.UI
             ignoreEscapeUntilFrame = Time.frameCount + 2;
         }
 
+        // SMOOTH-1 (owner, 2026-10-31): a quarter-second fade when the front end opens (leaving a game, the first menu).
+        private const float FadeInSeconds = 0.25f;
+        private CanvasGroup fadeGroup;
+        private float fadeElapsed = -1f;
+
+        private void StartFadeIn()
+        {
+            if (fadeGroup == null) fadeGroup = GetComponent<CanvasGroup>();
+            if (fadeGroup == null) fadeGroup = gameObject.AddComponent<CanvasGroup>();
+            fadeGroup.alpha = 0f;
+            fadeElapsed = 0f;
+        }
+
+        private void UpdateFadeIn()
+        {
+            if (fadeElapsed < 0f || fadeGroup == null) return;
+            fadeElapsed += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(fadeElapsed / FadeInSeconds);
+            fadeGroup.alpha = t * t * (3f - (2f * t));
+            if (t >= 1f) fadeElapsed = -1f;
+        }
+
         private void Update()
         {
+            UpdateFadeIn();
             if (model == null || backdropOnly) return;
             if (highlightTab != null) PlaceHighlight();
             UpdateBoard(); // boards 1–3: a click on a Library tile opens its sheet a moment later
@@ -367,7 +392,8 @@ namespace ConsoleCards.Presentation.UI
                     RenderBoardHome();
                     break;
                 case FrontEndPage.Profile:
-                    RenderProfile();
+                    if (HasBoardProfile) RenderProfileBoard(); // PROFILE-2: board 19
+                    else RenderProfile();
                     break;
                 case FrontEndPage.Library:
                     if (HasBoardLibrary) RenderBoardLibrary();
@@ -747,6 +773,21 @@ namespace ConsoleCards.Presentation.UI
             gameEntryTemplate = Require("Pages/Library/List/Viewport/Content/Template").gameObject;
             gameEntryTemplate.SetActive(false);
             tabHighlight = Require("TopBar/Tabs/Highlight") as RectTransform;
+            if (!HasBoardProfile) ResolveOldProfile(); // PROFILE-2: board 19 has its own parts (FrontEndView.Profile.cs)
+            if (transform.Find("Pages/Players/Viewport/Rows") != null) playerRowsPath = "Pages/Players/Viewport/Rows";
+            for (int i = 0; i < PlayerRowCount; i++)
+            {
+                // Seats 7 and 8 exist once Apply Kit Look has added them; until then the screen shows six.
+                playerRows[i] = PlayerRow(transform.Find(playerRowsPath + "/Row" + i));
+                reviewPlayers[i] = PlayerRow(transform.Find("Pages/Review/Players/Tiles/Tile" + i));
+            }
+
+            resolved = true;
+        }
+
+        // The Player profile screen before board 19.
+        private void ResolveOldProfile()
+        {
             addProfileRow = Require("Pages/Profile/Panel/Add") as RectTransform;
             Transform dotsRow = transform.Find("Pages/Profile/Avatar/Dots");
             if (dotsRow != null)
@@ -782,16 +823,6 @@ namespace ConsoleCards.Presentation.UI
                     name = Require(row, "NameBox/Name").GetComponent<Text>(),
                 };
             }
-
-            if (transform.Find("Pages/Players/Viewport/Rows") != null) playerRowsPath = "Pages/Players/Viewport/Rows";
-            for (int i = 0; i < PlayerRowCount; i++)
-            {
-                // Seats 7 and 8 exist once Apply Kit Look has added them; until then the screen shows six.
-                playerRows[i] = PlayerRow(transform.Find(playerRowsPath + "/Row" + i));
-                reviewPlayers[i] = PlayerRow(transform.Find("Pages/Review/Players/Tiles/Tile" + i));
-            }
-
-            resolved = true;
         }
 
         private static PlayerRowParts PlayerRow(Transform row)

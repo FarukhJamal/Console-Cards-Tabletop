@@ -659,6 +659,13 @@ namespace ConsoleCards.Presentation.UI
             bool shown = card != null;
             if (playerChip.activeSelf != shown) playerChip.SetActive(shown);
             if (!shown) return;
+            // SMOOTH-1 (owner, 2026-10-31): a new turn player's chip swells once, so the change of turn is seen.
+            if (!string.Equals(card.Title, lastPlayerTitle, StringComparison.Ordinal))
+            {
+                if (lastPlayerTitle != null) playerPulseAt = Time.unscaledTime;
+                lastPlayerTitle = card.Title;
+            }
+
             playerDot.color = colour ?? Color.white;
             if (playerEdge != null) playerEdge.color = colour ?? Color.white;
             if (playerStatusTag != null)
@@ -719,9 +726,24 @@ namespace ConsoleCards.Presentation.UI
 
         // L opens the log while it is hidden (an open log handles L itself). LateUpdate, so the log shown here does
         // not also read the same key press in its own Update this frame.
+        private const float PlayerPulseSeconds = 0.6f;
+        private const float PlayerPulseScale = 0.14f;
+        private string lastPlayerTitle;
+        private float playerPulseAt = -1f;
+
+        private void PulsePlayer()
+        {
+            if (playerPulseAt < 0f || playerChip == null) return;
+            float t = (Time.unscaledTime - playerPulseAt) / PlayerPulseSeconds;
+            float scale = t >= 1f ? 1f : 1f + (PlayerPulseScale * Mathf.Sin(Mathf.PI * t));
+            playerChip.transform.localScale = new Vector3(scale, scale, 1f);
+            if (t >= 1f) playerPulseAt = -1f;
+        }
+
         private void LateUpdate()
         {
             FadeNews();
+            PulsePlayer();
             Keyboard keyboard = Keyboard.current;
             if (actions == null || keyboard == null) return;
             bool l = keyboard.lKey.wasPressedThisFrame;

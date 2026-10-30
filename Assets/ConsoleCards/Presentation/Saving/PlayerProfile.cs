@@ -33,6 +33,14 @@ namespace ConsoleCards.Presentation.Saving
 
         /// <summary>PERSONA-1: experience from play; the level is worked out from it (filled by a later stage).</summary>
         public int experience;
+
+        /// <summary>PROFILE-2 (board 19): the player's colour, an index into the seat colours (-1: none chosen yet).</summary>
+        public int colour = -1;
+
+        /// <summary>PROFILE-2: games started from the menu, games won, and the game played last.</summary>
+        public int gamesPlayed;
+        public int gamesWon;
+        public string lastGame = string.Empty;
     }
 
     /// <summary>

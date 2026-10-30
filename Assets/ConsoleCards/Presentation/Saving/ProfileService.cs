@@ -139,6 +139,49 @@ namespace ConsoleCards.Presentation.Saving
             return false;
         }
 
+        /// <summary>PROFILE-2: saves the active profile's colour (an index into the seat colours).</summary>
+        public bool SaveColour(int colour, out string error)
+        {
+            ProfileInfo profile = RequireActive();
+            int previous = profile.colour;
+            profile.colour = colour;
+            if (Store.Save(profile, out error)) return true;
+            profile.colour = previous;
+            return false;
+        }
+
+        /// <summary>PROFILE-2: one more game started from the menu (and which one), saved at once.</summary>
+        public void RecordGameStarted(string gameName)
+        {
+            if (Active == null) return;
+            Active.gamesPlayed++;
+            Active.lastGame = gameName ?? string.Empty;
+            if (!Store.Save(Active, out string error)) Debug.LogWarning($"[Profiles] Could not save the game count: {error}");
+        }
+
+        /// <summary>PROFILE-2: a game won at this table, saved at once.</summary>
+        public void RecordWin()
+        {
+            if (Active == null) return;
+            Active.gamesWon++;
+            if (!Store.Save(Active, out string error)) Debug.LogWarning($"[Profiles] Could not save the win: {error}");
+        }
+
+        /// <summary>
+        /// PROFILE-2: takes a profile off this computer. Its folder is moved into Profiles/.removed (nothing is
+        /// erased, so it can be put back by hand). The profile playing now cannot be removed; switch first.
+        /// </summary>
+        public bool Remove(string profileId, out string error)
+        {
+            if (Active != null && string.Equals(Active.id, profileId, StringComparison.OrdinalIgnoreCase))
+            {
+                error = "switch to another player first";
+                return false;
+            }
+
+            return Store.Retire(profileId, out error);
+        }
+
         /// <summary>PERSONA-1b: saves the active profile's Persona (kept as it was when the save fails).</summary>
         public bool SavePersona(PersonaLook look, out string error)
         {

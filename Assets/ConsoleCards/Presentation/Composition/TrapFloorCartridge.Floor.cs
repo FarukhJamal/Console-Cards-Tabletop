@@ -50,10 +50,14 @@ namespace ConsoleCards.Presentation.Composition
                     state.Pose.RotationDegrees,
                     state.Pose.Layer + (aside / CollapsedAsidePerLayer),
                     state.Pose.LocalOrder);
+                Vector3 fromPosition = view.transform.position;
+                Quaternion fromRotation = view.transform.rotation;
                 if (host.MoveLoosePiece(view, state, pose))
                 {
                     moved++;
                     aside++;
+                    // SMOOTH-1 (owner, 2026-10-31): the tile slides off to its pile instead of jumping there.
+                    view.PhysicalObject?.GlideFrom(fromPosition, fromRotation, CollapsedGlideSeconds, 0f);
                 }
             }
 
@@ -64,6 +68,7 @@ namespace ConsoleCards.Presentation.Composition
         private const double CollapsedAsideY = 9d;
         private const double CollapsedAsideStep = 1.2d;
         private const int CollapsedAsidePerLayer = 3;
+        private const float CollapsedGlideSeconds = 0.55f;
 
         // Collapsed tiles players (or the game) already took off: the next one goes after them.
         private int CountTilesAlreadyAside(IReadOnlyList<TrapFloorCollapsedFloorState> collapsed, double halfWidth, double halfHeight)
@@ -126,6 +131,8 @@ namespace ConsoleCards.Presentation.Composition
                 : $"Choose {FloorEndedActionLabel()} in the turn menu.";
         }
 
+        private TrapFloorTemplateDefinition winRecordedFor;
+
         // The floor's end: says what happened and offers the next floor (or a new game after the last one).
         internal void ShowFloorEnded(bool won, string detail = null)
         {
@@ -133,6 +140,12 @@ namespace ConsoleCards.Presentation.Composition
             TrapFloorTemplateDefinition floor = host.trapFloorTemplate;
             int number = floor.FloorIndex + 1;
             bool last = floor.IsLastFloor;
+            if (won && last && !ReferenceEquals(winRecordedFor, floor))
+            {
+                winRecordedFor = floor; // PROFILE-2: one win in the profile's stats, however often this is shown
+                host.EnsureProfile().RecordWin();
+            }
+
             // FLOOR-2 (owner, 2026-10-22: "popup with Starting next phase and OK"): won or lost is the first line.
             string title = last
                 ? won ? "YOU WIN THE GAME" : "GAME OVER"

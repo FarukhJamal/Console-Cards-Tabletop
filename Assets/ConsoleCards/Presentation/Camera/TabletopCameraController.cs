@@ -163,6 +163,10 @@ namespace ConsoleCards.Presentation.Camera
         private float transitionStartOrthographicSize;
         private bool usesOrthographicProjection;
         private bool introEasing;
+        private const float MinimumPresetSeconds = 0.5f;
+
+        /// <summary>CAM-1: the game intro is still flying (the HUD waits for it).</summary>
+        public bool IsPlayingIntro => introEasing && transitionActive;
         private bool introLegPending;
         private Vector3 introFinalPivot;
         private float introFinalYaw;
@@ -260,9 +264,9 @@ namespace ConsoleCards.Presentation.Camera
                 float progress = transitionDuration <= 0f
                     ? 1f
                     : Mathf.Clamp01(transitionElapsed / transitionDuration);
-                float eased = introEasing
-                    ? progress * progress * progress * ((progress * ((progress * 6f) - 15f)) + 10f) // CAM-1: softer start and end
-                    : progress * progress * (3f - (2f * progress));
+                // CAM-1 / SMOOTH-1 (owner, 2026-10-31: "smooth ... implement those"): every camera move starts and ends
+                // softly (smootherstep).
+                float eased = progress * progress * progress * ((progress * ((progress * 6f) - 15f)) + 10f);
                 currentPivot = Vector3.Lerp(transitionStartPivot, targetPivot, eased);
                 currentYawDegrees = Mathf.LerpAngle(transitionStartYaw, targetYawDegrees, eased);
                 currentPitchDegrees = Mathf.Lerp(transitionStartPitch, targetPitchDegrees, eased);
@@ -807,7 +811,8 @@ namespace ConsoleCards.Presentation.Camera
             transitionStartDistance = currentDistance;
             transitionStartOrthographicSize = currentOrthographicSize;
             transitionElapsed = 0f;
-            transitionDuration = transitionSeconds > 0f ? transitionSeconds : presetTransitionDuration;
+            // SMOOTH-1: the views (1–4, the board, seat moves) take at least half a second, so they glide rather than jump.
+            transitionDuration = transitionSeconds > 0f ? transitionSeconds : Mathf.Max(presetTransitionDuration, MinimumPresetSeconds);
             transitionActive = true;
             ResetSmoothingVelocities();
         }

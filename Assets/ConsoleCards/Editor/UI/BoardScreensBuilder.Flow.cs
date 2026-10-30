@@ -75,6 +75,7 @@ namespace ConsoleCards.Editor.UI
 
             Text crumb = TextAt(top, "Crumb", 900, 20, 300, 56, bold, 13, Muted, TextAnchor.MiddleRight, "PLAY  ›  TRAP FLOOR");
             crumb.gameObject.SetActive(false);
+            SwitchList(top); // PROFILE-2: board 19b (BoardScreensBuilder.Profile.cs)
         }
 
         private static void TabB(RectTransform tabs, string name, float x, float width, string words)

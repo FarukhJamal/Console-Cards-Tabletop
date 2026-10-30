@@ -236,6 +236,7 @@ namespace ConsoleCards.Presentation.Composition
 
             UpdateMeasure();
             UpdateDrawBar(); // board 17: CLEAR stops asking
+            if (runtimeUi != null) runtimeUi.HoldHudForIntro = cameraInputAdapter != null && cameraInputAdapter.CameraController != null && cameraInputAdapter.CameraController.IsPlayingIntro; // SMOOTH-1
 
             toolsHadInteraction = interacting;
             PruneToolSelection();

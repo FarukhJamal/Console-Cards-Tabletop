@@ -85,6 +85,46 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>The Game sheet's words: a short line about the game and its first rules.</summary>
         public string Tagline = string.Empty;
         public IReadOnlyList<string> HowToPlay = Array.Empty<string>();
+
+        // PROFILE-2 (boards 19 and 19b): the players on this computer and the one playing now.
+        /// <summary>Every profile, the one playing now first.</summary>
+        public IReadOnlyList<FrontEndProfile> ProfileCards = Array.Empty<FrontEndProfile>();
+        /// <summary>The seat colours a player can pick, and the one picked (-1: none yet).</summary>
+        public IReadOnlyList<Color> ProfileColours = Array.Empty<Color>();
+        public int ProfileColour = -1;
+        /// <summary>Every avatar picture, in the set's order (<see cref="AvatarIndex"/> is the one picked).</summary>
+        public IReadOnlyList<Texture> AvatarChoices = Array.Empty<Texture>();
+        public IReadOnlyList<string> AvatarChoiceNames = Array.Empty<string>();
+        public string StatGames = "0";
+        public string StatWins = "0";
+        public string StatLastGame = "-";
+        public string StatYourGames = "0";
+        public bool CanDeleteProfile;
+        /// <summary>DELETE PLAYER was pressed once: the next press removes the player.</summary>
+        public bool ProfileDeleteArmed;
+        /// <summary>The last change to the profile was saved (the SAVED tick).</summary>
+        public bool ProfileSaved = true;
+    }
+
+    /// <summary>PROFILE-2: one player on this computer (board 19's list, board 19b's switch list).</summary>
+    public readonly struct FrontEndProfile
+    {
+        public FrontEndProfile(string id, string name, string line, Texture avatar, Color colour, bool active)
+        {
+            Id = id ?? string.Empty;
+            Name = name ?? string.Empty;
+            Line = line ?? string.Empty;
+            Avatar = avatar;
+            Colour = colour;
+            Active = active;
+        }
+
+        public string Id { get; }
+        public string Name { get; }
+        public string Line { get; }
+        public Texture Avatar { get; }
+        public Color Colour { get; }
+        public bool Active { get; }
     }
 
     /// <summary>A game on the Library (board 2): its tag (2–4 PLAYERS, YOUR GAME), a line, and whether it was played last.</summary>
@@ -222,6 +262,13 @@ namespace ConsoleCards.Presentation.UI
         public Action<string> DeleteMyGame;
         /// <summary>Home (board 1): PLAY AGAIN starts the game played last with its last settings.</summary>
         public Action PlayAgain;
+
+        // PROFILE-2 (board 19): the player playing now.
+        public Action<string> RenameProfile;
+        public Action<int> PickProfileColour;
+        public Action<int> PickAvatar;
+        public Action NewProfile;
+        public Action DeleteProfile;
     }
 
     /// <summary>

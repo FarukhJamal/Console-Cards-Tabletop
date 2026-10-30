@@ -127,6 +127,32 @@ namespace ConsoleCards.Presentation.Saving
             return Save(profile, out error) ? profile : null;
         }
 
+        /// <summary>PROFILE-2: moves a profile's folder into <c>.removed</c> under the profiles folder (kept, not erased).</summary>
+        public bool Retire(string profileId, out string error)
+        {
+            error = string.Empty;
+            string folder = ProfileFolder(profileId);
+            if (!Directory.Exists(folder))
+            {
+                error = "that profile is not on this computer";
+                return false;
+            }
+
+            try
+            {
+                string removed = Path.Combine(RootFolder, ".removed");
+                Directory.CreateDirectory(removed);
+                string target = Path.Combine(removed, Path.GetFileName(folder) + "-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture));
+                Directory.Move(folder, target);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                error = exception.Message;
+                return false;
+            }
+        }
+
         public bool Save(ProfileInfo profile, out string error) =>
             SaveFiles.TryWriteJson(Path.Combine(ProfileFolder(profile.id), ProfileInfo.FileName), profile, out error);
 

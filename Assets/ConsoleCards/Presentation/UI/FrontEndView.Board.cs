@@ -71,7 +71,8 @@ namespace ConsoleCards.Presentation.UI
 
         private void BindBoardButtons()
         {
-            On("TopBar/Right/Profile", () => Go(FrontEndPage.Profile));
+            On("TopBar/Right/Profile", OpenProfileChip); // PROFILE-2: the switch list (board 19b)
+            BindProfileBoard();
             On("Pages/Home/Continue/Continue", () => actions?.Close?.Invoke());
             On("Pages/Home/Continue/PlayAgain", () => actions?.PlayAgain?.Invoke());
             On("Pages/Library/Filters/All", () => SetLibraryFilter(0));

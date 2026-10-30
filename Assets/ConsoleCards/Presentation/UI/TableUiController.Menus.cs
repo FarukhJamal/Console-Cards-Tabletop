@@ -96,21 +96,31 @@ namespace ConsoleCards.Presentation.UI
                     || IsVisible(tablePanelView) // board 12: the Table editor has its own bars
                     || IsVisible(pauseMenuView)
                     || (componentToolboxView != null && componentToolboxView.IsAcquired && componentToolboxView.IsPanelOpen));
-            // Board 5: under the Esc menu the HUD stays as a dim ghost; under the others it goes.
-            float alpha = !hide ? 1f : IsVisible(pauseMenuView) ? 0.22f : 0f;
-            if (!UsesTableHud || (hide == hudHiddenForMakeGame && Mathf.Approximately(alpha, hudAlpha))) return;
-            hudHiddenForMakeGame = hide;
-            hudAlpha = alpha;
+            // Board 5: under the Esc menu the HUD stays as a dim ghost; under the others it goes. SMOOTH-1 (owner,
+            // 2026-10-31): it waits out the camera's game intro, and every change fades (HudFadeSeconds) instead of
+            // snapping.
+            bool held = HoldHudForIntro && !hide;
+            float alpha = held ? 0f : !hide ? 1f : IsVisible(pauseMenuView) ? 0.22f : 0f;
+            bool block = hide || held;
+            if (!UsesTableHud) return;
             if (hudGroup == null || hudGroup.gameObject != tableHudView.gameObject)
             {
                 hudGroup = tableHudView.GetComponent<CanvasGroup>();
                 if (hudGroup == null) hudGroup = tableHudView.gameObject.AddComponent<CanvasGroup>();
             }
 
-            hudGroup.alpha = alpha;
-            hudGroup.blocksRaycasts = !hide;
-            hudGroup.interactable = !hide;
+            if (block == hudHiddenForMakeGame && Mathf.Approximately(hudGroup.alpha, alpha)) return;
+            hudHiddenForMakeGame = block;
+            hudAlpha = alpha;
+            hudGroup.alpha = Mathf.MoveTowards(hudGroup.alpha, alpha, Time.unscaledDeltaTime / HudFadeSeconds);
+            hudGroup.blocksRaycasts = !block;
+            hudGroup.interactable = !block;
         }
+
+        private const float HudFadeSeconds = 0.3f;
+
+        /// <summary>SMOOTH-1: set by the table while the camera's game intro flies; the HUD fades in after it.</summary>
+        public bool HoldHudForIntro { get; set; }
 
         private bool IsTableOverlayOpen() =>
             AnyShown(popupLayer) || AnyShown(modalLayer)

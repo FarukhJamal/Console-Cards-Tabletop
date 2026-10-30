@@ -4,6 +4,7 @@ using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Presentation.Coordinates;
+using ConsoleCards.Presentation.Views;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -141,6 +142,15 @@ namespace ConsoleCards.Presentation.Interaction
             Vector3 centerOffset = bounds.center - physicalCollider.transform.position;
             float projectedExtent = Vector3.Dot(Abs(normal), bounds.extents);
             float restingRootOffset = Mathf.Max(0f, projectedExtent - Vector3.Dot(centerOffset, normal));
+            // SETUP-2 (the d4 that sank into the table and fell through): a collider made this frame (the d4's convex
+            // mesh on its visual child) can report stale bounds, so the piece's own lowest point, measured from its
+            // shapes, counts too.
+            Transform root = physicalCollider.attachedRigidbody != null ? physicalCollider.attachedRigidbody.transform : physicalCollider.transform;
+            if (normal.y > 0.9f)
+            {
+                float measured = ComponentRestHeight.RestLift(root) - ComponentRestHeight.RestClearance;
+                restingRootOffset = Mathf.Max(restingRootOffset, measured);
+            }
             float settlingClearance = isUserLocked ? 0f : PlacementClearance;
             state = PhysicalLooseObject.State(
                 hit.point + (normal * (restingRootOffset + settlingClearance)),
