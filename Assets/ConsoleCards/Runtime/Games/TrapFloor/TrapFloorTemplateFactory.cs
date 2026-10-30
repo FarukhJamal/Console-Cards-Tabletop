@@ -61,6 +61,7 @@ namespace ConsoleCards.Games.TrapFloor
         private const double FloorfallDiceX = -10.35d; // BOARD-2: off the playmat, the bottom-left corner
         private const double FloorfallDiceY = -9d;
         private const double FloorfallDiceSpacing = 0.9d;
+        private const double DirectionDieGap = 1.2d;
         // The Blind trap's direction die (doc 18; TrapFloorAbilityResolution requires a d4).
         private const int BlindDieSideCount = 4;
         private const float DefaultCameraOrthographicSize = 7.35f;
@@ -270,7 +271,7 @@ namespace ConsoleCards.Games.TrapFloor
             // SETUP-1: the d4 follows a saved Y die; otherwise it has its own place in the table setup.
             TableCoordinate directionDie = tableLayout?.DieY == null && tableSetup != null
                 ? tableSetup.DirectionDie
-                : new TableCoordinate(yAxisDie.X + FloorfallDiceSpacing, yAxisDie.Y);
+                : new TableCoordinate(yAxisDie.X + DirectionDieGap, yAxisDie.Y); // SETUP-2: room so the d4 never touches the d6
             objects.Add(CreateFloorfallDie(floorfallXAxisDieId, dieDefinitionId, xAxisDie.X, xAxisDie.Y));
             objects.Add(CreateFloorfallDie(floorfallYAxisDieId, dieDefinitionId, yAxisDie.X, yAxisDie.Y));
             // D4-1 (owner, 2026-10-21): the d4 the Blind trap rolls for its direction lies beside the floor dice

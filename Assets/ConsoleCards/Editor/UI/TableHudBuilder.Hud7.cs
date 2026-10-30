@@ -26,7 +26,7 @@ namespace ConsoleCards.Editor.UI
     /// </summary>
     public static partial class TableHudBuilder
     {
-        private const string HudLabel = "HudBoard7B7"; // B7: Draw is I, the player chip is a rounded box like the hint // B5: board 17's Draw on the rail and its bar
+        private const string HudLabel = "HudBoard7B8"; // B8: the CC logo picture (owner, 2026-10-30) // B7: Draw is I, the player chip is a rounded box like the hint // B5: board 17's Draw on the rail and its bar
         private const string HudArt = "Assets/ConsoleCards/Content/UI/Board/Hud/";
         private const float K = 1.5f; // board pixels to the 1920 x 1080 canvas
 
@@ -155,13 +155,31 @@ namespace ConsoleCards.Editor.UI
 
             RectTransform logoRect = Rect("Logo", root, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
                 new Vector2(12f * K, -10f * K), new Vector2(62f * K, 56f * K));
-            Image logoOuter = Shape(logoRect, Orange, hex != null ? hex : rounded);
-            logoOuter.raycastTarget = true;
-            Button logo = logoRect.gameObject.AddComponent<Button>();
-            logo.targetGraphic = logoOuter;
-            Shape(Centred("Inner", logoRect, 54f * K, 48f * K), DeepTeal, hex != null ? hex : rounded);
-            Shape(Centred("Mark", logoRect, 40f * K, 36f * K), Cyan, hex != null ? hex : rounded);
-            Label(Centred("Letters", logoRect, 40f * K, 36f * K), bold, 20, DeepTeal, TextAnchor.MiddleCenter, "CC");
+            // BRAND-1 (owner, 2026-10-30: "this one is for the HUD"): the CC logo picture; the drawn hex without it.
+            Sprite logoPicture = HudSprite("HudLogo", Vector4.zero);
+            Button logo;
+            if (logoPicture != null)
+            {
+                Image logoImage = logoRect.gameObject.AddComponent<Image>();
+                logoImage.sprite = logoPicture;
+                logoImage.preserveAspect = true;
+                logoImage.raycastTarget = true;
+                logo = logoRect.gameObject.AddComponent<Button>();
+                logo.targetGraphic = logoImage;
+                ColorBlock logoColours = logo.colors;
+                logoColours.highlightedColor = new Color(1f, 0.93f, 0.85f, 1f);
+                logo.colors = logoColours;
+            }
+            else
+            {
+                Image logoOuter = Shape(logoRect, Orange, hex != null ? hex : rounded);
+                logoOuter.raycastTarget = true;
+                logo = logoRect.gameObject.AddComponent<Button>();
+                logo.targetGraphic = logoOuter;
+                Shape(Centred("Inner", logoRect, 54f * K, 48f * K), DeepTeal, hex != null ? hex : rounded);
+                Shape(Centred("Mark", logoRect, 40f * K, 36f * K), Cyan, hex != null ? hex : rounded);
+                Label(Centred("Letters", logoRect, 40f * K, 36f * K), bold, 20, DeepTeal, TextAnchor.MiddleCenter, "CC");
+            }
             Tip(logoRect, "Game menu · Esc", false);
 
             // ---------- the one-line hint ----------

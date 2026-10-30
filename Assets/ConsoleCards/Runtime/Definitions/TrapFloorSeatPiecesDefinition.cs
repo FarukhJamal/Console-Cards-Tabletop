@@ -7,8 +7,10 @@ namespace ConsoleCards.Definitions
     /// <summary>
     /// SETUP-1 (owner, 2026-10-23: "the whole default setup ... the console mat, the board placement, the dice"):
     /// the game's whole default table setup. The board, the Consoles, the shared piles and the dice are places on the
-    /// table, in table units from the table's centre (x to the right of Player 1, y away from Player 1). The players'
-    /// own saved table layout ("Arrange table…") still wins over them.
+    /// table. SETUP-2 (owner, 2026-10-30: "the axes are different ... give all the three axes, because it's in a 3D
+    /// world"): every place is a position in the scene's own X, Y and Z, the same numbers the Transform shows (X to the
+    /// right of Player 1, Z away from Player 1, Y up). The pieces always rest on the table top, so Y only shows the
+    /// height. The players' own saved table layout ("Arrange table…") still wins over them.
     ///
     /// SEAT-1 (owner, 2026-10-23: "two initial ability cards are edge of the table ... have this data as scriptable so
     /// that i can adjust positioning rotation etc later"): where the pieces beside every Console go. All distances are
@@ -22,35 +24,35 @@ namespace ConsoleCards.Definitions
     {
         [Header("Board (the playmat the floor lies on)")]
         [Tooltip("The board's centre on the table. The floor and its playmat move with it.")]
-        [SerializeField] private Vector2 boardCentre;
+        [SerializeField] private Vector3 boardCentreAt = new Vector3(-0.2f, TableTop, 0.05f);
         [Tooltip("The playmat's width and depth in table units (1 = 2.5\"; 14 x 9.6 is the 35 x 24\" mat).")]
         [SerializeField] private Vector2 boardMatSize = new Vector2(14f, 9.6f);
 
         [Header("Consoles (each player's Console mat; 2 players use Players 1 and 3, 3 players use 1 to 3)")]
         [Tooltip("Player 1, in front. Turn 0 faces the board from the front.")]
-        [SerializeField] private TrapFloorTablePlace player1Console = new TrapFloorTablePlace(new Vector2(0f, -7.5f), 0f);
+        [SerializeField] private TrapFloorTablePlace player1Console = new TrapFloorTablePlace(new Vector3(-0.2f, TableTop, -7.45f), 0f);
         [Tooltip("Player 2, on the left. Turn 90 faces the board from the left.")]
-        [SerializeField] private TrapFloorTablePlace player2Console = new TrapFloorTablePlace(new Vector2(-9.7f, 0f), 90f);
+        [SerializeField] private TrapFloorTablePlace player2Console = new TrapFloorTablePlace(new Vector3(-9.9f, TableTop, 0.05f), 90f);
         [Tooltip("Player 3, at the back. Turn 180 faces the board from the back.")]
-        [SerializeField] private TrapFloorTablePlace player3Console = new TrapFloorTablePlace(new Vector2(0f, 7.5f), 180f);
+        [SerializeField] private TrapFloorTablePlace player3Console = new TrapFloorTablePlace(new Vector3(-0.2f, TableTop, 7.55f), 180f);
         [Tooltip("Player 4, on the right. Turn 270 faces the board from the right.")]
-        [SerializeField] private TrapFloorTablePlace player4Console = new TrapFloorTablePlace(new Vector2(9.7f, 0f), 270f);
+        [SerializeField] private TrapFloorTablePlace player4Console = new TrapFloorTablePlace(new Vector3(9.5f, TableTop, 0.05f), 270f);
 
         [Header("Shared piles")]
         [Tooltip("The Controller deck everyone draws from.")]
-        [SerializeField] private TrapFloorTablePlace controllerDeck = new TrapFloorTablePlace(new Vector2(9.6f, -9f), 0f);
+        [SerializeField] private TrapFloorTablePlace controllerDeck = new TrapFloorTablePlace(new Vector3(9.4f, TableTop, -8.95f), 0f);
         [Tooltip("The Ability deck.")]
-        [SerializeField] private TrapFloorTablePlace abilityDeck = new TrapFloorTablePlace(new Vector2(-11f, 9f), 0f);
+        [SerializeField] private TrapFloorTablePlace abilityDeck = new TrapFloorTablePlace(new Vector3(-11.2f, TableTop, 9.05f), 0f);
         [Tooltip("The Ability discard pile.")]
-        [SerializeField] private TrapFloorTablePlace abilityDiscard = new TrapFloorTablePlace(new Vector2(-8.8f, 9f), 0f);
+        [SerializeField] private TrapFloorTablePlace abilityDiscard = new TrapFloorTablePlace(new Vector3(-9.0f, TableTop, 9.05f), 0f);
 
         [Header("Dice")]
         [Tooltip("The Floorfall die for the column (X).")]
-        [SerializeField] private Vector2 xAxisDie = new Vector2(-10.8f, -9f);
+        [SerializeField] private Vector3 xAxisDieAt = new Vector3(-11.0f, TableTop, -8.95f);
         [Tooltip("The Floorfall die for the row (Y).")]
-        [SerializeField] private Vector2 yAxisDie = new Vector2(-9.9f, -9f);
-        [Tooltip("The d4 the Blind trap rolls for its direction.")]
-        [SerializeField] private Vector2 directionDie = new Vector2(-9f, -9f);
+        [SerializeField] private Vector3 yAxisDieAt = new Vector3(-10.1f, TableTop, -8.95f);
+        [Tooltip("The d4 the Blind trap rolls for its direction (beside the two d6, with room so they do not touch).")]
+        [SerializeField] private Vector3 directionDieAt = new Vector3(-8.9f, TableTop, -8.95f);
 
         [Header("Starting Ability cards (dealt beside the Console)")]
         [Tooltip("The side of the Console the row of starting Ability cards goes on (seen from the player).")]
@@ -79,7 +81,10 @@ namespace ConsoleCards.Definitions
         [Tooltip("Along the side: more goes away from the Console, less closer.")]
         [SerializeField] private float actionStackOutward;
 
-        public Vector2 BoardCentre => boardCentre;
+        /// <summary>SETUP-2: the table top's height in the Tabletop scene (the Y shown for every place).</summary>
+        public const float TableTop = 11.6f;
+
+        public Vector3 BoardCentre => boardCentreAt;
         public Vector2 BoardMatSize => boardMatSize;
         public TrapFloorTablePlace Player1Console => player1Console;
         public TrapFloorTablePlace Player2Console => player2Console;
@@ -88,9 +93,9 @@ namespace ConsoleCards.Definitions
         public TrapFloorTablePlace ControllerDeck => controllerDeck;
         public TrapFloorTablePlace AbilityDeck => abilityDeck;
         public TrapFloorTablePlace AbilityDiscard => abilityDiscard;
-        public Vector2 XAxisDie => xAxisDie;
-        public Vector2 YAxisDie => yAxisDie;
-        public Vector2 DirectionDie => directionDie;
+        public Vector3 XAxisDie => xAxisDieAt;
+        public Vector3 YAxisDie => yAxisDieAt;
+        public Vector3 DirectionDie => directionDieAt;
         public ConsoleSide StartingAbilitiesSide => startingAbilitiesSide;
         public float StartingAbilitiesTowardBoard => startingAbilitiesTowardBoard;
         public float StartingAbilitiesOutward => startingAbilitiesOutward;
@@ -102,12 +107,13 @@ namespace ConsoleCards.Definitions
         public float ActionStackOutward => actionStackOutward;
     }
 
-    /// <summary>SETUP-1: one place on the table: where (table units from the table's centre) and its turn.</summary>
+    /// <summary>SETUP-1 / SETUP-2: one place on the table: where (the scene's X, Y and Z) and its turn.</summary>
     [Serializable]
     public sealed class TrapFloorTablePlace
     {
-        [Tooltip("Table units from the table's centre: x to the right of Player 1, y away from Player 1.")]
-        [SerializeField] private Vector2 position;
+        [Tooltip("Where, in the scene's X, Y and Z (the numbers the Transform shows): X to the right of Player 1, Z away "
+            + "from Player 1, Y up (pieces rest on the table top, so Y only shows the height).")]
+        [SerializeField] private Vector3 at;
         [Tooltip("Turn in degrees.")]
         [SerializeField] private float turn;
 
@@ -115,13 +121,13 @@ namespace ConsoleCards.Definitions
         {
         }
 
-        public TrapFloorTablePlace(Vector2 position, float turn)
+        public TrapFloorTablePlace(Vector3 at, float turn)
         {
-            this.position = position;
+            this.at = at;
             this.turn = turn;
         }
 
-        public Vector2 Position => position;
+        public Vector3 Position => at;
         public float Turn => turn;
     }
 }

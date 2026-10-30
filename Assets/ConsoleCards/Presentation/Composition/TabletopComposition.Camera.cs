@@ -272,8 +272,14 @@ namespace ConsoleCards.Presentation.Composition
             return bounds;
         }
 
+        // CAM-1: set when a game is chosen in the menu; the next game table plays the camera intro once.
+        internal bool gameIntroWanted;
+
         private void ProjectTemplateCameraBookmark()
         {
+            bool intro = gameIntroWanted;
+            gameIntroWanted = false;
+            if (intro && cameraInputAdapter.CameraController.PlayGameIntro()) return;
             if (cameraInputAdapter.CameraController.ShowInitialGameView())
             {
                 return;

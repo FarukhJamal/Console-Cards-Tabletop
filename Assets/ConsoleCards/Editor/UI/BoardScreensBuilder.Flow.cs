@@ -84,8 +84,21 @@ namespace ConsoleCards.Editor.UI
 
         private static void BuildHome(RectTransform page)
         {
-            TextAt(page, "Title", 72, 120, 900, 76, bold, 52, Words, TextAnchor.MiddleLeft, "CONSOLE CARDS");
-            TextAt(page, "Subtitle", 72, 197, 900, 24, medium, 18, Soft, TextAnchor.MiddleLeft,
+            // BRAND-1 (owner, 2026-10-30): the CONSOLE CARDS plate is the title (the words when its picture is missing).
+            Sprite logo = Logo();
+            if (logo != null)
+            {
+                Image plate = Rect(page, "Logo", 68, 84, 244, 122).gameObject.AddComponent<Image>();
+                plate.sprite = logo;
+                plate.preserveAspect = true;
+                plate.raycastTarget = false;
+            }
+            else
+            {
+                TextAt(page, "Title", 72, 120, 900, 76, bold, 52, Words, TextAnchor.MiddleLeft, "CONSOLE CARDS");
+            }
+
+            TextAt(page, "Subtitle", 72, logo != null ? 212 : 197, 900, 24, medium, 18, Soft, TextAnchor.MiddleLeft,
                 "A tabletop for card and board games. Pick up the pieces and play.");
 
             RectTransform menu = Rect(page, "Menu", 72, 252, 520, 340);

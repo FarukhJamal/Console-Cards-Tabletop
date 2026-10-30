@@ -1024,8 +1024,12 @@ namespace ConsoleCards.Presentation.Interaction
                 }
             }
 
+            // SETUP-2 (owner, 2026-10-30: the d4 "is not next to the other d6"): a piece nobody has held or let go of yet
+            // fell by itself while the table was set up, so it goes back where it was dealt, not beside the table.
+            bool fellByItself = !hasReleasePose && !hasHeldPose && hasSettledPose;
             FreezeAt(position, rotation);
-            position = PlaceOutsideTable(position, fallPosition);
+            if (!fellByItself) position = PlaceOutsideTable(position, fallPosition);
+            else position = RestOnTable(position, rotation);
             bool accepted = CommitFrozenPose(position, rotation,
                 userActionActive
                     ? AuthoritativeActionRecordMode.Transaction
@@ -1043,6 +1047,20 @@ namespace ConsoleCards.Presentation.Interaction
                 frozenAfterRecovery = false;
                 applied = null;
             }
+        }
+
+        // SETUP-2: lifts a frozen piece so its collider's bottom lies on the table top (a die dealt at the table's height
+        // sank into it and fell through). Event-time only.
+        private Vector3 RestOnTable(Vector3 position, Quaternion rotation)
+        {
+            if (float.IsNaN(recoveryHeight) || physicalCollider == null) return position;
+            Physics.SyncTransforms();
+            float top = recoveryHeight + Tune.RecoverBelowSurfaceDistance;
+            float lift = top - physicalCollider.bounds.min.y;
+            if (lift <= 0f) return position;
+            position.y += lift + 0.002f;
+            FreezeAt(position, rotation);
+            return position;
         }
 
         private void FreezeAt(Vector3 position, Quaternion rotation)

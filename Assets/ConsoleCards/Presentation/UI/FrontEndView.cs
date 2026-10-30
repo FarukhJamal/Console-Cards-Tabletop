@@ -183,6 +183,7 @@ namespace ConsoleCards.Presentation.UI
             SetActive("TopBar", !backdrop);
             SetActive("Pages", !backdrop);
             SetActive("Status", !backdrop);
+            SetActive("Background/Picture", !backdrop && page == FrontEndPage.Home); // BRAND-1
         }
 
         private bool backdropOnly;
@@ -353,6 +354,8 @@ namespace ConsoleCards.Presentation.UI
                 if (pages[i] != null) pages[i].SetActive(i == (int)page);
             }
 
+            // BRAND-1 (owner, 2026-10-30): the main menu's picture behind Home only (the other screens keep the plain page).
+            SetActive("Background/Picture", page == FrontEndPage.Home && !backdropOnly);
             bool stepped = page >= FrontEndPage.Setup && page <= FrontEndPage.Review;
             SetActive("Pages/Stepper", stepped);
             if (stepped) RenderStepper();

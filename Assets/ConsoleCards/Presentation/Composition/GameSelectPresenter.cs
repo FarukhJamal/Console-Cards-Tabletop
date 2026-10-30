@@ -869,6 +869,7 @@ namespace ConsoleCards.Presentation.Composition
 
             returnToGameSelect = false;
             host.runtimeUi?.CloseGameSelect();
+            host.gameIntroWanted = entry.Game != null; // CAM-1: the camera intro on the game's table
             host.SessionService.RequestTableReplacement(
                 entry.Game == null
                     ? TabletopSessionSelection.EmptyCustom

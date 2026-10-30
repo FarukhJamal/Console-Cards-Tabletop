@@ -12,32 +12,32 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 32e34ab133bb46b5bd4d253f888136cf, type: 3}
   m_Name: TrapFloorSeatPieces
   m_EditorClassIdentifier: 
-  boardCentre: {x: 0, y: 0}
+  boardCentreAt: {x: -0.2, y: 11.6, z: 0.05}
   boardMatSize: {x: 14, y: 9.6}
   player1Console:
-    position: {x: 0, y: -7.5}
+    at: {x: -0.2, y: 11.6, z: -7.45}
     turn: 0
   player2Console:
-    position: {x: -9.7, y: 0}
+    at: {x: -9.9, y: 11.6, z: 0.05}
     turn: 90
   player3Console:
-    position: {x: 0, y: 7.5}
+    at: {x: -0.2, y: 11.6, z: 7.55}
     turn: 180
   player4Console:
-    position: {x: 9.7, y: 0}
+    at: {x: 9.5, y: 11.6, z: 0.05}
     turn: 270
   controllerDeck:
-    position: {x: 9.6, y: -9}
+    at: {x: 9.4, y: 11.6, z: -8.95}
     turn: 0
   abilityDeck:
-    position: {x: -11, y: 9}
+    at: {x: -11.2, y: 11.6, z: 9.05}
     turn: 0
   abilityDiscard:
-    position: {x: -8.8, y: 9}
+    at: {x: -9, y: 11.6, z: 9.05}
     turn: 0
-  xAxisDie: {x: -10.8, y: -9}
-  yAxisDie: {x: -9.9, y: -9}
-  directionDie: {x: -9, y: -9}
+  xAxisDieAt: {x: -11, y: 11.6, z: -8.95}
+  yAxisDieAt: {x: -10.1, y: 11.6, z: -8.95}
+  directionDieAt: {x: -8.9, y: 11.6, z: -8.95}
   startingAbilitiesSide: -1
   startingAbilitiesTowardBoard: 0.9
   startingAbilitiesOutward: 0

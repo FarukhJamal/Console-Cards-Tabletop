@@ -870,6 +870,7 @@ namespace ConsoleCards.Intro.Editor
             dot.raycastTarget = false;
             Label(Rect("Name", brand, Vector2.zero, Vector2.one, new Vector2(0f, 0.5f), new Vector2(26f, 0f), new Vector2(-26f, 0f)), bold, 24, words,
                 TextAnchor.MiddleLeft, "CONSOLE CARDS <color=#" + ColorUtility.ToHtmlStringRGB(orange) + ">///</color>");
+            AddLogo(brand); // BRAND-1: the CONSOLE CARDS plate stands in for the words
             Label(Rect("Hint", hudRect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 40f), new Vector2(900f, 30f)), medium, 15, muted,
                 TextAnchor.MiddleCenter, "CLICK THE CONSOLE   ·   ENTER   ·   A / START");
 
@@ -901,6 +902,72 @@ namespace ConsoleCards.Intro.Editor
             Label(Rect("Sub", lift, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -40f), new Vector2(400f, 24f)), medium, 13, muted, TextAnchor.MiddleCenter, "P O W E R   O N");
 
             parts = new UiParts { Prompt = prompt, PromptGroup = promptGroup, Lift = lift, Word = word, Line = line, Hud = hud, Exit = exit };
+        }
+
+        // ---------- BRAND-1 (owner, 2026-10-30): the CONSOLE CARDS plate at the top left ----------
+
+        private const string LogoPath = "Assets/ConsoleCards/Content/UI/Board/ConsoleCardsLogo.png";
+
+        /// <summary>Puts the CONSOLE CARDS plate in the open Intro scene's top left (the words and dot are hidden).</summary>
+        [MenuItem("Console Cards/Intro/Use Logo In Open Intro Scene")]
+        public static void UseLogoInOpenScene()
+        {
+            Scene scene = SceneManager.GetActiveScene();
+            GameObject brand = null;
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                Transform found = root.transform.Find("HUD/Brand");
+                if (found != null)
+                {
+                    brand = found.gameObject;
+                    break;
+                }
+            }
+
+            if (brand == null)
+            {
+                Debug.LogWarning("Intro: open the Intro scene first (its Intro UI/HUD/Brand was not found).");
+                return;
+            }
+
+            if (!AddLogo((RectTransform)brand.transform))
+            {
+                Debug.Log("Intro: the logo is already there, or its picture is missing: " + LogoPath);
+                return;
+            }
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            Debug.Log("Intro: the CONSOLE CARDS logo is in the top left (scene saved).");
+        }
+
+        private static bool AddLogo(RectTransform brand)
+        {
+            if (brand.Find("Logo") != null || !File.Exists(LogoPath)) return false;
+            TextureImporter importer = AssetImporter.GetAtPath(LogoPath) as TextureImporter;
+            if (importer != null && importer.textureType != TextureImporterType.Sprite)
+            {
+                importer.textureType = TextureImporterType.Sprite;
+                importer.spriteImportMode = SpriteImportMode.Single;
+                importer.mipmapEnabled = false;
+                importer.alphaIsTransparency = true;
+                importer.SaveAndReimport();
+            }
+
+            Sprite logo = AssetDatabase.LoadAssetAtPath<Sprite>(LogoPath);
+            if (logo == null) return false;
+            RectTransform rect = Rect("Logo", brand, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(-12f, 18f), new Vector2(260f, 130f));
+            Image image = rect.gameObject.AddComponent<Image>();
+            image.sprite = logo;
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+            for (int i = 0; i < brand.childCount; i++)
+            {
+                Transform child = brand.GetChild(i);
+                if (child != rect) child.gameObject.SetActive(false);
+            }
+
+            return true;
         }
 
         private static RectTransform Rect(string name, Transform parent, Vector2 min, Vector2 max, Vector2 pivot, Vector2 pos, Vector2 size)

@@ -73,6 +73,17 @@ namespace ConsoleCards.Presentation.Camera
         [SerializeField] internal float presetTransitionDuration = 0.32f;
         [SerializeField] internal float initialGameFramingDistanceMultiplier = 0.85f;
 
+        [Header("Game intro (CAM-1: entering a game from the menu)")]
+        [Tooltip("Seconds of the first move: from high above the table in to a close look at the board.")]
+        [SerializeField, Min(0f)] internal float introApproachSeconds = 1.7f;
+        [Tooltip("Seconds of the second move: out from the board to your seat's view.")]
+        [SerializeField, Min(0f)] internal float introSettleSeconds = 1.4f;
+        [Tooltip("Where the intro starts, turned this many degrees from your seat's view.")]
+        [SerializeField] internal float introStartYawOffset = -55f;
+        [SerializeField, Range(30f, 89.5f)] internal float introStartPitch = 86f;
+        [Tooltip("The close look at the board: this much of your seat view's distance.")]
+        [SerializeField, Range(0.3f, 1f)] internal float introCloseDistanceFactor = 0.62f;
+
         [Header("Authored Views")]
         [SerializeField] internal TabletopCameraPresetTuning closeView = new TabletopCameraPresetTuning
         {
@@ -151,6 +162,12 @@ namespace ConsoleCards.Presentation.Camera
         private float transitionStartDistance;
         private float transitionStartOrthographicSize;
         private bool usesOrthographicProjection;
+        private bool introEasing;
+        private bool introLegPending;
+        private Vector3 introFinalPivot;
+        private float introFinalYaw;
+        private float introFinalPitch;
+        private float introFinalDistance;
 
         private float kickAmplitude;
         private float kickSeconds;
@@ -243,7 +260,9 @@ namespace ConsoleCards.Presentation.Camera
                 float progress = transitionDuration <= 0f
                     ? 1f
                     : Mathf.Clamp01(transitionElapsed / transitionDuration);
-                float eased = progress * progress * (3f - (2f * progress));
+                float eased = introEasing
+                    ? progress * progress * progress * ((progress * ((progress * 6f) - 15f)) + 10f) // CAM-1: softer start and end
+                    : progress * progress * (3f - (2f * progress));
                 currentPivot = Vector3.Lerp(transitionStartPivot, targetPivot, eased);
                 currentYawDegrees = Mathf.LerpAngle(transitionStartYaw, targetYawDegrees, eased);
                 currentPitchDegrees = Mathf.Lerp(transitionStartPitch, targetPitchDegrees, eased);
@@ -256,6 +275,15 @@ namespace ConsoleCards.Presentation.Camera
                 {
                     transitionActive = false;
                     ResetSmoothingVelocities();
+                    if (introLegPending)
+                    {
+                        introLegPending = false; // CAM-1: from the board out to your seat
+                        BeginIntroLeg(introFinalPivot, introFinalYaw, introFinalPitch, introFinalDistance, introSettleSeconds);
+                    }
+                    else
+                    {
+                        introEasing = false;
+                    }
                 }
             }
             else
@@ -634,6 +662,54 @@ namespace ConsoleCards.Presentation.Camera
                 TabletopCameraPreset.Board,
                 immediate,
                 initialGameFramingDistanceMultiplier);
+        }
+
+        /// <summary>
+        /// CAM-1 (owner, 2026-10-30: "a proper introduction ... smooth camera zoom in, smooth camera zoom out where the
+        /// angle is for the players"): entering a game, the camera starts high above the table, glides in to a close
+        /// look at the board, then out to your seat's view (the Board view). Any camera input stops it where it is.
+        /// False when the game has no board to frame (then nothing moved).
+        /// </summary>
+        public bool PlayGameIntro()
+        {
+            EnsureInitialized();
+            if (!ShowPreset(TabletopCameraPreset.Board, true, initialGameFramingDistanceMultiplier)) return false;
+            introFinalPivot = targetPivot;
+            introFinalYaw = targetYawDegrees;
+            introFinalPitch = targetPitchDegrees;
+            introFinalDistance = targetDistance;
+            if (introApproachSeconds <= 0f && introSettleSeconds <= 0f) return true;
+
+            currentYawDegrees = NormalizeYaw(introFinalYaw + introStartYawOffset);
+            currentPitchDegrees = ClampPitch(introStartPitch);
+            currentDistance = maximumDistance;
+            ApplyCurrentPose();
+            introEasing = true;
+            introLegPending = true;
+            BeginIntroLeg(
+                introFinalPivot,
+                introFinalYaw + (introStartYawOffset * 0.2f),
+                Mathf.Max(introFinalPitch, 80f),
+                introFinalDistance * introCloseDistanceFactor,
+                introApproachSeconds);
+            return true;
+        }
+
+        private void BeginIntroLeg(Vector3 pivot, float yaw, float pitch, float distance, float seconds)
+        {
+            targetPivot = pivot;
+            targetYawDegrees = NormalizeYaw(yaw);
+            targetPitchDegrees = ClampPitch(pitch);
+            targetDistance = Mathf.Clamp(distance, minimumDistance, maximumDistance);
+            transitionStartPivot = currentPivot;
+            transitionStartYaw = currentYawDegrees;
+            transitionStartPitch = currentPitchDegrees;
+            transitionStartDistance = currentDistance;
+            transitionStartOrthographicSize = currentOrthographicSize;
+            transitionElapsed = 0f;
+            transitionDuration = Mathf.Max(0.01f, seconds);
+            transitionActive = true;
+            ResetSmoothingVelocities();
         }
 
         public void ShowDefaultView(bool immediate = false)
@@ -1047,6 +1123,8 @@ namespace ConsoleCards.Presentation.Camera
 
         private void CancelTransition()
         {
+            introLegPending = false; // CAM-1: camera input (or another view) stops the intro where it is
+            introEasing = false;
             transitionActive = false;
             transitionElapsed = 0f;
             transitionDuration = 0f;

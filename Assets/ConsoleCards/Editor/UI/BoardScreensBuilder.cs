@@ -55,12 +55,13 @@ namespace ConsoleCards.Editor.UI
             int built = 0;
             if (Rebuild("FE_Create", 1, BuildCreate)) built++;
             if (Rebuild("FE_TopBar", 1, BuildTopBar)) built++; // boards 1–3 (BoardScreensBuilder.Flow.cs)
-            if (Rebuild("FE_MainMenu", 1, BuildHome)) built++;
+            if (Rebuild("FE_MainMenu", 2, BuildHome)) built++; // 2: BRAND-1, the logo as the title
             if (Rebuild("FE_Library", 1, BuildLibrary)) built++;
             if (Rebuild("FE_Details", 1, BuildSheet)) built++;
             if (Rebuild("FE_Lobby", 1, BuildLobbyBoard)) built++; // board 2b (BoardScreensBuilder.Online.cs)
             if (Rebuild("FE_Room", 1, BuildRoomBoard)) built++;
             BoardBackground();
+            MenuPicture(); // BRAND-1: the main menu's picture (BoardScreensBuilder.Brand.cs)
             if (built > 0) AssetDatabase.SaveAssets();
             return built;
         }

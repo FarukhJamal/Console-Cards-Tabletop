@@ -2239,6 +2239,11 @@ MonoBehaviour:
   motionSmoothing: 0.09
   presetTransitionDuration: 0.32
   initialGameFramingDistanceMultiplier: 0.85
+  introApproachSeconds: 1.7
+  introSettleSeconds: 1.4
+  introStartYawOffset: -55
+  introStartPitch: 86
+  introCloseDistanceFactor: 0.62
   closeView:
     pitchDegrees: 78
     yawOffsetDegrees: 0
@@ -2370,6 +2375,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bb39d2163c1e4973999216a415d4ca07, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  rulebookBesideConsole: 0.9
+  rulebookBesideBoard: 0.3
+  rulebookTurn: -12
   trapFloorGameDefinition: {fileID: 11400000, guid: 5e5f408633e24bd6bc2b38a0b430ffb3, type: 2}
   targetCamera: {fileID: 839904108}
   cameraInputAdapter: {fileID: 1862448553}

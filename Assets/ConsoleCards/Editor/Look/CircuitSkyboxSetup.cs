@@ -21,6 +21,7 @@ namespace ConsoleCards.Editor.Look
         public const string FlowPath = "Assets/ConsoleCards/Content/Environment/CircuitSkyboxFlow.png";
         public const string MovingShaderName = "ConsoleCards/Circuit Skybox";
         private const string Title = "Use Circuit Skybox";
+        private static readonly bool UseFlowPulses = false; // SKY-2: true again once CircuitSkyboxFlow.png matches the picture
 
         [MenuItem("Console Cards/Look/Use Circuit Skybox")]
         public static void Use()
@@ -65,7 +66,8 @@ namespace ConsoleCards.Editor.Look
             }
 
             Shader moving = Shader.Find(MovingShaderName);
-            bool animated = moving != null && flow != null;
+            // SKY-2 (owner, 2026-10-30): the new all-round picture has no flow map of its own yet, so it is still.
+            bool animated = UseFlowPulses && moving != null && flow != null;
             Shader shader = animated ? moving : Shader.Find("Skybox/Panoramic");
             if (shader == null)
             {

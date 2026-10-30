@@ -5520,6 +5520,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             TrapFloorSeatPiecesDefinition definition = Game != null ? Game.TableSetup : null;
             if (definition == null) return null;
+            setupFrame = SetupFrame(); // SETUP-2: the asset's places are scene positions; the table turns them into its own
             try
             {
                 TrapFloorSeatPiecesLayout seatPieces = new TrapFloorSeatPiecesLayout(
@@ -5558,9 +5559,31 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private static TableCoordinate SetupPoint(Vector2 point) => new TableCoordinate(point.x, point.y);
+        // SETUP-2 (owner, 2026-10-30: "give all the three axes"): a scene position (X, Y, Z) as a place on the table.
+        // Without the table's frame (no table in the scene yet) X and Z are taken as they are.
+        private TabletopCoordinateConverter setupFrame;
 
-        private static TabletopPose SetupPose(TrapFloorTablePlace place) =>
+        private TabletopCoordinateConverter SetupFrame()
+        {
+            if (host.targetCamera == null) return null;
+            try
+            {
+                return PhysicalTabletopSurfaces.CreateTemplateLayoutConverter(
+                    host.targetCamera,
+                    host.worldUnitsPerTableUnit,
+                    host.tabletopLayerHeight,
+                    host.tabletopLocalOrderHeight);
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        private TableCoordinate SetupPoint(Vector3 point) =>
+            setupFrame != null ? setupFrame.ToTableCoordinate(point) : new TableCoordinate(point.x, point.z);
+
+        private TabletopPose SetupPose(TrapFloorTablePlace place) =>
             place != null
                 ? new TabletopPose(SetupPoint(place.Position), place.Turn, 0, 0)
                 : throw new ArgumentException("A table setup place is missing.");
