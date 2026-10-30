@@ -89,6 +89,8 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button menuButton;
         [Tooltip("Optional: FAN / ROW for the hand tray (the tool bar's button is hidden under this HUD).")]
         [SerializeField] private Button handStyleButton;
+        [Tooltip("Board 17 (optional): the Draw tool's bar beside the rail; without it Draw uses the tool bar's panel.")]
+        [SerializeField] private TableDrawBarView drawBar;
 
         [Header("Bottom left")]
         [SerializeField] private Button rulebookButton;
@@ -149,6 +151,9 @@ namespace ConsoleCards.Presentation.UI
         private bool toolsShown = true;
 
         public bool IsTipShown => tipShown;
+
+        /// <summary>Board 17: the Draw tool's bar when the prefab has it whole, else null.</summary>
+        public TableDrawBarView DrawBar => drawBar != null && drawBar.IsComplete ? drawBar : null;
 
         public void ValidateReferences()
         {

@@ -42,6 +42,7 @@ namespace ConsoleCards.Presentation.Composition
             Keyboard keyboard = Keyboard.current;
             if (keyboard == null || keyboard.ctrlKey.isPressed || keyboard.altKey.isPressed) return;
             if (runtimeUi != null && (runtimeUi.IsPauseMenuOpen || runtimeUi.IsTableSettingsOpen)) return;
+            if (HandleDrawKeys(keyboard)) return; // board 17: D, and 1 2 3 E while drawing
             if (keyboard.vKey.wasPressedThisFrame) ChooseTool(TableToolKind.Grab);
             else if (keyboard.pKey.wasPressedThisFrame) ChooseTool(TableToolKind.Ping);
             else if (keyboard.mKey.wasPressedThisFrame) ChooseTool(TableToolKind.Measure);

@@ -38,19 +38,19 @@ namespace ConsoleCards.Definitions
 
         [Header("Shared piles")]
         [Tooltip("The Controller deck everyone draws from.")]
-        [SerializeField] private TrapFloorTablePlace controllerDeck = new TrapFloorTablePlace(new Vector2(5.2f, -5.45f), 0f);
+        [SerializeField] private TrapFloorTablePlace controllerDeck = new TrapFloorTablePlace(new Vector2(9.6f, -9f), 0f);
         [Tooltip("The Ability deck.")]
-        [SerializeField] private TrapFloorTablePlace abilityDeck = new TrapFloorTablePlace(new Vector2(-4.75f, 0f), 0f);
+        [SerializeField] private TrapFloorTablePlace abilityDeck = new TrapFloorTablePlace(new Vector2(-11f, 9f), 0f);
         [Tooltip("The Ability discard pile.")]
-        [SerializeField] private TrapFloorTablePlace abilityDiscard = new TrapFloorTablePlace(new Vector2(-4.75f, 2f), 0f);
+        [SerializeField] private TrapFloorTablePlace abilityDiscard = new TrapFloorTablePlace(new Vector2(-8.8f, 9f), 0f);
 
         [Header("Dice")]
         [Tooltip("The Floorfall die for the column (X).")]
-        [SerializeField] private Vector2 xAxisDie = new Vector2(-5.9f, -3.6f);
+        [SerializeField] private Vector2 xAxisDie = new Vector2(-10.8f, -9f);
         [Tooltip("The Floorfall die for the row (Y).")]
-        [SerializeField] private Vector2 yAxisDie = new Vector2(-5f, -3.6f);
+        [SerializeField] private Vector2 yAxisDie = new Vector2(-9.9f, -9f);
         [Tooltip("The d4 the Blind trap rolls for its direction.")]
-        [SerializeField] private Vector2 directionDie = new Vector2(-4.1f, -3.6f);
+        [SerializeField] private Vector2 directionDie = new Vector2(-9f, -9f);
 
         [Header("Starting Ability cards (dealt beside the Console)")]
         [Tooltip("The side of the Console the row of starting Ability cards goes on (seen from the player).")]

@@ -12,7 +12,7 @@ namespace ConsoleCards.Presentation.Composition
     /// <summary>
     /// The collapsing tile (owner, 2026-10-21, as in the playtest): after the floor dice pick it, it is a hole at once,
     /// and any player lifts the tile off the board and sets it aside. A tile still lying in its cell when the floor
-    /// turn ends is set beside the board by the game (in a column to the right of the board). Event-time only.
+    /// turn ends is set aside by the game, off the playmat (BOARD-2: in the table's top-right corner). Event-time only.
     /// </summary>
     internal sealed partial class TrapFloorCartridge
     {
@@ -24,7 +24,6 @@ namespace ConsoleCards.Presentation.Composition
             IReadOnlyList<TrapFloorCollapsedFloorState> collapsed = host.trapFloorCollapseState.CollapsedFloors;
             double halfWidth = template.Grid.CellWidth * 0.5d;
             double halfHeight = template.Grid.CellHeight * 0.5d;
-            int rows = System.Math.Max(1, template.GridRows);
             int aside = CountTilesAlreadyAside(collapsed, halfWidth, halfHeight);
             int moved = 0;
             for (int i = 0; i < collapsed.Count; i++)
@@ -41,21 +40,15 @@ namespace ConsoleCards.Presentation.Composition
                     continue;
                 }
 
-                // Beside the board: a column to the right, one tile per row, then a second layer.
-                int row = 1 + (aside % rows);
-                if (!template.TryGetCellPosition(
-                        host.matchState,
-                        new TrapFloorCoordinate(template.GridColumns, row),
-                        out TableCoordinate edge))
-                {
-                    continue;
-                }
-
+                // BOARD-2 (owner, 2026-10-30: "don't put them on the game board again"): off the playmat, in the
+                // table's top-right corner, a row of three, then the next layer on top.
                 TabletopObjectState state = view.BoundState;
                 TabletopPose pose = new TabletopPose(
-                    new TableCoordinate(edge.X + (1.6d * template.Grid.ColumnPitch), edge.Y),
+                    new TableCoordinate(
+                        CollapsedAsideX + ((aside % CollapsedAsidePerLayer) * CollapsedAsideStep),
+                        CollapsedAsideY),
                     state.Pose.RotationDegrees,
-                    state.Pose.Layer + (aside / rows),
+                    state.Pose.Layer + (aside / CollapsedAsidePerLayer),
                     state.Pose.LocalOrder);
                 if (host.MoveLoosePiece(view, state, pose))
                 {
@@ -66,6 +59,11 @@ namespace ConsoleCards.Presentation.Composition
 
             return moved;
         }
+
+        private const double CollapsedAsideX = 8.6d;
+        private const double CollapsedAsideY = 9d;
+        private const double CollapsedAsideStep = 1.2d;
+        private const int CollapsedAsidePerLayer = 3;
 
         // Collapsed tiles players (or the game) already took off: the next one goes after them.
         private int CountTilesAlreadyAside(IReadOnlyList<TrapFloorCollapsedFloorState> collapsed, double halfWidth, double halfHeight)

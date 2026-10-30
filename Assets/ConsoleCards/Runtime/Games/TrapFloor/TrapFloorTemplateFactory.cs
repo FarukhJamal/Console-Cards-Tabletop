@@ -58,8 +58,8 @@ namespace ConsoleCards.Games.TrapFloor
             new GameTemplatePileStyle(GameTemplateBayMark.Draw);
         // T-1: on the playmat, left of the 6x6 floor (full-size tiles) below the Ability piles, clear of the Consoles
         // (collapsed tiles are set aside on the right).
-        private const double FloorfallDiceX = -5.45d;
-        private const double FloorfallDiceY = -3.6d;
+        private const double FloorfallDiceX = -10.35d; // BOARD-2: off the playmat, the bottom-left corner
+        private const double FloorfallDiceY = -9d;
         private const double FloorfallDiceSpacing = 0.9d;
         // The Blind trap's direction die (doc 18; TrapFloorAbilityResolution requires a d4).
         private const int BlindDieSideCount = 4;
@@ -512,9 +512,12 @@ namespace ConsoleCards.Games.TrapFloor
         }
 
         // The game data with the floor's smaller grid (same cell size and centre); everything else is unchanged.
+        // BOARD-2 (owner, 2026-10-30): a floor with an odd number of rows and columns taken out lies half a space toward
+        // its first column and row, so its tiles land on the first floor's spaces (the board's spaces stay put).
         private static GameDefinitionData WithFloorGrid(GameDefinitionData data, int floorIndex, TableCoordinate? center = null)
         {
             GridDefinitionData grid = data.Grid;
+            double half = (floorIndex % 2) * 0.5d;
             GridDefinitionData floorGrid = new GridDefinitionData(
                 grid.StableId,
                 grid.Rows - floorIndex,
@@ -523,8 +526,8 @@ namespace ConsoleCards.Games.TrapFloor
                 grid.CellHeight,
                 grid.HorizontalSpacing,
                 grid.VerticalSpacing,
-                center.HasValue ? center.Value.X : grid.OriginX, // LAYOUT-1: the board where the players put it
-                center.HasValue ? center.Value.Y : grid.OriginY,
+                (center.HasValue ? center.Value.X : grid.OriginX) - (half * grid.ColumnPitch), // LAYOUT-1: where the players put it
+                (center.HasValue ? center.Value.Y : grid.OriginY) - (half * grid.RowPitch),
                 grid.LayoutMetadata);
             return new GameDefinitionData(
                 data.StableId,

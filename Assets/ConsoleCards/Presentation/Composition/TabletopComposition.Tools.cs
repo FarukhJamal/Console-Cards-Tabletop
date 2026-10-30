@@ -235,6 +235,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             UpdateMeasure();
+            UpdateDrawBar(); // board 17: CLEAR stops asking
 
             toolsHadInteraction = interacting;
             PruneToolSelection();

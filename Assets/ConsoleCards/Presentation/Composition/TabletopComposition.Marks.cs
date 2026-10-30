@@ -8,6 +8,7 @@ using ConsoleCards.Presentation.UI;
 using ConsoleCards.Presentation.Views;
 using ConsoleCards.Presentation.Views.Containers;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityCamera = UnityEngine.Camera;
 
@@ -173,6 +174,28 @@ namespace ConsoleCards.Presentation.Composition
             new Color(0.55f, 0.3f, 0.75f, 1f),
         };
 
+        // Board 17 (owner, 2026-10-30): the HUD's Draw bar. Its LINE buttons in the board's order, its three sizes, and
+        // its colours (the first is your seat's colour).
+        private static readonly TableMarkStyle[] BarStyleOrder =
+        {
+            TableMarkStyle.Plain, TableMarkStyle.Dashed, TableMarkStyle.Dotted, TableMarkStyle.Wavy, TableMarkStyle.Brush,
+            TableMarkStyle.Swirl,
+        };
+
+        private static readonly float[] DrawSizeScales = { 0.6f, 1f, 1.7f };
+
+        private static readonly Color[] HudDrawPalette =
+        {
+            new Color(1f, 0.231f, 0.231f, 1f), // replaced by the seat's colour
+            new Color(0.910f, 0.925f, 0.929f, 1f),
+            new Color(1f, 0.788f, 0.231f, 1f),
+            new Color(0.024f, 0.937f, 0.941f, 1f),
+            new Color(0.184f, 0.482f, 1f, 1f),
+            new Color(0.184f, 0.831f, 0.420f, 1f),
+        };
+
+        private const float ClearAskSeconds = 4f; // CLEAR asks again in place this long
+
         private readonly Color[] drawSwatches = new Color[8];
         private readonly Vector3[] strokePoints = new Vector3[MaximumStrokePoints];
         private readonly Vector3[] styledPoints = new Vector3[MaximumStyledPoints];
@@ -185,6 +208,8 @@ namespace ConsoleCards.Presentation.Composition
         private GameObject markRoot;
         private int drawMode = DrawModePen;
         private int drawColour;
+        private int drawSize = 1;
+        private float clearAskedAt = -100f;
         private TableMarkStyle drawStyle = TableMarkStyle.Plain;
         private LineRenderer strokeLine;
         private int strokeCount;
@@ -205,8 +230,13 @@ namespace ConsoleCards.Presentation.Composition
         private bool DrawToolReady()
         {
             ToolBarView bar = runtimeUi != null ? runtimeUi.ShownToolBar : null;
-            return bar != null && bar.HasDrawPanel && EnsureMarkSet();
+            return (HudDrawBar != null || (bar != null && bar.HasDrawPanel)) && EnsureMarkSet();
         }
+
+        // Board 17: the HUD's Draw bar beside the rail (null without it: the tool bar's panel is used).
+        private TableDrawBarView HudDrawBar => runtimeUi != null ? runtimeUi.ShownDrawBar : null;
+
+        private Color[] ActiveDrawPalette => HudDrawBar != null ? HudDrawPalette : DrawPalette;
 
         private bool EnsureMarkSet()
         {
@@ -223,6 +253,16 @@ namespace ConsoleCards.Presentation.Composition
         private void RefreshDrawPanel()
         {
             ToolBarView bar = runtimeUi != null ? runtimeUi.ShownToolBar : null;
+            TableDrawBarView hud = HudDrawBar;
+            if (hud != null)
+            {
+                hud.Bind(ChooseDrawMode, ChooseBarStyle, ChooseDrawSize, ChooseDrawColour, UndoDrawLine, PressDrawClear,
+                    CloseDrawBar);
+                if (bar != null && bar.HasDrawPanel) bar.ShowDraw(false); // the HUD's bar stands in for it
+                ShowDrawPanel(activeTool == TableToolKind.Draw);
+                return;
+            }
+
             if (bar == null || !bar.HasDrawPanel) return;
             bar.BindDraw(ChooseDrawMode, ChooseDrawColour, ClearTableMarksByPlayer, CycleDrawStyle);
             ShowDrawPanel(activeTool == TableToolKind.Draw);
@@ -230,6 +270,27 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ShowDrawPanel(bool shown)
         {
+            TableDrawBarView hud = HudDrawBar;
+            if (hud != null)
+            {
+                hud.Show(shown);
+                if (!shown)
+                {
+                    clearAskedAt = -100f;
+                    return;
+                }
+
+                hud.SetMode(drawMode);
+                hud.SetStyle(Array.IndexOf(BarStyleOrder, drawStyle));
+                hud.SetSize(drawSize);
+                int hudCount = Mathf.Min(drawSwatches.Length, HudDrawPalette.Length);
+                for (int i = 0; i < hudCount; i++) drawSwatches[i] = HudDrawPalette[i];
+                drawSwatches[0] = FeedbackColour(localPlayerId); // your seat's colour
+                hud.SetSwatches(drawSwatches, Mathf.Clamp(drawColour, 0, hudCount - 1));
+                hud.SetClearAsking(Time.unscaledTime - clearAskedAt <= ClearAskSeconds);
+                return;
+            }
+
             ToolBarView bar = runtimeUi != null ? runtimeUi.ShownToolBar : null;
             if (bar == null || !bar.HasDrawPanel) return;
             bar.ShowDraw(shown);
@@ -273,9 +334,84 @@ namespace ConsoleCards.Presentation.Composition
             RefreshToolBarState();
         }
 
+        // Board 17: a LINE button of the HUD's bar (in the board's order).
+        private void ChooseBarStyle(int index)
+        {
+            if (index < 0 || index >= BarStyleOrder.Length) return;
+            CancelDraw();
+            drawStyle = BarStyleOrder[index];
+            if (drawMode == DrawModeEraser || drawMode == DrawModeLabel) drawMode = DrawModePen;
+            ShowDrawPanel(true);
+            RefreshToolBarState();
+        }
+
+        // Board 17: thin, medium or thick (lines drawn from now on).
+        private void ChooseDrawSize(int size)
+        {
+            if (size < 0 || size >= DrawSizeScales.Length) return;
+            drawSize = size;
+            if (drawMode == DrawModeEraser) drawMode = DrawModePen;
+            ShowDrawPanel(true);
+            RefreshToolBarState();
+        }
+
+        // Board 17: the bar's Undo is the table's Undo (each line is one step).
+        private void UndoDrawLine()
+        {
+            CancelDraw();
+            SessionService.HandleUndoButtonPressed();
+        }
+
+        // Board 17: CLEAR asks again in place (CLEAR ALL?); a second press within a few seconds clears your drawings.
+        private void PressDrawClear()
+        {
+            if (Time.unscaledTime - clearAskedAt <= ClearAskSeconds)
+            {
+                clearAskedAt = -100f;
+                ClearTableMarksByPlayer();
+            }
+            else
+            {
+                clearAskedAt = Time.unscaledTime;
+            }
+
+            ShowDrawPanel(activeTool == TableToolKind.Draw);
+        }
+
+        // Board 17: ✕, D or Esc closes the bar and goes back to Select.
+        private void CloseDrawBar() => ChooseTool(TableToolKind.Grab);
+
+        // Per frame (UpdateTools): CLEAR stops asking after a while.
+        private void UpdateDrawBar()
+        {
+            if (clearAskedAt < 0f || Time.unscaledTime - clearAskedAt <= ClearAskSeconds) return;
+            clearAskedAt = -100f;
+            HudDrawBar?.SetClearAsking(false);
+        }
+
+        // Board 17 keys: D opens and closes Draw; while it is chosen 1, 2, 3 and E choose the pen, highlighter, label
+        // and eraser. True when a key was used.
+        private bool HandleDrawKeys(Keyboard keyboard)
+        {
+            if (keyboard.dKey.wasPressedThisFrame)
+            {
+                ChooseTool(activeTool == TableToolKind.Draw ? TableToolKind.Grab : TableToolKind.Draw);
+                return true;
+            }
+
+            if (activeTool != TableToolKind.Draw) return false;
+            if (keyboard.digit1Key.wasPressedThisFrame) ChooseDrawMode(DrawModePen);
+            else if (keyboard.digit2Key.wasPressedThisFrame) ChooseDrawMode(DrawModeHighlighter);
+            else if (keyboard.digit3Key.wasPressedThisFrame) ChooseDrawMode(DrawModeLabel);
+            else if (keyboard.eKey.wasPressedThisFrame) ChooseDrawMode(DrawModeEraser);
+            else return false;
+            return true;
+        }
+
         private Color CurrentDrawColour(TableMarkKind kind)
         {
-            Color colour = drawColour == 0 ? FeedbackColour(localPlayerId) : DrawPalette[Mathf.Clamp(drawColour, 0, DrawPalette.Length - 1)];
+            Color[] palette = ActiveDrawPalette;
+            Color colour = drawColour == 0 ? FeedbackColour(localPlayerId) : palette[Mathf.Clamp(drawColour, 0, palette.Length - 1)];
             if (kind == TableMarkKind.Highlighter) colour.a = HighlighterAlpha;
             return colour;
         }
@@ -461,7 +597,8 @@ namespace ConsoleCards.Presentation.Composition
         private float LineWidth(TableMarkKind kind)
         {
             float unit = MarkUnit();
-            return (kind == TableMarkKind.Highlighter ? markSet.HighlighterWidth : markSet.PenWidth) * unit;
+            return (kind == TableMarkKind.Highlighter ? markSet.HighlighterWidth : markSet.PenWidth) * unit
+                * DrawSizeScales[Mathf.Clamp(drawSize, 0, DrawSizeScales.Length - 1)]; // board 17: SIZE
         }
 
         // The line is kept: one Undo step. A click without moving leaves a dot.
@@ -501,7 +638,8 @@ namespace ConsoleCards.Presentation.Composition
         private void PlaceLabel(Vector2 screenPosition)
         {
             ToolBarView bar = runtimeUi != null ? runtimeUi.ShownToolBar : null;
-            string words = bar != null ? bar.DrawLabelText : string.Empty;
+            TableDrawBarView hud = HudDrawBar;
+            string words = hud != null ? hud.LabelText : bar != null ? bar.DrawLabelText : string.Empty;
             words = words != null ? words.Trim() : string.Empty;
             if (words.Length == 0)
             {

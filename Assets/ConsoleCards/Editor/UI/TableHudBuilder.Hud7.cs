@@ -26,7 +26,7 @@ namespace ConsoleCards.Editor.UI
     /// </summary>
     public static partial class TableHudBuilder
     {
-        private const string HudLabel = "HudBoard7B4";
+        private const string HudLabel = "HudBoard7B6"; // B5: board 17's Draw on the rail and its bar
         private const string HudArt = "Assets/ConsoleCards/Content/UI/Board/Hud/";
         private const float K = 1.5f; // board pixels to the 1920 x 1080 canvas
 
@@ -71,6 +71,7 @@ namespace ConsoleCards.Editor.UI
             pillFrame = HudSprite("HudPillFrame", new Vector4(31f, 31f, 31f, 31f));
             if (round == null) round = rounded;
             foreach (string icon in HudIcons) HudSprite(icon, Vector4.zero);
+            foreach (string icon in DrawIcons) HudSprite(icon, Vector4.zero); // board 17
             Save<TableHudView>(HudPath, "TableHud", BuildHud7);
             GameObject made = AssetDatabase.LoadAssetAtPath<GameObject>(HudPath);
             if (made != null) AssetDatabase.SetLabels(made, new[] { HudLabel });
@@ -199,6 +200,7 @@ namespace ConsoleCards.Editor.UI
                 Rail7Tool(rail, TableToolKind.Pan, "HudPan", "+", "Move the camera · Space drag"),
                 Rail7Tool(rail, TableToolKind.Ping, "HudPing", "P", "Ping · P"),
                 Rail7Tool(rail, TableToolKind.Measure, "HudMeasure", "M", "Measure · M"),
+                Rail7Tool(rail, TableToolKind.Draw, "HudDraw", "D", "Draw · D"), // board 17: under Measure
             };
             Rail7Rule(rail, "Rule1");
             Button undo = Rail7Button(rail, "Undo", "HudUndo", "<", "Undo · Ctrl Z", out Image undoIcon, out _);
@@ -303,6 +305,7 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("playerStatusTag").objectReferenceValue = statusTag.gameObject;
             so.FindProperty("playerStatusText").objectReferenceValue = statusText;
             BuildNews7(root, so);
+            BuildDrawBar17(root, so); // board 17: the Draw bar beside the rail
             so.FindProperty("actionsRoot").objectReferenceValue = actionsRoot;
             so.FindProperty("actionTemplate").objectReferenceValue = template;
             so.FindProperty("primaryButton").objectReferenceValue = primary;

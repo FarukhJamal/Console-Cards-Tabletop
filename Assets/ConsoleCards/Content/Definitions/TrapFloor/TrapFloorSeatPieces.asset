@@ -27,17 +27,17 @@ MonoBehaviour:
     position: {x: 9.7, y: 0}
     turn: 270
   controllerDeck:
-    position: {x: 5.2, y: -5.75}
+    position: {x: 9.6, y: -9}
     turn: 0
   abilityDeck:
-    position: {x: -8, y: 0}
+    position: {x: -11, y: 9}
     turn: 0
   abilityDiscard:
-    position: {x: -4.75, y: 2}
+    position: {x: -8.8, y: 9}
     turn: 0
-  xAxisDie: {x: -5.9, y: -3.6}
-  yAxisDie: {x: -5, y: -3.6}
-  directionDie: {x: -4.1, y: -3.6}
+  xAxisDie: {x: -10.8, y: -9}
+  yAxisDie: {x: -9.9, y: -9}
+  directionDie: {x: -9, y: -9}
   startingAbilitiesSide: -1
   startingAbilitiesTowardBoard: 0.9
   startingAbilitiesOutward: 0

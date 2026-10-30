@@ -955,6 +955,9 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>The tool bar while it is shown (the Draw tool's panel is filled through it), or null.</summary>
         public ToolBarView ShownToolBar => VisibleToolBar();
 
+        /// <summary>Board 17: the HUD's Draw bar while the HUD and the tool bar are shown, or null.</summary>
+        public TableDrawBarView ShownDrawBar => UsesTableHud && VisibleToolBar() != null ? tableHudView.DrawBar : null;
+
         /// <summary>
         /// POL-3 / POL-5: the table's information layer (tooltip, card peek, floating labels). False when its prefab is
         /// missing (warned once); then those simply do not show.
