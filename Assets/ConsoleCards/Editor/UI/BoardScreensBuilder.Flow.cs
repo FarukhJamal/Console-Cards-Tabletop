@@ -39,15 +39,36 @@ namespace ConsoleCards.Editor.UI
             line.raycastTarget = false;
 
             RectTransform right = Rect(top, "Right", 836, 20, 400, 56);
-            RectTransform profile = Box(right, "Profile", 6, 8, 108, 40, Hex("101314"), Edge, 1f);
+            // PROFILE-2 (board 19b, owner 2026-10-31: the chip "is not looking good"): the hint tab's box, the player's
+            // avatar framed in cyan, PLAYING AS and the name, and a caret. FrontEndView fills the avatar.
+            RectTransform profile = Box(right, "Profile", 0, 8, 124, 40, Hex("1c1f1f"), Edge, 1f);
             Button profileButton = profile.gameObject.AddComponent<Button>();
             profileButton.targetGraphic = profile.GetComponent<Image>();
-            Image dot = Rect(profile, "Dot", 8, 7, 26, 26).gameObject.AddComponent<Image>();
-            dot.sprite = circle;
-            dot.color = Cyan;
-            dot.raycastTarget = false;
-            TextAt(profile, "Small", 42, 5, 64, 14, medium, 11, Muted, TextAnchor.MiddleLeft, "Playing as");
-            TextAt(profile, "Name", 42, 19, 64, 18, bold, 13, Words, TextAnchor.MiddleLeft, "PLAYER 1");
+            ColorBlock profileColours = profileButton.colors;
+            profileColours.highlightedColor = new Color(0.72f, 1f, 1f, 1f);
+            profileButton.colors = profileColours;
+            Image frame = Rect(profile, "Dot", 4, 4, 32, 32).gameObject.AddComponent<Image>();
+            frame.sprite = rounded;
+            frame.type = Image.Type.Sliced;
+            frame.color = Cyan;
+            frame.raycastTarget = false;
+            RawImage face = Rect(profile, "Avatar", 6, 6, 28, 28).gameObject.AddComponent<RawImage>();
+            face.color = new Color(1f, 1f, 1f, 0.06f);
+            face.raycastTarget = false;
+            Text small = TextAt(profile, "Small", 42, 5, 70, 14, bold, 9, Muted, TextAnchor.MiddleLeft, "PLAYING AS");
+            small.fontStyle = FontStyle.Bold;
+            TextAt(profile, "Name", 42, 19, 66, 18, bold, 13, Words, TextAnchor.MiddleLeft, "PLAYER 1");
+            RectTransform caret = Rect(profile, "Caret", 108, 16, 10, 8); // two short bars (the font has no caret)
+            for (int i = 0; i < 2; i++)
+            {
+                RectTransform caretBar = Rect(caret, i == 0 ? "Left" : "Right", 0f, 0f, 6f, 1.6f);
+                caretBar.pivot = new Vector2(0.5f, 0.5f);
+                caretBar.anchoredPosition = new Vector2((i == 0 ? 3f : 7f) * S, -4f * S); // a V: "\" then "/"
+                caretBar.localRotation = Quaternion.Euler(0f, 0f, i == 0 ? -45f : 45f);
+                Image barImage = caretBar.gameObject.AddComponent<Image>();
+                barImage.color = Soft;
+                barImage.raycastTarget = false;
+            }
             WordButton(right, "Guide", 144, 52, "GUIDE");
             WordButton(right, "Settings", 222, 76, "SETTINGS");
             WordButton(right, "Exit", 327, 36, "EXIT");
@@ -84,11 +105,12 @@ namespace ConsoleCards.Editor.UI
 
         private static void BuildHome(RectTransform page)
         {
-            // BRAND-1 (owner, 2026-10-30): the CONSOLE CARDS plate is the title (the words when its picture is missing).
+            // BRAND-1 (owner, 2026-10-30): the CONSOLE CARDS plate is the title (the words when its picture is missing);
+            // 540 x 270 on the 1920 x 1080 screen (owner, 2026-10-31).
             Sprite logo = Logo();
             if (logo != null)
             {
-                Image plate = Rect(page, "Logo", 68, 84, 244, 122).gameObject.AddComponent<Image>();
+                Image plate = Rect(page, "Logo", 62, 80, 360, 180).gameObject.AddComponent<Image>();
                 plate.sprite = logo;
                 plate.preserveAspect = true;
                 plate.raycastTarget = false;
@@ -98,15 +120,15 @@ namespace ConsoleCards.Editor.UI
                 TextAt(page, "Title", 72, 120, 900, 76, bold, 52, Words, TextAnchor.MiddleLeft, "CONSOLE CARDS");
             }
 
-            TextAt(page, "Subtitle", 72, logo != null ? 212 : 197, 900, 24, medium, 18, Soft, TextAnchor.MiddleLeft,
+            TextAt(page, "Subtitle", 72, logo != null ? 262 : 197, 900, 24, medium, 18, Soft, TextAnchor.MiddleLeft,
                 "A tabletop for card and board games. Pick up the pieces and play.");
 
-            RectTransform menu = Rect(page, "Menu", 72, 252, 520, 340);
+            RectTransform menu = Rect(page, "Menu", 72, logo != null ? 300 : 252, 520, 340);
             MenuCard(menu, "Play", 0, true, "Play", "PLAY", "Pick a game and start. Here or online.");
             MenuCard(menu, "Create", 118, false, "Plus", "CREATE", "Make cards, decks and whole games of your own.");
             MenuCard(menu, "Sandbox", 236, false, "Cube", "SANDBOX", "An empty table and every piece. No rules.");
 
-            RectTransform card = Box(page, "Continue", 738, 252, 470, 336, Panel, Edge, 1f);
+            RectTransform card = Box(page, "Continue", 738, logo != null ? 300 : 252, 470, 336, Panel, Edge, 1f);
             Text heading = TextAt(card, "Heading", 24, 22, 200, 20, bold, 13, Muted, TextAnchor.MiddleLeft, "CONTINUE");
             _ = heading;
             Line(card, "Rule", 120, 32, 292, 1, Edge);

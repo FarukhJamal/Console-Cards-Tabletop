@@ -82,14 +82,14 @@ namespace ConsoleCards.Presentation.UI
 
         // Boards 1–3: PLAY goes straight to the Library (the profile is the top bar's "Playing as").
         private FrontEndPage PlayPage => InOnlineRoom ? FrontEndPage.Room
-            : HasBoardLibrary ? FrontEndPage.Library : FrontEndPage.Profile;
+            : FrontEndPage.Library; // owner, 2026-10-31: PLAY goes straight to the game library (the player is the top bar's chip)
 
         private static bool IsOnlinePage(FrontEndPage target) => target == FrontEndPage.Lobby || target == FrontEndPage.Room;
 
         private void BindOnlineButtons()
         {
             On("Pages/Profile/Online", OpenOnline);
-            On("Pages/Lobby/Back", () => Go(FrontEndPage.Profile));
+            On("Pages/Lobby/Back", () => Go(FrontEndPage.Library));
             On("Pages/Lobby/Create/Privacy", () =>
             {
                 roomPrivate = !roomPrivate;

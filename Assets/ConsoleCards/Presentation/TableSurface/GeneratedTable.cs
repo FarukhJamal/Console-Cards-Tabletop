@@ -150,7 +150,10 @@ namespace ConsoleCards.Presentation.TableSurface
 
             transform.SetPositionAndRotation(frame.Centre, frame.Rotation);
             transform.localScale = Vector3.one;
-            Vector2 textureSize = frame.ClassicSize * unit;
+            // LOOK-3 (owner, 2026-10-31: the new table top with its cyan inner line): the top picture covers the whole
+            // table once, so its border follows the table's edge; the rim and the neon strip keep the classic repeat.
+            Vector2 textureSize = new Vector2(Mathf.Max(0.01f, clean.width), Mathf.Max(0.01f, clean.depth)) * unit;
+            float edgeRepeat = frame.ClassicSize.x * unit;
             float thickness = clean.thickness * unit;
 
             builder.BuildTop(outline, thickness, textureSize, topMesh, true);
@@ -162,14 +165,14 @@ namespace ConsoleCards.Presentation.TableSurface
 
             float edgeHeight = clean.edgeHeight * unit;
             float edgeWidth = (clean.edge == TableEdge.WoodenRail ? 1.6f : 1f) * clean.edgeWidth * unit;
-            bool hasEdge = builder.BuildEdge(outline, clean.edge, edgeHeight, edgeWidth, thickness, textureSize.x, edgeMesh);
+            bool hasEdge = builder.BuildEdge(outline, clean.edge, edgeHeight, edgeWidth, thickness, edgeRepeat, edgeMesh);
             if (hasEdge) edgeRenderer.sharedMaterial = clean.edge == TableEdge.WoodenRail ? WoodMaterial(sides) : EdgeMaterial(body, sides);
             edge.SetActive(hasEdge);
 
             bool hasGlow = clean.edge == TableEdge.Neon;
             if (hasGlow)
             {
-                builder.BuildNeonStrip(outline, edgeHeight, edgeWidth, textureSize.x, glowMesh);
+                builder.BuildNeonStrip(outline, edgeHeight, edgeWidth, edgeRepeat, glowMesh);
                 glowRenderer.sharedMaterial = NeonMaterial(sides);
             }
 

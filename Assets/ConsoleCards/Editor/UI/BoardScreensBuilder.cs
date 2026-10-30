@@ -54,8 +54,8 @@ namespace ConsoleCards.Editor.UI
             Prepare();
             int built = 0;
             if (Rebuild("FE_Create", 1, BuildCreate)) built++;
-            if (Rebuild("FE_TopBar", 1, BuildTopBar)) built++; // boards 1–3 (BoardScreensBuilder.Flow.cs)
-            if (Rebuild("FE_MainMenu", 2, BuildHome)) built++; // 2: BRAND-1, the logo as the title
+            if (Rebuild("FE_TopBar", 2, BuildTopBar)) built++; // 2: PROFILE-2, the avatar chip // boards 1–3 (BoardScreensBuilder.Flow.cs)
+            if (Rebuild("FE_MainMenu", 3, BuildHome)) built++; // 2: BRAND-1, the logo as the title; 3: 540 x 270
             if (Rebuild("FE_Library", 1, BuildLibrary)) built++;
             if (Rebuild("FE_Details", 1, BuildSheet)) built++;
             if (Rebuild("FE_Lobby", 1, BuildLobbyBoard)) built++; // board 2b (BoardScreensBuilder.Online.cs)

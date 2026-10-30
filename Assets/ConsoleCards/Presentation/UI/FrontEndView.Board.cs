@@ -106,6 +106,7 @@ namespace ConsoleCards.Presentation.UI
         {
             if (Find("TopBar/Right/Profile") == null) return;
             SetText("TopBar/Right/Profile/Name", Upper(model.ProfileName));
+            ShowPicture(Picture("TopBar/Right/Profile/Avatar"), model.AvatarPicture); // PROFILE-2: the player's face
             bool sheet = page == FrontEndPage.Details && HasBoardSheet;
             SetActive("TopBar/Right", !sheet);
             SetActive("TopBar/Crumb", sheet);

@@ -956,7 +956,7 @@ namespace ConsoleCards.Intro.Editor
 
             Sprite logo = AssetDatabase.LoadAssetAtPath<Sprite>(LogoPath);
             if (logo == null) return false;
-            RectTransform rect = Rect("Logo", brand, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(-12f, 18f), new Vector2(260f, 130f));
+            RectTransform rect = Rect("Logo", brand, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(-12f, 18f), new Vector2(540f, 270f)); // owner, 2026-10-31: 540 x 270
             Image image = rect.gameObject.AddComponent<Image>();
             image.sprite = logo;
             image.preserveAspect = true;

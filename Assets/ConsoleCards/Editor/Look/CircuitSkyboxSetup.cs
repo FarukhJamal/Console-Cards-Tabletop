@@ -41,7 +41,7 @@ namespace ConsoleCards.Editor.Look
             importer.wrapModeU = TextureWrapMode.Repeat;
             importer.wrapModeV = TextureWrapMode.Clamp;
             importer.filterMode = FilterMode.Bilinear;
-            importer.maxTextureSize = 4096;
+            importer.maxTextureSize = 8192; // SKY-2: the 8192 x 4096 picture (owner, 2026-10-31: "high resolution")
             importer.textureCompression = TextureImporterCompression.CompressedHQ;
             importer.SaveAndReimport();
             Texture2D texture = AssetDatabase.LoadAssetAtPath<Texture2D>(TexturePath);
