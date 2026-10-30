@@ -95,6 +95,24 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button undoButton;
         [SerializeField] private Button saveButton;
 
+        // Board 11 "Deck builder" (owner, 2026-10-30). Optional: a panel made before board 11 works as before.
+        [Header("Deck builder (board 11)")]
+        [Tooltip("ADD CARDS on the right: one row per card (made from this hidden row: Thumb, Name, Count, Add).")]
+        [SerializeField] private RectTransform addRowsRoot;
+        [SerializeField] private GameObject addRowTemplate;
+        [SerializeField] private InputField addSearch;
+        [Tooltip("The deck's size, over the deck.")]
+        [SerializeField] private Text sizeLabel;
+        [SerializeField] private Button shuffleTestButton;
+        [Tooltip("DONE: saves and closes.")]
+        [SerializeField] private Button doneButton;
+
+        private readonly List<GameObject> addRows = new List<GameObject>();
+        private readonly List<DeckEditorCardRowModel> boardCards = new List<DeckEditorCardRowModel>();
+        private readonly System.Text.StringBuilder testWords = new System.Text.StringBuilder(128);
+
+        private bool IsBoard => addRowTemplate != null && addRowsRoot != null;
+
         private readonly List<CardEditorRowView> deckRowViews = new List<CardEditorRowView>();
         private readonly List<DeckEditorCardRowView> cardRowViews = new List<DeckEditorCardRowView>();
         private IRuntimeUiService uiService;
@@ -167,11 +185,18 @@ namespace ConsoleCards.Presentation.UI
 
             for (int i = 0; i < model.Cards.Count; i++)
             {
+                if (IsBoard && model.Cards[i].Copies <= 0) continue; // board 11: the deck shows the cards in it
                 DeckEditorCardRowView row =
                     uiService.AcquirePooled<DeckEditorCardRowView>(UiPrefabIds.DeckEditorCardRow, cardRowsRoot);
                 row.Bind(model.Cards[i], HandleCopies);
                 row.Show();
                 cardRowViews.Add(row);
+            }
+
+            if (IsBoard)
+            {
+                for (int i = 0; i < deckRowViews.Count; i++) deckRowViews[i].ShowThumbnail(false);
+                BindBoard(model);
             }
 
             Canvas.ForceUpdateCanvases();
@@ -220,6 +245,138 @@ namespace ConsoleCards.Presentation.UI
         private static void Clear(Button button)
         {
             if (button != null) button.onClick.RemoveAllListeners();
+        }
+
+        // ---------- board 11 ----------
+
+        private void BindBoard(DeckEditorModel model)
+        {
+            boardCards.Clear();
+            int total = 0;
+            for (int i = 0; i < model.Cards.Count; i++)
+            {
+                boardCards.Add(model.Cards[i]);
+                total += model.Cards[i].Copies;
+            }
+
+            if (sizeLabel != null) sizeLabel.text = $"Size <size=30><b>{total}</b></size>";
+            titleLabel.text = "DECKS";
+            filterButton.gameObject.SetActive(false); // every card is on the right
+            while (addRows.Count < boardCards.Count)
+            {
+                GameObject made = Instantiate(addRowTemplate, addRowsRoot, false);
+                made.name = "Card";
+                addRows.Add(made);
+            }
+
+            addRowTemplate.SetActive(false);
+            for (int i = 0; i < addRows.Count; i++)
+            {
+                bool shown = i < boardCards.Count;
+                if (!shown)
+                {
+                    addRows[i].SetActive(false);
+                    continue;
+                }
+
+                DeckEditorCardRowModel card = boardCards[i];
+                Transform row = addRows[i].transform;
+                RawImage thumb = row.Find("Thumb")?.GetComponent<RawImage>();
+                if (thumb != null)
+                {
+                    thumb.texture = card.Thumbnail;
+                    thumb.color = card.Thumbnail != null ? Color.white : new Color(1f, 1f, 1f, 0.2f);
+                }
+
+                Text name = row.Find("Name")?.GetComponent<Text>();
+                if (name != null) name.text = card.Name;
+                Text count = row.Find("Count")?.GetComponent<Text>();
+                if (count != null)
+                {
+                    count.text = card.Copies + " in";
+                    count.color = card.Copies > 0 ? new Color(0.608f, 0.643f, 0.655f, 1f) : new Color(0.420f, 0.455f, 0.467f, 1f);
+                }
+
+                Button add = row.Find("Add")?.GetComponent<Button>();
+                if (add != null)
+                {
+                    string id = card.CardId;
+                    add.onClick.RemoveAllListeners();
+                    add.onClick.AddListener(() => actions?.ChangeCopies?.Invoke(id, 1));
+                }
+            }
+
+            if (addSearch != null)
+            {
+                addSearch.onValueChanged.RemoveAllListeners();
+                addSearch.onValueChanged.AddListener(_ => FilterAddRows());
+            }
+
+            FilterAddRows();
+            if (shuffleTestButton != null)
+            {
+                shuffleTestButton.onClick.RemoveAllListeners();
+                shuffleTestButton.onClick.AddListener(ShuffleTest);
+            }
+
+            if (doneButton != null)
+            {
+                doneButton.onClick.RemoveAllListeners();
+                doneButton.onClick.AddListener(() =>
+                {
+                    DeckEditorActions now = actions;
+                    if (model.HasChanges) now?.Save?.Invoke();
+                    now?.Close?.Invoke();
+                });
+            }
+        }
+
+        private void FilterAddRows()
+        {
+            string find = addSearch != null ? addSearch.text.Trim() : string.Empty;
+            for (int i = 0; i < addRows.Count && i < boardCards.Count; i++)
+            {
+                bool shown = find.Length == 0 || boardCards[i].Name.IndexOf(find, StringComparison.OrdinalIgnoreCase) >= 0;
+                if (addRows[i].activeSelf != shown) addRows[i].SetActive(shown);
+            }
+        }
+
+        // SHUFFLE TEST · DRAW 5: five cards drawn from the deck as it is now (nothing on the table changes).
+        private void ShuffleTest()
+        {
+            int total = 0;
+            for (int i = 0; i < boardCards.Count; i++) total += boardCards[i].Copies;
+            testWords.Clear();
+            if (total == 0)
+            {
+                statusLabel.text = "The deck is empty: add cards with + on the right.";
+                return;
+            }
+
+            testWords.Append("Drew: ");
+            int draws = Mathf.Min(5, total);
+            int[] left = new int[boardCards.Count];
+            for (int i = 0; i < boardCards.Count; i++) left[i] = boardCards[i].Copies;
+            int remaining = total;
+            for (int d = 0; d < draws; d++)
+            {
+                int pick = UnityEngine.Random.Range(0, remaining);
+                for (int i = 0; i < left.Length; i++)
+                {
+                    if (pick < left[i])
+                    {
+                        left[i]--;
+                        remaining--;
+                        if (d > 0) testWords.Append(", ");
+                        testWords.Append(boardCards[i].Name);
+                        break;
+                    }
+
+                    pick -= left[i];
+                }
+            }
+
+            statusLabel.text = testWords.ToString();
         }
 
         private void HandleClose() => actions?.Close?.Invoke();

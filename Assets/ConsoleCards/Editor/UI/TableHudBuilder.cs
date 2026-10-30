@@ -86,6 +86,9 @@ namespace ConsoleCards.Editor.UI
             BuildRulebookObject(); // BOOK-1: the rulebook as a book on the table
             BuildToolboxB(); // TOOL-B: the Toolbox in colour B (board 8)
             BuildMakeGame(); // MAKE-B: Save table as a game in colour B (board 13)
+            BuildPieceMenus(); // board 9: the piece menu, Draw how many and Inspect (TableHudBuilder.Piece9.cs)
+            BuildEditors(); // boards 10 and 11: the Card studio and the deck builder (TableHudBuilder.Editors.cs)
+            BuildTable12(); // board 12: the Table editor (TableHudBuilder.Table12.cs)
 
             AssignCatalogEntry(UiPrefabIds.TableHud, AssetDatabase.LoadAssetAtPath<TableHudView>(HudPath),
                 UiLayer.Hud, UiRetention.CachedSingleInstance);
@@ -212,6 +215,9 @@ namespace ConsoleCards.Editor.UI
                 AssignCatalogEntry(UiPrefabIds.FocusedCardSelection, selection, UiLayer.Modal, UiRetention.CachedSingleInstance);
             }
 
+            RestorePieceMenus();
+            RestoreEditors();
+            RestoreTable12();
             AssetDatabase.SaveAssets();
             Debug.Log("[HUD-B] Turned off: the V5 HUD and the old Shop and payment popups are back. The HUD-B prefabs are kept.");
         }

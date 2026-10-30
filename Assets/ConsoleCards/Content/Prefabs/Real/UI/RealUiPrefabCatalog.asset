@@ -18,7 +18,7 @@ MonoBehaviour:
     layer: 1
     retention: 0
   - id: platform.tabletop-popup
-    prefab: {fileID: 3522589389718324386, guid: 393c6296bbfe49b8840bed37f30ec6d7, type: 3}
+    prefab: {fileID: 480962575552959305, guid: ef44184d3b7cd9e47b55f4c55d2c4c2e, type: 3}
     layer: 2
     retention: 0
   - id: platform.quantity-popup
@@ -26,7 +26,7 @@ MonoBehaviour:
     layer: 3
     retention: 0
   - id: platform.card-inspect
-    prefab: {fileID: 8960332244895446581, guid: 682b082f09f14419a1b64341442578ec, type: 3}
+    prefab: {fileID: 2847436763423531215, guid: 50e8630313c549847b10c7c387c3ab53, type: 3}
     layer: 3
     retention: 0
   - id: platform.action-ability-purchase
@@ -42,7 +42,7 @@ MonoBehaviour:
     layer: 1
     retention: 0
   - id: platform.popup-action-row
-    prefab: {fileID: 3662043002929201794, guid: a9fab3fdb46c476bb8643b5c92684a17, type: 3}
+    prefab: {fileID: 6810504501794803268, guid: 18ccb9f5a4fb655448a060c8eeeb32e9, type: 3}
     layer: 2
     retention: 1
   - id: platform.focused-card-option
@@ -114,23 +114,23 @@ MonoBehaviour:
     layer: 3
     retention: 1
   - id: platform.card-editor-panel
-    prefab: {fileID: 4867949631524467754, guid: 37e462bdfee38314a8b42d27570437fd, type: 3}
+    prefab: {fileID: 7569261114359807885, guid: caef0cf7db07da74aa77783d03bd2d8c, type: 3}
     layer: 3
     retention: 0
   - id: platform.card-editor-row
-    prefab: {fileID: 3980991224246447659, guid: a39577c1b2a7ad74dbc38a34089cfd6c, type: 3}
+    prefab: {fileID: 3897284252616157463, guid: 15de90f6d98993245b8576ebaffdafbb, type: 3}
     layer: 3
     retention: 1
   - id: platform.card-editor-deck-row
-    prefab: {fileID: 383339595222857012, guid: a7bb597113cc7504493c785dd19ae979, type: 3}
+    prefab: {fileID: 4821376467160254109, guid: 0a8d60a53a0dcfb46bb83e42b3d4844d, type: 3}
     layer: 3
     retention: 1
   - id: platform.deck-editor-panel
-    prefab: {fileID: 5510419056781249358, guid: 60ba61d7cd3ede246a4ccbe90c307511, type: 3}
+    prefab: {fileID: 7236007032004692236, guid: 5c00bd3843574cc44984b26f599c7766, type: 3}
     layer: 3
     retention: 0
   - id: platform.deck-editor-card-row
-    prefab: {fileID: 6740071548307343147, guid: e21967b5632fa9a4f9e56a26f6467ac7, type: 3}
+    prefab: {fileID: 3953738980317596637, guid: aeeef8baa4058ff498273bbdcd4280e7, type: 3}
     layer: 3
     retention: 1
   - id: platform.game-select-panel
@@ -142,7 +142,7 @@ MonoBehaviour:
     layer: 3
     retention: 0
   - id: platform.table-panel
-    prefab: {fileID: 4294395777971505368, guid: 0bad867b1939f8343b925bbdb9fb2571, type: 3}
+    prefab: {fileID: 7792926473232921954, guid: f063a006def2dd74c8f803a48f9eb734, type: 3}
     layer: 3
     retention: 0
   - id: platform.tool-bar
@@ -162,7 +162,7 @@ MonoBehaviour:
     layer: 3
     retention: 0
   - id: platform.table-choice-chip
-    prefab: {fileID: 5213955543850977946, guid: 74406f4d7f7b86446b6519017b6e92bf, type: 3}
+    prefab: {fileID: 5416435019508520722, guid: 74406f4d7f7b86446b6519017b6e92bf, type: 3}
     layer: 1
     retention: 0
   - id: platform.table-warning
@@ -174,7 +174,7 @@ MonoBehaviour:
     layer: 1
     retention: 0
   - id: platform.table-hud
-    prefab: {fileID: 7117548558055220292, guid: 0042263a2c1a1fa479c09173891eb063, type: 3}
+    prefab: {fileID: 5734886683666886583, guid: 0042263a2c1a1fa479c09173891eb063, type: 3}
     layer: 1
     retention: 0
   - id: platform.table-rulebook

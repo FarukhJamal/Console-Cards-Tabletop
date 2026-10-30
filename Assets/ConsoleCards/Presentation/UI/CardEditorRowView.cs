@@ -14,6 +14,14 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Text detailLabel;
         [SerializeField] private Color normalColor = Color.white;
         [SerializeField] private Color selectedColor = new Color(1f, 0.953f, 0.769f, 1f);
+        // Boards 10 and 11 (owner, 2026-10-30): the chosen row has a cyan edge and bar. Optional.
+        [SerializeField] private GameObject selectedBar;
+        [SerializeField] private Outline[] edges = Array.Empty<Outline>();
+        [SerializeField] private Color edgeColor = new Color(0.259f, 0.271f, 0.278f, 1f);
+        [SerializeField] private Color selectedEdgeColor = new Color(0.004f, 0.969f, 0.976f, 1f);
+
+        /// <summary>The row's card (filters in the Card studio read it).</summary>
+        public CardEditorRowModel Row { get; private set; }
 
         private string cardId;
         private Action<string> select;
@@ -27,8 +35,15 @@ namespace ConsoleCards.Presentation.UI
             }
 
             cardId = row.Id;
+            Row = row;
             select = selectAction;
             selectedFill.color = row.IsSelected ? selectedColor : normalColor;
+            if (selectedBar != null) selectedBar.SetActive(row.IsSelected);
+            for (int i = 0; i < edges.Length; i++)
+            {
+                if (edges[i] != null) edges[i].effectColor = row.IsSelected ? selectedEdgeColor : edgeColor;
+            }
+            ShowThumbnail(true);
             thumbnail.texture = row.Thumbnail;
             thumbnail.color = row.Thumbnail != null ? Color.white : new Color(1f, 1f, 1f, 0.35f);
             nameLabel.text = row.Name;
@@ -45,5 +60,11 @@ namespace ConsoleCards.Presentation.UI
         }
 
         private void HandleSelect() => select?.Invoke(cardId);
+
+        /// <summary>Board 11: the deck builder's deck list has no pictures.</summary>
+        public void ShowThumbnail(bool show)
+        {
+            if (thumbnail != null && thumbnail.gameObject.activeSelf != show) thumbnail.gameObject.SetActive(show);
+        }
     }
 }

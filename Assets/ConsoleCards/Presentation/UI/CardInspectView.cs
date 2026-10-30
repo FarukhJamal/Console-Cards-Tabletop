@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ConsoleCards.Core.Domain;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -21,6 +22,19 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Button viewOtherSideButton;
         [SerializeField] private Text viewOtherSideButtonLabel;
         [SerializeField] private Button closeButton;
+
+        // Board 9 (owner, 2026-10-30): the inspect panel at the right edge, the table still in view. The card is shown
+        // whole with a FRONT / BACK tag; under it the card's facts as rows (Card, Category, Cost …, taken from its
+        // "Name: value" lines) and the rest as a short note. Optional: a panel made before board 9 shows the text as before.
+        [SerializeField] private RectTransform factsRoot;
+        [SerializeField] private GameObject factTemplate;
+        [SerializeField] private Text noteLabel;
+        [SerializeField] private Text sideTag;
+
+        private readonly List<GameObject> factRows = new List<GameObject>();
+        private readonly List<string> factKeys = new List<string>();
+        private readonly List<string> factValues = new List<string>();
+        private readonly System.Text.StringBuilder note = new System.Text.StringBuilder(256);
 
         private CardInspectModel model;
         private CardFace displayedFace;
@@ -146,6 +160,7 @@ namespace ConsoleCards.Presentation.UI
             artworkImage.sprite = side.Artwork;
             artworkImage.gameObject.SetActive(side.Artwork != null);
             iconsRoot.gameObject.SetActive(false);
+            if (factsRoot != null && factTemplate != null) ShowFacts(side);
             ConfigureAuxiliaryAction();
         }
 
@@ -177,6 +192,59 @@ namespace ConsoleCards.Presentation.UI
             {
                 dismiss?.Invoke();
             }
+        }
+
+        // The card's "Name: value" lines become rows; the other lines are the note. With a picture the card shows only
+        // the picture (nothing is drawn over it); without one, its title stays on the card.
+        private void ShowFacts(CardInspectSideModel side)
+        {
+            factKeys.Clear();
+            factValues.Clear();
+            note.Clear();
+            factKeys.Add("Card");
+            factValues.Add(string.IsNullOrWhiteSpace(side.Title) ? "Card" : side.Title);
+            string[] lines = (side.Body ?? string.Empty).Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (line.Length == 0) continue;
+                int colon = line.IndexOf(": ", StringComparison.Ordinal);
+                if (colon > 0 && colon <= 22 && colon < line.Length - 2 && char.IsUpper(line[0]))
+                {
+                    factKeys.Add(line.Substring(0, colon));
+                    factValues.Add(line.Substring(colon + 2));
+                    continue;
+                }
+
+                if (note.Length > 0) note.Append(' ');
+                note.Append(line);
+            }
+
+            while (factRows.Count < factKeys.Count)
+            {
+                GameObject made = Instantiate(factTemplate, factsRoot, false);
+                made.name = "Fact";
+                factRows.Add(made);
+            }
+
+            factTemplate.SetActive(false);
+            for (int i = 0; i < factRows.Count; i++)
+            {
+                bool shown = i < factKeys.Count;
+                factRows[i].SetActive(shown);
+                if (!shown) continue;
+                Text key = factRows[i].transform.Find("Key")?.GetComponent<Text>();
+                Text value = factRows[i].transform.Find("Value")?.GetComponent<Text>();
+                if (key != null) key.text = factKeys[i];
+                if (value != null) value.text = factValues[i];
+                Transform rule = factRows[i].transform.Find("Rule");
+                if (rule != null) rule.gameObject.SetActive(i < factKeys.Count - 1);
+            }
+
+            if (noteLabel != null) noteLabel.text = note.ToString();
+            sideBodyLabel.text = string.Empty;
+            sideTitleLabel.gameObject.SetActive(side.Artwork == null);
+            if (sideTag != null) sideTag.text = displayedFace == CardFace.FaceUp ? "FRONT" : "BACK";
         }
 
         private static string FormatFace(CardFace face)

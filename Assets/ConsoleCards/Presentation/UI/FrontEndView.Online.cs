@@ -30,6 +30,14 @@ namespace ConsoleCards.Presentation.UI
         public bool CanChangeSeat;
         public bool AllReady = true;
         public int Seats;
+
+        // Board 2b: the room panel's parts.
+        public Color ColourBefore = Color.grey;
+        public Color ColourAfter = Color.grey;
+        public string SeatNumber = string.Empty;
+        public string GameName = string.Empty;
+        public string GameDetail = string.Empty;
+        public int NotReady;
     }
 
     /// <summary>One room in the Lobby's list.</summary>
@@ -49,6 +57,11 @@ namespace ConsoleCards.Presentation.UI
         public string Tags = string.Empty;
         public Color Colour = Color.grey;
         public bool IsYou;
+
+        // Board 2b: "seat 1 · you", HOST, and READY / NOT READY / RECONNECTING / WATCHING / AWAY.
+        public string SeatLabel = string.Empty;
+        public bool IsHost;
+        public string State = string.Empty;
     }
 
     /// <summary>

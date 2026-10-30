@@ -58,6 +58,8 @@ namespace ConsoleCards.Editor.UI
             if (Rebuild("FE_MainMenu", 1, BuildHome)) built++;
             if (Rebuild("FE_Library", 1, BuildLibrary)) built++;
             if (Rebuild("FE_Details", 1, BuildSheet)) built++;
+            if (Rebuild("FE_Lobby", 1, BuildLobbyBoard)) built++; // board 2b (BoardScreensBuilder.Online.cs)
+            if (Rebuild("FE_Room", 1, BuildRoomBoard)) built++;
             BoardBackground();
             if (built > 0) AssetDatabase.SaveAssets();
             return built;

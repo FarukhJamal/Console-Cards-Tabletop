@@ -29,6 +29,21 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private ScrollRect mergeScrollRect;
         [SerializeField] private Button mergeBackButton;
 
+        // Board 9 (owner, 2026-10-30): a piece's menu shows its actions in groups (PLAY · ARRANGE · TABLE), and Draw how
+        // many has 1 / 3 / 5 / 7 and Enter. Optional: a popup made before board 9 has neither.
+        [SerializeField] private GameObject groupTemplate;
+        [SerializeField] private Button[] drawQuickButtons = Array.Empty<Button>();
+        [SerializeField] private int[] drawQuickCounts = { 1, 3, 5, 7 };
+
+        private static readonly string[] GroupNames = { "PLAY", "ARRANGE", "TABLE" };
+        private readonly List<Text> groupHeaders = new List<Text>();
+        private readonly List<GameObject> groupObjects = new List<GameObject>();
+        private Action drawDecrement;
+        private Action drawIncrement;
+        private Action drawConfirm;
+        private int drawShown;
+        private int drawAvailable;
+
         private readonly List<PopupActionRowView> actionRows =
             new List<PopupActionRowView>();
         private Action dismiss;
@@ -115,6 +130,16 @@ namespace ConsoleCards.Presentation.UI
             BindButton(drawIncrementButton, increment);
             BindButton(drawConfirmButton, confirm);
             BindButton(drawCancelButton, cancel);
+            drawDecrement = decrement;
+            drawIncrement = increment;
+            drawConfirm = confirm;
+            for (int i = 0; i < drawQuickButtons.Length; i++)
+            {
+                if (drawQuickButtons[i] == null) continue;
+                int count = i < drawQuickCounts.Length ? drawQuickCounts[i] : i + 1;
+                drawQuickButtons[i].onClick.RemoveAllListeners();
+                drawQuickButtons[i].onClick.AddListener(() => DrawQuick(count));
+            }
             SetDrawCount(selectedCount, availableCount);
             base.Show();
             PositionPanel(drawCountPanel);
@@ -125,9 +150,16 @@ namespace ConsoleCards.Presentation.UI
             bool canDraw = availableCount > 0;
             int visibleCount = canDraw ? Mathf.Clamp(selectedCount, 1, availableCount) : 0;
             drawCountLabel.text = visibleCount.ToString();
-            drawAvailableLabel.text = canDraw
-                ? $"Available: {availableCount}"
-                : "Deck is empty.";
+            drawShown = visibleCount;
+            drawAvailable = availableCount;
+            drawAvailableLabel.text = !canDraw ? "Deck is empty."
+                : groupTemplate != null ? $"Into your hand · Enter draws · {availableCount} left"
+                : $"Available: {availableCount}";
+            for (int i = 0; i < drawQuickButtons.Length; i++)
+            {
+                int count = i < drawQuickCounts.Length ? drawQuickCounts[i] : i + 1;
+                if (drawQuickButtons[i] != null) drawQuickButtons[i].interactable = canDraw && count <= availableCount;
+            }
             drawDecrementButton.interactable = canDraw && visibleCount > 1;
             drawIncrementButton.interactable = canDraw && visibleCount < availableCount;
             drawConfirmButton.interactable = canDraw;
@@ -181,6 +213,9 @@ namespace ConsoleCards.Presentation.UI
             RemoveButtonListeners();
             dismiss = null;
             secondaryDismiss = null;
+            drawDecrement = null;
+            drawIncrement = null;
+            drawConfirm = null;
             if (contextTitleLabel != null) contextTitleLabel.text = string.Empty;
             if (contextBodyLabel != null) contextBodyLabel.text = string.Empty;
             if (drawCountLabel != null) drawCountLabel.text = string.Empty;
@@ -208,11 +243,40 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
+        // 1 / 3 / 5 / 7: steps the count there with the deck's own − and +.
+        private void DrawQuick(int count)
+        {
+            int target = Mathf.Clamp(count, 1, Mathf.Max(1, drawAvailable));
+            int guard = 64;
+            while (drawShown < target && drawIncrement != null && guard-- > 0)
+            {
+                int before = drawShown;
+                drawIncrement();
+                if (drawShown == before) break;
+            }
+
+            while (drawShown > target && drawDecrement != null && guard-- > 0)
+            {
+                int before = drawShown;
+                drawDecrement();
+                if (drawShown == before) break;
+            }
+        }
+
         private void Update()
         {
             if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
             {
                 dismiss?.Invoke();
+                return;
+            }
+
+            // Board 9: Enter draws.
+            if (Keyboard.current != null && drawCountPanel != null && drawCountPanel.gameObject.activeInHierarchy
+                && Time.frameCount != preparedFrame && drawConfirm != null && drawConfirmButton.interactable
+                && (Keyboard.current.enterKey.wasPressedThisFrame || Keyboard.current.numpadEnterKey.wasPressedThisFrame))
+            {
+                drawConfirm();
                 return;
             }
 
@@ -283,17 +347,79 @@ namespace ConsoleCards.Presentation.UI
             RectTransform contentRoot,
             IReadOnlyList<PopupActionOption> actions)
         {
-            for (int i = 0; i < actions.Count; i++)
+            HideGroupHeaders();
+            if (groupTemplate != null && contentRoot == contextActionsRoot && InGroups(actions))
             {
-                PopupActionRowView row =
-                    uiManager.AcquirePooled<PopupActionRowView>(
-                        UiPrefabIds.PopupActionRow,
-                        contentRoot);
-                row.Bind(actions[i]);
-                row.Show();
-                actionRows.Add(row);
+                int headers = 0;
+                for (int group = 0; group < GroupNames.Length; group++)
+                {
+                    bool headed = false;
+                    for (int i = 0; i < actions.Count; i++)
+                    {
+                        if (PopupActionRowView.GroupOf(actions[i].Label) != group) continue;
+                        if (!headed)
+                        {
+                            Text header = GroupHeader(headers++, contentRoot);
+                            header.text = GroupNames[group];
+                            groupObjects[headers - 1].transform.SetAsLastSibling();
+                            headed = true;
+                        }
+
+                        AddRow(contentRoot, actions[i]);
+                    }
+                }
+
+                return;
             }
 
+            for (int i = 0; i < actions.Count; i++) AddRow(contentRoot, actions[i]);
+        }
+
+        private void AddRow(RectTransform contentRoot, PopupActionOption action)
+        {
+            PopupActionRowView row = uiManager.AcquirePooled<PopupActionRowView>(UiPrefabIds.PopupActionRow, contentRoot);
+            row.Bind(action);
+            row.Show();
+            row.transform.SetAsLastSibling();
+            actionRows.Add(row);
+        }
+
+        // Groups only when every row is a piece action and there are at least two kinds.
+        private static bool InGroups(IReadOnlyList<PopupActionOption> actions)
+        {
+            int kinds = 0;
+            for (int i = 0; i < actions.Count; i++)
+            {
+                int group = PopupActionRowView.GroupOf(actions[i].Label);
+                if (group < 0) return false;
+                kinds |= 1 << group;
+            }
+
+            return kinds != 0 && (kinds & (kinds - 1)) != 0;
+        }
+
+        private Text GroupHeader(int index, RectTransform contentRoot)
+        {
+            while (groupObjects.Count <= index)
+            {
+                GameObject made = Instantiate(groupTemplate, contentRoot, false);
+                made.name = "Group";
+                groupObjects.Add(made);
+                groupHeaders.Add(made.GetComponentInChildren<Text>(true));
+            }
+
+            GameObject header = groupObjects[index];
+            if (header.transform.parent != contentRoot) header.transform.SetParent(contentRoot, false);
+            header.SetActive(true);
+            return groupHeaders[index];
+        }
+
+        private void HideGroupHeaders()
+        {
+            for (int i = 0; i < groupObjects.Count; i++)
+            {
+                if (groupObjects[i] != null) groupObjects[i].SetActive(false);
+            }
         }
 
         private void PositionPanel(RectTransform panel)
@@ -310,10 +436,13 @@ namespace ConsoleCards.Presentation.UI
             }
 
             Rect bounds = popupBounds.rect;
+            // Board 9: a panel sized by its parts may not have its size yet; its preferred size keeps it on screen.
+            float width = Mathf.Max(panel.rect.width, LayoutUtility.GetPreferredWidth(panel));
+            float height = Mathf.Max(panel.rect.height, LayoutUtility.GetPreferredHeight(panel));
             float x = localPoint.x - bounds.xMin + PointerOffset;
             float y = localPoint.y - bounds.yMin - PointerOffset;
-            float clampedX = Mathf.Clamp(x, 0f, Mathf.Max(0f, bounds.width - panel.rect.width));
-            float clampedY = Mathf.Clamp(y, panel.rect.height, bounds.height);
+            float clampedX = Mathf.Clamp(x, 0f, Mathf.Max(0f, bounds.width - width));
+            float clampedY = Mathf.Clamp(y, height, bounds.height);
             panel.anchoredPosition = new Vector2(clampedX, clampedY);
         }
 
@@ -330,6 +459,7 @@ namespace ConsoleCards.Presentation.UI
 
         private void ClearRows()
         {
+            HideGroupHeaders();
             for (int i = actionRows.Count - 1; i >= 0; i--)
             {
                 PopupActionRowView row = actionRows[i];

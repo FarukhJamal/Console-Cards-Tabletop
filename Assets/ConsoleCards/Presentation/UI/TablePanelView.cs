@@ -42,6 +42,21 @@ namespace ConsoleCards.Presentation.UI
         [Tooltip("Six handles: +X side, −X side, +Z side, −Z side, corner or radius, star inner corner.")]
         [SerializeField] private TableHandleView[] handles = Array.Empty<TableHandleView>();
 
+        [Header("Board 12 (optional)")]
+        [Tooltip("The shape tiles' fills (same order as the shape buttons): the chosen one teal, the others grey.")]
+        [SerializeField] private Image[] shapeFills = Array.Empty<Image>();
+        [SerializeField] private Image[] shapeIcons = Array.Empty<Image>();
+        [SerializeField] private Color shapeOn = new Color(0.110f, 0.235f, 0.239f, 1f);
+        [SerializeField] private Color shapeOff = new Color(0.161f, 0.180f, 0.184f, 1f);
+        [SerializeField] private Color iconOn = new Color(0.024f, 0.937f, 0.941f, 1f);
+        [SerializeField] private Color iconOff = new Color(0.420f, 0.455f, 0.467f, 1f);
+        [Tooltip("Board 12: while the panel is open the table camera draws only inside this part of the screen (x, y from "
+            + "the bottom left, width, height; 0 to 1). Zero size: the whole screen, as before.")]
+        [SerializeField] private Rect previewViewport = new Rect(0f, 0f, 0f, 0f);
+
+        private UnityEngine.Camera framedCamera;
+        private Rect framedCameraRect;
+
         private TablePanelActions actions;
         private TablePanelModel shown;
         private Canvas canvas;
@@ -94,6 +109,8 @@ namespace ConsoleCards.Presentation.UI
                 // The chosen shape reads as "you are here": its button does not press.
                 shapeButtons[i].interactable = i != model.SelectedShape;
                 shapeButtons[i].onClick.AddListener(() => actions?.PickShape?.Invoke(shape));
+                if (i < shapeFills.Length && shapeFills[i] != null) shapeFills[i].color = i == model.SelectedShape ? shapeOn : shapeOff;
+                if (i < shapeIcons.Length && shapeIcons[i] != null) shapeIcons[i].color = i == model.SelectedShape ? iconOn : iconOff;
             }
 
             modelRow.SetActive(model.ShowModels);
@@ -127,6 +144,7 @@ namespace ConsoleCards.Presentation.UI
             doneButton.onClick.AddListener(() => actions?.Done?.Invoke());
 
             shown = model;
+            FrameCamera(model.Camera);
             if (!HasHandles) return;
             if (beginHandle == null)
             {
@@ -167,8 +185,31 @@ namespace ConsoleCards.Presentation.UI
             }
         }
 
+        // Board 12: the table is seen "from above" inside the panel's frame.
+        private void FrameCamera(UnityEngine.Camera camera)
+        {
+            if (previewViewport.width <= 0f || previewViewport.height <= 0f || camera == null) return;
+            if (framedCamera != camera)
+            {
+                UnframeCamera();
+                framedCamera = camera;
+                framedCameraRect = camera.rect;
+            }
+
+            camera.rect = previewViewport;
+        }
+
+        private void UnframeCamera()
+        {
+            if (framedCamera != null) framedCamera.rect = framedCameraRect;
+            framedCamera = null;
+        }
+
+        private void OnDisable() => UnframeCamera();
+
         public override void Unbind()
         {
+            UnframeCamera();
             RemoveListeners();
             for (int i = 0; handles != null && i < handles.Length; i++)
             {

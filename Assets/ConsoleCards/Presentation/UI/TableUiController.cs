@@ -1254,6 +1254,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseModalViews();
             componentToolboxView?.CloseToolbox();
             popupLayer.SetActive(true);
+            popupShownFrame = Time.frameCount;
             tabletopPopupView.ShowContextMenu(screenPosition, title, body, actions, dismiss, secondaryDismiss);
         }
 
@@ -1272,6 +1273,7 @@ namespace ConsoleCards.Presentation.UI
             ReleaseModalViews();
             componentToolboxView?.CloseToolbox();
             popupLayer.SetActive(true);
+            popupShownFrame = Time.frameCount;
             tabletopPopupView.ShowDrawCount(
                 screenPosition,
                 selectedCount,

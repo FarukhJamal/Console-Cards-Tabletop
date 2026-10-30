@@ -91,7 +91,15 @@ namespace ConsoleCards.Presentation.UI
     public readonly struct FrontEndLibraryTile
     {
         public FrontEndLibraryTile(string id, string name, string line, string tag, bool mine, Texture picture, bool chosen)
+            : this(id, name, line, tag, mine, picture, chosen, false)
         {
+        }
+
+        /// <param name="comingSoon">Board 2: a game that is not out yet (COMING SOON, dimmed, not clickable).</param>
+        public FrontEndLibraryTile(string id, string name, string line, string tag, bool mine, Texture picture, bool chosen,
+            bool comingSoon)
+        {
+            ComingSoon = comingSoon;
             Id = id ?? string.Empty;
             Name = name ?? string.Empty;
             Line = line ?? string.Empty;
@@ -108,6 +116,7 @@ namespace ConsoleCards.Presentation.UI
         public bool Mine { get; }
         public Texture Picture { get; }
         public bool Chosen { get; }
+        public bool ComingSoon { get; }
     }
 
     /// <summary>One line of IN THE BOX on Game details. <see cref="Icon"/> names a picture in the screen's IconSet.</summary>
@@ -202,6 +211,8 @@ namespace ConsoleCards.Presentation.UI
         public Action<int> CycleColours;
         public Action<int> CycleQuality;
         public Action<int> CycleRoomSound;
+        /// <summary>Board 6: the main menu's SETTINGS opens the full Settings page (false: it is missing).</summary>
+        public Func<bool> OpenBoardSettings;
         // CREATE (board 4): MAKE A GAME, and PLAY / EDIT / Copy / Rename / Delete for a game you made (by its id).
         public Action MakeGame;
         public Action<string> PlayMyGame;

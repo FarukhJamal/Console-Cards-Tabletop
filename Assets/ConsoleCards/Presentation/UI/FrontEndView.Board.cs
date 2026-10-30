@@ -35,6 +35,9 @@ namespace ConsoleCards.Presentation.UI
         private static readonly Color TileChosenEdge = new Color(0.024f, 0.937f, 0.941f, 1f);
         private static readonly Color CoverGame = new Color(0.024f, 0.937f, 0.941f, 1f);
         private static readonly Color CoverMine = new Color(0.110f, 0.235f, 0.239f, 1f);
+        private static readonly Color SoonTag = new Color(0.949f, 0.463f, 0.180f, 1f); // #F2762E
+        private static readonly Color SoonWords = new Color(0.102f, 0.055f, 0.024f, 1f); // #1A0E06
+        private static readonly Color SoonCover = new Color(0.169f, 0.188f, 0.200f, 1f); // #2B3033
 
         private sealed class BoardTileParts
         {
@@ -49,6 +52,7 @@ namespace ConsoleCards.Presentation.UI
             public Text name;
             public Text line;
             public GameObject footer;
+            public CanvasGroup dim;
         }
 
         private readonly List<BoardTileParts> boardTiles = new List<BoardTileParts>();
@@ -184,12 +188,15 @@ namespace ConsoleCards.Presentation.UI
                 if (parts.tag != null) parts.tag.text = tile.Tag;
                 if (parts.tagFill != null)
                 {
-                    parts.tagFill.color = tile.Mine ? new Color(0.063f, 0.075f, 0.078f, 1f) : new Color(0.039f, 0.208f, 0.216f, 1f);
+                    parts.tagFill.color = tile.ComingSoon ? SoonTag
+                        : tile.Mine ? new Color(0.063f, 0.075f, 0.078f, 1f) : new Color(0.039f, 0.208f, 0.216f, 1f);
                 }
 
-                if (parts.tag != null) parts.tag.color = tile.Mine ? ChipOn : CoverGame;
+                if (parts.tag != null) parts.tag.color = tile.ComingSoon ? SoonWords : tile.Mine ? ChipOn : CoverGame;
                 ShowCover(parts.picture, parts.cover != null ? parts.cover.transform : null, tile.Picture,
-                    tile.Mine ? CoverMine : CoverGame);
+                    tile.ComingSoon ? SoonCover : tile.Mine ? CoverMine : CoverGame);
+                parts.dim.alpha = tile.ComingSoon ? 0.62f : 1f;
+                parts.button.interactable = !tile.ComingSoon;
                 if (parts.mark != null) parts.mark.SetActive(tile.Mine);
                 if (parts.footer != null) parts.footer.SetActive(tile.Chosen);
                 for (int e = 0; e < parts.edges.Length; e++)
@@ -198,7 +205,7 @@ namespace ConsoleCards.Presentation.UI
                 }
 
                 string id = tile.Id;
-                parts.button.onClick.AddListener(() => ClickTile(id));
+                if (!tile.ComingSoon) parts.button.onClick.AddListener(() => ClickTile(id));
             }
 
             int rows = (shownTiles.Count + 3) / 4;
@@ -261,6 +268,7 @@ namespace ConsoleCards.Presentation.UI
                 name = name != null ? name.GetComponent<Text>() : null,
                 line = line != null ? line.GetComponent<Text>() : null,
                 footer = footer != null ? footer.gameObject : null,
+                dim = copy.TryGetComponent(out CanvasGroup group) ? group : copy.AddComponent<CanvasGroup>(),
             };
         }
 

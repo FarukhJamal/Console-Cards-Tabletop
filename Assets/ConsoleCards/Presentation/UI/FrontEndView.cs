@@ -221,7 +221,7 @@ namespace ConsoleCards.Presentation.UI
                     Go(FrontEndPage.Home);
                     break;
                 case FrontEndPage.Lobby:
-                    Go(FrontEndPage.Profile);
+                    Go(HasBoardOnline ? FrontEndPage.Library : FrontEndPage.Profile);
                     break;
                 case FrontEndPage.Room:
                     break; // LEAVE leaves the room; Esc does not
@@ -315,6 +315,7 @@ namespace ConsoleCards.Presentation.UI
             BindSettingsButtons();
             BindCreateButtons(); // CREATE (board 4)
             BindBoardButtons(); // boards 1–3
+            BindOnlineBoard(); // board 2b
         }
 
         private void On(string path, Action click)
@@ -386,10 +387,12 @@ namespace ConsoleCards.Presentation.UI
                     RenderReview();
                     break;
                 case FrontEndPage.Lobby:
-                    RenderLobby();
+                    if (HasBoardOnline) RenderOnlineBoard();
+                    else RenderLobby();
                     break;
                 case FrontEndPage.Room:
-                    RenderRoom();
+                    if (HasBoardOnline) RenderOnlineBoard();
+                    else RenderRoom();
                     break;
                 case FrontEndPage.Settings:
                     RenderSettings();

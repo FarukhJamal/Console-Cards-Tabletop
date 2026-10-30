@@ -201,6 +201,46 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Text resetLabel;
         [SerializeField] private Button saveButton;
 
+        // Board 10 "Card studio" (owner, 2026-10-30: "cards plus art will be merged"). All optional: a panel made before
+        // board 10 has none of them and works as before.
+        [Header("Card studio (board 10)")]
+        [Tooltip("Find a card: hides the rows whose name does not have the words.")]
+        [SerializeField] private InputField searchInput;
+        [Tooltip("ALL · YOURS · NO PICTURE · WRONG SHAPE")]
+        [SerializeField] private Button[] filterButtons = Array.Empty<Button>();
+        [SerializeField] private Image[] filterFills = Array.Empty<Image>();
+        [SerializeField] private Text[] filterLabels = Array.Empty<Text>();
+        [SerializeField] private Color filterOn = new Color(0.910f, 0.925f, 0.929f, 1f);
+        [SerializeField] private Color filterOff = new Color(0f, 0f, 0f, 0f);
+        [SerializeField] private Color filterOnWords = new Color(0.063f, 0.075f, 0.078f, 1f);
+        [SerializeField] private Color filterOffWords = new Color(0.718f, 0.753f, 0.765f, 1f);
+        [Tooltip("Under each picture: ✓ (or ⚠) its name · width × height.")]
+        [SerializeField] private Text frontFileLabel;
+        [SerializeField] private Text backFileLabel;
+        [Tooltip("PICTURES · GAME DATA · IN DECKS: the buttons and the page each shows.")]
+        [SerializeField] private Button[] tabButtons = Array.Empty<Button>();
+        [SerializeField] private Image[] tabFills = Array.Empty<Image>();
+        [SerializeField] private GameObject[] tabPages = Array.Empty<GameObject>();
+        [SerializeField] private Color tabOn = new Color(0.110f, 0.235f, 0.239f, 1f);
+        [SerializeField] private Color tabOff = new Color(0f, 0f, 0f, 0f);
+        [Tooltip("The yellow box: shown when the front picture is not the card's shape or is below its sharp size.")]
+        [SerializeField] private GameObject shapeWarning;
+        [SerializeField] private Text shapeWarningLabel;
+        [SerializeField] private Button templateButton;
+        [Tooltip("UNDO: back to the card as it was last saved.")]
+        [SerializeField] private Button undoButton;
+        [Tooltip("DONE: saves the card and closes the studio.")]
+        [SerializeField] private Button doneButton;
+        [Tooltip("The card's shape (width : height), its best size and its smallest sharp size, in pixels.")]
+        [SerializeField] private Vector2 bestSize = new Vector2(1500f, 2100f);
+        [SerializeField] private Vector2 sharpSize = new Vector2(750f, 1050f);
+
+        private static readonly System.Text.StringBuilder FileWords = new System.Text.StringBuilder(64);
+        private int filter;
+        private int tab;
+        private string selectedId = string.Empty;
+        private Texture shownFront;
+
         private readonly List<CardEditorRowView> rowViews = new List<CardEditorRowView>();
         private readonly List<CardEditorDeckRowView> deckRowViews = new List<CardEditorDeckRowView>();
         private IRuntimeUiService uiService;
@@ -320,6 +360,208 @@ namespace ConsoleCards.Presentation.UI
 
             Canvas.ForceUpdateCanvases();
             scroll.verticalNormalizedPosition = keepPlace ? scrollPlace : 1f;
+            BindStudio(model);
+        }
+
+        // ---------- board 10 ----------
+
+        private void BindStudio(CardEditorModel model)
+        {
+            selectedId = string.Empty;
+            for (int i = 0; i < model.Rows.Count; i++)
+            {
+                if (model.Rows[i].IsSelected) selectedId = model.Rows[i].Id;
+            }
+
+            shownFront = model.Front;
+            if (searchInput != null)
+            {
+                searchInput.onValueChanged.RemoveAllListeners();
+                searchInput.onValueChanged.AddListener(_ => ApplyFilter());
+            }
+
+            for (int i = 0; i < filterButtons.Length; i++)
+            {
+                if (filterButtons[i] == null) continue;
+                int which = i;
+                filterButtons[i].onClick.RemoveAllListeners();
+                filterButtons[i].onClick.AddListener(() =>
+                {
+                    filter = which;
+                    ApplyFilter();
+                });
+            }
+
+            for (int i = 0; i < tabButtons.Length; i++)
+            {
+                if (tabButtons[i] == null) continue;
+                int which = i;
+                tabButtons[i].onClick.RemoveAllListeners();
+                tabButtons[i].onClick.AddListener(() => ShowTab(which));
+            }
+
+            if (filterLabels.Length > 0 && filterLabels[0] != null) filterLabels[0].text = "ALL " + model.Rows.Count;
+            if (templateButton != null)
+            {
+                templateButton.onClick.RemoveAllListeners();
+                templateButton.onClick.AddListener(SaveTemplate);
+            }
+
+            if (undoButton != null)
+            {
+                undoButton.onClick.RemoveAllListeners();
+                undoButton.onClick.AddListener(() =>
+                {
+                    if (selectedId.Length > 0) actions?.Select?.Invoke(selectedId);
+                });
+            }
+
+            if (doneButton != null)
+            {
+                doneButton.onClick.RemoveAllListeners();
+                doneButton.onClick.AddListener(() =>
+                {
+                    CardEditorActions now = actions;
+                    now?.Save?.Invoke(Typed());
+                    now?.Close?.Invoke();
+                });
+            }
+
+            if (frontFileLabel != null) titleLabel.text = "CARD STUDIO";
+            if (frontFileLabel != null)
+            {
+                // Board 10: a picture is never stretched; one of another shape is cropped to fill the card.
+                CropToFill(frontPreview, model.Front);
+                CropToFill(backPreview, model.Back);
+                frontPreview.color = model.Front != null ? Color.white : new Color(1f, 1f, 1f, 0f);
+                backPreview.color = model.Back != null ? Color.white : new Color(1f, 1f, 1f, 0f);
+            }
+
+            if (frontFileLabel != null) frontFileLabel.text = FileLine(model.Front, true);
+            if (backFileLabel != null) backFileLabel.text = FileLine(model.Back, false);
+            ShowWarning(model.Front);
+            ShowTab(tab);
+            ApplyFilter();
+        }
+
+        private void ShowTab(int which)
+        {
+            if (tabPages.Length == 0) return;
+            tab = Mathf.Clamp(which, 0, tabPages.Length - 1);
+            for (int i = 0; i < tabPages.Length; i++)
+            {
+                if (tabPages[i] != null && tabPages[i].activeSelf != (i == tab)) tabPages[i].SetActive(i == tab);
+                if (i < tabFills.Length && tabFills[i] != null) tabFills[i].color = i == tab ? tabOn : tabOff;
+            }
+        }
+
+        // ALL, YOURS (your cards and new ones), NO PICTURE, ⚠ SHAPE (a picture that is not the card's shape).
+        private void ApplyFilter()
+        {
+            string find = searchInput != null ? searchInput.text.Trim() : string.Empty;
+            for (int i = 0; i < rowViews.Count; i++)
+            {
+                CardEditorRowView view = rowViews[i];
+                if (view == null) continue;
+                CardEditorRowModel row = view.Row;
+                bool shown = find.Length == 0 || row.Name.IndexOf(find, StringComparison.OrdinalIgnoreCase) >= 0;
+                if (shown && filter == 1) shown = row.Detail.Contains("Your card") || row.Detail.StartsWith("New card", StringComparison.Ordinal);
+                if (shown && filter == 2) shown = row.Thumbnail == null;
+                if (shown && filter == 3) shown = row.Thumbnail != null && !RightShape(row.Thumbnail);
+                if (view.gameObject.activeSelf != shown) view.gameObject.SetActive(shown);
+            }
+
+            for (int i = 0; i < filterFills.Length; i++)
+            {
+                if (filterFills[i] != null) filterFills[i].color = i == filter ? filterOn : filterOff;
+                if (i < filterLabels.Length && filterLabels[i] != null) filterLabels[i].color = i == filter ? filterOnWords : filterOffWords;
+            }
+        }
+
+        private void CropToFill(RawImage image, Texture picture)
+        {
+            if (image == null) return;
+            if (picture == null || picture.height <= 0 || bestSize.y <= 0f)
+            {
+                image.uvRect = new Rect(0f, 0f, 1f, 1f);
+                return;
+            }
+
+            float card = bestSize.x / bestSize.y;
+            float shape = picture.width / (float)picture.height;
+            image.uvRect = shape > card
+                ? new Rect((1f - (card / shape)) * 0.5f, 0f, card / shape, 1f)
+                : new Rect(0f, (1f - (shape / card)) * 0.5f, 1f, shape / card);
+        }
+
+        private bool RightShape(Texture picture)
+        {
+            if (picture == null || picture.height <= 0 || bestSize.y <= 0f) return true;
+            float shape = picture.width / (float)picture.height;
+            return Mathf.Abs(shape - (bestSize.x / bestSize.y)) <= 0.02f;
+        }
+
+        private string FileLine(Texture picture, bool front)
+        {
+            if (picture == null) return front ? "No front picture yet" : "The deck's back";
+            FileWords.Clear();
+            // Oxanium has no tick or warning sign: the words say it.
+            FileWords.Append(RightShape(picture) ? "<color=#2FD46B>OK</color> · " : "<color=#FFB21E>WRONG SHAPE</color> · ");
+            if (!string.IsNullOrEmpty(picture.name)) FileWords.Append(picture.name).Append(" · ");
+            FileWords.Append(picture.width).Append(" × ").Append(picture.height);
+            return FileWords.ToString();
+        }
+
+        private void ShowWarning(Texture front)
+        {
+            if (shapeWarning == null) return;
+            bool wrongShape = front != null && !RightShape(front);
+            bool soft = front != null && (front.width < sharpSize.x || front.height < sharpSize.y);
+            shapeWarning.SetActive(wrongShape || soft);
+            if (shapeWarningLabel == null || front == null) return;
+            shapeWarningLabel.text = wrongShape && soft
+                ? $"This {front.width} × {front.height} picture is not the card's shape and is below the sharp size: it is cropped to fit and looks soft up close."
+                : wrongShape
+                    ? $"This {front.width} × {front.height} picture is not the card's shape ({bestSize.x:0} × {bestSize.y:0}): it is cropped to fit, never stretched."
+                    : $"This {front.width} × {front.height} picture is below the sharp size ({sharpSize.x:0} × {sharpSize.y:0}): it looks soft up close.";
+        }
+
+        // GET THE TEMPLATE PNG: a card-sized picture with the safe area marked, saved where the game keeps your files.
+        private void SaveTemplate()
+        {
+            int width = Mathf.RoundToInt(bestSize.x);
+            int height = Mathf.RoundToInt(bestSize.y);
+            Texture2D template = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            Color[] pixels = new Color[width * height];
+            Color paper = new Color(0.17f, 0.19f, 0.20f, 1f);
+            Color line = new Color(0.024f, 0.937f, 0.941f, 1f);
+            int inset = Mathf.RoundToInt(width * 0.05f);
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    bool onSafe = (x == inset || x == width - inset || y == inset || y == height - inset)
+                        && x >= inset && x <= width - inset && y >= inset && y <= height - inset;
+                    pixels[(y * width) + x] = onSafe ? line : paper;
+                }
+            }
+
+            template.SetPixels(pixels);
+            template.Apply();
+            string path = System.IO.Path.Combine(UnityEngine.Application.persistentDataPath, "CardTemplate.png");
+            try
+            {
+                System.IO.File.WriteAllBytes(path, template.EncodeToPNG());
+                statusLabel.text = "Template saved: " + path;
+            }
+            catch (Exception exception) when (exception is System.IO.IOException || exception is UnauthorizedAccessException)
+            {
+                statusLabel.text = "The template could not be saved: " + exception.Message;
+            }
+            finally
+            {
+                Destroy(template);
+            }
         }
 
         public override void Unbind()

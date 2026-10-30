@@ -64,9 +64,17 @@ namespace ConsoleCards.Presentation.Composition
                 taglines[chosen.Id] = string.Join(" ", lines);
             }
 
-            List<FrontEndLibraryTile> tiles = new List<FrontEndLibraryTile>(entries.Count);
+            List<FrontEndLibraryTile> tiles = new List<FrontEndLibraryTile>(entries.Count + ComingSoon.Length);
+            bool soonAdded = false;
             for (int i = 0; i < entries.Count; i++)
             {
+                // Board 2: our games first, then the ones coming soon, then the games you made.
+                if (!soonAdded && entries[i].PlayerGame != null)
+                {
+                    AddComingSoon(tiles);
+                    soonAdded = true;
+                }
+
                 GameSelectEntry entry = entries[i];
                 if (entry.Game == null && entry.PlayerGame == null) continue; // the Empty Table is SANDBOX
                 bool mine = entry.PlayerGame != null;
@@ -84,6 +92,7 @@ namespace ConsoleCards.Presentation.Composition
                     entry.Id == chosen.Id));
             }
 
+            if (!soonAdded) AddComingSoon(tiles);
             model.LibraryTiles = tiles;
             model.Tagline = chosen.PlayerGame != null
                 ? string.IsNullOrWhiteSpace(chosen.PlayerGame.description) ? "A game you made in CREATE." : chosen.PlayerGame.description
@@ -91,6 +100,22 @@ namespace ConsoleCards.Presentation.Composition
             model.HowToPlay = HowToPlayLines(chosen);
             FillContinue(model, entries, chosen);
             gameSelectActions.PlayAgain = StartWithChosenColours;
+        }
+
+        // Owner, 2026-10-30 (board 2): the games that are not out yet, dimmed with COMING SOON.
+        private static readonly string[] ComingSoon =
+        {
+            "Tower Clash", "Build higher. Block opponents. Be the last builder.",
+            "Color Control", "Flip tiles. Control zones. Outplay your friends.",
+        };
+
+        private static void AddComingSoon(List<FrontEndLibraryTile> tiles)
+        {
+            for (int i = 0; i + 1 < ComingSoon.Length; i += 2)
+            {
+                tiles.Add(new FrontEndLibraryTile("soon:" + ComingSoon[i], ComingSoon[i], ComingSoon[i + 1], "COMING SOON",
+                    false, null, false, true));
+            }
         }
 
         private string PlayersOf(GameSelectEntry entry)

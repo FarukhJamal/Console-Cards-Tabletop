@@ -123,6 +123,14 @@ namespace ConsoleCards.Presentation.UI
         [SerializeField] private Color railActiveIcon = new Color(0.102f, 0.071f, 0.024f, 1f);
         [SerializeField, Range(0f, 1f)] private float disabledAlpha = 0.35f;
 
+        [Header("News (boards 7B and 14v2: top centre, fades after a few seconds; optional)")]
+        [SerializeField] private CanvasGroup newsGroup;
+        [SerializeField] private Text newsLabel;
+        [SerializeField] private Image newsDot;
+        [SerializeField, Min(0.5f)] private float newsSeconds = 4f;
+        [SerializeField, Min(0.05f)] private float newsFadeSeconds = 0.6f;
+        private float newsShownAt = -100f;
+
         private readonly List<Button> actionChips = new List<Button>();
         private readonly List<Text> actionChipLabels = new List<Text>();
         private readonly List<PopupActionOption> secondaryActions = new List<PopupActionOption>();
@@ -675,10 +683,40 @@ namespace ConsoleCards.Presentation.UI
             playerText.text = text;
         }
 
+        /// <summary>
+        /// Boards 7B and 14v2: news ("Blue found a Key.") as a small pill at the top centre that fades after a few
+        /// seconds; the full log keeps it.
+        /// </summary>
+        public void ShowNews(string text, Color dot)
+        {
+            if (newsGroup == null || newsLabel == null || string.IsNullOrEmpty(text)) return;
+            newsLabel.text = text;
+            if (newsDot != null) newsDot.color = dot;
+            newsShownAt = Time.unscaledTime;
+            newsGroup.gameObject.SetActive(true);
+            newsGroup.alpha = 1f;
+        }
+
+        private void FadeNews()
+        {
+            if (newsGroup == null || !newsGroup.gameObject.activeSelf) return;
+            float age = Time.unscaledTime - newsShownAt;
+            if (age < newsSeconds) return;
+            float alpha = 1f - ((age - newsSeconds) / newsFadeSeconds);
+            if (alpha <= 0f)
+            {
+                newsGroup.gameObject.SetActive(false);
+                return;
+            }
+
+            newsGroup.alpha = alpha;
+        }
+
         // L opens the log while it is hidden (an open log handles L itself). LateUpdate, so the log shown here does
         // not also read the same key press in its own Update this frame.
         private void LateUpdate()
         {
+            FadeNews();
             Keyboard keyboard = Keyboard.current;
             if (actions == null || keyboard == null) return;
             bool l = keyboard.lKey.wasPressedThisFrame;

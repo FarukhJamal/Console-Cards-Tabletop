@@ -137,6 +137,7 @@ namespace ConsoleCards.Presentation.Composition
                     CycleSeatColour = CycleFrontEndColour,
                     OpenTableTools = OpenTableToolsFromFrontEnd,
                     OpenOnline = () => host.Online.OpenLobby(),
+                    OpenBoardSettings = () => host.runtimeUi != null && host.runtimeUi.OpenTableSettings(false),
                     CreateRoom = (title, isPrivate) => host.Online.CreateRoom(title, isPrivate),
                     JoinRoom = code => host.Online.JoinRoom(code),
                     LeaveRoom = () => host.Online.LeaveRoom(),
@@ -205,7 +206,7 @@ namespace ConsoleCards.Presentation.Composition
                 Status = !string.IsNullOrEmpty(status)
                     ? status
                     : playable
-                        ? "Choose a game and a mode, make it yours if you like, then Start."
+                        ? string.Empty // the boards have no line here
                         : $"{entry.Name} cannot be played yet; you can already make its cards and decks yours.",
             };
             AddFrontEnd(model, entry);

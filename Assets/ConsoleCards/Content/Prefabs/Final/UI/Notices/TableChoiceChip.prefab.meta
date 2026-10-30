@@ -1,5 +1,7 @@
 fileFormatVersion: 2
 guid: 74406f4d7f7b86446b6519017b6e92bf
+labels:
+- ChoiceChipEnter
 PrefabImporter:
   externalObjects: {}
   userData: 

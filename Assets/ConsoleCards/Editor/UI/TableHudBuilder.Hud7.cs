@@ -26,7 +26,7 @@ namespace ConsoleCards.Editor.UI
     /// </summary>
     public static partial class TableHudBuilder
     {
-        private const string HudLabel = "HudBoard7B2";
+        private const string HudLabel = "HudBoard7B3";
         private const string HudArt = "Assets/ConsoleCards/Content/UI/Board/Hud/";
         private const float K = 1.5f; // board pixels to the 1920 x 1080 canvas
 
@@ -74,6 +74,28 @@ namespace ConsoleCards.Editor.UI
             Save<TableHudView>(HudPath, "TableHud", BuildHud7);
             GameObject made = AssetDatabase.LoadAssetAtPath<GameObject>(HudPath);
             if (made != null) AssetDatabase.SetLabels(made, new[] { HudLabel });
+        }
+
+        // News at the top centre (boards 7B, 14v2): a dark pill with a coloured dot and one line; it fades by itself.
+        private static void BuildNews7(RectTransform root, SerializedObject so)
+        {
+            RectTransform news = Rect("News", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(0f, -14f * K), new Vector2(200f, 30f * K));
+            Fill(news, GlassStrong, pill != null ? pill : round, Edge, 1.5f).raycastTarget = false;
+            HorizontalLayoutGroup row = Row(news.gameObject, 18, 18, 0, 0, 12f, TextAnchor.MiddleCenter);
+            row.childAlignment = TextAnchor.MiddleCenter;
+            Fit(news.gameObject, true, false);
+            RectTransform dot = Child("Dot", news);
+            Image dotImage = Shape(dot, Hex("2f7bff"), circle);
+            Size(dot.gameObject, 12f, 12f, 12f);
+            Text label = FitLabel(Child("Label", news), medium, 19, Words, "Blue found a Key · 2 of 3");
+            CanvasGroup group = news.gameObject.AddComponent<CanvasGroup>();
+            group.blocksRaycasts = false;
+            group.interactable = false;
+            news.gameObject.SetActive(false);
+            so.FindProperty("newsGroup").objectReferenceValue = group;
+            so.FindProperty("newsLabel").objectReferenceValue = label;
+            so.FindProperty("newsDot").objectReferenceValue = dotImage;
         }
 
         private static Sprite HudSprite(string name, Vector4 border)
@@ -279,6 +301,7 @@ namespace ConsoleCards.Editor.UI
             so.FindProperty("playerEdge").objectReferenceValue = playerEdge;
             so.FindProperty("playerStatusTag").objectReferenceValue = statusTag.gameObject;
             so.FindProperty("playerStatusText").objectReferenceValue = statusText;
+            BuildNews7(root, so);
             so.FindProperty("actionsRoot").objectReferenceValue = actionsRoot;
             so.FindProperty("actionTemplate").objectReferenceValue = template;
             so.FindProperty("primaryButton").objectReferenceValue = primary;

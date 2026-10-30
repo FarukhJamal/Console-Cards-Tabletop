@@ -947,8 +947,13 @@ namespace ConsoleCards.Presentation.Composition
                 string tags = member.IsHost ? "HOST" : !member.Connected ? "RECONNECTING…" : member.Ready ? "READY" : "NOT READY";
                 if (watching) tags = member.Connected ? "WATCHING" : "AWAY";
                 if (member == me) tags = "YOU  ·  " + tags;
+                string memberState = watching ? (member.Connected ? "WATCHING" : "AWAY")
+                    : !member.Connected ? "RECONNECTING" : member.IsHost || member.Ready ? "READY" : "NOT READY";
                 rows.Add(new OnlineMemberRow
                 {
+                    SeatLabel = (watching ? "watching" : "seat " + (SeatNumberOf(member, i) + 1)) + (member == me ? " · you" : string.Empty),
+                    IsHost = member.IsHost,
+                    State = memberState,
                     Badge = watching ? "—" : "P" + (SeatNumberOf(member, i) + 1),
                     Name = member.Name,
                     Colour = TabletopComposition.ColourByIndex(member.Colour),
@@ -971,6 +976,20 @@ namespace ConsoleCards.Presentation.Composition
             model.CanChangeSeat = !sharedTable && members.Count > 1;
             model.AllReady = hosting ? AllReady() : true;
             model.Seats = seats;
+            model.ColourBefore = me != null ? TabletopComposition.ColourByIndex(NextFreeColour(me, -1)) : Color.grey;
+            model.ColourAfter = me != null ? TabletopComposition.ColourByIndex(NextFreeColour(me, 1)) : Color.grey;
+            model.SeatNumber = mine >= 0 ? (mine + 1).ToString() : "–";
+            model.GameName = !string.IsNullOrEmpty(roomGame) ? roomGame.ToUpperInvariant() : "NOT CHOSEN YET";
+            model.GameDetail = roomStarted ? "playing now"
+                : model.IsHost ? "CHANGE GAME picks it; START is on its sheet" : "the host picks the game";
+            int notReady = 0;
+            for (int i = 0; i < members.Count; i++)
+            {
+                bool watcher = sharedTable && members[i].Player == Guid.Empty;
+                if (!members[i].IsHost && !watcher && !members[i].Ready) notReady++;
+            }
+
+            model.NotReady = notReady;
             return model;
         }
 

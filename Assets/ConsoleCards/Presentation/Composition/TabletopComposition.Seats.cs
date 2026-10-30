@@ -439,6 +439,26 @@ namespace ConsoleCards.Presentation.Composition
             gameplayLogRound[gameplayLogCount % HandoverLogSize] = ActiveCartridge.CurrentRound;
             gameplayLogCount++;
             shownActivityLogCount = -1; // redrawn on the next frame
+            ShowNews(line);
+        }
+
+        // Boards 7B and 14v2: the newest line also shows at the top centre for a few seconds (names in their colour).
+        private readonly StringBuilder newsText = new StringBuilder(128);
+
+        private void ShowNews(string line)
+        {
+            if (runtimeUi == null) return;
+            newsText.Clear();
+            AppendColourNames(newsText, line);
+            Color dot = new Color(0.024f, 0.937f, 0.941f, 1f);
+            int player = line.IndexOf("Player", StringComparison.Ordinal);
+            if (player >= 0)
+            {
+                int seat = SeatNumberAfter(line, player + 6, out _);
+                if (seat >= 0) dot = PlayerSeatColor(seat);
+            }
+
+            runtimeUi.ShowTableNews(newsText.ToString(), dot);
         }
 
         // F4: the "What happened" text, newest first, with the round each line happened in. Built only when the

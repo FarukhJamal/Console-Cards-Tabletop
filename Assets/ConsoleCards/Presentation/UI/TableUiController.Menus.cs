@@ -93,6 +93,7 @@ namespace ConsoleCards.Presentation.UI
         {
             bool hide = UsesTableHud
                 && (IsVisible(gameSavePanelView) || physicalRulebookReading || IsVisible(tableSettingsView)
+                    || IsVisible(tablePanelView) // board 12: the Table editor has its own bars
                     || IsVisible(pauseMenuView)
                     || (componentToolboxView != null && componentToolboxView.IsAcquired && componentToolboxView.IsPanelOpen));
             // Board 5: under the Esc menu the HUD stays as a dim ghost; under the others it goes.
@@ -131,7 +132,11 @@ namespace ConsoleCards.Presentation.UI
         /// last frame: a press then is the menu's (MAIN MENU's second press must not reach the table). Popups and the
         /// Toolbox do not count (a press on the table still closes a piece's menu).
         /// </summary>
-        public bool IsTableBehindMenu => menuOpenLastFrame || IsMenuOverTable();
+        public bool IsTableBehindMenu => menuOpenLastFrame || IsMenuOverTable() || Time.frameCount - popupShownFrame <= 1;
+
+        // Board 9: a menu row that opens the next popup somewhere else (Draw… opens Draw how many?) leaves the pointer
+        // over the table; that press is the row's, not the table's.
+        private int popupShownFrame = -10;
 
         /// <summary>True while a popup, panel, menu or the Toolbox covers the table (or did last frame).</summary>
         public bool IsTableCovered => overlayOpenLastFrame || IsTableOverlayOpen();
@@ -287,6 +292,12 @@ namespace ConsoleCards.Presentation.UI
             pauseNewTable = newTable;
             pauseReset = reset;
             pauseClear = clear;
+        }
+
+        /// <summary>Boards 7B and 14v2: news at the top centre of the table (it fades by itself).</summary>
+        public void ShowTableNews(string text, Color dot)
+        {
+            if (UsesTableHud && tableHudView != null && tableHudView.IsAcquired) tableHudView.ShowNews(text, dot);
         }
 
         // ---------- Settings ----------

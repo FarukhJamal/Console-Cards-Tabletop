@@ -10,6 +10,9 @@ namespace ConsoleCards.Presentation.UI
 
         private void OpenSettings()
         {
+            // Board 6 (owner, 2026-10-30): the same Settings page as in a game (GAME, LOOK, CONTROLS, SOUND,
+            // PROFILES); BACK comes back here.
+            if (actions?.OpenBoardSettings != null && actions.OpenBoardSettings()) return;
             // A front end made before FE_Settings: SETTINGS opens the player profile, as before.
             if (pages[(int)FrontEndPage.Settings] == null) actions?.OpenProfile?.Invoke();
             else Go(FrontEndPage.Settings);

@@ -527,7 +527,7 @@ namespace ConsoleCards.Presentation.Composition
             host.runtimeUi.ShowContextMenu(
                 host.contextMenuAnchorScreenPosition,
                 "DECK",
-                string.Empty,
+                targetDeck.Count == 1 ? "1 card" : $"{targetDeck.Count} cards",
                 actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);
@@ -1054,8 +1054,22 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            // Board 9 (owner, 2026-10-30): Draw 1, Draw… (Draw how many?, with 1 3 5 7), and the hand-limit choices.
+            int available = host.AvailableAssistedDeckCount(targetDeckId);
             actions.Add(new PopupActionOption(
-                "Draw...",
+                "Draw 1",
+                available > 0,
+                () => DrawControllerCardsFromContext(targetDeckId, 1)));
+            actions.Add(new PopupActionOption(
+                "Draw…",
+                available > 0,
+                () =>
+                {
+                    host.selectedDrawCount = Mathf.Clamp(host.selectedDrawCount, 1, Math.Max(1, available));
+                    SetContextMenuMode(ContextMenuMode.CustomDrawCards);
+                }));
+            actions.Add(new PopupActionOption(
+                "Draw to hand limit…",
                 true,
                 () => SetContextMenuMode(ContextMenuMode.DrawCards)));
         }

@@ -38,6 +38,7 @@ namespace ConsoleCards.Editor.UI
         private static readonly Color Green = Hex("2fd46b");
         private static readonly Color RingBack = Hex("2b3033");
 
+        private const string ChipLabel = "ChoiceChipEnter";
         private static Font bold;
         private static Font medium;
         private static Sprite rounded;
@@ -52,7 +53,16 @@ namespace ConsoleCards.Editor.UI
             circle = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
             Directory.CreateDirectory(Folder);
 
+            // Board 14v2 (owner, 2026-10-30): the main button shows its ENTER key; a chip made before that is made again once.
+            GameObject madeChip = AssetDatabase.LoadAssetAtPath<GameObject>(ChoiceChipPath);
+            if (madeChip != null && System.Array.IndexOf(AssetDatabase.GetLabels(madeChip), ChipLabel) < 0)
+            {
+                AssetDatabase.DeleteAsset(ChoiceChipPath);
+            }
+
             Save<TableChoiceChipView>(ChoiceChipPath, "TableChoiceChip", BuildChoiceChip);
+            madeChip = AssetDatabase.LoadAssetAtPath<GameObject>(ChoiceChipPath);
+            if (madeChip != null) AssetDatabase.SetLabels(madeChip, new[] { ChipLabel });
             Save<TableWarningView>(WarningPath, "TableWarning", BuildWarning);
             Save<TableMilestoneView>(MilestonePath, "TableMilestone", BuildMilestone);
 
@@ -144,6 +154,18 @@ namespace ConsoleCards.Editor.UI
             Row(buttons.gameObject, 0, 0, 2, 0, 10);
             Button secondary = KitButton(buttons, "Secondary", "LEAVE", Secondary, SoftWords, 1f, out Text secondaryLabel);
             Button primary = KitButton(buttons, "Primary", "TAKE IT", Primary, Hex("f4fefe"), 1.4f, out Text primaryLabel);
+            // The ENTER key on the main button, as on the board.
+            RectTransform primaryLabelRect = primaryLabel.rectTransform;
+            primaryLabelRect.offsetMax = new Vector2(-70f, 0f);
+            RectTransform key = Rect("Key", primary.transform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                new Vector2(-8f, 0f), new Vector2(62f, 26f));
+            Image keyFill = key.gameObject.AddComponent<Image>();
+            keyFill.sprite = rounded;
+            keyFill.type = Image.Type.Sliced;
+            keyFill.color = Hex("0a3537");
+            keyFill.raycastTarget = false;
+            Label(Rect("Label", key, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero), bold, 12,
+                Hex("bff6f6"), TextAnchor.MiddleCenter, "ENTER");
 
             SerializedObject so = new SerializedObject(view);
             so.FindProperty("chip").objectReferenceValue = chip;
