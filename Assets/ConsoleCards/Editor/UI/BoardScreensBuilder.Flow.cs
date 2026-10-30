@@ -323,6 +323,7 @@ namespace ConsoleCards.Editor.UI
             RawImage picture = Rect(sheet, "Picture", 24, 25, 150, 150).gameObject.AddComponent<RawImage>();
             picture.raycastTarget = false;
             picture.color = new Color(0f, 0f, 0f, 0f);
+            SmallButton(sheet, "ChangePicture", 31, 147, 136, 22, "CHANGE PICTURE", Cyan, Words); // COVER-1
             RectTransform tag = Box(sheet, "Tag", 192, 25, 98, 22, Cyan, null, 0f);
             TextAt(tag, "Label", 0, 0, 98, 22, bold, 11, Ink, TextAnchor.MiddleCenter, "2–4 PLAYERS");
             TextAt(sheet, "Name", 192, 54, 310, 40, bold, 30, Words, TextAnchor.MiddleLeft, "TRAP FLOOR");

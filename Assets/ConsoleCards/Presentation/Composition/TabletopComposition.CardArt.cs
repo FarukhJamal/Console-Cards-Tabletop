@@ -104,7 +104,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (contentArt == null)
             {
-                contentArt = new ContentArtService(ContentPackStore.ForProfile(EnsureProfile()));
+                contentArt = new ContentArtService(ContentPackStore.ForCards(EnsureProfile()));
                 contentArt.Library.Changed += HandleArtChanged;
                 contentArt.Library.TextureReleased += HandleArtTextureReleased;
             }

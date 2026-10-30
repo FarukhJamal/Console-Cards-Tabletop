@@ -100,6 +100,8 @@ namespace ConsoleCards.Presentation.UI
         public string StatLastGame = "-";
         public string StatYourGames = "0";
         public bool CanDeleteProfile;
+        /// <summary>COVER-1: the game sheet's CHANGE PICTURE (a game of the platform, and a file picker here).</summary>
+        public bool CanChangeGamePicture;
         /// <summary>DELETE PLAYER was pressed once: the next press removes the player.</summary>
         public bool ProfileDeleteArmed;
         /// <summary>The last change to the profile was saved (the SAVED tick).</summary>
@@ -269,6 +271,8 @@ namespace ConsoleCards.Presentation.UI
         public Action<int> PickAvatar;
         public Action NewProfile;
         public Action DeleteProfile;
+        /// <summary>COVER-1: CHANGE PICTURE on the game sheet.</summary>
+        public Action ChangeGamePicture;
     }
 
     /// <summary>

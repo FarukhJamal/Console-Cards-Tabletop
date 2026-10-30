@@ -38,7 +38,14 @@ namespace ConsoleCards.Presentation.Content
         public ContentArtService(ContentPackStore store)
         {
             Store = store ?? throw new ArgumentNullException(nameof(store));
+            GameDataStore = store.IsGameData ? null : ContentPackStore.GameData();
         }
+
+        /// <summary>
+        /// GAMEDATA-1: the game's own edits kept in the project, under the player's (null when <see cref="Store"/> is
+        /// that folder itself, as in the Unity editor).
+        /// </summary>
+        public ContentPackStore GameDataStore { get; }
 
         public ArtLibrary Library { get; } = new ArtLibrary();
         public ContentPackStore Store { get; }
@@ -68,7 +75,9 @@ namespace ConsoleCards.Presentation.Content
         {
             if (!HasGame) return new PlayerCardsFile();
             ContentPackInfo pack = ActivePack;
-            return PlayerCardsFile.Merge(pack != null ? pack.Manifest.cards : null, Store.LoadCards(GameId));
+            PlayerCardsFile under = GameDataStore != null ? GameDataStore.LoadCards(GameId) : null;
+            if (pack != null) under = PlayerCardsFile.Merge(under, pack.Manifest.cards);
+            return PlayerCardsFile.Merge(under, Store.LoadCards(GameId));
         }
 
         /// <summary>The decks: the active pack's with the player's own on top, as <see cref="LoadPlayerCards"/>.</summary>
@@ -76,7 +85,9 @@ namespace ConsoleCards.Presentation.Content
         {
             if (!HasGame) return new PlayerDecksFile();
             ContentPackInfo pack = ActivePack;
-            return PlayerDecksFile.Merge(pack != null ? pack.Manifest.decks : null, Store.LoadDecks(GameId));
+            PlayerDecksFile under = GameDataStore != null ? GameDataStore.LoadDecks(GameId) : null;
+            if (pack != null) under = PlayerDecksFile.Merge(under, pack.Manifest.decks);
+            return PlayerDecksFile.Merge(under, Store.LoadDecks(GameId));
         }
 
         /// <summary>
@@ -107,6 +118,7 @@ namespace ConsoleCards.Presentation.Content
         {
             Library.ClearLayer(ArtLayer.PlayerUpload);
             Library.ClearLayer(ArtLayer.GamePack);
+            Library.ClearLayer(ArtLayer.GameData);
             Library.ClearBuiltIn();
             entries.Clear();
             entryKeys.Clear();
@@ -132,6 +144,7 @@ namespace ConsoleCards.Presentation.Content
                 packs = Store.ListPacks(GameId);
                 uploads = Store.LoadUploads(GameId);
                 LoadUploadLayer();
+                LoadGameDataLayer();
                 string active = Store.LoadSettings(GameId).activePackId;
                 ActivatePack(FindPack(active) != null ? active : string.Empty, out _);
             }
@@ -293,6 +306,7 @@ namespace ConsoleCards.Presentation.Content
             {
                 case ArtLayer.PlayerUpload: return "Your picture";
                 case ArtLayer.GamePack: return $"Pack: {ActivePackName}";
+                case ArtLayer.GameData: return "The game's picture";
                 default: return "Built-in";
             }
         }
@@ -327,6 +341,8 @@ namespace ConsoleCards.Presentation.Content
                 if (avatar != null) AddEntry(avatar.ArtworkReference, $"{AvatarName(avatar)} (avatar)", avatar.Artwork);
             }
 
+            AddEntry(CoverKeyOf(definition), "Title picture", definition.CoverPicture); // COVER-1
+
             IReadOnlyList<Texture2D> backs = definition.BoardCardBacks;
             IReadOnlyList<string> keys = definition.BoardCardBackReferences;
             for (int i = 0; keys != null && i < keys.Count; i++)
@@ -358,6 +374,31 @@ namespace ConsoleCards.Presentation.Content
                     Debug.LogWarning($"[Content] Your picture for {file.key}: {error}");
                 }
             }
+        }
+
+        // GAMEDATA-1: the game's own pictures kept in the project, when the player's pictures are kept elsewhere.
+        private void LoadGameDataLayer()
+        {
+            Library.ClearLayer(ArtLayer.GameData);
+            if (GameDataStore == null) return;
+            ContentUploadIndex own = GameDataStore.LoadUploads(GameId);
+            string folder = GameDataStore.UploadsFolder(GameId);
+            for (int i = own.pictures.Count - 1; i >= 0; i--)
+            {
+                if (!LoadInto(ArtLayer.GameData, folder, own.pictures[i], out string error))
+                {
+                    Debug.LogWarning($"[Content] The game's picture for {own.pictures[i].key}: {error}");
+                }
+            }
+        }
+
+        /// <summary>COVER-1: the art key of a game's title picture ("trap-floor/cover").</summary>
+        public static string CoverKeyOf(GameDefinition definition) => GameContent.ArtFolderOf(definition) + "/cover";
+
+        /// <summary>COVER-1: the game's title picture (yours, the pack's, the game's), or null when it has none.</summary>
+        public Texture2D CoverPicture()
+        {
+            return game != null && Library.TryResolve(CoverKeyOf(game), out Texture2D texture, out _) ? texture : null;
         }
 
         private bool LoadInto(ArtLayer layer, string folder, ContentArtFile file, out string error)

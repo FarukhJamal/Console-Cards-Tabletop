@@ -10,6 +10,12 @@ namespace ConsoleCards.Presentation.Art
         PlayerUpload = 0,
         GamePack = 1,
         BuiltIn = 2,
+
+        /// <summary>
+        /// GAMEDATA-1: the game's own edits kept in the project (StreamingAssets/GameData), between the pack and the
+        /// built-in art. Its number is last so the older layers keep theirs; lookups use <see cref="ArtLibrary"/>'s order.
+        /// </summary>
+        GameData = 3,
     }
 
     /// <summary>
@@ -26,6 +32,13 @@ namespace ConsoleCards.Presentation.Art
             new Dictionary<string, Texture2D>(StringComparer.Ordinal),
             new Dictionary<string, Texture2D>(StringComparer.Ordinal),
             new Dictionary<string, Texture2D>(StringComparer.Ordinal),
+            new Dictionary<string, Texture2D>(StringComparer.Ordinal),
+        };
+
+        // Lookup order: your pictures, the active pack, the game's own edits, the built-in art.
+        private static readonly ArtLayer[] SearchOrder =
+        {
+            ArtLayer.PlayerUpload, ArtLayer.GamePack, ArtLayer.GameData, ArtLayer.BuiltIn,
         };
 
         private readonly HashSet<Texture2D> owned = new HashSet<Texture2D>();
@@ -92,11 +105,11 @@ namespace ConsoleCards.Presentation.Art
             string normalized = NormalizeKey(key);
             if (normalized.Length > 0)
             {
-                for (int i = 0; i < layers.Length; i++)
+                for (int i = 0; i < SearchOrder.Length; i++)
                 {
-                    if (layers[i].TryGetValue(normalized, out texture) && texture != null)
+                    if (layers[(int)SearchOrder[i]].TryGetValue(normalized, out texture) && texture != null)
                     {
-                        layer = (ArtLayer)i;
+                        layer = SearchOrder[i];
                         return true;
                     }
                 }

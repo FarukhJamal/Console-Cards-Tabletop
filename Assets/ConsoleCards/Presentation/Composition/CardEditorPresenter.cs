@@ -142,7 +142,7 @@ namespace ConsoleCards.Presentation.Composition
             editorOtherArt = null;
             if (!host.UsesTableArt(game))
             {
-                editorOtherArt = new ContentArtService(ContentPackStore.ForProfile(host.EnsureProfile()));
+                editorOtherArt = new ContentArtService(ContentPackStore.ForCards(host.EnsureProfile()));
                 editorOtherArt.UseGame(game);
             }
 

@@ -97,6 +97,10 @@ namespace ConsoleCards.Definitions
         [Tooltip("SETUP-1: the game's default table setup: the board, the Consoles, the shared piles, the dice and the "
             + "pieces beside every Console. Empty: the built-in places. Used by Trap Floor.")]
         [SerializeField, FormerlySerializedAs("seatPieces")] private TrapFloorSeatPiecesDefinition tableSetup;
+        [Tooltip("COVER-1: the game's title picture in the Library, the game sheet and Played Last (cropped to fill each "
+            + "place; a wide picture, about 16:10, suits them all). Empty: the first card's front. CHANGE PICTURE on "
+            + "the game sheet replaces it.")]
+        [SerializeField] private Texture2D coverPicture;
 
         public string StableId => stableId;
         public string DisplayName => displayName;
@@ -112,6 +116,7 @@ namespace ConsoleCards.Definitions
         public Texture2D BoardMatPicture => boardMatPicture;
         public string BoardMatPictureReference => boardMatPictureReference;
         public TrapFloorSeatPiecesDefinition TableSetup => tableSetup;
+        public Texture2D CoverPicture => coverPicture;
         public IReadOnlyList<GameContentSet> ContentSets => contentSets;
 
         /// <summary>The game's own frame style, else the platform's default (null when neither exists).</summary>

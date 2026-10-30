@@ -102,7 +102,9 @@ namespace ConsoleCards.Presentation.Composition
             else if (EditorArt.HasUpload(key + SourceSuffix)) EditorArt.RemoveUpload(key + SourceSuffix, out _);
             message = reshaped
                 ? (fit ? "Picture saved on the card, fitted with a border (it is another shape)." : "Picture saved on the card, cropped to fill (it is another shape).")
-                : "Picture saved on the card (a copy is kept in your profile).";
+                : EditorArt.Store.IsGameData
+                    ? "Picture saved on the card (a copy is kept in the game's files, GameData)."
+                    : "Picture saved on the card (a copy is kept in your profile).";
             return true;
         }
 

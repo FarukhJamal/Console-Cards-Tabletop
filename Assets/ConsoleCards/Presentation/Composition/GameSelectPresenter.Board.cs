@@ -101,6 +101,7 @@ namespace ConsoleCards.Presentation.Composition
             FillContinue(model, entries, chosen);
             gameSelectActions.PlayAgain = StartWithChosenColours;
             FillProfileBoard(model); // PROFILE-2 (boards 19, 19b)
+            FillCoverBoard(model, chosen); // COVER-1
         }
 
         // Owner, 2026-10-30 (board 2): the games that are not out yet, dimmed with COMING SOON.

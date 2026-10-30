@@ -185,7 +185,7 @@ namespace ConsoleCards.Presentation.UI
             SetActive("TopBar", !backdrop);
             SetActive("Pages", !backdrop);
             SetActive("Status", !backdrop);
-            SetActive("Background/Picture", !backdrop && page == FrontEndPage.Home); // BRAND-1
+            SetActive("Background/Picture", true); // BRAND-2: behind every menu screen and the CREATE editors
         }
 
         private bool backdropOnly;
@@ -379,8 +379,8 @@ namespace ConsoleCards.Presentation.UI
                 if (pages[i] != null) pages[i].SetActive(i == (int)page);
             }
 
-            // BRAND-1 (owner, 2026-10-30): the main menu's picture behind Home only (the other screens keep the plain page).
-            SetActive("Background/Picture", page == FrontEndPage.Home && !backdropOnly);
+            // BRAND-2 (owner, 2026-10-31: "that background image everywhere on the menus"): behind every screen.
+            SetActive("Background/Picture", true);
             bool stepped = page >= FrontEndPage.Setup && page <= FrontEndPage.Review;
             SetActive("Pages/Stepper", stepped);
             if (stepped) RenderStepper();
@@ -1021,6 +1021,31 @@ namespace ConsoleCards.Presentation.UI
             if (image == null) return;
             image.texture = picture;
             image.color = picture != null ? Color.white : new Color(1f, 1f, 1f, 0.06f);
+            CropToFill(image, picture);
+        }
+
+        /// <summary>COVER-1: a picture of another shape fills its place cropped, never stretched.</summary>
+        internal static void CropToFill(RawImage image, Texture picture)
+        {
+            Rect uv = new Rect(0f, 0f, 1f, 1f);
+            Rect place = image.rectTransform.rect;
+            if (picture != null && picture.width > 0 && picture.height > 0 && place.width > 0f && place.height > 0f)
+            {
+                float box = place.width / place.height;
+                float shape = (float)picture.width / picture.height;
+                if (shape > box)
+                {
+                    float width = box / shape;
+                    uv = new Rect((1f - width) * 0.5f, 0f, width, 1f);
+                }
+                else if (shape < box)
+                {
+                    float height = shape / box;
+                    uv = new Rect(0f, (1f - height) * 0.5f, 1f, height);
+                }
+            }
+
+            image.uvRect = uv;
         }
 
         // A face picture, or a soft tile in the given colour when there is none.

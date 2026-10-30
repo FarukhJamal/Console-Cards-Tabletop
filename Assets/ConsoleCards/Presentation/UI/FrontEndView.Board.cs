@@ -79,6 +79,7 @@ namespace ConsoleCards.Presentation.UI
             On("Pages/Library/Filters/Ours", () => SetLibraryFilter(1));
             On("Pages/Library/Filters/Yours", () => SetLibraryFilter(2));
             On("Pages/Library/Where/Online", OpenOnline);
+            On("Pages/Details/Sheet/ChangePicture", () => actions?.ChangeGamePicture?.Invoke()); // COVER-1
             On("Pages/Details/Setup/Players/Minus", () => actions?.CyclePlayers?.Invoke(-1));
             On("Pages/Details/Setup/Players/Plus", () => actions?.CyclePlayers?.Invoke(1));
             On("Pages/Details/Setup/Difficulty/Previous", () => actions?.CycleMode?.Invoke(-1));
@@ -281,6 +282,7 @@ namespace ConsoleCards.Presentation.UI
             {
                 picture.texture = texture;
                 picture.color = texture != null ? Color.white : new Color(0f, 0f, 0f, 0f);
+                CropToFill(picture, texture);
             }
 
             Image fill = cover != null ? cover.GetComponent<Image>() : null;
@@ -297,6 +299,7 @@ namespace ConsoleCards.Presentation.UI
             SetText(sheet + "Name", Upper(model.GameName));
             SetText(sheet + "Tagline", model.Tagline);
             ShowCover(Picture(sheet + "Picture"), Find(sheet + "Cover"), model.Picture, CoverGame);
+            SetActive(sheet + "ChangePicture", model.CanChangeGamePicture);
             for (int i = 0; i < HowToPlayRows; i++)
             {
                 string row = sheet + "How/Row" + i;

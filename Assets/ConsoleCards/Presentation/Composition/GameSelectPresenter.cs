@@ -638,10 +638,12 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        // A picture for the game: its first card's front (the game box has no picture of its own yet).
+        // A picture for the game: its title picture (COVER-1), else its first card's front.
         internal Texture2D GamePicture(GameDefinition game)
         {
             if (game == null) return null;
+            Texture2D cover = CoverOf(game);
+            if (cover != null) return cover;
             for (int s = 0; s < game.ContentSets.Count; s++)
             {
                 GameContentSet set = game.ContentSets[s];
@@ -661,7 +663,7 @@ namespace ConsoleCards.Presentation.Composition
         internal ContentArtServiceScope ArtFor(GameDefinition game)
         {
             if (host.UsesTableArt(game)) return new ContentArtServiceScope(host.contentArt, false);
-            ContentArtService art = new ContentArtService(ContentPackStore.ForProfile(host.EnsureProfile()));
+            ContentArtService art = new ContentArtService(ContentPackStore.ForCards(host.EnsureProfile()));
             art.UseGame(game);
             return new ContentArtServiceScope(art, true);
         }

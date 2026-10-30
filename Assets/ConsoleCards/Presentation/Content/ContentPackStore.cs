@@ -34,7 +34,83 @@ namespace ConsoleCards.Presentation.Content
         public static string RoomRoot;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ForgetRoomRoot() => RoomRoot = null;
+        private static void ForgetRoomRoot()
+        {
+            RoomRoot = null;
+            movedProfileEdits = false;
+        }
+
+        // ---------- GAMEDATA-1 (owner, 2026-10-31: card pictures and edits "into the game") ----------
+
+        /// <summary>The project's folder of game edits: StreamingAssets/GameData, shipped with every build.</summary>
+        public const string GameDataFolderName = "GameData";
+
+        public static string GameDataRoot => Path.Combine(UnityEngine.Application.streamingAssetsPath, GameDataFolderName);
+
+        /// <summary>True for the project's game edits (<see cref="GameDataRoot"/>), false for a profile or a room.</summary>
+        public bool IsGameData { get; private set; }
+
+        /// <summary>The game's own card edits, decks and pictures kept in the project (the layer under a player's own).</summary>
+        public static ContentPackStore GameData() => new ContentPackStore(GameDataRoot) { IsGameData = true };
+
+        private static bool movedProfileEdits;
+
+        /// <summary>
+        /// Where the card studio and the title picture save. In the Unity editor: the project (<see cref="GameData"/>),
+        /// so the edits are part of the game, in version control and in every build; card edits the profile held
+        /// before are moved there once. In a build: the player's profile, on top of the game's own edits. In an
+        /// online room: the room's copy, as <see cref="ForProfile"/>.
+        /// </summary>
+        public static ContentPackStore ForCards(ProfileService profiles)
+        {
+            if (!string.IsNullOrEmpty(RoomRoot) || !UnityEngine.Application.isEditor) return ForProfile(profiles);
+            ContentPackStore project = GameData();
+            if (!movedProfileEdits && profiles != null)
+            {
+                movedProfileEdits = true;
+                profiles.EnsureActive();
+                project.MoveEditsFrom(profiles.GamesFolder);
+            }
+
+            return project;
+        }
+
+        // Moves cards.json, decks.json and uploads/ of each game in a profile into this store, for games that have no
+        // edits here yet (a game that already has them keeps them; the profile's copy is left and a warning says so).
+        private void MoveEditsFrom(string profileGames)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(profileGames) || !Directory.Exists(profileGames)) return;
+                foreach (string from in Directory.GetDirectories(profileGames))
+                {
+                    string to = Path.Combine(RootFolder, Path.GetFileName(from));
+                    string fromCards = Path.Combine(from, PlayerCardsFile.FileName);
+                    string fromDecks = Path.Combine(from, PlayerDecksFile.FileName);
+                    string fromUploads = Path.Combine(from, UploadsFolderName);
+                    bool hasEdits = File.Exists(fromCards) || File.Exists(fromDecks) || Directory.Exists(fromUploads);
+                    if (!hasEdits) continue;
+                    bool projectHas = File.Exists(Path.Combine(to, PlayerCardsFile.FileName))
+                        || File.Exists(Path.Combine(to, PlayerDecksFile.FileName))
+                        || Directory.Exists(Path.Combine(to, UploadsFolderName));
+                    if (projectHas)
+                    {
+                        Debug.LogWarning($"[Game data] {to} already holds this game's edits; the ones in {from} stay in the profile and are not used in the editor.");
+                        continue;
+                    }
+
+                    Directory.CreateDirectory(to);
+                    if (File.Exists(fromCards)) File.Move(fromCards, Path.Combine(to, PlayerCardsFile.FileName));
+                    if (File.Exists(fromDecks)) File.Move(fromDecks, Path.Combine(to, PlayerDecksFile.FileName));
+                    if (Directory.Exists(fromUploads)) Directory.Move(fromUploads, Path.Combine(to, UploadsFolderName));
+                    Debug.Log($"[Game data] Card edits and pictures moved into the project: {from} -> {to}");
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[Game data] Could not move the profile's card edits into the project: {exception.Message}");
+            }
+        }
 
         /// <summary>The game saves of the active profile (or of the online room, see <see cref="RoomRoot"/>).</summary>
         public static ContentPackStore ForProfile(ProfileService profiles)
