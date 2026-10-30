@@ -8,7 +8,7 @@ namespace ConsoleCards.Editor.UI
 {
     /// <summary>
     /// Board 17 "Draw tool (right rail + bar)" (owner, 2026-10-30): the Draw bar, built into the table HUD. It opens to the
-    /// left of the rail, level with the Draw icon (the rail's fifth button), 50 board px high: TOOL | LINE | SIZE | COLOUR |
+    /// left of the rail, level with the Draw icon (I) (the rail's fifth button), 50 board px high: TOOL | LINE | SIZE | COLOUR |
     /// Undo, CLEAR, ✕; under it one line of keys (or the label's words box). Measured from the board (x1.5).
     /// </summary>
     public static partial class TableHudBuilder
@@ -39,10 +39,10 @@ namespace ConsoleCards.Editor.UI
             Row(bar.gameObject, 12, 12, 0, 0, 9f, TextAnchor.MiddleLeft);
             Fit(bar.gameObject, true, false);
 
-            // TOOL: pen 1, highlighter 2, label 3, eraser E
+            // TOOL: pen N, highlighter K, label O, eraser X (1, 2, 3 and E are the camera's and the table's)
             RectTransform tools = DrawGroup17(bar, "Tool", "TOOL", 3f);
             string[] toolIcons = { "HudDraw", "DrawHighlighter", "DrawLabel", "DrawEraser" };
-            string[] toolKeys = { "1", "2", "3", "E" };
+            string[] toolKeys = { "N", "K", "O", "X" };
             Button[] modeButtons = new Button[4];
             Image[] modeFills = new Image[4];
             for (int i = 0; i < 4; i++)

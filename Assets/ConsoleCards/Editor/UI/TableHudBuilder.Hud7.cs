@@ -26,7 +26,7 @@ namespace ConsoleCards.Editor.UI
     /// </summary>
     public static partial class TableHudBuilder
     {
-        private const string HudLabel = "HudBoard7B6"; // B5: board 17's Draw on the rail and its bar
+        private const string HudLabel = "HudBoard7B7"; // B7: Draw is I, the player chip is a rounded box like the hint // B5: board 17's Draw on the rail and its bar
         private const string HudArt = "Assets/ConsoleCards/Content/UI/Board/Hud/";
         private const float K = 1.5f; // board pixels to the 1920 x 1080 canvas
 
@@ -200,7 +200,7 @@ namespace ConsoleCards.Editor.UI
                 Rail7Tool(rail, TableToolKind.Pan, "HudPan", "+", "Move the camera · Space drag"),
                 Rail7Tool(rail, TableToolKind.Ping, "HudPing", "P", "Ping · P"),
                 Rail7Tool(rail, TableToolKind.Measure, "HudMeasure", "M", "Measure · M"),
-                Rail7Tool(rail, TableToolKind.Draw, "HudDraw", "D", "Draw · D"), // board 17: under Measure
+                Rail7Tool(rail, TableToolKind.Draw, "HudDraw", "I", "Draw · I"), // board 17: under Measure
             };
             Rail7Rule(rail, "Rule1");
             Button undo = Rail7Button(rail, "Undo", "HudUndo", "<", "Undo · Ctrl Z", out Image undoIcon, out _);
@@ -226,7 +226,7 @@ namespace ConsoleCards.Editor.UI
             // side alongside the right toolbar"; it grows to the left) ----------
             RectTransform chip = Rect("Player", root, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
                 new Vector2(-((14f * K) + 72f + 12f), -14f * K), new Vector2(300f, 26f * K));
-            Fill(chip, new Color(0.078f, 0.094f, 0.098f, 0.85f), pill != null ? pill : round, Hex("ff3b3b"), 1.5f);
+            Fill(chip, new Color(0.078f, 0.094f, 0.098f, 0.85f), round, Hex("ff3b3b"), 1.5f); // owner: the hint's box, not a pill
             Graphic playerEdge = chip.Find("Edge")?.GetComponent<Graphic>();
             Row(chip.gameObject, 15, 9, 0, 0, 12f).childAlignment = TextAnchor.MiddleLeft;
             Fit(chip.gameObject, true, false);

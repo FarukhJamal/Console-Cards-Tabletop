@@ -378,7 +378,7 @@ namespace ConsoleCards.Presentation.Composition
             ShowDrawPanel(activeTool == TableToolKind.Draw);
         }
 
-        // Board 17: ✕, D or Esc closes the bar and goes back to Select.
+        // Board 17: ✕, I or Esc closes the bar and goes back to Select.
         private void CloseDrawBar() => ChooseTool(TableToolKind.Grab);
 
         // Per frame (UpdateTools): CLEAR stops asking after a while.
@@ -389,21 +389,22 @@ namespace ConsoleCards.Presentation.Composition
             HudDrawBar?.SetClearAsking(false);
         }
 
-        // Board 17 keys: D opens and closes Draw; while it is chosen 1, 2, 3 and E choose the pen, highlighter, label
-        // and eraser. True when a key was used.
+        // Board 17 keys (owner, 2026-10-30: 1, 2, 3 are the camera's, and W A S D, Q and E are taken too): I opens and
+        // closes Draw; while it is chosen N, K, O and X choose the pen, highlighter (marker), label and eraser. True
+        // when a key was used.
         private bool HandleDrawKeys(Keyboard keyboard)
         {
-            if (keyboard.dKey.wasPressedThisFrame)
+            if (keyboard.iKey.wasPressedThisFrame)
             {
                 ChooseTool(activeTool == TableToolKind.Draw ? TableToolKind.Grab : TableToolKind.Draw);
                 return true;
             }
 
             if (activeTool != TableToolKind.Draw) return false;
-            if (keyboard.digit1Key.wasPressedThisFrame) ChooseDrawMode(DrawModePen);
-            else if (keyboard.digit2Key.wasPressedThisFrame) ChooseDrawMode(DrawModeHighlighter);
-            else if (keyboard.digit3Key.wasPressedThisFrame) ChooseDrawMode(DrawModeLabel);
-            else if (keyboard.eKey.wasPressedThisFrame) ChooseDrawMode(DrawModeEraser);
+            if (keyboard.nKey.wasPressedThisFrame) ChooseDrawMode(DrawModePen);
+            else if (keyboard.kKey.wasPressedThisFrame) ChooseDrawMode(DrawModeHighlighter);
+            else if (keyboard.oKey.wasPressedThisFrame) ChooseDrawMode(DrawModeLabel);
+            else if (keyboard.xKey.wasPressedThisFrame) ChooseDrawMode(DrawModeEraser);
             else return false;
             return true;
         }

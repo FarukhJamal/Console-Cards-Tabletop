@@ -6,8 +6,8 @@ namespace ConsoleCards.Presentation.UI
 {
     /// <summary>
     /// Board 17 "Draw tool (right rail + bar)" (owner, 2026-10-30): the Draw tool's bar, part of the table HUD. It opens to
-    /// the left of the rail, level with the Draw icon, while Draw is chosen: TOOL (pen 1, highlighter 2, label 3,
-    /// eraser E) | LINE (plain, dashed, dotted, wavy, brush, swirl) | SIZE (thin, medium, thick) | COLOUR (your seat's
+    /// the left of the rail, level with the Draw icon, while Draw is chosen: TOOL (pen N, highlighter K, label O,
+    /// eraser X; I opens and closes it) | LINE (plain, dashed, dotted, wavy, brush, swirl) | SIZE (thin, medium, thick) | COLOUR (your seat's
     /// colour first) | Undo, CLEAR (asks again in place: CLEAR ALL?) and ✕ (back to Select). Under it one line of keys,
     /// and the label's words box while the label tool is chosen. Built by Console Cards > UI > Create Missing Table HUD.
     /// </summary>
