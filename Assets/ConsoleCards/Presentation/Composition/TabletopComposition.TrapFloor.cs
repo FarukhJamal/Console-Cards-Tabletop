@@ -561,7 +561,11 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
-            boardFeedback.ShowTurnPiece(pawnFound, pawnPosition, colour);
+            // CHIP-1: YOU on the turn piece when this computer plays that seat, else the seat's colour.
+            string turnLabel = IsPlayerOnThisComputer(active)
+                ? "YOU"
+                : TryGetSeatIndex(active, out int turnSeat) ? PlayerColorName(turnSeat) : null;
+            boardFeedback.ShowTurnPiece(pawnFound, pawnPosition, colour, turnLabel);
             boardFeedbackTraps.Clear();
             if (trapFloorAbilityResolutionState != null)
             {

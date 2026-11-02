@@ -4071,8 +4071,14 @@ namespace ConsoleCards.Presentation.Composition
                 if (anyHeld && !show) LogReachSkipped(heldPawnId, hintsOn);
             }
 
-            if (show == reachHintShown) return;
+            if (show == reachHintShown)
+            {
+                if (show) UpdateStepsChip(); // CHIP-1
+                return;
+            }
+
             reachHintShown = show;
+            stepsChipReady = false;
             if (!show)
             {
                 host.boardFeedback?.HideReach();
@@ -4106,7 +4112,9 @@ namespace ConsoleCards.Presentation.Composition
 
             TrapFloorCoordinate start = moveStartTile ?? current;
             int allowance = MoveAllowance(out _);
+            stepsChipAllowance = allowance;
             ComputeMoveSteps(start, onlyDirection);
+            stepsChipReady = true;
             reachTileIds.Clear();
             for (int x = TrapFloorCoordinate.MinimumAxisValue; x <= host.trapFloorTemplate.GridColumns; x++)
             {
@@ -4126,6 +4134,48 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (host.EnsureBoardFeedback()) host.boardFeedback.ShowReach(reachPositions, ReachMarkerColour);
+            UpdateStepsChip();
+        }
+
+        // CHIP-1 (board 18, owner 2026-11-02): while the pawn is carried over a tile in reach, a small chip on that
+        // tile's near edge says what dropping there costs ("2 STEPS · DROP"). Out of reach: no chip (the RULE
+        // reminder says why). The words are made once.
+        private static readonly string[] StepsChipWords =
+        {
+            string.Empty, "1 STEP · DROP", "2 STEPS · DROP", "3 STEPS · DROP", "4 STEPS · DROP", "5 STEPS · DROP",
+            "6 STEPS · DROP",
+        };
+
+        private int stepsChipAllowance;
+        private bool stepsChipReady; // the steps were worked out for this pick-up (not an earlier one)
+
+        private void UpdateStepsChip()
+        {
+            if (host.boardFeedback == null) return;
+            if (!stepsChipReady)
+            {
+                host.boardFeedback.HideChip(BoardChip.Steps);
+                return;
+            }
+
+            int steps = -1;
+            CardView tileView = null;
+            if (reachSteps != null
+                && TryGetActivePawnTile(out _, out TrapFloorCoordinate tile)
+                && tile.X >= 0 && tile.X < reachSteps.GetLength(0) && tile.Y >= 0 && tile.Y < reachSteps.GetLength(1)
+                && host.trapFloorTemplate.TryGetFloorCardId(tile, out TabletopObjectId tileId)
+                && host.Registry.TryGetCardView(tileId, out tileView))
+            {
+                steps = reachSteps[tile.X, tile.Y];
+            }
+
+            if (tileView == null || steps <= 0 || steps >= StepsChipWords.Length || steps > stepsChipAllowance)
+            {
+                host.boardFeedback.HideChip(BoardChip.Steps);
+                return;
+            }
+
+            host.boardFeedback.ShowStepsChip(tileView.transform.position, StepsChipWords[steps]);
         }
 
         // Console note (once per pick-up) for why a held pawn shows no reach.

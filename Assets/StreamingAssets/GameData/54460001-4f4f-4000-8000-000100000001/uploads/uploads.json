@@ -31,6 +31,10 @@
         {
             "key": "trap-floor/player/54460015-4f4f-4000-8000-001500000023/front",
             "file": "trap-floor__player__54460015-4f4f-4000-8000-001500000023__front.png"
+        },
+        {
+            "key": "trap-floor/cover",
+            "file": "trap-floor__cover.png"
         }
     ]
 }

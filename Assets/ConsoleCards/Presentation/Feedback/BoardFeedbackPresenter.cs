@@ -58,6 +58,13 @@ namespace ConsoleCards.Presentation.Feedback
         private int nextFlash;
         private int nextBurst;
 
+        // CHIP-1 (board 18): the word chips, one each (Turn, Steps, Event), on a tile's edge.
+        private static readonly Color ChipInkLight = new Color(0.98f, 0.99f, 0.99f, 1f);
+        private static readonly Color ChipInkDark = new Color(0.10f, 0.07f, 0.02f, 1f);
+        private static readonly Color ChipDark = new Color(0.063f, 0.075f, 0.078f, 0.94f);
+        private static readonly Color ChipTeal = new Color(0.024f, 0.937f, 0.941f, 1f);
+        private readonly BoardTileChip[] chips = new BoardTileChip[3];
+
         public BoardFeedbackPresenter(BoardFeedbackSet set, Transform parent)
         {
             this.set = set;
@@ -92,6 +99,32 @@ namespace ConsoleCards.Presentation.Feedback
             hover = Make(set.HoverOutline, parent);
             landing = Make(set.LandingGhost, parent);
             puffs = MakePool(set.CollapseBurst, parent, PuffPool);
+            Canvas chipCanvas = BoardTileChip.CreateCanvas(parent);
+            owned.Add(chipCanvas.gameObject);
+            for (int i = 0; i < chips.Length; i++)
+            {
+                chips[i] = BoardTileChip.Create(chipCanvas, "Chip " + (BoardChip)i);
+            }
+        }
+
+        /// <summary>
+        /// CHIP-1: a word chip pinned to a tile's edge, over the gap so the card stays visible. Turn and Event sit on
+        /// the far edge, Steps hangs under the near edge (as the camera looks). Pass the same string each frame.
+        /// </summary>
+        public void ShowChip(BoardChip chip, Vector3 tile, string words, Color plate, Color ink)
+        {
+            chips[(int)chip].Show(tile, chip == BoardChip.Steps, words, plate, ink);
+        }
+
+        public void HideChip(BoardChip chip)
+        {
+            chips[(int)chip].Hide();
+        }
+
+        /// <summary>CHIP-1: "2 STEPS · DROP" on the tile under a carried piece, dark with teal words.</summary>
+        public void ShowStepsChip(Vector3 tile, string words)
+        {
+            ShowChip(BoardChip.Steps, tile, words, ChipDark, ChipTeal);
         }
 
         /// <summary>POL-7: the selection outlines, each sized to its piece (1 = card sized).</summary>
@@ -183,9 +216,14 @@ namespace ConsoleCards.Presentation.Feedback
 
         private Color Meaning(Color byMeaning, Color fromCaller) => set.ColoursByMeaning ? byMeaning : fromCaller;
 
-        /// <summary>Whose piece acts: a glow in the seat's colour on its tile (board 18, 1).</summary>
-        public void ShowTurnPiece(bool visible, Vector3 position, Color colour)
+        /// <summary>
+        /// Whose piece acts: a glow in the seat's colour on its tile (board 18, 1), and a chip with
+        /// <paramref name="label"/> (YOU, or the seat's colour; none when null).
+        /// </summary>
+        public void ShowTurnPiece(bool visible, Vector3 position, Color colour, string label = null)
         {
+            if (!visible || label == null) HideChip(BoardChip.Turn);
+            else ShowChip(BoardChip.Turn, position, label, colour, ChipInkLight);
             if (ring == null) return;
             if (!visible)
             {
@@ -233,20 +271,25 @@ namespace ConsoleCards.Presentation.Feedback
         public void HideReach()
         {
             HideRange(reach, 0);
+            HideChip(BoardChip.Steps);
         }
 
         /// <summary>
         /// The round's big moment on one tile (board 18, 7), for Trap Floor the tile the floor dice point at. Like
         /// reach, kept apart from the other markers: <see cref="HideAll"/> leaves it; <see cref="HideEvent"/> takes it away.
         /// </summary>
-        public void ShowEvent(Vector3 position, Color colour)
+        public void ShowEvent(Vector3 position, Color colour, string label = null)
         {
-            collapseTarget?.Show(position + (Vector3.up * set.TileMarkerLift), Meaning(set.EventColour, colour));
+            Color tint = Meaning(set.EventColour, colour);
+            collapseTarget?.Show(position + (Vector3.up * set.TileMarkerLift), tint);
+            if (label == null) HideChip(BoardChip.Event);
+            else ShowChip(BoardChip.Event, position, label, new Color(tint.r, tint.g, tint.b, 1f), ChipInkDark);
         }
 
         public void HideEvent()
         {
             collapseTarget?.Hide();
+            HideChip(BoardChip.Event);
         }
 
         public void Flash(Vector3 position, Color colour)
@@ -266,6 +309,7 @@ namespace ConsoleCards.Presentation.Feedback
         public void HideAll()
         {
             ring?.Hide();
+            HideChip(BoardChip.Turn);
             HideRange(warnings, 0);
             HideRange(targets, 0);
             HideRange(neutralized, 0);

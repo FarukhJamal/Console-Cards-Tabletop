@@ -35,7 +35,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (shownOn != null && shownOn != feedback) shownOn.HideEvent();
-            feedback.ShowEvent(tilePosition, TargetColor); // board 18: the collapse is the round's Event
+            feedback.ShowEvent(tilePosition, TargetColor, "COLLAPSE"); // board 18: the collapse is the round's Event, with its chip
             shownOn = feedback;
             CurrentTargetId = floorCardId;
         }
