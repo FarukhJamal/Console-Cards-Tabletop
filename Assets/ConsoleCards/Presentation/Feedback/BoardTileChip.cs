@@ -32,6 +32,12 @@ namespace ConsoleCards.Presentation.Feedback
         private const float HalfTileDepth = 0.7f;  // table units: a floor tile is 1 wide, 1.4 deep
         private static Font chipFont;
 
+        /// <summary>
+        /// MENU-1: true while something drawn in the world covers the table (the rulebook open on it): the chips are drawn
+        /// on the screen, so they would otherwise show through it.
+        /// </summary>
+        internal static bool Covered;
+
         private RectTransform rect;
         private Image plate;
         private Text words;
@@ -160,7 +166,7 @@ namespace ConsoleCards.Presentation.Feedback
             forward.Normalize();
             Vector3 edgePoint = centre + (forward * (below ? -HalfTileDepth : HalfTileDepth));
             Vector3 screen = camera.WorldToScreenPoint(edgePoint);
-            bool visible = screen.z > 0f;
+            bool visible = screen.z > 0f && !Covered;
             if (words.enabled != visible)
             {
                 words.enabled = visible;

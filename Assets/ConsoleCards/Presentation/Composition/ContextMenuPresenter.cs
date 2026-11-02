@@ -495,7 +495,7 @@ namespace ConsoleCards.Presentation.Composition
             if (host.HasLocalHand() && !host.ActiveCartridge.IsAssistedControllerDeck(targetDeckId) && targetDeck.Count > 0)
             {
                 actions.Add(new PopupActionOption(
-                    "Draw to Hand",
+                    "Draw into hand…",
                     true,
                     () => host.OpenDrawToHandPopup(targetDeckId)));
             }
@@ -527,7 +527,7 @@ namespace ConsoleCards.Presentation.Composition
             host.runtimeUi.ShowContextMenu(
                 host.contextMenuAnchorScreenPosition,
                 "DECK",
-                targetDeck.Count == 1 ? "1 card" : $"{targetDeck.Count} cards",
+                PileWords(targetDeck),
                 actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);
@@ -554,7 +554,7 @@ namespace ConsoleCards.Presentation.Composition
             host.runtimeUi.ShowContextMenu(
                 host.contextMenuAnchorScreenPosition,
                 "DISCARD PILE",
-                string.Empty,
+                PileWords(host.matchState.GetContainer(targetPileId)),
                 actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);
@@ -792,8 +792,8 @@ namespace ConsoleCards.Presentation.Composition
                 TabletopComponentTarget.ForObject(targetCardId));
             host.runtimeUi.ShowContextMenu(
                 host.contextMenuAnchorScreenPosition,
-                "CARD",
-                string.Empty,
+                CardTitle(targetCardId),
+                CardFaceWords(targetCardId),
                 actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);
@@ -837,11 +837,43 @@ namespace ConsoleCards.Presentation.Composition
 
             host.runtimeUi.ShowContextMenu(
                 host.contextMenuAnchorScreenPosition,
-                "CARD",
+                CardTitle(targetCardId),
                 $"In {FormatContainerKind(container.Kind)}",
                 actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);
+        }
+
+        // MENU-1 (Piece menus board): the header says how many cards and which way up ("32 cards · face down").
+        private string PileWords(ContainerState pile)
+        {
+            if (pile == null || pile.Count == 0) return "Empty";
+            string count = pile.Count == 1 ? "1 card" : $"{pile.Count} cards";
+            return pile.TryPeekTop(out TabletopObjectId top) && host.matchState.Cards.TryGetValue(top, out CardInstanceState card)
+                ? $"{count} · {(card.Face == CardFace.FaceUp ? "face up" : "face down")}"
+                : count;
+        }
+
+        // MENU-1: "CARD · Heavy Kick" when its face shows; just "CARD" when it does not.
+        private string CardTitle(TabletopObjectId cardId)
+        {
+            if (host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card)
+                && card.Face == CardFace.FaceUp
+                && !IsInAnotherPlayersHand(cardId)
+                && host.TryGetAuthoredCardDefinition(card.BaseState.DefinitionId, out CardDefinition definition)
+                && !string.IsNullOrWhiteSpace(definition.DisplayName))
+            {
+                return $"CARD <size=17><color=#9BA4A7>· {definition.DisplayName}</color></size>";
+            }
+
+            return "CARD";
+        }
+
+        private string CardFaceWords(TabletopObjectId cardId)
+        {
+            return host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card)
+                ? card.Face == CardFace.FaceUp ? "Face up" : "Face down"
+                : string.Empty;
         }
 
         internal static string FormatContainerKind(ContainerKind kind)
@@ -885,7 +917,7 @@ namespace ConsoleCards.Presentation.Composition
             if (host.HasLocalHand() && stack.Count > 0)
             {
                 actions.Add(new PopupActionOption(
-                    "Draw to Hand",
+                    "Draw into hand…",
                     true,
                     () => host.OpenDrawToHandPopup(sourceStackId)));
             }
@@ -900,7 +932,7 @@ namespace ConsoleCards.Presentation.Composition
             if (stack.Count >= 2)
             {
                 actions.Add(new PopupActionOption(
-                    "Split Stack",
+                    "Split in two",
                     true,
                     () =>
                     {
@@ -927,7 +959,7 @@ namespace ConsoleCards.Presentation.Composition
             host.runtimeUi.ShowContextMenu(
                 host.contextMenuAnchorScreenPosition,
                 "STACK",
-                $"{stack.Count} card{(stack.Count == 1 ? string.Empty : "s")}",
+                PileWords(stack),
                 actions,
                 CloseContextMenu,
                 DismissPopupFromSecondary);

@@ -158,7 +158,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!CanSplitIntoPiles(pileId)) return;
             actions.Add(new PopupActionOption(
-                "Split into...",
+                "Split into piles…",
                 true,
                 () =>
                 {

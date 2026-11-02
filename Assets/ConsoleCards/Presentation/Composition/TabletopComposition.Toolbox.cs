@@ -1555,22 +1555,28 @@ namespace ConsoleCards.Presentation.Composition
 
             int maximum = Math.Max(1, deck.Count);
             selectedQuantity = Mathf.Clamp(selectedQuantity, 1, maximum);
-            runtimeUi.ShowQuantityPopup(
-                "DRAW TO HAND",
-                $"Draw from the top of this {(deck.Kind == ContainerKind.Stack ? "stack" : "deck")} into your hand. {deck.Count} card{(deck.Count == 1 ? string.Empty : "s")} left.",
-                "Draw",
+            // MENU-1 (Piece menus board): the same "Draw how many?" panel as the Controller deck, with 1 3 5 7.
+            runtimeUi.ShowDrawCountPopup(
+                contextMenuAnchorScreenPosition,
                 selectedQuantity,
-                1,
-                maximum,
-                () => ChangeSelectedQuantity(-1, maximum),
-                () => ChangeSelectedQuantity(1, maximum),
+                deck.Count,
+                () => StepDrawToHand(-1, maximum),
+                () => StepDrawToHand(1, maximum),
                 () =>
                 {
                     int count = Mathf.Clamp(selectedQuantity, 1, maximum);
                     runtimeUi?.CloseTabletopPopup();
                     DrawCards(deckId, count);
                 },
-                ContextMenus.CloseContextMenu);
+                ContextMenus.CloseContextMenu,
+                ContextMenus.CloseContextMenu,
+                ContextMenus.DismissPopupFromSecondary);
+        }
+
+        private void StepDrawToHand(int delta, int maximum)
+        {
+            selectedQuantity = Mathf.Clamp(selectedQuantity + delta, 1, maximum);
+            runtimeUi?.SetDrawCountPopupValue(selectedQuantity, maximum);
         }
 
         private void ProjectCreatedCardBatch(IReadOnlyList<TabletopObjectId> cardIds)

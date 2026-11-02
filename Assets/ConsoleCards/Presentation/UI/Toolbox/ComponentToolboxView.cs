@@ -744,9 +744,35 @@ namespace ConsoleCards.Presentation.UI.Toolbox
             beforeOpen?.Invoke();
             ClearPlacementHint();
             panel.SetActive(true);
+            FitPanelToScreen();
             openButton.gameObject.SetActive(false);
             panelOpenChanged?.Invoke(true);
             ClearSelectedUiObject();
+        }
+
+        // MENU-1 (owner, 2026-11-02: "check every panel"): on a screen shorter than 16:9 the Toolbox ran past the bottom
+        // and cut TABLE TOOLS off. It now ends a margin above the bottom; the parts inside are anchored to its edges.
+        private const float ScreenMargin = 24f;
+        private const float SmallestPanelHeight = 480f;
+        private RectTransform fitPanel;
+        private float fitPanelHeight;
+
+        private void FitPanelToScreen()
+        {
+            if (fitPanel == null)
+            {
+                Transform inner = panel.transform.Find("Panel");
+                if (inner == null) return;
+                fitPanel = (RectTransform)inner;
+                fitPanelHeight = fitPanel.sizeDelta.y;
+            }
+
+            RectTransform area = panel.transform as RectTransform;
+            if (area == null) return;
+            float room = area.rect.height + fitPanel.anchoredPosition.y - ScreenMargin; // the panel hangs from the top
+            Vector2 size = fitPanel.sizeDelta;
+            size.y = Mathf.Clamp(room, SmallestPanelHeight, fitPanelHeight);
+            fitPanel.sizeDelta = size;
         }
 
         public void CloseToolbox()

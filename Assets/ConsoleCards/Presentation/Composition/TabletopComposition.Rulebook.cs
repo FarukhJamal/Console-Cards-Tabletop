@@ -149,6 +149,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (reading == rulebookReading) return;
             rulebookReading = reading;
+            BoardTileChip.Covered = reading; // MENU-1: the chips stay under the open book
             runtimeUi?.SetPhysicalRulebookReading(reading);
             if (reading)
             {

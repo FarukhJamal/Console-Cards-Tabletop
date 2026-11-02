@@ -1015,7 +1015,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             actions.Add(new PopupActionOption(
-                "Spread",
+                "Spread the cards",
                 true,
                 () =>
                 {

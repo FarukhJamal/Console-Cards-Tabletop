@@ -49,6 +49,62 @@ namespace ConsoleCards.Editor.UI
                 UiLayer.Popup, UiRetention.CachedSingleInstance);
             AssignCatalogEntry(UiPrefabIds.CardInspect, AssetDatabase.LoadAssetAtPath<CardInspectView>(Inspect9Path),
                 UiLayer.Modal, UiRetention.CachedSingleInstance);
+            PolishPieceMenus();
+        }
+
+        // MENU-1 (owner, 2026-11-02: "check every panel" at full size). Done once on each prefab (it gets the label):
+        // - the menus' shadow was a hard copy of the card 18 px lower, which read as a dark band under every menu;
+        //   it is now a 5 px lip;
+        // - the Inspect panel stood over the right rail; it now stops left of it.
+        private const string PolishLabel = "Menu1Polish";
+        private const float SoftShadowDrop = 5f;
+        private const float SoftShadowAlpha = 0.45f;
+        private const float InspectRight = -108f; // the rail is 72 wide, 21 in from the right edge
+
+        private static void PolishPieceMenus()
+        {
+            Polish(Popup9Path, root =>
+            {
+                foreach (Shadow shadow in root.GetComponentsInChildren<Shadow>(true))
+                {
+                    if (shadow is Outline || shadow.effectDistance.y > -10f) continue; // edges stay; only the drops
+                    shadow.effectDistance = new Vector2(0f, -SoftShadowDrop);
+                    Color colour = shadow.effectColor;
+                    colour.a = SoftShadowAlpha;
+                    shadow.effectColor = colour;
+                }
+            });
+            Polish(Inspect9Path, root =>
+            {
+                Transform panel = root.transform.Find("CardInspectPanel");
+                if (panel is RectTransform rect && rect.anchoredPosition.x > InspectRight)
+                {
+                    rect.anchoredPosition = new Vector2(InspectRight, rect.anchoredPosition.y);
+                }
+            });
+        }
+
+        private static void Polish(string path, System.Action<GameObject> change)
+        {
+            GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (asset == null || System.Array.IndexOf(AssetDatabase.GetLabels(asset), PolishLabel) >= 0) return;
+            GameObject root = PrefabUtility.LoadPrefabContents(path);
+            try
+            {
+                change(root);
+                PrefabUtility.SaveAsPrefabAsset(root, path);
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+
+            asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            string[] labels = AssetDatabase.GetLabels(asset);
+            System.Array.Resize(ref labels, labels.Length + 1);
+            labels[labels.Length - 1] = PolishLabel;
+            AssetDatabase.SetLabels(asset, labels);
+            Debug.Log($"[MENU-1] Polished {path}.");
         }
 
         /// <summary>Turn Off: the menus before board 9.</summary>

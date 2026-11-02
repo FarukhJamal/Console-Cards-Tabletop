@@ -354,9 +354,28 @@ namespace ConsoleCards.Presentation.UI
                 for (int group = 0; group < GroupNames.Length; group++)
                 {
                     bool headed = false;
-                    for (int i = 0; i < actions.Count; i++)
+                    int lastOrder = -1;
+                    int lastIndex = -1;
+                    while (true)
                     {
-                        if (PopupActionRowView.GroupOf(actions[i].Label) != group) continue;
+                        // MENU-1: the next row of this group in the board's order (ties keep the game's order).
+                        int i = -1;
+                        int order = int.MaxValue;
+                        for (int j = 0; j < actions.Count; j++)
+                        {
+                            if (PopupActionRowView.GroupOf(actions[j].Label) != group) continue;
+                            int o = PopupActionRowView.OrderOf(actions[j].Label);
+                            if (o < lastOrder || (o == lastOrder && j <= lastIndex)) continue;
+                            if (o < order || (o == order && j < i))
+                            {
+                                order = o;
+                                i = j;
+                            }
+                        }
+
+                        if (i < 0) break;
+                        lastOrder = order;
+                        lastIndex = i;
                         if (!headed)
                         {
                             Text header = GroupHeader(headers++, contentRoot);
@@ -384,7 +403,8 @@ namespace ConsoleCards.Presentation.UI
             actionRows.Add(row);
         }
 
-        // Groups only when every row is a piece action and there are at least two kinds.
+        // Groups whenever every row is a piece action (MENU-1: one group still shows its name, as every piece's menu
+        // uses the same PLAY · ARRANGE · TABLE groups).
         private static bool InGroups(IReadOnlyList<PopupActionOption> actions)
         {
             int kinds = 0;
@@ -395,7 +415,7 @@ namespace ConsoleCards.Presentation.UI
                 kinds |= 1 << group;
             }
 
-            return kinds != 0 && (kinds & (kinds - 1)) != 0;
+            return kinds != 0;
         }
 
         private Text GroupHeader(int index, RectTransform contentRoot)

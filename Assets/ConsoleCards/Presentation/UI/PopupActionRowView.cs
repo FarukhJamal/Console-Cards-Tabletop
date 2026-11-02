@@ -151,7 +151,8 @@ namespace ConsoleCards.Presentation.UI
             if (Starts(action, "Draw") || Starts(action, "Deal") || Starts(action, "Shuffle") || Starts(action, "Flip")
                 || Starts(action, "Roll") || Starts(action, "Set the face") || Starts(action, "Inspect")
                 || Starts(action, "Into") || Starts(action, "Take") || Starts(action, "Play") || Starts(action, "Reveal")
-                || Starts(action, "Hide") || Starts(action, "Show") || Starts(action, "Pick up"))
+                || Starts(action, "Hide") || Starts(action, "Show") || Starts(action, "Pick up")
+                || Starts(action, "Populate"))
             {
                 return 0;
             }
@@ -165,6 +166,37 @@ namespace ConsoleCards.Presentation.UI
             }
 
             return -1;
+        }
+
+        // MENU-1 (owner, 2026-11-02): the rows of every piece's menu keep one order inside their group, as on the
+        // approved Piece menus board: the main thing first (Roll, Draw, Deal, Shuffle, Flip), Inspect last in PLAY;
+        // Spread, Split, Look through in ARRANGE; Lock, Move, Duplicate and Delete last in TABLE.
+        private static readonly string[] RowOrder =
+        {
+            "Roll", "Show", "Set the face", "Draw 1", "Draw…", "Draw into hand", "Draw to hand limit", "Populate",
+            "Deal", "Shuffle", "Flip", "Reveal", "Hide", "Into", "Take", "Pick up", "Play", "Inspect",
+            "Spread", "Split", "Look through", "Sort", "Fan", "Stack", "Gather", "Merge", "Shuffle as", "Flourish",
+            "Deal another way",
+            "Lock", "Unlock", "Move", "Rotate", "Columns", "Rows", "Resize", "Duplicate", "Copy", "Remove", "Delete",
+        };
+
+        /// <summary>MENU-1: where a piece action sits inside its group (the longest matching start wins).</summary>
+        public static int OrderOf(string action)
+        {
+            if (string.IsNullOrEmpty(action)) return RowOrder.Length;
+            int best = RowOrder.Length;
+            int bestLength = 0;
+            for (int i = 0; i < RowOrder.Length; i++)
+            {
+                string start = RowOrder[i];
+                if (start.Length > bestLength && Starts(action, start))
+                {
+                    best = i;
+                    bestLength = start.Length;
+                }
+            }
+
+            return best;
         }
 
         private static bool Starts(string text, string start) => text.StartsWith(start, StringComparison.Ordinal);
