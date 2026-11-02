@@ -23,9 +23,9 @@ namespace ConsoleCards.Presentation.Composition
             model.RangeMinimum = deck != null ? deck.minimumCards : decks.gameDeckMinimum;
             model.RangeMaximum = deck != null ? deck.maximumCards : decks.gameDeckMaximum;
             model.CanChangeBack = PictureFilePicker.IsAvailable;
-            if (deck != null && deck.floor > 0 && !string.IsNullOrWhiteSpace(deck.backArtKey))
+            if (deck != null && deck.stage > 0 && !string.IsNullOrWhiteSpace(deck.backArtKey))
             {
-                model.BackPicture = host.CardEditorPanel.DraftPicture(deck.backArtKey, null, false); // FLOORDECK-1
+                model.BackPicture = host.CardEditorPanel.DraftPicture(deck.backArtKey, null, false); // STAGES-1
                 if (model.BackPicture != null) return;
             }
 
@@ -109,12 +109,12 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            // FLOORDECK-1: a floor deck keeps its own back; every tile of that floor shows it.
-            if (SelectedIsFloorDeck(out PlayerDeckRecord floorDeck))
+            // STAGES-1: a stage keeps its own back; every floor tile of that stage shows it.
+            if (SelectedIsStage(out PlayerDeckRecord stage))
             {
-                floorDeck.backArtKey = key;
+                stage.backArtKey = key;
                 deckEditorChanged = true;
-                ShowDeckEditor($"Your picture is now the back of every tile on Floor {floorDeck.floor}.");
+                ShowDeckEditor($"Your picture is now the back of every floor tile in {StageTitle(stage)}.");
                 return;
             }
 

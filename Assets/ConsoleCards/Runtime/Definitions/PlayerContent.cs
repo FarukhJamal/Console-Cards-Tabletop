@@ -202,13 +202,24 @@ namespace ConsoleCards.Definitions
         public List<PlayerDeckEntry> cards = new List<PlayerDeckEntry>();
 
         /// <summary>
-        /// FLOORDECK-1 (owner, 2026-11-02): 1, 2, 3… for a floor deck (Trap Floor deals that floor from its cards);
-        /// 0 for an ordinary deck.
+        /// STAGES-1 (owner, 2026-11-02): 1, 2, 3… for a stage's look (Trap Floor: a whole run of floors with its own
+        /// pictures; the name is the stage's, for example "Kitchen"); 0 for an ordinary deck. A stage holds no cards.
         /// </summary>
-        public int floor;
+        public int stage;
 
-        /// <summary>FLOORDECK-1: the back every tile of this floor shows (an art key); empty: the game's own back.</summary>
+        /// <summary>STAGES-1: the back every floor tile of this stage shows (an art key); empty: the game's own back.</summary>
         public string backArtKey = string.Empty;
+
+        /// <summary>STAGES-1: this stage's front pictures, by card.</summary>
+        public List<PlayerDeckFront> fronts = new List<PlayerDeckFront>();
+    }
+
+    /// <summary>STAGES-1: a card's front picture in one stage (an art key in the game's pictures).</summary>
+    [Serializable]
+    public sealed class PlayerDeckFront
+    {
+        public string cardId = string.Empty;
+        public string frontArtKey = string.Empty;
     }
 
     [Serializable]

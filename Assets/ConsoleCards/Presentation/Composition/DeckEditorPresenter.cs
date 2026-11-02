@@ -160,6 +160,7 @@ namespace ConsoleCards.Presentation.Composition
                     Close = CloseDeckEditor,
                     SetRange = SetDeckEditorRange,
                     ChangeBack = ChangeDeckEditorBack,
+                    ExtraButton = ImportStageFronts,
                 };
             }
 
@@ -167,8 +168,8 @@ namespace ConsoleCards.Presentation.Composition
             PlayerDeckRecord deck = FindEditorDeck(deckEditorSelectedId);
             if (deck == null) deckEditorSelectedId = CardEditorPresenter.GameDeckId;
             bool isGameDeck = deck == null;
-            bool isFloorDeck = deck != null && deck.floor > 0; // FLOORDECK-1
-            string deckName = isGameDeck ? $"{gameName} deck" : isFloorDeck ? $"Floor {deck.floor}" : DeckName(deck);
+            bool isStage = deck != null && deck.stage > 0; // STAGES-1
+            string deckName = isGameDeck ? $"{gameName} deck" : isStage ? StageTitle(deck) : DeckName(deck);
 
             List<DeckEditorCard> cards = DeckEditorCards();
             List<DeckEditorCardRowModel> rows = new List<DeckEditorCardRowModel>(cards.Count);
@@ -180,7 +181,9 @@ namespace ConsoleCards.Presentation.Composition
                 total += copies;
                 if (copies > 0) different++;
                 if (!deckEditorShowAll && copies == 0) continue;
-                rows.Add(new DeckEditorCardRowModel(cards[i].Id, CardName(cards[i]), CardDetail(cards[i]), CardThumbnail(cards[i]), copies));
+                Texture2D thumbnail = isStage ? StageFront(deck, cards[i].Id) : null; // STAGES-1: this stage's picture
+                rows.Add(new DeckEditorCardRowModel(cards[i].Id, CardName(cards[i]), CardDetail(cards[i]),
+                    thumbnail != null ? thumbnail : CardThumbnail(cards[i]), copies));
             }
 
             string text = status;
@@ -188,8 +191,8 @@ namespace ConsoleCards.Presentation.Composition
             {
                 text = deckEditorChanged
                     ? "Not saved yet: the decks could not be written."
-                    : isFloorDeck
-                        ? FloorDeckText(deck)
+                    : isStage
+                        ? StageText(deck)
                     : isGameDeck
                         ? "The game's own deck: these copies are used in play from the next table you start."
                         : "Your deck. Games will use your decks in a later step (L2-5).";
@@ -201,7 +204,8 @@ namespace ConsoleCards.Presentation.Composition
                 CanChangeGame = host.CardEditorPanel.editorGames.Count > 1,
                 Decks = BuildDeckEditorDeckRows(gameName, cards),
                 DeckName = deckName,
-                CanRename = !isGameDeck && !isFloorDeck,
+                CanRename = !isGameDeck,
+                ExtraButtonText = isStage ? "IMPORT FRONTS…" : string.Empty,
                 CanDelete = !isGameDeck,
                 Summary = $"{deckName.ToUpperInvariant()} · {total} CARD{(total == 1 ? string.Empty : "S")} · {different} DIFFERENT",
                 FilterText = deckEditorShowAll ? "Show: all cards" : "Show: this deck only",
@@ -221,21 +225,22 @@ namespace ConsoleCards.Presentation.Composition
         {
             List<CardEditorRowModel> rows = new List<CardEditorRowModel>(1 + host.CardEditorPanel.editorDecks.decks.Count)
             {
-                DeckRow(CardEditorPresenter.GameDeckId, $"{gameName} deck", "The game's own deck", cards),
+                // DECKTREE-1 (owner, 2026-11-02): the game is the parent; its stages and your decks sit under it.
+                DeckRow(CardEditorPresenter.GameDeckId, gameName, "The game and its deck", AllDeckEditorCards()),
             };
-            AddFloorRows(rows, cards); // FLOORDECK-1
+            AddStageRows(rows); // STAGES-1
             for (int d = 0; d < host.CardEditorPanel.editorDecks.decks.Count; d++)
             {
                 PlayerDeckRecord deck = host.CardEditorPanel.editorDecks.decks[d];
-                if (deck == null || string.IsNullOrWhiteSpace(deck.id) || deck.floor > 0) continue;
-                rows.Add(DeckRow(deck.id, DeckName(deck), "Your deck", cards));
+                if (deck == null || string.IsNullOrWhiteSpace(deck.id) || deck.stage > 0) continue;
+                rows.Add(DeckRow(deck.id, DeckName(deck), "Your deck", AllDeckEditorCards(), 1));
             }
 
-            return rows;
+            return CardEditorRowModel.AsTree(rows); // DECKTREE-2: the tree's lines
         }
 
         // A deck in the list: its name, size, and the picture of its first card.
-        internal CardEditorRowModel DeckRow(string deckId, string name, string kind, List<DeckEditorCard> cards)
+        internal CardEditorRowModel DeckRow(string deckId, string name, string kind, List<DeckEditorCard> cards, int depth = 0)
         {
             int total = 0;
             Texture2D picture = null;
@@ -247,7 +252,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             return new CardEditorRowModel(deckId, name, $"{kind} · {total} card{(total == 1 ? string.Empty : "s")}", picture,
-                string.Equals(deckId, deckEditorSelectedId, StringComparison.OrdinalIgnoreCase));
+                string.Equals(deckId, deckEditorSelectedId, StringComparison.OrdinalIgnoreCase), depth);
         }
 
         // ---------- actions ----------
@@ -272,13 +277,19 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void SelectEditorDeck(string deckId)
         {
-            if (TrySelectFloorRow(deckId)) return; // FLOORDECK-1
+            if (TrySelectStageRow(deckId)) return; // STAGES-1
             deckEditorSelectedId = string.IsNullOrEmpty(deckId) ? CardEditorPresenter.GameDeckId : deckId;
             ShowDeckEditor(string.Empty);
         }
 
         internal void NewDeckInEditor()
         {
+            if (!host.CardEditorPanel.editorGame.AllowsPlayerDecks)
+            {
+                ShowDeckEditor($"{host.CardEditorPanel.editorGame.DisplayName} plays with its own deck only."); // GENRE-1
+                return;
+            }
+
             PlayerDeckRecord deck = new PlayerDeckRecord
             {
                 id = PlayerCardsFile.NewCardId(),
@@ -294,6 +305,12 @@ namespace ConsoleCards.Presentation.Composition
         // A new deck of yours with the same cards and copies as the selected deck (the game's deck included).
         internal void CopyEditorDeck()
         {
+            if (!host.CardEditorPanel.editorGame.AllowsPlayerDecks)
+            {
+                ShowDeckEditor($"{host.CardEditorPanel.editorGame.DisplayName} plays with its own deck only."); // GENRE-1
+                return;
+            }
+
             PlayerDeckRecord source = FindEditorDeck(deckEditorSelectedId);
             string sourceName = source != null ? DeckName(source) : $"{host.CardEditorPanel.editorGame.DisplayName} deck";
             string name = $"Copy of {sourceName}";
@@ -317,6 +334,11 @@ namespace ConsoleCards.Presentation.Composition
             PlayerDeckRecord deck = FindEditorDeck(deckEditorSelectedId);
             if (deck == null) return;
             string name = (typedName ?? string.Empty).Trim();
+            if (deck.stage > 0 && name.StartsWith($"Stage {deck.stage} · ", StringComparison.Ordinal))
+            {
+                name = name.Substring($"Stage {deck.stage} · ".Length).Trim(); // STAGES-1: the box shows "Stage n · name"
+            }
+
             if (name.Length == 0)
             {
                 ShowDeckEditor("Type a name for the deck first.");
@@ -352,6 +374,12 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void ChangeDeckEditorCopies(string cardId, int step)
         {
+            if (SelectedIsStage(out _))
+            {
+                ShowDeckEditor("A stage plays the game's cards: change copies on the Trap Floor deck. Here you change the stage's pictures.");
+                return;
+            }
+
             List<DeckEditorCard> cards = DeckEditorCards();
             for (int i = 0; i < cards.Count; i++)
             {
@@ -420,11 +448,11 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- copies ----------
 
-        // FLOORDECK-1: a floor deck lists only the floor cards.
+        // STAGES-1: a stage lists the floor cards (with this stage's pictures).
         internal List<DeckEditorCard> DeckEditorCards()
         {
             List<DeckEditorCard> all = AllDeckEditorCards();
-            if (!SelectedIsFloorDeck(out _)) return all;
+            if (!SelectedIsStage(out _)) return all;
             all.RemoveAll(card => !IsFloorCard(card));
             return all;
         }
@@ -453,6 +481,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             PlayerDeckRecord deck = FindEditorDeck(deckId);
+            if (deck != null && deck.stage > 0) return DeckEditorCopies(CardEditorPresenter.GameDeckId, card); // STAGES-1: the game's cards
             return deck != null ? CardEditorPresenter.SavedDeckCopies(deck, card.Id) : 0;
         }
 

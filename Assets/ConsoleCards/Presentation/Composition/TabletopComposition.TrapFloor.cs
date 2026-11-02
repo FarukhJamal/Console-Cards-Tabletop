@@ -377,7 +377,7 @@ namespace ConsoleCards.Presentation.Composition
                 case TrapFloorActivityKind.PlayerEscaped:
                     return $"{who} escaped.";
                 case TrapFloorActivityKind.WonGame:
-                    return trapFloorTemplate == null || trapFloorTemplate.IsLastFloor ? "The team won the game!" : "The team won the floor.";
+                    return IsFinalTrapFloor ? "The team won the game!" : "The team won the floor.";
                 case TrapFloorActivityKind.UsedShield:
                     return $"{who} used Shield: the trap is blocked.";
                 case TrapFloorActivityKind.UsedDodge:
@@ -455,7 +455,7 @@ namespace ConsoleCards.Presentation.Composition
                     break;
                 case TrapFloorActivityKind.WonGame:
                     Banner(FeedbackEventKind.Reward,
-                        trapFloorTemplate == null || trapFloorTemplate.IsLastFloor ? "YOU WIN!" : "FLOOR WON", who, colour);
+                        IsFinalTrapFloor ? "YOU WIN!" : "FLOOR WON", who, colour);
                     break;
                 case TrapFloorActivityKind.UsedShield:
                     FeedbackLine($"{who} used Shield.", FeedbackSeverity.Gain);
@@ -616,13 +616,31 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- board card backs and floor colours (moved from TabletopComposition.CardArt.cs) ----------
 
-        // FLOORDECK-1 (owner, 2026-11-02): the floor decks of the game in play (their cards and backs), set when the
-        // game's setups are made. Null without floor decks.
+        // STAGES-1 (owner, 2026-11-02): the game's stages (each a whole run of floors with its own look), set when the
+        // game's setups are made; null without stages. The stage being played (0 = Stage 1), and the one the next
+        // first floor starts (set only while a next stage is dealt).
         internal TrapFloorFloorPlan trapFloorFloorPlan;
+        internal int trapFloorStageIndex;
+        internal int trapFloorNextStageIndex;
 
-        // Board (floor) card backs: the back of this floor's deck when it has one (FLOORDECK-1), else the game's
-        // backs by floor: Floor 1 the first, Floor 2 the second, and so on, repeating after the last (doc 24; they
-        // used to follow a round number that no longer changes). Null when the game has no backs.
+        internal int TrapFloorStageCount => trapFloorFloorPlan != null ? trapFloorFloorPlan.StageCount : 1;
+
+        internal TrapFloorStage CurrentTrapFloorStage => trapFloorFloorPlan?.StageAt(trapFloorStageIndex);
+
+        // The floor that ends the game when won: the last floor of the last stage.
+        internal bool IsFinalTrapFloor =>
+            trapFloorTemplate == null || (trapFloorTemplate.IsLastFloor && trapFloorStageIndex >= TrapFloorStageCount - 1);
+
+        // STAGES-1: this stage's front picture for a floor card (by its card ID), or null when it keeps its own.
+        internal Texture2D StageFrontArt(string cardId)
+        {
+            TrapFloorStage stage = CurrentTrapFloorStage;
+            return stage != null && stage.TryGetFront(cardId, out string key) ? Art(key, null) : null;
+        }
+
+        // Board (floor) card backs: this stage's back when it has one (STAGES-1), else the game's backs by floor:
+        // Floor 1 the first, Floor 2 the second, and so on, repeating after the last (doc 24; they used to follow a
+        // round number that no longer changes). Null when the game has no backs.
         internal Texture2D CurrentBoardCardBack()
         {
             if (trapFloorGameDefinition == null)
@@ -631,11 +649,11 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             int floor = trapFloorTemplate != null ? trapFloorTemplate.FloorIndex : 0;
-            string deckBack = trapFloorFloorPlan != null ? trapFloorFloorPlan.BackOf(floor) : string.Empty;
-            if (!string.IsNullOrEmpty(deckBack))
+            TrapFloorStage stage = CurrentTrapFloorStage;
+            if (stage != null && !string.IsNullOrEmpty(stage.BackArtKey))
             {
-                Texture2D floorBack = Art(deckBack, null);
-                if (floorBack != null) return floorBack;
+                Texture2D stageBack = Art(stage.BackArtKey, null);
+                if (stageBack != null) return stageBack;
             }
 
             int count = BoardCardBackCount();

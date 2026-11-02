@@ -946,7 +946,7 @@ namespace ConsoleCards.Presentation.Composition
                 for (int i = 0; i < deck.cards.Count; i++) size += deck.cards[i] != null ? deck.cards[i].count : 0;
                 size += copies - SavedDeckCopies(deck, draft.Id);
                 rows.Add(new CardEditorDeckRowModel(deck.id, string.IsNullOrWhiteSpace(deck.name) ? "My deck" : deck.name,
-                    $"{(deck.floor > 0 ? "Floor deck" : "Your deck")} · {size} card{(size == 1 ? string.Empty : "s")}", copies));
+                    $"{(deck.stage > 0 ? "Stage look" : "Your deck")} · {size} card{(size == 1 ? string.Empty : "s")}", copies));
             }
 
             return rows;

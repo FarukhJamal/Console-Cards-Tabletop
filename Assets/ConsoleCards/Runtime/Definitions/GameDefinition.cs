@@ -101,6 +101,14 @@ namespace ConsoleCards.Definitions
             + "place; a wide picture, about 16:10, suits them all). Empty: the first card's front. CHANGE PICTURE on "
             + "the game sheet replaces it.")]
         [SerializeField] private Texture2D coverPicture;
+        [Header("Kind of game (GENRE-1)")]
+        [Tooltip("GENRE-1 (owner, 2026-11-02: \"every game is unique to its genre\"): the game's genre. The Library will "
+            + "sort games by it; Console Cards' general rules hold for every genre, each game adds its own.")]
+        [SerializeField] private GameGenre genre;
+        [Tooltip("Players may make decks of their own for this game (Decks: + NEW DECK, COPY). Off: the game's deck only.")]
+        [SerializeField] private bool allowsPlayerDecks = true;
+        [Tooltip("The game has stages (STAGES-1): whole runs of its floors with a new look each. Used by games with floors.")]
+        [SerializeField] private bool allowsStages = true;
 
         public string StableId => stableId;
         public string DisplayName => displayName;
@@ -117,6 +125,9 @@ namespace ConsoleCards.Definitions
         public string BoardMatPictureReference => boardMatPictureReference;
         public TrapFloorSeatPiecesDefinition TableSetup => tableSetup;
         public Texture2D CoverPicture => coverPicture;
+        public GameGenre Genre => genre;
+        public bool AllowsPlayerDecks => allowsPlayerDecks;
+        public bool AllowsStages => allowsStages;
         public IReadOnlyList<GameContentSet> ContentSets => contentSets;
 
         /// <summary>The game's own frame style, else the platform's default (null when neither exists).</summary>

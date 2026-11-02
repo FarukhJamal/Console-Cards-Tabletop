@@ -150,6 +150,8 @@ namespace ConsoleCards.Presentation.Composition
         {
             host.trapFloorTemplate = context.GameSetup as TrapFloorTemplateDefinition
                 ?? throw new InvalidOperationException("The table's setup is not a Trap Floor template.");
+            // STAGES-1: a first floor starts the stage asked for (a new game: Stage 1); later floors keep the stage.
+            if (host.trapFloorTemplate.FloorIndex == 0) host.trapFloorStageIndex = Math.Max(0, host.trapFloorNextStageIndex);
             seats.Clear();
             IReadOnlyList<TrapFloorPlayerSetupDefinition> players = host.trapFloorTemplate.Players;
             for (int i = 0; i < players.Count; i++)

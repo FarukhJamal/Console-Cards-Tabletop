@@ -46,6 +46,8 @@ namespace ConsoleCards.Presentation.UI
         /// <summary>BACK OF CARDS: the back of the deck's first card.</summary>
         public Texture BackPicture;
         public bool CanChangeBack;
+        /// <summary>STAGES-1: the words on the button under the deck when the actions give it another use.</summary>
+        public string ExtraButtonText = string.Empty;
         public string Status = string.Empty;
     }
 
@@ -67,6 +69,11 @@ namespace ConsoleCards.Presentation.UI
         public Action<string> SetRange;
         /// <summary>BACK OF CARDS · CHANGE…: one picture for the back of every card in the deck.</summary>
         public Action ChangeBack;
+        /// <summary>
+        /// STAGES-1: when set, the button under the deck (SHUFFLE TEST · DRAW 5) does this instead, with
+        /// <see cref="DeckEditorModel.ExtraButtonText"/> on it (a stage: IMPORT FRONTS…).
+        /// </summary>
+        public Action ExtraButton;
     }
 
     /// <summary>
@@ -387,7 +394,19 @@ namespace ConsoleCards.Presentation.UI
             if (shuffleTestButton != null)
             {
                 shuffleTestButton.onClick.RemoveAllListeners();
-                shuffleTestButton.onClick.AddListener(ShuffleTest);
+                Text shuffleLabel = shuffleTestButton.GetComponentInChildren<Text>(true);
+                if (shuffleLabel != null && shuffleTestWords == null) shuffleTestWords = shuffleLabel.text;
+                DeckEditorActions extra = actions;
+                if (extra?.ExtraButton != null && !string.IsNullOrEmpty(model.ExtraButtonText))
+                {
+                    shuffleTestButton.onClick.AddListener(() => extra.ExtraButton());
+                    if (shuffleLabel != null) shuffleLabel.text = model.ExtraButtonText;
+                }
+                else
+                {
+                    shuffleTestButton.onClick.AddListener(ShuffleTest);
+                    if (shuffleLabel != null && shuffleTestWords != null) shuffleLabel.text = shuffleTestWords;
+                }
             }
 
             if (doneButton != null)
@@ -411,6 +430,8 @@ namespace ConsoleCards.Presentation.UI
                 if (addRows[i].activeSelf != shown) addRows[i].SetActive(shown);
             }
         }
+
+        private string shuffleTestWords; // the button's own words, put back when it is SHUFFLE TEST again
 
         // SHUFFLE TEST · DRAW 5: five cards drawn from the deck as it is now (nothing on the table changes).
         private void ShuffleTest()

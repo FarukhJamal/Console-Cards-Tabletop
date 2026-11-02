@@ -112,11 +112,27 @@ namespace ConsoleCards.Presentation.Composition
             && (host.trapFloorTurnState.IsCurrentFloorFailed
                 || (host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsWon));
 
-        internal string FloorEndedActionLabel()
+        internal string FloorEndedActionLabel() => FloorEndedActionLabel(false);
+
+        internal string FloorEndedActionLabel(bool won)
         {
+            if (StartsNextStage(won)) return $"Start Stage {host.trapFloorStageIndex + 2}"; // STAGES-1
             if (host.trapFloorTemplate == null || host.trapFloorTemplate.IsLastFloor) return "Play Again";
             int rows = NextFloorSize(out int columns);
             return $"Start next phase ({columns}×{rows})"; // FLOOR-2
+        }
+
+        // STAGES-1: winning a stage's last floor (3×3) starts the next stage at full size, while there is one.
+        private bool StartsNextStage(bool won) =>
+            won
+            && host.trapFloorTemplate != null
+            && host.trapFloorTemplate.IsLastFloor
+            && host.trapFloorStageIndex < host.TrapFloorStageCount - 1;
+
+        private string StageName(int stageIndex)
+        {
+            TrapFloorStage stage = host.trapFloorFloorPlan?.StageAt(stageIndex);
+            return stage != null ? stage.Name : $"Stage {stageIndex + 1}";
         }
 
         internal string FloorEndedChoiceText() => FloorEndedChoiceText(false);
@@ -124,6 +140,7 @@ namespace ConsoleCards.Presentation.Composition
         // MODE-1: a Survival floor where someone escaped is won even when the rest are out.
         internal string FloorEndedChoiceText(bool won)
         {
+            if (StartsNextStage(won)) return $"Choose {FloorEndedActionLabel(true)} in the turn menu.";
             return host.trapFloorTemplate == null || host.trapFloorTemplate.IsLastFloor
                 ? won
                     ? "That was the last floor: the game is won. Choose Play Again to start over."
@@ -139,7 +156,9 @@ namespace ConsoleCards.Presentation.Composition
             if (host.runtimeUi == null || host.trapFloorTemplate == null) return;
             TrapFloorTemplateDefinition floor = host.trapFloorTemplate;
             int number = floor.FloorIndex + 1;
-            bool last = floor.IsLastFloor;
+            bool nextStage = StartsNextStage(won); // STAGES-1
+            bool last = floor.IsLastFloor && !nextStage;
+            int stageNumber = host.trapFloorStageIndex + 1;
             if (won && last && !ReferenceEquals(winRecordedFor, floor))
             {
                 winRecordedFor = floor; // PROFILE-2: one win in the profile's stats, however often this is shown
@@ -149,7 +168,7 @@ namespace ConsoleCards.Presentation.Composition
             // FLOOR-2 (owner, 2026-10-22: "popup with Starting next phase and OK"): won or lost is the first line.
             string title = last
                 ? won ? "YOU WIN THE GAME" : "GAME OVER"
-                : "STARTING NEXT PHASE";
+                : nextStage ? $"STAGE {stageNumber} COMPLETE" : "STARTING NEXT PHASE";
             string result = won ? $"Floor {number} won." : $"Floor {number} lost.";
             string next;
             if (last)
@@ -157,6 +176,11 @@ namespace ConsoleCards.Presentation.Composition
                 next = won
                     ? "That was the last floor: the team escaped the Trap Floor."
                     : "Everyone is out on the last floor: the team lost.";
+            }
+            else if (nextStage)
+            {
+                next = $"{result} {StageName(stageNumber - 1)} is done. Next: Stage {stageNumber + 1}, {StageName(stageNumber)}, "
+                    + "from the full floor again, dealt fresh. This cannot be undone.";
             }
             else
             {
@@ -173,25 +197,31 @@ namespace ConsoleCards.Presentation.Composition
             // it); the last floor waits for Play Again.
             int nextColumns = 0;
             int nextRows = 0;
-            if (!last) nextRows = NextFloorSize(out nextColumns);
+            if (!last && !nextStage) nextRows = NextFloorSize(out nextColumns);
             string chipTitle = last
                 ? won ? "You win the game" : "Game over"
-                : $"Floor {number + 1} of {floor.FloorCount}";
+                : nextStage
+                    ? $"Stage {stageNumber + 1}: {StageName(stageNumber)}"
+                    : $"Floor {number + 1} of {floor.FloorCount}";
             string chipDetail = last
                 ? (string.IsNullOrEmpty(detail) ? next : detail)
-                : $"{nextColumns}×{nextRows}, dealt fresh"
-                    + (string.IsNullOrEmpty(detail) ? string.Empty : $" · {detail}");
+                : nextStage
+                    ? $"{host.trapFloorTemplate.GridColumns + floor.FloorIndex}×{host.trapFloorTemplate.GridRows + floor.FloorIndex}, a new look"
+                        + (string.IsNullOrEmpty(detail) ? string.Empty : $" · {detail}")
+                    : $"{nextColumns}×{nextRows}, dealt fresh"
+                        + (string.IsNullOrEmpty(detail) ? string.Empty : $" · {detail}");
             if (host.runtimeUi.ShowTableMilestone(new TableMilestoneModel(
-                    last ? (won ? "GAME WON" : "GAME LOST") : $"FLOOR {number} {(won ? "WON" : "LOST")}",
+                    last ? (won ? "GAME WON" : "GAME LOST") : nextStage ? $"STAGE {stageNumber} WON" : $"FLOOR {number} {(won ? "WON" : "LOST")}",
                     won ? TableNoticeTone.Won : TableNoticeTone.Danger,
                     chipTitle,
                     chipDetail,
-                    last ? FloorEndedActionLabel() : "Start",
+                    last || nextStage ? FloorEndedActionLabel(won) : "Start",
                     () =>
                     {
                         host.runtimeUi?.CloseTableMilestone();
                         if (!IsFloorEnded()) return; // Undo took the floor's end back while the chip waited
-                        if (last) DealFloor(0);
+                        if (nextStage) DealFloor(0, stageNumber);
+                        else if (last) DealFloor(0);
                         else DealFloor(floor.FloorIndex + 1);
                     },
                     "Not yet",
@@ -209,12 +239,13 @@ namespace ConsoleCards.Presentation.Composition
                 new[]
                 {
                     new PopupActionOption(
-                        last ? FloorEndedActionLabel() : "OK",
+                        last || nextStage ? FloorEndedActionLabel(won) : "OK",
                         true,
                         () =>
                         {
                             close();
-                            if (last) DealFloor(0);
+                            if (nextStage) DealFloor(0, stageNumber);
+                            else if (last) DealFloor(0);
                             else DealFloor(floor.FloorIndex + 1);
                         }),
                     new PopupActionOption("Not yet", true, close),
@@ -223,13 +254,15 @@ namespace ConsoleCards.Presentation.Composition
                 _ => close());
         }
 
-        // Sets the table up again at the given floor (0 = a new game at full size), keeping the mode and seats.
-        private void DealFloor(int floorIndex)
+        // Sets the table up again at the given floor (0 = a new game at full size, or the start of stage
+        // <paramref name="stageIndex"/>), keeping the mode and seats.
+        private void DealFloor(int floorIndex, int stageIndex = 0)
         {
             if (host.activeSession == null) return;
             PendingWinMode = null; // MODE-1: the next floor keeps this game's win mode and turn direction
             PendingAnticlockwise = null;
             host.trapFloorNextFloorIndex = floorIndex;
+            host.trapFloorNextStageIndex = floorIndex == 0 ? Math.Max(0, stageIndex) : host.trapFloorStageIndex;
             bool dealt;
             try
             {
@@ -238,11 +271,12 @@ namespace ConsoleCards.Presentation.Composition
             finally
             {
                 host.trapFloorNextFloorIndex = 0;
+                host.trapFloorNextStageIndex = 0;
             }
 
             if (!dealt || host.trapFloorTemplate == null) return;
             host.ShowMessage(floorIndex == 0
-                ? "A new game: Floor 1."
+                ? stageIndex > 0 ? $"STAGE {stageIndex + 1}: {StageName(stageIndex)} — Floor 1." : "A new game: Floor 1."
                 : $"FLOOR {host.trapFloorTemplate.FloorIndex + 1} of {host.trapFloorTemplate.FloorCount} — "
                     + $"{host.trapFloorTemplate.GridColumns}×{host.trapFloorTemplate.GridRows}, dealt fresh.");
         }

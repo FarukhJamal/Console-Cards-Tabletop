@@ -259,6 +259,7 @@ namespace ConsoleCards.Presentation.Composition
             int floorIndex = host.trapFloorTemplate.FloorIndex;
             layoutPreview = layout;
             host.trapFloorNextFloorIndex = floorIndex;
+            host.trapFloorNextStageIndex = host.trapFloorStageIndex; // STAGES-1: the same stage
             try
             {
                 return host.SessionService.TryReplaceTable(host.activeSession.Selection);
@@ -266,6 +267,7 @@ namespace ConsoleCards.Presentation.Composition
             finally
             {
                 host.trapFloorNextFloorIndex = 0;
+                host.trapFloorNextStageIndex = 0;
                 layoutPreview = null;
             }
         }

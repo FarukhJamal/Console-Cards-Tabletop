@@ -8,13 +8,41 @@ namespace ConsoleCards.Presentation.UI
     /// <summary>One card in the card editor's list.</summary>
     public readonly struct CardEditorRowModel
     {
-        public CardEditorRowModel(string id, string name, string detail, Texture thumbnail, bool isSelected)
+        public CardEditorRowModel(string id, string name, string detail, Texture thumbnail, bool isSelected, int depth = 0,
+            bool lastChild = false, bool hasChildren = false)
         {
             Id = id ?? string.Empty;
             Name = name ?? string.Empty;
             Detail = detail ?? string.Empty;
             Thumbnail = thumbnail;
             IsSelected = isSelected;
+            Depth = depth < 0 ? 0 : depth;
+            IsLastChild = lastChild;
+            HasChildren = hasChildren;
+        }
+
+        /// <summary>DECKTREE-1: how far under its parent the row sits (0: a top row, 1: a child of the row above).</summary>
+        public int Depth { get; }
+
+        /// <summary>DECKTREE-2: the last child under its parent (the tree line ends at this row).</summary>
+        public bool IsLastChild { get; }
+
+        /// <summary>DECKTREE-2: a parent with children under it (the tree line starts at this row).</summary>
+        public bool HasChildren { get; }
+
+        /// <summary>DECKTREE-2: the rows with their tree lines worked out from their depths (last child, parent).</summary>
+        public static List<CardEditorRowModel> AsTree(List<CardEditorRowModel> rows)
+        {
+            List<CardEditorRowModel> tree = new List<CardEditorRowModel>(rows.Count);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                CardEditorRowModel row = rows[i];
+                bool nextIsChild = i + 1 < rows.Count && rows[i + 1].Depth > row.Depth;
+                bool last = row.Depth > 0 && (i + 1 >= rows.Count || rows[i + 1].Depth < row.Depth);
+                tree.Add(new CardEditorRowModel(row.Id, row.Name, row.Detail, row.Thumbnail, row.IsSelected, row.Depth, last, nextIsChild));
+            }
+
+            return tree;
         }
 
         public string Id { get; }

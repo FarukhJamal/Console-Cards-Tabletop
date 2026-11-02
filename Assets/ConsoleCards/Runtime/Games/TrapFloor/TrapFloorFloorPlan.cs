@@ -4,42 +4,50 @@ using System.Collections.Generic;
 namespace ConsoleCards.Games.TrapFloor
 {
     /// <summary>
-    /// FLOORDECK-1 (owner, 2026-11-02: "floor decks … this next floor will be a different"): each floor of the game
-    /// can have its own floor deck, the cards that floor is dealt from (with copies) and the back its tiles show.
-    /// Floor n (0 = the first) without a deck is dealt from every floor card, as before. A plan with more floors than
-    /// the board can shrink to adds floors at the smallest size, like extra rounds of a game show.
+    /// STAGES-1 (owner, 2026-11-02: "think of it like stages: stage 1 with a kitchen floor which ends on 3×3, then the
+    /// next stage a living room and so on"): the game's stages. A stage is one whole run of floors (6×6 down to 3×3)
+    /// with the same cards and rules and its own look: a name, the back every floor tile shows, and new front pictures
+    /// for any cards. Winning a stage's last floor starts the next stage at full size; winning the last stage wins
+    /// the game. Losing works as before.
     /// </summary>
     public sealed class TrapFloorFloorPlan
     {
-        private readonly IReadOnlyDictionary<string, int>[] cards;
-        private readonly string[] backs;
+        private readonly List<TrapFloorStage> stages;
 
-        /// <param name="floorCards">Per floor (index 0 = Floor 1): card ID to copies; null for a floor without a deck.</param>
-        /// <param name="floorBacks">Per floor: the back's art key; null or empty for the game's own back.</param>
-        public TrapFloorFloorPlan(IReadOnlyList<IReadOnlyDictionary<string, int>> floorCards, IReadOnlyList<string> floorBacks)
+        public TrapFloorFloorPlan(List<TrapFloorStage> stages)
         {
-            if (floorCards == null) throw new ArgumentNullException(nameof(floorCards));
-            cards = new IReadOnlyDictionary<string, int>[floorCards.Count];
-            backs = new string[floorCards.Count];
-            for (int i = 0; i < floorCards.Count; i++)
-            {
-                cards[i] = floorCards[i];
-                backs[i] = floorBacks != null && i < floorBacks.Count ? floorBacks[i] ?? string.Empty : string.Empty;
-            }
+            this.stages = stages ?? throw new ArgumentNullException(nameof(stages));
         }
 
-        /// <summary>How many floors the decks name (the highest floor with a deck).</summary>
-        public int FloorCount => cards.Length;
+        /// <summary>How many stages the game has (at least 1).</summary>
+        public int StageCount => Math.Max(1, stages.Count);
 
-        /// <summary>The cards floor <paramref name="floorIndex"/> is dealt from; false when that floor has no deck.</summary>
-        public bool TryGetCards(int floorIndex, out IReadOnlyDictionary<string, int> floorCards)
+        /// <summary>The stage at <paramref name="stageIndex"/> (0 = Stage 1), or null when it has no look of its own.</summary>
+        public TrapFloorStage StageAt(int stageIndex) =>
+            stageIndex >= 0 && stageIndex < stages.Count ? stages[stageIndex] : null;
+    }
+
+    /// <summary>One stage's look: its name, its tiles' back and front pictures by card ID (art keys).</summary>
+    public sealed class TrapFloorStage
+    {
+        public TrapFloorStage(int number, string name, string backArtKey, IReadOnlyDictionary<string, string> fronts)
         {
-            floorCards = floorIndex >= 0 && floorIndex < cards.Length ? cards[floorIndex] : null;
-            return floorCards != null;
+            Number = number;
+            Name = string.IsNullOrWhiteSpace(name) ? $"Stage {number}" : name.Trim();
+            BackArtKey = backArtKey ?? string.Empty;
+            Fronts = fronts ?? new Dictionary<string, string>();
         }
 
-        /// <summary>The back's art key for floor <paramref name="floorIndex"/>; empty for the game's own back.</summary>
-        public string BackOf(int floorIndex) =>
-            floorIndex >= 0 && floorIndex < backs.Length ? backs[floorIndex] : string.Empty;
+        public int Number { get; }
+        public string Name { get; }
+        public string BackArtKey { get; }
+        public IReadOnlyDictionary<string, string> Fronts { get; }
+
+        /// <summary>This stage's front picture (art key) for a card; false when the card keeps its own.</summary>
+        public bool TryGetFront(string cardId, out string artKey)
+        {
+            artKey = null;
+            return !string.IsNullOrEmpty(cardId) && Fronts.TryGetValue(cardId, out artKey) && !string.IsNullOrEmpty(artKey);
+        }
     }
 }

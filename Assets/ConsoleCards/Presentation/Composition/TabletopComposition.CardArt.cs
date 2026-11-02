@@ -60,6 +60,8 @@ namespace ConsoleCards.Presentation.Composition
         internal Texture2D FrontArt(CardDefinition definition)
         {
             if (definition == null) return null;
+            Texture2D stageArt = StageFrontArt(definition.StableId); // STAGES-1: this stage's picture for the card
+            if (stageArt != null) return stageArt;
             Texture2D art = Art(definition.FrontArtworkReference, definition.FrontArtwork);
             return art != null ? art : StandInCardFronts.FrontFor(definition.StableId);
         }
