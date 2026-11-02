@@ -16,10 +16,20 @@ namespace ConsoleCards.Presentation.UI
         private Transform home;
         private int homeIndex;
         private bool lifted;
+        private bool quiet;
+
+        /// <summary>
+        /// MENU-1: no tip while quiet (the Draw tool's tip covered its own open bar). Going quiet hides a shown tip.
+        /// </summary>
+        public void SetQuiet(bool on)
+        {
+            quiet = on;
+            if (on) HideTip();
+        }
 
         public void OnPointerEnter(PointerEventData eventData)
         {
-            if (tip == null) return;
+            if (tip == null || quiet) return;
             Lift();
             tip.SetActive(true);
         }

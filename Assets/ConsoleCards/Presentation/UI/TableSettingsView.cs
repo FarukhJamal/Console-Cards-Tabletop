@@ -98,12 +98,24 @@ namespace ConsoleCards.Presentation.UI
             if (!IsComplete) throw new InvalidOperationException("TableSettingsView requires its authored tabs and rows.");
         }
 
+        // MENU-1 (owner, 2026-11-02: "check every panel"): the page is drawn for 1920 x 1080; on a shorter or narrower
+        // screen its top bar ran off the top, so the whole page shrinks to fit (never grows).
+        private void FitBoard()
+        {
+            if (!(transform.Find("Board") is RectTransform board) || !(transform is RectTransform area)) return;
+            Vector2 size = board.sizeDelta;
+            if (size.x <= 0f || size.y <= 0f) return;
+            float scale = Mathf.Min(1f, Mathf.Min(area.rect.width / size.x, area.rect.height / size.y));
+            board.localScale = new Vector3(scale, scale, 1f);
+        }
+
         /// <summary>Shows the values; keeps the open tab unless <paramref name="firstTab"/>.</summary>
         public void Bind(TableSettingsModel settings, bool firstTab)
         {
             RequireAcquired();
             ValidateReferences();
             model = settings ?? throw new ArgumentNullException(nameof(settings));
+            FitBoard();
             Clear(backdropButton);
             Clear(backButton);
             Clear(closeButton);

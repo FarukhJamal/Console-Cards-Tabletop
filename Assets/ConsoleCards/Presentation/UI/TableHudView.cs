@@ -496,6 +496,12 @@ namespace ConsoleCards.Presentation.UI
                 if (tool == null) continue;
                 bool active = tool.kind == kind;
                 if (tool.fill != null) tool.fill.color = active ? railActiveFill : railIdleFill;
+                if (tool.kind == TableToolKind.Draw && tool.button != null)
+                {
+                    // MENU-1: the Draw bar opens beside this button, so its tip stays away while Draw is on.
+                    HudHoverTip tip = tool.button.GetComponent<HudHoverTip>();
+                    if (tip != null) tip.SetQuiet(active);
+                }
                 if (tool.icon != null)
                 {
                     Color c = active ? railActiveIcon : railIdleIcon;

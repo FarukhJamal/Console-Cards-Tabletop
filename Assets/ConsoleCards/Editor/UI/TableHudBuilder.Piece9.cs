@@ -55,11 +55,15 @@ namespace ConsoleCards.Editor.UI
         // MENU-1 (owner, 2026-11-02: "check every panel" at full size). Done once on each prefab (it gets the label):
         // - the menus' shadow was a hard copy of the card 18 px lower, which read as a dark band under every menu;
         //   it is now a 5 px lip;
-        // - the Inspect panel stood over the right rail; it now stops left of it.
+        // - the Inspect panel stood over the right rail; it now stops left of it;
+        // - Settings opened from a game had no picture behind it; it now has the main menu's picture, like every other
+        //   menu screen (owner, 2026-10-31: "that background image everywhere on the menus").
         private const string PolishLabel = "Menu1Polish";
         private const float SoftShadowDrop = 5f;
         private const float SoftShadowAlpha = 0.45f;
         private const float InspectRight = -108f; // the rail is 72 wide, 21 in from the right edge
+        private const string MenuPictureFile = "Assets/ConsoleCards/Content/UI/Board/MenuBackground.jpg";
+        private const string MenuShadeFile = "Assets/ConsoleCards/Content/UI/Board/MenuShade.png";
 
         private static void PolishPieceMenus()
         {
@@ -82,6 +86,39 @@ namespace ConsoleCards.Editor.UI
                     rect.anchoredPosition = new Vector2(InspectRight, rect.anchoredPosition.y);
                 }
             });
+            Sprite picture = AssetDatabase.LoadAssetAtPath<Sprite>(MenuPictureFile);
+            if (picture != null) Polish(SettingsPath, root => AddMenuPicture(root, picture));
+        }
+
+        // The main menu's picture over the page's own dark backdrop and under the board, cropped to fill the screen, with
+        // the menu's shade over it (the same parts as the front end's Background/Picture).
+        private static void AddMenuPicture(GameObject root, Sprite picture)
+        {
+            if (root.transform.Find("Picture") != null) return;
+            Transform board = root.transform.Find("Board");
+            RectTransform rect = (RectTransform)new GameObject("Picture", typeof(RectTransform)).transform;
+            rect.gameObject.layer = 5;
+            rect.SetParent(root.transform, false);
+            Stretch(rect);
+            Image image = rect.gameObject.AddComponent<Image>();
+            image.sprite = picture;
+            image.raycastTarget = false;
+            AspectRatioFitter fitter = rect.gameObject.AddComponent<AspectRatioFitter>();
+            fitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+            fitter.aspectRatio = picture.rect.width / Mathf.Max(1f, picture.rect.height);
+            Sprite shade = AssetDatabase.LoadAssetAtPath<Sprite>(MenuShadeFile);
+            if (shade != null)
+            {
+                RectTransform shadeRect = (RectTransform)new GameObject("Shade", typeof(RectTransform)).transform;
+                shadeRect.gameObject.layer = 5;
+                shadeRect.SetParent(rect, false);
+                Stretch(shadeRect);
+                Image shadeImage = shadeRect.gameObject.AddComponent<Image>();
+                shadeImage.sprite = shade;
+                shadeImage.raycastTarget = false;
+            }
+
+            if (board != null) rect.SetSiblingIndex(board.GetSiblingIndex());
         }
 
         private static void Polish(string path, System.Action<GameObject> change)
