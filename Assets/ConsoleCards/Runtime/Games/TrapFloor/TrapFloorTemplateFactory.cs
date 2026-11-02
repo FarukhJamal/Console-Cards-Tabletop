@@ -119,6 +119,10 @@ namespace ConsoleCards.Games.TrapFloor
             return Math.Max(1, Math.Min(grid.Rows, grid.Columns) - MinimumFloorSize + 1);
         }
 
+        /// <summary>FLOORDECK-1: the floors of the grid, or more when the floor decks name more floors.</summary>
+        public static int FloorCountFor(GridDefinitionData grid, TrapFloorFloorPlan floorPlan) =>
+            Math.Max(FloorCountFor(grid), floorPlan != null ? floorPlan.FloorCount : 0);
+
         /// <summary>
         /// FLOORS-1 (owner, 2026-10-21): one floor of the game. Floor 0 is the authored grid; each later floor is
         /// one row and one column smaller and is dealt fresh, with the same tile mix scaled down (both Exits and
@@ -166,24 +170,29 @@ namespace ConsoleCards.Games.TrapFloor
             int floorIndex,
             TrapFloorTableLayout tableLayout,
             int playerCount,
-            TrapFloorTableSetup tableSetup = null)
+            TrapFloorTableSetup tableSetup = null,
+            TrapFloorFloorPlan floorPlan = null)
         {
             if (randomValueSource == null) throw new ArgumentNullException(nameof(randomValueSource));
             if (gameDefinition == null) throw new ArgumentNullException(nameof(gameDefinition));
-            int floorCount = FloorCountFor(gameDefinition.Grid);
+            int floorCount = FloorCountFor(gameDefinition.Grid, floorPlan);
             if (floorIndex < 0 || floorIndex >= floorCount) throw new ArgumentOutOfRangeException(nameof(floorIndex));
+            // FLOORDECK-1: floors past the smallest size stay at the smallest size.
+            int sizeIndex = Math.Min(floorIndex, FloorCountFor(gameDefinition.Grid) - 1);
             TableCoordinate? boardCenter = tableLayout?.BoardCenter
                 ?? (tableSetup != null ? tableSetup.BoardCenter : (TableCoordinate?)null);
-            if (floorIndex > 0 || boardCenter.HasValue)
+            if (sizeIndex > 0 || boardCenter.HasValue)
             {
-                gameDefinition = WithFloorGrid(gameDefinition, floorIndex, boardCenter);
+                gameDefinition = WithFloorGrid(gameDefinition, sizeIndex, boardCenter);
             }
 
             ModeDefinitionData activeMode = ValidateAndResolveMode(gameDefinition, selectedModeStableId, playerCount);
             Guid gameDefinitionId = ParseStableGuid(gameDefinition.StableId, "Game");
             GridDefinitionData grid = gameDefinition.Grid;
+            IReadOnlyDictionary<string, int> floorDeck = null;
+            floorPlan?.TryGetCards(floorIndex, out floorDeck);
             IReadOnlyList<TrapFloorFloorContentDefinition> floorContent =
-                ResolveFloorContent(gameDefinition, activeMode, grid, randomValueSource, floorIndex > 0);
+                ResolveFloorContent(gameDefinition, activeMode, grid, randomValueSource, sizeIndex > 0, floorDeck);
             IReadOnlyList<TrapFloorAvatarSetup> avatars = ResolveAvatars(gameDefinition);
             IReadOnlyList<CardDefinitionData> controllerInputCards = ResolveControllerInputCards(gameDefinition);
             ConsoleSlotDefinitionData mainSlot = ResolveConsoleSlot(gameDefinition.Console, "Main", 1);
@@ -643,7 +652,8 @@ namespace ConsoleCards.Games.TrapFloor
             ModeDefinitionData activeMode,
             GridDefinitionData grid,
             IRandomValueSource randomValueSource,
-            bool scaleToGrid)
+            bool scaleToGrid,
+            IReadOnlyDictionary<string, int> floorDeck = null)
         {
             List<TrapFloorFloorContentDefinition> drawn = new List<TrapFloorFloorContentDefinition>(grid.CellCount);
             List<FloorGroupDraw> groups = new List<FloorGroupDraw>();
@@ -661,6 +671,16 @@ namespace ConsoleCards.Games.TrapFloor
             if (scaleToGrid) ScaleFloorDrawCounts(groups, grid.CellCount, activeMode.RequiredKeyCount);
             for (int i = 0; i < groups.Count; i++)
             {
+                // FLOORDECK-1: a floor with its own deck draws each group from that deck's cards of the group (as many
+                // times as the deck has copies, then again from them when it has fewer than the floor needs); a group
+                // the deck has none of draws from all its cards, so the floor always fills.
+                List<TrapFloorFloorContentDefinition> deckPool = floorDeck != null ? FloorDeckPool(groups[i].Pool, floorDeck) : null;
+                if (deckPool != null && deckPool.Count > 0)
+                {
+                    DrawFromFloorDeck(deckPool, groups[i].Count, randomValueSource, drawn);
+                    continue;
+                }
+
                 DrawFloorGroup(groups[i].ContentSet, groups[i].Pool, groups[i].Count, randomValueSource, drawn);
             }
 
@@ -834,6 +854,52 @@ namespace ConsoleCards.Games.TrapFloor
                 groups[best].Count++;
                 leftOver[best] = -1d;
                 assigned++;
+            }
+        }
+
+        // FLOORDECK-1: the group's cards that the floor deck holds, once per copy in the deck.
+        private static List<TrapFloorFloorContentDefinition> FloorDeckPool(
+            List<TrapFloorFloorContentDefinition> groupPool,
+            IReadOnlyDictionary<string, int> floorDeck)
+        {
+            List<TrapFloorFloorContentDefinition> pool = new List<TrapFloorFloorContentDefinition>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < groupPool.Count; i++)
+            {
+                TrapFloorFloorContentDefinition content = groupPool[i];
+                string id = content.AuthoredCard != null ? content.AuthoredCard.StableId : null;
+                if (string.IsNullOrEmpty(id) || !seen.Add(id)) continue;
+                if (!floorDeck.TryGetValue(id, out int copies)) continue;
+                for (int copy = 0; copy < copies; copy++) pool.Add(content);
+            }
+
+            return pool;
+        }
+
+        // Shuffled draws from the floor deck's cards; once they are used up, they are shuffled and drawn again.
+        private static void DrawFromFloorDeck(
+            List<TrapFloorFloorContentDefinition> pool,
+            int drawCount,
+            IRandomValueSource randomValueSource,
+            List<TrapFloorFloorContentDefinition> drawn)
+        {
+            int next = pool.Count;
+            for (int i = 0; i < drawCount; i++)
+            {
+                if (next >= pool.Count)
+                {
+                    for (int s = pool.Count - 1; s > 0; s--)
+                    {
+                        int pick = randomValueSource.NextInt(0, s + 1);
+                        TrapFloorFloorContentDefinition swap = pool[s];
+                        pool[s] = pool[pick];
+                        pool[pick] = swap;
+                    }
+
+                    next = 0;
+                }
+
+                drawn.Add(pool[next++]);
             }
         }
 

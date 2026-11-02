@@ -376,7 +376,13 @@ namespace ConsoleCards.Presentation.Composition
 
         // MAT-2 (owner, 2026-10-22: "board 6x6 visually and cards on 5x5"): each floor after the first has one row and
         // one column fewer; the board keeps the first floor's size, and the removed spaces stay empty.
-        public int BoardRemovedSpaces => host.trapFloorTemplate != null ? Math.Max(0, host.trapFloorTemplate.FloorIndex) : 0;
+        // FLOORDECK-1: the rows taken out of the full board (an extra floor stays at the smallest size).
+        public int BoardRemovedSpaces =>
+            host.trapFloorTemplate == null
+                ? 0
+                : host.trapFloorGameDefinition != null && host.trapFloorGameDefinition.PlayAreaDefinition != null
+                    ? Math.Max(0, host.trapFloorGameDefinition.PlayAreaDefinition.Rows - host.trapFloorTemplate.GridRows)
+                    : Math.Max(0, host.trapFloorTemplate.FloorIndex);
 
         // T-1 (owner, 2026-10-23): the floor lies on a 35 x 24" playmat. SETUP-1: its size is in the Table Setup asset.
         public Vector2 BoardMatSize => Game != null && Game.TableSetup != null && Game.TableSetup.BoardMatSize.x > 0f

@@ -200,6 +200,15 @@ namespace ConsoleCards.Definitions
         public int minimumCards;
         public int maximumCards;
         public List<PlayerDeckEntry> cards = new List<PlayerDeckEntry>();
+
+        /// <summary>
+        /// FLOORDECK-1 (owner, 2026-11-02): 1, 2, 3… for a floor deck (Trap Floor deals that floor from its cards);
+        /// 0 for an ordinary deck.
+        /// </summary>
+        public int floor;
+
+        /// <summary>FLOORDECK-1: the back every tile of this floor shows (an art key); empty: the game's own back.</summary>
+        public string backArtKey = string.Empty;
     }
 
     [Serializable]

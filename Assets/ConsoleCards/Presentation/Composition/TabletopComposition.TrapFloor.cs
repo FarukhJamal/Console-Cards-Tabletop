@@ -616,13 +616,26 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- board card backs and floor colours (moved from TabletopComposition.CardArt.cs) ----------
 
-        // Board (floor) card backs change per round: round 1 uses the first back, round 2 the second,
-        // and so on, repeating after the last (doc 24). Null when the game has no backs.
+        // FLOORDECK-1 (owner, 2026-11-02): the floor decks of the game in play (their cards and backs), set when the
+        // game's setups are made. Null without floor decks.
+        internal TrapFloorFloorPlan trapFloorFloorPlan;
+
+        // Board (floor) card backs: the back of this floor's deck when it has one (FLOORDECK-1), else the game's
+        // backs by floor: Floor 1 the first, Floor 2 the second, and so on, repeating after the last (doc 24; they
+        // used to follow a round number that no longer changes). Null when the game has no backs.
         internal Texture2D CurrentBoardCardBack()
         {
             if (trapFloorGameDefinition == null)
             {
                 return null;
+            }
+
+            int floor = trapFloorTemplate != null ? trapFloorTemplate.FloorIndex : 0;
+            string deckBack = trapFloorFloorPlan != null ? trapFloorFloorPlan.BackOf(floor) : string.Empty;
+            if (!string.IsNullOrEmpty(deckBack))
+            {
+                Texture2D floorBack = Art(deckBack, null);
+                if (floorBack != null) return floorBack;
             }
 
             int count = BoardCardBackCount();
@@ -631,8 +644,7 @@ namespace ConsoleCards.Presentation.Composition
                 return null;
             }
 
-            int round = trapFloorRoundState != null ? Math.Max(1, trapFloorRoundState.CurrentRoundNumber) : 1;
-            int index = (round - 1) % count;
+            int index = floor % count;
             IReadOnlyList<Texture2D> backs = trapFloorGameDefinition.BoardCardBacks;
             IReadOnlyList<string> keys = trapFloorGameDefinition.BoardCardBackReferences;
             return Art(

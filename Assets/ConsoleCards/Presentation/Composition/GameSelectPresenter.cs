@@ -913,7 +913,7 @@ namespace ConsoleCards.Presentation.Composition
                 for (int d = 0; d < decks.decks.Count; d++)
                 {
                     PlayerDeckRecord deck = decks.decks[d];
-                    if (deck == null || string.IsNullOrWhiteSpace(deck.id)) continue;
+                    if (deck == null || string.IsNullOrWhiteSpace(deck.id) || deck.floor > 0) continue; // FLOORDECK-1: floors are dealt by the game
                     int cards = 0;
                     for (int i = 0; i < deck.cards.Count; i++) cards += deck.cards[i] != null ? Math.Max(0, deck.cards[i].count) : 0;
                     string name = string.IsNullOrWhiteSpace(deck.name) ? "My deck" : deck.name;

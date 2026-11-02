@@ -3556,7 +3556,7 @@ namespace ConsoleCards.Presentation.Composition
             TableCoordinate position = PawnTablePosition(pawn);
             int x = 1 + (int)Math.Round((position.X - firstCell.X) / template.Grid.ColumnPitch);
             int y = 1 + (int)Math.Round((position.Y - firstCell.Y) / template.Grid.RowPitch);
-            int removed = template.FloorIndex; // each floor is one row and one column smaller
+            int removed = BoardRemovedSpaces; // each floor is one row and one column smaller (FLOORDECK-1: down to the smallest)
             bool onRemovedEdge = x >= 1 - removed && y >= 1 - removed
                 && x <= template.GridColumns + removed && y <= template.GridRows + removed
                 && (x < 1 || y < 1 || x > template.GridColumns || y > template.GridRows);
@@ -5683,6 +5683,43 @@ namespace ConsoleCards.Presentation.Composition
             registrations.AddRange(mine);
         }
 
+        // FLOORDECK-1: the floor decks (decks with a floor number) as a plan: per floor its cards with copies and its
+        // back. Null when there are none. Made when the setups are made, not every frame.
+        internal static TrapFloorFloorPlan FloorPlanOf(PlayerDecksFile decks)
+        {
+            if (decks == null || decks.decks == null) return null;
+            int floors = 0;
+            for (int i = 0; i < decks.decks.Count; i++)
+            {
+                PlayerDeckRecord deck = decks.decks[i];
+                if (deck != null && deck.floor > floors) floors = deck.floor;
+            }
+
+            if (floors == 0) return null;
+            Dictionary<string, int>[] cards = new Dictionary<string, int>[floors];
+            string[] backs = new string[floors];
+            for (int i = 0; i < decks.decks.Count; i++)
+            {
+                PlayerDeckRecord deck = decks.decks[i];
+                if (deck == null || deck.floor < 1) continue;
+                int index = deck.floor - 1;
+                if (cards[index] != null) continue; // one deck per floor: the first wins
+                Dictionary<string, int> copies = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (int c = 0; deck.cards != null && c < deck.cards.Count; c++)
+                {
+                    PlayerDeckEntry entry = deck.cards[c];
+                    if (entry == null || string.IsNullOrWhiteSpace(entry.cardId) || entry.count <= 0) continue;
+                    copies.TryGetValue(entry.cardId, out int had);
+                    copies[entry.cardId] = had + entry.count;
+                }
+
+                cards[index] = copies;
+                backs[index] = deck.backArtKey ?? string.Empty;
+            }
+
+            return new TrapFloorFloorPlan(cards, backs);
+        }
+
         // (Moved from TableSessionService.RegisterTrapFloorTemplates.)
         private List<GameTemplateRegistration> BuildTemplates(bool useChosenDeck)
         {
@@ -5721,10 +5758,12 @@ namespace ConsoleCards.Presentation.Composition
 
             host.availableTrapFloorTemplates.Clear();
             List<GameTemplateRegistration> registrations = new List<GameTemplateRegistration>(gameDefinition.Modes.Count);
+            // FLOORDECK-1: the floor decks (each floor's cards and back); they may add floors.
+            host.trapFloorFloorPlan = FloorPlanOf(content.PlayerDecks);
             // FLOORS-1: while the next floor is being dealt, every mode's setup is that smaller floor.
             int floorIndex = Math.Min(
                 Math.Max(0, host.trapFloorNextFloorIndex),
-                TrapFloorTemplateFactory.FloorCountFor(gameDefinition.Grid) - 1);
+                TrapFloorTemplateFactory.FloorCountFor(gameDefinition.Grid, host.trapFloorFloorPlan) - 1);
             // LAYOUT-1: dealt with the players' table layout (the one being arranged, else the saved one).
             TrapFloorTableLayout tableLayout = LayoutForDeal();
             // SETUP-1: the game's default table setup (its Table Setup asset), else the built-in places.
@@ -5742,7 +5781,8 @@ namespace ConsoleCards.Presentation.Composition
                         floorIndex,
                         tableLayout,
                         DealPlayerCount,
-                        tableSetup);
+                        tableSetup,
+                        host.trapFloorFloorPlan);
                 }
                 catch (Exception exception) when (tableLayout != null || tableSetup != null)
                 {
@@ -5760,7 +5800,9 @@ namespace ConsoleCards.Presentation.Composition
                         host.GetConsoleLayout(),
                         floorIndex,
                         null,
-                        DealPlayerCount);
+                        DealPlayerCount,
+                        null,
+                        host.trapFloorFloorPlan);
                 }
 
                 host.availableTrapFloorTemplates.Add(template.Template.Id, template);

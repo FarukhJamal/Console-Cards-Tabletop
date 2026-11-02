@@ -167,7 +167,8 @@ namespace ConsoleCards.Presentation.Composition
             PlayerDeckRecord deck = FindEditorDeck(deckEditorSelectedId);
             if (deck == null) deckEditorSelectedId = CardEditorPresenter.GameDeckId;
             bool isGameDeck = deck == null;
-            string deckName = isGameDeck ? $"{gameName} deck" : DeckName(deck);
+            bool isFloorDeck = deck != null && deck.floor > 0; // FLOORDECK-1
+            string deckName = isGameDeck ? $"{gameName} deck" : isFloorDeck ? $"Floor {deck.floor}" : DeckName(deck);
 
             List<DeckEditorCard> cards = DeckEditorCards();
             List<DeckEditorCardRowModel> rows = new List<DeckEditorCardRowModel>(cards.Count);
@@ -187,6 +188,8 @@ namespace ConsoleCards.Presentation.Composition
             {
                 text = deckEditorChanged
                     ? "Not saved yet: the decks could not be written."
+                    : isFloorDeck
+                        ? FloorDeckText(deck)
                     : isGameDeck
                         ? "The game's own deck: these copies are used in play from the next table you start."
                         : "Your deck. Games will use your decks in a later step (L2-5).";
@@ -198,7 +201,7 @@ namespace ConsoleCards.Presentation.Composition
                 CanChangeGame = host.CardEditorPanel.editorGames.Count > 1,
                 Decks = BuildDeckEditorDeckRows(gameName, cards),
                 DeckName = deckName,
-                CanRename = !isGameDeck,
+                CanRename = !isGameDeck && !isFloorDeck,
                 CanDelete = !isGameDeck,
                 Summary = $"{deckName.ToUpperInvariant()} · {total} CARD{(total == 1 ? string.Empty : "S")} · {different} DIFFERENT",
                 FilterText = deckEditorShowAll ? "Show: all cards" : "Show: this deck only",
@@ -220,10 +223,11 @@ namespace ConsoleCards.Presentation.Composition
             {
                 DeckRow(CardEditorPresenter.GameDeckId, $"{gameName} deck", "The game's own deck", cards),
             };
+            AddFloorRows(rows, cards); // FLOORDECK-1
             for (int d = 0; d < host.CardEditorPanel.editorDecks.decks.Count; d++)
             {
                 PlayerDeckRecord deck = host.CardEditorPanel.editorDecks.decks[d];
-                if (deck == null || string.IsNullOrWhiteSpace(deck.id)) continue;
+                if (deck == null || string.IsNullOrWhiteSpace(deck.id) || deck.floor > 0) continue;
                 rows.Add(DeckRow(deck.id, DeckName(deck), "Your deck", cards));
             }
 
@@ -268,6 +272,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void SelectEditorDeck(string deckId)
         {
+            if (TrySelectFloorRow(deckId)) return; // FLOORDECK-1
             deckEditorSelectedId = string.IsNullOrEmpty(deckId) ? CardEditorPresenter.GameDeckId : deckId;
             ShowDeckEditor(string.Empty);
         }
@@ -415,7 +420,16 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- copies ----------
 
+        // FLOORDECK-1: a floor deck lists only the floor cards.
         internal List<DeckEditorCard> DeckEditorCards()
+        {
+            List<DeckEditorCard> all = AllDeckEditorCards();
+            if (!SelectedIsFloorDeck(out _)) return all;
+            all.RemoveAll(card => !IsFloorCard(card));
+            return all;
+        }
+
+        internal List<DeckEditorCard> AllDeckEditorCards()
         {
             List<DeckEditorCard> cards = new List<DeckEditorCard>(host.CardEditorPanel.editorGameCards.Count + host.CardEditorPanel.editorCards.cards.Count);
             for (int i = 0; i < host.CardEditorPanel.editorGameCards.Count; i++) cards.Add(new DeckEditorCard(host.CardEditorPanel.editorGameCards[i], null));
