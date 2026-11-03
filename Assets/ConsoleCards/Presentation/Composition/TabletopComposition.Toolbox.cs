@@ -1227,13 +1227,31 @@ namespace ConsoleCards.Presentation.Composition
         // The Presentation of one placed Deck, Stack, Discard Pile or Console the Toolbox (or a split) made. Used
         // when it is placed and again when Undo or Redo rebuilds the table (doc 22, C2b). No interaction
         // rebuild or appear animation here; the callers do that.
+        // D1 (QA, 2026-11-03): a game's named piles (ABILITIES, AVATARS…) were too small to read at the usual camera.
+        private const float NamedPileLabelSize = ContainerLabelCharacterSize * 2.4f;
+
+        // Two-word names go on two lines so the bigger words stay about a card wide (STARTING ABILITIES).
+        private static string StackedPileLabel(string name) => name.Length > 9 ? name.Replace(' ', '\n') : name;
+
         private Transform ProjectToolboxDeck(ContainerId containerId)
         {
+            string pileName = ResolveTemplatePileName(containerId); // D1: a game's deck says what it is
             RuntimeDeckInstance instance = Spawner.CreateRuntimeDeckInstance(
-                "Toolbox Deck",
-                "DECK",
+                pileName ?? "Toolbox Deck",
+                pileName ?? "DECK",
                 containerId,
-                true);
+                pileName == null);
+            if (pileName != null && instance.Visual != null && instance.Visual.Label != null)
+            {
+                instance.Visual.Label.text = StackedPileLabel(pileName);
+                if (instance.Visual.Label.GetComponent<UprightForViewer>() == null)
+                {
+                    instance.Visual.Label.gameObject.AddComponent<UprightForViewer>(); // QA Q12
+                }
+
+                instance.Visual.Label.characterSize = NamedPileLabelSize; // D1 (QA): readable from the seat
+            }
+
             Registry.runtimeDeckInstances.Add(instance);
             Registry.controllerDeckViews.Add(instance.View);
             GameTemplatePileStyle toolboxDeckStyle = GameTemplatePileStyle.DefaultFor(ContainerKind.Deck);
@@ -1291,9 +1309,16 @@ namespace ConsoleCards.Presentation.Composition
                 matchState.IsTemplateContainer(containerId) ? "Template Discard Pile" : "Toolbox Discard Pile");
             visual.ValidateReferences();
             DiscardPileView view = visual.GetView<DiscardPileView>();
-            ConfigureContainerLabel(visual.Label, "DISCARD");
+            string pileName = ResolveTemplatePileName(containerId); // D1
+            ConfigureContainerLabel(visual.Label, pileName ?? "DISCARD");
+            if (pileName != null)
+            {
+                visual.Label.text = StackedPileLabel(pileName);
+                if (visual.Label.GetComponent<UprightForViewer>() == null) visual.Label.gameObject.AddComponent<UprightForViewer>(); // QA Q12
+                visual.Label.characterSize = NamedPileLabelSize; // D1 (QA): readable from the seat
+            }
             visual.ClearFeedback();
-            ApplyFixedContainerVisualHide(visual, true);
+            ApplyFixedContainerVisualHide(visual, pileName == null);
             view.ConfigureTableRest(true, style.MaximumPileHeight);
             ConfigurePileBay(visual, style, container.OwnerSeatId);
             view.Bind(

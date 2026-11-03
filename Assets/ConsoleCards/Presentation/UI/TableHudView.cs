@@ -210,6 +210,7 @@ namespace ConsoleCards.Presentation.UI
             if (hintNext != null) hintNext.onClick.AddListener(NextHintStep);
             primaryButton.onClick.AddListener(PressPrimary);
             actionTemplate.gameObject.SetActive(false);
+            PlaceOthersBesidePrimary();
             gameLabel.text = gameTitle ?? string.Empty;
             ClearStatus();
             SetActiveTool(TableToolKind.Grab);
@@ -612,6 +613,61 @@ namespace ConsoleCards.Presentation.UI
             actionsRoot.gameObject.SetActive(secondaryActions.Count > 0);
         }
 
+        // Owner, 2026-11-03: the turn's other actions (TAKE KEY, COLLAPSE FLOOR…) stood as small grey chips stacked
+        // above END TURN, which looked like loose hints. They now sit in one row to the left of END TURN, as full
+        // buttons of its height in the teal of the table's actions, so they read as the turn's choices.
+        private const float OtherActionHeight = 56f;
+        private const float OtherActionGap = 12f;
+        private static readonly Color OtherActionFill = new Color(0.075f, 0.541f, 0.549f, 1f);
+        private static readonly Color OtherActionWords = new Color(0.957f, 0.996f, 0.996f, 1f);
+        private bool othersBesidePrimary;
+
+        private void PlaceOthersBesidePrimary()
+        {
+            if (othersBesidePrimary || actionsRoot == null || primaryButton == null) return;
+            RectTransform area = primaryButton.transform.parent as RectTransform;
+            if (area == null || area.parent == null || actionsRoot.parent != area) return;
+            othersBesidePrimary = true;
+            RectTransform primaryRect = (RectTransform)primaryButton.transform;
+            float primaryWidth = primaryRect.rect.width > 1f ? primaryRect.rect.width : primaryRect.sizeDelta.x;
+            actionsRoot.SetParent(area.parent, false);
+            actionsRoot.anchorMin = new Vector2(1f, 0f);
+            actionsRoot.anchorMax = new Vector2(1f, 0f);
+            actionsRoot.pivot = new Vector2(1f, 0f);
+            Vector2 areaCorner = area.anchoredPosition; // the area's lower right corner (pivot 1, 0)
+            actionsRoot.anchoredPosition = new Vector2(areaCorner.x - primaryWidth - OtherActionGap, areaCorner.y);
+            VerticalLayoutGroup column = actionsRoot.GetComponent<VerticalLayoutGroup>();
+            if (column != null) DestroyImmediate(column);
+            HorizontalLayoutGroup row = actionsRoot.gameObject.AddComponent<HorizontalLayoutGroup>();
+            row.spacing = OtherActionGap;
+            row.childAlignment = TextAnchor.LowerRight;
+            row.childForceExpandWidth = false;
+            row.childForceExpandHeight = false;
+            row.childControlWidth = true;
+            row.childControlHeight = true;
+            ContentSizeFitter fit = actionsRoot.GetComponent<ContentSizeFitter>();
+            if (fit == null) fit = actionsRoot.gameObject.AddComponent<ContentSizeFitter>();
+            fit.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            fit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            StyleOtherAction(actionTemplate);
+        }
+
+        private static void StyleOtherAction(Button chip)
+        {
+            if (chip == null) return;
+            LayoutElement size = chip.GetComponent<LayoutElement>();
+            if (size == null) size = chip.gameObject.AddComponent<LayoutElement>();
+            size.minHeight = OtherActionHeight;
+            size.preferredHeight = OtherActionHeight;
+            if (chip.targetGraphic is Image fill) fill.color = OtherActionFill;
+            Text label = chip.GetComponentInChildren<Text>(true);
+            if (label != null)
+            {
+                label.color = OtherActionWords;
+                label.fontSize = Mathf.Max(label.fontSize, 15);
+            }
+        }
+
         private bool IsPrimary(PopupActionOption action) =>
             !string.IsNullOrEmpty(primaryActionPrefix)
             && action.Label.StartsWith(primaryActionPrefix, StringComparison.OrdinalIgnoreCase);
@@ -713,6 +769,36 @@ namespace ConsoleCards.Presentation.UI
             newsShownAt = Time.unscaledTime;
             newsGroup.gameObject.SetActive(true);
             newsGroup.alpha = 1f;
+            newsGroup.transform.localScale = new Vector3(1f + NewsPopScale, 1f + NewsPopScale, 1f);
+        }
+
+        // N1 (owner's test, 2026-11-02: "notifications are not that good: you have to tell them there's a notification
+        // up there"): news pops in big, settles, and nudges once more a moment later, so the eye goes to it.
+        private const float NewsPopScale = 0.3f;
+        private const float NewsPopSeconds = 0.4f;
+        private const float NewsNudgeAt = 1.1f;
+        private const float NewsNudgeSeconds = 0.35f;
+        private const float NewsNudgeScale = 0.1f;
+
+        private void PopNews()
+        {
+            if (newsGroup == null || !newsGroup.gameObject.activeSelf) return;
+            float age = Time.unscaledTime - newsShownAt;
+            float scale = 1f;
+            if (age < NewsPopSeconds)
+            {
+                float t = age / NewsPopSeconds;
+                scale = 1f + (NewsPopScale * (1f - t) * Mathf.Cos(t * Mathf.PI * 1.5f)); // big, a little under, settled
+            }
+            else if (age >= NewsNudgeAt && age < NewsNudgeAt + NewsNudgeSeconds)
+            {
+                scale = 1f + (NewsNudgeScale * Mathf.Sin(Mathf.PI * (age - NewsNudgeAt) / NewsNudgeSeconds));
+            }
+
+            if (!Mathf.Approximately(newsGroup.transform.localScale.x, scale))
+            {
+                newsGroup.transform.localScale = new Vector3(scale, scale, 1f);
+            }
         }
 
         private void FadeNews()
@@ -749,6 +835,7 @@ namespace ConsoleCards.Presentation.UI
         private void LateUpdate()
         {
             FadeNews();
+            PopNews(); // N1
             PulsePlayer();
             Keyboard keyboard = Keyboard.current;
             if (actions == null || keyboard == null) return;
@@ -757,6 +844,7 @@ namespace ConsoleCards.Presentation.UI
             bool enter = keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame;
             if (!l && !b && !enter) return;
             if (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed) return;
+            if (keyboard.leftAltKey.isPressed || keyboard.rightAltKey.isPressed) return; // QA: Alt+Enter (full screen) is not END TURN
             EventSystem current = EventSystem.current;
             GameObject selected = current != null ? current.currentSelectedGameObject : null;
             if (selected != null && selected.GetComponent<InputField>() != null) return;

@@ -491,6 +491,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 if (ReferenceEquals(pick.View, leader)) continue;
+                if (pick.View != null && pick.View.BoundState != null && !pick.View.BoundState.ContainerId.IsEmpty) continue; // H2: a hand card stays in the hand
                 PhysicalLooseObject follower = pick.View != null ? pick.View.PhysicalObject : null;
                 if (follower == null || follower.Body == null || pick.View.BoundState == null || pick.View.BoundState.IsUserLocked) continue;
                 Vector3 offset = follower.Body.position - leaderPosition;
@@ -704,6 +705,8 @@ namespace ConsoleCards.Presentation.Composition
 
         private string PileName(ContainerKind kind, ContainerId pileId)
         {
+            string named = ResolveTemplatePileName(pileId); // D1 (QA): the hover says AVATARS, not just "Deck"
+            if (!string.IsNullOrEmpty(named)) return named;
             switch (kind)
             {
                 case ContainerKind.Deck: return "Deck";

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ConsoleCards.Presentation.Views;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Interaction
@@ -32,6 +33,7 @@ namespace ConsoleCards.Presentation.Interaction
         private readonly Dictionary<Transform, Motion> motions = new Dictionary<Transform, Motion>();
         private readonly Dictionary<Transform, PulseState> pulses = new Dictionary<Transform, PulseState>();
         private readonly Dictionary<Transform, Vector3> restingScales = new Dictionary<Transform, Vector3>();
+        private readonly HashSet<Transform> handSizedScales = new HashSet<Transform>();
         private readonly List<Transform> completedTransforms = new List<Transform>();
         // SMOOTH-1: reused when cards are ordered for a staggered move or a riffle (no allocation per call).
         private readonly List<KeyValuePair<Transform, TabletopTransformSnapshot>> orderedStarts =
@@ -416,6 +418,7 @@ namespace ConsoleCards.Presentation.Interaction
 
             Stop(target, true);
             restingScales.Remove(target);
+            handSizedScales.Remove(target);
         }
 
         public void CompleteAll()
@@ -438,6 +441,7 @@ namespace ConsoleCards.Presentation.Interaction
             motions.Clear();
             pulses.Clear();
             restingScales.Clear();
+            handSizedScales.Clear();
         }
 
         private void TickMotions(float deltaTime)
@@ -645,11 +649,32 @@ namespace ConsoleCards.Presentation.Interaction
                 Mathf.Max(0f, arcHeight));
         }
 
+        // H1 (owner's test, 2026-11-02: "put a hand card on the table, put another on it to make a deck: its cards are
+        // very tiny"): the size a card rests at was remembered once and kept. A card first animated while it showed at
+        // the hand's small size kept that size, so later moves into a stack or deck shrank it to the hand's size on the
+        // table. A size seen while the card is shown in a hand (an overlay) now counts only until the card is back
+        // on the table; then its own size is remembered instead.
         private void RememberRestingScale(Transform target)
         {
+            bool inHand = target.TryGetComponent(out TabletopObjectView view) && view.IsOverlayPresentation;
+            if (inHand)
+            {
+                restingScales[target] = target.localScale;
+                handSizedScales.Add(target);
+                return;
+            }
+
             if (!restingScales.ContainsKey(target))
             {
-                restingScales.Add(target, target.localScale);
+                restingScales[target] = target.localScale;
+                return;
+            }
+
+            // Only read again while nothing here is changing its size (a pick-up or a tap scales it for a moment).
+            if (handSizedScales.Contains(target) && !motions.ContainsKey(target) && !pulses.ContainsKey(target))
+            {
+                handSizedScales.Remove(target);
+                restingScales[target] = target.localScale;
             }
         }
 

@@ -929,7 +929,10 @@ namespace ConsoleCards.Presentation.Composition
                 {
                     Code = room.Code,
                     Title = room.Title,
-                    Detail = $"{game}  ·  {room.Players}/{room.MaxPlayers}",
+                    // QA Q4: "1/8" before a game is chosen read like an 8-player game; the count says who is there.
+                    Detail = string.IsNullOrEmpty(room.Game)
+                        ? $"{game}  ·  {room.Players} {(room.Players == 1 ? "player" : "players")}"
+                        : $"{game}  ·  {room.Players}/{room.MaxPlayers}",
                     CanJoin = room.IsOpen,
                 });
             }

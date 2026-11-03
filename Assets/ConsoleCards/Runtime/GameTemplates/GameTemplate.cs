@@ -126,7 +126,8 @@ namespace ConsoleCards.GameTemplates
             TabletopPose tabletopPose,
             float? extentWidth = null,
             float? extentDepth = null,
-            GameTemplatePileStyle pileStyle = null)
+            GameTemplatePileStyle pileStyle = null,
+            string displayName = null)
         {
             Id = id;
             Kind = kind;
@@ -139,6 +140,7 @@ namespace ConsoleCards.GameTemplates
             ExtentWidth = extentWidth ?? 0f;
             ExtentDepth = extentDepth ?? 0f;
             PileStyle = pileStyle;
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName.Trim();
         }
 
         public ContainerId Id { get; }
@@ -164,6 +166,12 @@ namespace ConsoleCards.GameTemplates
 
         /// <summary>Declared pile presentation of a Deck, Stack or Discard Pile; null uses the kind's default (DefaultFor).</summary>
         public GameTemplatePileStyle PileStyle { get; }
+
+        /// <summary>
+        /// D1 (owner, 2026-11-02: "decks should be labelled: this is the Ability deck, this is the Console card deck, as
+        /// we don't have the backs of the cards yet"): what a game's pile is, shown beside it on the table. Null: none.
+        /// </summary>
+        public string DisplayName { get; }
     }
 
     /// <summary>

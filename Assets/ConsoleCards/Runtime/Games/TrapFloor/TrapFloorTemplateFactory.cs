@@ -166,7 +166,8 @@ namespace ConsoleCards.Games.TrapFloor
             int floorIndex,
             TrapFloorTableLayout tableLayout,
             int playerCount,
-            TrapFloorTableSetup tableSetup = null)
+            TrapFloorTableSetup tableSetup = null,
+            IReadOnlyList<ObjectDefinitionId> seatAvatars = null)
         {
             if (randomValueSource == null) throw new ArgumentNullException(nameof(randomValueSource));
             if (gameDefinition == null) throw new ArgumentNullException(nameof(gameDefinition));
@@ -229,11 +230,20 @@ namespace ConsoleCards.Games.TrapFloor
             CreateFloorBoard(floorContent, grid, randomValueSource, floorCardIds, labels, objects);
 
             TrapFloorCoordinate[] startingCorners = AssignStartingCorners(playerLayout, grid, playerCount);
+            // D3 (owner, 2026-11-02: "by default don't add any avatar to any player's Console; the players choose"):
+            // a seat starts with an Avatar only when it already chose one (a later floor or stage of the same game).
+            TrapFloorAvatarSetup[] seatAvatar = ChooseSeatAvatars(avatars, seatAvatars, playerCount);
 
             // TABLE-1 (owner, 2026-10-21, as in the playtest): one Controller deck for everyone beside the board.
+            // Owner, 2026-11-03: the CONSOLE CARDS deck lies with ABILITIES, ABILITY DISCARD, AVATARS and STARTING
+            // ABILITIES: under ABILITIES, on the board's side of that row, unless the players saved a layout of their own
+            // (the game's set-up place for it, by the far corner, is no longer used).
             ContainerId controllerDeckId = CreateSharedControllerDeck(
                 controllerInputCards, playerCount, grid, randomValueSource, containers, memberships, objects, labels,
-                tableLayout?.ControllerDeck ?? SetupPlace(tableSetup, setup => setup.ControllerDeck));
+                tableLayout?.ControllerDeck
+                    ?? ConsoleDeckBesideAbilities(
+                        tableLayout?.AbilityDeck ?? SetupPlace(tableSetup, setup => setup.AbilityDeck) ?? AbilityDeckPose(grid),
+                        tableLayout?.AbilityDiscard ?? SetupPlace(tableSetup, setup => setup.AbilityDiscard)));
 
             for (int seatIndex = 0; seatIndex < playerCount; seatIndex++)
             {
@@ -242,7 +252,7 @@ namespace ConsoleCards.Games.TrapFloor
                     seatIndex,
                     layoutSeat,
                     startingCorners[seatIndex],
-                    AvatarForSeat(avatars, seatIndex),
+                    seatAvatar[seatIndex],
                     pawnDefinitionId,
                     grid,
                     mainSlot,
@@ -291,6 +301,15 @@ namespace ConsoleCards.Games.TrapFloor
                 containers,
                 memberships,
                 tableLayout?.AbilityDiscard ?? SetupPlace(tableSetup, setup => setup.AbilityDiscard));
+            CreateAvatarPiles(
+                avatars,
+                seatAvatar,
+                tableLayout?.AbilityDeck ?? SetupPlace(tableSetup, setup => setup.AbilityDeck) ?? AbilityDeckPose(grid),
+                tableLayout?.AbilityDiscard ?? SetupPlace(tableSetup, setup => setup.AbilityDiscard),
+                containers,
+                memberships,
+                objects,
+                labels);
 
             TabletopBounds boardBounds = CreateBoardBounds(grid);
             // A saved layout is the players' own choice of places: the default seat check does not apply to it.
@@ -364,7 +383,8 @@ namespace ConsoleCards.Games.TrapFloor
                     new TableCoordinate(deckPose.Position.X, deckPose.Position.Y + AbilityDiscardAboveDeck),
                     0f,
                     0,
-                    0)));
+                    0),
+                displayName: AbilityDiscardName));
             memberships.Add(new GameTemplateContainerMembership(discardId, Array.Empty<TabletopObjectId>()));
             return discardId;
         }
@@ -401,7 +421,8 @@ namespace ConsoleCards.Games.TrapFloor
                     0f,
                     0,
                     0),
-                pileStyle: ControllerDeckPileStyle));
+                pileStyle: ControllerDeckPileStyle,
+                displayName: ConsoleCardDeckName));
 
             List<TabletopObjectId> cardIds = new List<TabletopObjectId>(controllerInputCards.Count * playerCount);
             for (int seatIndex = 0; seatIndex < playerCount; seatIndex++)
@@ -477,7 +498,8 @@ namespace ConsoleCards.Games.TrapFloor
                 0,
                 true,
                 placed ?? AbilityDeckPose(grid),
-                pileStyle: ControllerDeckPileStyle));
+                pileStyle: ControllerDeckPileStyle,
+                displayName: AbilityDeckName));
             List<TabletopObjectId> cardIds = new List<TabletopObjectId>(order.Count);
             for (int i = 0; i < order.Count; i++)
             {
@@ -498,6 +520,190 @@ namespace ConsoleCards.Games.TrapFloor
 
             memberships.Add(new GameTemplateContainerMembership(deckId, cardIds));
             return deckId;
+        }
+
+        // D1: the names shown beside the game's piles (the cards have no backs yet).
+        private const string AbilityDeckName = "ABILITIES";
+        private const string AbilityDiscardName = "ABILITY DISCARD";
+        private const string ConsoleCardDeckName = "CONSOLE CARDS";
+        private const string AvatarDeckName = "AVATARS";
+        private const string StartingAbilitiesName = "STARTING ABILITIES";
+        private const double AvatarPileStep = 1.7d; // from one pile to the next beside the Ability piles
+
+        // D3: each seat's Avatar when it chose one before (same Avatar never twice); null where none was chosen.
+        private static TrapFloorAvatarSetup[] ChooseSeatAvatars(
+            IReadOnlyList<TrapFloorAvatarSetup> avatars,
+            IReadOnlyList<ObjectDefinitionId> seatAvatars,
+            int playerCount)
+        {
+            TrapFloorAvatarSetup[] chosen = new TrapFloorAvatarSetup[playerCount];
+            if (seatAvatars == null) return chosen;
+            for (int seat = 0; seat < playerCount && seat < seatAvatars.Count; seat++)
+            {
+                ObjectDefinitionId wanted = seatAvatars[seat];
+                if (wanted.IsEmpty) continue;
+                for (int i = 0; i < avatars.Count; i++)
+                {
+                    if (avatars[i].DefinitionId != wanted || Array.IndexOf(chosen, avatars[i]) >= 0) continue;
+                    chosen[seat] = avatars[i];
+                    break;
+                }
+            }
+
+            return chosen;
+        }
+
+        /// <summary>The Avatar card of each Avatar not taken by a seat, in the order the game lists them.</summary>
+        public static TabletopObjectId AvatarDeckCardId(int avatarIndex) => new TabletopObjectId(CreateGuid(43, avatarIndex + 1));
+
+        /// <summary>D2: the shared Avatar deck (face up) and, beside it, the starting Abilities of those Avatars.</summary>
+        public static ContainerId AvatarDeckId => new ContainerId(CreateGuid(71, 4));
+
+        public static ContainerId StartingAbilitiesId => new ContainerId(CreateGuid(71, 5));
+
+        /// <summary>D2: the card of the Avatar at <paramref name="avatarIndex"/>'s starting Ability number <paramref name="abilityIndex"/>.</summary>
+        public static TabletopObjectId StartingAbilityCardId(int avatarIndex, int abilityIndex) =>
+            new TabletopObjectId(CreateGuid(44, (avatarIndex * 20) + abilityIndex + 1));
+
+        /// <summary>D2: where this Avatar (by its card's definition) is in the game's list of Avatars; -1 when it is none.</summary>
+        public static int AvatarIndexOf(GameDefinitionData definition, ObjectDefinitionId avatarDefinitionId, out int startingAbilityCount)
+        {
+            startingAbilityCount = 0;
+            if (definition == null || avatarDefinitionId.IsEmpty) return -1;
+            for (int i = 0; i < definition.Avatars.Count; i++)
+            {
+                AvatarDefinitionData avatar = definition.Avatars[i];
+                if (avatar == null || !Guid.TryParse(avatar.StableId, out Guid id) || id != avatarDefinitionId.Value) continue;
+                startingAbilityCount = avatar.StartingAbilityIds.Count;
+                return i;
+            }
+
+            return -1;
+        }
+
+        // D2 (owner, 2026-11-02: "we also need to add the avatar cards as a deck"): every Avatar no seat has yet lies
+        // face up in one deck beside the Ability piles, and their starting Abilities face up in a pile beside it. A
+        // player picks an Avatar by putting it into their Console's Main slot; its starting Abilities then go to their
+        // hand (TrapFloorCartridge.Avatars.cs). The piles continue the line from the Ability deck to its discard pile.
+        // Beside the Ability deck, across the row of game piles, on the side toward the middle of the table (the row
+        // itself runs from the table's edge, so a pile before or after it would leave the table or meet a Console).
+        private static TabletopPose ConsoleDeckBesideAbilities(TabletopPose abilityDeckPose, TabletopPose? abilityDiscardPose)
+        {
+            TableCoordinate from = abilityDeckPose.Position;
+            TableCoordinate next = abilityDiscardPose.HasValue
+                ? abilityDiscardPose.Value.Position
+                : new TableCoordinate(from.X, from.Y + AbilityDiscardAboveDeck);
+            double stepX = next.X - from.X;
+            double stepY = next.Y - from.Y;
+            double length = Math.Sqrt((stepX * stepX) + (stepY * stepY));
+            if (length < 0.01d)
+            {
+                stepX = 0d;
+                stepY = AvatarPileStep;
+            }
+            else
+            {
+                stepX *= AvatarPileStep / length;
+                stepY *= AvatarPileStep / length;
+            }
+
+            const double across = 1.35d; // a deck is taller than it is wide: a little more than one pile step
+            double ax = -stepY * across;
+            double ay = stepX * across;
+            TableCoordinate one = new TableCoordinate(from.X + ax, from.Y + ay);
+            TableCoordinate other = new TableCoordinate(from.X - ax, from.Y - ay);
+            bool oneIsInward = (one.X * one.X) + (one.Y * one.Y) <= (other.X * other.X) + (other.Y * other.Y);
+            return new TabletopPose(oneIsInward ? one : other, abilityDeckPose.RotationDegrees, 0, 0);
+        }
+
+        private static void CreateAvatarPiles(
+            IReadOnlyList<TrapFloorAvatarSetup> avatars,
+            TrapFloorAvatarSetup[] seatAvatar,
+            TabletopPose abilityDeckPose,
+            TabletopPose? abilityDiscardPose,
+            List<GameTemplateContainerDefinition> containers,
+            List<GameTemplateContainerMembership> memberships,
+            List<GameTemplateObjectInstanceDefinition> objects,
+            Dictionary<TabletopObjectId, string> labels)
+        {
+            TableCoordinate from = abilityDeckPose.Position;
+            TableCoordinate last = abilityDiscardPose.HasValue
+                ? abilityDiscardPose.Value.Position
+                : new TableCoordinate(from.X, from.Y + AbilityDiscardAboveDeck);
+            double stepX = last.X - from.X;
+            double stepY = last.Y - from.Y;
+            double length = Math.Sqrt((stepX * stepX) + (stepY * stepY));
+            if (length < 0.01d)
+            {
+                stepX = 0d;
+                stepY = AvatarPileStep;
+            }
+            else
+            {
+                stepX *= AvatarPileStep / length;
+                stepY *= AvatarPileStep / length;
+            }
+
+            float yaw = abilityDeckPose.RotationDegrees;
+            TabletopPose avatarPose = new TabletopPose(new TableCoordinate(last.X + stepX, last.Y + stepY), yaw, 0, 0);
+            TabletopPose startingPose = new TabletopPose(new TableCoordinate(last.X + (2d * stepX), last.Y + (2d * stepY)), yaw, 0, 0);
+
+            List<TabletopObjectId> avatarCards = new List<TabletopObjectId>(avatars.Count);
+            List<TabletopObjectId> startingCards = new List<TabletopObjectId>(avatars.Count);
+            for (int i = 0; i < avatars.Count; i++)
+            {
+                TrapFloorAvatarSetup avatar = avatars[i];
+                if (Array.IndexOf(seatAvatar, avatar) >= 0) continue; // a seat already has it
+                TabletopObjectId cardId = AvatarDeckCardId(i);
+                objects.Add(new GameTemplateObjectInstanceDefinition(
+                    cardId,
+                    avatar.DefinitionId,
+                    TabletopObjectKind.Card,
+                    TabletopPose.Default,
+                    SeatId.Empty,
+                    ObjectVisibility.Public,
+                    false,
+                    CardFace.FaceUp));
+                labels.Add(cardId, avatar.DisplayName);
+                avatarCards.Add(cardId);
+                for (int a = 0; a < avatar.StartingAbilities.Count; a++)
+                {
+                    CardDefinitionData ability = avatar.StartingAbilities[a];
+                    TabletopObjectId abilityId = new TabletopObjectId(CreateGuid(44, (i * 20) + a + 1));
+                    objects.Add(new GameTemplateObjectInstanceDefinition(
+                        abilityId,
+                        new ObjectDefinitionId(ParseStableGuid(ability.StableId, $"Ability '{ability.DisplayName}'")),
+                        TabletopObjectKind.Card,
+                        TabletopPose.Default,
+                        SeatId.Empty,
+                        ObjectVisibility.Public,
+                        false,
+                        CardFace.FaceUp));
+                    labels.Add(abilityId, ability.DisplayName);
+                    startingCards.Add(abilityId);
+                }
+            }
+
+            containers.Add(new GameTemplateContainerDefinition(
+                AvatarDeckId,
+                ContainerKind.Deck,
+                SeatId.Empty,
+                ObjectVisibility.Public,
+                0,
+                true,
+                avatarPose,
+                displayName: AvatarDeckName));
+            memberships.Add(new GameTemplateContainerMembership(AvatarDeckId, avatarCards));
+            containers.Add(new GameTemplateContainerDefinition(
+                StartingAbilitiesId,
+                ContainerKind.Deck,
+                SeatId.Empty,
+                ObjectVisibility.Public,
+                0,
+                true,
+                startingPose,
+                displayName: StartingAbilitiesName));
+            memberships.Add(new GameTemplateContainerMembership(StartingAbilitiesId, startingCards));
         }
 
         private static TabletopPose AbilityDeckPose(GridDefinitionData grid)
@@ -1274,14 +1480,18 @@ namespace ConsoleCards.Games.TrapFloor
             TabletopPose abilityOverflowPose =
                 ConsoleAdjacentPlacement.ToTablePose(seatConsolePose, seatPieces.ActionStack);
 
-            TabletopObjectId avatarId = new TabletopObjectId(CreateGuid(42, playerNumber));
+            // D3: a seat that has not chosen an Avatar starts with an empty Main slot and no starting Abilities.
+            TabletopObjectId avatarId = avatar != null ? new TabletopObjectId(CreateGuid(42, playerNumber)) : TabletopObjectId.Empty;
             TabletopObjectId pawnId = new TabletopObjectId(CreateGuid(45, playerNumber));
             TabletopPose consolePose = seatConsolePose;
             TabletopPose avatarPose = mainSlotYawOffset.HasValue
                 ? new TabletopPose(TableCoordinate.Zero, consolePose.RotationDegrees + mainSlotYawOffset.Value, 0, 0)
                 : TabletopPose.Default;
-            objects.Add(CreatePlayerCard(avatarId, avatar.DefinitionId, seatId, avatarPose));
-            labels.Add(avatarId, $"P{playerNumber}\n{avatar.DisplayName}");
+            if (avatar != null)
+            {
+                objects.Add(CreatePlayerCard(avatarId, avatar.DefinitionId, seatId, avatarPose));
+                labels.Add(avatarId, $"P{playerNumber}\n{avatar.DisplayName}");
+            }
             objects.Add(new GameTemplateObjectInstanceDefinition(
                 pawnId,
                 pawnDefinitionId,
@@ -1292,7 +1502,9 @@ namespace ConsoleCards.Games.TrapFloor
                 false,
                 CardFace.FaceUp));
 
-            memberships.Add(new GameTemplateContainerMembership(mainSlotId, new[] { avatarId }));
+            memberships.Add(new GameTemplateContainerMembership(
+                mainSlotId,
+                avatar != null ? new[] { avatarId } : Array.Empty<TabletopObjectId>()));
             for (int i = 0; i < sideSlotIds.Length; i++)
             {
                 memberships.Add(new GameTemplateContainerMembership(sideSlotIds[i], Array.Empty<TabletopObjectId>()));
@@ -1303,7 +1515,8 @@ namespace ConsoleCards.Games.TrapFloor
                 memberships.Add(new GameTemplateContainerMembership(extraSlotIds[i], Array.Empty<TabletopObjectId>()));
             }
 
-            for (int i = 0; i < avatar.StartingAbilities.Count; i++)
+            int startingCount = avatar != null ? avatar.StartingAbilities.Count : 0;
+            for (int i = 0; i < startingCount; i++)
             {
                 CardDefinitionData ability = avatar.StartingAbilities[i];
                 TabletopObjectId abilityId = new TabletopObjectId(CreateGuid(46, (seatIndex * 100) + i + 1));

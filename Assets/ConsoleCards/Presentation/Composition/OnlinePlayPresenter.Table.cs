@@ -153,6 +153,7 @@ namespace ConsoleCards.Presentation.Composition
             dirty = false;
             matchReplaced = false;
             awaitingTable = false;
+            host.ClearRemoteStrokes(); // SYNC-1: lines others were drawing go with the shared table
         }
 
         // ---------- starting a game (host) ----------
@@ -903,6 +904,9 @@ namespace ConsoleCards.Presentation.Composition
                 case MsgDeal:
                     HostDeal(data);
                     break;
+                case MsgLive:
+                    HostLive(member, data); // SYNC-1
+                    break;
             }
         }
 
@@ -917,6 +921,9 @@ namespace ConsoleCards.Presentation.Composition
                     break;
                 case MsgPoses:
                     ApplyPoses(data);
+                    break;
+                case MsgLive:
+                    ApplyLive(data); // SYNC-1
                     break;
             }
         }

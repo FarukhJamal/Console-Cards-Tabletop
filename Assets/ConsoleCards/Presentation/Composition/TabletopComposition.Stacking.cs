@@ -274,6 +274,13 @@ namespace ConsoleCards.Presentation.Composition
         private void MakeStackFromCards(CardView bottom, CardView top)
         {
             TabletopPose stackPose = RestPose(bottom);
+            if (IsOnlineTable)
+            {
+                // QA Q8: an online card-on-card pile once appeared across the table; this line finds out why.
+                Debug.Log($"[Online] Stack at ({stackPose.Position.X:0.00}, {stackPose.Position.Y:0.00}); bottom card view "
+                    + $"{bottom.transform.position}, its state ({bottom.BoundState.Pose.Position.X:0.00}, {bottom.BoundState.Pose.Position.Y:0.00}).");
+            }
+
             ContainerId stackId = ContainerId.Empty;
             bool stacked = false;
             SessionService.BeginUndoBatch();

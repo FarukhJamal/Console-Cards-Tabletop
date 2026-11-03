@@ -218,6 +218,7 @@ namespace ConsoleCards.Presentation.Composition
             if (!Ready || ShownByGesture(command.Context)) return;
             host.PresentAcceptedObject(command.ObjectId);
             host.RefreshAcceptedCardFaces();
+            host.TurnCardOverFromElsewhere(command.ObjectId); // SYNC-1: the same turn-over as on the flipping computer
         }
 
         private void OnPhysicalObjectCommitted(CommitPhysicalObjectCommand command, CommandResult result)
@@ -229,7 +230,7 @@ namespace ConsoleCards.Presentation.Composition
         private void OnConsoleFlipped(FlipConsoleCommand command, CommandResult result)
         {
             if (!Ready || ShownByGesture(command.Context)) return;
-            host.PresentConsoleSide(command.SlotContainerId);
+            host.TurnConsoleOverFromElsewhere(command.SlotContainerId, command.ShowBack); // SYNC-1: turns, not snaps
         }
 
         // ---------- Shared ----------

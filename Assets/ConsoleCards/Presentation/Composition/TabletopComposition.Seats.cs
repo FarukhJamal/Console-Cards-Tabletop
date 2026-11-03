@@ -459,7 +459,19 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             runtimeUi.ShowTableNews(newsText.ToString(), dot);
+            // N1: a soft high tick with it, so news is heard as well as seen.
+            EnsureCardSounds();
+            if (tablePingClip != null && Time.unscaledTime - lastNewsSoundAt > NewsSoundGap)
+            {
+                lastNewsSoundAt = Time.unscaledTime;
+                PlayTableSound(tablePingClip, NewsSoundVolume, NewsSoundPitch);
+            }
         }
+
+        private const float NewsSoundVolume = 0.35f;
+        private const float NewsSoundPitch = 1.5f;
+        private const float NewsSoundGap = 0.5f;
+        private float lastNewsSoundAt = -10f;
 
         // F4: the "What happened" text, newest first, with the round each line happened in. Built only when the
         // log changes.

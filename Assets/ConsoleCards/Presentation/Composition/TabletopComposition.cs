@@ -1071,6 +1071,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             online?.Tick(); // MP-2: the room's messages and the shared table
+            TickRemotePing(); // QA S1: the extra ripples of someone else's ping
             if (SessionService.HandleRedoShortcut()) return;
             if (SessionService.HandleUndoShortcut()) return;
             HandleHandTrayShortcut();
@@ -1125,6 +1126,19 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // The pile style the active template declares for a Deck or Stack (null: not declared, or no style).
+        // D1: a game's own name for its pile ("ABILITIES"), shown beside it; null when the game gives none.
+        private string ResolveTemplatePileName(ContainerId containerId)
+        {
+            if (templateContext == null || templateContext.Template == null) return null;
+            IReadOnlyList<GameTemplateContainerDefinition> definitions = templateContext.Template.Containers;
+            for (int i = 0; i < definitions.Count; i++)
+            {
+                if (definitions[i].Id == containerId) return definitions[i].DisplayName;
+            }
+
+            return null;
+        }
+
         private GameTemplatePileStyle ResolveTemplatePileStyle(ContainerId containerId)
         {
             if (templateContext == null || templateContext.Template == null)

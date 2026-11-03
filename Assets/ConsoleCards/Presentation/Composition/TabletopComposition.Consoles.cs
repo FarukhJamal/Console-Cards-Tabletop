@@ -345,6 +345,38 @@ namespace ConsoleCards.Presentation.Composition
             boardFeedback.Flash(position, new Color(0.34f, 0.94f, 0.86f, 1f));
         }
 
+        /// <summary>
+        /// SYNC-1 (owner's test, 2026-11-02: "the flip animations are not synced"): a card turned over on another
+        /// computer (or by its replayed command) lifts and turns here too, instead of changing face in place.
+        /// </summary>
+        internal void TurnCardOverFromElsewhere(TabletopObjectId cardId)
+        {
+            if (Registry.TryGetCardView(cardId, out CardView card) && card.IsBound && card.isActiveAndEnabled)
+            {
+                BeginCardFlipTurn(card);
+            }
+        }
+
+        /// <summary>SYNC-1: a Console turned over on another computer turns over here as it did there, with its cards.</summary>
+        internal void TurnConsoleOverFromElsewhere(ContainerId slotContainerId, bool toBack)
+        {
+            RuntimeConsoleInstance instance = FindConsoleInstanceBySlot(slotContainerId);
+            if (instance == null) return;
+            ConsoleMatFaces faces = instance.View != null ? instance.View.GetComponent<ConsoleMatFaces>() : null;
+            if (faces == null || faces.TurnPivot == null)
+            {
+                ApplyConsoleSide(instance);
+                return;
+            }
+
+            faces.CompleteTurn();
+            faces.BeginTurn(
+                toBack,
+                () => OnConsoleTurnMidpoint(instance, faces),
+                () => OnConsoleTurnLanded(instance));
+            AddConsoleSideRiders(instance, faces, !toBack, false);
+        }
+
         internal void BeginCardFlipTurn(CardView card)
         {
             if (cardFlipTurns == null)

@@ -449,7 +449,10 @@ namespace ConsoleCards.Presentation.Composition
             handContainerId = context.HandContainerId;
             primaryStackContainerId = ContainerId.Empty;
             centralPlayAreaId = context.CentralPlayAreaId;
-            cardState = matchState.Cards[context.LooseCardId];
+            // D3: a seat may start with no Avatar card (the game's loose card here), so none is needed.
+            cardState = !context.LooseCardId.IsEmpty && matchState.Cards.TryGetValue(context.LooseCardId, out CardInstanceState looseCard)
+                ? looseCard
+                : null;
             pawnState = matchState.Pawns[context.PawnId];
             tokenState = context.TokenId.IsEmpty
                 ? null

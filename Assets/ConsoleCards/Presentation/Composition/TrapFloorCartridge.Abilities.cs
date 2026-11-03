@@ -383,15 +383,16 @@ namespace ConsoleCards.Presentation.Composition
             return false;
         }
 
-        // The Main slot when empty, otherwise the first empty side slot; empty when every slot is taken.
+        // The first empty side slot, then the Main slot (D3: it is kept for the Avatar the player chooses); empty when
+        // every slot is taken.
         private ContainerId FreeConsoleSlot(TrapFloorPlayerSetupDefinition setup)
         {
-            if (IsEmptySlot(setup.MainSlotContainerId)) return setup.MainSlotContainerId;
             for (int i = 0; i < setup.SideSlotContainerIds.Count; i++)
             {
                 if (IsEmptySlot(setup.SideSlotContainerIds[i])) return setup.SideSlotContainerIds[i];
             }
 
+            if (IsEmptySlot(setup.MainSlotContainerId)) return setup.MainSlotContainerId;
             return ContainerId.Empty;
         }
 

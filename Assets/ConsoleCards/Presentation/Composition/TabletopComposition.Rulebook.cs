@@ -117,6 +117,7 @@ namespace ConsoleCards.Presentation.Composition
                 () => OpenRulebookObject(),
                 SetRulebookReading,
                 () => runtimeUi?.OpenScreenRulebook());
+            rulebookObject.SetMoveHandlers(SetRulebookHeld, position => rulebookMovedTo = position);
             return true;
         }
 
@@ -180,7 +181,29 @@ namespace ConsoleCards.Presentation.Composition
                 || TryGetSeatRulebookPose(out position, out rotation)
                 || TryGetCornerRulebookPose(out position, out rotation))
             {
+                if (rulebookMovedTo.HasValue) position = rulebookMovedTo.Value; // where the player put it
                 rulebookObject.PlaceOnTable(position, rotation);
+            }
+        }
+
+        // Owner, 2026-11-03: the book can be carried (hold it, or drag it); it stays where it was put on this table.
+        private Vector3? rulebookMovedTo;
+        private bool rulebookHeldInputWasOn;
+
+        // While the book is carried the table does not also start a selection box or a camera drag under it.
+        private void SetRulebookHeld(bool held)
+        {
+            if (inputFrameCoordinator == null) return;
+            if (held)
+            {
+                rulebookHeldInputWasOn = inputFrameCoordinator.enabled;
+                inputFrameCoordinator.enabled = false;
+                return;
+            }
+
+            if (rulebookHeldInputWasOn && frameCoordinatorEnabledByComposition && !rulebookReading)
+            {
+                inputFrameCoordinator.enabled = true;
             }
         }
 

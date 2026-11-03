@@ -154,8 +154,13 @@ namespace ConsoleCards.Presentation.Composition
             if (playMat.x > 0f && playMat.y > 0f)
             {
                 Vector3 back = templateBoardMat.transform.InverseTransformVector(-extra);
-                templateBoardMat.SetMatSize(playMat.x, playMat.y, new Vector2(back.x, back.z));
-                if (playMat.x > grid.Width || playMat.y > grid.Depth) templateBoardMat.SetSurfaceEnabled(true);
+                // Owner, 2026-11-03: more Columns or Rows than the printed board holds ran the spaces over the mat's
+                // painted edge. The mat now grows to keep a margin of board around every space (it never shrinks
+                // below the game's own size).
+                float matWidth = Mathf.Max(playMat.x, grid.Width + (2f * (PlayMatSpaceMargin + Mathf.Abs(back.x))));
+                float matDepth = Mathf.Max(playMat.y, grid.Depth + (2f * (PlayMatSpaceMargin + Mathf.Abs(back.z))));
+                templateBoardMat.SetMatSize(matWidth, matDepth, new Vector2(back.x, back.z));
+                if (matWidth > grid.Width || matDepth > grid.Depth) templateBoardMat.SetSurfaceEnabled(true);
             }
 
             templateBoardMat.SetMatPicture(ActiveCartridge.BoardMatPicture);

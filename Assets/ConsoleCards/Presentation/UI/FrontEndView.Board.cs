@@ -219,6 +219,26 @@ namespace ConsoleCards.Presentation.UI
             }
 
             SetActive("Pages/Library/Empty", shownTiles.Count == 0);
+            ShowWhereChosen("Pages/Library/Where/", InOnlineRoom);
+        }
+
+        // QA Q6 (2026-11-03): in an online room the host picks the room's game here, so ONLINE is the one lit.
+        private static readonly Color WhereFill = new Color(0.110f, 0.235f, 0.239f, 1f);
+        private static readonly Color WhereWords = new Color(0.910f, 0.925f, 0.929f, 1f);
+        private static readonly Color WhereMuted = new Color(0.608f, 0.643f, 0.655f, 1f);
+        private static readonly Color WhereIdle = new Color(0.110f, 0.122f, 0.122f, 1f);
+        private readonly List<Shadow> whereEdges = new List<Shadow>(2);
+
+        private void ShowWhereChosen(string at, bool online)
+        {
+            TintImage(at + "Local", online ? WhereIdle : WhereFill);
+            TintImage(at + "Online", online ? WhereFill : new Color(0f, 0f, 0f, 0f));
+            Tint(at + "Local/Label", online ? WhereMuted : WhereWords);
+            Tint(at + "Online/Label", online ? WhereWords : WhereMuted);
+            Transform local = Find(at + "Local");
+            if (local == null) return;
+            local.GetComponents(whereEdges); // the cyan edge (an Outline drawn without the fill's alpha)
+            for (int i = 0; i < whereEdges.Count; i++) whereEdges[i].enabled = !online;
         }
 
         // One click opens the sheet (a moment later, so a second click can start the game instead).
@@ -312,6 +332,7 @@ namespace ConsoleCards.Presentation.UI
 
             const string setup = "Pages/Details/Setup/";
             SetActive(setup + "Players", model.ShowPlayers);
+            SetText(setup + "Players/Hint", InOnlineRoom ? "in this room" : "on this computer"); // QA Q6
             SetText(setup + "Players/Count", model.PlayerCount.ToString());
             SetInteractable(setup + "Players/Minus", model.CanChangePlayers);
             SetInteractable(setup + "Players/Plus", model.CanChangePlayers);

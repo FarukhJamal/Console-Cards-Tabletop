@@ -21,6 +21,25 @@ namespace ConsoleCards.Presentation.UI
 
         public IRuntimeUiService UiService => uiManager;
 
+        // QA Q9 (2026-11-03): in a window narrower than the screens were drawn for (4:3, 16:10) the menus were cut
+        // off on the right. Below the reference shape the scaler fits the width instead, so everything stays on.
+        private float authoredMatch = -1f;
+        private int fittedWidth;
+        private int fittedHeight;
+
+        private void Update()
+        {
+            if (canvasScaler == null) return;
+            if (Screen.width == fittedWidth && Screen.height == fittedHeight) return;
+            fittedWidth = Screen.width;
+            fittedHeight = Screen.height;
+            if (authoredMatch < 0f) authoredMatch = canvasScaler.matchWidthOrHeight;
+            Vector2 reference = canvasScaler.referenceResolution;
+            float referenceAspect = reference.y > 0f ? reference.x / reference.y : 16f / 9f;
+            float aspect = fittedHeight > 0 ? (float)fittedWidth / fittedHeight : referenceAspect;
+            canvasScaler.matchWidthOrHeight = aspect < referenceAspect - 0.01f ? 0f : authoredMatch;
+        }
+
         public void ValidateReferences()
         {
             if (canvas == null

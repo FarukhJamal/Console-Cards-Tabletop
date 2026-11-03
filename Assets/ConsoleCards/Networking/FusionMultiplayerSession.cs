@@ -92,7 +92,7 @@ namespace ConsoleCards.Networking
             StartGameResult result;
             try
             {
-                result = await created.JoinSessionLobby(SessionLobby.ClientServer, null, null, Settings(null));
+                result = await created.JoinSessionLobby(SessionLobby.ClientServer, null, null, Settings(LobbyRegion()));
             }
             catch (Exception exception)
             {
@@ -403,6 +403,21 @@ namespace ConsoleCards.Networking
         }
 
         // The project's Photon settings, with the build's version (other builds never meet) and the room's region.
+        // R1 (owner's test with a friend, 2026-11-02: "when I create a room, it's not showing in the room list; I have to
+        // give him the code"): each computer joined the lobby of its own best region, and a room list shows only the
+        // rooms of its region, so two players in different best regions never saw each other's rooms (a code names its
+        // region, so joining by code worked). Everyone now meets in one region: the one set in Photon App Settings
+        // (Fixed Region), else this default. A player can still be sent elsewhere by a code.
+        internal const string DefaultLobbyRegion = "eu";
+
+        private static string LobbyRegion()
+        {
+            string set = PhotonAppSettings.Global != null && PhotonAppSettings.Global.AppSettings != null
+                ? PhotonAppSettings.Global.AppSettings.FixedRegion
+                : null;
+            return string.IsNullOrEmpty(set) ? DefaultLobbyRegion : set.Trim().ToLowerInvariant();
+        }
+
         private static FusionAppSettings Settings(string fixedRegion)
         {
             FusionAppSettings settings = PhotonAppSettings.Global.AppSettings.GetCopy();

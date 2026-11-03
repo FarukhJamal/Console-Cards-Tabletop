@@ -82,7 +82,7 @@ namespace ConsoleCards.Presentation.Composition
 
         bool ITabletopCarryHandler.TryBeginCarry(CardView pressedCard, Vector2 screenPosition)
         {
-            if (!CanCarryStackOf(pressedCard, out ContainerId stackId, out StackRuntimeView stackView)
+            if (!CanCarryStackOf(pressedCard, out ContainerId stackId, out Transform pileRoot)
                 || pointerProjector == null
                 || !pointerProjector.TryProjectScreenPoint(screenPosition, out TableCoordinate grab))
             {
@@ -91,7 +91,7 @@ namespace ConsoleCards.Presentation.Composition
 
             ContextMenus.CloseContextMenu();
             carriedStackId = stackId;
-            carriedRoot = stackView.Root != null ? stackView.Root.transform : null;
+            carriedRoot = pileRoot;
             carriedRootStart = carriedRoot != null ? carriedRoot.position : Vector3.zero;
             carriedCards.Clear();
             carriedCardStarts.Clear();
@@ -194,10 +194,12 @@ namespace ConsoleCards.Presentation.Composition
             Physics.SyncTransforms();
         }
 
-        private bool CanCarryStackOf(CardView pressedCard, out ContainerId stackId, out StackRuntimeView stackView)
+        // Owner, 2026-11-03 ("like Tabletop Simulator: hold on the deck and it all moves together"): decks and discard
+        // piles are carried whole by a hold too; only stacks merge, a deck or discard pile is put down where it is let go.
+        private bool CanCarryStackOf(CardView pressedCard, out ContainerId stackId, out Transform pileRoot)
         {
             stackId = ContainerId.Empty;
-            stackView = null;
+            pileRoot = null;
             if (!IsInitialized || matchState == null || carryDropPending || !carriedStackId.IsEmpty
                 || pressedCard == null || pressedCard.CardState == null)
             {
@@ -205,12 +207,40 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             stackId = pressedCard.CardState.BaseState.ContainerId;
-            return Registry.stackViewsByContainerId.TryGetValue(stackId, out stackView)
-                && stackView != null
-                && matchState.Containers.TryGetValue(stackId, out ContainerState stack)
-                && stack.Kind == ContainerKind.Stack
-                && stack.Count > 0
-                && !MoveContainerUseCase.IsMoveBlockedByOwner(matchState, stack, localPlayerId);
+            if (!matchState.Containers.TryGetValue(stackId, out ContainerState pile)
+                || pile.Count == 0
+                || MoveContainerUseCase.IsMoveBlockedByOwner(matchState, pile, localPlayerId))
+            {
+                return false;
+            }
+
+            switch (pile.Kind)
+            {
+                case ContainerKind.Stack:
+                    if (!Registry.stackViewsByContainerId.TryGetValue(stackId, out StackRuntimeView stackView) || stackView == null)
+                    {
+                        return false;
+                    }
+
+                    pileRoot = stackView.Root != null ? stackView.Root.transform : null;
+                    return true;
+                case ContainerKind.Deck:
+                    for (int i = 0; i < Registry.runtimeDeckInstances.Count; i++)
+                    {
+                        RuntimeDeckInstance deck = Registry.runtimeDeckInstances[i];
+                        if (deck.ContainerId != stackId || deck.Root == null) continue;
+                        pileRoot = deck.Root.transform;
+                        return true;
+                    }
+
+                    return false;
+                case ContainerKind.DiscardPile:
+                    if (!Registry.TryGetRuntimeDiscardPile(stackId, out RuntimeDiscardPileInstance discard)) return false;
+                    pileRoot = discard.Root != null ? discard.Root.transform : null;
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         // POL-4, every frame while a stack is carried: it follows the pointer smoothly and, over a stack it will merge
@@ -253,9 +283,11 @@ namespace ConsoleCards.Presentation.Composition
         // The nearest other stack whose centre is within reach of the carried stack's centre.
         private ContainerId FindCarryMergeTarget()
         {
-            if (!matchState.TryGetContainerPlacement(carriedStackId, out ContainerPlacementState placement))
+            if (!matchState.TryGetContainerPlacement(carriedStackId, out ContainerPlacementState placement)
+                || !matchState.Containers.TryGetValue(carriedStackId, out ContainerState carried)
+                || carried.Kind != ContainerKind.Stack)
             {
-                return ContainerId.Empty;
+                return ContainerId.Empty; // only a stack merges; a deck or discard pile is just put down
             }
 
             Vector3 carriedCentre = coordinateConverter.ToWorldPosition(placement.Pose) + carryHorizontalOffset;
@@ -313,6 +345,8 @@ namespace ConsoleCards.Presentation.Composition
 
         private void ClearCarryState()
         {
+            // The pile's own frame goes back to where it lay; the table's view sync then sets it where the pile now is.
+            if (carriedRoot != null) carriedRoot.position = carriedRootStart;
             carriedStackId = ContainerId.Empty;
             carriedRoot = null;
             carriedCards.Clear();

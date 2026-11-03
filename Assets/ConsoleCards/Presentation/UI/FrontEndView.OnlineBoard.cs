@@ -170,6 +170,7 @@ namespace ConsoleCards.Presentation.UI
                 TintImage(row + "/Dot", member.Colour);
                 SetText(row + "/Name", Upper(member.Name));
                 SetText(row + "/Detail", member.SeatLabel);
+                PlaceDetailAfterName(row); // QA Q3: a long name pushed "seat 2 · you" over itself
                 SetText(row + "/State/Label", member.State);
                 bool ready = member.State == "READY";
                 bool waiting = member.State == "RECONNECTING" || member.State == "AWAY";
@@ -199,7 +200,8 @@ namespace ConsoleCards.Presentation.UI
             TintImage(at + "Start", lit ? StartOn : StartOff);
             Tint(at + "Start/Label", lit ? StartOnWords : StartOffWords);
             SetText(at + "Waiting", online.IsHost
-                ? online.NotReady > 0 ? $"Waiting for {online.NotReady} player{(online.NotReady == 1 ? string.Empty : "s")} to be ready" : string.Empty
+                ? online.Started && online.NotReady > 0 ? "A game is on: NEW GAME once everyone is READY again"
+                : online.NotReady > 0 ? $"Waiting for {online.NotReady} player{(online.NotReady == 1 ? string.Empty : "s")} to be ready" : string.Empty
                 : online.Ready ? "Waiting for the host to start" : "Press READY when you are");
         }
 
@@ -213,6 +215,16 @@ namespace ConsoleCards.Presentation.UI
             RectTransform nameRect = name.rectTransform;
             rect.anchoredPosition = new Vector2(nameRect.anchoredPosition.x + Mathf.Min(name.preferredWidth, nameRect.rect.width) + 18f,
                 rect.anchoredPosition.y);
+        }
+
+        private void PlaceDetailAfterName(string row)
+        {
+            if (!texts.TryGetValue(row + "/Name", out Text name) || name == null) return;
+            if (!texts.TryGetValue(row + "/Detail", out Text detail) || detail == null) return;
+            RectTransform nameRect = name.rectTransform;
+            RectTransform detailRect = detail.rectTransform;
+            float x = nameRect.anchoredPosition.x + Mathf.Min(name.preferredWidth, nameRect.rect.width) + 12f;
+            detailRect.anchoredPosition = new Vector2(x, detailRect.anchoredPosition.y);
         }
 
         private void Move(string path, float x, float y)

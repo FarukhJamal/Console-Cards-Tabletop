@@ -72,6 +72,7 @@ namespace ConsoleCards.Presentation.UI
 
             BindCycle(lightRow, lightPrevious, lightNext, lightValue, settings.LightText, settings.CycleLight);
             BindCycle(qualityRow, qualityPrevious, qualityNext, qualityValue, settings.QualityText, settings.CycleQuality);
+            BindScreenRow();
             if (profileLabel != null) profileLabel.text = settings.ProfileText ?? string.Empty;
         }
 
@@ -87,6 +88,71 @@ namespace ConsoleCards.Presentation.UI
             Clear(lightNext);
             Clear(qualityPrevious);
             Clear(qualityNext);
+            Clear(screenPrevious);
+            Clear(screenNext);
+        }
+
+        // QA Q7 (2026-11-03): LOOK > Screen, full screen or a window. Made at run time from the Quality row (same
+        // look, < value >), so the settings prefab does not change.
+        private GameObject screenRow;
+        private Button screenPrevious;
+        private Button screenNext;
+        private Text screenValue;
+
+        private void BindScreenRow()
+        {
+            if (qualityRow == null || qualityValue == null) return;
+            if (screenRow == null)
+            {
+                screenRow = Instantiate(qualityRow, qualityRow.transform.parent, false);
+                screenRow.name = "ScreenRow";
+                screenRow.transform.SetSiblingIndex(qualityRow.transform.GetSiblingIndex() + 1);
+                Button[] buttons = screenRow.GetComponentsInChildren<Button>(true);
+                screenPrevious = buttons.Length > 0 ? buttons[0] : null;
+                screenNext = buttons.Length > 1 ? buttons[buttons.Length - 1] : null;
+                string valueName = qualityValue.name;
+                Text[] texts = screenRow.GetComponentsInChildren<Text>(true);
+                for (int i = 0; i < texts.Length; i++)
+                {
+                    Text text = texts[i];
+                    if (text.transform.parent == screenRow.transform && text.name == "Title") text.text = "Screen";
+                    else if (text.transform.parent == screenRow.transform && text.name == "Hint")
+                    {
+                        text.text = "Full screen or a window (Alt+Enter also switches).";
+                    }
+                    else if (screenValue == null && text.name == valueName) screenValue = text;
+                }
+            }
+
+            screenRow.SetActive(qualityRow.activeSelf);
+            Clear(screenPrevious);
+            Clear(screenNext);
+            if (screenPrevious != null) screenPrevious.onClick.AddListener(SwitchScreenMode);
+            if (screenNext != null) screenNext.onClick.AddListener(SwitchScreenMode);
+            ShowScreenMode(Screen.fullScreen);
+        }
+
+        private void SwitchScreenMode()
+        {
+            bool full = !Screen.fullScreen;
+            if (full)
+            {
+                Resolution native = Screen.currentResolution;
+                Screen.SetResolution(native.width, native.height, FullScreenMode.FullScreenWindow);
+            }
+            else
+            {
+                // A 16:9 window most of the screen's size, so the menus keep their shape.
+                int height = Mathf.Max(720, Mathf.RoundToInt(Screen.currentResolution.height * 0.8f));
+                Screen.SetResolution(Mathf.RoundToInt(height * 16f / 9f), height, FullScreenMode.Windowed);
+            }
+
+            ShowScreenMode(full);
+        }
+
+        private void ShowScreenMode(bool full)
+        {
+            if (screenValue != null) screenValue.text = full ? "Full screen" : "Window";
         }
 
         private static void BindCycle(GameObject row, Button previous, Button next, Text value, string text, Action<int> cycle)

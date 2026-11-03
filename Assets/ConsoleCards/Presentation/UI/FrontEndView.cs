@@ -386,6 +386,8 @@ namespace ConsoleCards.Presentation.UI
             if (stepped) RenderStepper();
             RenderTabs();
             SetText("Status", model.Status);
+            // QA Q13: the online board has its own status line; the front end's one sat on top of it.
+            if (!backdropOnly) SetActive("Status", !(HasBoardOnline && IsOnlinePage(page)));
             switch (page)
             {
                 case FrontEndPage.Home:

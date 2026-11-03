@@ -263,6 +263,7 @@ namespace ConsoleCards.Presentation.Composition
             PendingAnticlockwise = null;
             host.trapFloorNextFloorIndex = floorIndex;
             host.trapFloorNextStageIndex = floorIndex == 0 ? Math.Max(0, stageIndex) : host.trapFloorStageIndex;
+            host.trapFloorCarriedAvatars = CaptureSeatAvatars(); // D3: each seat keeps the Avatar it chose
             bool dealt;
             try
             {
@@ -272,6 +273,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 host.trapFloorNextFloorIndex = 0;
                 host.trapFloorNextStageIndex = 0;
+                host.trapFloorCarriedAvatars = null;
             }
 
             if (!dealt || host.trapFloorTemplate == null) return;

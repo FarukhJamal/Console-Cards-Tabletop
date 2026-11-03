@@ -305,6 +305,26 @@ namespace ConsoleCards.Presentation.UI
             return page;
         }
 
+        // Owner, 2026-11-03 ("the rule book should be movable … holding on to that can move it"): press and hold the
+        // closed book (or start dragging it) and it follows the pointer over the table; a quick click still opens it.
+        private const float HoldToMoveSeconds = 0.3f;
+        private const float DragStartPixels = 8f;
+        private const float CarryLift = 0.08f;
+        private bool pressing;
+        private bool moving;
+        private float pressedAt;
+        private Vector2 pressedScreen;
+        private Vector3 grabOffset;
+        private Action<bool> holdingChanged;
+        private Action<Vector3> movedTo;
+
+        /// <summary>Told when the book is picked up (true) and put down (false), and where it was put.</summary>
+        public void SetMoveHandlers(Action<bool> holding, Action<Vector3> moved)
+        {
+            holdingChanged = holding;
+            movedTo = moved;
+        }
+
         /// <summary>Where the closed book lies.</summary>
         public void PlaceOnTable(Vector3 position, Quaternion rotation)
         {
@@ -370,6 +390,7 @@ namespace ConsoleCards.Presentation.UI
         {
             if (wantOpen) ReadKeys();
             else if (openAmount <= 0f) WatchForClick();
+            if (pressing) FollowPress();
 
             float target = wantOpen ? 1f : 0f;
             if (!Mathf.Approximately(openAmount, target))
@@ -420,7 +441,74 @@ namespace ConsoleCards.Presentation.UI
             UnityEngine.Camera eye = clickCamera != null ? clickCamera : UnityEngine.Camera.main;
             if (eye == null) return;
             Ray ray = eye.ScreenPointToRay(mouse.position.ReadValue());
-            if (clickCollider.Raycast(ray, out _, 200f)) requestOpen();
+            if (!clickCollider.Raycast(ray, out _, 200f)) return;
+            pressing = true;
+            moving = false;
+            pressedAt = Time.unscaledTime;
+            pressedScreen = mouse.position.ReadValue();
+            grabOffset = PointOnRestPlane(eye, pressedScreen, out Vector3 grabbed) ? restPosition - grabbed : Vector3.zero;
+        }
+
+        // While the button is held after a press on the book: a quick click opens it; a hold or a drag carries it.
+        private void FollowPress()
+        {
+            Mouse mouse = Mouse.current;
+            UnityEngine.Camera eye = clickCamera != null ? clickCamera : UnityEngine.Camera.main;
+            if (mouse == null || eye == null)
+            {
+                EndPress(false);
+                return;
+            }
+
+            Vector2 screen = mouse.position.ReadValue();
+            if (!mouse.leftButton.isPressed)
+            {
+                EndPress(true);
+                return;
+            }
+
+            if (!moving
+                && ((screen - pressedScreen).sqrMagnitude > DragStartPixels * DragStartPixels
+                    || Time.unscaledTime - pressedAt >= HoldToMoveSeconds))
+            {
+                moving = true;
+                holdingChanged?.Invoke(true);
+            }
+
+            if (!moving || !PointOnRestPlane(eye, screen, out Vector3 point)) return;
+            Vector3 target = point + grabOffset;
+            target.y = restPosition.y + CarryLift;
+            float follow = 1f - Mathf.Exp(-18f * Time.unscaledDeltaTime);
+            transform.position = Vector3.Lerp(transform.position, target, follow);
+        }
+
+        private void EndPress(bool released)
+        {
+            bool wasMoving = moving;
+            pressing = false;
+            moving = false;
+            if (!wasMoving)
+            {
+                if (released && (blocked == null || !blocked())) requestOpen?.Invoke();
+                return;
+            }
+
+            Vector3 put = transform.position;
+            put.y = restPosition.y;
+            restPosition = put;
+            transform.SetPositionAndRotation(restPosition, restRotation);
+            holdingChanged?.Invoke(false);
+            movedTo?.Invoke(restPosition);
+        }
+
+        private bool PointOnRestPlane(UnityEngine.Camera eye, Vector2 screen, out Vector3 point)
+        {
+            point = default;
+            Ray ray = eye.ScreenPointToRay(screen);
+            Plane plane = new Plane(Vector3.up, restPosition);
+            if (!plane.Raycast(ray, out float enter) || enter <= 0f) return false;
+            point = ray.GetPoint(enter);
+            return true;
         }
 
         // Between lying on the table (0) and open in front of the camera (1): eased, the cover swinging open on the way.

@@ -105,6 +105,9 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
+            // QA (2026-11-03): a middle click in another window (the game in the background) pinged the table.
+            if (!UnityEngine.Application.isFocused) return false;
+
             if (!TryResolvePingPoint(screenPosition, out Vector3 point))
             {
                 return false;
@@ -117,8 +120,46 @@ namespace ConsoleCards.Presentation.Composition
 
             EnsureCardSounds();
             if (tablePingClip != null) PlayTableSound(tablePingClip, TablePingVolume, 1f); // POL-8: through the sound player
+            if (IsOnlineTable) online.SendPing(localPlayerId, point); // SYNC-1: the others see it too
 
             return true;
+        }
+
+        private Vector3 remotePingPoint;
+        private Color remotePingColour;
+        private int remotePingRipplesLeft;
+        private float remotePingNextRipple;
+
+        // Called every frame from the table's Update: the extra ripples of someone else's ping.
+        internal void TickRemotePing()
+        {
+            if (remotePingRipplesLeft <= 0 || Time.unscaledTime < remotePingNextRipple || boardFeedback == null) return;
+            remotePingRipplesLeft--;
+            remotePingNextRipple = Time.unscaledTime + 1f;
+            boardFeedback.Ping(remotePingPoint, remotePingColour, 1f);
+        }
+
+        /// <summary>SYNC-1: a ping made on another computer, in that player's colour, with the ping's sound.</summary>
+        internal void ShowRemotePing(PlayerId player, Vector3 point)
+        {
+            if (!IsInitialized) return;
+            // QA S1 (owner, 2026-11-03: "pings don't show"): they arrived but were gone in a blink, somewhere the
+            // player was not looking. Someone else's ping now stays three times as long, with a ripple each second,
+            // and the news line says who pinged.
+            if (EnsureBoardFeedback())
+            {
+                Color colour = FeedbackColour(player);
+                float seconds = Mathf.Max(TablePingSeconds * 3f, 3f);
+                boardFeedback.Ping(point, colour, seconds);
+                remotePingPoint = point;
+                remotePingColour = colour;
+                remotePingRipplesLeft = 4;
+                remotePingNextRipple = Time.unscaledTime + 1f;
+            }
+
+            EnsureCardSounds();
+            if (tablePingClip != null) PlayTableSound(tablePingClip, TablePingVolume, 1f);
+            runtimeUi?.ShowTableNews($"{FormatPlayerName(player)} pinged the table", FeedbackColour(player));
         }
 
         // The spot under the pointer: on top of whatever is there (a card, a board), or on the table.

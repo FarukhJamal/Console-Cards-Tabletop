@@ -292,7 +292,9 @@ namespace ConsoleCards.Presentation.Composition
         {
             bool local = occupant.IsEmpty || occupant == localPlayerId;
             ProfileInfo profile = local ? EnsureProfile().Active : null;
-            string nameSource = profile != null ? profile.displayName : null;
+            // QA Q2: online, every seat (yours too) shows the room's name for it, so both tables say "Player 1 (2)".
+            string nameSource = IsOnlineTable && !occupant.IsEmpty ? OnlinePlayerName(occupant) : null;
+            if (string.IsNullOrWhiteSpace(nameSource)) nameSource = profile != null ? profile.displayName : null;
             PersonaLook wanted = profile != null && profile.persona != null ? profile.persona : null;
             int avatarIndex = profile != null ? profile.avatar : seat.LayoutSeatIndex;
             bool changed = persona.SeatId != seat.SeatId

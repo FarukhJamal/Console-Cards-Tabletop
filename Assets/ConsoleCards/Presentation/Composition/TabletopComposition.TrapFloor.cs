@@ -358,8 +358,14 @@ namespace ConsoleCards.Presentation.Composition
                     if (string.Equals(name, "Overcharged", StringComparison.OrdinalIgnoreCase))
                         return $"{who} is Overcharged: +1 move next turn.";
                     if (entry.ContentCategory == TrapFloorFloorContentCategory.Key) return $"{who} found {name}.";
-                    if (entry.ContentCategory == TrapFloorFloorContentCategory.Entry) return $"{who} found the Grand Exit.";
-                    if (entry.ContentCategory == TrapFloorFloorContentCategory.SecretExit) return $"{who} found the Secret Exit.";
+                    // P1 (owner's test, 2026-11-02: "I landed on a Secret Exit but it says Grand Exit"): both exits are
+                    // the same kind of tile (the Grand Exit is the one tagged grand-exit), so the line names the tile
+                    // itself instead of guessing from its kind.
+                    if (entry.ContentCategory == TrapFloorFloorContentCategory.Entry
+                        || entry.ContentCategory == TrapFloorFloorContentCategory.SecretExit)
+                    {
+                        return string.IsNullOrEmpty(name) ? $"{who} found an exit." : $"{who} found the {name}.";
+                    }
                     if (entry.ContentCategory == TrapFloorFloorContentCategory.Ability) return $"{who} found the {name} ability card.";
                     return $"{who} found {name}.";
                 case TrapFloorActivityKind.SafelyRevealedTrap:
@@ -622,6 +628,9 @@ namespace ConsoleCards.Presentation.Composition
         internal TrapFloorFloorPlan trapFloorFloorPlan;
         internal int trapFloorStageIndex;
         internal int trapFloorNextStageIndex;
+
+        /// <summary>D3: while the next floor is dealt, each seat's Avatar (empty: none chosen); null otherwise.</summary>
+        internal ObjectDefinitionId[] trapFloorCarriedAvatars;
 
         internal int TrapFloorStageCount => trapFloorFloorPlan != null ? trapFloorFloorPlan.StageCount : 1;
 

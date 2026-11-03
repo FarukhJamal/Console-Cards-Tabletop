@@ -4197,7 +4197,7 @@ namespace ConsoleCards.Presentation.Composition
             if (host.trapFloorTurnState == null
                 || host.matchState == null
                 || !TryGetTrapFloorPlayerSetup(host.trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition player)
-                || !host.matchState.Cards.TryGetValue(player.AvatarCardId, out CardInstanceState avatarCard)
+                || !TryGetSeatAvatar(player, out CardInstanceState avatarCard) // D3: the Avatar in the Main slot
                 || !host.TryGetAvatarLook(avatarCard.BaseState.DefinitionId, out AvatarDefinition avatar))
             {
                 return string.Empty;
@@ -4711,7 +4711,7 @@ namespace ConsoleCards.Presentation.Composition
             string inHand = "—";
             if (TryGetTrapFloorPlayerSetup(playerId, out TrapFloorPlayerSetupDefinition setup))
             {
-                if (host.matchState.Cards.TryGetValue(setup.AvatarCardId, out CardInstanceState avatarCard)
+                if (TryGetSeatAvatar(setup, out CardInstanceState avatarCard) // D3: the Avatar in the Main slot
                     && host.TryGetAvatarLook(avatarCard.BaseState.DefinitionId, out AvatarDefinition look))
                 {
                     avatar = look.DisplayName;
@@ -5781,7 +5781,8 @@ namespace ConsoleCards.Presentation.Composition
                         floorIndex,
                         tableLayout,
                         DealPlayerCount,
-                        tableSetup);
+                        tableSetup,
+                        host.trapFloorCarriedAvatars); // D3
                 }
                 catch (Exception exception) when (tableLayout != null || tableSetup != null)
                 {
@@ -5799,7 +5800,9 @@ namespace ConsoleCards.Presentation.Composition
                         host.GetConsoleLayout(),
                         floorIndex,
                         null,
-                        DealPlayerCount);
+                        DealPlayerCount,
+                        null,
+                        host.trapFloorCarriedAvatars); // D3
                 }
 
                 host.availableTrapFloorTemplates.Add(template.Template.Id, template);
@@ -5821,6 +5824,7 @@ namespace ConsoleCards.Presentation.Composition
             UpdateTurnOrderRule(); // IMP-1
             CompletePendingLandingFlip();
             DiscardUsedAbility();
+            GiveChosenAvatarsTheirAbilities(); // D2/D3
             DealArrangedBoardIfPlaced();
         }
 

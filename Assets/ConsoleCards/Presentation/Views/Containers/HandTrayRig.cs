@@ -1,6 +1,7 @@
 using System;
 using ConsoleCards.Presentation.Interaction;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 using UnityCamera = UnityEngine.Camera;
 
@@ -70,6 +71,16 @@ namespace ConsoleCards.Presentation.Views.Containers
 
         public bool IsCollapsed { get; private set; }
 
+        // QA Q11 (2026-11-03): a shown hand covered the player's own console (and the avatar just placed in it). It
+        // now rests lower, with the top of each card showing, and rises as the pointer comes down to it or while a
+        // card is carried.
+        public const float RestingVisibleFraction = 0.5f;
+        private const float PeekResponse = 12f;
+        private float peekAmount;
+
+        /// <summary>Set by the hand while one of its cards is hovered, picked up or carried: the tray stays up.</summary>
+        public bool HeldUp { get; set; }
+
         /// <summary>
         /// The share of a card's height, from its bottom edge, where a card from the table is dropped into the hand
         /// (the drop band). Dragging a hand card keeps the whole tray (<see cref="ContainsScreenPoint"/>).
@@ -111,6 +122,14 @@ namespace ConsoleCards.Presentation.Views.Containers
             ClearDropTarget();
             ShowFeedback(HandTrayFeedback.None);
             gameObject.SetActive(false);
+        }
+
+        private static bool PointerBelow(float viewportFraction)
+        {
+            Pointer pointer = Pointer.current;
+            if (pointer == null || Screen.height <= 0) return false;
+            Vector2 position = pointer.position.ReadValue();
+            return position.y <= viewportFraction * Screen.height;
         }
 
         public void SetCollapsed(bool collapsed)
@@ -227,6 +246,15 @@ namespace ConsoleCards.Presentation.Views.Containers
             if (IsCollapsed)
             {
                 y -= scaledDepth * (1f - CollapsedVisibleFraction);
+            }
+            else
+            {
+                // Up while the pointer is over the hand's strip (its full height) or a card is held; else resting.
+                float stripTop = BottomMarginFraction + (scaledDepth / viewportHeight) + 0.04f;
+                bool up = HeldUp || (bandCollider != null && bandCollider.enabled) || PointerBelow(stripTop);
+                float blend = 1f - Mathf.Exp(-PeekResponse * Time.unscaledDeltaTime);
+                peekAmount = Mathf.Lerp(peekAmount, up ? 0f : 1f, blend);
+                y -= peekAmount * scaledDepth * (1f - RestingVisibleFraction);
             }
 
             if (clearAmount > 0f)

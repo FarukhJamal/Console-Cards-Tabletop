@@ -406,7 +406,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             pick = default;
             if (view == null || !view.IsBound || view.BoundState == null) return false;
-            if (IsSelectableLoosePiece(view))
+            if (IsSelectableLoosePiece(view) || IsSelectableHandCard(view))
             {
                 pick.View = view;
                 return true;
@@ -435,6 +435,23 @@ namespace ConsoleCards.Presentation.Composition
 
             return view is PawnView || view is TokenView || view is DieView;
         }
+
+        // H2 (owner's test, 2026-11-02: "I want the hand card to be selectable through the selection tool, and G should
+        // work on them"): a card in this screen's own hand can be selected too (a click or a box); G groups the
+        // selected cards into a deck on the table.
+        private bool IsSelectableHandCard(TabletopObjectView view)
+        {
+            return view is CardView
+                && view.IsBound
+                && view.BoundState != null
+                && view.gameObject.activeInHierarchy
+                && handView != null
+                && handView.IsBound
+                && !view.BoundState.ContainerId.IsEmpty
+                && view.BoundState.ContainerId == handView.ContainerId;
+        }
+
+        private bool IsSelectablePiece(TabletopObjectView view) => IsSelectableLoosePiece(view) || IsSelectableHandCard(view);
 
         // Decks, stacks and discard piles lying on the table, and token bags. Not hands, Console slots or other
         // containers that belong to a Console or a board.
@@ -508,8 +525,10 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < views.Count; i++)
             {
                 TView view = views[i];
-                if (!IsSelectableLoosePiece(view)) continue;
-                if (InScreenBox(camera, PieceRestPosition(view), min, max)) AddPick(new ToolPick { View = view });
+                bool inHand = IsSelectableHandCard(view);
+                if (!inHand && !IsSelectableLoosePiece(view)) continue;
+                Vector3 shownAt = inHand ? view.transform.position : PieceRestPosition(view); // a hand card has no table pose
+                if (InScreenBox(camera, shownAt, min, max)) AddPick(new ToolPick { View = view });
             }
         }
 
@@ -547,13 +566,53 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = toolSelection.Count - 1; i >= 0; i--)
             {
                 ToolPick pick = toolSelection[i];
-                bool keep = pick.IsPile ? IsSelectablePile(pick.Pile) : IsSelectableLoosePiece(pick.View);
+                bool keep = pick.IsPile ? IsSelectablePile(pick.Pile) : IsSelectablePiece(pick.View);
                 if (!keep) toolSelection.RemoveAt(i);
             }
         }
 
+        // H2: a selected hand card lights its own highlight (it moves with the card in the hand), not a ring on the table.
+        private readonly List<TabletopSelectionVisual> handPickMarks = new List<TabletopSelectionVisual>(8);
+        private readonly List<TabletopSelectionVisual> handPickMarksNow = new List<TabletopSelectionVisual>(8);
+
+        private void ShowHandPickMarks()
+        {
+            handPickMarksNow.Clear();
+            for (int i = 0; i < toolSelection.Count; i++)
+            {
+                ToolPick pick = toolSelection[i];
+                if (pick.IsPile || !IsSelectableHandCard(pick.View)) continue;
+                TabletopSelectionVisual mark = pick.View.GetComponentInChildren<TabletopSelectionVisual>(true);
+                if (mark != null && mark.IsConfigured) handPickMarksNow.Add(mark);
+            }
+
+            for (int i = 0; i < handPickMarks.Count; i++)
+            {
+                TabletopSelectionVisual old = handPickMarks[i];
+                if (old == null || handPickMarksNow.Contains(old) || old.HighlightRoot == null) continue;
+                bool selectedByClick = selectionState != null && ReferenceEquals(selectionState.SelectedView, old.ObjectView);
+                if (selectedByClick) continue;
+                old.HighlightRoot.SetActive(false);
+                ApplySelectionHighlightHide(old); // back to the table's own setting for that highlight
+            }
+
+            for (int i = 0; i < handPickMarksNow.Count; i++)
+            {
+                TabletopSelectionVisual mark = handPickMarksNow[i];
+                if (mark.IsSelected || mark.ObjectView == null || !mark.ObjectView.isActiveAndEnabled) continue;
+                mark.SetSelected(true);
+                // The table hides its selection highlight by default; a picked hand card shows it anyway.
+                Renderer[] parts = mark.HighlightRoot.GetComponentsInChildren<Renderer>(true);
+                for (int r = 0; r < parts.Length; r++) parts[r].enabled = true;
+            }
+
+            handPickMarks.Clear();
+            handPickMarks.AddRange(handPickMarksNow);
+        }
+
         private void DrawToolSelection()
         {
+            if (handPickMarks.Count > 0 || toolSelection.Count > 0) ShowHandPickMarks();
             if (toolSelection.Count == 0)
             {
                 if (shownToolSelectionCount != 0 && boardFeedback != null) boardFeedback.HideSelection();
@@ -568,6 +627,7 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < toolSelection.Count; i++)
             {
                 ToolPick pick = toolSelection[i];
+                if (!pick.IsPile && IsSelectableHandCard(pick.View)) continue; // H2: lit in the hand instead
                 // On top of a card or pile, around the base of a pawn, token or die, sized to the piece.
                 Vector3 position;
                 float yaw;
@@ -626,12 +686,20 @@ namespace ConsoleCards.Presentation.Composition
                 else if (pick.View is CardView card)
                 {
                     cardSources++;
-                    if (!hasPose)
+                    if (!hasPose && !IsSelectableHandCard(card))
                     {
                         deckPose = RestPose(card);
                         hasPose = true;
                     }
                 }
+            }
+
+            // H2: only hand cards chosen: the deck goes on the table in the middle of the view.
+            if (!hasPose && cardSources >= 2 && pointerProjector != null
+                && pointerProjector.TryProjectScreenPoint(new Vector2(Screen.width * 0.5f, Screen.height * 0.5f), out TableCoordinate centre))
+            {
+                deckPose = new TabletopPose(centre, 0f, 0, 0);
+                hasPose = true;
             }
 
             if (cardSources < 2 || !hasPose)

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ConsoleCards.Core.Coordinates;
+using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Presentation.Feedback;
 using ConsoleCards.Presentation.Interaction;
 using ConsoleCards.Presentation.Saving;
@@ -220,6 +221,26 @@ namespace ConsoleCards.Presentation.Composition
         private int erasedCount;
         private bool labelPressActive;
         private string keysDraw;
+
+        // SYNC-1 (owner's test, 2026-11-02: "drawing is only syncing when you finish drawing; it should be live"): the
+        // line being drawn here goes to the others a few times a second, and the lines others are drawing show here.
+        private const float LiveStrokeSendSeconds = 0.08f;
+        private int liveStrokeSerial;
+        private int liveStrokeSent;
+        private float liveStrokeSentAt;
+        private readonly List<RemoteStroke> remoteStrokes = new List<RemoteStroke>(4);
+
+        private sealed class RemoteStroke
+        {
+            public PlayerId Player;
+            public int Serial;
+            public LineRenderer Line;
+            public readonly Vector3[] Points = new Vector3[MaximumStrokePoints];
+            public int Count;
+            public TableMarkStyle Style;
+            public float Width;
+            public bool Ended;
+        }
 
         /// <summary>The drawings on the table now (kept in each Undo step).</summary>
         internal TableMarkSet TableMarks => tableMarks;
@@ -491,6 +512,7 @@ namespace ConsoleCards.Presentation.Composition
         // A line being drawn goes away; drawings already erased stay erased (one Undo step brings them back).
         private void CancelDraw()
         {
+            if (strokeActive && strokeLine != null && IsOnlineTable) online.SendStrokeEnd(localPlayerId, liveStrokeSerial, false);
             if (strokeLine != null) Destroy(strokeLine.gameObject);
             strokeLine = null;
             strokeActive = false;
@@ -513,6 +535,8 @@ namespace ConsoleCards.Presentation.Composition
                 strokePoints[1] = point;
                 strokeCount = 2;
                 ShowStroke(strokeLine, strokePoints, strokeCount, drawStyle, strokeWidth, true);
+                liveStrokeSent = Mathf.Min(liveStrokeSent, 1); // the end point moved: it goes again
+                SendLiveStroke(false);
                 return;
             }
 
@@ -524,6 +548,9 @@ namespace ConsoleCards.Presentation.Composition
                 strokeWidth = LineWidth(kind);
                 strokeLine = NewMarkLine(kind, CurrentDrawColour(kind), strokeWidth, drawStyle);
                 strokeShownCount = 0;
+                liveStrokeSerial++;
+                liveStrokeSent = 0;
+                liveStrokeSentAt = -1f;
                 if (strokeLine == null)
                 {
                     strokeActive = false;
@@ -534,6 +561,96 @@ namespace ConsoleCards.Presentation.Composition
             strokePoints[strokeCount] = point;
             strokeCount++;
             ShowStroke(strokeLine, strokePoints, strokeCount, drawStyle, strokeWidth, false);
+            SendLiveStroke(false);
+        }
+
+        // SYNC-1: the points not sent yet, at most a few times a second (all of them when <paramref name="now"/>).
+        private void SendLiveStroke(bool now)
+        {
+            if (!IsOnlineTable || strokeLine == null || strokeCount == 0) return;
+            float time = Time.unscaledTime;
+            if (!now && liveStrokeSentAt >= 0f && time - liveStrokeSentAt < LiveStrokeSendSeconds) return;
+            int from = Mathf.Min(liveStrokeSent, strokeCount - 1); // the last point sent goes again: it may have moved
+            TableMarkKind kind = drawMode == DrawModeHighlighter ? TableMarkKind.Highlighter : TableMarkKind.Pen;
+            online.SendStrokePoints(localPlayerId, liveStrokeSerial, kind, drawStyle, strokeLine.startColor, strokeWidth,
+                strokePoints, Mathf.Max(0, from), strokeCount);
+            liveStrokeSent = strokeCount;
+            liveStrokeSentAt = time;
+        }
+
+        /// <summary>SYNC-1: points of a line another player is drawing, from <paramref name="start"/> on.</summary>
+        internal void ShowRemoteStroke(PlayerId player, int serial, TableMarkKind kind, TableMarkStyle style, Color colour,
+            float width, int start, Vector3[] points, int count)
+        {
+            RemoteStroke stroke = null;
+            for (int i = 0; i < remoteStrokes.Count; i++)
+            {
+                if (remoteStrokes[i].Player == player) stroke = remoteStrokes[i];
+            }
+
+            if (stroke == null)
+            {
+                stroke = new RemoteStroke { Player = player };
+                remoteStrokes.Add(stroke);
+            }
+
+            if (stroke.Line == null || stroke.Serial != serial)
+            {
+                if (stroke.Line != null) Destroy(stroke.Line.gameObject);
+                stroke.Line = NewMarkLine(kind, colour, width, style);
+                stroke.Serial = serial;
+                stroke.Count = 0;
+                stroke.Style = style;
+                stroke.Width = width;
+                stroke.Ended = false;
+                if (stroke.Line == null) return;
+            }
+
+            if (start < 0 || start > stroke.Count) return; // an earlier part has not come yet: wait for it
+            int end = Mathf.Min(MaximumStrokePoints, start + count);
+            for (int i = start; i < end; i++) stroke.Points[i] = points[i - start];
+            stroke.Count = end;
+            if (stroke.Count > 0) ShowStroke(stroke.Line, stroke.Points, stroke.Count, stroke.Style, stroke.Width, true);
+        }
+
+        /// <summary>SYNC-1: another player let go: a kept line stays until the table brings it; a given-up one goes.</summary>
+        internal void EndRemoteStroke(PlayerId player, int serial, bool kept)
+        {
+            for (int i = remoteStrokes.Count - 1; i >= 0; i--)
+            {
+                RemoteStroke stroke = remoteStrokes[i];
+                if (stroke.Player != player || stroke.Serial != serial) continue;
+                if (kept)
+                {
+                    stroke.Ended = true;
+                    continue;
+                }
+
+                if (stroke.Line != null) Destroy(stroke.Line.gameObject);
+                remoteStrokes.RemoveAt(i);
+            }
+        }
+
+        /// <summary>SYNC-1: no lines from other computers (the table is no longer shared).</summary>
+        internal void ClearRemoteStrokes()
+        {
+            for (int i = 0; i < remoteStrokes.Count; i++)
+            {
+                if (remoteStrokes[i].Line != null) Destroy(remoteStrokes[i].Line.gameObject);
+            }
+
+            remoteStrokes.Clear();
+        }
+
+        // The table's drawings came: lines others finished are now among them, so the live copies go.
+        private void DropEndedRemoteStrokes()
+        {
+            for (int i = remoteStrokes.Count - 1; i >= 0; i--)
+            {
+                if (!remoteStrokes[i].Ended) continue;
+                if (remoteStrokes[i].Line != null) Destroy(remoteStrokes[i].Line.gameObject);
+                remoteStrokes.RemoveAt(i);
+            }
         }
 
         // Puts the line's shape into the Line Renderer: the path itself (Plain, Brush, Dashed, Dotted) or a swirl or
@@ -621,6 +738,8 @@ namespace ConsoleCards.Presentation.Composition
                 ShowStroke(strokeLine, strokePoints, strokeCount, drawStyle, strokeWidth, true);
             }
 
+            SendLiveStroke(true);
+            if (IsOnlineTable) online.SendStrokeEnd(localPlayerId, liveStrokeSerial, true);
             Vector3[] points = new Vector3[strokeCount];
             Array.Copy(strokePoints, points, strokeCount);
             bool highlighter = drawMode == DrawModeHighlighter;
@@ -823,13 +942,19 @@ namespace ConsoleCards.Presentation.Composition
         /// </summary>
         internal void ShowTableMarks(TableMarkSet marks)
         {
-            if (strokeLine != null) Destroy(strokeLine.gameObject);
-            strokeLine = null;
-            strokeActive = false;
-            strokeCount = 0;
-            eraseActive = false;
-            erasedCount = 0;
-            labelPressActive = false;
+            DropEndedRemoteStrokes(); // SYNC-1
+            // SYNC-1: a table from another computer leaves a line being drawn here alone (it is added when let go).
+            if (!(IsOnlineTable && online.ApplyingTable))
+            {
+                if (strokeLine != null) Destroy(strokeLine.gameObject);
+                strokeLine = null;
+                strokeActive = false;
+                strokeCount = 0;
+                eraseActive = false;
+                erasedCount = 0;
+                labelPressActive = false;
+            }
+
             tableMarks = marks ?? TableMarkSet.Empty;
             for (int i = shownMarks.Count - 1; i >= 0; i--)
             {

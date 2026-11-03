@@ -825,6 +825,18 @@ namespace ConsoleCards.Presentation.Composition
                 AddInspectAction(actions, targetCardId);
             }
 
+            // Owner, 2026-11-03: a card in your own hand can be discarded, alone or with the whole hand.
+            if (container.Kind == ContainerKind.Hand && host.IsLocalHand(container.Id) && host.TryFindHandDiscardPile(out _))
+            {
+                ContainerId handId = container.Id;
+                actions.Add(new PopupActionOption("Discard", true, () => host.DiscardFromHand(handId, targetCardId, false)));
+                if (container.Count > 1)
+                {
+                    actions.Add(new PopupActionOption(
+                        "Discard whole hand", true, () => host.DiscardFromHand(handId, targetCardId, true)));
+                }
+            }
+
             if (container.Kind == ContainerKind.ConsoleSlot
                 && host.TryResolveConsolePlacement(container.Id, out _, out _, out _))
             {

@@ -70,6 +70,10 @@ namespace ConsoleCards.Presentation.Camera
         [SerializeField] internal float minimumPitchDegrees = 32f;
         [SerializeField] internal float maximumPitchDegrees = 89.5f;
         [SerializeField] internal float motionSmoothing = 0.09f;
+        [Tooltip("Owner, 2026-11-03 (\"smooth the zoom like Tabletop Simulator\"): how long a wheel step glides, in seconds.")]
+        [SerializeField] internal float zoomSmoothing = 0.16f;
+        [Tooltip("How far each wheel step moves toward the point under the pointer when zooming in (0: straight in).")]
+        [SerializeField, Range(0f, 1f)] internal float zoomTowardPointer = 0.6f;
         [SerializeField] internal float presetTransitionDuration = 0.32f;
         [SerializeField] internal float initialGameFramingDistanceMultiplier = 0.85f;
 
@@ -314,18 +318,19 @@ namespace ConsoleCards.Presentation.Camera
                     smoothTime,
                     Mathf.Infinity,
                     deltaTime);
+                float zoomTime = Mathf.Max(smoothTime, zoomSmoothing); // the zoom glides a little longer than a turn
                 currentDistance = Mathf.SmoothDamp(
                     currentDistance,
                     targetDistance,
                     ref distanceVelocity,
-                    smoothTime,
+                    zoomTime,
                     Mathf.Infinity,
                     deltaTime);
                 currentOrthographicSize = Mathf.SmoothDamp(
                     currentOrthographicSize,
                     targetOrthographicSize,
                     ref orthographicSizeVelocity,
-                    smoothTime,
+                    zoomTime,
                     Mathf.Infinity,
                     deltaTime);
             }
@@ -417,18 +422,29 @@ namespace ConsoleCards.Presentation.Camera
             float previousZoom = usesOrthographicProjection
                 ? targetOrthographicSize
                 : targetDistance;
+            // Owner, 2026-11-03: like Tabletop Simulator, each wheel step changes the distance by the same share
+            // (fine steps up close, big ones far away; the old fixed step was coarse up close), and zooming in
+            // heads toward what is under the pointer.
+            float step = Mathf.Exp(inputDelta * zoomSpeed / Mathf.Max(1f, initialDistance));
             float nextZoom = usesOrthographicProjection
                 ? Mathf.Clamp(
-                    previousZoom + (inputDelta * zoomSpeed),
+                    previousZoom * step,
                     minimumOrthographicSize,
                     maximumOrthographicSize)
                 : Mathf.Clamp(
-                    previousZoom + (inputDelta * zoomSpeed),
+                    previousZoom * step,
                     minimumDistance,
                     maximumDistance);
             if (Mathf.Approximately(previousZoom, nextZoom))
             {
                 return;
+            }
+
+            if (nextZoom < previousZoom && zoomTowardPointer > 0f && targetCamera != null
+                && TryPointOnTable(screenPosition, out Vector3 pointed))
+            {
+                float share = (1f - (nextZoom / previousZoom)) * zoomTowardPointer;
+                SetTargetPivot(Vector3.Lerp(targetPivot, pointed, share));
             }
 
             if (usesOrthographicProjection)
@@ -1014,6 +1030,17 @@ namespace ConsoleCards.Presentation.Camera
         {
             targetPivot = SanitizePivot(pivot);
             State.SetFocus(coordinateConverter.ToTableCoordinate(targetPivot));
+        }
+
+        // The point on the table's plane under a screen point (the camera's current view).
+        private bool TryPointOnTable(Vector2 screenPosition, out Vector3 point)
+        {
+            point = default;
+            Ray ray = targetCamera.ScreenPointToRay(screenPosition);
+            Plane table = new Plane(Vector3.up, new Vector3(0f, tabletopHeight, 0f));
+            if (!table.Raycast(ray, out float enter) || enter <= 0f || float.IsInfinity(enter)) return false;
+            point = ray.GetPoint(enter);
+            return IsFinite(point);
         }
 
         private Vector3 SanitizePivot(Vector3 pivot)
