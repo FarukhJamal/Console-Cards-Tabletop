@@ -687,6 +687,9 @@ namespace ConsoleCards.Presentation.Composition
                 BuildEmptyTableHand();
                 ProjectUnprojectedPlacedComponents();
                 ConfigureTabletopCameraFraming(); // camera fix: views 1–4 work on the Empty Table too
+                // Owner, 2026-11-03 (MAKE A GAME / SANDBOX opened on a camera pressed against the table top): the
+                // default view came before the table was measured; the Empty Table now opens on the whole table.
+                if (!rebuildingFromUndo) cameraInputAdapter.CameraController.ShowInitialGameView(true);
 
                 BuildInteractionGraph();
                 inputFrameCoordinator.ConfigureUiInput(
@@ -1084,6 +1087,7 @@ namespace ConsoleCards.Presentation.Composition
             CompleteConsoleDieSnaps();
             UpdateCardStackDrops(); // before the board snap: a card dropped on a card stacks
             CompletePendingStackCarry(); // a stack carried by press-and-hold is merged or put down
+            CompletePendingHandCarry(); // hand cards carried from the row at the table edge are put down
             CompleteBoardCardSnaps();
             // SMOOTH-1: card motion now ticks in LateUpdate (TabletopComposition.Frame.cs), after every layout of
             // the frame, so a layout applied later in the frame can no longer flash a moving card at its end place.

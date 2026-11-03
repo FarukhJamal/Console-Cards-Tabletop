@@ -340,7 +340,8 @@ namespace ConsoleCards.Presentation.Input
                 && componentPlacementController.HandlePointerFrame(
                     frame.ScreenPosition,
                     pointerInsideBlockedUi,
-                    frame.SelectPressedThisFrame,
+                    frame.SelectPressedThisFrame
+                        || (componentPlacementController.ConfirmOnRelease && frame.SelectReleasedThisFrame),
                     frame.CancelPressedThisFrame,
                     frame.RotateDelta,
                     objectInputAdapter.RotationStepDegrees))

@@ -72,8 +72,12 @@ namespace ConsoleCards.Presentation.Camera
         [SerializeField] internal float motionSmoothing = 0.09f;
         [Tooltip("Owner, 2026-11-03 (\"smooth the zoom like Tabletop Simulator\"): how long a wheel step glides, in seconds.")]
         [SerializeField] internal float zoomSmoothing = 0.16f;
-        [Tooltip("How far each wheel step moves toward the point under the pointer when zooming in (0: straight in).")]
-        [SerializeField, Range(0f, 1f)] internal float zoomTowardPointer = 0.6f;
+        [Tooltip("Owner, 2026-11-03: how much one wheel notch zooms (0.2: a fifth of the distance per notch).")]
+        [SerializeField, Range(0.05f, 0.6f)] internal float zoomPerNotch = 0.25f;
+        [Tooltip("Owner, 2026-11-03 (the hand view): view 1 looks at your Console from your seat at this angle, with the board's near edge beyond it (0: the Close view's own pitch).")]
+        [SerializeField, Range(0f, 89f)] internal float closeViewSeatPitch = 50f;
+        [Tooltip("How much further back view 1 sits than a tight fit of your Console and hand (1: tight).")]
+        [SerializeField, Range(1f, 3f)] internal float closeViewSeatDistance = 1.5f;
         [SerializeField] internal float presetTransitionDuration = 0.32f;
         [SerializeField] internal float initialGameFramingDistanceMultiplier = 0.85f;
 
@@ -422,10 +426,11 @@ namespace ConsoleCards.Presentation.Camera
             float previousZoom = usesOrthographicProjection
                 ? targetOrthographicSize
                 : targetDistance;
-            // Owner, 2026-11-03: like Tabletop Simulator, each wheel step changes the distance by the same share
-            // (fine steps up close, big ones far away; the old fixed step was coarse up close), and zooming in
-            // heads toward what is under the pointer.
-            float step = Mathf.Exp(inputDelta * zoomSpeed / Mathf.Max(1f, initialDistance));
+            // Owner, 2026-11-03: each wheel notch zooms a good share of the distance (a few notches go from the
+            // whole table to a close look), always toward the middle of the view. One notch arrives as 0.01 here
+            // (the wheel's 1 times the input's sensitivity); a burst is capped so a fast spin cannot jump.
+            float notches = Mathf.Clamp(inputDelta * 100f, -4f, 4f);
+            float step = Mathf.Exp(notches * zoomPerNotch);
             float nextZoom = usesOrthographicProjection
                 ? Mathf.Clamp(
                     previousZoom * step,
@@ -438,13 +443,6 @@ namespace ConsoleCards.Presentation.Camera
             if (Mathf.Approximately(previousZoom, nextZoom))
             {
                 return;
-            }
-
-            if (nextZoom < previousZoom && zoomTowardPointer > 0f && targetCamera != null
-                && TryPointOnTable(screenPosition, out Vector3 pointed))
-            {
-                float share = (1f - (nextZoom / previousZoom)) * zoomTowardPointer;
-                SetTargetPivot(Vector3.Lerp(targetPivot, pointed, share));
             }
 
             if (usesOrthographicProjection)
@@ -616,7 +614,9 @@ namespace ConsoleCards.Presentation.Camera
             float framingDistanceMultiplier,
             float transitionSeconds)
         {
-            float pitch = ClampPitch(tuning.PitchDegrees);
+            float pitch = ClampPitch(preset == TabletopCameraPreset.Close && closeViewSeatPitch > 0f
+                ? closeViewSeatPitch
+                : tuning.PitchDegrees);
             float yaw = NormalizeYaw(localSeatYawDegrees + tuning.YawOffsetDegrees);
             Quaternion rotation = Quaternion.Euler(pitch, yaw, 0f);
             float size = CalculateOrthographicSize(
@@ -634,7 +634,8 @@ namespace ConsoleCards.Presentation.Camera
             float distance = Mathf.Clamp(
                 fittedDistance
                     * Mathf.Max(0.01f, tuning.DistanceMultiplier)
-                    * framingDistanceMultiplier,
+                    * framingDistanceMultiplier
+                    * (preset == TabletopCameraPreset.Close && closeViewSeatPitch > 0f ? closeViewSeatDistance : 1f),
                 minimumDistance,
                 maximumDistance);
             Vector3 pivot = framingBounds.center;
@@ -1030,17 +1031,6 @@ namespace ConsoleCards.Presentation.Camera
         {
             targetPivot = SanitizePivot(pivot);
             State.SetFocus(coordinateConverter.ToTableCoordinate(targetPivot));
-        }
-
-        // The point on the table's plane under a screen point (the camera's current view).
-        private bool TryPointOnTable(Vector2 screenPosition, out Vector3 point)
-        {
-            point = default;
-            Ray ray = targetCamera.ScreenPointToRay(screenPosition);
-            Plane table = new Plane(Vector3.up, new Vector3(0f, tabletopHeight, 0f));
-            if (!table.Raycast(ray, out float enter) || enter <= 0f || float.IsInfinity(enter)) return false;
-            point = ray.GetPoint(enter);
-            return IsFinite(point);
         }
 
         private Vector3 SanitizePivot(Vector3 pivot)

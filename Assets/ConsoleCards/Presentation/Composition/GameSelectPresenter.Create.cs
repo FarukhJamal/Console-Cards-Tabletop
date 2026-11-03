@@ -156,7 +156,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!pendingOpenSave) return;
             pendingOpenSave = false;
-            host.PlayerGamesPanel.OpenGameSave();
+            host.PlayerGamesPanel.OpenGameSave(true);
         }
     }
 }

@@ -121,6 +121,7 @@ namespace ConsoleCards.Presentation.Composition
 
             UpdateStackCarryMotion(); // POL-4
             UpdateGroupCarry();
+            UpdateHandEdge(); // owner, 2026-11-03: your hand also stands at your edge of the table
             UpdateCarryHeightAndGhost();
             UpdateHover();
             HandlePolishKeys();
@@ -192,6 +193,10 @@ namespace ConsoleCards.Presentation.Composition
         private void ClearPolish()
         {
             EndGroupCarry(false);
+            CancelHandCarry();
+            handCarryDropPending = false;
+            ClearHandCarryLists();
+            ClearHandEdge();
             lastCarried = null;
             ClearHover();
             if (boardFeedback != null) boardFeedback.HideLanding();
@@ -481,6 +486,7 @@ namespace ConsoleCards.Presentation.Composition
             groupFollowers.Clear();
             groupOffsets.Clear();
             groupPiles.Clear();
+            CollectGroupHandCards(); // selected hand cards come along too (owner, 2026-11-03)
             for (int i = 0; i < toolSelection.Count; i++)
             {
                 ToolPick pick = toolSelection[i];
@@ -490,7 +496,7 @@ namespace ConsoleCards.Presentation.Composition
                     continue;
                 }
 
-                if (ReferenceEquals(pick.View, leader)) continue;
+                if (ReferenceEquals(pick.View, leader) || IsSelectableHandCard(pick.View)) continue;
                 if (pick.View != null && pick.View.BoundState != null && !pick.View.BoundState.ContainerId.IsEmpty) continue; // H2: a hand card stays in the hand
                 PhysicalLooseObject follower = pick.View != null ? pick.View.PhysicalObject : null;
                 if (follower == null || follower.Body == null || pick.View.BoundState == null || pick.View.BoundState.IsUserLocked) continue;
@@ -526,6 +532,21 @@ namespace ConsoleCards.Presentation.Composition
             {
                 for (int i = 0; i < groupPiles.Count; i++) MovePileBy(groupPiles[i], moved);
             }
+
+            if (released && groupHandCards.Count > 0 && groupLeader.PhysicalObject != null && groupLeader.PhysicalObject.Body != null)
+            {
+                SessionService.BeginUndoBatch();
+                try
+                {
+                    PlaceHandCards(groupHandCards, GroupHandAnchor(groupLeader.PhysicalObject.Body.position), ContainerId.Empty);
+                }
+                finally
+                {
+                    SessionService.EndUndoBatch();
+                }
+            }
+
+            groupHandCards.Clear();
 
             groupLeader = null;
             groupFollowers.Clear();

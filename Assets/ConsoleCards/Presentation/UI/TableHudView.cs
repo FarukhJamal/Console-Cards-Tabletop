@@ -610,7 +610,8 @@ namespace ConsoleCards.Presentation.UI
                 actionChips[i].interactable = secondaryActions[i].Enabled;
             }
 
-            actionsRoot.gameObject.SetActive(secondaryActions.Count > 0);
+            // Owner, 2026-11-03: "remove the next step from the END TURN button for now": the row stays hidden.
+            actionsRoot.gameObject.SetActive(false);
         }
 
         // Owner, 2026-11-03: the turn's other actions (TAKE KEY, COLLAPSE FLOOR…) stood as small grey chips stacked

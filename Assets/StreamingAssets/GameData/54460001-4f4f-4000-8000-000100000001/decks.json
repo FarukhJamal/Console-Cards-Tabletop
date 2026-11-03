@@ -1,7 +1,28 @@
 {
     "formatVersion": 1,
     "gameStableId": "54460001-4f4f-4000-8000-000100000001",
-    "decks": [],
+    "decks": [
+        {
+            "id": "7237d7c0-42c0-40ef-93ce-4ccb6bddbed6",
+            "name": "Stage 1",
+            "minimumCards": 0,
+            "maximumCards": 0,
+            "cards": [],
+            "stage": 1,
+            "backArtKey": "",
+            "fronts": []
+        },
+        {
+            "id": "860ed754-f0a2-4c67-ab99-f43e7c50dc2a",
+            "name": "Stage 2",
+            "minimumCards": 0,
+            "maximumCards": 0,
+            "cards": [],
+            "stage": 2,
+            "backArtKey": "",
+            "fronts": []
+        }
+    ],
     "gameDeckMinimum": 0,
     "gameDeckMaximum": 0
 }

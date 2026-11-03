@@ -335,7 +335,31 @@ namespace ConsoleCards.Presentation.Composition
 
         bool ITabletopSelectHandler.TryBeginSelect(TabletopObjectView viewUnderPointer, Vector2 screenPosition)
         {
-            selectPressHasPick = TryPickFromView(viewUnderPointer, out selectPressPick);
+            // Owner, 2026-11-03: a press on your hand's row at the table edge picks that card (a drag carries it).
+            if (TryBeginHandEdgePress(screenPosition))
+            {
+                selectPressHasPick = true;
+                selectPressPick = new ToolPick { View = handEdgePressCard };
+            }
+            else
+            {
+                selectPressHasPick = TryPickFromView(viewUnderPointer, out selectPressPick);
+            }
+
+            // Owner, 2026-11-03 ("everything should be free to move"): a press held still on a Console or a board
+            // mat picks it up, as a deck is; a quick drag there still draws a selection box.
+            selectPressStartedAt = Time.unscaledTime;
+            furnitureConsole = null;
+            furnitureBoard = BoardId.Empty;
+            if (!selectPressHasPick && !handEdgePressActive && viewUnderPointer == null)
+            {
+                if (!TryFindConsoleUnderPointer(screenPosition, out furnitureConsole)) furnitureConsole = null;
+                if (furnitureConsole == null && !TryFindBoardUnderPointer(screenPosition, out furnitureBoard, out _))
+                {
+                    furnitureBoard = BoardId.Empty;
+                }
+            }
+
             selectPressScreen = screenPosition;
             selectPressActive = true;
             selectBoxShown = false;
@@ -346,6 +370,27 @@ namespace ConsoleCards.Presentation.Composition
         void ITabletopSelectHandler.UpdateSelect(Vector2 screenPosition)
         {
             if (!selectPressActive) return;
+            if (!selectBoxShown
+                && (furnitureConsole != null || !furnitureBoard.IsEmpty)
+                && (screenPosition - selectPressScreen).sqrMagnitude < SelectBoxThresholdPixels * SelectBoxThresholdPixels
+                && Time.unscaledTime - selectPressStartedAt >= FurnitureHoldSeconds)
+            {
+                BeginFurnitureCarry();
+                return;
+            }
+
+            if (handEdgePressActive)
+            {
+                if (!handCarryActive
+                    && (screenPosition - selectPressScreen).sqrMagnitude >= SelectBoxThresholdPixels * SelectBoxThresholdPixels)
+                {
+                    BeginHandCarry(screenPosition);
+                }
+
+                UpdateHandCarry(screenPosition);
+                return;
+            }
+
             if (!selectBoxShown
                 && (screenPosition - selectPressScreen).sqrMagnitude < SelectBoxThresholdPixels * SelectBoxThresholdPixels)
             {
@@ -359,6 +404,16 @@ namespace ConsoleCards.Presentation.Composition
         void ITabletopSelectHandler.ReleaseSelect(Vector2 screenPosition)
         {
             if (!selectPressActive) return;
+            if (handCarryActive)
+            {
+                UpdateHandCarry(screenPosition);
+                ReleaseHandCarry();
+                handEdgePressActive = false;
+                CancelSelectPress();
+                return;
+            }
+
+            handEdgePressActive = false;
             bool box = selectBoxShown;
             bool hasPick = selectPressHasPick;
             ToolPick pick = selectPressPick;
@@ -388,11 +443,43 @@ namespace ConsoleCards.Presentation.Composition
 
         void ITabletopSelectHandler.CancelSelect()
         {
+            CancelHandCarry();
             CancelSelectPress();
+        }
+
+        private const float FurnitureHoldSeconds = 0.35f;
+        private float selectPressStartedAt;
+        private RuntimeConsoleInstance furnitureConsole;
+        private BoardId furnitureBoard;
+
+        // The held Console or board follows the pointer and is put down where the button is let go.
+        private void BeginFurnitureCarry()
+        {
+            RuntimeConsoleInstance console = furnitureConsole;
+            BoardId board = furnitureBoard;
+            CancelSelectPress();
+            interactionRouter?.Cancel(); // the placement owns the pointer from here
+            if (componentPlacementController == null) return;
+            if (console != null && console.SlotViews != null && console.SlotViews.Length > 0 && console.SlotViews[0] != null)
+            {
+                BeginConsoleMove(console.SlotViews[0].ContainerId);
+            }
+            else if (!board.IsEmpty)
+            {
+                BeginBoardMove(board);
+            }
+
+            if (componentPlacementController.IsActive)
+            {
+                componentPlacementController.ConfirmOnRelease = true;
+                PlayCardSound(false);
+            }
         }
 
         private void CancelSelectPress()
         {
+            furnitureConsole = null;
+            furnitureBoard = BoardId.Empty;
             selectPressActive = false;
             selectBoxShown = false;
             selectPressHasPick = false;
@@ -512,6 +599,7 @@ namespace ConsoleCards.Presentation.Composition
             BoxSelectViews(Registry.pawnViews, camera, min, max);
             BoxSelectViews(Registry.tokenViews, camera, min, max);
             BoxSelectViews(Registry.dieViews, camera, min, max);
+            BoxSelectHandEdge(camera, min, max); // the hand's row at the table edge
             foreach (KeyValuePair<ContainerId, ContainerState> pair in matchState.Containers)
             {
                 if (!IsSelectablePile(pair.Key) || !TryGetPileWorldPose(pair.Key, out Vector3 position, out _)) continue;

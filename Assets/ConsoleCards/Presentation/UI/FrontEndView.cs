@@ -189,6 +189,7 @@ namespace ConsoleCards.Presentation.UI
         }
 
         private bool backdropOnly;
+        private bool libraryAfterLeavingRoom;
 
         // Owner, 2026-10-26: leaving the game's window (Esc to free the mouse, clicking another window) must never
         // take the player to the table. Esc counts only while the game has focus, and not just after it comes back.
@@ -374,6 +375,12 @@ namespace ConsoleCards.Presentation.UI
         private void Render()
         {
             if (model == null) return;
+            if (libraryAfterLeavingRoom && !InOnlineRoom)
+            {
+                libraryAfterLeavingRoom = false;
+                page = FrontEndPage.Library; // ON THIS COMPUTER pressed twice in a room: the room is left, now the games
+            }
+
             for (int i = 0; i < pages.Length; i++)
             {
                 if (pages[i] != null) pages[i].SetActive(i == (int)page);

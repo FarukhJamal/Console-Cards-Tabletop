@@ -67,15 +67,23 @@ namespace ConsoleCards.Presentation.UI
         private string DefaultRoomName() =>
             model?.Online != null && model.Online.DefaultRoomTitle.Length > 0 ? model.Online.DefaultRoomTitle : "My table";
 
-        // ON THIS COMPUTER: back to the Library (in a room, LEAVE first).
+        // ON THIS COMPUTER: back to the Library. In a room (owner, 2026-11-03: "you can't move back to ON THIS
+        // COMPUTER"), the first press asks and the second leaves the room and goes there.
+        private bool leaveRoomForLibraryArmed;
+
         private void LeaveOnlineForLibrary()
         {
-            if (InOnlineRoom)
+            if (InOnlineRoom && !leaveRoomForLibraryArmed)
             {
-                SetText(OnlinePath() + "Status", "You are in a room: LEAVE it first to play on this computer.");
+                leaveRoomForLibraryArmed = true;
+                SetText(OnlinePath() + "Status", "Press ON THIS COMPUTER again to leave the room and play on this computer.");
                 return;
             }
 
+            bool leave = InOnlineRoom;
+            leaveRoomForLibraryArmed = false;
+            libraryAfterLeavingRoom = leave; // the room's "you left" screen comes back on the Lobby otherwise
+            if (leave) actions?.LeaveRoom?.Invoke();
             Go(FrontEndPage.Library);
         }
 

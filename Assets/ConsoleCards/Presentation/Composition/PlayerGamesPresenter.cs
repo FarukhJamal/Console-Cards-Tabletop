@@ -97,8 +97,15 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- Save table as a game ----------
 
-        internal void OpenGameSave()
+        // Owner, 2026-11-03 ("create game takes you to the table unnecessarily"): Make a game opened from CREATE
+        // (MAKE A GAME or EDIT) goes back to CREATE when it is closed, instead of leaving you on the empty table.
+        internal bool closeGameSaveToCreate;
+
+        internal void OpenGameSave() => OpenGameSave(false);
+
+        internal void OpenGameSave(bool fromCreate)
         {
+            closeGameSaveToCreate = fromCreate;
             PlayerGameFile from = activePlayerGame;
             saveName = from != null ? from.name : "My game";
             saveDescription = from != null ? from.description : string.Empty;
@@ -121,7 +128,7 @@ namespace ConsoleCards.Presentation.Composition
                     ChangePlayers = ChangeSavePlayers,
                     SaveAsNew = typed => SavePlayerGame(typed, false),
                     SaveOver = typed => SavePlayerGame(typed, true),
-                    Close = () => host.runtimeUi?.CloseGameSave(),
+                    Close = CloseGameSaveFromButton,
                     GoToStep = GoToSaveStep,
                     CyclePick = CycleSaveDeck,
                     ActionA = SaveStepActionA,
@@ -158,6 +165,14 @@ namespace ConsoleCards.Presentation.Composition
             {
                 host.ShowMessage("The Save table as a game panel is missing: run Console Cards > UI > Create Missing Gameplay UI Prefabs.");
             }
+        }
+
+        private void CloseGameSaveFromButton()
+        {
+            host.runtimeUi?.CloseGameSave();
+            if (!closeGameSaveToCreate) return;
+            closeGameSaveToCreate = false;
+            host.GameSelectPanel.OpenFrontEnd(FrontEndPage.Create);
         }
 
         internal void ChangeSavePlayers(bool fewest, int step, GameSaveTyped typed)

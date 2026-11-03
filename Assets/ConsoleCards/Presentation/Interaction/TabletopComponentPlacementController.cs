@@ -74,6 +74,12 @@ namespace ConsoleCards.Presentation.Interaction
         public Func<TabletopPose, TabletopPose> AdjustPose { get; set; }
 
         /// <summary>
+        /// Owner, 2026-11-03 ("everything should be free to move"): a Console or board picked up by holding it is put
+        /// down where the button is let go (instead of a second click). Cleared when the placement ends.
+        /// </summary>
+        public bool ConfirmOnRelease { get; set; }
+
+        /// <summary>
         /// For the current placement only: after each placed piece the placement stays on, so the same piece can be
         /// placed again and again; Esc or right-click ends it. <paramref name="localOrder"/>, when given, supplies
         /// the next piece's order on the table.
@@ -333,6 +339,7 @@ namespace ConsoleCards.Presentation.Interaction
         private void CompletePreview(bool committed)
         {
             AdjustPose = null;
+            ConfirmOnRelease = false;
             keepPlacing = false;
             nextLocalOrder = null;
             Action<bool> placementEnded = activePlacementEnded;

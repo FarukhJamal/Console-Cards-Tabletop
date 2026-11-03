@@ -142,7 +142,11 @@ namespace ConsoleCards.Presentation.Composition
                     avatarPlace.y = persona.EdgeTop + (personaSet.AvatarLift * unit);
                     persona.Avatar.Place(avatarPlace, Quaternion.LookRotation(outward, Vector3.up) * Quaternion.Euler(personaSet.AvatarLean, 0f, 0f), unit);
                     persona.Avatar.SetGlow(theirTurn ? personaSet.AvatarGlowTurn * pulse : personaSet.AvatarGlowIdle);
-                    if (!persona.Avatar.gameObject.activeSelf) persona.Avatar.gameObject.SetActive(true);
+                    // Owner, 2026-11-03 (the hand view): seen from behind (your own seat's picture, with the camera
+                    // at your seat) the picture covered the bottom of the screen; it hides while the camera is behind it.
+                    UnityEngine.Camera viewer = hitResolver != null ? hitResolver.TargetCamera : null;
+                    bool behind = viewer != null && Vector3.Dot(viewer.transform.position - avatarPlace, outward) > 0f;
+                    if (persona.Avatar.gameObject.activeSelf == behind) persona.Avatar.gameObject.SetActive(!behind);
                 }
 
                 // AVATAR-1: the name lies along the rim in front of the seat, letters to the outside, so the players across
@@ -292,9 +296,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             bool local = occupant.IsEmpty || occupant == localPlayerId;
             ProfileInfo profile = local ? EnsureProfile().Active : null;
-            // QA Q2: online, every seat (yours too) shows the room's name for it, so both tables say "Player 1 (2)".
-            string nameSource = IsOnlineTable && !occupant.IsEmpty ? OnlinePlayerName(occupant) : null;
-            if (string.IsNullOrWhiteSpace(nameSource)) nameSource = profile != null ? profile.displayName : null;
+            string nameSource = profile != null ? profile.displayName : null;
             PersonaLook wanted = profile != null && profile.persona != null ? profile.persona : null;
             int avatarIndex = profile != null ? profile.avatar : seat.LayoutSeatIndex;
             bool changed = persona.SeatId != seat.SeatId
