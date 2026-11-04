@@ -21,6 +21,16 @@ namespace ConsoleCards.Presentation.Composition
         Pen = 0,
         Highlighter = 1,
         Label = 2,
+        // Doc 58 (TabletopComposition.Toys.cs): zones, snap points, toys and a piece's look, kept with the drawings.
+        HiddenZone = 3,
+        ShuffleZone = 4,
+        LayoutZone = 5,
+        SnapPoint = 6,
+        Note = 7,
+        Counter = 8,
+        Timer = 9,
+        DiceTray = 10,
+        PieceLook = 11,
     }
 
     /// <summary>How a pen or highlighter line looks (the STYLE button cycles them, owner 2026-10-20).</summary>
@@ -157,6 +167,7 @@ namespace ConsoleCards.Presentation.Composition
         private const float LabelPrefabLetterHeight = 0.64f; // the label prefab's letter height at scale 1 (world)
         private const float MarkRayLength = 500f;
         private const int MaximumStyledPoints = 4096;
+        private const string ToySavedKindPrefix = "toy:"; // doc 58: a saved zone or toy is "toy:<kind>"
 
         // STYLE (owner, 2026-10-20): the names on the button, in the order it cycles.
         private static readonly string[] DrawStyleNames = { "PLAIN", "BRUSH", "SWIRL", "WAVY", "DASHED", "DOTTED" };
@@ -809,7 +820,7 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = shownMarks.Count - 1; i >= 0; i--)
             {
                 TableMark mark = shownMarks[i];
-                if (!MarkTouches(mark, point, radius)) continue;
+                if (IsToyMark(mark.Kind) ? !ToyTouches(mark, point, radius) : !MarkTouches(mark, point, radius)) continue;
                 if (shownMarkObjects[i] != null) Destroy(shownMarkObjects[i]);
                 shownMarks.RemoveAt(i);
                 shownMarkObjects.RemoveAt(i);
@@ -821,6 +832,7 @@ namespace ConsoleCards.Presentation.Composition
         private void FinishErase()
         {
             eraseActive = false;
+            PruneToyVisuals();
             int erased = erasedCount;
             erasedCount = 0;
             if (erased == 0) return;
@@ -881,8 +893,21 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            int count = tableMarks.Count;
-            ShowTableMarks(TableMarkSet.Empty);
+            // Doc 58: zones and toys stay (each has its own Remove).
+            List<TableMark> kept = new List<TableMark>();
+            for (int i = 0; i < tableMarks.Count; i++)
+            {
+                if (IsToyMark(tableMarks[i].Kind)) kept.Add(tableMarks[i]);
+            }
+
+            int count = tableMarks.Count - kept.Count;
+            if (count == 0)
+            {
+                ShowMessage("Nothing is drawn on the table.");
+                return;
+            }
+
+            ShowTableMarks(TableMarkSet.Of(kept));
             SessionService.RecordTableMarkStep("cleared the drawings");
             ShowMessage(count == 1 ? "Cleared 1 drawing (Undo brings it back)." : $"Cleared {count} drawings (Undo brings them back).");
         }
@@ -973,10 +998,14 @@ namespace ConsoleCards.Presentation.Composition
                 shownMarks.Add(mark);
                 shownMarkObjects.Add(shown);
             }
+
+            PruneToyVisuals(); // doc 58: toys taken away
+            toyCheckPending = true;
         }
 
         private GameObject NewMarkObject(TableMark mark)
         {
+            if (IsToyMark(mark.Kind)) return NewToyObject(mark); // doc 58
             if (mark.Kind == TableMarkKind.Label)
             {
                 if (!EnsureMarkSet() || mark.Points.Length == 0) return null;
@@ -1048,6 +1077,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             shownMarks.Clear();
             shownMarkObjects.Clear();
+            toyVisuals.Clear();
             tableMarks = TableMarkSet.Empty;
             strokeLine = null;
             if (markRoot != null) Destroy(markRoot);
@@ -1066,7 +1096,9 @@ namespace ConsoleCards.Presentation.Composition
                 TableMark mark = tableMarks[i];
                 SavedMark entry = new SavedMark
                 {
-                    kind = mark.Kind == TableMarkKind.Label
+                    kind = IsToyMark(mark.Kind)
+                        ? ToySavedKindPrefix + ((int)mark.Kind).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        : mark.Kind == TableMarkKind.Label
                         ? SavedMark.Label
                         : mark.Kind == TableMarkKind.Highlighter ? SavedMark.Highlighter : SavedMark.Pen,
                     r = mark.Colour.r,
@@ -1118,6 +1150,12 @@ namespace ConsoleCards.Presentation.Composition
                 TableMarkKind kind = entry.kind == SavedMark.Label
                     ? TableMarkKind.Label
                     : entry.kind == SavedMark.Highlighter ? TableMarkKind.Highlighter : TableMarkKind.Pen;
+                if (entry.kind != null && entry.kind.StartsWith(ToySavedKindPrefix, StringComparison.Ordinal)
+                    && int.TryParse(entry.kind.Substring(ToySavedKindPrefix.Length), out int toyKind)
+                    && toyKind >= (int)TableMarkKind.HiddenZone && toyKind <= (int)TableMarkKind.PieceLook)
+                {
+                    kind = (TableMarkKind)toyKind; // doc 58: a zone or toy
+                }
                 if (kind == TableMarkKind.Label && string.IsNullOrWhiteSpace(entry.text)) continue;
                 marks.Add(new TableMark(
                     kind,

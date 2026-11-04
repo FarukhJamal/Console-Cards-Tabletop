@@ -11,7 +11,7 @@ namespace ConsoleCards.Presentation.Settings
     /// </summary>
     public sealed class PlayerHandComfortSettings
     {
-        public const int DefaultMaxHandCards = 20;
+        public const int DefaultMaxHandCards = 10; // owner, 2026-11-04: a Console Cards hand holds at most 10
         public const int MinimumMaxHandCards = 1;
 
         private int maxHandCards = DefaultMaxHandCards;

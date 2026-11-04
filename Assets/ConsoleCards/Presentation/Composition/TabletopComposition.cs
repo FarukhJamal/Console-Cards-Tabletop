@@ -1075,6 +1075,7 @@ namespace ConsoleCards.Presentation.Composition
 
             online?.Tick(); // MP-2: the room's messages and the shared table
             TickRemotePing(); // QA S1: the extra ripples of someone else's ping
+            TickAssist(); // doc 57: the Assist setting, the turn cartridge and the Console glow
             if (SessionService.HandleRedoShortcut()) return;
             if (SessionService.HandleUndoShortcut()) return;
             HandleHandTrayShortcut();
@@ -1089,6 +1090,7 @@ namespace ConsoleCards.Presentation.Composition
             CompletePendingStackCarry(); // a stack carried by press-and-hold is merged or put down
             CompletePendingHandCarry(); // hand cards carried from the row at the table edge are put down
             CompleteBoardCardSnaps();
+            TickToys(); // doc 58: zones, snap points, timers, the hidden zones' lids, auto-save
             // SMOOTH-1: card motion now ticks in LateUpdate (TabletopComposition.Frame.cs), after every layout of
             // the frame, so a layout applied later in the frame can no longer flash a moving card at its end place.
             RefreshHandInteractionPresentation();

@@ -732,6 +732,12 @@ namespace ConsoleCards.Presentation.Views.Containers
             return false;
         }
 
+        private const float TraySpreadFactor = 1.06f;
+        private const float TrayRowWidth = 6.8f;
+
+        // The screen hand has a wider row, so more cards fit side by side before they overlap.
+        private float RowWidth => IsTrayMode ? Mathf.Max(layoutWidth, TrayRowWidth) : layoutWidth;
+
         private float CalculatePitch(int count)
         {
             if (count <= 1)
@@ -740,8 +746,10 @@ namespace ConsoleCards.Presentation.Views.Containers
             }
 
             // Normal spacing until the row would exceed the hand width, then compress evenly.
-            float fittedPitch = (layoutWidth - cardLayoutWidth) / (count - 1);
-            return Mathf.Max(0f, Mathf.Min(horizontalSpacing, fittedPitch));
+            float fittedPitch = (RowWidth - cardLayoutWidth) / (count - 1);
+            // Owner, 2026-11-04: the screen hand spreads its cards out, side by side with a small gap while they fit.
+            float spacing = IsTrayMode ? Mathf.Max(horizontalSpacing, cardLayoutWidth * TraySpreadFactor) : horizontalSpacing;
+            return Mathf.Max(0f, Mathf.Min(spacing, fittedPitch));
         }
 
         private float ResolveCardHeight(
@@ -806,7 +814,7 @@ namespace ConsoleCards.Presentation.Views.Containers
 
             trayExcludedCard = excludedCard;
             RecordPickOrder(plan);
-            trayRig.UpdateFrame(TrayCardDepth(), layoutWidth, traySelectedRise);
+            trayRig.UpdateFrame(TrayCardDepth(), RowWidth, traySelectedRise);
 
             // Cards keep their current pose here (new members start where they are); LateUpdateTray
             // eases them to their slots, so reflows, draws and returns all glide.
@@ -834,7 +842,7 @@ namespace ConsoleCards.Presentation.Views.Containers
 
         private void LateUpdateTray()
         {
-            trayRig.UpdateFrame(TrayCardDepth(), layoutWidth, traySelectedRise);
+            trayRig.UpdateFrame(TrayCardDepth(), RowWidth, traySelectedRise);
             float deltaTime = Time.unscaledDeltaTime;
             float settle = 1f - Mathf.Exp(-trayResponse * deltaTime);
             float follow = 1f - Mathf.Exp(-trayDragResponse * deltaTime);

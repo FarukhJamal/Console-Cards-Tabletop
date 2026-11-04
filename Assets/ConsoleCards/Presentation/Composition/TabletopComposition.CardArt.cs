@@ -66,8 +66,18 @@ namespace ConsoleCards.Presentation.Composition
             return art != null ? art : StandInCardFronts.FrontFor(definition.StableId);
         }
 
-        internal Texture2D BackArt(CardDefinition definition) =>
-            definition == null ? null : Art(definition.BackArtworkReference, definition.BackArtwork);
+        // At a Trap Floor table every card of the game shares the board back (owner, 2026-11-04).
+        internal Texture2D BackArt(CardDefinition definition)
+        {
+            if (definition == null) return null;
+            if (trapFloorTemplate != null)
+            {
+                Texture2D shared = CurrentBoardCardBack();
+                if (shared != null) return shared;
+            }
+
+            return Art(definition.BackArtworkReference, definition.BackArtwork);
+        }
 
         internal Texture2D AvatarArt(AvatarDefinition avatar) =>
             avatar == null ? null : Art(avatar.ArtworkReference, avatar.Artwork);

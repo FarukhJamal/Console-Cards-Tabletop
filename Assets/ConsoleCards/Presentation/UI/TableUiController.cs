@@ -1402,6 +1402,20 @@ namespace ConsoleCards.Presentation.UI
 
         public void ShowFocusedCardReveal(FocusedCardRevealModel model)
         {
+            // Owner, 2026-11-03 (doc 57, Assist FREE / REMINDERS): the game's "you landed on…" and trap popups become a
+            // short line at the top; only a real choice (take a prize, collapse the tile, roll for the Crane) still asks.
+            if (model != null && PlayAssist.IsQuiet && !IsRealChoice(model))
+            {
+                ShowTableNews(QuietRevealLine(model), new Color(0.949f, 0.463f, 0.180f, 1f));
+                // Picking a Key up is what landing on it does at a real table (owner's playtest, 2026-11-04: the Key
+                // was not counted in FREE).
+                if (model.CompletionLabel == "OK" || model.CompletionLabel == "Return" || model.CompletionLabel == "Take Key")
+                {
+                    model.Completed();
+                }
+                return;
+            }
+
             if (TryShowChoiceChip(model)) return; // POP-2: beside the tile, when the tile is on the table
             ReleaseView(choiceChipView);
             ReleaseView(tabletopPopupView);
@@ -1412,6 +1426,17 @@ namespace ConsoleCards.Presentation.UI
             modalLayer.SetActive(true);
             focusedCardSelectionView.Show();
             focusedCardSelectionView.ShowReveal(model);
+        }
+
+        private static bool IsRealChoice(FocusedCardRevealModel model) =>
+            model.CompletionLabel == "Take it"
+            || model.CompletionLabel == "Collapse"
+            || model.CompletionLabel == "Roll the dice";
+
+        private static string QuietRevealLine(FocusedCardRevealModel model)
+        {
+            string title = model.CardTitle.Length > 0 ? model.CardTitle : model.HeaderTitle;
+            return model.ResultState.Length > 0 ? $"{title} · {model.ResultState}" : title;
         }
 
         public void CloseFocusedCardSelection()

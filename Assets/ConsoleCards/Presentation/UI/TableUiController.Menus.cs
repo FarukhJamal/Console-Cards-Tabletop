@@ -25,6 +25,9 @@ namespace ConsoleCards.Presentation.UI
         private Action pauseReset;
         private Action pauseClear;
         private Action pauseSaveGame;
+
+        /// <summary>Doc 58: the Esc menu's SAVE · LOAD · TABLE row (the table menu); null hides it.</summary>
+        public Action PauseExtra { get; set; }
         private Action pauseMainMenu;
         private Action pauseExit;
 
@@ -257,6 +260,8 @@ namespace ConsoleCards.Presentation.UI
                 : null;
             pauseActions.OpenHowToPlay = interactionGuideView != null ? ThenClose(OpenHelp) : null;
             pauseActions.SaveAsGame = ThenClose(pauseSaveGame);
+            pauseActions.Extra = ThenClose(PauseExtra); // doc 58
+            pauseActions.ExtraLabel = "SAVE · LOAD · TABLE";
             pauseActions.OpenSettings = () => OpenTableSettings(true);
             pauseActions.NewTable = null; // NEW TABLE… opens the main menu: MAIN MENU is that row
             pauseActions.ResetTable = ThenClose(pauseReset);

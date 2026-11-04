@@ -272,7 +272,7 @@ namespace ConsoleCards.Games.TrapFloor
                     ? deckTransfer.MoveBetweenContainers(deckCard.BaseState, abilityDeck, destination)
                     : deckTransfer.RemoveFromContainer(deckCard.BaseState, abilityDeck);
                 if (!moved.Succeeded) return Failure(CommandResultStatus.Rejected, TrapFloorShopError.MutationFailed);
-                if (destination == null) deckCard.BaseState.SetPose(player.AbilityOverflowPose);
+                if (destination == null) deckCard.BaseState.SetPose(TrapFloorTakePrizeUseCase.FreeOverflowPose(matchState, player, deckCard.BaseState.Id));
                 deckCard.BaseState.SetOwner(actor);
                 deckCard.BaseState.SetVisibility(destination != null ? destination.Visibility : ObjectVisibility.Public);
                 deckCard.SetFace(CardFace.FaceUp);
@@ -290,7 +290,7 @@ namespace ConsoleCards.Games.TrapFloor
                     command.GrantedCardId,
                     new ObjectDefinitionId(definitionGuid),
                     TabletopObjectKind.Card,
-                    destination != null ? TabletopPose.Default : player.AbilityOverflowPose,
+                    destination != null ? TabletopPose.Default : TrapFloorTakePrizeUseCase.FreeOverflowPose(matchState, player, command.GrantedCardId),
                     ContainerId.Empty,
                     actor,
                     destination != null ? destination.Visibility : ObjectVisibility.Public,

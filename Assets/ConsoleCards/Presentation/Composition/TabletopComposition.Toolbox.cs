@@ -996,7 +996,7 @@ namespace ConsoleCards.Presentation.Composition
                 {
                     FixedContainerVisual preview = Instantiate(catalogStackPrefab);
                     preview.ValidateReferences();
-                    ConfigureContainerLabel(preview.Label, "STACK");
+                    ConfigureContainerLabel(preview.Label, "DECK"); // doc 58: every pile players make is a deck
                     preview.Label.gameObject.SetActive(!HidesTableVisual(TableVisualHide.ContainerLabels));
                     ConfigureBayFootprint(preview, GameTemplatePileStyle.DefaultFor(ContainerKind.Stack).BayMark);
                     previewRoot = preview.gameObject;
@@ -1165,7 +1165,7 @@ namespace ConsoleCards.Presentation.Composition
                     layoutCollectionChanged = true;
                     break;
                 case TabletopComponentKind.Stack:
-                    appearedTransform = ProjectToolboxStack(result.ContainerId, "STACK");
+                    appearedTransform = ProjectToolboxStack(result.ContainerId, "DECK");
                     layoutCollectionChanged = true;
                     break;
                 case TabletopComponentKind.DiscardPile:
@@ -1362,7 +1362,7 @@ namespace ConsoleCards.Presentation.Composition
                         if (!matchState.IsTemplateContainer(containerId)
                             && !Registry.stackViewsByContainerId.ContainsKey(containerId))
                         {
-                            ProjectToolboxStack(containerId, "STACK");
+                            ProjectToolboxStack(containerId, "DECK");
                         }
 
                         break;

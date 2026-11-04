@@ -154,6 +154,8 @@ namespace ConsoleCards.Presentation.Composition
         internal void ShowFloorEnded(bool won, string detail = null)
         {
             if (host.runtimeUi == null || host.trapFloorTemplate == null) return;
+            string recap = host.TakeFloorRecap(); // doc 57: what the floor showed
+            if (!string.IsNullOrEmpty(recap)) detail = string.IsNullOrEmpty(detail) ? recap : $"{detail} · {recap}";
             TrapFloorTemplateDefinition floor = host.trapFloorTemplate;
             int number = floor.FloorIndex + 1;
             bool nextStage = StartsNextStage(won); // STAGES-1

@@ -335,6 +335,19 @@ namespace ConsoleCards.Presentation.Composition
 
         bool ITabletopSelectHandler.TryBeginSelect(TabletopObjectView viewUnderPointer, Vector2 screenPosition)
         {
+            // Doc 57: a press on the turn cartridge picks it up; let go on the next Console to pass the turn.
+            if (TryPressTurnCartridge(screenPosition))
+            {
+                selectPressHasPick = false;
+                furnitureConsole = null;
+                furnitureBoard = BoardId.Empty;
+                selectPressScreen = screenPosition;
+                selectPressActive = true;
+                selectBoxShown = false;
+                ContextMenus.CloseContextMenu();
+                return true;
+            }
+
             // Owner, 2026-11-03: a press on your hand's row at the table edge picks that card (a drag carries it).
             if (TryBeginHandEdgePress(screenPosition))
             {
@@ -370,6 +383,12 @@ namespace ConsoleCards.Presentation.Composition
         void ITabletopSelectHandler.UpdateSelect(Vector2 screenPosition)
         {
             if (!selectPressActive) return;
+            if (cartridgeHeld)
+            {
+                UpdateCartridgeCarry(screenPosition);
+                return;
+            }
+
             if (!selectBoxShown
                 && (furnitureConsole != null || !furnitureBoard.IsEmpty)
                 && (screenPosition - selectPressScreen).sqrMagnitude < SelectBoxThresholdPixels * SelectBoxThresholdPixels
@@ -404,6 +423,13 @@ namespace ConsoleCards.Presentation.Composition
         void ITabletopSelectHandler.ReleaseSelect(Vector2 screenPosition)
         {
             if (!selectPressActive) return;
+            if (cartridgeHeld)
+            {
+                ReleaseCartridgeCarry(screenPosition);
+                CancelSelectPress();
+                return;
+            }
+
             if (handCarryActive)
             {
                 UpdateHandCarry(screenPosition);
@@ -443,6 +469,7 @@ namespace ConsoleCards.Presentation.Composition
 
         void ITabletopSelectHandler.CancelSelect()
         {
+            CancelCartridgeCarry();
             CancelHandCarry();
             CancelSelectPress();
         }

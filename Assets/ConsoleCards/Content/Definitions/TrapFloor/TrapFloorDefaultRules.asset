@@ -42,7 +42,7 @@ MonoBehaviour:
       displayValue: ''
       modeStableIds: []
     - stableId: tf-setup-fixed
-      text: 'Also 6 Keys, the Grand Exit and the Secret Exit. All the counts must add up to the 36 tiles. Each later floor is one row and one column smaller, down to 3×3, with the same mix scaled down (both Exits and enough Keys always stay).'
+      text: 'The game mode sets each floor''s Keys and Exits (see Goal); the other tiles are scaled to fill the floor. Each later floor is one row and one column smaller: 6×6, 5×5, 4×4. Survival plays one 6×6 floor.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -303,7 +303,7 @@ MonoBehaviour:
     numbered: 0
     entries:
     - stableId: tf-goal-easy
-      text: 'Bring {value} Key to the Grand Exit.'
+      text: 'Easy: more helping cards (Friends) on the floor.'
       settingKind: 1
       settingKey: mode.keys-needed
       value: '1'
@@ -311,7 +311,7 @@ MonoBehaviour:
       modeStableIds:
       - trap-floor-mode-easy
     - stableId: tf-goal-hard
-      text: 'Bring all {value} Keys to the Grand Exit, by any means. Keys can be passed between players.'
+      text: 'Hard: more Traps and Abilities on the floor.'
       settingKind: 1
       settingKey: mode.keys-needed
       value: '3'
@@ -319,7 +319,7 @@ MonoBehaviour:
       modeStableIds:
       - trap-floor-mode-hard
     - stableId: tf-goal-impossible
-      text: '{value} Keys are needed to escape.'
+      text: 'Impossible: the most Traps and the fewest helping cards.'
       settingKind: 1
       settingKey: mode.keys-needed
       value: '3'
@@ -327,14 +327,14 @@ MonoBehaviour:
       modeStableIds:
       - trap-floor-mode-impossible
     - stableId: tf-goal-win-mode
-      text: 'Win mode: chosen in New table… (Regular, Team or Survival).'
+      text: 'Game mode: chosen in New table… (Free for all, Team Play or Survival).'
       settingKind: 3
       settingKey: game.win-mode
       value: 'Team'
       displayValue: 'Team, one player must escape'
       modeStableIds: []
     - stableId: tf-goal-exit-roll
-      text: 'Survival: once the Grand Exit is face up, stepping on a tile triggers it again, and prizes (Abilities, Friends) can no longer be taken.'
+      text: 'Survival: one 6×6 floor with 3 Keys and the Grand Exit only. A tile collapses after every player''s turn; Keys can collapse, the Grand Exit cannot. 3 Keys open the Grand Exit.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -346,7 +346,7 @@ MonoBehaviour:
       hintHelper: 
       modeStableIds: []
     - stableId: tf-goal-secret-exit
-      text: 'Exits are taken by landing on them. Regular: once the team has the Keys, the floor is won when every player still in stands on the Grand Exit, and a player holding a Key who lands on the Secret Exit wins the floor at once. Team: one player escaping wins. Survival: every player still in must escape (an escaped pawn leaves the floor) and the Grand Exit needs 3 Keys. A won or lost floor ends: everyone comes back and the next, smaller floor is dealt fresh (Avatars stay; Hands, Consoles and Abilities are dealt again). Win the last floor (3×3) to win the game.'
+      text: 'Exits are taken by landing on them, one player at a time; the floor ends when everyone still in has escaped. A Key used at the Secret Exit is gone, and the Secret Exit can collapse. Free for all: one Key each; you need your own Key for the Grand Exit (6×6: 3 Keys, Grand and Secret Exit; 5×5: 2 Keys, Grand and Secret; 4×4: 2 Keys, Grand). Team Play (2 v 2): a Key belongs to whoever took it and one player may carry them all; your team needs a Key for the Grand Exit (6×6: 3 Keys, Grand and Secret; 5×5 and 4×4: 2 Keys, Grand). With no Key and none left to take, you are out. Taking a Key or a blue card sends your pawn back to its starting tile. Win the 4×4 to win the game.'
       settingKind: 0
       settingKey: 
       value: ''

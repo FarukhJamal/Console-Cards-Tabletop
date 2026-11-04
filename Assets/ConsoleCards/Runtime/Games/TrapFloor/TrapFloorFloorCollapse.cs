@@ -363,6 +363,9 @@ namespace ConsoleCards.Games.TrapFloor
             this.activityFeed = activityFeed ?? throw new ArgumentNullException(nameof(activityFeed));
         }
 
+        /// <summary>Survival (owner, 2026-11-04): the Grand Exit cannot collapse; a roll that lands on it is rolled again.</summary>
+        public bool ProtectsGrandExit { get; set; }
+
         public TrapFloorCollapseResult Begin(
             MatchState matchState,
             TrapFloorBeginCollapseCommand command)
@@ -437,7 +440,8 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(TrapFloorCollapseError.FloorMappingMissing);
             if (matchState.Revision == long.MaxValue) return Failure(TrapFloorCollapseError.RevisionOverflow);
 
-            bool rerollRequired = state.IsCollapsed(floorCardId);
+            bool rerollRequired = state.IsCollapsed(floorCardId)
+                || (ProtectsGrandExit && TrapFloorObjectiveUseCase.IsGrandExit(floorCard.Content));
             long revision = checked(matchState.Revision + 1L);
             TrapFloorCollapseRollState roll = state.RecordRoll(
                 xAxisDie, yAxisDie, coordinate, floorCardId, rerollRequired);

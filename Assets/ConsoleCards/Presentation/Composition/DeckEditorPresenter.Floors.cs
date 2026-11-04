@@ -60,33 +60,42 @@ namespace ConsoleCards.Presentation.Composition
             return null;
         }
 
-        internal static string StageTitle(PlayerDeckRecord deck) =>
-            string.IsNullOrWhiteSpace(deck.name) || deck.name == $"Stage {deck.stage}"
-                ? $"Stage {deck.stage}"
-                : $"Stage {deck.stage} · {deck.name}";
+        // Owner, 2026-11-04: stages are gone; a game with floors has one floor deck per floor size instead (Floor 1 ·
+        // 6×6, Floor 2 · 5×5, Floor 3 · 4×4). A floor deck holds the Traps, Friends and Abilities that floor is dealt
+        // from (scaled to fit); empty, the game makes the floor by the difficulty. Keys and Exits come from the mode.
+        internal const int FloorDeckCount = 3;
+        internal const int FirstFloorSize = 6;
 
-        // STAGE 1 … STAGE n, then + ADD STAGE, for a game with floors.
+        internal static string StageTitle(PlayerDeckRecord deck) => FloorTitle(deck.stage);
+
+        internal static string FloorTitle(int floor)
+        {
+            int size = FirstFloorSize - (floor - 1);
+            return $"Floor {floor} · {size}×{size}";
+        }
+
+        // FLOOR 1 … FLOOR 3 for a game with floors.
         internal void AddStageRows(List<CardEditorRowModel> rows)
         {
             if (!EditorGameHasFloors()) return;
-            int stages = Math.Max(1, StageCount());
-            for (int stage = 1; stage <= stages; stage++)
+            for (int floor = 1; floor <= FloorDeckCount; floor++)
             {
-                PlayerDeckRecord deck = FindStage(stage);
-                if (deck != null)
+                PlayerDeckRecord deck = FindStage(floor);
+                int tiles = 0;
+                for (int c = 0; deck != null && deck.cards != null && c < deck.cards.Count; c++)
                 {
-                    int fronts = deck.fronts != null ? deck.fronts.Count : 0;
-                    rows.Add(new CardEditorRowModel(deck.id, StageTitle(deck),
-                        $"6×6 to 3×3 · {fronts} picture{(fronts == 1 ? string.Empty : "s")}{(string.IsNullOrEmpty(deck.backArtKey) ? string.Empty : " · own back")}",
-                        StageThumbnail(deck), string.Equals(deck.id, deckEditorSelectedId, StringComparison.OrdinalIgnoreCase), 1));
+                    if (deck.cards[c] != null) tiles += Math.Max(0, deck.cards[c].count);
                 }
-                else
-                {
-                    rows.Add(new CardEditorRowModel(StageRowPrefix + stage, $"Stage {stage}", "6×6 to 3×3 · the game's own pictures", null, false, 1));
-                }
-            }
 
-            rows.Add(new CardEditorRowModel(AddStageRowId, "+ ADD STAGE", $"Stage {stages + 1}: the floors again with a new look", null, false, 1));
+                string detail = tiles > 0 ? $"Your mix · {tiles} cards" : "Made by the game";
+                rows.Add(new CardEditorRowModel(
+                    deck != null ? deck.id : StageRowPrefix + floor,
+                    FloorTitle(floor),
+                    detail,
+                    null,
+                    deck != null && string.Equals(deck.id, deckEditorSelectedId, StringComparison.OrdinalIgnoreCase),
+                    1));
+            }
         }
 
         private Texture2D StageThumbnail(PlayerDeckRecord deck)
@@ -99,17 +108,7 @@ namespace ConsoleCards.Presentation.Composition
         internal bool TrySelectStageRow(string rowId)
         {
             if (string.IsNullOrEmpty(rowId) || !rowId.StartsWith(StageRowPrefix, StringComparison.Ordinal)) return false;
-            if (rowId == AddStageRowId)
-            {
-                if (FindStage(1) == null) MakeStage(1); // stage 1 is the game's look until it is changed
-                PlayerDeckRecord added = MakeStage(Math.Max(1, StageCount()) + 1);
-                deckEditorSelectedId = added.id;
-                deckEditorChanged = true;
-                ShowDeckEditor($"Added Stage {added.stage}. RENAME it (for example Living room), give it a back with CHANGE… and its pictures with IMPORT FRONTS….");
-                return true;
-            }
-
-            if (!int.TryParse(rowId.Substring(StageRowPrefix.Length), out int stage) || stage < 1) return false;
+            if (!int.TryParse(rowId.Substring(StageRowPrefix.Length), out int stage) || stage < 1 || stage > FloorDeckCount) return false;
             PlayerDeckRecord deck = FindStage(stage) ?? MakeStage(stage);
             deckEditorSelectedId = deck.id;
             ShowDeckEditor(string.Empty);
@@ -121,7 +120,7 @@ namespace ConsoleCards.Presentation.Composition
             PlayerDeckRecord deck = new PlayerDeckRecord
             {
                 id = PlayerCardsFile.NewCardId(),
-                name = $"Stage {stage}",
+                name = FloorTitle(stage),
                 stage = stage,
             };
             host.CardEditorPanel.editorDecks.decks.Add(deck);
@@ -156,6 +155,7 @@ namespace ConsoleCards.Presentation.Composition
         // The stage's picture for a card, else null (the card's normal front shows).
         internal Texture2D StageFront(PlayerDeckRecord stage, string cardId)
         {
+            if (stage != null) return null; // floor decks use the cards' own pictures
             for (int i = 0; stage.fronts != null && i < stage.fronts.Count; i++)
             {
                 PlayerDeckFront front = stage.fronts[i];
@@ -166,11 +166,17 @@ namespace ConsoleCards.Presentation.Composition
             return null;
         }
 
-        internal string StageText(PlayerDeckRecord deck)
+        internal string StageText(PlayerDeckRecord deck) =>
+            $"{StageTitle(deck)}: the Traps, Friends and Abilities this floor is dealt from (scaled to fit). "
+            + "No cards: the game makes the floor by the difficulty. Keys and Exits come from the game mode.";
+
+        // A floor deck lists the floor's Traps, Friends and Abilities (Keys and Exits are set by the mode).
+        internal static bool IsKeyOrExit(DeckEditorCard card)
         {
-            int fronts = deck.fronts != null ? deck.fronts.Count : 0;
-            return $"{StageTitle(deck)}: the floors from 6×6 to 3×3 with this look; the same cards and rules. {fronts} card"
-                + $"{(fronts == 1 ? " has" : "s have")} a picture of this stage. IMPORT FRONTS… takes a folder of PNGs named like the cards; CHANGE… sets the tiles' back.";
+            string category = card.GameCard != null ? card.GameCard.Category : null;
+            return string.Equals(category, "Key", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(category, "SecretExit", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(category, "Exit", StringComparison.OrdinalIgnoreCase);
         }
 
         // IMPORT FRONTS…: each picture in the folder whose name matches a floor card ("Fall Trap.png", "fall-trap.png")
@@ -178,6 +184,11 @@ namespace ConsoleCards.Presentation.Composition
         internal void ImportStageFronts()
         {
             if (!SelectedIsStage(out PlayerDeckRecord stage)) return;
+            if (stage != null)
+            {
+                ShowDeckEditor("Floor decks use the cards' own pictures.");
+                return;
+            }
             if (!PictureFilePicker.TryPickFolder($"Choose a folder of pictures for {StageTitle(stage)}", out string folder))
             {
                 ShowDeckEditor(string.Empty);

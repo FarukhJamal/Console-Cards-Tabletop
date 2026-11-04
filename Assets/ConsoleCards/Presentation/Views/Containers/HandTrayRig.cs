@@ -28,7 +28,7 @@ namespace ConsoleCards.Presentation.Views.Containers
         // Camera-space depth of the tray plane; raised past the near clip plane when needed.
         public const float TrayDistance = 0.75f;
         // Card depth (on-screen height of one card) as a fraction of the viewport height.
-        public const float CardScreenFraction = 0.24f;
+        public const float CardScreenFraction = 0.28f; // owner, 2026-11-04: a bigger screen hand
         public const float BottomMarginFraction = 0.02f;
         public const float MaximumWidthFraction = 0.92f;
         // Fraction of a card's height that stays on screen while the tray is collapsed.
@@ -74,7 +74,7 @@ namespace ConsoleCards.Presentation.Views.Containers
         // QA Q11 (2026-11-03): a shown hand covered the player's own console (and the avatar just placed in it). It
         // now rests lower, with the top of each card showing, and rises as the pointer comes down to it or while a
         // card is carried.
-        public const float RestingVisibleFraction = 0.5f;
+        public const float RestingVisibleFraction = 0.3f; // owner, 2026-11-04: lower when not in focus
         private const float PeekResponse = 12f;
         private float peekAmount;
 

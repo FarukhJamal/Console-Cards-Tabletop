@@ -151,21 +151,25 @@ namespace ConsoleCards.Presentation.Composition
                 trapFloorCollapseState = new TrapFloorCollapseState(
                     matchState.Id,
                     trapFloorTemplate.FloorCardIds.Count);
+                TrapFloorGame.ApplyPendingTableChoices(); // MODE-1 / DIR-1: the choices made for this new table
                 trapFloorObjectiveState = new TrapFloorObjectiveState(
                     matchState.Id,
-                    trapFloorTemplate.ActiveMode.RequiredKeyCount,
+                    TrapFloorGame.RequiredKeysForGrandExit(), // owner, 2026-11-04: the mode's Keys, not the difficulty's
                     trapFloorTemplate.ActiveMode.Behavior);
-                TrapFloorGame.ApplyPendingTableChoices(); // MODE-1 / DIR-1: the choices made for this new table
                 trapFloorTurnState = new TrapFloorTurnState(
                     matchState.Id,
                     TrapFloorGame.OrderedTurnPlayers(activeSession.Request.ActivePlayerIds)); // DIR-1
                 trapFloorAbilityResolutionState =
                     new TrapFloorAbilityResolutionState(matchState.Id);
             }
+            TrapFloorGame.ConfigureKeyRules(trapFloorObjectiveState); // who may hold which Key, by mode
             trapFloorCollapseUseCase = new TrapFloorCollapseUseCase(
                 trapFloorTemplate,
                 trapFloorCollapseState,
-                trapFloorActivityFeed);
+                trapFloorActivityFeed)
+            {
+                ProtectsGrandExit = TrapFloorGame.WinMode == TrapFloorWinMode.Survival,
+            };
             trapFloorRevealFloorUseCase = new TrapFloorRevealFloorUseCase(
                 trapFloorTemplate,
                 trapFloorActivityFeed,
@@ -580,6 +584,7 @@ namespace ConsoleCards.Presentation.Composition
                 {
                     TrapFloorTrapResolutionRecord record = records[i];
                     if (record.IsPending
+                        && record.AffectedPlayerId == active // only the turn player's own traps to do
                         && record.Content.HasSupportedAssistedTrapEffect
                         && Registry.TryGetCardView(record.FloorCardId, out CardView trapView))
                     {
@@ -650,19 +655,13 @@ namespace ConsoleCards.Presentation.Composition
         // Board (floor) card backs: this stage's back when it has one (STAGES-1), else the game's backs by floor:
         // Floor 1 the first, Floor 2 the second, and so on, repeating after the last (doc 24; they used to follow a
         // round number that no longer changes). Null when the game has no backs.
+        // Owner, 2026-11-04 ("I want it the same ... give all the backs red mystery box for now"): every floor, every
+        // stage and every Trap Floor card shows the game's first back (the red Mystery Box).
         internal Texture2D CurrentBoardCardBack()
         {
             if (trapFloorGameDefinition == null)
             {
                 return null;
-            }
-
-            int floor = trapFloorTemplate != null ? trapFloorTemplate.FloorIndex : 0;
-            TrapFloorStage stage = CurrentTrapFloorStage;
-            if (stage != null && !string.IsNullOrEmpty(stage.BackArtKey))
-            {
-                Texture2D stageBack = Art(stage.BackArtKey, null);
-                if (stageBack != null) return stageBack;
             }
 
             int count = BoardCardBackCount();
@@ -671,7 +670,7 @@ namespace ConsoleCards.Presentation.Composition
                 return null;
             }
 
-            int index = floor % count;
+            const int index = 0;
             IReadOnlyList<Texture2D> backs = trapFloorGameDefinition.BoardCardBacks;
             IReadOnlyList<string> keys = trapFloorGameDefinition.BoardCardBackReferences;
             return Art(

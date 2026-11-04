@@ -112,9 +112,7 @@ namespace ConsoleCards.Presentation.Composition
             // STAGES-1: a stage keeps its own back; every floor tile of that stage shows it.
             if (SelectedIsStage(out PlayerDeckRecord stage))
             {
-                stage.backArtKey = key;
-                deckEditorChanged = true;
-                ShowDeckEditor($"Your picture is now the back of every floor tile in {StageTitle(stage)}.");
+                ShowDeckEditor($"Every Trap Floor card uses the red Mystery Box back for now, so {StageTitle(stage)} keeps it.");
                 return;
             }
 

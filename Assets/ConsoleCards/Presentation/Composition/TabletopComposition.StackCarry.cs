@@ -72,6 +72,11 @@ namespace ConsoleCards.Presentation.Composition
         private bool carryDropPending;
         private ContainerId carryDropTargetId;
         private TabletopPose carryDropPose;
+        // Owner, 2026-11-03 (doc 58, "as in TTS, anything on anything makes a deck"): a pile carried onto a single
+        // loose card takes that card in (the card goes to the bottom, the pile lies where the card lay).
+        private CardView carryTargetCard;
+        private CardView carryDropTargetCard;
+        private readonly List<TabletopObjectId> carryMoveIds = new List<TabletopObjectId>(64);
 
         internal bool IsCarryingStack => !carriedStackId.IsEmpty;
 
@@ -131,7 +136,8 @@ namespace ConsoleCards.Presentation.Composition
             Vector3 offset = coordinateConverter.ToWorldPosition(point) - carryGrabWorld;
             offset.y = 0f;
             carryHorizontalOffset = offset;
-            SetCarryTarget(FindCarryMergeTarget()); // POL-4: the shown stack follows in UpdateStackCarryMotion
+            ContainerId pile = FindCarryMergeTarget();
+            SetCarryTarget(pile, pile.IsEmpty ? FindCarryTargetCard() : null); // POL-4: the shown stack follows in UpdateStackCarryMotion
         }
 
         void ITabletopCarryHandler.ReleaseCarry(Vector2 screenPosition)
@@ -152,6 +158,7 @@ namespace ConsoleCards.Presentation.Composition
                 start.Layer,
                 start.LocalOrder);
             carryDropTargetId = carryTargetId;
+            carryDropTargetCard = carryTargetCard;
             carryDropPending = true;
             HideCarryTarget();
         }
@@ -174,14 +181,27 @@ namespace ConsoleCards.Presentation.Composition
             carryDropPending = false;
             ContainerId stackId = carriedStackId;
             ContainerId targetId = carryDropTargetId;
+            CardView targetCard = carryDropTargetCard;
+            carryDropTargetCard = null;
             TabletopPose pose = carryDropPose;
             ClearCarryState();
             if (matchState == null || !matchState.Containers.ContainsKey(stackId)) return;
 
             if (!targetId.IsEmpty && matchState.Containers.ContainsKey(targetId))
             {
-                // MergeStacks animates the cards from where they were carried onto the stack below.
-                if (MergeStacks(stackId, targetId).Succeeded) ScheduleLandingFeedback(targetId, true);
+                bool bothStacks = matchState.Containers[stackId].Kind == ContainerKind.Stack
+                    && matchState.Containers[targetId].Kind == ContainerKind.Stack;
+                // MergeStacks animates the cards from where they were carried onto the stack below; any other pile
+                // (a deck, a discard pile) takes the carried cards one by one, bottom first, so their order stays.
+                bool merged = bothStacks ? MergeStacks(stackId, targetId).Succeeded : PourPileInto(stackId, targetId);
+                if (merged) ScheduleLandingFeedback(targetId, true);
+                Physics.SyncTransforms();
+                return;
+            }
+
+            if (targetCard != null && TakeCardUnderPile(stackId, targetCard, pose))
+            {
+                ScheduleLandingFeedback(stackId, true);
                 Physics.SyncTransforms();
                 return;
             }
@@ -280,23 +300,26 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        // The nearest other stack whose centre is within reach of the carried stack's centre.
+        // The nearest other pile (stack, deck or discard pile) whose centre is within reach of the carried pile's
+        // centre (doc 58: every pile takes another, as in TTS).
         private ContainerId FindCarryMergeTarget()
         {
             if (!matchState.TryGetContainerPlacement(carriedStackId, out ContainerPlacementState placement)
-                || !matchState.Containers.TryGetValue(carriedStackId, out ContainerState carried)
-                || carried.Kind != ContainerKind.Stack)
+                || !matchState.Containers.ContainsKey(carriedStackId))
             {
-                return ContainerId.Empty; // only a stack merges; a deck or discard pile is just put down
+                return ContainerId.Empty;
             }
 
             Vector3 carriedCentre = coordinateConverter.ToWorldPosition(placement.Pose) + carryHorizontalOffset;
             TableCoordinate centre = coordinateConverter.ToTableCoordinate(carriedCentre);
             ContainerId best = ContainerId.Empty;
             double bestDistance = StackCarryMergeReach * StackCarryMergeReach;
-            foreach (KeyValuePair<ContainerId, StackRuntimeView> pair in Registry.stackViewsByContainerId)
+            foreach (KeyValuePair<ContainerId, ContainerState> pair in matchState.Containers)
             {
-                if (!ContextMenus.IsValidMergeDestination(carriedStackId, pair.Key, pair.Value)
+                ContainerKind kind = pair.Value.Kind;
+                if (pair.Key == carriedStackId
+                    || (kind != ContainerKind.Stack && kind != ContainerKind.Deck && kind != ContainerKind.DiscardPile)
+                    || !IsSelectablePile(pair.Key)
                     || !matchState.TryGetContainerPlacement(pair.Key, out ContainerPlacementState other))
                 {
                     continue;
@@ -315,24 +338,122 @@ namespace ConsoleCards.Presentation.Composition
             return best;
         }
 
-        // The stack the carried one would merge onto shows the green stack outline.
-        private void SetCarryTarget(ContainerId targetId)
+        // The single loose card under the carried pile's centre (not one of the pile's own cards).
+        private CardView FindCarryTargetCard()
         {
-            if (targetId == carryTargetId) return;
+            if (!matchState.TryGetContainerPlacement(carriedStackId, out ContainerPlacementState placement)) return null;
+            Vector3 carriedCentre = coordinateConverter.ToWorldPosition(placement.Pose) + carryHorizontalOffset;
+            TableCoordinate centre = coordinateConverter.ToTableCoordinate(carriedCentre);
+            CardView best = null;
+            double bestDistance = StackCarryMergeReach * StackCarryMergeReach;
+            for (int i = 0; i < Registry.cardViews.Count; i++)
+            {
+                CardView card = Registry.cardViews[i];
+                if (!IsSelectableLoosePiece(card)) continue;
+                TableCoordinate at = coordinateConverter.ToTableCoordinate(PieceRestPosition(card));
+                double dx = at.X - centre.X;
+                double dy = at.Y - centre.Y;
+                double distance = (dx * dx) + (dy * dy);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = card;
+                }
+            }
+
+            return best;
+        }
+
+        // A deck or discard pile under the carried pile takes its cards, bottom first (one Undo step).
+        private bool PourPileInto(ContainerId sourceId, ContainerId targetId)
+        {
+            if (transferCoordinator == null || !matchState.Containers.TryGetValue(sourceId, out ContainerState source)) return false;
+            carryMoveIds.Clear();
+            for (int i = 0; i < source.Count; i++) carryMoveIds.Add(source.GetObjectAt(i));
+            int moved = 0;
+            SessionService.BeginUndoBatch();
+            try
+            {
+                for (int i = 0; i < carryMoveIds.Count; i++)
+                {
+                    if (Registry.TryGetCardView(carryMoveIds[i], out CardView card)
+                        && transferCoordinator.Transfer(card, CardDropTarget.ForContainer(targetId)).Succeeded)
+                    {
+                        moved++;
+                    }
+                }
+            }
+            finally
+            {
+                SessionService.EndUndoBatch();
+            }
+
+            carryMoveIds.Clear();
+            ViewSync.SyncContainer(targetId);
+            if (matchState.Containers.ContainsKey(sourceId)) ViewSync.SyncContainer(sourceId);
+            return moved > 0;
+        }
+
+        // A pile let go over a single card: it goes where the card lay and the card joins it at the bottom.
+        private bool TakeCardUnderPile(ContainerId pileId, CardView card, TabletopPose carriedPose)
+        {
+            if (transferCoordinator == null || card == null || !card.IsBound || card.BoundState == null) return false;
+            TabletopPose cardPose = RestPose(card);
+            TabletopPose pose = new TabletopPose(cardPose.Position, carriedPose.RotationDegrees, carriedPose.Layer, carriedPose.LocalOrder);
+            bool joined = false;
+            SessionService.BeginUndoBatch();
+            try
+            {
+                IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts = CaptureContainerCardTransforms(pileId);
+                if (!CommitContainerMove(pileId, pose)) ViewSync.SyncContainer(pileId);
+                presentationTransitions.AnimateCardsFromCurrentResults(starts, Feel.DropSettleSeconds);
+                if (transferCoordinator.Transfer(card, CardDropTarget.ForContainer(pileId)).Succeeded
+                    && matchState.Containers.TryGetValue(pileId, out ContainerState pile))
+                {
+                    joined = true;
+                    int from = pile.IndexOf(card.ObjectId);
+                    if (from > 0) ReorderCardInContainer(card, pile, from, 0);
+                }
+            }
+            finally
+            {
+                SessionService.EndUndoBatch();
+            }
+
+            if (joined) ShowMessage("The card joined the deck.");
+            return joined;
+        }
+
+        // The pile or card the carried one would join shows the green outline.
+        private void SetCarryTarget(ContainerId targetId, CardView targetCard)
+        {
+            if (targetId == carryTargetId && ReferenceEquals(targetCard, carryTargetCard)) return;
             carryTargetId = targetId;
-            if (targetId.IsEmpty || !Registry.stackViewsByContainerId.TryGetValue(targetId, out StackRuntimeView target)
-                || target.Root == null)
+            carryTargetCard = targetCard;
+            Vector3 position;
+            float yaw;
+            if (!targetId.IsEmpty && TryGetPileWorldPose(targetId, out position, out yaw))
+            {
+                if (Registry.stackViewsByContainerId.TryGetValue(targetId, out StackRuntimeView targetStack) && targetStack.Root != null)
+                {
+                    position = targetStack.Root.transform.position;
+                }
+            }
+            else if (targetCard != null)
+            {
+                position = PieceRestPosition(targetCard);
+                yaw = targetCard.transform.eulerAngles.y;
+            }
+            else
             {
                 HideCarryTarget();
-                carryTargetId = targetId;
                 return;
             }
 
             EnsureStackHoverHint();
-            Transform root = target.Root.transform;
             stackHoverHint.transform.SetPositionAndRotation(
-                root.position,
-                Quaternion.Euler(0f, root.eulerAngles.y, 0f));
+                position,
+                Quaternion.Euler(0f, yaw, 0f));
             stackHoverHint.SetActive(true);
             stackHoverHintVisual?.ShowValidTarget();
         }
@@ -340,6 +461,7 @@ namespace ConsoleCards.Presentation.Composition
         private void HideCarryTarget()
         {
             carryTargetId = ContainerId.Empty;
+            carryTargetCard = null;
             if (stackHoverTarget == null && stackHoverHint != null) stackHoverHint.SetActive(false);
         }
 
@@ -354,6 +476,7 @@ namespace ConsoleCards.Presentation.Composition
             carryHorizontalOffset = Vector3.zero;
             carryShownOffset = Vector3.zero;
             carryTargetId = ContainerId.Empty;
+            carryTargetCard = null;
         }
     }
 }

@@ -4,6 +4,7 @@ using System.Text;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Identifiers;
+using ConsoleCards.Definitions;
 using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.Feedback;
 using ConsoleCards.Presentation.UI;
@@ -13,22 +14,23 @@ using UnityEngine;
 namespace ConsoleCards.Presentation.Composition
 {
     /// <summary>
-    /// MODE-1 (owner, 2026-10-22): the win mode, chosen at New table… apart from the difficulty.
-    /// Regular (default): the Grand Exit wins when every player still in stands on it with the Keys; the Secret Exit is
-    /// a bonus instant win for one player holding a Key. Team: one escape wins. Survival: every player still in must
-    /// escape (escaped pawns leave the floor), the Grand Exit needs 3 Keys, and once it is face up tiles trigger again
-    /// and prizes are off (MODE-2).
+    /// The game mode (owner, 2026-11-04, TRAP CARDS rules), chosen at New table… apart from the difficulty:
+    /// Free for all (default): everyone works toward the exit; a player may hold one Key and needs it for the Grand
+    /// Exit. Team Play (2v2, competitive): a Key belongs to the player who took it and one player may carry them all;
+    /// a team needs a Key for the Grand Exit. Survival: one 6×6 floor, 3 Keys, Grand Exit only, and a tile collapses
+    /// after every player's turn (never the Grand Exit). In every mode a Key used at the Secret Exit is gone, and the
+    /// floor ends when every player still in has escaped.
     /// </summary>
     internal enum TrapFloorWinMode
     {
-        Regular = 0,
-        Team = 1,
+        FreeForAll = 0,
+        TeamPlay = 1,
         Survival = 2,
     }
 
     /// <summary>
-    /// The win modes (MODE-1, MODE-2), Impossible's turn order (IMP-1) and the turn direction (DIR-1). Event-time only,
-    /// except <see cref="UpdateTurnOrderRule"/> (one field write per frame).
+    /// The game modes, Survival's turn order and the turn direction (DIR-1). Event-time only, except
+    /// <see cref="UpdateTurnOrderRule"/> (one field write per frame).
     /// </summary>
     internal sealed partial class TrapFloorCartridge
     {
@@ -36,7 +38,7 @@ namespace ConsoleCards.Presentation.Composition
         internal const int SurvivalKeyCount = 3;
 
         // Chosen at New table… and kept for the next floors, Play Again and Reset.
-        internal TrapFloorWinMode WinMode { get; set; } = TrapFloorWinMode.Regular;
+        internal TrapFloorWinMode WinMode { get; set; } = TrapFloorWinMode.FreeForAll;
 
         // DIR-1 (owner, 2026-10-22: "players decide clockwise or anticlockwise when more than 2"): false plays in seat
         // order, true the other way round (the first player stays first).
@@ -45,6 +47,9 @@ namespace ConsoleCards.Presentation.Composition
         // MODE-1 / DIR-1: chosen in New table…, applied when that table is dealt (ApplyPendingTableChoices).
         internal TrapFloorWinMode? PendingWinMode { get; set; }
         internal bool? PendingAnticlockwise { get; set; }
+
+        // The mode the next deal is made for (the choice just made in New table…, else the mode in play).
+        internal TrapFloorWinMode DealWinMode => PendingWinMode ?? WinMode;
 
         internal void ApplyPendingTableChoices()
         {
@@ -58,9 +63,9 @@ namespace ConsoleCards.Presentation.Composition
         {
             switch (mode)
             {
-                case TrapFloorWinMode.Team: return "Team";
+                case TrapFloorWinMode.TeamPlay: return "Team Play";
                 case TrapFloorWinMode.Survival: return "Survival";
-                default: return "Regular";
+                default: return "Free for all";
             }
         }
 
@@ -68,13 +73,93 @@ namespace ConsoleCards.Presentation.Composition
         {
             switch (mode)
             {
-                case TrapFloorWinMode.Team: return "Team: one player escaping wins the floor.";
-                case TrapFloorWinMode.Survival: return "Survival: every player still in must escape; 3 Keys open the Grand Exit.";
-                default: return "Regular: everyone still in on the Grand Exit with the Keys, or a Key holder on the Secret Exit.";
+                case TrapFloorWinMode.TeamPlay: return "Team Play: 2 v 2. Take the Keys before the other team; your team needs a Key to exit.";
+                case TrapFloorWinMode.Survival: return "Survival: one 6×6 floor. A tile collapses after every turn; 3 Keys open the Grand Exit.";
+                default: return "Free for all: everyone heads for the exit. One Key each; no Key, no Grand Exit.";
             }
         }
 
         internal static string TurnsName(bool anticlockwise) => anticlockwise ? "Anticlockwise" : "Clockwise";
+
+        // Owner, 2026-11-04 (TRAP CARDS rules): what each floor holds in each mode.
+        //   Team Play:    6×6 3 Keys, Grand + Secret · 5×5 2 Keys, Grand · 4×4 2 Keys, Grand
+        //   Free for all: 6×6 3 Keys, Grand + Secret · 5×5 2 Keys, Grand + Secret · 4×4 2 Keys, Grand
+        //   Survival:     6×6 only, 3 Keys, Grand
+        // The difficulty shapes the rest of the mix (rules: "trap cards and ability cards are more if the difficulty is
+        // high; the easier the difficulty the more assisting cards"); a floor deck of the players' replaces it.
+        internal static TrapFloorFloorRecipe RecipeFor(
+            TrapFloorWinMode mode,
+            int floorIndex,
+            string difficultyStableId = null,
+            IReadOnlyDictionary<string, int> tileCounts = null)
+        {
+            DifficultyWeights(difficultyStableId, out double traps, out double abilities, out double friends);
+            if (mode == TrapFloorWinMode.Survival)
+                return new TrapFloorFloorRecipe(1, SurvivalKeyCount, false, SurvivalKeyCount, traps, abilities, friends, tileCounts);
+            int keys = floorIndex == 0 ? 3 : 2;
+            bool secret = floorIndex == 0 || (floorIndex == 1 && mode == TrapFloorWinMode.FreeForAll);
+            return new TrapFloorFloorRecipe(3, keys, secret, 1, traps, abilities, friends, tileCounts,
+                mode == TrapFloorWinMode.FreeForAll ? "lasso" : null); // rules: "No lasso in this game mode"
+        }
+
+        private static void DifficultyWeights(string stableId, out double traps, out double abilities, out double friends)
+        {
+            string id = stableId ?? string.Empty;
+            if (id.EndsWith("impossible", StringComparison.OrdinalIgnoreCase))
+            {
+                traps = 1.3d; abilities = 1.2d; friends = 0.5d;
+            }
+            else if (id.EndsWith("hard", StringComparison.OrdinalIgnoreCase))
+            {
+                traps = 1.15d; abilities = 1.15d; friends = 0.75d;
+            }
+            else if (id.EndsWith("easy", StringComparison.OrdinalIgnoreCase))
+            {
+                traps = 0.85d; abilities = 1d; friends = 1.5d;
+            }
+            else
+            {
+                traps = 1d; abilities = 1d; friends = 1d;
+            }
+        }
+
+        internal TrapFloorFloorRecipe DealRecipe(int floorIndex, string difficultyStableId = null, PlayerDecksFile decks = null) =>
+            RecipeFor(DealWinMode, floorIndex, difficultyStableId, FloorTileCounts(decks, floorIndex));
+
+        // Owner, 2026-11-04: the players' own floor deck for a floor (Decks › Trap Floor › Floor n), card ID to copies;
+        // null when they left it to the game. Stored as a deck with stage = the floor's number.
+        internal static IReadOnlyDictionary<string, int> FloorTileCounts(PlayerDecksFile decks, int floorIndex)
+        {
+            if (decks == null || decks.decks == null) return null;
+            for (int i = 0; i < decks.decks.Count; i++)
+            {
+                PlayerDeckRecord deck = decks.decks[i];
+                if (deck == null || deck.stage != floorIndex + 1 || deck.cards == null) continue;
+                Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (int c = 0; c < deck.cards.Count; c++)
+                {
+                    PlayerDeckEntry entry = deck.cards[c];
+                    if (entry == null || string.IsNullOrWhiteSpace(entry.cardId) || entry.count <= 0) continue;
+                    counts.TryGetValue(entry.cardId, out int had);
+                    counts[entry.cardId] = had + entry.count;
+                }
+
+                return counts.Count > 0 ? counts : null;
+            }
+
+            return null;
+        }
+
+        // The Keys the Grand Exit needs, counted by the objective: 3 in Survival; else 1 (a player's own Key in Free for
+        // all, the team's in Team Play; the table checks whose).
+        internal int RequiredKeysForGrandExit() => WinMode == TrapFloorWinMode.Survival ? SurvivalKeyCount : 1;
+
+        internal void ConfigureKeyRules(TrapFloorObjectiveState objective)
+        {
+            if (objective == null) return;
+            objective.KeysAreExclusive = WinMode != TrapFloorWinMode.Survival;
+            objective.OneKeyPerPlayer = WinMode == TrapFloorWinMode.FreeForAll;
+        }
 
         internal bool IsImpossibleMode =>
             host.trapFloorTemplate != null
@@ -89,22 +174,18 @@ namespace ConsoleCards.Presentation.Composition
             return order;
         }
 
-        // IMP-1 (owner, 2026-10-22, Impossible): once a player has escaped, a floor turn follows every player turn.
-        // Read by the turn state on its next advance; derived from the mode and the escapes, so Undo needs nothing.
+        // Survival (rules: "a collapse will happen after each player turn"): a floor turn follows every player turn.
         internal void UpdateTurnOrderRule()
         {
             if (host.trapFloorTurnState == null) return;
-            host.trapFloorTurnState.FloorTurnAfterEachPlayer =
-                IsImpossibleMode
-                && host.trapFloorObjectiveState != null
-                && host.trapFloorObjectiveState.EscapedPlayerCount > 0;
+            host.trapFloorTurnState.FloorTurnAfterEachPlayer = WinMode == TrapFloorWinMode.Survival;
         }
 
-        // The Keys the Grand Exit needs: the difficulty's, and 3 in Survival (no more than this floor holds).
+        // What the status shows as the Keys the Grand Exit needs.
         internal int KeysNeededForGrandExit()
         {
+            if (WinMode != TrapFloorWinMode.Survival) return 1;
             int needed = host.trapFloorObjectiveState != null ? host.trapFloorObjectiveState.RequiredKeyCount : 0;
-            if (WinMode != TrapFloorWinMode.Survival) return needed;
             return Math.Max(needed, Math.Min(SurvivalKeyCount, KeyTileCount()));
         }
 
@@ -135,66 +216,79 @@ namespace ConsoleCards.Presentation.Composition
             return keys;
         }
 
-        // MODE-2: Survival's endgame starts when the Grand Exit tile is face up.
-        internal bool IsSurvivalEndgame()
+        // The rules have no endgame after the Exit is revealed (MODE-2 is gone, owner 2026-11-04).
+        internal bool IsSurvivalEndgame() => false;
+
+        // A floor where every player is out but someone escaped is won (knocked-out players do not count).
+        internal bool FloorFailedCountsAsWin() =>
+            host.trapFloorObjectiveState != null
+            && host.trapFloorObjectiveState.EscapedPlayerCount > 0;
+
+        // Team Play: partners sit opposite each other (seats 1 and 3, seats 2 and 4).
+        internal int TeamOf(PlayerId player) =>
+            TryGetTrapFloorPlayerSetup(player, out TrapFloorPlayerSetupDefinition setup) ? setup.LayoutSeatIndex % 2 : -1;
+
+        internal static string TeamName(int team) => team == 0 ? "Team 1" : "Team 2";
+
+        // Team Play: the player's team holds a Key (a teammate who escaped through the Grand Exit keeps theirs).
+        private bool TeamHasKey(PlayerId player)
         {
-            if (WinMode != TrapFloorWinMode.Survival || host.trapFloorTemplate == null || host.matchState == null) return false;
-            foreach (KeyValuePair<TrapFloorCoordinate, TabletopObjectId> cell in host.trapFloorTemplate.FloorCardIds)
+            int team = TeamOf(player);
+            IReadOnlyList<PlayerId> order = host.trapFloorTurnState.PlayerOrder;
+            for (int i = 0; i < order.Count; i++)
             {
-                if (host.trapFloorTemplate.TryGetFloorCardState(host.matchState, cell.Value, out TrapFloorFloorCardState floor)
-                    && floor.IsRevealed
-                    && TrapFloorObjectiveUseCase.IsGrandExit(floor.Content))
-                {
-                    return true;
-                }
+                if (TeamOf(order[i]) == team && host.trapFloorObjectiveUseCase.HasClaimedKey(order[i])) return true;
             }
 
             return false;
         }
 
-        // Survival: a floor where every player is out but someone escaped is won (knocked-out players do not count).
-        internal bool FloorFailedCountsAsWin() =>
-            WinMode == TrapFloorWinMode.Survival
-            && host.trapFloorObjectiveState != null
-            && host.trapFloorObjectiveState.EscapedPlayerCount > 0;
-
-        // MODE-1: Team and Survival exits after the turn player lands (Regular keeps TryTakeExitsAfterMove's rules).
+        // Exits after the turn player lands, by mode. The floor ends when every player still in has escaped.
         private void TryTakeExitsForMode(TabletopObjectId landedFloorCardId, PlayerId active)
         {
             if (landedFloorCardId.IsEmpty || active.IsEmpty || !IsOpenExit(landedFloorCardId, out bool grand)) return;
             if (host.trapFloorObjectiveState.IsPlayerEscaped(active)) return;
             if (grand)
             {
-                int needed = KeysNeededForGrandExit();
-                if (host.trapFloorObjectiveState.CollectedKeyCount < needed)
+                if (WinMode == TrapFloorWinMode.Survival)
                 {
-                    host.FeedbackLine(
-                        $"GRAND EXIT — locked: the team needs {needed} Key(s), {host.trapFloorObjectiveState.CollectedKeyCount} claimed. "
-                            + "Land on a Key to take it.",
-                        FeedbackSeverity.Warning);
+                    int needed = KeysNeededForGrandExit();
+                    if (host.trapFloorObjectiveState.CollectedKeyCount < needed)
+                    {
+                        host.FeedbackLine(
+                            $"GRAND EXIT — locked: {needed} Keys needed, {host.trapFloorObjectiveState.CollectedKeyCount} taken.",
+                            FeedbackSeverity.Warning);
+                        return;
+                    }
+                }
+                else if (WinMode == TrapFloorWinMode.TeamPlay && !TeamHasKey(active))
+                {
+                    host.FeedbackLine($"GRAND EXIT — locked: {TeamName(TeamOf(active))} needs a Key.", FeedbackSeverity.Warning);
+                    return;
+                }
+                else if (WinMode == TrapFloorWinMode.FreeForAll && !host.trapFloorObjectiveUseCase.HasClaimedKey(active))
+                {
+                    host.FeedbackLine("GRAND EXIT — locked: you need a Key of your own.", FeedbackSeverity.Warning);
                     return;
                 }
             }
             else if (!host.trapFloorObjectiveUseCase.HasClaimedKey(active))
             {
-                host.FeedbackLine(
-                    "SECRET EXIT — you need a Key you took: land on a Key, then come back here.",
-                    FeedbackSeverity.Warning);
+                host.FeedbackLine("SECRET EXIT — you need a Key: land on a Key, then come back here.", FeedbackSeverity.Warning);
                 return;
             }
 
-            bool winsFloor = WinMode == TrapFloorWinMode.Team || !AnyOtherPlayerStillIn(active);
+            bool winsFloor = !AnyOtherPlayerStillIn(active);
             host.SessionService.BeginUndoBatch();
             bool escaped;
             try
             {
-                escaped = AttemptTrapFloorEscape(landedFloorCardId, active, winsFloor);
+                escaped = AttemptTrapFloorEscape(landedFloorCardId, active, winsFloor, !grand);
                 if (escaped && !winsFloor)
                 {
-                    // Survival: the pawn leaves the floor and the player takes no more turns this floor.
+                    // The pawn leaves the floor and the player takes no more turns this floor.
                     EndAbilityOffer(); // as End Turn does: the Ability draw not bought goes back
                     SendEscapedPawnAway(active);
-                    UpdateTurnOrderRule(); // IMP-1: the first escape changes Impossible's turn order from here on
                     host.trapFloorTurnService.MarkPlayerEliminatedForCurrentRound(
                         host.matchState,
                         host.CreateCommandContext(active),
@@ -209,8 +303,84 @@ namespace ConsoleCards.Presentation.Composition
             if (!escaped || winsFloor) return;
             RefreshTrapFloorStatusUi();
             host.FeedbackLine(
-                $"{FormatPlayerName(active).ToUpperInvariant()} ESCAPED! Still to escape: {StillInNames(active)}.",
+                $"{FormatPlayerName(active).ToUpperInvariant()} ESCAPED{(grand ? string.Empty : " (the Key is used up)")}. "
+                    + $"Still to escape: {StillInNames(active)}.",
                 FeedbackSeverity.Info);
+            EliminateStuckPlayers();
+        }
+
+        // Rules: a player (Free for all) or a team (Team Play) with no Key, when no Key is left to take, is stuck and
+        // loses ("if there's no key for the player and you get stuck there, you lose automatically"). Event-time only.
+        internal void EliminateStuckPlayers()
+        {
+            if (WinMode == TrapFloorWinMode.Survival
+                || host.trapFloorObjectiveState == null
+                || host.trapFloorTurnState == null
+                || host.trapFloorObjectiveState.IsWon
+                || host.trapFloorTurnState.IsCurrentFloorFailed
+                || FreeKeyTileLeft())
+            {
+                return;
+            }
+
+            bool anyOut = false;
+            IReadOnlyList<PlayerId> order = host.trapFloorTurnState.PlayerOrder;
+            host.SessionService.BeginUndoBatch();
+            try
+            {
+                for (int i = 0; i < order.Count; i++)
+                {
+                    PlayerId player = order[i];
+                    if (host.trapFloorObjectiveState.IsPlayerEscaped(player)
+                        || host.trapFloorTurnState.GetPlayerState(player) == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound)
+                    {
+                        continue;
+                    }
+
+                    bool hasKey = WinMode == TrapFloorWinMode.TeamPlay
+                        ? TeamHasKey(player)
+                        : host.trapFloorObjectiveUseCase.HasClaimedKey(player);
+                    if (hasKey) continue;
+                    TrapFloorTurnAdvanceResult knocked = host.trapFloorTurnService.MarkPlayerEliminatedForCurrentRound(
+                        host.matchState,
+                        host.CreateCommandContext(player),
+                        player);
+                    if (!knocked.Succeeded) continue;
+                    anyOut = true;
+                    host.FeedbackLine(
+                        $"{FormatPlayerName(player).ToUpperInvariant()} has no Key and none is left to take: OUT for this floor.",
+                        FeedbackSeverity.Loss);
+                    if (host.trapFloorTurnState.IsCurrentFloorFailed) break;
+                }
+            }
+            finally
+            {
+                host.SessionService.EndUndoBatch();
+            }
+
+            if (!anyOut) return;
+            RefreshTrapFloorStatusUi();
+            if (host.trapFloorTurnState.IsCurrentFloorFailed) ShowFloorEnded(FloorFailedCountsAsWin());
+        }
+
+        // A Key tile nobody holds yet and that has not collapsed (face down or face up).
+        private bool FreeKeyTileLeft()
+        {
+            if (host.trapFloorTemplate == null || host.matchState == null) return false;
+            foreach (KeyValuePair<TrapFloorCoordinate, TabletopObjectId> cell in host.trapFloorTemplate.FloorCardIds)
+            {
+                if (!host.trapFloorTemplate.TryGetFloorCardState(host.matchState, cell.Value, out TrapFloorFloorCardState floor)
+                    || floor.Content.Category != TrapFloorFloorContentCategory.Key
+                    || (host.trapFloorCollapseState != null && host.trapFloorCollapseState.IsCollapsed(cell.Value))
+                    || host.trapFloorObjectiveState.TryGetClaim(cell.Value, out _))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+
+            return false;
         }
 
         // Every player still in (not knocked out, not escaped) other than one.

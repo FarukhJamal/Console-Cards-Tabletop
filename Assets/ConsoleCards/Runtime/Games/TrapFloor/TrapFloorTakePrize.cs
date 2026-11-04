@@ -289,7 +289,7 @@ namespace ConsoleCards.Games.TrapFloor
                 }
                 else
                 {
-                    tile.SetPose(player.AbilityOverflowPose);
+                    tile.SetPose(FreeOverflowPose(matchState, player, tile.Id));
                 }
 
                 tileCard.SetFace(CardFace.FaceUp);
@@ -380,9 +380,9 @@ namespace ConsoleCards.Games.TrapFloor
             return TrapFloorTakePrizeError.None;
         }
 
-        // The Hand, unless it already holds the game's hand limit; then the Action stack beside the Console when the
-        // seat has one, otherwise (TABLE-1) null: the card is placed loose beside the Console (AbilityOverflowPose).
-        // Shared with the Shop (doc 18 §15.4), so a bought card goes where a taken one does.
+        // Owner, 2026-11-04: a taken or bought card no longer goes into the Hand by itself. It is placed face up on
+        // the table in front of its new owner (the Action stack beside the Console when the seat has one, otherwise
+        // loose beside the Console), and the player picks it up themselves. Shared with the Shop (doc 18 §15.4).
         internal static bool TryResolveDestination(
             TrapFloorTemplateDefinition template,
             MatchState matchState,
@@ -391,16 +391,6 @@ namespace ConsoleCards.Games.TrapFloor
             out bool placedInHand)
         {
             placedInHand = false;
-            int handLimit = template.GameDefinition.ControllerConfiguration?.MaximumHandSize ?? 0;
-            if (matchState.Containers.TryGetValue(player.HandContainerId, out ContainerState hand)
-                && !hand.IsFull
-                && (handLimit <= 0 || hand.Count < handLimit))
-            {
-                destination = hand;
-                placedInHand = true;
-                return true;
-            }
-
             if (!player.ActionAbilityAreaContainerId.IsEmpty
                 && matchState.Containers.TryGetValue(player.ActionAbilityAreaContainerId, out destination)
                 && !destination.IsFull)
@@ -410,6 +400,36 @@ namespace ConsoleCards.Games.TrapFloor
 
             destination = null;
             return true;
+        }
+
+        // The spot beside the Console, moved along a little for each loose card already lying there, so a second
+        // prize does not hide the first.
+        internal static TabletopPose FreeOverflowPose(MatchState matchState, TrapFloorPlayerSetupDefinition player, TabletopObjectId placing)
+        {
+            TabletopPose basePose = player.AbilityOverflowPose;
+            const double Step = 0.45d;
+            const double Near = 2.5d;
+            int lying = 0;
+            foreach (CardInstanceState card in matchState.Cards.Values)
+            {
+                TabletopObjectState state = card.BaseState;
+                if (state.Id == placing || !state.ContainerId.IsEmpty || state.IsUserLocked) continue;
+                double dx = state.Pose.Position.X - basePose.Position.X;
+                double dy = state.Pose.Position.Y - basePose.Position.Y;
+                if ((dx * dx) + (dy * dy) <= Near * Near) lying++;
+            }
+
+            if (lying == 0) return basePose;
+            int slot = Math.Min(lying, 6);
+            double radians = basePose.RotationDegrees * Math.PI / 180d;
+            double along = slot * Step;
+            return new TabletopPose(
+                new TableCoordinate(
+                    basePose.Position.X + (Math.Cos(radians) * along),
+                    basePose.Position.Y - (Math.Sin(radians) * along)),
+                basePose.RotationDegrees,
+                basePose.Layer,
+                basePose.LocalOrder + slot);
         }
 
         private bool TryGetPlayerSetup(

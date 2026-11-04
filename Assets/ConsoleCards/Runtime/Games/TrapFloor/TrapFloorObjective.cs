@@ -15,13 +15,18 @@ namespace ConsoleCards.Games.TrapFloor
             TabletopObjectId floorCardId,
             ObjectDefinitionId contentDefinitionId,
             PlayerId claimedByPlayerId,
-            long acceptedRevision)
+            long acceptedRevision,
+            bool isUsed = false)
         {
             FloorCardId = floorCardId;
             ContentDefinitionId = contentDefinitionId;
             ClaimedByPlayerId = claimedByPlayerId;
             AcceptedRevision = acceptedRevision;
+            IsUsed = isUsed;
         }
+
+        /// <summary>Used up at the Secret Exit (owner, 2026-11-04): the Key is gone and nobody can take it again.</summary>
+        public bool IsUsed { get; }
 
         public TabletopObjectId FloorCardId { get; }
 
@@ -93,6 +98,12 @@ namespace ConsoleCards.Games.TrapFloor
         // a Key tile can be taken by every player once; the team's Keys count each Key tile once.
         public int CollectedKeyCount => claimsByFloorCardId.Count;
 
+        // Owner, 2026-11-04 (TRAP CARDS rules), set by the table for its mode: a Key belongs to the one player who took
+        // it (Team Play, Free for all), and a player may hold only one Key (Free for all). Off: KEYS-3, a Key for everyone.
+        public bool KeysAreExclusive { get; set; }
+
+        public bool OneKeyPerPlayer { get; set; }
+
         public bool HasRequiredKeys => CollectedKeyCount >= RequiredKeyCount;
 
         public IReadOnlyList<PlayerId> EscapedPlayerIds => readOnlyEscapedPlayerIds;
@@ -141,6 +152,26 @@ namespace ConsoleCards.Games.TrapFloor
             collectedKeys.Add(claim);
             if (!claimsByFloorCardId.ContainsKey(claim.FloorCardId)) claimsByFloorCardId.Add(claim.FloorCardId, claim);
             return claim;
+        }
+
+        // The Secret Exit uses up one Key of the escaping player (rules: "the key is gone").
+        internal void ConsumeKeyOf(PlayerId playerId)
+        {
+            for (int i = 0; i < collectedKeys.Count; i++)
+            {
+                TrapFloorCollectedKeyState claim = collectedKeys[i];
+                if (claim.ClaimedByPlayerId != playerId || claim.IsUsed) continue;
+                TrapFloorCollectedKeyState used = new TrapFloorCollectedKeyState(
+                    claim.FloorCardId, claim.ContentDefinitionId, claim.ClaimedByPlayerId, claim.AcceptedRevision, true);
+                collectedKeys[i] = used;
+                if (claimsByFloorCardId.TryGetValue(claim.FloorCardId, out TrapFloorCollectedKeyState first)
+                    && ReferenceEquals(first, claim))
+                {
+                    claimsByFloorCardId[claim.FloorCardId] = used;
+                }
+
+                return;
+            }
         }
 
         internal void RecordEscape(
@@ -239,7 +270,14 @@ namespace ConsoleCards.Games.TrapFloor
         /// the others still to go); the table decides when the last escape wins.
         /// </summary>
         public TrapFloorAttemptEscapeCommand(CommandContext context, TabletopObjectId floorCardId, bool winsFloor)
+            : this(context, floorCardId, winsFloor, false)
         {
+        }
+
+        /// <summary>usesKey: the escape uses up one of the escaping player's Keys (the Secret Exit, owner 2026-11-04).</summary>
+        public TrapFloorAttemptEscapeCommand(CommandContext context, TabletopObjectId floorCardId, bool winsFloor, bool usesKey)
+        {
+            UsesKey = usesKey;
             if (floorCardId.IsEmpty)
             {
                 throw new ArgumentException("Floor Card ID cannot be empty.", nameof(floorCardId));
@@ -255,6 +293,8 @@ namespace ConsoleCards.Games.TrapFloor
         public TabletopObjectId FloorCardId { get; }
 
         public bool WinsFloor { get; }
+
+        public bool UsesKey { get; }
     }
 
     public enum TrapFloorObjectiveError
@@ -278,6 +318,7 @@ namespace ConsoleCards.Games.TrapFloor
         RevisionOverflow,
         PlayerAlreadyEscaped,
         EscaperHasNoKey,
+        PlayerAlreadyHoldsKey,
     }
 
     public readonly struct TrapFloorObjectiveResult
@@ -449,6 +490,16 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(CommandResultStatus.Rejected, TrapFloorObjectiveError.KeyAlreadyClaimed); // KEYS-3: per player
             }
 
+            if (objectiveState.KeysAreExclusive && objectiveState.TryGetClaim(floorCard.ObjectId, out _))
+            {
+                return Failure(CommandResultStatus.Rejected, TrapFloorObjectiveError.KeyAlreadyClaimed); // another player has it
+            }
+
+            if (objectiveState.OneKeyPerPlayer && HasClaimedKey(command.Context.RequestedByPlayerId))
+            {
+                return Failure(CommandResultStatus.Rejected, TrapFloorObjectiveError.PlayerAlreadyHoldsKey);
+            }
+
             if (objectiveState.IsWon)
             {
                 return Failure(CommandResultStatus.Rejected, TrapFloorObjectiveError.GameAlreadyWon);
@@ -545,6 +596,7 @@ namespace ConsoleCards.Games.TrapFloor
                 participatingPlayerCount,
                 winsFloor: command.WinsFloor,
                 countOnly: !command.WinsFloor);
+            if (command.UsesKey) objectiveState.ConsumeKeyOf(escapingPlayerId);
             TrapFloorActivityEntry escapedActivity = activityFeed.RecordPlayerEscaped(
                 acceptedRevision,
                 escapingPlayerId,
@@ -593,7 +645,7 @@ namespace ConsoleCards.Games.TrapFloor
             IReadOnlyList<TrapFloorCollectedKeyState> keys = objectiveState.CollectedKeys;
             for (int i = 0; i < keys.Count; i++)
             {
-                if (keys[i].ClaimedByPlayerId == playerId) return true;
+                if (keys[i].ClaimedByPlayerId == playerId && !keys[i].IsUsed) return true;
             }
 
             return false;

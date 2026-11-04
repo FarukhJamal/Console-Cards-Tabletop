@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22e99343c26241089ebf0c37ca115c09, type: 3}
+  m_Name: AbilityInsurance
+  m_EditorClassIdentifier: ConsoleCards.Definitions::ConsoleCards.Definitions.CardDefinition
+  stableId: 54460015-4f4f-4000-8000-0015000000a1
+  displayName: Insurance
+  category: Ability
+  description: Reaction. Saves you when you would fall into a collapsed tile. (Cost
+    and full text to come.)
+  frontArtwork: {fileID: 0}
+  frontArtworkReference: 
+  backArtwork: {fileID: 0}
+  backArtworkReference: 
+  quantity: 1
+  inputCost:
+    requirements: []
+  orientation: 0
+  defaultFace: 0
+  preferredConsolePlacement: Side
+  consoleBehavior: 0
+  tags:
+  - trap-floor
+  - ability
+  - reaction
+  - insurance
+  - cost-pending
+  effectMetadata: trap-floor-ability-insurance
+  objectiveMetadata: 
+  representsControllerInput: 0
+  representedControllerInput: 0
+  sizeClass: 0
+  consoleSymbol: 0
+  edgeSymbols: 0000000000000000000000000000000000000000000000000000000000000000
+  frameVariant: 

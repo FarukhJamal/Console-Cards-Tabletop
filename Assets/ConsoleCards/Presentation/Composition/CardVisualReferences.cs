@@ -230,7 +230,12 @@ namespace ConsoleCards.Presentation.Composition
             labelLocalPosition.y = faceRootLocalSurface.y + FaceLabelSurfaceEpsilon;
             label.transform.localPosition = labelLocalPosition;
 
-            float worldSurfaceOffset = label.transform.position.y - worldSurface.y;
+            // Measured along the face's own up (owner's playtest, 2026-11-04: a prize card turned over on its way to the
+            // hand measured below its face in world height and threw).
+            Vector3 faceUp = faceRoot.up;
+            float worldSurfaceOffset = faceUp.sqrMagnitude > 1e-8f
+                ? Vector3.Dot(label.transform.position - worldSurface, faceUp.normalized)
+                : label.transform.position.y - worldSurface.y;
             if (worldSurfaceOffset <= 0f || worldSurfaceOffset >= localOrderHeight)
             {
                 throw new InvalidOperationException(

@@ -205,7 +205,7 @@ namespace ConsoleCards.Presentation.Composition
                 Decks = BuildDeckEditorDeckRows(gameName, cards),
                 DeckName = deckName,
                 CanRename = !isGameDeck,
-                ExtraButtonText = isStage ? "IMPORT FRONTS…" : string.Empty,
+                ExtraButtonText = string.Empty,
                 CanDelete = !isGameDeck,
                 Summary = $"{deckName.ToUpperInvariant()} · {total} CARD{(total == 1 ? string.Empty : "S")} · {different} DIFFERENT",
                 FilterText = deckEditorShowAll ? "Show: all cards" : "Show: this deck only",
@@ -334,9 +334,10 @@ namespace ConsoleCards.Presentation.Composition
             PlayerDeckRecord deck = FindEditorDeck(deckEditorSelectedId);
             if (deck == null) return;
             string name = (typedName ?? string.Empty).Trim();
-            if (deck.stage > 0 && name.StartsWith($"Stage {deck.stage} · ", StringComparison.Ordinal))
+            if (deck.stage > 0)
             {
-                name = name.Substring($"Stage {deck.stage} · ".Length).Trim(); // STAGES-1: the box shows "Stage n · name"
+                ShowDeckEditor($"{StageTitle(deck)} keeps its name.");
+                return;
             }
 
             if (name.Length == 0)
@@ -374,12 +375,6 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void ChangeDeckEditorCopies(string cardId, int step)
         {
-            if (SelectedIsStage(out _))
-            {
-                ShowDeckEditor("A stage plays the game's cards: change copies on the Trap Floor deck. Here you change the stage's pictures.");
-                return;
-            }
-
             List<DeckEditorCard> cards = DeckEditorCards();
             for (int i = 0; i < cards.Count; i++)
             {
@@ -453,7 +448,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             List<DeckEditorCard> all = AllDeckEditorCards();
             if (!SelectedIsStage(out _)) return all;
-            all.RemoveAll(card => !IsFloorCard(card));
+            all.RemoveAll(card => !IsFloorCard(card) || IsKeyOrExit(card));
             return all;
         }
 
@@ -481,7 +476,6 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             PlayerDeckRecord deck = FindEditorDeck(deckId);
-            if (deck != null && deck.stage > 0) return DeckEditorCopies(CardEditorPresenter.GameDeckId, card); // STAGES-1: the game's cards
             return deck != null ? CardEditorPresenter.SavedDeckCopies(deck, card.Id) : 0;
         }
 

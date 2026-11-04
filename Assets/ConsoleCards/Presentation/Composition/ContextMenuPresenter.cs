@@ -118,9 +118,17 @@ namespace ConsoleCards.Presentation.Composition
                 {
                     OpenConsoleContextMenu(screenPosition, pointedConsole.SlotViews[0].ContainerId);
                 }
+                else if (host.TryOpenToyMenu(screenPosition))
+                {
+                    // doc 58: a zone, counter, note, timer or snap point
+                }
                 else if (host.TryFindBoardUnderPointer(screenPosition, out BoardId pointedBoard, out _))
                 {
                     host.OpenBoardContextMenu(screenPosition, pointedBoard); // C3e
+                }
+                else
+                {
+                    host.OpenTableMenu(screenPosition); // doc 58: the table's own menu
                 }
 
                 return;
@@ -513,6 +521,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             host.AddShuffleActions(actions, targetDeckId); // SHUF-1: your style, Shuffle as..., Flourish...
+            host.AddSearchAction(actions, targetDeckId); // doc 58
             host.AddDealActions(actions, targetDeckId); // DEAL-1
             host.AddSplitIntoPilesAction(actions, targetDeckId);
             host.AddSpreadAction(actions, targetDeckId); // POL-4
@@ -787,6 +796,7 @@ namespace ConsoleCards.Presentation.Composition
                 DuplicateActionLabel(targetCardId, TabletopComponentKind.Card),
                 true,
                 () => host.BeginDuplicatePlacement(targetCardId)));
+            host.AddPieceActions(actions, targetCardId, false); // doc 58: lock and size
             AddDeleteActionIfRuntime(
                 actions,
                 TabletopComponentTarget.ForObject(targetCardId));
@@ -824,6 +834,8 @@ namespace ConsoleCards.Presentation.Composition
             {
                 AddInspectAction(actions, targetCardId);
             }
+
+            if (container.Kind == ContainerKind.Hand) host.AddHandPlayAction(actions, targetCardId, container.Id); // doc 58
 
             if (container.Kind == ContainerKind.ConsoleSlot
                 && host.TryResolveConsolePlacement(container.Id, out _, out _, out _))
@@ -925,6 +937,7 @@ namespace ConsoleCards.Presentation.Composition
             if (stack.Count >= 2)
             {
                 host.AddShuffleActions(actions, sourceStackId); // SHUF-1
+                host.AddSearchAction(actions, sourceStackId); // doc 58
             }
 
             host.AddDealActions(actions, sourceStackId); // DEAL-1
@@ -958,7 +971,7 @@ namespace ConsoleCards.Presentation.Composition
                 TabletopComponentTarget.ForContainer(sourceStackId));
             host.runtimeUi.ShowContextMenu(
                 host.contextMenuAnchorScreenPosition,
-                "STACK",
+                "DECK",
                 PileWords(stack),
                 actions,
                 CloseContextMenu,
@@ -981,6 +994,7 @@ namespace ConsoleCards.Presentation.Composition
                     () => host.BeginDuplicatePlacement(targetDieId)),
             };
             host.AddDieNumberActions(actions, targetDieView);
+            host.AddPieceActions(actions, targetDieId, true); // doc 58: lock, size and tint
             AddDeleteActionIfRuntime(
                 actions,
                 TabletopComponentTarget.ForObject(targetDieId));
@@ -1005,6 +1019,7 @@ namespace ConsoleCards.Presentation.Composition
                     true,
                     () => host.BeginDuplicatePlacement(targetPawnId)),
             };
+            host.AddPieceActions(actions, targetPawnId, true); // doc 58: lock, size and tint
             AddDeleteActionIfRuntime(
                 actions,
                 TabletopComponentTarget.ForObject(targetPawnId));
@@ -1027,6 +1042,7 @@ namespace ConsoleCards.Presentation.Composition
                     true,
                     () => host.BeginDuplicatePlacement(targetTokenId)),
             };
+            host.AddPieceActions(actions, targetTokenId, true); // doc 58: lock, size and tint
             AddDeleteActionIfRuntime(
                 actions,
                 TabletopComponentTarget.ForObject(targetTokenId));
@@ -1086,12 +1102,9 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            // Board 9 (owner, 2026-10-30): Draw 1, Draw… (Draw how many?, with 1 3 5 7), and the hand-limit choices.
+            // Owner, 2026-11-04 ("too many draw options"): one Draw… panel (how many, with + / -); drawing past the hand
+            // limit draws up to it and says so.
             int available = host.AvailableAssistedDeckCount(targetDeckId);
-            actions.Add(new PopupActionOption(
-                "Draw 1",
-                available > 0,
-                () => DrawControllerCardsFromContext(targetDeckId, 1)));
             actions.Add(new PopupActionOption(
                 "Draw…",
                 available > 0,
@@ -1100,10 +1113,6 @@ namespace ConsoleCards.Presentation.Composition
                     host.selectedDrawCount = Mathf.Clamp(host.selectedDrawCount, 1, Math.Max(1, available));
                     SetContextMenuMode(ContextMenuMode.CustomDrawCards);
                 }));
-            actions.Add(new PopupActionOption(
-                "Draw to hand limit…",
-                true,
-                () => SetContextMenuMode(ContextMenuMode.DrawCards)));
         }
 
         internal void DrawControllerCardsFromContext(ContainerId targetDeckId, int requestedCount)

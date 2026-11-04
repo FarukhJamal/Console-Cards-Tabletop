@@ -94,6 +94,7 @@ namespace ConsoleCards.Presentation.Composition
         private string hoverDetail;
         private bool hoverTextsBuilt;
         private bool peekShown;
+        private bool peekUnder;
         private TabletopObjectId peekCardId;
         private readonly RaycastHit[] polishHits = new RaycastHit[16];
 
@@ -197,6 +198,8 @@ namespace ConsoleCards.Presentation.Composition
             handCarryDropPending = false;
             ClearHandCarryLists();
             ClearHandEdge();
+            ClearTurnCartridge();
+            ClearToys();
             lastCarried = null;
             ClearHover();
             if (boardFeedback != null) boardFeedback.HideLanding();
@@ -632,6 +635,12 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             DrawHoverOutline();
+            if (HiddenFromMe(hoverView.transform.position))
+            {
+                HidePeekAndTooltip(); // doc 58: what lies in someone else's hidden zone stays hidden
+                return;
+            }
+
             float rested = Time.unscaledTime - hoverSince;
             bool altHeld = Keys.PingModifierHeld;
             if (altHeld && rested >= Feel.PeekDelay && ShowPeekForHover()) return;
@@ -699,23 +708,26 @@ namespace ConsoleCards.Presentation.Composition
             {
                 title = PileName(pile.Kind, hoverPileId);
                 int count = pile.Count;
-                detail = count == 1 ? "1 card" : count + " cards";
+                detail = (count == 1 ? "1 card" : count + " cards")
+                    + "\n1-9 draw · R shuffle · hold to carry · right-click: Search"; // doc 58: keys on hover
                 return;
             }
 
             if (hoverView is CardView card)
             {
                 title = VisibleCardTitle(card.ObjectId);
+                bool faceUp = card.CardState != null && card.CardState.Face == CardFace.FaceUp;
                 detail = hoverIsHandCard
                     ? "In your hand"
-                    : card.CardState != null && card.CardState.Face == CardFace.FaceUp ? "Face up" : "Face down";
+                    : faceUp ? "Face up" : "Face down";
+                detail += faceUp ? "\nF flip · Q/E turn · Alt look" : "\nF flip · Q/E turn · Alt+Shift peek";
                 return;
             }
 
             if (hoverView is DieView die && die.DieState != null)
             {
                 title = "Die (d" + die.DieState.SideCount + ")";
-                detail = "Shows " + die.DieState.CurrentValue;
+                detail = "Shows " + die.DieState.CurrentValue + "\nR roll · Shift while held: shake";
                 return;
             }
 
@@ -731,7 +743,7 @@ namespace ConsoleCards.Presentation.Composition
             switch (kind)
             {
                 case ContainerKind.Deck: return "Deck";
-                case ContainerKind.Stack: return "Stack";
+                case ContainerKind.Stack: return "Deck"; // doc 58: one word for a pile, as in TTS
                 case ContainerKind.DiscardPile: return "Discard pile";
                 default: return IsTokenBag(pileId) ? "Bag" : "Pile";
             }
@@ -765,9 +777,13 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (cardId.IsEmpty) return false;
-            if (peekShown && cardId == peekCardId) return true;
+            bool under = PeekHeld() && MayPeekAt(cardId); // doc 58: Alt + Shift peeks at the face
+            if (peekShown && cardId == peekCardId && under == peekUnder) return true;
             if (!CardInspectPanel.TryBuildCardInspectModel(cardId, out CardInspectModel model)) return false;
-            CardInspectSideModel side = model.AuthoritativeFace == CardFace.FaceUp ? model.Front : model.Back;
+            bool faceDown = model.AuthoritativeFace != CardFace.FaceUp;
+            CardInspectSideModel side = !faceDown || under ? model.Front : model.Back;
+            peekUnder = under;
+            if (under && faceDown) runtimeUi.ShowTableNews("You peeked at a face-down card", FeedbackColour(localPlayerId));
             runtimeUi.HideTooltip();
             runtimeUi.ShowPeek(side.Title, side.Body, side.Artwork, side.SurfaceColor, side.TextColor);
             peekShown = true;
@@ -812,6 +828,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private void HandlePolishKeys()
         {
+            CompletePendingDraw();
             if (tableModeStart != null || IsTypingInUi()) return;
             if (componentPlacementController != null && componentPlacementController.IsActive) return;
             TableKeys keys = Keys;
@@ -826,13 +843,14 @@ namespace ConsoleCards.Presentation.Composition
 
             TabletopObjectView carried = CurrentCarried();
             bool interacting = interactionRouter != null && interactionRouter.HasActiveInteraction;
+            if (HandleToyKeys(carried)) return; // doc 58: Ctrl+L, Ctrl+C / V, + / -, U
             if (interacting || carried != null) return;
 
             if (keys.RollPressedThisFrame) RollOrShuffleByKey();
             if (keys.DealPressedThisFrame) DealByKey(); // DEAL-1
 
             int number = keys.NumberPressedThisFrame;
-            if (number > 0 && IsPointerOnDrawablePile()) DrawCards(hoverPileId, number);
+            if (number > 0 && IsPointerOnDrawablePile()) QueueDrawDigit(number, hoverPileId); // doc 58: 1 then 2 draws 12
 
             if (keys.DeletePressedThisFrame) DeleteByKey();
 

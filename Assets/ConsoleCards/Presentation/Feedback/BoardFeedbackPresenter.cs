@@ -70,6 +70,16 @@ namespace ConsoleCards.Presentation.Feedback
             this.set = set;
             ring = Make(set.ActivePawnRing, parent);
             warnings = MakePool(set.TrapWarning, parent, TrapWarningPool);
+            // Owner, 2026-11-04 ("marking the revealed traps ... not looking very nice"): a trap still to do keeps
+            // only its thin frame; the striped edge and the "!" are left off.
+            for (int i = 0; i < warnings.Length; i++)
+            {
+                if (warnings[i] == null) continue;
+                Transform stripe = warnings[i].transform.Find("Stripe");
+                if (stripe != null) stripe.gameObject.SetActive(false);
+                Transform bang = warnings[i].transform.Find("Bang");
+                if (bang != null) bang.gameObject.SetActive(false);
+            }
             targets = MakePool(set.MoveTarget, parent, MoveTargetPool);
             flashes = MakePool(set.FlipFlash, parent, FlashPool);
             bursts = MakePool(set.CollapseBurst, parent, BurstPool);

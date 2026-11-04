@@ -32,6 +32,8 @@ namespace ConsoleCards.Core.Domain.Match
         ResizeBoardGrid = 24,
         // A line, a label or an erase made with the Draw tool (one Undo step; the drawings are table-side data).
         TableMark = 25,
+        // Doc 58: a piece locked or freed (Ctrl+L, the menus).
+        LockObject = 26,
     }
 
     public enum AuthoritativeActionRecordMode

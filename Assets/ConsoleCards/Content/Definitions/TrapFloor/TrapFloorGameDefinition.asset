@@ -73,6 +73,8 @@ MonoBehaviour:
     - {fileID: 11400000, guid: a5555555555545558555555555555555, type: 2}
     - {fileID: 11400000, guid: a2222222222242228222222222222222, type: 2}
     - {fileID: 11400000, guid: fd525b561aca4c5dadc5336438e94f7c, type: 2}
+    - {fileID: 11400000, guid: 42e18ee5bf3e53040857c0ade485af34, type: 2}
+    - {fileID: 11400000, guid: 57beeea43ce01074c957a2a071534516, type: 2}
     role: floor
     drawCount: 6
     allowRepeats: 1
@@ -85,6 +87,8 @@ MonoBehaviour:
     - {fileID: 11400000, guid: a4444444444444448444444444444444, type: 2}
     - {fileID: 11400000, guid: a5555555555545558555555555555555, type: 2}
     - {fileID: 11400000, guid: fd525b561aca4c5dadc5336438e94f7c, type: 2}
+    - {fileID: 11400000, guid: 42e18ee5bf3e53040857c0ade485af34, type: 2}
+    - {fileID: 11400000, guid: 57beeea43ce01074c957a2a071534516, type: 2}
     role: 
     drawCount: 0
     allowRepeats: 0
@@ -138,3 +142,6 @@ MonoBehaviour:
   boardMatPictureReference: trap-floor/board/playmat.png
   tableSetup: {fileID: 11400000, guid: 976b6508fefa405b8156d980faa2f00e, type: 2}
   coverPicture: {fileID: 2800000, guid: e95a05d89488d1d46b88e9e9d0cd50a0, type: 3}
+  genre: 0
+  allowsPlayerDecks: 1
+  allowsStages: 1

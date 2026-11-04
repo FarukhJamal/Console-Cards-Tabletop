@@ -29,7 +29,7 @@ namespace ConsoleCards.Games.TrapFloor
         public const string ControllerInputContentSetId = "trap-floor-controller-inputs";
 
         /// <summary>FLOORS-1 (owner, 2026-10-21): the smallest floor; each floor is one row and one column smaller.</summary>
-        public const int MinimumFloorSize = 3;
+        public const int MinimumFloorSize = 4; // owner, 2026-11-04: the last floor is 4x4 (6x6, 5x5, 4x4)
 
         private const double PlayerConsoleRadius = 6.1d;
 
@@ -167,11 +167,13 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorTableLayout tableLayout,
             int playerCount,
             TrapFloorTableSetup tableSetup = null,
-            IReadOnlyList<ObjectDefinitionId> seatAvatars = null)
+            IReadOnlyList<ObjectDefinitionId> seatAvatars = null,
+            TrapFloorFloorRecipe recipe = null)
         {
             if (randomValueSource == null) throw new ArgumentNullException(nameof(randomValueSource));
             if (gameDefinition == null) throw new ArgumentNullException(nameof(gameDefinition));
             int floorCount = FloorCountFor(gameDefinition.Grid);
+            if (recipe != null) floorCount = Math.Max(1, Math.Min(floorCount, recipe.FloorCount));
             if (floorIndex < 0 || floorIndex >= floorCount) throw new ArgumentOutOfRangeException(nameof(floorIndex));
             TableCoordinate? boardCenter = tableLayout?.BoardCenter
                 ?? (tableSetup != null ? tableSetup.BoardCenter : (TableCoordinate?)null);
@@ -184,7 +186,7 @@ namespace ConsoleCards.Games.TrapFloor
             Guid gameDefinitionId = ParseStableGuid(gameDefinition.StableId, "Game");
             GridDefinitionData grid = gameDefinition.Grid;
             IReadOnlyList<TrapFloorFloorContentDefinition> floorContent =
-                ResolveFloorContent(gameDefinition, activeMode, grid, randomValueSource, floorIndex > 0);
+                ResolveFloorContent(gameDefinition, activeMode, grid, randomValueSource, floorIndex > 0, recipe);
             IReadOnlyList<TrapFloorAvatarSetup> avatars = ResolveAvatars(gameDefinition);
             IReadOnlyList<CardDefinitionData> controllerInputCards = ResolveControllerInputCards(gameDefinition);
             ConsoleSlotDefinitionData mainSlot = ResolveConsoleSlot(gameDefinition.Console, "Main", 1);
@@ -849,7 +851,8 @@ namespace ConsoleCards.Games.TrapFloor
             ModeDefinitionData activeMode,
             GridDefinitionData grid,
             IRandomValueSource randomValueSource,
-            bool scaleToGrid)
+            bool scaleToGrid,
+            TrapFloorFloorRecipe recipe = null)
         {
             List<TrapFloorFloorContentDefinition> drawn = new List<TrapFloorFloorContentDefinition>(grid.CellCount);
             List<FloorGroupDraw> groups = new List<FloorGroupDraw>();
@@ -864,11 +867,49 @@ namespace ConsoleCards.Games.TrapFloor
                     ResolveFloorDrawCount(gameDefinition, activeMode, contentSet, pool.Count)));
             }
 
-            if (scaleToGrid) ScaleFloorDrawCounts(groups, grid.CellCount, activeMode.RequiredKeyCount);
+            int requiredKeys = recipe != null ? recipe.RequiredKeys : activeMode.RequiredKeyCount;
+            if (recipe != null)
+            {
+                // Owner, 2026-11-04 (rules document): the mode sets each floor's Keys and whether it has a Secret Exit.
+                for (int i = 0; i < groups.Count; i++)
+                {
+                    FloorGroupDraw group = groups[i];
+                    if (group.Kind != FloorGroupKind.Exits || recipe.SecretExit) continue;
+                    group.Pool.RemoveAll(content => !TrapFloorObjectiveUseCase.IsGrandExit(content));
+                    group.Count = Math.Min(group.Count, group.Pool.Count);
+                }
+            }
+
+            if (recipe != null)
+            {
+                for (int i = 0; i < groups.Count; i++)
+                {
+                    if (groups[i].Kind != FloorGroupKind.Other) continue;
+                    if (!string.IsNullOrEmpty(recipe.ExcludedTag))
+                    {
+                        groups[i].Pool.RemoveAll(content => recipe.Excludes(content.AuthoredCard)); // Free for all: no Lasso
+                    }
+
+                    groups[i].Weight = recipe.WeightFor(groups[i].FirstCategory);
+                }
+            }
+
+            if (scaleToGrid || recipe != null)
+                ScaleFloorDrawCounts(groups, grid.CellCount, requiredKeys, recipe != null ? recipe.KeyCount : -1);
+            bool ownFloorDeck = recipe != null && recipe.HasTileCounts;
+            int otherCells = 0;
             for (int i = 0; i < groups.Count; i++)
             {
+                if (ownFloorDeck && groups[i].Kind == FloorGroupKind.Other)
+                {
+                    otherCells += groups[i].Count; // the players' floor deck fills these cells instead
+                    continue;
+                }
+
                 DrawFloorGroup(groups[i].ContentSet, groups[i].Pool, groups[i].Count, randomValueSource, drawn);
             }
+
+            if (ownFloorDeck) AddOwnFloorTiles(gameDefinition, recipe, otherCells, drawn);
 
             int groupCount = groups.Count;
             if (groupCount == 0)
@@ -894,10 +935,10 @@ namespace ConsoleCards.Games.TrapFloor
                     nameof(gameDefinition));
             }
 
-            if (activeMode.RequiredKeyCount > keyCount)
+            if (requiredKeys > keyCount)
             {
                 throw new ArgumentException(
-                    $"Trap Floor Mode '{activeMode.DisplayName}' requires {activeMode.RequiredKeyCount} Keys, "
+                    $"Trap Floor Mode '{activeMode.DisplayName}' requires {requiredKeys} Keys, "
                     + $"but the floor groups draw {keyCount}.",
                     nameof(gameDefinition));
             }
@@ -928,7 +969,13 @@ namespace ConsoleCards.Games.TrapFloor
                 Count = count;
                 BaseCount = count;
                 Kind = KindOf(pool);
+                Weight = 1d;
             }
+
+            // The difficulty's share for this group (Other groups only).
+            public double Weight { get; set; }
+
+            public TrapFloorFloorContentCategory FirstCategory => Pool.Count > 0 ? Pool[0].Category : TrapFloorFloorContentCategory.Trap;
 
             public GameContentSetData ContentSet { get; }
             public List<TrapFloorFloorContentDefinition> Pool { get; }
@@ -957,11 +1004,12 @@ namespace ConsoleCards.Games.TrapFloor
         // FLOORS-1 (owner, 2026-10-21: "same mix, scaled"): a smaller floor keeps every Exit, scales the Keys but
         // never below the mode's Key count, and shares the remaining cells among the other groups in proportion
         // (largest remainder), so the counts add up to the floor's cells.
-        private static void ScaleFloorDrawCounts(List<FloorGroupDraw> groups, int cellCount, int requiredKeys)
+        // exactKeys (0 or more): the floor holds exactly that many Keys (the mode's floor recipe), instead of scaling.
+        private static void ScaleFloorDrawCounts(List<FloorGroupDraw> groups, int cellCount, int requiredKeys, int exactKeys = -1)
         {
             int baseTotal = 0;
             for (int i = 0; i < groups.Count; i++) baseTotal += groups[i].BaseCount;
-            if (baseTotal == 0 || baseTotal == cellCount) return;
+            if (baseTotal == 0 || (baseTotal == cellCount && exactKeys < 0)) return;
             double ratio = cellCount / (double)baseTotal;
 
             int fixedTotal = 0;
@@ -975,7 +1023,9 @@ namespace ConsoleCards.Games.TrapFloor
                 }
                 else if (group.Kind == FloorGroupKind.Keys)
                 {
-                    group.Count = Math.Min(group.BaseCount, (int)Math.Round(group.BaseCount * ratio, MidpointRounding.AwayFromZero));
+                    group.Count = exactKeys >= 0
+                        ? Math.Min(group.MaximumCount, Math.Max(0, exactKeys - keys))
+                        : Math.Min(group.BaseCount, (int)Math.Round(group.BaseCount * ratio, MidpointRounding.AwayFromZero));
                     keys += group.Count;
                 }
             }
@@ -993,9 +1043,12 @@ namespace ConsoleCards.Games.TrapFloor
             fixedTotal += keys;
             int remaining = cellCount - fixedTotal;
             int otherBase = 0;
+            double weightedBase = 0d;
             for (int i = 0; i < groups.Count; i++)
             {
-                if (groups[i].Kind == FloorGroupKind.Other) otherBase += groups[i].BaseCount;
+                if (groups[i].Kind != FloorGroupKind.Other) continue;
+                otherBase += groups[i].BaseCount;
+                weightedBase += groups[i].BaseCount * groups[i].Weight;
             }
 
             if (remaining < 0 || (remaining > 0 && otherBase == 0))
@@ -1011,7 +1064,7 @@ namespace ConsoleCards.Games.TrapFloor
                 FloorGroupDraw group = groups[i];
                 leftOver[i] = -1d;
                 if (group.Kind != FloorGroupKind.Other) continue;
-                double exact = otherBase == 0 ? 0d : remaining * (group.BaseCount / (double)otherBase);
+                double exact = weightedBase <= 0d ? 0d : remaining * (group.BaseCount * group.Weight / weightedBase);
                 group.Count = Math.Min(group.MaximumCount, (int)Math.Floor(exact));
                 leftOver[i] = exact - group.Count;
                 assigned += group.Count;
@@ -1040,6 +1093,68 @@ namespace ConsoleCards.Games.TrapFloor
                 groups[best].Count++;
                 leftOver[best] = -1d;
                 assigned++;
+            }
+        }
+
+        // The players' floor deck (card ID to copies) scaled to the cells left after the Keys and Exits, by largest
+        // remainder, so the floor is always full. A card that is not in the game is skipped.
+        private static void AddOwnFloorTiles(
+            GameDefinitionData gameDefinition,
+            TrapFloorFloorRecipe recipe,
+            int cells,
+            List<TrapFloorFloorContentDefinition> drawn)
+        {
+            IReadOnlyDictionary<string, int> tileCounts = recipe.TileCounts;
+            List<TrapFloorFloorContentDefinition> contents = new List<TrapFloorFloorContentDefinition>();
+            List<int> copies = new List<int>();
+            int total = 0;
+            foreach (KeyValuePair<string, int> entry in tileCounts)
+            {
+                if (entry.Value <= 0
+                    || !gameDefinition.TryGetCard(entry.Key, out CardDefinitionData card)
+                    || recipe.Excludes(card))
+                {
+                    continue;
+                }
+
+                contents.Add(new TrapFloorFloorContentDefinition(card));
+                copies.Add(entry.Value);
+                total += entry.Value;
+            }
+
+            if (total == 0 || cells <= 0)
+            {
+                if (cells > 0) throw new ArgumentException("Your floor deck has no Trap, Friend or Ability cards of this game.");
+                return;
+            }
+
+            int[] counts = new int[contents.Count];
+            double[] leftOver = new double[contents.Count];
+            int assigned = 0;
+            for (int i = 0; i < contents.Count; i++)
+            {
+                double exact = cells * (copies[i] / (double)total);
+                counts[i] = (int)Math.Floor(exact);
+                leftOver[i] = exact - counts[i];
+                assigned += counts[i];
+            }
+
+            while (assigned < cells)
+            {
+                int best = 0;
+                for (int i = 1; i < contents.Count; i++)
+                {
+                    if (leftOver[i] > leftOver[best]) best = i;
+                }
+
+                counts[best]++;
+                leftOver[best] = -1d;
+                assigned++;
+            }
+
+            for (int i = 0; i < contents.Count; i++)
+            {
+                for (int c = 0; c < counts[i]; c++) drawn.Add(contents[i]);
             }
         }
 

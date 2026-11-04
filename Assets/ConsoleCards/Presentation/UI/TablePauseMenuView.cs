@@ -18,6 +18,9 @@ namespace ConsoleCards.Presentation.UI
         public Action ClearTable;
         public Action MainMenu;
         public Action ExitGame;
+        /// <summary>Doc 58: one more row under SAVE TABLE AS A GAME (the table menu: save, load, zones and toys).</summary>
+        public Action Extra;
+        public string ExtraLabel;
         /// <summary>Settings › Ask before Reset: Reset and Clear need a second press.</summary>
         public bool AskBeforeReset = true;
     }
@@ -50,6 +53,7 @@ namespace ConsoleCards.Presentation.UI
 
         private TablePauseActions actions;
         private Button armed;
+        private Button extraButton; // doc 58: made at run time from the SAVE TABLE AS A GAME row
         private string armedText;
         private float armedUntil;
         private int ignoreKeysUntilFrame;
@@ -82,6 +86,7 @@ namespace ConsoleCards.Presentation.UI
             Wire(rulesButton, actions.OpenRules, false);
             Wire(howToPlayButton, actions.OpenHowToPlay, false);
             Wire(saveGameButton, actions.SaveAsGame, false);
+            BindExtraRow();
             Wire(settingsButton, actions.OpenSettings, false);
             Wire(newTableButton, actions.NewTable, false);
             Wire(resetButton, actions.ResetTable, actions.AskBeforeReset);
@@ -102,6 +107,7 @@ namespace ConsoleCards.Presentation.UI
             Clear(rulesButton);
             Clear(howToPlayButton);
             Clear(saveGameButton);
+            Clear(extraButton);
             Clear(settingsButton);
             Clear(newTableButton);
             Clear(resetButton);
@@ -124,6 +130,22 @@ namespace ConsoleCards.Presentation.UI
             if (Keyboard.current.escapeKey.wasPressedThisFrame) actions.Resume?.Invoke();
             else if (Keyboard.current.rKey.wasPressedThisFrame && actions.OpenRules != null) actions.OpenRules();
             else if (Keyboard.current.hKey.wasPressedThisFrame && actions.OpenHowToPlay != null) actions.OpenHowToPlay();
+        }
+
+        // Doc 58: a copy of the SAVE TABLE AS A GAME row, just under it, for the table menu.
+        private void BindExtraRow()
+        {
+            if (extraButton == null && actions.Extra != null)
+            {
+                extraButton = Instantiate(saveGameButton, saveGameButton.transform.parent, false);
+                extraButton.name = "Table Menu Row";
+                extraButton.transform.SetSiblingIndex(saveGameButton.transform.GetSiblingIndex() + 1);
+            }
+
+            if (extraButton == null) return;
+            Wire(extraButton, actions.Extra, false);
+            Text label = extraButton.GetComponentInChildren<Text>(true);
+            if (label != null) label.text = string.IsNullOrEmpty(actions.ExtraLabel) ? "TABLE" : actions.ExtraLabel;
         }
 
         private void Wire(Button button, Action action, bool askTwice)

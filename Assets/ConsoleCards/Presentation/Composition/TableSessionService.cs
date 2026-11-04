@@ -818,7 +818,8 @@ namespace ConsoleCards.Presentation.Composition
                 host.RefreshAcceptedCardFaces(); // a Hand turns arriving cards face up (H1b)
             }
 
-            if (madeHere) host.ActiveCartridge.OnActionAccepted(acceptance); // CART-1b: the game follows its own moves (landing, guided moves)
+            host.toyCheckPending = true; // doc 58: the zones and snap points look again
+            if (madeHere && !host.TableFlipQuiet) host.ActiveCartridge.OnActionAccepted(acceptance); // CART-1b (not while the table flips): the game follows its own moves (landing, guided moves)
 
             if (madeHere
                 && (acceptance.Kind == AuthoritativeActionKind.MoveObject
@@ -1026,6 +1027,7 @@ namespace ConsoleCards.Presentation.Composition
                 case AuthoritativeActionKind.MoveBoard: return $"{actor} moved a Board";
                 case AuthoritativeActionKind.ResizeBoardGrid: return $"{actor} changed a Board's grid";
                 case AuthoritativeActionKind.TableMark: return $"{actor} drew on the table";
+                case AuthoritativeActionKind.LockObject: return $"{actor} locked or freed a piece";
                 default:
                     // CART-1b: a game names its own actions; anything else is a table action.
                     return host.ActiveCartridge.DescribeAction(acceptance, actor) ?? $"{actor} performed a table action";

@@ -142,6 +142,11 @@ namespace ConsoleCards.Presentation.Composition
             authority.Register<DeleteBoardCommand, CommandResult>(
                 command => boardUseCases.Delete(matchState, command.Context, command.BoardId), IsAccepted);
 
+            // Doc 58: lock and free a piece (Ctrl+L, the piece menus, the table menu).
+            authority.Register<SetObjectLockedCommand, CommandResult>(
+                command => SetObjectLockedCommand.Execute(matchState, command), IsAccepted);
+            authority.Observe<SetObjectLockedCommand, CommandResult>(OnObjectLockChanged);
+
             // CART-1b: each game with code adds its own commands (and the views that follow them) to the door.
             IReadOnlyList<IGameCartridge> cartridges = Cartridges.CodeCartridges;
             for (int i = 0; i < cartridges.Count; i++)

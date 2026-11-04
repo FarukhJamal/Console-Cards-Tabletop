@@ -99,7 +99,8 @@ namespace ConsoleCards.Presentation.Composition
         public void CheckSetUp(GameDefinitionData data, string modeStableId)
         {
             TrapFloorTemplateFactory.CreateStandardFourPlayer(
-                new SystemRandomValueSource(), data, modeStableId, host.GetConsoleLayout(), 0, null, DealPlayerCount);
+                new SystemRandomValueSource(), data, modeStableId, host.GetConsoleLayout(), 0, null, DealPlayerCount,
+                recipe: DealRecipe(0));
         }
 
         // ---------- how many players (PLACE-1) ----------
@@ -131,7 +132,8 @@ namespace ConsoleCards.Presentation.Composition
             {
                 GameDefinitionData data = content.ToData(host.RulesCardPanel.ActiveRuleSet);
                 TrapFloorTemplateFactory.CreateStandardFourPlayer(
-                    new SystemRandomValueSource(), data, template.ActiveMode.StableId, host.GetConsoleLayout(), 0, null, DealPlayerCount);
+                    new SystemRandomValueSource(), data, template.ActiveMode.StableId, host.GetConsoleLayout(), 0, null, DealPlayerCount,
+                    recipe: DealRecipe(0));
                 return null;
             }
             catch (Exception exception)

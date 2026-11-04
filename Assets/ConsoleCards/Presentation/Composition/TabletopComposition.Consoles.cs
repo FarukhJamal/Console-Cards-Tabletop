@@ -742,6 +742,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             consoleDieCheckPending = false;
+            CompleteConsoleTokenSnaps(); // the small track squares hold tokens (mana, health, stamina…)
             if (!ConsoleMatHasBackSide())
             {
                 return;
@@ -778,7 +779,9 @@ namespace ConsoleCards.Presentation.Composition
                 int free = FreeDiePlace(instance, spot, place, dieId);
                 if (free < 0)
                 {
-                    ShowMessage($"The {DescribeDieSpot(spot)} already holds {MaxDicePerArrow} dice.");
+                    ShowMessage(IsDiceSquare(spot)
+                        ? $"The {DescribeDieSpot(spot)} already holds a die."
+                        : $"The {DescribeDieSpot(spot)} already holds {MaxDicePerArrow} dice.");
                     diceOnConsoleSpots.Remove(dieId);
                     continue;
                 }
@@ -830,14 +833,16 @@ namespace ConsoleCards.Presentation.Composition
                 for (int s = 0; s < layout.Slots.Count; s++)
                 {
                     ConsoleLayoutSlotData slot = layout.Slots[s];
-                    if (slot.Kind != ConsoleLayoutSlotKind.Die
+                    if ((slot.Kind != ConsoleLayoutSlotKind.Die && !IsDiceSquare(slot))
                         || (slot.Side == ConsoleMatSide.Back) != console.ShowsBack)
                     {
                         continue;
                     }
 
-                    // PAD-1: each arrow has a place on it and two beside it; the nearest place wins.
-                    for (int place = 0; place < MaxDicePerArrow; place++)
+                    // PAD-1: each arrow has a place on it and two beside it; the nearest place wins. A big square of
+                    // the front's 3×3 grid holds one die.
+                    int places = IsDiceSquare(slot) ? 1 : MaxDicePerArrow;
+                    for (int place = 0; place < places; place++)
                     {
                         Vector3 world = DieSpotPlace(instance, slot, place, spacing);
                         float dx = world.x - diePosition.x;
@@ -1039,7 +1044,8 @@ namespace ConsoleCards.Presentation.Composition
         private int FreeDiePlace(RuntimeConsoleInstance instance, ConsoleLayoutSlotData spot, int wanted, TabletopObjectId dieId)
         {
             if (!DiePlaceTaken(instance, spot, wanted, dieId)) return wanted;
-            for (int place = 0; place < MaxDicePerArrow; place++)
+            int places = IsDiceSquare(spot) ? 1 : MaxDicePerArrow;
+            for (int place = 0; place < places; place++)
             {
                 if (!DiePlaceTaken(instance, spot, place, dieId)) return place;
             }
@@ -1203,8 +1209,80 @@ namespace ConsoleCards.Presentation.Composition
             return best;
         }
 
+        // Owner, 2026-11-04: the 9 big squares beside the Console's screen (layout group "Grid") hold dice, for games
+        // that keep dice as turns, counters or the like. The small squares around the screen (the tracks) hold tokens
+        // for mana, health, stamina and other bars.
+        internal const string DiceGridGroup = "Grid";
+
+        private static bool IsDiceSquare(ConsoleLayoutSlotData slot) =>
+            slot != null
+            && slot.Kind == ConsoleLayoutSlotKind.Cube
+            && string.Equals(slot.Group, DiceGridGroup, StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsTrackSquare(ConsoleLayoutSlotData slot) =>
+            slot != null && slot.Kind == ConsoleLayoutSlotKind.Cube && !IsDiceSquare(slot);
+
+        // A token at rest within reach of a track square of a Console showing its front is set on the square's centre.
+        // Event-time only (after an accepted action); no allocation.
+        private void CompleteConsoleTokenSnaps()
+        {
+            if (Registry.tokenViews.Count == 0 || Registry.runtimeConsoleInstances.Count == 0) return;
+            ConsoleLayoutData layout = GetConsoleLayout();
+            for (int t = 0; t < Registry.tokenViews.Count; t++)
+            {
+                TokenView token = Registry.tokenViews[t];
+                if (token == null || !token.IsBound || token.BoundState == null) continue;
+                TabletopObjectState state = token.BoundState;
+                if (!state.ContainerId.IsEmpty
+                    || state.IsUserLocked
+                    || state.PhysicalState == null
+                    || state.PhysicalState.Mode != PhysicalObjectMode.Sleeping
+                    || (token.PhysicalObject != null && token.PhysicalObject.IsHeld))
+                {
+                    continue;
+                }
+
+                Vector3 at = token.PhysicalObject != null && token.PhysicalObject.Body != null
+                    ? token.PhysicalObject.Body.position
+                    : token.transform.position;
+                bool found = false;
+                Vector3 best = Vector3.zero;
+                float bestDistance = float.MaxValue;
+                for (int i = 0; i < Registry.runtimeConsoleInstances.Count; i++)
+                {
+                    RuntimeConsoleInstance instance = Registry.runtimeConsoleInstances[i];
+                    ConsoleState console = ResolveConsoleState(instance);
+                    if (console == null || console.ShowsBack || instance.View == null || !instance.Root.activeInHierarchy) continue;
+                    Transform mat = instance.View.transform;
+                    float scale = Mathf.Abs(mat.lossyScale.x);
+                    for (int s = 0; s < layout.Slots.Count; s++)
+                    {
+                        ConsoleLayoutSlotData slot = layout.Slots[s];
+                        if (!IsTrackSquare(slot) || slot.Side == ConsoleMatSide.Back) continue;
+                        Vector3 world = mat.TransformPoint(new Vector3(slot.X, 0f, slot.Z));
+                        float dx = world.x - at.x;
+                        float dz = world.z - at.z;
+                        float distance = Mathf.Sqrt((dx * dx) + (dz * dz));
+                        float reach = Mathf.Max(slot.FootprintWidth, slot.FootprintDepth) * scale * 0.75f;
+                        if (distance <= reach && distance < bestDistance)
+                        {
+                            found = true;
+                            best = world;
+                            bestDistance = distance;
+                        }
+                    }
+                }
+
+                if (!found || bestDistance < 0.01f) continue; // not near a square, or already on it
+                TabletopPose pose = state.Pose;
+                MoveLoosePiece(token, state, new TabletopPose(
+                    coordinateConverter.ToTableCoordinate(best), pose.RotationDegrees, pose.Layer, pose.LocalOrder));
+            }
+        }
+
         private static string DescribeDieSpot(ConsoleLayoutSlotData spot)
         {
+            if (IsDiceSquare(spot)) return "big square";
             switch (spot.Key)
             {
                 case "PadUp": return "Up arrow";

@@ -73,6 +73,7 @@ namespace ConsoleCards.Presentation.UI
             BindCycle(lightRow, lightPrevious, lightNext, lightValue, settings.LightText, settings.CycleLight);
             BindCycle(qualityRow, qualityPrevious, qualityNext, qualityValue, settings.QualityText, settings.CycleQuality);
             BindScreenRow();
+            BindAssistRow();
             if (profileLabel != null) profileLabel.text = settings.ProfileText ?? string.Empty;
         }
 
@@ -90,6 +91,89 @@ namespace ConsoleCards.Presentation.UI
             Clear(qualityNext);
             Clear(screenPrevious);
             Clear(screenNext);
+            for (int i = 0; i < assistButtons.Length; i++) Clear(assistButtons[i]);
+        }
+
+        // Owner, 2026-11-03 (doc 57): GAME › Assist, FREE / REMINDERS / FULL. Made at run time from the Tips row (same
+        // three-choice look), so the settings prefab does not change.
+        private GameObject assistRow;
+        private Button[] assistButtons = Array.Empty<Button>();
+        private Image[] assistFills = Array.Empty<Image>();
+        private Text[] assistLabels = Array.Empty<Text>();
+        private Text assistHint;
+
+        private void BindAssistRow()
+        {
+            if (tipsModeRow == null || tipsModeButtons.Length < 3) return;
+            if (assistRow == null)
+            {
+                assistRow = Instantiate(tipsModeRow, tipsModeRow.transform.parent, false);
+                assistRow.name = "AssistRow";
+                assistRow.transform.SetSiblingIndex(tipsModeRow.transform.GetSiblingIndex());
+                assistButtons = new Button[3];
+                assistFills = new Image[3];
+                assistLabels = new Text[3];
+                for (int i = 0; i < 3; i++)
+                {
+                    assistButtons[i] = Twin<Button>(tipsModeButtons[i]);
+                    assistFills[i] = i < tipsModeFills.Length ? Twin<Image>(tipsModeFills[i]) : null;
+                    assistLabels[i] = i < tipsModeLabels.Length ? Twin<Text>(tipsModeLabels[i]) : null;
+                    if (assistLabels[i] != null) assistLabels[i].text = PlayAssist.Name((PlayAssistLevel)i);
+                }
+
+                Text[] texts = assistRow.GetComponentsInChildren<Text>(true);
+                for (int i = 0; i < texts.Length; i++)
+                {
+                    if (texts[i].transform.parent != assistRow.transform) continue;
+                    if (texts[i].name == "Title") texts[i].text = "Assist";
+                    else if (texts[i].name == "Hint") assistHint = texts[i];
+                }
+            }
+
+            assistRow.SetActive(true);
+            for (int i = 0; i < assistButtons.Length; i++)
+            {
+                if (assistButtons[i] == null) continue;
+                int level = i;
+                Clear(assistButtons[i]);
+                assistButtons[i].onClick.AddListener(() =>
+                {
+                    PlayAssist.Level = (PlayAssistLevel)level;
+                    ShowAssist();
+                });
+            }
+
+            ShowAssist();
+        }
+
+        private void ShowAssist()
+        {
+            int level = (int)PlayAssist.Level;
+            for (int i = 0; i < assistButtons.Length; i++)
+            {
+                bool on = i == level;
+                if (assistFills[i] != null) assistFills[i].color = on ? optionOn : optionOff;
+                if (assistLabels[i] != null) assistLabels[i].color = on ? optionOnWords : optionOffWords;
+            }
+
+            if (assistHint != null) assistHint.text = PlayAssist.Describe(PlayAssist.Level);
+        }
+
+        // The copy of a part of the Tips row, found in the Assist row by the same path.
+        private T Twin<T>(Component original) where T : Component
+        {
+            if (original == null || assistRow == null) return null;
+            string path = original.transform.name;
+            Transform walk = original.transform.parent;
+            while (walk != null && walk != tipsModeRow.transform)
+            {
+                path = walk.name + "/" + path;
+                walk = walk.parent;
+            }
+
+            if (walk == null) return null;
+            Transform twin = assistRow.transform.Find(path);
+            return twin != null ? twin.GetComponent<T>() : null;
         }
 
         // QA Q7 (2026-11-03): LOOK > Screen, full screen or a window. Made at run time from the Quality row (same

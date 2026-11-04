@@ -523,7 +523,7 @@ namespace ConsoleCards.Presentation.Composition
                 string from = deckCardId.IsEmpty ? "the Shop" : "the Ability deck";
                 host.ShowMessage(result.PlacedInHand
                     ? $"Bought {name} from {from} into {buyerName}'s hand."
-                    : $"Bought {name} from {from}. {buyerName}'s hand is full, so it is beside their Console.");
+                    : $"{buyerName} bought {name}. It is by their Console.");
                 host.GameplayLog($"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} bought the {name} ability card.");
             }
         }
@@ -1469,6 +1469,14 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            if (PlayAssist.IsQuiet)
+            {
+                // Doc 57: no "apply and end turn?" question; the turn passes and the referee says what came with it.
+                host.Whisper($"{host.PlayerLabel(actor)} still has to do: {string.Join("; ", lines)} (by hand)");
+                AdvanceTrapFloorTurn(skipped);
+                return;
+            }
+
             int reactions = CountUsableReactions(actor);
             string body = $"{(skipped ? "Skipping" : "Ending")} {host.PlayerLabel(actor)}'s turn applies:\n• "
                 + string.Join("\n• ", lines)
@@ -1608,7 +1616,10 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 // A Trap left waiting is applied before the turn passes (G2c); only a Reaction prevents it.
-                if (!host.trapFloorTurnState.IsCurrentFloorFailed
+                // Doc 58 (owner, 2026-11-03: "applying the effect is still there in the no-assist mode"): with Assist FREE
+                // or REMINDERS nothing is applied for the players; the referee has already said what waits.
+                if (!PlayAssist.IsQuiet
+                    && !host.trapFloorTurnState.IsCurrentFloorFailed
                     && host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
                     && !ApplyPendingTrapsBeforeTurnEnds(actor, out trapSummary))
                 {
@@ -2486,7 +2497,7 @@ namespace ConsoleCards.Presentation.Composition
                 $"{floor.Content.Category.ToString().ToUpperInvariant()} • PRIZE",
                 floor.Content.DisplayName,
                 floor.Content.DisplayText,
-                $"{floor.Content.DisplayText}\n\nTake it? {costLine} It comes to your hand when you move off this tile.",
+                $"{floor.Content.DisplayText}\n\nTake it? {costLine} It goes by your Console when you move off.",
                 "Take it",
                 () =>
                 {
@@ -2556,7 +2567,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.FeedbackLine(
                     result.PlacedInHand
                         ? $"{result.FloorCard.Content.DisplayName} came off the floor into {FormatPlayerName(taken.CollapsedByPlayerId)}'s hand. Its space is now empty."
-                        : $"{result.FloorCard.Content.DisplayName} came off the floor; {FormatPlayerName(taken.CollapsedByPlayerId)}'s hand is full, so it is beside their Console. Its space is now empty.",
+                        : $"{result.FloorCard.Content.DisplayName} is by {FormatPlayerName(taken.CollapsedByPlayerId)}'s Console.",
                     FeedbackSeverity.Info);
             }
         }
@@ -2676,7 +2687,11 @@ namespace ConsoleCards.Presentation.Composition
                 new TrapFloorClaimKeyCommand(ClaimContext(), floorCardId));
             if (!result.Succeeded)
             {
-                host.ShowMessage($"Claim Key rejected: {result.Error}.");
+                host.ShowMessage(result.Error == TrapFloorObjectiveError.PlayerAlreadyHoldsKey
+                    ? "Free for all: you already hold a Key (one each)."
+                    : result.Error == TrapFloorObjectiveError.KeyAlreadyClaimed
+                        ? "Another player already has this Key."
+                        : $"Claim Key rejected: {result.Error}.");
                 return;
             }
 
@@ -2694,10 +2709,53 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             host.FeedbackLine( // KEYS-1: always shown
-                $"{FormatPlayerName(result.Activity.ActorPlayerId)} claimed "
-                + $"{result.FloorCard.Content.DisplayName}. "
-                + $"KEYS {result.CollectedKeyCount} / {result.RequiredKeyCount}.",
+                $"{FormatPlayerName(result.Activity.ActorPlayerId)} took {result.FloorCard.Content.DisplayName}.",
                 FeedbackSeverity.Info);
+            ReturnPawnToStart(result.Activity.ActorPlayerId, floorCardId); // rules: back to where the pawn started
+            EliminateStuckPlayers();
+        }
+
+        // Rules (owner, 2026-11-04): "when the player is stepping in a key card or blue card you go back to your default
+        // starting card and obtain that key or blue card". Only when the pawn still stands on that tile. Event-time only.
+        internal void ReturnPawnToStart(PlayerId player, TabletopObjectId fromFloorCardId)
+        {
+            if (player.IsEmpty
+                || host.trapFloorTemplate == null
+                || !TryGetTrapFloorPlayerSetup(player, out TrapFloorPlayerSetupDefinition setup)
+                || !TryReadPawnTile(setup.PawnId, out TrapFloorCoordinate tile)
+                || !host.trapFloorTemplate.TryGetFloorCardId(tile, out TabletopObjectId onId)
+                || onId != fromFloorCardId
+                || tile == setup.StartingCorner
+                || !host.trapFloorTemplate.TryGetFloorCardId(setup.StartingCorner, out TabletopObjectId startId))
+            {
+                return;
+            }
+
+            if (host.trapFloorCollapseState != null && host.trapFloorCollapseState.IsCollapsed(startId))
+            {
+                host.FeedbackLine($"{FormatPlayerName(player)}'s starting tile is gone, so the pawn stays here.", FeedbackSeverity.Info);
+                return;
+            }
+
+            if (TryAutoMovePawnToFloor(player, startId, out _))
+            {
+                CollectTakenPrizesOffPawns(); // the prize the pawn just left goes by the Console now
+                host.FeedbackLine($"{FormatPlayerName(player)} goes back to the starting tile.", FeedbackSeverity.Info);
+            }
+        }
+
+        // The Keys a player holds now (a Key used at the Secret Exit is gone).
+        internal int KeysHeldBy(PlayerId playerId)
+        {
+            if (host.trapFloorObjectiveState == null || playerId.IsEmpty) return 0;
+            int held = 0;
+            IReadOnlyList<TrapFloorCollectedKeyState> keys = host.trapFloorObjectiveState.CollectedKeys;
+            for (int i = 0; i < keys.Count; i++)
+            {
+                if (keys[i].ClaimedByPlayerId == playerId && !keys[i].IsUsed) held++;
+            }
+
+            return held;
         }
 
         // KEYS-1 (audit B1): on a player turn a Key is claimed for the turn player, not for this screen's seat.
@@ -2709,7 +2767,7 @@ namespace ConsoleCards.Presentation.Composition
                 : host.CreateCommandContext();
 
         // MODE-1: winsFloor false records one player's escape only (Survival). True when the escape was accepted.
-        internal bool AttemptTrapFloorEscape(TabletopObjectId floorCardId, PlayerId actor, bool winsFloor = true)
+        internal bool AttemptTrapFloorEscape(TabletopObjectId floorCardId, PlayerId actor, bool winsFloor = true, bool usesKey = false)
         {
             if (host.trapFloorObjectiveUseCase == null)
             {
@@ -2718,7 +2776,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             TrapFloorObjectiveResult result = host.TableAuthority.Submit<TrapFloorAttemptEscapeCommand, TrapFloorObjectiveResult>(
-                new TrapFloorAttemptEscapeCommand(host.CreateCommandContext(actor), floorCardId, winsFloor));
+                new TrapFloorAttemptEscapeCommand(host.CreateCommandContext(actor), floorCardId, winsFloor, usesKey));
             if (!result.Succeeded)
             {
                 if (result.Error == TrapFloorObjectiveError.EscaperHasNoKey)
@@ -2759,9 +2817,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 host.FeedbackLine( // always shown
                     grand
-                        ? WinMode == TrapFloorWinMode.Regular
-                            ? "The team escaped through the Grand Exit. FLOOR WON."
-                            : $"{escapedPlayer} escaped through the Grand Exit. FLOOR WON."
+                        ? $"{escapedPlayer} escaped through the Grand Exit. FLOOR WON."
                         : $"{escapedPlayer} escaped through the Secret Exit. FLOOR WON.",
                     FeedbackSeverity.Info);
             }
@@ -2775,11 +2831,7 @@ namespace ConsoleCards.Presentation.Composition
             ShowFloorEnded(
                 true,
                 (TrapFloorObjectiveUseCase.IsGrandExit(result.FloorCard.Content)
-                    ? WinMode == TrapFloorWinMode.Regular
-                        ? "Every player still in escaped through the Grand Exit"
-                        : WinMode == TrapFloorWinMode.Survival
-                            ? $"Every player still in escaped; {FormatPlayerName(result.EscapedActivity.ActorPlayerId)} was the last, through the Grand Exit"
-                            : $"{FormatPlayerName(result.EscapedActivity.ActorPlayerId)} escaped through the Grand Exit"
+                    ? $"Every player still in escaped; {FormatPlayerName(result.EscapedActivity.ActorPlayerId)} was the last, through the Grand Exit"
                     : $"{FormatPlayerName(result.EscapedActivity.ActorPlayerId)} escaped through the Secret Exit")
                     + $" at {result.FloorCard.Coordinate}.");
         }
@@ -3005,8 +3057,9 @@ namespace ConsoleCards.Presentation.Composition
             host.GameplayLog($"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} took {prizeName}.");
             host.FeedbackLine( // always shown
                 $"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} took {prizeName}. "
-                    + "It stays under the pawn and comes to the hand when the pawn moves off this tile.",
+                    + "It goes by their Console when the pawn moves off.",
                 FeedbackSeverity.Info);
+            ReturnPawnToStart(host.trapFloorTurnState.ActivePlayerId, floorCardId); // rules: back to the start, prize in hand
         }
 
         // TABLE-1: the Controller Cards that paid went back into the Controller deck: lay out the deck and the
@@ -3062,38 +3115,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             PlayerId active = host.trapFloorTurnState.ActivePlayerId;
-            if (WinMode != TrapFloorWinMode.Regular)
-            {
-                TryTakeExitsForMode(activeLandedFloorCardId, active); // MODE-1
-                return;
-            }
-
-            if (!activeLandedFloorCardId.IsEmpty
-                && !active.IsEmpty
-                && IsOpenExit(activeLandedFloorCardId, out bool landedOnGrand)
-                && !landedOnGrand)
-            {
-                if (host.trapFloorObjectiveUseCase.HasClaimedKey(active)) AttemptTrapFloorEscape(activeLandedFloorCardId, active);
-                else host.FeedbackLine("SECRET EXIT — you need a Key you claimed: land on a Key, then come back here to win the floor.", FeedbackSeverity.Warning); // KEYS-1
-                return;
-            }
-
-            if (!TryGetGrandExitWithEveryoneOn(out TabletopObjectId grandExitId, out PlayerId anyoneOn))
-            {
-                ExplainGrandExitWait(activeLandedFloorCardId); // EXIT-2
-                return;
-            }
-
-            if (!host.trapFloorObjectiveState.HasRequiredKeys)
-            {
-                host.FeedbackLine( // KEYS-1: always shown
-                    $"GRAND EXIT — everyone still in is here, but the team needs {host.trapFloorObjectiveState.RequiredKeyCount} "
-                    + $"Key(s): {host.trapFloorObjectiveState.CollectedKeyCount} claimed. Land on a Key to claim it.",
-                    FeedbackSeverity.Warning);
-                return;
-            }
-
-            AttemptTrapFloorEscape(grandExitId, active.IsEmpty ? anyoneOn : active);
+            TryTakeExitsForMode(activeLandedFloorCardId, active); // owner, 2026-11-04: every mode escapes one by one
+            EliminateStuckPlayers();
         }
 
         // EXIT-2 (owner, 2026-10-22: "both landed on grand exit but no popup for win"; the Grand Exit needs every player
@@ -3296,6 +3319,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             keyRevealedThisLanding = floorCardId; // KEYS-2 / PRIZE-3: this landing's popup comes from the reveal
+            host.ReactToRevealedTile(floorCardId, result.FloorCard.Content.Category.ToString()); // doc 57: a ring in its colour
             bool waits = IsAnyPawnOnFloorCard(floorCardId);
             if (host.Registry.TryGetCardView(floorCardId, out CardView floorCardView))
             {
@@ -3465,6 +3489,13 @@ namespace ConsoleCards.Presentation.Composition
             if (landedTile.HasValue)
             {
                 moveProblem = CheckGuidedMove(landedTile.Value) ?? CheckActivePawnMove(landedFrom, landedTile.Value);
+                if (moveProblem != null && PlayAssist.IsQuiet)
+                {
+                    // Doc 57 (Assist FREE / REMINDERS): the referee only whispers; the move stands and the tile flips.
+                    host.Whisper($"that move looks off: {moveProblem}");
+                    moveProblem = null;
+                }
+
                 if (moveProblem != null)
                 {
                     host.FeedbackLine(
@@ -4722,7 +4753,9 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             string keys = host.trapFloorObjectiveState != null
-                ? $"{host.trapFloorObjectiveState.CollectedKeyCount} / {KeysNeededForGrandExit()}"
+                ? WinMode == TrapFloorWinMode.Survival
+                    ? $"{host.trapFloorObjectiveState.CollectedKeyCount} / {KeysNeededForGrandExit()}"
+                    : $"{KeysHeldBy(playerId)}{(WinMode == TrapFloorWinMode.TeamPlay ? $" · {TeamName(TeamOf(playerId))}" : string.Empty)}"
                 : "—";
             string floor = host.trapFloorTemplate != null
                 ? (host.TrapFloorStageCount > 1 ? $"Stage {host.trapFloorStageIndex + 1} · " : string.Empty) // STAGES-1
@@ -4748,7 +4781,12 @@ namespace ConsoleCards.Presentation.Composition
             if (host.trapFloorAbilityResolutionState.TryGetBlindStatus(playerId, round, out _)) status = JoinStatus(status, "BLIND");
             if (host.trapFloorAbilityResolutionState.TryGetStickyStatus(playerId, round, out _)) status = JoinStatus(status, "STUCK");
             int pending = PendingEndTurnEffects(playerId, null);
-            if (pending > 0) status = JoinStatus(status, pending == 1 ? "1 TRAP WAITING" : $"{pending} TRAPS WAITING");
+            if (pending > 0)
+            {
+                status = JoinStatus(status, PlayAssist.IsQuiet
+                    ? pending == 1 ? "1 TRAP TO DO" : $"{pending} TRAPS TO DO" // doc 58: by hand in FREE
+                    : pending == 1 ? "1 TRAP WAITING" : $"{pending} TRAPS WAITING");
+            }
             return status;
         }
 
@@ -4942,7 +4980,7 @@ namespace ConsoleCards.Presentation.Composition
 
                 // F3: End Turn says when it will apply waiting Traps, and asks first.
                 int waiting = PendingEndTurnEffects(host.trapFloorTurnState.ActivePlayerId, null);
-                string applies = waiting > 0 ? $" (applies {waiting})" : string.Empty;
+                string applies = waiting > 0 && !PlayAssist.IsQuiet ? $" (applies {waiting})" : string.Empty; // doc 58: FREE applies nothing
                 // Owner, 2026-10-30: Skip Turn did the same as End Turn, so only End Turn is offered.
                 actions.Add(new PopupActionOption(
                     "End Turn" + applies,
@@ -5256,12 +5294,11 @@ namespace ConsoleCards.Presentation.Composition
 
         internal string CurrentTrapFloorObjectiveProgressText()
         {
-            string keys =
-                $"KEYS {host.trapFloorObjectiveState.CollectedKeyCount} / {KeysNeededForGrandExit()}";
-            return WinMode == TrapFloorWinMode.Survival // MODE-1
-                ? $"{keys}\nESCAPED {host.trapFloorObjectiveState.EscapedPlayerCount} / "
-                    + $"{host.activeSession.Request.ActivePlayerIds.Count}"
-                : keys;
+            string keys = WinMode == TrapFloorWinMode.Survival
+                ? $"KEYS {host.trapFloorObjectiveState.CollectedKeyCount} / {KeysNeededForGrandExit()}"
+                : $"KEYS {host.trapFloorObjectiveState.CollectedKeyCount} TAKEN";
+            return $"{keys}\nESCAPED {host.trapFloorObjectiveState.EscapedPlayerCount} / "
+                + $"{host.activeSession.Request.ActivePlayerIds.Count}";
         }
 
         // F3: the effects on a player this round, as chips after their name on the turn strip.
@@ -5758,18 +5795,21 @@ namespace ConsoleCards.Presentation.Composition
 
             host.availableTrapFloorTemplates.Clear();
             List<GameTemplateRegistration> registrations = new List<GameTemplateRegistration>(gameDefinition.Modes.Count);
-            // STAGES-1: the game's stages (each a whole run of floors with its own look).
-            host.trapFloorFloorPlan = StagePlanOf(content.PlayerDecks);
+            // Owner, 2026-11-04: stages are gone (not in the rules); a floor deck of the players' sets a floor's mix.
+            host.trapFloorFloorPlan = null;
             // FLOORS-1: while the next floor is being dealt, every mode's setup is that smaller floor.
             int floorIndex = Math.Min(
                 Math.Max(0, host.trapFloorNextFloorIndex),
-                TrapFloorTemplateFactory.FloorCountFor(gameDefinition.Grid) - 1);
+                Math.Min(TrapFloorTemplateFactory.FloorCountFor(gameDefinition.Grid), DealRecipe(0).FloorCount) - 1);
+
             // LAYOUT-1: dealt with the players' table layout (the one being arranged, else the saved one).
             TrapFloorTableLayout tableLayout = LayoutForDeal();
             // SETUP-1: the game's default table setup (its Table Setup asset), else the built-in places.
             TrapFloorTableSetup tableSetup = TableSetup();
             for (int i = 0; i < gameDefinition.Modes.Count; i++)
             {
+                // Owner, 2026-11-04: the mode's Keys and exits, the difficulty's mix, or the players' floor deck.
+                TrapFloorFloorRecipe recipe = DealRecipe(floorIndex, gameDefinition.Modes[i].StableId, content.PlayerDecks);
                 TrapFloorTemplateDefinition template;
                 try
                 {
@@ -5782,7 +5822,8 @@ namespace ConsoleCards.Presentation.Composition
                         tableLayout,
                         DealPlayerCount,
                         tableSetup,
-                        host.trapFloorCarriedAvatars); // D3
+                        host.trapFloorCarriedAvatars, // D3
+                        recipe);
                 }
                 catch (Exception exception) when (tableLayout != null || tableSetup != null)
                 {
@@ -5802,7 +5843,8 @@ namespace ConsoleCards.Presentation.Composition
                         null,
                         DealPlayerCount,
                         null,
-                        host.trapFloorCarriedAvatars); // D3
+                        host.trapFloorCarriedAvatars, // D3
+                        recipe);
                 }
 
                 host.availableTrapFloorTemplates.Add(template.Template.Id, template);
