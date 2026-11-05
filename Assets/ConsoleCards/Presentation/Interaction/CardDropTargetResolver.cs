@@ -67,6 +67,19 @@ namespace ConsoleCards.Presentation.Interaction
 
         public int HitBufferCapacity => hitBuffer.Length;
 
+        /// <summary>
+        /// CONSOLE-1 evidence switch (off by default): when true, drag releases log the full resolution trace (every
+        /// hit and why it was used or skipped, and on a table drop the colliders on all layers and the nearest drop
+        /// targets). Turn on from a debugger or a test to diagnose a drop that lands somewhere unexpected.
+        /// </summary>
+        public static bool VerboseReleaseTrace { get; set; }
+
+        /// <summary>CONSOLE-1 evidence: when true, the next resolves record what was hit and why in LastTrace.</summary>
+        public bool TraceEnabled { get; set; }
+
+        /// <summary>CONSOLE-1 evidence: the hits of the last traced resolve and the reason each was used or skipped.</summary>
+        public string LastTrace { get; private set; } = string.Empty;
+
         public bool TryResolve(Vector2 screenPosition, out CardDropTarget target)
         {
             return TryResolve(screenPosition, ContainerId.Empty, out target);
@@ -93,17 +106,22 @@ namespace ConsoleCards.Presentation.Interaction
                 Array.Sort(hitBuffer, 0, hitCount, RaycastHitDistanceComparer.Instance);
             }
 
+            System.Text.StringBuilder trace = TraceEnabled ? new System.Text.StringBuilder() : null;
+            trace?.Append($"pointer=({screenPosition.x:0},{screenPosition.y:0}) hits={hitCount} excluded={excludedContainerId}");
             ContainerId directContainerId = ContainerId.Empty;
             for (int i = 0; i < hitCount; i++)
             {
                 if (!TryGetValidContainerTarget(
                     hitBuffer[i].collider,
                     excludedContainerId,
-                    out ContainerId containerId))
+                    out ContainerId containerId,
+                    out string reason))
                 {
+                    trace?.Append($" [{DescribeCollider(hitBuffer[i])} skip:{reason}]");
                     continue;
                 }
 
+                trace?.Append($" [{DescribeCollider(hitBuffer[i])} use:{containerId}]");
                 directContainerId = containerId;
                 break;
             }
@@ -114,10 +132,53 @@ namespace ConsoleCards.Presentation.Interaction
                 bool hasPoint = TryGetPointerCoordinate(screenPosition, out TableCoordinate point);
                 if (magnet.TryAdjust(directContainerId, hasPoint, point, out ContainerId adjustedContainerId))
                 {
+                    trace?.Append($" magnet:{directContainerId}->{adjustedContainerId}");
                     directContainerId = adjustedContainerId == excludedContainerId
                         ? ContainerId.Empty
                         : adjustedContainerId;
                 }
+            }
+
+            if (trace != null && directContainerId.IsEmpty && VerboseReleaseTrace)
+            {
+                // Everything under the pointer on any layer, to show a drop target the mask or distance misses.
+                RaycastHit[] all = Physics.RaycastAll(ray, 1000f, Physics.AllLayers, QueryTriggerInteraction.Collide);
+                Array.Sort(all, RaycastHitDistanceComparer.Instance);
+                trace.Append($" | all-layers mask={ContainerLayerMask.value} max={MaximumDistance}:");
+                for (int i = 0; i < all.Length && i < 8; i++)
+                {
+                    Collider c = all[i].collider;
+                    TabletopContainerDropTarget t = c != null ? c.GetComponentInParent<TabletopContainerDropTarget>() : null;
+                    trace.Append($" [{DescribeCollider(all[i])} trig={(c != null && c.isTrigger)} dt={(t != null ? (t.IsConfigured ? "cfg" : "uncfg") + (t.isActiveAndEnabled ? "" : "-off") : "none")}]");
+                }
+
+                // The nearest drop targets to where the ray meets the table, whatever their state.
+                Vector3 probe = all.Length > 0 ? all[all.Length - 1].point : ray.GetPoint(10f);
+                TabletopContainerDropTarget[] targets = UnityEngine.Object.FindObjectsByType<TabletopContainerDropTarget>(FindObjectsInactive.Include);
+                Array.Sort(targets, (a, b) => DistanceTo(a, probe).CompareTo(DistanceTo(b, probe)));
+                trace.Append($" | nearest targets to {probe}:");
+                int listed = 0;
+                for (int i = 0; i < targets.Length && listed < 6; i++)
+                {
+                    TabletopContainerDropTarget t = targets[i];
+                    if (t.TargetCollider == null || !t.TargetCollider.enabled) continue;
+                    listed++;
+                    Vector3 sp = TargetCamera.WorldToScreenPoint(t.TargetCollider.bounds.center);
+                    trace.Append($" [ON {t.name}<{(t.transform.parent != null ? t.transform.parent.name : "-")}> screen=({sp.x:0},{sp.y:0}) of {Screen.width}x{Screen.height} size={t.TargetCollider.bounds.size}]");
+                }
+                trace.Append(" | nearest any:");
+                for (int i = 0; i < targets.Length && i < 3; i++)
+                {
+                    TabletopContainerDropTarget t = targets[i];
+                    Collider c = t.TargetCollider;
+                    trace.Append($" [{t.name}<{(t.transform.parent != null ? t.transform.parent.name : "-")}> go={t.gameObject.activeInHierarchy} dt={t.enabled}/{t.IsConfigured} col={(c != null ? $"{c.enabled} L{c.gameObject.layer} {c.bounds.center} {c.bounds.size}" : "null")} d={DistanceTo(t, probe):0.000}]");
+                }
+            }
+
+            if (trace != null)
+            {
+                trace.Append($" result={(directContainerId.IsEmpty ? "table" : directContainerId.ToString())}");
+                LastTrace = trace.ToString();
             }
 
             if (!directContainerId.IsEmpty)
@@ -163,26 +224,62 @@ namespace ConsoleCards.Presentation.Interaction
             return PointerProjector.TryProjectScreenPoint(screenPosition, out coordinate);
         }
 
+        private static float DistanceTo(TabletopContainerDropTarget target, Vector3 point)
+        {
+            Collider c = target.TargetCollider;
+            Vector3 centre = c != null ? c.bounds.center : target.transform.position;
+            if (c != null && !c.enabled) centre = c.transform.TransformPoint(c is BoxCollider box ? box.center : Vector3.zero);
+            return Vector3.Distance(centre, point);
+        }
+
+        private static string DescribeCollider(RaycastHit hit)
+        {
+            Collider c = hit.collider;
+            return c == null
+                ? "null"
+                : $"{c.name}<{(c.transform.parent != null ? c.transform.parent.name : "-")}> L{c.gameObject.layer} d{hit.distance:0.000}";
+        }
+
         private static bool TryGetValidContainerTarget(
             Collider hitCollider,
             ContainerId excludedContainerId,
             out ContainerId containerId)
         {
+            return TryGetValidContainerTarget(hitCollider, excludedContainerId, out containerId, out _);
+        }
+
+        private static bool TryGetValidContainerTarget(
+            Collider hitCollider,
+            ContainerId excludedContainerId,
+            out ContainerId containerId,
+            out string reason)
+        {
             containerId = ContainerId.Empty;
+            reason = string.Empty;
 
             if (hitCollider == null || !hitCollider.enabled)
             {
+                reason = "collider-off";
                 return false;
             }
 
             TabletopContainerDropTarget dropTarget = hitCollider.GetComponentInParent<TabletopContainerDropTarget>();
-            if (dropTarget == null
-                || !dropTarget.IsConfigured
+            if (dropTarget == null)
+            {
+                reason = "no-drop-target";
+                return false;
+            }
+
+            if (!dropTarget.IsConfigured
                 || !dropTarget.isActiveAndEnabled
                 || dropTarget.TargetCollider == null
                 || !ReferenceEquals(dropTarget.TargetCollider, hitCollider)
                 || !dropTarget.TargetCollider.enabled)
             {
+                reason = !dropTarget.IsConfigured ? "unconfigured"
+                    : !dropTarget.isActiveAndEnabled ? "target-off"
+                    : !ReferenceEquals(dropTarget.TargetCollider, hitCollider) ? "not-target-collider"
+                    : "target-collider-off";
                 return false;
             }
 
@@ -197,11 +294,13 @@ namespace ConsoleCards.Presentation.Interaction
                 || containerView.ContainerState.Id != containerView.ContainerId
                 || !IsComponentActiveAndEnabled(viewComponent))
             {
+                reason = "view-unbound";
                 return false;
             }
 
             if (!excludedContainerId.IsEmpty && containerView.ContainerId == excludedContainerId)
             {
+                reason = "excluded";
                 return false;
             }
 

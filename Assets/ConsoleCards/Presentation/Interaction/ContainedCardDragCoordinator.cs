@@ -38,6 +38,7 @@ namespace ConsoleCards.Presentation.Interaction
         // lands it becomes an ordinary held card. Coming back over the tray returns it to the tray.
         private bool trayDragActive;
         private bool trayExitInProgress;
+        private bool trayCardCarriedOut; // CONSOLE-1: the hand card has left the hand during this drag
         private bool trayDragOnTable;
 
         public ContainedCardDragCoordinator(
@@ -263,9 +264,10 @@ namespace ConsoleCards.Presentation.Interaction
                     startedDragging = false;
                 }
 
-                if (handView.IsScreenPointInTray(screenPosition))
+                if (IsPointerBackInTray(screenPosition))
                 {
                     trayExitInProgress = false;
+                    trayCardCarriedOut = false; // back in the hand: the whole tray counts again
                     handView.SetTrayDragPointer(view, screenPosition, true);
                     UpdateHandReorderPreview(view, default(TableCoordinate), screenPosition);
                     UpdateFeedback(screenPosition);
@@ -281,6 +283,7 @@ namespace ConsoleCards.Presentation.Interaction
                 if (!trayExitInProgress)
                 {
                     trayExitInProgress = true;
+                    trayCardCarriedOut = true;
                     ClearHandReorderPreview(view);
                     // HAND-2 (2026-11-06): the card left the hand's top edge; the hand drops to its resting strip so
                     // the table under it (the player's own Console slots) can take the card.
@@ -300,13 +303,14 @@ namespace ConsoleCards.Presentation.Interaction
                     return;
                 }
             }
-            else if (trayDragActive && handView.IsScreenPointInTray(screenPosition))
+            else if (trayDragActive && IsPointerBackInTray(screenPosition))
             {
                 // Back over the tray: stop holding it on the table and let it shrink back into the tray.
                 if (handView.TrayRig != null) handView.TrayRig.CarriedOut = false; // HAND-2
                 view.PhysicalObject.DisableForContainer();
                 trayDragOnTable = false;
                 trayExitInProgress = false;
+                trayCardCarriedOut = false; // back in the hand: the whole tray counts again
                 handView.SetTrayDragPointer(view, screenPosition, false);
                 UpdateHandReorderPreview(view, default(TableCoordinate), screenPosition);
                 UpdateFeedback(screenPosition);
@@ -403,7 +407,13 @@ namespace ConsoleCards.Presentation.Interaction
             stateMachine.ReleasePointer();
             try
             {
+                // CONSOLE-1 evidence: one line per release saying where the drop resolved and from what.
+                dropTargetResolver.TraceEnabled = true;
                 bool resolved = dropTargetResolver.TryResolve(screenPosition, out CardDropTarget target);
+                string releaseTrace = dropTargetResolver.LastTrace;
+                dropTargetResolver.TraceEnabled = false;
+                Debug.Log($"[Drop] contained-card release: source={sourceContainerId} tray={trayDragActive} onTable={trayDragOnTable} "
+                    + $"carriedOut={trayCardCarriedOut} target={target.Kind}:{target.ContainerId} | {releaseTrace}");
                 if (trayDragActive
                     && !trayDragOnTable
                     && (!resolved
@@ -477,6 +487,7 @@ namespace ConsoleCards.Presentation.Interaction
                     transferResult,
                     view,
                     transferStart);
+                Debug.Log($"[Drop] contained-card transfer to {target.Kind}:{target.ContainerId} -> {releaseResult.Status}");
                 if (releaseResult.Status == ContainedCardDragReleaseStatus.TransferAccepted)
                 {
                     stateMachine.CompleteAcceptance();
@@ -986,7 +997,19 @@ namespace ConsoleCards.Presentation.Interaction
             trayDragOnTable = false;
             trayExitInProgress = false;
             if (handView != null && handView.TrayRig != null) handView.TrayRig.CarriedOut = false; // HAND-2
+            trayCardCarriedOut = false;
             handView?.EndTrayDrag();
+        }
+
+        // CONSOLE-1 (2026-11-06): before the card has left the hand the whole tray counts (reordering inside it);
+        // once it was carried out, only the hand's drop band brings it back, the same band a card from the table
+        // drops into. The full tray reaches over the player's own Console, so a card held over a Console slot
+        // went back into the hand and the release was turned into a return to the hand.
+        private bool IsPointerBackInTray(Vector2 screenPosition)
+        {
+            return trayCardCarriedOut
+                ? handView.IsScreenPointInTrayDropBand(screenPosition)
+                : handView.IsScreenPointInTray(screenPosition);
         }
 
         private CardView GetActiveCardView()

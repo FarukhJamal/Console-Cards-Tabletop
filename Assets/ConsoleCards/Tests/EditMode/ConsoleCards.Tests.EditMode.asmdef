@@ -8,7 +8,8 @@
         "ConsoleCards.Application",
         "ConsoleCards.GameTemplates",
         "ConsoleCards.Definitions",
-        "ConsoleCards.TrapFloor"
+        "ConsoleCards.TrapFloor",
+        "ConsoleCards.Presentation"
     ],
     "includePlatforms": [
         "Editor"

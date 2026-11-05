@@ -240,6 +240,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!host.ViewSync.Ready) return;
             PresentGrantedCard(result.GrantedCardId, result.Card.DisplayName, result.DestinationContainerId);
+            if (result.Succeeded && command.PaymentCardIds.Count > 0) ShowPaymentReturned(command.Context.RequestedByPlayerId);
         }
 
         private void OnPrizeTaken(TrapFloorTakePrizeCommand command, TrapFloorTakePrizeResult result)
@@ -249,6 +250,10 @@ namespace ConsoleCards.Presentation.Composition
                 result.GrantedCardId,
                 result.FloorCard.Content.DisplayName,
                 result.DestinationContainerId);
+            // CONSOLE-2 (2026-11-06, two-client test): on the other computers the Controller Cards that paid stayed
+            // drawn in the payer's Console slots although the state had put them back in the Controller deck (the
+            // deck count was right). Lay out the payer's slots and the deck here too.
+            if (result.Succeeded && command.PaymentCardIds.Count > 0) ShowPaymentReturned(command.Context.RequestedByPlayerId);
         }
 
         public void OnTableShutdown() => FinishPawnHops();

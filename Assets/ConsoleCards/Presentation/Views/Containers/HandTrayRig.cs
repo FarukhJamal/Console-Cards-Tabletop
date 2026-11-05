@@ -311,6 +311,32 @@ namespace ConsoleCards.Presentation.Views.Containers
             }
         }
 
+        /// <summary>
+        /// CONSOLE-1 (2026-11-06): true when the screen point lies over the hand's drop band, the lower part of the
+        /// cards where a card from the table goes into the hand (pure geometry, no physics). A hand card that was
+        /// carried out of the hand comes back only here: the full tray (<see cref="ContainsScreenPoint"/>) reaches up
+        /// over the player's own Console, so a card carried to a Console slot was pulled back into the hand.
+        /// </summary>
+        public bool ContainsDropBandScreenPoint(Vector2 screenPosition)
+        {
+            if (targetCamera == null || !gameObject.activeInHierarchy)
+            {
+                return false;
+            }
+
+            Ray ray = targetCamera.ScreenPointToRay(screenPosition);
+            Plane plane = new Plane(anchor.up, anchor.position);
+            if (!plane.Raycast(ray, out float enter))
+            {
+                return false;
+            }
+
+            Vector3 local = anchor.InverseTransformPoint(ray.GetPoint(enter));
+            return Mathf.Abs(local.x) <= bandHalfWidth
+                && local.z >= -bandLowerDepth
+                && local.z <= bandDropTop;
+        }
+
         /// <summary>True when the screen point lies over the tray band (pure geometry, no physics).</summary>
         public bool ContainsScreenPoint(Vector2 screenPosition)
         {

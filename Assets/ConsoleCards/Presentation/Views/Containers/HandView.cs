@@ -247,6 +247,12 @@ namespace ConsoleCards.Presentation.Views.Containers
             return isBound && trayRig != null && trayRig.ContainsScreenPoint(screenPosition);
         }
 
+        /// <summary>CONSOLE-1: over the hand's drop band only (where a card carried out of the hand comes back).</summary>
+        internal bool IsScreenPointInTrayDropBand(Vector2 screenPosition)
+        {
+            return isBound && trayRig != null && trayRig.ContainsDropBandScreenPoint(screenPosition);
+        }
+
         /// <summary>
         /// A card dragged inside the tray follows the pointer on the tray plane. A card coming back from
         /// the table shrinks into the tray from where it is, centred on the pointer.

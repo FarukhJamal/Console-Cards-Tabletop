@@ -548,7 +548,11 @@ namespace ConsoleCards.Presentation.Interaction
                 return false;
             }
 
-            if (!cardDropTargetResolver.TryResolve(screenPosition, out CardDropTarget target)
+            cardDropTargetResolver.TraceEnabled = true;
+            bool resolvedTarget = cardDropTargetResolver.TryResolve(screenPosition, out CardDropTarget target);
+            cardDropTargetResolver.TraceEnabled = false;
+            Debug.Log($"[Drop] table-card release: target={target.Kind}:{target.ContainerId} | {cardDropTargetResolver.LastTrace}");
+            if (!resolvedTarget
                 || target.Kind != CardDropTargetKind.Container)
             {
                 return false;

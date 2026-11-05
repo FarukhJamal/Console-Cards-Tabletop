@@ -3361,6 +3361,15 @@ namespace ConsoleCards.Presentation.Composition
         internal void BeginTakeFloorPrize()
         {
             host.ContextMenus.CloseContextMenu();
+            // UX-HOST-CHIP (2026-11-06): online, only the computer that plays the turn seat takes its prize; say so
+            // instead of doing nothing (the chip is greyed out there; the floor card's "Take it" ends here too).
+            if (host.trapFloorTurnState != null
+                && !host.IsPlayerOnThisComputer(host.trapFloorTurnState.ActivePlayerId))
+            {
+                host.ShowMessage($"It is {FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)}'s turn: only their computer can take this.");
+                return;
+            }
+
             if (IsPaymentBlocking())
             {
                 host.ShowMessage("Finish or cancel the current payment first.");
@@ -3487,7 +3496,13 @@ namespace ConsoleCards.Presentation.Composition
         // active player's Console slots again.
         internal void ShowPaymentReturned()
         {
-            if (!TryGetTrapFloorPlayerSetup(host.trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition player))
+            if (host.trapFloorTurnState != null) ShowPaymentReturned(host.trapFloorTurnState.ActivePlayerId);
+        }
+
+        // CONSOLE-2: also run on the computers that replay another player's purchase (OnPrizeTaken, OnShopCardBought).
+        internal void ShowPaymentReturned(PlayerId payer)
+        {
+            if (payer.IsEmpty || !TryGetTrapFloorPlayerSetup(payer, out TrapFloorPlayerSetupDefinition player))
             {
                 return;
             }

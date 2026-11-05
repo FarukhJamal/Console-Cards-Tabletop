@@ -589,6 +589,10 @@ namespace ConsoleCards.Presentation.UI
             {
                 primaryLabel.text = primaryAction.Label.ToUpperInvariant();
                 primaryButton.interactable = primaryAction.Enabled;
+                // UX-HOST-CHIP: END TURN on a computer that does not play the turn seat is greyed out clearly too.
+                CanvasGroup primaryGroup = primaryButton.GetComponent<CanvasGroup>();
+                if (primaryGroup == null) primaryGroup = primaryButton.gameObject.AddComponent<CanvasGroup>();
+                primaryGroup.alpha = primaryAction.Enabled ? 1f : DisabledChipAlpha;
             }
 
             while (actionChips.Count < secondaryActions.Count)
@@ -610,6 +614,11 @@ namespace ConsoleCards.Presentation.UI
                 anyShown = true;
                 if (actionChipLabels[i] != null) actionChipLabels[i].text = secondaryActions[i].Label.ToUpperInvariant();
                 actionChips[i].interactable = secondaryActions[i].Enabled;
+                // UX-HOST-CHIP (2026-11-06): a chip for an action that belongs to another computer's seat (or is not
+                // available yet) is greyed out clearly: the button's own disabled tint left it looking pressable.
+                CanvasGroup chipGroup = actionChips[i].GetComponent<CanvasGroup>();
+                if (chipGroup == null) chipGroup = actionChips[i].gameObject.AddComponent<CanvasGroup>();
+                chipGroup.alpha = secondaryActions[i].Enabled ? 1f : DisabledChipAlpha;
             }
 
             // Owner, 2026-11-03: "remove the next step from the END TURN button for now": the row stays hidden...
@@ -633,6 +642,8 @@ namespace ConsoleCards.Presentation.UI
             Vector2 areaCorner = othersArea.anchoredPosition;
             actionsRoot.anchoredPosition = new Vector2(areaCorner.x - primaryWidth - OtherActionGap, areaCorner.y);
         }
+
+        private const float DisabledChipAlpha = 0.4f; // UX-HOST-CHIP
 
         private static bool IsKeptBesideEndTurn(PopupActionOption action) =>
             string.Equals(action.Label, "End Floor…", StringComparison.Ordinal) // Free mode's manual floor end (2026-11-05)
