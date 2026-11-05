@@ -19,7 +19,11 @@ namespace ConsoleCards.Editor.Board
             MethodInfo deal = cartridge?.GetType().GetMethod("DealFloor", any);
             PropertyInfo index = template?.GetType().GetProperty("FloorIndex");
             if (deal == null || index == null) { Debug.Log("[Debug] Not a Trap Floor table."); return; }
-            deal.Invoke(cartridge, new object[] { (int)index.GetValue(template) + 1 });
+            // DealFloor(int floorIndex, int stageIndex = 0): reflection needs every parameter (NEXTFLOOR-1, 2026-11-05).
+            object[] arguments = deal.GetParameters().Length == 2
+                ? new object[] { (int)index.GetValue(template) + 1, 0 }
+                : new object[] { (int)index.GetValue(template) + 1 };
+            deal.Invoke(cartridge, arguments);
         }
 
         [MenuItem("Console Cards/Debug/Deal Next Trap Floor (Play mode)", true)]

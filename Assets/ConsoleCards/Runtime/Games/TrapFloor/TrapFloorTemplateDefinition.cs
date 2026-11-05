@@ -22,6 +22,7 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly ReadOnlyDictionary<TabletopObjectId, string> cardLabels;
         private readonly ReadOnlyDictionary<ObjectDefinitionId, TrapFloorFloorContentDefinition> floorContentDefinitions;
         private readonly int floorContentInstanceCount;
+        private readonly int floorRequiredKeyCount;
         private readonly ReadOnlyCollection<TrapFloorPlayerSetupDefinition> players;
         private readonly ReadOnlyDictionary<ObjectDefinitionId, TrapFloorFloormasterCardCategory> emptyFloormasterCategories;
         private readonly ReadOnlyCollection<TabletopObjectId> emptyObjectIds;
@@ -43,9 +44,15 @@ namespace ConsoleCards.Games.TrapFloor
             int floorCount = 1,
             ContainerId abilityDeckId = default,
             ContainerId abilityDiscardId = default,
-            bool usesCustomLayout = false)
+            bool usesCustomLayout = false,
+            int floorRequiredKeyCount = -1)
         {
             UsesCustomLayout = usesCustomLayout;
+            // NEXTFLOOR-1 (2026-11-05): since the rules recipe (owner, 2026-11-04) a floor's Keys come from the win mode
+            // (floor 1: 3 Keys, floors 2-3: 2 Keys; the Grand Exit needs 1, Survival 3), not from the difficulty asset's
+            // authored count (Hard / Impossible: 3). The factory passes the recipe's figure; without one the authored
+            // count is used, as before.
+            this.floorRequiredKeyCount = floorRequiredKeyCount;
             AbilityDeckId = abilityDeckId;
             AbilityDiscardId = abilityDiscardId;
             if (floorCount < 1) throw new ArgumentOutOfRangeException(nameof(floorCount));
@@ -91,6 +98,12 @@ namespace ConsoleCards.Games.TrapFloor
         public GameDefinitionData GameDefinition { get; }
 
         public ModeDefinitionData ActiveMode { get; }
+
+        /// <summary>
+        /// NEXTFLOOR-1: the Keys this floor's rules recipe requires (the win mode's figure); without a recipe, the
+        /// active mode's authored count, as before.
+        /// </summary>
+        public int FloorRequiredKeyCount => floorRequiredKeyCount >= 0 ? floorRequiredKeyCount : ActiveMode.RequiredKeyCount;
 
         public GridDefinitionData Grid => GameDefinition.Grid;
 
@@ -413,10 +426,11 @@ namespace ConsoleCards.Games.TrapFloor
                     $"Authored Trap Floor content produces {floorContentInstanceCount} instances for a {Grid.CellCount}-cell Grid.");
             }
 
-            if (ActiveMode.RequiredKeyCount > configuredKeyCount)
+            int requiredKeys = FloorRequiredKeyCount;
+            if (requiredKeys > configuredKeyCount)
             {
                 throw new ArgumentException(
-                    "Trap Floor active Mode requires more Keys than the authored Floor content produces.");
+                    $"Trap Floor active Mode requires {requiredKeys} Keys, but the authored Floor content produces {configuredKeyCount}.");
             }
 
             Dictionary<TabletopObjectId, GameTemplateObjectInstanceDefinition> templateObjects =

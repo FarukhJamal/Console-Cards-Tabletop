@@ -683,8 +683,10 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             if (objectiveState.MatchId != matchState.Id
+                // NEXTFLOOR-1 (2026-11-05): the floor's own Key requirement (the win mode's, owner 2026-11-04), not
+                // the difficulty asset's count, which refused every claim and escape in Hard and Impossible.
                 || objectiveState.RequiredKeyCount
-                    != template.ActiveMode.RequiredKeyCount
+                    != template.FloorRequiredKeyCount
                 || objectiveState.ModeBehavior != template.ActiveMode.Behavior)
             {
                 return TrapFloorObjectiveError.ObjectiveStateMismatch;

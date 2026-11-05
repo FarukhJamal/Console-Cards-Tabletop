@@ -361,7 +361,8 @@ namespace ConsoleCards.Games.TrapFloor
                 floorCount,
                 abilityDeckId,
                 abilityDiscardId,
-                tableLayout != null);
+                tableLayout != null,
+                recipe != null ? recipe.RequiredKeys : -1); // NEXTFLOOR-1: the floor's own Key requirement
         }
 
         // TABLE-1 (owner, 2026-10-21): the Ability discard pile, just above the Ability deck. Used Abilities go there;

@@ -357,6 +357,7 @@ namespace ConsoleCards.Presentation.Composition
             host.trapFloorNextStageIndex = floorIndex == 0 ? Math.Max(0, stageIndex) : host.trapFloorStageIndex;
             host.trapFloorCarriedAvatars = CaptureSeatAvatars(); // D3: each seat keeps the Avatar it chose
             bool dealt;
+            host.gameTemplatesPanelError = null; // NEXTFLOOR-1: only this deal's reason is reported
             try
             {
                 dealt = host.SessionService.TryReplaceTable(host.activeSession.Selection);
@@ -368,7 +369,17 @@ namespace ConsoleCards.Presentation.Composition
                 host.trapFloorCarriedAvatars = null;
             }
 
-            if (!dealt || host.trapFloorTemplate == null) return;
+            if (!dealt)
+            {
+                if (host.IsOnlineTable && !(host.HasOnline && host.Online.IsHosting)) return; // a joined computer asked the host
+                // NEXTFLOOR-1: a failed deal used to be silent at the table (the reason only reached the Games panel).
+                string why = string.IsNullOrEmpty(host.gameTemplatesPanelError) ? "the reason is in the log" : host.gameTemplatesPanelError;
+                Debug.LogWarning($"[Floor] Floor {floorIndex + 1} could not be dealt: {why}");
+                host.ShowMessage($"Floor {floorIndex + 1} could not be dealt: {why}");
+                return;
+            }
+
+            if (host.trapFloorTemplate == null) return;
             host.ShowMessage(floorIndex == 0
                 ? stageIndex > 0 ? $"STAGE {stageIndex + 1}: {StageName(stageIndex)} — Floor 1." : "A new game: Floor 1."
                 : $"FLOOR {host.trapFloorTemplate.FloorIndex + 1} of {host.trapFloorTemplate.FloorCount} — "
