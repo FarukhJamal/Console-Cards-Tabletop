@@ -75,6 +75,7 @@ namespace ConsoleCards.Presentation.Composition
             // SEC-1 (2026-11-05): true when Key is only the public id of the member's secret key (what the roster
             // carries). A computer that rejoins proves itself with the secret key; the public id alone gets nothing.
             public bool KeyIsPublic;
+            public bool WatchNoticeSent; // SEC-3: told once that watching is not available yet
             public string Name = string.Empty;
             public int Colour;
             public bool Ready;

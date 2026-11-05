@@ -228,7 +228,8 @@ namespace ConsoleCards.Presentation.Composition
                     },
                     "Not yet",
                     () => host.runtimeUi?.CloseTableMilestone(),
-                    last || host.IsOnlineTable ? 0f : FloorEndedAutoDealSeconds))) // online: no countdown; a player presses Start
+                    // Owner decision C (2026-11-05): Free never deals the next floor by itself.
+                    last || host.IsOnlineTable || PlayAssist.IsFree ? 0f : FloorEndedAutoDealSeconds))) // online: no countdown; a player presses Start
             {
                 return;
             }

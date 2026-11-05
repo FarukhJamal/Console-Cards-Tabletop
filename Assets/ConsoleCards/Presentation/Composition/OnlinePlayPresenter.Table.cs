@@ -551,8 +551,21 @@ namespace ConsoleCards.Presentation.Composition
             };
         }
 
+        // SEC-3 (owner decision B, 2026-11-05): a computer without a seat (watching) receives no table data at all,
+        // until the authority migration can send it only what is public (doc 10). It is told why instead.
+        private bool IsWatcher(Member member) =>
+            sharedTable && member != null && !member.IsHost && member.Player == Guid.Empty;
+
         private void SendTable(Member member)
         {
+            if (IsWatcher(member))
+            {
+                if (member.WatchNoticeSent) return;
+                member.WatchNoticeSent = true;
+                SendNotice(member, "This table is full. Watching a game is not available yet: wait for the next game, or ask the host for a seat.");
+                return;
+            }
+
             byte[] payload = TablePayload();
             if (payload == null || !member.Connected || member.Connection < 0) return;
             BeginOrdered(MsgTable);
@@ -870,6 +883,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 Member member = members[i];
                 if (member.IsHost || !member.Connected || member.Connection < 0) continue;
+                if (IsWatcher(member)) continue; // SEC-3
                 session.SendTo(member.Connection, outStream.GetBuffer(), 0, (int)outStream.Length);
             }
         }
@@ -909,6 +923,7 @@ namespace ConsoleCards.Presentation.Composition
                     {
                         Member other = members[i];
                         if (other == member || other.IsHost || !other.Connected || other.Connection < 0) continue;
+                        if (IsWatcher(other)) continue; // SEC-3
                         session.SendTo(other.Connection, data, 0, data.Length);
                     }
 
@@ -1047,6 +1062,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 Member member = members[i];
                 if (member == except || member.IsHost || !member.Connected || member.Connection < 0) continue;
+                if (IsWatcher(member)) continue; // SEC-3: no table, commands, checks or deals for a computer that watches
                 WriteSeq(buffer, ++member.SentSeq);
                 session.SendTo(member.Connection, buffer, 0, length);
             }

@@ -601,18 +601,44 @@ namespace ConsoleCards.Presentation.UI
                 actionChipLabels.Add(chip.GetComponentInChildren<Text>(true));
             }
 
+            bool anyShown = false;
             for (int i = 0; i < actionChips.Count; i++)
             {
-                bool shown = i < secondaryActions.Count;
+                bool shown = i < secondaryActions.Count && IsKeptBesideEndTurn(secondaryActions[i]);
                 if (actionChips[i].gameObject.activeSelf != shown) actionChips[i].gameObject.SetActive(shown);
                 if (!shown) continue;
+                anyShown = true;
                 if (actionChipLabels[i] != null) actionChipLabels[i].text = secondaryActions[i].Label.ToUpperInvariant();
                 actionChips[i].interactable = secondaryActions[i].Enabled;
             }
 
-            // Owner, 2026-11-03: "remove the next step from the END TURN button for now": the row stays hidden.
-            actionsRoot.gameObject.SetActive(false);
+            // Owner, 2026-11-03: "remove the next step from the END TURN button for now": the row stays hidden...
+            // Stabilization, 2026-11-05 (owner decision D): ...except the payment and prize choices, which have no other
+            // way in. Without them a costed prize could be neither paid nor cancelled (Confirm and Cancel Payment
+            // lived only in this row).
+            actionsRoot.gameObject.SetActive(anyShown);
+            if (anyShown) KeepOthersLeftOfPrimary();
         }
+
+        // Stabilization, 2026-11-05: the row was placed once at Bind, when END TURN had no width yet, so it sat on top
+        // of END TURN. Placed again from END TURN's real width each time it is shown.
+        private RectTransform othersArea;
+
+        private void KeepOthersLeftOfPrimary()
+        {
+            if (!othersBesidePrimary || othersArea == null || primaryButton == null) return;
+            RectTransform primaryRect = (RectTransform)primaryButton.transform;
+            float primaryWidth = primaryRect.rect.width > 1f ? primaryRect.rect.width : primaryRect.sizeDelta.x;
+            if (primaryWidth <= 1f) return;
+            Vector2 areaCorner = othersArea.anchoredPosition;
+            actionsRoot.anchoredPosition = new Vector2(areaCorner.x - primaryWidth - OtherActionGap, areaCorner.y);
+        }
+
+        private static bool IsKeptBesideEndTurn(PopupActionOption action) =>
+            action.Label.StartsWith("Confirm Payment", StringComparison.OrdinalIgnoreCase)
+            || action.Label.StartsWith("Cancel Payment", StringComparison.OrdinalIgnoreCase)
+            || (action.Label.StartsWith("Take ", StringComparison.OrdinalIgnoreCase)
+                && !action.Label.StartsWith("Take Key", StringComparison.OrdinalIgnoreCase));
 
         // Owner, 2026-11-03: the turn's other actions (TAKE KEY, COLLAPSE FLOOR…) stood as small grey chips stacked
         // above END TURN, which looked like loose hints. They now sit in one row to the left of END TURN, as full
@@ -629,6 +655,7 @@ namespace ConsoleCards.Presentation.UI
             RectTransform area = primaryButton.transform.parent as RectTransform;
             if (area == null || area.parent == null || actionsRoot.parent != area) return;
             othersBesidePrimary = true;
+            othersArea = area;
             RectTransform primaryRect = (RectTransform)primaryButton.transform;
             float primaryWidth = primaryRect.rect.width > 1f ? primaryRect.rect.width : primaryRect.sizeDelta.x;
             actionsRoot.SetParent(area.parent, false);

@@ -135,7 +135,7 @@ namespace ConsoleCards.Presentation.Composition
                 return true;
             }
 
-            DropPendingPayment("The unfinished payment was cancelled. Its cards stay where they were placed.");
+            DropPendingPayment("The unfinished payment was cancelled.");
             return false;
         }
 
@@ -145,11 +145,163 @@ namespace ConsoleCards.Presentation.Composition
             host.pendingPurchaseDefinitionStableId = string.Empty;
             pendingDeckCardId = TabletopObjectId.Empty;
             PendingControllerPurchaseState state = host.pendingControllerPurchaseState;
-            if (state == null || !state.IsActive) return;
+            if (state == null || !state.IsActive)
+            {
+                paymentOrigins.Clear();
+                return;
+            }
+
+            int restored = RestorePaymentCards(state);
             state.Clear();
             ReplaceCurrentUndoStateForPurchaseAssistance();
             RefreshTrapFloorStatusUi();
-            if (!string.IsNullOrEmpty(message)) host.ShowMessage(message);
+            if (!string.IsNullOrEmpty(message))
+            {
+                host.ShowMessage(restored > 0
+                    ? $"{message} {restored} payment card{(restored == 1 ? " is" : "s are")} back where {(restored == 1 ? "it was" : "they were")}."
+                    : message);
+            }
+        }
+
+        // Owner decision D (2026-11-05): "Cancel Payment must restore the pre-transaction state." Where each chosen
+        // payment card was when the payment began: its pile and place in it (or its spot on the table), its face and
+        // its owner. Kept on this computer, like the payment itself.
+        private struct PaymentOrigin
+        {
+            public ContainerId Container;
+            public int Index;
+            public TabletopPose Pose;
+            public CardFace Face;
+            public PlayerId Owner;
+        }
+
+        private readonly Dictionary<TabletopObjectId, PaymentOrigin> paymentOrigins =
+            new Dictionary<TabletopObjectId, PaymentOrigin>();
+
+        // Every card on the table is noted, not only the chosen ones: a card with the same button may be put in
+        // instead of a chosen one (BUY-1, TryUseMatchingPaymentCard), and it must go back to where it came from too.
+        private void RecordPaymentOrigins(IReadOnlyList<TabletopObjectId> cardIds)
+        {
+            paymentOrigins.Clear();
+            if (host.matchState == null) return;
+            foreach (KeyValuePair<TabletopObjectId, CardInstanceState> entry in host.matchState.Cards)
+            {
+                CardInstanceState card = entry.Value;
+                if (card == null) continue;
+                TabletopObjectState state = card.BaseState;
+                int index = -1;
+                if (!state.ContainerId.IsEmpty && host.matchState.Containers.TryGetValue(state.ContainerId, out ContainerState pile))
+                    index = pile.IndexOf(entry.Key);
+                paymentOrigins[entry.Key] = new PaymentOrigin
+                {
+                    Container = state.ContainerId,
+                    Index = index,
+                    Pose = state.Pose,
+                    Face = card.Face,
+                    Owner = state.OwnerPlayerId,
+                };
+            }
+        }
+
+        // Puts every chosen payment card (reserved for this payment, wherever it was moved since) back where it was when the payment
+        // began, through the table's commands (so it is one Undo step and reaches the other computers). A card that is
+        // gone, or already back, is left alone; nothing is created or destroyed. The count put back.
+        private int RestorePaymentCards(PendingControllerPurchaseState state)
+        {
+            if (paymentOrigins.Count == 0 || host.matchState == null || !host.IsPlayerOnThisComputer(state.PlayerId))
+            {
+                Debug.Log($"[Payment] Cancel: nothing put back here (origins {paymentOrigins.Count}, payer here {host.IsPlayerOnThisComputer(state.PlayerId)}).", host);
+                paymentOrigins.Clear();
+                return 0;
+            }
+
+            List<KeyValuePair<TabletopObjectId, PaymentOrigin>> toRestore = new List<KeyValuePair<TabletopObjectId, PaymentOrigin>>();
+            HashSet<ContainerId> leftFrom = new HashSet<ContainerId>();
+            for (int i = 0; i < state.SelectedCardIds.Count; i++)
+            {
+                TabletopObjectId cardId = state.SelectedCardIds[i];
+                // Decision D: "every staged or reserved card": a chosen card is reserved for the payment, so it goes back
+                // wherever it was moved to (a Console slot, the table, another pile); not only once it is in a slot.
+                if (!paymentOrigins.TryGetValue(cardId, out PaymentOrigin origin)) continue;
+                if (!host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card)) continue;
+                if (card.BaseState.ContainerId == origin.Container) continue; // already back
+                toRestore.Add(new KeyValuePair<TabletopObjectId, PaymentOrigin>(cardId, origin));
+            }
+
+            {
+                // Stabilization evidence (decision D): what the cancel saw, one line in the log.
+                StringBuilder seen = new StringBuilder();
+                for (int i = 0; i < state.SelectedCardIds.Count; i++)
+                {
+                    TabletopObjectId id = state.SelectedCardIds[i];
+                    string where = host.matchState.Cards.TryGetValue(id, out CardInstanceState c) ? c.BaseState.ContainerId.ToString() : "gone";
+                    string from = paymentOrigins.TryGetValue(id, out PaymentOrigin o) ? o.Container.ToString() : "?";
+                    seen.Append($" [{id} inserted={state.IsInserted(id)} now={where} was={from}]");
+                }
+                Debug.Log($"[Payment] Cancel: {toRestore.Count} of {state.SelectedCardIds.Count} chosen card(s) to put back.{seen}", host);
+            }
+
+            toRestore.Sort((a, b) => a.Value.Index.CompareTo(b.Value.Index)); // lowest place first keeps the order
+            int restored = 0;
+            host.SessionService.BeginUndoBatch();
+            try
+            {
+                for (int i = 0; i < toRestore.Count; i++)
+                {
+                    TabletopObjectId cardId = toRestore[i].Key;
+                    PaymentOrigin origin = toRestore[i].Value;
+                    CardInstanceState card = host.matchState.Cards[cardId];
+                    ContainerId from = card.BaseState.ContainerId;
+                    if (!from.IsEmpty) leftFrom.Add(from);
+                    CommandContext context = host.CreateCommandContext(state.PlayerId);
+                    TransferCardResult moved = origin.Container.IsEmpty
+                        ? host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(
+                            TransferCardCommand.ToTabletop(context, cardId, from, origin.Pose))
+                        : host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(
+                            TransferCardCommand.ToContainer(context, cardId, from, origin.Container));
+                    if (!moved.Succeeded)
+                    {
+                        Debug.Log($"[Payment] Cancel: {cardId} could not go back to {origin.Container}: {moved.Error}.", host);
+                        continue;
+                    }
+
+                    restored++;
+                    if (!origin.Container.IsEmpty
+                        && origin.Index >= 0
+                        && host.matchState.Containers.TryGetValue(origin.Container, out ContainerState pile))
+                    {
+                        int now = pile.IndexOf(cardId);
+                        int wanted = Math.Min(origin.Index, pile.Count - 1);
+                        if (now >= 0 && now != wanted)
+                        {
+                            host.TableAuthority.Submit<ReorderContainerCommand, ReorderContainerResult>(
+                                new ReorderContainerCommand(host.CreateCommandContext(state.PlayerId), origin.Container, cardId, now, wanted));
+                        }
+                    }
+
+                    if (card.Face != origin.Face)
+                    {
+                        host.TableAuthority.Submit<FlipCardCommand, FlipCardResult>(
+                            new FlipCardCommand(host.CreateCommandContext(state.PlayerId), cardId, origin.Face));
+                    }
+                }
+            }
+            finally
+            {
+                host.SessionService.EndUndoBatch();
+                paymentOrigins.Clear();
+            }
+
+            for (int i = 0; i < toRestore.Count; i++)
+            {
+                if (!toRestore[i].Value.Container.IsEmpty) host.ApplyLayout(toRestore[i].Value.Container);
+                if (host.Registry.TryGetCardView(toRestore[i].Key, out CardView view) && view.IsBound) view.ApplyAcceptedState();
+            }
+
+            foreach (ContainerId slot in leftFrom) host.ApplyLayout(slot);
+            host.RefreshCardContentVisibility();
+            Debug.Log($"[Payment] Cancel: {restored} of {toRestore.Count} card(s) put back.", host);
+            return restored;
         }
 
         internal void OpenActionAbilityPurchase()
@@ -351,6 +503,12 @@ namespace ConsoleCards.Presentation.Composition
             string definitionId = host.pendingPurchaseDefinitionStableId;
             PlayerId playerId = host.trapFloorTurnState.ActivePlayerId;
             host.pendingControllerPurchaseState.Begin(playerId, definitionId, selectedCardIds, pendingPurchaseSource);
+            RecordPaymentOrigins(selectedCardIds); // owner decision D: Cancel puts every staged card back where it was
+            {
+                TrapFloorPlayerSetupDefinition payerSetup = GetAssistedTrapFloorPlayerSetup();
+                int handCount = host.matchState.Containers.TryGetValue(payerSetup.HandContainerId, out ContainerState payerHand) ? payerHand.Count : -1;
+                Debug.Log($"[Payment] Began: {selectedCardIds.Count} chosen card(s); the Hand holds {handCount}.", host);
+            }
             host.pendingPurchaseDefinitionStableId = string.Empty;
             host.runtimeUi?.CloseFocusedCardSelection();
             ReplaceCurrentUndoStateForPurchaseAssistance();
@@ -411,7 +569,7 @@ namespace ConsoleCards.Presentation.Composition
             pendingDeckCardId = TabletopObjectId.Empty;
             host.runtimeUi?.CloseFocusedCardSelection();
             host.runtimeUi?.CloseActionAbilityPurchase();
-            DropPendingPayment("Payment cancelled. Cards stay where you placed them.");
+            DropPendingPayment("Payment cancelled.");
         }
 
         internal string FindPurchaseDisplayName(string cardDefinitionStableId)
@@ -928,6 +1086,9 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            // Owner decision C (2026-11-05): in Free the dice are never watched; a collapse happens only when a player asks for
+            // it (Collapse Floor), or by hand.
+            if (PlayAssist.IsFree) { collapseWatching = false; return; }
             if (floorTurnCollapseDone
                 || host.trapFloorCollapseState.IsBoardExhausted
                 || (host.trapFloorCollapseUseCase != null && host.trapFloorCollapseUseCase.NothingLeftToCollapse)) return;
@@ -1096,7 +1257,7 @@ namespace ConsoleCards.Presentation.Composition
             host.physicalFloorCollapseActor = PlayerId.Empty;
             floorTurnCollapseDone = true; // COLLAPSE-3: one collapse per floor turn
             ApplyCollapsedFloorPresentation(result.CollapsedFloor.FloorCardId);
-            KnockOutPawnsOnCollapsedTile(result.Roll.Coordinate); // FALL-1
+            if (!PlayAssist.IsFree) KnockOutPawnsOnCollapsedTile(result.Roll.Coordinate); // FALL-1; decision C: not in Free
             host.selectionState?.ClearAll();
             host.selectionPresenter?.Refresh();
             RefreshTrapFloorStatusUi();
@@ -1827,7 +1988,7 @@ namespace ConsoleCards.Presentation.Composition
                 if (!knockedOut && !wasFloorTurn) RememberPrizeLeft(actor);
                 if (!wasFloorTurn) EndAbilityOffer(); // ABIL-DECK: what was not bought goes back; the deck is shuffled
                 // B01 (playtest): an unfinished payment ends with the turn, so it never blocks the next player.
-                if (!wasFloorTurn) DropPendingPayment("The unfinished payment ended with the turn. Its cards stay where they were placed.");
+                if (!wasFloorTurn) DropPendingPayment("The unfinished payment ended with the turn.");
                 if (!knockedOut)
                 {
                     result = skipped
@@ -2346,8 +2507,10 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             RefreshTrapFloorStatusUi();
-            // B03: the turn player's pawn standing on the tile just turned (an exit in Free mode) is checked as a landing.
-            if (TryGetActivePawnTile(out _, out TrapFloorCoordinate pawnTile)
+            // B03: the turn player's pawn standing on the tile just turned is checked as a landing (not in Free: owner
+            // decision C, 2026-11-05, Free never takes exits by itself).
+            if (!PlayAssist.IsFree
+                && TryGetActivePawnTile(out _, out TrapFloorCoordinate pawnTile)
                 && host.trapFloorTemplate.TryGetFloorCardId(pawnTile, out TabletopObjectId underPawn)
                 && underPawn == floorCardId)
             {
@@ -3672,7 +3835,8 @@ namespace ConsoleCards.Presentation.Composition
             // B05 (playtest: "gameplay may continue after a terminal condition"): once the floor is won or lost, moving
             // pawns triggers nothing more (the positions above are still recorded).
             if (IsFloorEnded()) return;
-            if (activePawnLeftGrid) KnockOutIfOffTheFloor(); // FIX-3
+            // Owner decision C (2026-11-05): Free never eliminates, takes exits or ends the floor by itself.
+            if (activePawnLeftGrid && !PlayAssist.IsFree) KnockOutIfOffTheFloor(); // FIX-3
             if (!anyPawnMoved) return;
             if (host.trapFloorTurnState != null
                 && !host.trapFloorTurnState.IsCurrentFloorFailed
@@ -3690,7 +3854,7 @@ namespace ConsoleCards.Presentation.Composition
 
             CollectTakenPrizesOffPawns(); // PRIZE-2
             if (!PlayAssist.IsFree) OfferRevealedKeyOnLanding(activeLandedFloorCardId); // KEYS-2; Free offers nothing
-            TryTakeExitsAfterMove(activeLandedFloorCardId);
+            if (!PlayAssist.IsFree) TryTakeExitsAfterMove(activeLandedFloorCardId); // decision C: exits and stuck players
         }
 
         private void RunLandingCheck(out TabletopObjectId activeLandedFloorCardId, out bool anyPawnMoved)
