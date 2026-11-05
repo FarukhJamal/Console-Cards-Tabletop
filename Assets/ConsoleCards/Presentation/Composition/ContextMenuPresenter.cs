@@ -520,6 +520,7 @@ namespace ConsoleCards.Presentation.Composition
                     }));
             }
 
+            if (targetDeck.Count > 0) actions.Add(new PopupActionOption("Flip deck (F)", true, () => { host.FlipWholePile(targetDeckId); CloseContextMenu(); }));
             host.AddShuffleActions(actions, targetDeckId); // SHUF-1: your style, Shuffle as..., Flourish...
             host.AddSearchAction(actions, targetDeckId); // doc 58
             host.AddDealActions(actions, targetDeckId); // DEAL-1
@@ -941,6 +942,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             host.AddDealActions(actions, sourceStackId); // DEAL-1
+            if (stack.Count > 0) actions.Add(new PopupActionOption("Flip deck (F)", true, () => { host.FlipWholePile(sourceStackId); CloseContextMenu(); }));
 
             if (stack.Count >= 2)
             {

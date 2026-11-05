@@ -2088,6 +2088,12 @@ namespace ConsoleCards.Presentation.Composition
                 // Owner, 2026-10-21: exits are taken by landing on them (no Attempt Escape button).
             }
 
+            // Owner, 2026-11-05: a floor card flips like any card (menu Flip or F).
+            if (!floorCard.IsRevealed && !isCollapsed)
+            {
+                actions.Insert(0, new PopupActionOption("Flip", true, () => FlipFloorTileByHand(targetCardId)));
+            }
+
             actions.Add(new PopupActionOption(
                 "Inspect",
                 true,
@@ -2103,10 +2109,34 @@ namespace ConsoleCards.Presentation.Composition
                     ? $"COLLAPSED HOLE — Floor {floorCard.Coordinate} is permanently unusable."
                     : floorCard.IsRevealed
                     ? FloorCardContextDescription(floorCard)
-                    : "MYSTERY — content is hidden until the turn player's pawn lands on it.",
+                    : "Face down. Flip it when a pawn lands on it.",
                 actions,
                 host.ContextMenus.CloseContextMenu,
                 host.ContextMenus.DismissPopupFromSecondary);
+        }
+
+        // Owner, 2026-11-05: turning a face-down floor tile by hand (menu Flip or F). It is revealed for everyone, with
+        // no popup; the turn player counts as the one who turned it.
+        internal bool FlipFloorTileByHand(TabletopObjectId floorCardId)
+        {
+            host.ContextMenus.CloseContextMenu();
+            if (host.trapFloorTemplate == null || host.matchState == null) return false;
+            PlayerId player = host.trapFloorTurnState != null && !host.trapFloorTurnState.ActivePlayerId.IsEmpty
+                ? host.trapFloorTurnState.ActivePlayerId
+                : host.localPlayerId;
+            bool flipped = TryLandingFlipNow(player, floorCardId, out _);
+            if (flipped) RefreshTrapFloorStatusUi();
+            return flipped;
+        }
+
+        // A face-down, standing floor tile of this table (F turns it like any card).
+        internal bool IsFlippableFloorTile(TabletopObjectId cardId)
+        {
+            return host.trapFloorTemplate != null
+                && host.matchState != null
+                && host.trapFloorTemplate.TryGetFloorCardState(host.matchState, cardId, out TrapFloorFloorCardState floorCard)
+                && !floorCard.IsRevealed
+                && (host.trapFloorCollapseState == null || !host.trapFloorCollapseState.IsCollapsed(cardId));
         }
 
         internal string FloorCardContextDescription(TrapFloorFloorCardState floorCard)
@@ -3427,7 +3457,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             CollectTakenPrizesOffPawns(); // PRIZE-2
-            OfferRevealedKeyOnLanding(activeLandedFloorCardId); // KEYS-2
+            if (!PlayAssist.IsFree) OfferRevealedKeyOnLanding(activeLandedFloorCardId); // KEYS-2; Free offers nothing
             TryTakeExitsAfterMove(activeLandedFloorCardId);
         }
 
@@ -3492,7 +3522,8 @@ namespace ConsoleCards.Presentation.Composition
                 if (moveProblem != null && PlayAssist.IsQuiet)
                 {
                     // Doc 57 (Assist FREE / REMINDERS): the referee only whispers; the move stands and the tile flips.
-                    host.Whisper($"that move looks off: {moveProblem}");
+                    // Free says nothing (owner, 2026-11-05).
+                    if (!PlayAssist.IsFree) host.Whisper($"that move looks off: {moveProblem}");
                     moveProblem = null;
                 }
 
@@ -3550,6 +3581,10 @@ namespace ConsoleCards.Presentation.Composition
                 RefreshTrapFloorStatusUi();
                 return;
             }
+
+            // Owner, 2026-11-05: in the default mode (Free) the table does nothing by itself; the player flips the
+            // tile (F or the menu's Flip).
+            if (PlayAssist.IsFree) return;
 
             // The landing triggers now (popup and effects); the tile on the table turns once the pawn is off it
             // (aside or ahead), or when the turn ends.

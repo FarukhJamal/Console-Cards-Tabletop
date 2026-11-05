@@ -83,6 +83,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             appliedAssist = level;
+            if (trapFloorTemplate != null) RefreshTrapFloorBoardFeedback(); // the markers follow the new level
         }
 
         /// <summary>
@@ -110,6 +111,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void ReactToRevealedTile(TabletopObjectId tileId, string category)
         {
             CountRevealForRecap(category); // doc 57: the floor's recap
+            if (PlayAssist.IsFree) return; // owner, 2026-11-05: no ring in the default mode
             if (!EnsureBoardFeedback() || !Registry.TryGetCardView(tileId, out CardView tile) || tile == null) return;
             Color colour;
             switch (category)
@@ -128,7 +130,8 @@ namespace ConsoleCards.Presentation.Composition
 
         private void TickTurnCartridge()
         {
-            PlayerId turn = IsInitialized && matchState != null ? ActiveCartridge.TurnPlayerId : PlayerId.Empty;
+            // Owner, 2026-11-05: no turn marker in the default mode (Free).
+            PlayerId turn = IsInitialized && matchState != null && !PlayAssist.IsFree ? ActiveCartridge.TurnPlayerId : PlayerId.Empty;
             if (turn.IsEmpty || !TryTurnConsole(turn, out ConsoleView console, out Vector3 inward) || !EnsureTurnCartridge())
             {
                 HideTurnCartridge();

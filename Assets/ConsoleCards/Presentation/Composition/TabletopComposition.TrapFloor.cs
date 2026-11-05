@@ -419,7 +419,7 @@ namespace ConsoleCards.Presentation.Composition
             string who = actor.IsEmpty ? "A player" : FormatPlayerName(actor);
             Color colour = FeedbackColour(actor);
             string name = entry.ContentName ?? string.Empty;
-            BoardFeedbackAt(entry, colour);
+            if (!PlayAssist.IsFree) BoardFeedbackAt(entry, colour); // owner, 2026-11-05: Free marks nothing
             RulesCardPanel.RaiseHint(HintTriggers.GameActivity, entry.Kind.ToString());
             if (entry.Kind == TrapFloorActivityKind.RevealedFloorContent)
                 RulesCardPanel.RaiseHint(HintTriggers.ContentRevealed, entry.ContentCategory.ToString());
@@ -542,6 +542,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void RefreshTrapFloorBoardFeedback()
         {
             if (!playerFeedback
+                || PlayAssist.IsFree // owner, 2026-11-05: the default mode shows no markers or highlights
                 || trapFloorTemplate == null
                 || trapFloorTurnState == null
                 || matchState == null)

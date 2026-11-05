@@ -234,9 +234,42 @@ namespace ConsoleCards.Presentation.Composition
             host.ApplySelectionHighlightHide(selectionVisual);
             createdView.Bind(token, host.coordinateConverter);
             createdView.transform.localScale = Vector3.one * visualScale;
+            FitTokenToConsoleSquare(createdView); // owner, 2026-11-05: every token is the box's size
             host.ApplyPieceColour(createdView);
             host.Registry.runtimeTokenInstances.Add(new RuntimeObjectInstance(root, createdView, selectionVisual));
             return createdView;
+        }
+
+        // Owner, 2026-11-05 ("the sizes will be the same" as the Console's squares): a token fits one small square of
+        // the Console (mana, health, stamina rows) with a little room, however it was made (table, Toolbox, saved
+        // game). Its look: a chunky square counter in the piece's colour, like a resource cube, not a flat tile.
+        private const float ConsoleSmallSquareSize = 0.204f; // layout units (TopTrack / BottomTrack squares)
+        private const float TokenSquareFraction = 0.8f;
+        private const float TokenPrefabWidth = 0.6f; // the prefab's visual counter at scale 1
+        private const float TokenHeightFraction = 0.6f; // of its width
+
+        private void FitTokenToConsoleSquare(TokenView view)
+        {
+            float matScale = host.catalogConsolePrefab != null
+                ? Mathf.Abs(host.catalogConsolePrefab.transform.localScale.x)
+                : 1f;
+            if (matScale <= 0f) matScale = 1f;
+            float width = ConsoleSmallSquareSize * matScale * TokenSquareFraction;
+            view.transform.localScale = Vector3.one * (width / TokenPrefabWidth);
+            float height = TokenPrefabWidth * TokenHeightFraction;
+            Transform counter = view.transform.Find("VisualRoot/TokenDisc");
+            if (counter != null)
+            {
+                counter.localScale = new Vector3(TokenPrefabWidth, height, TokenPrefabWidth);
+                counter.localPosition = new Vector3(0f, height * 0.5f, 0f);
+            }
+
+            BoxCollider box = view.GetComponent<BoxCollider>();
+            if (box != null)
+            {
+                box.size = new Vector3(TokenPrefabWidth * 1.04f, height, TokenPrefabWidth * 1.04f);
+                box.center = new Vector3(0f, height * 0.5f, 0f);
+            }
         }
 
         internal RuntimeTokenContainerInstance CreateTokenContainerInstance(

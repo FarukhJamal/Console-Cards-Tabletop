@@ -854,7 +854,77 @@ namespace ConsoleCards.Presentation.Composition
 
             if (keys.DeletePressedThisFrame) DeleteByKey();
 
-            if (keys.FlipPressedThisFrame && toolSelection.Count > 0) FlipToolSelection();
+            if (keys.FlipPressedThisFrame)
+            {
+                if (toolSelection.Count > 0) FlipToolSelection();
+                else if (IsPointerOnDrawablePile()) FlipWholePile(hoverPileId); // owner, 2026-11-05: as in TTS
+                else FlipFloorTileUnderPointer();
+            }
+        }
+
+        // Owner, 2026-11-05 ("in Tabletop Simulator you can flip the whole deck"): the pile turns over as one, so the
+        // bottom card comes on top and every card shows its other side. One Undo takes it back.
+        internal bool FlipWholePile(ContainerId pileId)
+        {
+            EnsureInitialized();
+            if (pileId.IsEmpty
+                || matchState == null
+                || !matchState.Containers.TryGetValue(pileId, out ContainerState pile)
+                || pile.Count == 0)
+            {
+                return false;
+            }
+
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> transitionStarts = CaptureContainerCardTransforms(pileId);
+            int count = pile.Count;
+            bool ok = true;
+            SessionService.BeginUndoBatch();
+            try
+            {
+                // The order turns round: the card now at the bottom of what is left goes to place i.
+                for (int i = 0; i < count - 1 && ok; i++)
+                {
+                    TabletopObjectId moving = pile.GetObjectAt(count - 1);
+                    ReorderContainerResult moved = TableAuthority.Submit<ReorderContainerCommand, ReorderContainerResult>(
+                        new ReorderContainerCommand(CreateCommandContext(), pileId, moving, count - 1, i));
+                    ok = moved.Succeeded;
+                }
+
+                List<TabletopObjectId> ids = new List<TabletopObjectId>(pile.ObjectIds);
+                for (int i = 0; i < ids.Count && ok; i++)
+                {
+                    if (!Registry.TryGetCardView(ids[i], out CardView card) || card.CardState == null) continue;
+                    CardFace other = card.CardState.Face == CardFace.FaceUp ? CardFace.FaceDown : CardFace.FaceUp;
+                    FlipCardResult flipped = TableAuthority.Submit<FlipCardCommand, FlipCardResult>(
+                        new FlipCardCommand(CreateCommandContext(), ids[i], other));
+                    ok = flipped.Succeeded;
+                    if (ok && card.IsBound) card.ApplyAcceptedState();
+                }
+            }
+            finally
+            {
+                SessionService.EndUndoBatch();
+            }
+
+            ApplyLayout(pileId);
+            AnimatePileCards(transitionStarts, true);
+            if (!ok) ShowMessage("The deck could not be flipped.");
+            return ok;
+        }
+
+        // F over a face-down floor tile turns it, like any card (owner, 2026-11-05).
+        private void FlipFloorTileUnderPointer()
+        {
+            if (trapFloorTemplate == null || hitResolver == null || Mouse.current == null) return;
+            if (!hitResolver.TryResolve(Mouse.current.position.ReadValue(), out TabletopObjectView resolved)
+                || !(resolved is CardView card)
+                || !card.IsBound
+                || !TrapFloorGame.IsFlippableFloorTile(card.ObjectId))
+            {
+                return;
+            }
+
+            TrapFloorGame.FlipFloorTileByHand(card.ObjectId);
         }
 
         private void RotateByKey(float degrees)

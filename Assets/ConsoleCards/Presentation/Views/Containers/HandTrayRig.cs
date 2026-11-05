@@ -249,9 +249,10 @@ namespace ConsoleCards.Presentation.Views.Containers
             }
             else
             {
-                // Up while the pointer is over the hand's strip (its full height) or a card is held; else resting.
+                // Up only while the pointer is over the hand's strip (its full height), as in TTS; carrying a piece
+                // does not raise it (owner, 2026-11-05).
                 float stripTop = BottomMarginFraction + (scaledDepth / viewportHeight) + 0.04f;
-                bool up = HeldUp || (bandCollider != null && bandCollider.enabled) || PointerBelow(stripTop);
+                bool up = HeldUp || PointerBelow(stripTop);
                 float blend = 1f - Mathf.Exp(-PeekResponse * Time.unscaledDeltaTime);
                 peekAmount = Mathf.Lerp(peekAmount, up ? 0f : 1f, blend);
                 y -= peekAmount * scaledDepth * (1f - RestingVisibleFraction);
