@@ -72,6 +72,9 @@ namespace ConsoleCards.Presentation.Composition
         private sealed class Member
         {
             public Guid Key;
+            // SEC-1 (2026-11-05): true when Key is only the public id of the member's secret key (what the roster
+            // carries). A computer that rejoins proves itself with the secret key; the public id alone gets nothing.
+            public bool KeyIsPublic;
             public string Name = string.Empty;
             public int Colour;
             public bool Ready;
@@ -543,6 +546,11 @@ namespace ConsoleCards.Presentation.Composition
 
             Member member = MemberWithKey(key);
             bool back = member != null;
+            if (member != null && member.KeyIsPublic)
+            {
+                member.Key = key; // SEC-1: the secret key proved itself; keep it from now on
+                member.KeyIsPublic = false;
+            }
             if (member == null)
             {
                 if (members.Count >= MaxMembers)
@@ -641,6 +649,7 @@ namespace ConsoleCards.Presentation.Composition
                 if (i >= members.Count) members.Add(new Member());
                 Member member = members[i];
                 member.Key = ReadGuid(reader);
+                member.KeyIsPublic = true; // SEC-1: the roster carries public ids only
                 member.Name = reader.ReadString();
                 member.Colour = reader.ReadInt32();
                 member.Ready = reader.ReadBoolean();
@@ -679,7 +688,9 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < members.Count; i++)
             {
                 Member member = members[i];
-                WriteGuid(member.Key);
+                // SEC-1 (security audit, 2026-11-05): the secret rejoin key used to go to everyone, so a modified
+                // client could take over another player's seat with it. Only its public id is sent now.
+                WriteGuid(member.KeyIsPublic ? member.Key : PublicIdOf(member.Key));
                 writer.Write(member.Name ?? string.Empty);
                 writer.Write(member.Colour);
                 writer.Write(member.Ready);
@@ -746,14 +757,34 @@ namespace ConsoleCards.Presentation.Composition
 
         private Member Me() => MemberWithKey(clientKey);
 
+        // A member is matched by its secret key, or (after a host change, when only public ids are known) by the
+        // public id of the key given. A public id given as a key never matches (SEC-1).
         private Member MemberWithKey(Guid key)
         {
+            if (key == Guid.Empty) return null;
+            Guid publicId = PublicIdOf(key);
             for (int i = 0; i < members.Count; i++)
             {
-                if (members[i].Key == key) return members[i];
+                if (members[i].KeyIsPublic ? members[i].Key == publicId : members[i].Key == key) return members[i];
             }
 
             return null;
+        }
+
+        private bool IsMe(Member member) =>
+            member != null && (member.KeyIsPublic ? member.Key == PublicIdOf(clientKey) : member.Key == clientKey);
+
+        // SEC-1: a one-way public id for a secret key (the first 16 bytes of its SHA-256).
+        internal static Guid PublicIdOf(Guid key)
+        {
+            if (key == Guid.Empty) return Guid.Empty;
+            using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create())
+            {
+                byte[] hash = sha.ComputeHash(key.ToByteArray());
+                byte[] id = new byte[16];
+                Array.Copy(hash, id, 16);
+                return new Guid(id);
+            }
         }
 
         private Member MemberAt(int connection)

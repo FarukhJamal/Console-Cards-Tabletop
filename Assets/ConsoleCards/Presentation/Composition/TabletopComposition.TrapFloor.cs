@@ -169,6 +169,10 @@ namespace ConsoleCards.Presentation.Composition
                 trapFloorActivityFeed)
             {
                 ProtectsGrandExit = TrapFloorGame.WinMode == TrapFloorWinMode.Survival,
+                // AUTH-3: a collapse begins only in a floor turn of a floor still in play.
+                MayBeginCollapse = () => trapFloorTurnState != null
+                    && !trapFloorTurnState.IsCurrentFloorFailed
+                    && trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn,
             };
             trapFloorRevealFloorUseCase = new TrapFloorRevealFloorUseCase(
                 trapFloorTemplate,
@@ -538,6 +542,9 @@ namespace ConsoleCards.Presentation.Composition
         // pawn when there is one target. (2026-10-20: the green outline replaces a tint nobody could see.)
         private readonly List<Vector3> boardFeedbackNeutralized = new List<Vector3>(8);
         private static readonly Color NeutralizedTrapColour = new Color(0.32f, 0.78f, 0.52f, 0.9f);
+
+        // AUTH-5: the game's public state as one number for the online check (0 for a table with no game state).
+        internal ulong GameStateHash() => trapFloorTemplate != null ? TrapFloorGame.PublicStateHash() : 0UL;
 
         internal void RefreshTrapFloorBoardFeedback()
         {

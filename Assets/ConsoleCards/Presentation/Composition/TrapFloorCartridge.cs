@@ -830,6 +830,72 @@ namespace ConsoleCards.Presentation.Composition
         private bool collapseWatching;
         private bool floorTurnCollapseDone;
 
+        // AUTH-5: Trap Floor's public state (no hands, no face-down contents) as one number, the same on every computer
+        // whose game state agrees. Collections are summed so their order does not matter.
+        internal ulong PublicStateHash()
+        {
+            unchecked
+            {
+                ulong hash = 1469598103934665603UL;
+                TrapFloorTurnState turn = host.trapFloorTurnState;
+                if (turn != null)
+                {
+                    hash = Mix(hash, (ulong)turn.CurrentRound);
+                    hash = Mix(hash, (ulong)turn.Phase);
+                    hash = Mix(hash, turn.IsCurrentFloorFailed ? 1UL : 0UL);
+                    hash = Mix(hash, IdHash(turn.ActivePlayerId.Value));
+                    hash = Mix(hash, IdHash(turn.FloorOperatorPlayerId.Value));
+                    ulong players = 0UL;
+                    for (int i = 0; i < turn.PlayerOrder.Count; i++)
+                    {
+                        PlayerId player = turn.PlayerOrder[i];
+                        players += Mix(IdHash(player.Value), (ulong)turn.GetPlayerState(player));
+                    }
+
+                    hash = Mix(hash, players);
+                }
+
+                TrapFloorCollapseState collapse = host.trapFloorCollapseState;
+                if (collapse != null)
+                {
+                    ulong floors = 0UL;
+                    for (int i = 0; i < collapse.CollapsedFloors.Count; i++)
+                    {
+                        TrapFloorCollapsedFloorState floor = collapse.CollapsedFloors[i];
+                        floors += Mix(IdHash(floor.FloorCardId.Value), floor.IsTakenPrize ? 2UL : 1UL);
+                    }
+
+                    hash = Mix(hash, floors);
+                    hash = Mix(hash, collapse.IsCollapsePending ? 1UL : 0UL);
+                }
+
+                if (host.trapFloorObjectiveState != null)
+                {
+                    hash = Mix(hash, host.trapFloorObjectiveState.IsWon ? 1UL : 0UL);
+                    hash = Mix(hash, (ulong)host.trapFloorObjectiveState.CollectedKeyCount);
+                }
+
+                return hash;
+            }
+        }
+
+        private static ulong IdHash(Guid id)
+        {
+            byte[] bytes = id.ToByteArray();
+            return BitConverter.ToUInt64(bytes, 0) ^ (BitConverter.ToUInt64(bytes, 8) * 31UL);
+        }
+
+        private static ulong Mix(ulong hash, ulong value)
+        {
+            unchecked
+            {
+                hash ^= value + 0x9E3779B97F4A7C15UL + (hash << 6) + (hash >> 2);
+                hash ^= hash >> 33;
+                hash *= 0xFF51AFD7ED558CCDUL;
+                return hash ^ (hash >> 33);
+            }
+        }
+
         internal void MarkFloorTurnCollapseDone()
         {
             floorTurnCollapseDone = true;
@@ -975,6 +1041,9 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            // AUTH-4 (authority audit, 2026-11-05): a collapse begun on another computer is finished there; a throw here
+            // would be sent for a player this computer does not play and never run.
+            if (!host.IsPlayerOnThisComputer(host.physicalFloorCollapseActor)) return;
             if (!FloorDiceRolledAsAsked()) return; // DICE-1: wait for the player's roll
 
             // ROUND-1 (owner, 2026-10-22: "after rolling the game records the tile and highlights it and gives a button to
@@ -1557,8 +1626,14 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            RevealWaitingLandingTile(true); // the tile under the pawn turns over first, then the turn ends
             PlayerId actor = host.trapFloorTurnState.ActivePlayerId;
+            if (!host.IsPlayerOnThisComputer(actor))
+            {
+                AdvanceTrapFloorTurn(skipped); // AUTH-2: says whose computer ends it, changes nothing here
+                return;
+            }
+
+            RevealWaitingLandingTile(true); // the tile under the pawn turns over first, then the turn ends
             List<string> lines = new List<string>(4);
             if (PendingEndTurnEffects(actor, lines) == 0)
             {
@@ -1682,6 +1757,17 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             bool wasFloorTurn = host.trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn;
+            // AUTH-2 (authority audit, 2026-11-05): a turn is ended only on the computer that plays the player (or floor
+            // operator) whose turn it is. Elsewhere it would change this table alone and the tables would drift apart.
+            PlayerId turnOwner = wasFloorTurn
+                ? host.trapFloorTurnState.FloorOperatorPlayerId
+                : host.trapFloorTurnState.ActivePlayerId;
+            if (!turnOwner.IsEmpty && !host.IsPlayerOnThisComputer(turnOwner))
+            {
+                host.ShowMessage($"It's {FormatPlayerName(turnOwner)}'s turn: their computer ends it.");
+                return;
+            }
+
             if (wasFloorTurn && !collapsePreviewId.IsEmpty && host.physicalFloorCollapsePending)
             {
                 // ROUND-1: the dice already point at a tile; it collapses first (Undo takes the roll back instead).
@@ -3592,6 +3678,7 @@ namespace ConsoleCards.Presentation.Composition
                 && !host.trapFloorTurnState.IsCurrentFloorFailed
                 && host.trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn
                 && !floorTurnCollapseDone
+                && !PlayAssist.IsFree // owner, 2026-11-05 (decision 3): no game reminders in Free
                 && Time.frameCount - lastTurnAdvanceFrame > 5) // a Trap's own move at End Turn is not a turn taken
             {
                 // ROUND-1 (owner, 2026-10-22: "if someone tries to take a turn, notify all players and ask that player to
@@ -4960,7 +5047,8 @@ namespace ConsoleCards.Presentation.Composition
 
             if (host.trapFloorAbilityResolutionState.TryGetBlindStatus(playerId, round, out _)) status = JoinStatus(status, "BLIND");
             if (host.trapFloorAbilityResolutionState.TryGetStickyStatus(playerId, round, out _)) status = JoinStatus(status, "STUCK");
-            int pending = PendingEndTurnEffects(playerId, null);
+            // Owner, 2026-11-05 (decision 3): Free shows no game reminders such as "1 TRAP TO DO".
+            int pending = PlayAssist.IsFree ? 0 : PendingEndTurnEffects(playerId, null);
             if (pending > 0)
             {
                 status = JoinStatus(status, PlayAssist.IsQuiet
@@ -5185,9 +5273,11 @@ namespace ConsoleCards.Presentation.Composition
                     collapseWaiting ? (Action)RemindFloorCollapseRoll : () => BeginPhysicalFloorCollapse()));
             }
 
+            // AUTH-2 (authority audit, 2026-11-05): online, the floor turn is ended by the computer that plays its
+            // operator, like a player turn's buttons.
             actions.Add(new PopupActionOption(
                 "End Floor Turn",
-                true,
+                host.IsPlayerOnThisComputer(host.trapFloorTurnState.FloorOperatorPlayerId),
                 AdvanceTrapFloorTurn));
             return actions;
         }
@@ -5498,7 +5588,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (host.trapFloorAbilityResolutionState.TryGetStickyStatus(playerId, round, out _)) chips += "  · STUCK";
-            int pending = PendingEndTurnEffects(playerId, null);
+            int pending = PlayAssist.IsFree ? 0 : PendingEndTurnEffects(playerId, null); // decision 3
             if (pending > 0) chips += $"  · {pending} TRAP{(pending == 1 ? string.Empty : "S")} WAITING";
             return chips;
         }

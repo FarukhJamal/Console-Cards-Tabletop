@@ -287,6 +287,7 @@ namespace ConsoleCards.Games.TrapFloor
         DiceResultAlreadyHandled,
         FloorMappingMissing,
         RevisionOverflow,
+        NotFloorTurn,
     }
 
     public readonly struct TrapFloorCollapseResult
@@ -370,6 +371,12 @@ namespace ConsoleCards.Games.TrapFloor
         /// B02 (playtest): no tile is left that may collapse. With the Grand Exit protected (Survival), the Grand Exit
         /// alone left standing counts as nothing left (every roll on it would ask for another roll, for ever).
         /// </summary>
+        /// <summary>
+        /// AUTH-3 (authority audit, 2026-11-05): when set, a collapse may only begin while this is true (Trap Floor: in a
+        /// floor turn of a floor still in play). Checked on every computer that runs the command, the host included.
+        /// </summary>
+        public Func<bool> MayBeginCollapse { get; set; }
+
         public bool NothingLeftToCollapse => state.UsableFloorCount <= (ProtectsGrandExit ? 1 : 0);
 
         public TrapFloorCollapseResult Begin(
@@ -378,6 +385,7 @@ namespace ConsoleCards.Games.TrapFloor
         {
             TrapFloorCollapseError error = Validate(matchState, command, command?.Context ?? default);
             if (error != TrapFloorCollapseError.None) return Failure(error);
+            if (MayBeginCollapse != null && !MayBeginCollapse()) return Failure(TrapFloorCollapseError.NotFloorTurn);
             if (NothingLeftToCollapse)
                 return TrapFloorCollapseResult.Failure(
                     CommandResultStatus.Rejected, TrapFloorCollapseError.BoardExhausted, true);

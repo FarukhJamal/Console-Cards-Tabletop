@@ -98,7 +98,7 @@ namespace ConsoleCards.Presentation.Interaction
         {
             for (int i = objects.Count - 1; i >= 0; i--)
             {
-                if (objects[i] == null) { contained.Remove(objects[i]); objects.RemoveAt(i); continue; }
+                if (objects[i] == null) { contained.Remove(objects[i]); carrying.Remove(objects[i]); objects.RemoveAt(i); continue; }
                 objects[i].Tick();
             }
         }
@@ -120,6 +120,37 @@ namespace ConsoleCards.Presentation.Interaction
         {
             return Commit(view, state, value, AuthoritativeActionRecordMode.None);
         }
+        // B07 (owner, 2026-11-05, decision 2): a piece being carried passes over pieces lying at rest instead of
+        // shoving them. Contacts come back when it is let go, so a thrown die still knocks into things. Physics is
+        // never switched off globally. Set CarriedPiecesShove for the old physical shove (an option for later).
+        private readonly HashSet<PhysicalLooseObject> carrying = new HashSet<PhysicalLooseObject>();
+
+        public bool CarriedPiecesShove { get; set; }
+
+        internal void SetCarryCollisions(PhysicalLooseObject target, bool carried)
+        {
+            if (target == null) return;
+            if (carried)
+            {
+                if (CarriedPiecesShove || !carrying.Add(target)) return;
+            }
+            else if (!carrying.Remove(target))
+            {
+                return;
+            }
+
+            Collider collider = target.PhysicalCollider;
+            if (collider == null) return;
+            bool targetContained = contained.TryGetValue(target, out bool tc) && tc;
+            foreach (PhysicalLooseObject other in objects)
+            {
+                if (other == null || other == target || other.PhysicalCollider == null) continue;
+                if (carried && !other.IsAtRest) continue; // only pieces lying still are passed over
+                bool otherContained = contained.TryGetValue(other, out bool oc) && oc;
+                Physics.IgnoreCollision(collider, other.PhysicalCollider, carried || targetContained || otherContained);
+            }
+        }
+
         internal void SetContainedCollisions(PhysicalLooseObject target, bool isContained)
         {
             if (contained.TryGetValue(target, out bool previous) && previous == isContained) return;

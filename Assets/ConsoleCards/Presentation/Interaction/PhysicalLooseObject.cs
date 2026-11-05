@@ -174,6 +174,19 @@ namespace ConsoleCards.Presentation.Interaction
 
         public bool IsHeld => held;
 
+        /// <summary>B07: lying still on the table (not held, not moving): a carried piece passes over it.</summary>
+        internal bool IsAtRest
+        {
+            get
+            {
+                if (held || view == null || !view.IsBound || view.BoundState == null) return false;
+                PhysicalObjectState state = view.BoundState.PhysicalState;
+                return state == null
+                    || state.Mode == PhysicalObjectMode.Sleeping
+                    || state.Mode == PhysicalObjectMode.SleepingUnresolved;
+            }
+        }
+
         /// <summary>MP-2: the player whose computer simulates and commits this piece.</summary>
         public PlayerId Controller => actor;
 
@@ -320,6 +333,7 @@ namespace ConsoleCards.Presentation.Interaction
         {
             if (body == null) return;
             held = false;
+            authority?.SetCarryCollisions(this, false); // B07
             hasPointerAnchor = false;
             hasSupportHeight = false;
             heldWithoutSupport = false;
@@ -396,6 +410,7 @@ namespace ConsoleCards.Presentation.Interaction
             body.WakeUp();
 
             authority.SetContainedCollisions(this, false);
+            authority.SetCarryCollisions(this, true); // B07: no shoving resting pieces while carried
             authority.StopAnimation(transform);
             pickupPosition = body.position;
             pickupRotation = body.rotation;
@@ -771,6 +786,7 @@ namespace ConsoleCards.Presentation.Interaction
             if (!Commit(ReleaseState(), null, AuthoritativeActionRecordMode.Intermediate)) { Cancel(); return false; }
             RestoreContainedSmoothing();
             held = false;
+            authority.SetCarryCollisions(this, false); // B07: contacts back once let go (a thrown die still collides)
             hasPointerAnchor = false;
             hasSupportHeight = false;
             heldWithoutSupport = false;
@@ -861,6 +877,7 @@ namespace ConsoleCards.Presentation.Interaction
                     Vector(grabOrigin.AngularVelocity), PhysicalObjectMode.Dynamic, actor), null,
                     AuthoritativeActionRecordMode.CancelTransaction);
             held = false;
+            authority?.SetCarryCollisions(this, false); // B07
             hasPointerAnchor = false;
             hasSupportHeight = false;
             heldWithoutSupport = false;

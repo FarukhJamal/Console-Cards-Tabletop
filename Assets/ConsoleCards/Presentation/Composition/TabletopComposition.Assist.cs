@@ -93,6 +93,13 @@ namespace ConsoleCards.Presentation.Composition
         internal void Whisper(string text)
         {
             if (string.IsNullOrEmpty(text) || !PlayAssist.IsQuiet || TableFlipQuiet) return;
+            if (PlayAssist.IsFree)
+            {
+                // Owner, 2026-11-05 (decision 3): Free shows no game reminders; the line is only kept in the log.
+                RecordHandoverLine($"Referee: {text}");
+                return;
+            }
+
             // Owner's playtest, 2026-11-04: a long list ran off the screen; the top line keeps the first part, the log all.
             string shown = text;
             if (shown.Length > WhisperShownLetters)

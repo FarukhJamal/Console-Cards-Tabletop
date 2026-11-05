@@ -102,7 +102,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 Member member = members[i];
                 if (member.IsHost || !member.Connected) continue;
-                return member.Key == clientKey;
+                return IsMe(member);
             }
 
             return false;
@@ -133,7 +133,12 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < members.Count; i++)
             {
                 Member member = members[i];
-                bool me = member.Key == clientKey;
+                bool me = IsMe(member);
+                if (me)
+                {
+                    member.Key = clientKey; // SEC-1: the new host knows its own secret key
+                    member.KeyIsPublic = false;
+                }
                 member.IsHost = me;
                 member.Connected = me;
                 member.Connection = me ? session.LocalConnection : -1;

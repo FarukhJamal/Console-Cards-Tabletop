@@ -426,30 +426,56 @@ namespace ConsoleCards.Games.TrapFloor
 
             if (lying == 0) return basePose;
 
-            // B08 (playtest: bought cards landed on top of others): the first spot along the row with no loose card on
-            // it, so a card picked up from the middle of the row leaves a gap that is filled first.
-            double radians = basePose.RotationDegrees * Math.PI / 180d;
-            const int Slots = 12;
-            for (int slot = 0; slot <= Slots; slot++)
-            {
-                double along = slot * Step;
-                double x = basePose.Position.X + (Math.Cos(radians) * along);
-                double y = basePose.Position.Y - (Math.Sin(radians) * along);
-                if (slot < Slots && IsSpotTaken(matchState, placing, x, y, Step * 0.5d)) continue;
-                return new TabletopPose(new TableCoordinate(x, y), basePose.RotationDegrees, basePose.Layer, basePose.LocalOrder + slot);
-            }
-
-            return basePose;
-        }
-
-        private static bool IsSpotTaken(MatchState matchState, TabletopObjectId placing, double x, double y, double radius)
-        {
+            List<TableCoordinate> loose = new List<TableCoordinate>();
             foreach (CardInstanceState card in matchState.Cards.Values)
             {
                 TabletopObjectState state = card.BaseState;
                 if (state.Id == placing || !state.ContainerId.IsEmpty || state.IsUserLocked) continue;
-                double dx = state.Pose.Position.X - x;
-                double dy = state.Pose.Position.Y - y;
+                loose.Add(state.Pose.Position);
+            }
+
+            return NextFreeOverflowPose(basePose, loose);
+        }
+
+        /// <summary>Spots in one row beside the Console before the next row starts.</summary>
+        public const int OverflowRowLength = 12;
+
+        /// <summary>
+        /// B08 / F (playtest: bought cards landed on top of others): the first spot with no loose card on it. Spots fill a
+        /// row of <see cref="OverflowRowLength"/> beside the Console, then further rows beside it (alternating sides), so
+        /// a 13th card never lands on the first. A gap left by a card picked up is filled first. Deterministic: every
+        /// computer picks the same spot.
+        /// </summary>
+        public static TabletopPose NextFreeOverflowPose(TabletopPose basePose, IReadOnlyList<TableCoordinate> loose)
+        {
+            const double Step = 0.45d;
+            const double RowStep = 0.65d;
+            const int MaxRows = 9;
+            double radians = basePose.RotationDegrees * Math.PI / 180d;
+            double alongX = Math.Cos(radians);
+            double alongY = -Math.Sin(radians);
+            double acrossX = Math.Sin(radians);
+            double acrossY = Math.Cos(radians);
+            for (int slot = 0; slot < OverflowRowLength * MaxRows; slot++)
+            {
+                int row = slot / OverflowRowLength;
+                int column = slot % OverflowRowLength;
+                int side = row == 0 ? 0 : ((row + 1) / 2) * (row % 2 == 1 ? 1 : -1); // 0, +1, -1, +2, -2…
+                double x = basePose.Position.X + (alongX * column * Step) + (acrossX * side * RowStep);
+                double y = basePose.Position.Y + (alongY * column * Step) + (acrossY * side * RowStep);
+                if (IsTaken(loose, x, y, Step * 0.5d)) continue;
+                return new TabletopPose(new TableCoordinate(x, y), basePose.RotationDegrees, basePose.Layer, basePose.LocalOrder + slot);
+            }
+
+            return basePose; // over 100 loose cards here: on the first spot
+        }
+
+        private static bool IsTaken(IReadOnlyList<TableCoordinate> loose, double x, double y, double radius)
+        {
+            for (int i = 0; i < loose.Count; i++)
+            {
+                double dx = loose[i].X - x;
+                double dy = loose[i].Y - y;
                 if ((dx * dx) + (dy * dy) < radius * radius) return true;
             }
 

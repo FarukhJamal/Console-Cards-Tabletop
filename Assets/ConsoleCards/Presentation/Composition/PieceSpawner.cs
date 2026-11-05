@@ -89,7 +89,9 @@ namespace ConsoleCards.Presentation.Composition
                 SceneManager.MoveGameObjectToScene(clone, host.gameObject.scene);
             }
 
-            clone.name = $"Card {label}";
+            // SEC-2 (security audit, 2026-11-05): named by id, not by its card name, so a face-down or hidden card's
+            // name is not in the scene or the player log.
+            clone.name = $"Card {card.BaseState.Id}";
             RuntimeCardInstance runtimeCardInstance = new RuntimeCardInstance(clone);
             host.Registry.runtimeCardInstances.Add(runtimeCardInstance);
             createdVisualReferences.ValidateReferences();

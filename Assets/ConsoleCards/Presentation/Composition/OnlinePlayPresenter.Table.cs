@@ -581,6 +581,13 @@ namespace ConsoleCards.Presentation.Composition
         private void HostPush(Member member, byte[] message)
         {
             if (!sharedTable) return;
+            if (member == null || member.Player == Guid.Empty)
+            {
+                // AUTH-1 (authority audit, 2026-11-05): a computer that only watches never replaces the table.
+                if (member != null) SendTable(member);
+                return;
+            }
+
             OnlineTablePacket packet = TableWire.Read(message, 9, message.Length - 9, true) as OnlineTablePacket;
             if (packet == null || packet.Setup == null) return;
             if (host.matchState == null || packet.Setup.MatchId != host.matchState.Id.Value)
@@ -759,7 +766,7 @@ namespace ConsoleCards.Presentation.Composition
         private void SendChecks()
         {
             if (host.matchState == null || !AnyClientConnected(null)) return;
-            ulong hash = MatchHash(host.matchState);
+            ulong hash = TableHash();
             BeginOrdered(MsgCheck);
             WriteGuid(host.matchState.Id.Value);
             writer.Write(hash);
@@ -779,7 +786,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (MatchHash(host.matchState) == hash)
+            if (TableHash() == hash)
             {
                 mismatches = 0;
                 return;
@@ -791,6 +798,11 @@ namespace ConsoleCards.Presentation.Composition
                 RequestTable("this table differed from the host's");
             }
         }
+
+        // AUTH-5 (authority audit, 2026-11-05): the check also covers the game's public state (Trap Floor: whose turn,
+        // the phase, who is out, collapsed tiles, keys, floor won or lost), so tables whose turn went apart are
+        // noticed and sent again. Nothing private is in it.
+        private ulong TableHash() => MatchHash(host.matchState) + (host.GameStateHash() * 41UL);
 
         // The table's state as one number, whatever order its parts were added in on each computer.
         private static ulong MatchHash(MatchState match)
