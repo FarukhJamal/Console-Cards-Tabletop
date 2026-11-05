@@ -103,10 +103,15 @@ namespace ConsoleCards.Games.TrapFloor
             DestinationContainerId = destinationContainerId;
             PlacedInHand = placedInHand;
             Error = error;
+            accepted = status == CommandResultStatus.Accepted;
         }
 
+        // B01/B08 (playtest): a result made by a use case. A command another computer runs comes back as an all-default
+        // value (status 0 = Accepted), which must not read as a success.
+        private readonly bool accepted;
+
         public CommandResultStatus Status { get; }
-        public bool Succeeded => Status == CommandResultStatus.Accepted;
+        public bool Succeeded => accepted;
         public long Revision { get; }
         public TrapFloorFloorCardState FloorCard { get; }
         public TabletopObjectId GrantedCardId { get; }
@@ -420,16 +425,35 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             if (lying == 0) return basePose;
-            int slot = Math.Min(lying, 6);
+
+            // B08 (playtest: bought cards landed on top of others): the first spot along the row with no loose card on
+            // it, so a card picked up from the middle of the row leaves a gap that is filled first.
             double radians = basePose.RotationDegrees * Math.PI / 180d;
-            double along = slot * Step;
-            return new TabletopPose(
-                new TableCoordinate(
-                    basePose.Position.X + (Math.Cos(radians) * along),
-                    basePose.Position.Y - (Math.Sin(radians) * along)),
-                basePose.RotationDegrees,
-                basePose.Layer,
-                basePose.LocalOrder + slot);
+            const int Slots = 12;
+            for (int slot = 0; slot <= Slots; slot++)
+            {
+                double along = slot * Step;
+                double x = basePose.Position.X + (Math.Cos(radians) * along);
+                double y = basePose.Position.Y - (Math.Sin(radians) * along);
+                if (slot < Slots && IsSpotTaken(matchState, placing, x, y, Step * 0.5d)) continue;
+                return new TabletopPose(new TableCoordinate(x, y), basePose.RotationDegrees, basePose.Layer, basePose.LocalOrder + slot);
+            }
+
+            return basePose;
+        }
+
+        private static bool IsSpotTaken(MatchState matchState, TabletopObjectId placing, double x, double y, double radius)
+        {
+            foreach (CardInstanceState card in matchState.Cards.Values)
+            {
+                TabletopObjectState state = card.BaseState;
+                if (state.Id == placing || !state.ContainerId.IsEmpty || state.IsUserLocked) continue;
+                double dx = state.Pose.Position.X - x;
+                double dy = state.Pose.Position.Y - y;
+                if ((dx * dx) + (dy * dy) < radius * radius) return true;
+            }
+
+            return false;
         }
 
         private bool TryGetPlayerSetup(

@@ -399,11 +399,66 @@ namespace ConsoleCards.Presentation.Composition
             // Keep the Die menu and its Button instance alive until click/acceptance; Roll validates
             // current state through the physical authority. Other menus retain their existing policy.
             // DEAL-1: the "how many players?" question after a game starts waits for an answer too.
-            if (host.contextMenuMode != ContextMenuMode.Die
-                && host.contextMenuMode != ContextMenuMode.DealPlayers
-                && host.matchState != null && host.contextMenuRenderedRevision != host.matchState.Revision)
+            // U06 (playtest: "context menus close unexpectedly"): the table changes many times a second (a die
+            // settling, another player's move, a shuffle zone), so a menu now closes only when what it acts on
+            // changed. Game menus (floor tiles, game cards) keep closing on any change: their state is the game's.
+            if (host.contextMenuMode == ContextMenuMode.Die
+                || host.contextMenuMode == ContextMenuMode.DealPlayers
+                || host.matchState == null
+                || host.contextMenuRenderedRevision == host.matchState.Revision)
+            {
+                return;
+            }
+
+            bool gameMenu = host.contextMenuMode == ContextMenuMode.BoardPiece
+                || host.contextMenuMode == ContextMenuMode.GamePendingCard;
+            if (gameMenu || renderedTargetPrint != TargetPrint())
             {
                 CloseContextMenu();
+                return;
+            }
+
+            host.contextMenuRenderedRevision = host.matchState.Revision; // still the same target: keep it open
+        }
+
+        private long renderedTargetPrint;
+
+        // U06: the open menu's target (piece, card, pile) as one number: place, pile, face, lock, pile size and top.
+        private long TargetPrint()
+        {
+            MatchState match = host.matchState;
+            if (match == null) return 0;
+            unchecked
+            {
+                long print = 17;
+                print = (print * 31) + ObjectPrint(match, host.contextMenuCardId);
+                print = (print * 31) + ObjectPrint(match, host.contextMenuDieId);
+                print = (print * 31) + ObjectPrint(match, host.contextMenuPawnId);
+                print = (print * 31) + ObjectPrint(match, host.contextMenuTokenId);
+                if (!host.contextMenuContainerId.IsEmpty
+                    && match.Containers.TryGetValue(host.contextMenuContainerId, out ContainerState pile))
+                {
+                    print = (print * 31) + pile.Count;
+                    if (pile.TryPeekTop(out TabletopObjectId top)) print = (print * 31) + top.GetHashCode();
+                }
+
+                return print;
+            }
+        }
+
+        private static long ObjectPrint(MatchState match, TabletopObjectId id)
+        {
+            if (id.IsEmpty || !match.ContainsObject(id)) return id.IsEmpty ? 0 : -1;
+            TabletopObjectState state = match.GetObject(id);
+            unchecked
+            {
+                long print = state.ContainerId.GetHashCode();
+                print = (print * 31) + (state.IsUserLocked ? 1 : 0);
+                print = (print * 31) + (long)Math.Round(state.Pose.Position.X * 100d);
+                print = (print * 31) + (long)Math.Round(state.Pose.Position.Y * 100d);
+                print = (print * 31) + (long)Math.Round(state.Pose.RotationDegrees);
+                if (match.Cards.TryGetValue(id, out CardInstanceState card)) print = (print * 31) + (int)card.Face;
+                return print;
             }
         }
 
@@ -487,6 +542,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             host.contextMenuRenderedRevision = host.matchState.Revision;
+            renderedTargetPrint = TargetPrint();
         }
 
         internal void ShowDeckContextMenu()
@@ -984,10 +1040,12 @@ namespace ConsoleCards.Presentation.Composition
         {
             TabletopObjectId targetDieId = host.contextMenuDieId;
             host.Registry.TryGetDieView(targetDieId, out DieView targetDieView);
+            // B04 (playtest): with this die in a group selection of several dice, Roll rolls them all, as R does.
+            int selectedDice = host.SelectedDiceWith(targetDieId);
             List<PopupActionOption> actions = new List<PopupActionOption>
             {
                 new PopupActionOption(
-                    "Roll",
+                    selectedDice > 1 ? $"Roll selected ({selectedDice})" : "Roll",
                     true,
                     () => RollContextDie(targetDieId)),
                 new PopupActionOption(
@@ -1107,9 +1165,12 @@ namespace ConsoleCards.Presentation.Composition
             // Owner, 2026-11-04 ("too many draw options"): one Draw… panel (how many, with + / -); drawing past the hand
             // limit draws up to it and says so.
             int available = host.AvailableAssistedDeckCount(targetDeckId);
+            // B08 (playtest): online, only the computer that plays the turn player's seat draws for it; elsewhere the
+            // draw was refused with no reason and the cards snapped back.
+            bool drawsHere = host.IsPlayerOnThisComputer(host.ActiveCartridge.TurnPlayerId);
             actions.Add(new PopupActionOption(
-                "Draw…",
-                available > 0,
+                drawsHere ? "Draw…" : "Draw… (their computer draws)",
+                available > 0 && drawsHere,
                 () =>
                 {
                     host.selectedDrawCount = Mathf.Clamp(host.selectedDrawCount, 1, Math.Max(1, available));
@@ -1172,7 +1233,7 @@ namespace ConsoleCards.Presentation.Composition
             }
             else
             {
-                host.ShowMessage($"Controller draw rejected: {result.Error}.");
+                host.ShowMessage($"Could not draw: {TabletopComposition.DrawErrorText(result.Error)}");
             }
         }
 
@@ -1227,7 +1288,7 @@ namespace ConsoleCards.Presentation.Composition
                 result.Succeeded ? 0.035f : 0f);
             if (!result.Succeeded)
             {
-                host.ShowMessage($"Controller draw rejected: {result.Error}.");
+                host.ShowMessage($"Could not draw: {TabletopComposition.DrawErrorText(result.Error)}");
                 return ControllerInputHandDrawResult.NoChange(host.matchState.Revision);
             }
 
@@ -1264,19 +1325,29 @@ namespace ConsoleCards.Presentation.Composition
         {
             // Ignore callbacks retained from a closed/replaced menu; one accepted click launches once.
             if (host.contextMenuMode != ContextMenuMode.Die || host.contextMenuDieId != targetDieId) return;
-            if (!host.Registry.TryGetDieView(targetDieId, out DieView targetDieView))
+            if (host.SelectedDiceWith(targetDieId) > 1)
             {
+                int rolled = host.RollSelectedDice(); // B04: the whole group, each die with its own result
+                host.ShowMessage(rolled > 0 ? $"Rolling {rolled} dice." : "Those dice can't be rolled now.");
                 CloseContextMenu();
                 return;
             }
 
-            if (targetDieView.PhysicalObject == null || !targetDieView.PhysicalObject.Roll())
+            if (!RollDie(targetDieId))
             {
-                host.ShowMessage("Die Roll rejected: object is unavailable or controlled.");
+                host.ShowMessage("That die can't be rolled now (it is locked, held or being moved).");
                 return;
             }
-            host.ShowMessage("Rolling physically; result is accepted when the Die settles.");
+
             CloseContextMenu();
+        }
+
+        // B04: rolls one die, with no menu check (a shuffle zone rolls the dice put in it this way).
+        internal bool RollDie(TabletopObjectId dieId)
+        {
+            return host.Registry.TryGetDieView(dieId, out DieView dieView)
+                && dieView.PhysicalObject != null
+                && dieView.PhysicalObject.Roll();
         }
 
         internal bool IsCurrentContextCardInContainer(ContainerId containerId)

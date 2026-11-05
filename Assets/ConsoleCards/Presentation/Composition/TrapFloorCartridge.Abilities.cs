@@ -468,9 +468,15 @@ namespace ConsoleCards.Presentation.Composition
         internal void OpenAbilityOffer()
         {
             host.ContextMenus.CloseContextMenu();
-            if (host.pendingControllerPurchaseState != null && host.pendingControllerPurchaseState.IsActive)
+            if (IsPaymentBlocking())
             {
                 host.ShowMessage("Finish or cancel the current payment first.");
+                return;
+            }
+
+            if (host.trapFloorTurnState != null && !host.IsPlayerOnThisComputer(host.trapFloorTurnState.ActivePlayerId))
+            {
+                host.ShowMessage("Only the player whose turn it is can buy from the Ability deck."); // B01
                 return;
             }
 
@@ -581,8 +587,15 @@ namespace ConsoleCards.Presentation.Composition
         // The card to buy out of the deck for this payment, if it is still there; cleared either way.
         internal TabletopObjectId TakePendingDeckCard(string cardDefinitionStableId)
         {
-            TabletopObjectId cardId = pendingDeckCardId;
+            TabletopObjectId cardId = PeekPendingDeckCard(cardDefinitionStableId);
             pendingDeckCardId = TabletopObjectId.Empty;
+            return cardId;
+        }
+
+        // B01: the same card without forgetting it, so a rejected purchase can be confirmed again for the same card.
+        internal TabletopObjectId PeekPendingDeckCard(string cardDefinitionStableId)
+        {
+            TabletopObjectId cardId = pendingDeckCardId;
             return !cardId.IsEmpty
                 && TryGetAbilityDeck(out ContainerState deck)
                 && deck.Contains(cardId)

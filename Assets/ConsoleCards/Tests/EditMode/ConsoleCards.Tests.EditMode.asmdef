@@ -1,0 +1,27 @@
+{
+    "name": "ConsoleCards.Tests.EditMode",
+    "rootNamespace": "ConsoleCards.Tests",
+    "references": [
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "ConsoleCards.Core",
+        "ConsoleCards.Application",
+        "ConsoleCards.GameTemplates",
+        "ConsoleCards.TrapFloor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

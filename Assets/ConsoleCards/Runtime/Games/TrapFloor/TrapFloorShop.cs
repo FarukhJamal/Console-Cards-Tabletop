@@ -156,10 +156,15 @@ namespace ConsoleCards.Games.TrapFloor
             DestinationContainerId = destinationContainerId;
             PlacedInHand = placedInHand;
             Error = error;
+            accepted = status == CommandResultStatus.Accepted;
         }
 
+        // B01/B08 (playtest): a result made by a use case. A command another computer runs comes back as an all-default
+        // value (status 0 = Accepted), which must not read as a success.
+        private readonly bool accepted;
+
         public CommandResultStatus Status { get; }
-        public bool Succeeded => Status == CommandResultStatus.Accepted;
+        public bool Succeeded => accepted;
         public long Revision { get; }
         public CardDefinitionData Card { get; }
         public TabletopObjectId GrantedCardId { get; }

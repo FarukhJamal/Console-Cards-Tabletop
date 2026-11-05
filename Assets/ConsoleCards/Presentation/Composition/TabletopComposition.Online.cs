@@ -222,7 +222,10 @@ namespace ConsoleCards.Presentation.Composition
             {
                 replacement = snapshot.Match.Restore(Math.Max(1L, revision));
                 restoredGameState = snapshot.GameState?.Restore();
-                restoredPurchase = snapshot.PendingControllerPurchase?.Restore();
+                // B01 (playtest): a payment in progress belongs to this computer's player. Another computer's table never
+                // adds one here or wipes ours; it is checked again when it is confirmed.
+                PendingControllerPurchaseState local = pendingControllerPurchaseState;
+                restoredPurchase = local != null && local.IsActive && IsPlayerOnThisComputer(local.PlayerId) ? local : null;
             }
             catch (Exception exception)
             {

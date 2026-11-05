@@ -280,6 +280,7 @@ namespace ConsoleCards.Presentation.Composition
             cardFlipTurns?.CompleteAll();
             flipCoordinator.Flipped = BeginCardFlipTurn;
             inputRoutingPolicy = new TabletopInteractionInputRoutingPolicy(selectionState, moveCoordinator);
+            inputRoutingPolicy.PointerIsOver = IsPointerOverView; // U02: the wheel zooms unless over the selected piece
             interactionRouter = new TabletopInteractionRouter(
                 hitResolver,
                 moveCoordinator,

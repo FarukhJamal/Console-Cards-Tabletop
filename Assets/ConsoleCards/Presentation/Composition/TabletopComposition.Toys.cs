@@ -571,7 +571,7 @@ namespace ConsoleCards.Presentation.Composition
 
                 diceInShuffleZones.Add(id);
                 rolledThisCheck.Add(id);
-                ContextMenus.RollContextDie(id);
+                ContextMenus.RollDie(id); // B04: the menu-only check left zone dice unrolled
             }
 
             return unsettled;

@@ -912,6 +912,14 @@ namespace ConsoleCards.Presentation.Composition
             return ok;
         }
 
+        // U02: whether the pointer is over this piece (the wheel turns a selected piece only then).
+        private bool IsPointerOverView(TabletopObjectView view)
+        {
+            if (view == null || hitResolver == null || Mouse.current == null) return false;
+            return hitResolver.TryResolve(Mouse.current.position.ReadValue(), out TabletopObjectView resolved)
+                && ReferenceEquals(resolved, view);
+        }
+
         // F over a face-down floor tile turns it, like any card (owner, 2026-11-05).
         private void FlipFloorTileUnderPointer()
         {
@@ -990,16 +998,45 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private void RollOrShuffleByKey()
+        // B04 (playtest): how many dice a roll from this die's menu covers: the group selection when the die is in it.
+        internal int SelectedDiceWith(TabletopObjectId dieId)
         {
-            // The selected dice first (as in Tabletop Simulator), then the die or pile under the pointer.
+            int dice = 0;
+            bool inIt = false;
+            for (int i = 0; i < toolSelection.Count; i++)
+            {
+                if (!(toolSelection[i].View is DieView die) || !die.IsBound) continue;
+                dice++;
+                if (die.ObjectId == dieId) inIt = true;
+            }
+
+            return inIt ? dice : 1;
+        }
+
+        // Every selected die rolls (each keeps its own result); the count that rolled.
+        internal int RollSelectedDice()
+        {
             int rolled = 0;
             for (int i = 0; i < toolSelection.Count; i++)
             {
                 if (toolSelection[i].View is DieView die && die.PhysicalObject != null && die.PhysicalObject.Roll()) rolled++;
             }
 
+            return rolled;
+        }
+
+        private void RollOrShuffleByKey()
+        {
+            // The selected dice first (as in Tabletop Simulator), then the die or pile under the pointer.
+            int selectedDice = 0;
+            for (int i = 0; i < toolSelection.Count; i++) if (toolSelection[i].View is DieView) selectedDice++;
+            int rolled = RollSelectedDice();
             if (rolled > 0) return;
+            if (selectedDice > 0)
+            {
+                ShowMessage("The selected dice can't be rolled now."); // B04: no silent fall-through to other actions
+                return;
+            }
             if (hoverView is DieView hoveredDie && hoverPileId.IsEmpty)
             {
                 if (hoveredDie.PhysicalObject == null || !hoveredDie.PhysicalObject.Roll()) ShowMessage("That die can't be rolled now.");
@@ -1084,6 +1121,12 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < toolSelection.Count; i++)
             {
                 if (!(toolSelection[i].View is CardView card) || ReferenceEquals(card, handledByTable)) continue;
+                if (trapFloorTemplate != null && card.IsBound && TrapFloorGame.IsFlippableFloorTile(card.ObjectId))
+                {
+                    TrapFloorGame.FlipFloorTileByHand(card.ObjectId); // B03: floor tiles are locked to the board
+                    continue;
+                }
+
                 WithSelected(card, () => flipCoordinator.FlipSelected());
             }
         }

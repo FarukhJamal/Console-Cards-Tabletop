@@ -133,8 +133,27 @@ namespace ConsoleCards.Presentation.Composition
                 ? result.Changed
                     ? $"Drew {result.DrawnCount} Controller Card{(result.DrawnCount == 1 ? string.Empty : "s")}."
                     : "Controller Hand is already at its configured limit or the Deck is empty."
-                : $"Controller draw rejected: {result.Error}.");
+                : result.Error == ControllerInputHandDrawError.None
+                ? "Only the computer that plays this seat can draw for it." // B08: run on another computer
+                : $"Could not draw ({result.Error}).");
             return result;
+        }
+
+        // B08 (playtest: "draw requests are sometimes rejected"): why a draw was refused, in plain words. A draw for a
+        // seat played on another computer is not run here and comes back with no error.
+        internal static string DrawErrorText(DrawCardsError error)
+        {
+            switch (error)
+            {
+                case DrawCardsError.None: return "only the computer that plays this seat can draw for it.";
+                case DrawCardsError.InsufficientCards: return "the deck does not have that many cards.";
+                case DrawCardsError.DestinationCapacityExceeded: return "the hand is full.";
+                case DrawCardsError.ObjectUserLocked: return "a card in the deck is locked.";
+                case DrawCardsError.SourceContainerNotDeck: return "that pile is not a deck.";
+                case DrawCardsError.RevisionConflict: return "the table changed at the same moment. Try again.";
+                case DrawCardsError.InvalidCount: return "choose at least one card.";
+                default: return $"the table refused it ({error}).";
+            }
         }
 
         private DrawCardsResult DrawCards(ContainerId sourceDeckContainerId, int count)
@@ -182,7 +201,7 @@ namespace ConsoleCards.Presentation.Composition
                 presentationTransitions.AnimateCardsFromCurrentResults(
                     transitionStarts,
                     returnDuration);
-                ShowMessage($"Draw rejected: {result.Error}.");
+                ShowMessage($"Could not draw: {DrawErrorText(result.Error)}");
             }
 
             RefreshCardContentVisibility();

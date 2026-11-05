@@ -111,10 +111,46 @@ namespace ConsoleCards.Presentation.Composition
             host.runtimeUi.ShowShopEntry(open ? (Action)OpenActionAbilityPurchase : null);
         }
 
+        // B01 (playtest, 2026-11-05): only the computer that plays the turn player's seat buys for them; a player who
+        // is not on turn could otherwise start a payment for someone else and block their own Shop for the session.
         internal bool IsShopBuyingTurn() =>
             host.trapFloorTurnState != null
             && !host.trapFloorTurnState.IsCurrentFloorFailed
-            && host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn;
+            && host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+            && host.IsPlayerOnThisComputer(host.trapFloorTurnState.ActivePlayerId);
+
+        // B01: a payment belongs to the turn player who started it, on this computer. One left over from another turn,
+        // another phase, or a seat played elsewhere never blocks anything: it is dropped (its cards stay where they
+        // were placed, as with Cancel Payment).
+        internal bool IsPaymentBlocking()
+        {
+            PendingControllerPurchaseState state = host.pendingControllerPurchaseState;
+            if (state == null || !state.IsActive) return false;
+            if (host.trapFloorTurnState != null
+                && !host.trapFloorTurnState.IsCurrentFloorFailed
+                && host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                && state.PlayerId == host.trapFloorTurnState.ActivePlayerId
+                && host.IsPlayerOnThisComputer(state.PlayerId))
+            {
+                return true;
+            }
+
+            DropPendingPayment("The unfinished payment was cancelled. Its cards stay where they were placed.");
+            return false;
+        }
+
+        // B01: ends a payment without buying (turn over, stale, or cancelled). Nothing was reserved, so nothing moves back.
+        internal void DropPendingPayment(string message)
+        {
+            host.pendingPurchaseDefinitionStableId = string.Empty;
+            pendingDeckCardId = TabletopObjectId.Empty;
+            PendingControllerPurchaseState state = host.pendingControllerPurchaseState;
+            if (state == null || !state.IsActive) return;
+            state.Clear();
+            ReplaceCurrentUndoStateForPurchaseAssistance();
+            RefreshTrapFloorStatusUi();
+            if (!string.IsNullOrEmpty(message)) host.ShowMessage(message);
+        }
 
         internal void OpenActionAbilityPurchase()
         {
@@ -125,8 +161,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (host.pendingControllerPurchaseState != null
-                && host.pendingControllerPurchaseState.IsActive)
+            if (IsPaymentBlocking())
             {
                 host.ShowMessage("Finish or cancel the current payment first.");
                 return;
@@ -156,8 +191,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void TryPurchaseActionAbilityFromPopup(string cardDefinitionStableId)
         {
-            if (host.pendingControllerPurchaseState != null
-                && host.pendingControllerPurchaseState.IsActive)
+            if (IsPaymentBlocking())
             {
                 host.runtimeUi?.SetActionAbilityPurchaseStatus(
                     "Finish or cancel the current payment first.");
@@ -166,7 +200,10 @@ namespace ConsoleCards.Presentation.Composition
 
             if (!IsShopBuyingTurn())
             {
-                host.runtimeUi?.SetActionAbilityPurchaseStatus("Buying is on a player's own turn.");
+                host.runtimeUi?.SetActionAbilityPurchaseStatus(
+                    host.trapFloorTurnState != null && !host.IsPlayerOnThisComputer(host.trapFloorTurnState.ActivePlayerId)
+                        ? "Only the player whose turn it is can buy."
+                        : "Buying is on a player's own turn.");
                 return;
             }
 
@@ -374,15 +411,7 @@ namespace ConsoleCards.Presentation.Composition
             pendingDeckCardId = TabletopObjectId.Empty;
             host.runtimeUi?.CloseFocusedCardSelection();
             host.runtimeUi?.CloseActionAbilityPurchase();
-            if (host.pendingControllerPurchaseState == null
-                || !host.pendingControllerPurchaseState.IsActive)
-                return;
-
-            host.pendingControllerPurchaseState.Clear();
-            ReplaceCurrentUndoStateForPurchaseAssistance();
-            RefreshTrapFloorStatusUi();
-            host.ShowMessage(
-                "Payment cancelled. Cards stay where you placed them.");
+            DropPendingPayment("Payment cancelled. Cards stay where you placed them.");
         }
 
         internal string FindPurchaseDisplayName(string cardDefinitionStableId)
@@ -468,6 +497,42 @@ namespace ConsoleCards.Presentation.Composition
             return InputCostNotation.Format(cost);
         }
 
+        // B08 (playtest): a rejected purchase says why in plain words, not as an error name.
+        internal static string PurchaseErrorText(TrapFloorShopError error)
+        {
+            switch (error)
+            {
+                case TrapFloorShopError.None: return "this computer does not play the turn player's seat.";
+                case TrapFloorShopError.ActorIsNotActivePlayer: return "it is not this player's turn.";
+                case TrapFloorShopError.NotInShop:
+                case TrapFloorShopError.NotForSale: return "that card is not for sale.";
+                case TrapFloorShopError.PaymentInvalid: return "the cards in your Console do not pay the cost exactly.";
+                case TrapFloorShopError.PaymentCardNotInConsole: return "a payment card is not in your Console.";
+                case TrapFloorShopError.PaymentCardLocked: return "a payment card is locked.";
+                case TrapFloorShopError.SourceCardNotInAbilityDeck: return "that card is no longer in the Ability deck.";
+                case TrapFloorShopError.MatchRevisionConflict: return "the table changed at the same moment. Try again.";
+                default: return $"the table refused it ({error}).";
+            }
+        }
+
+        internal static string TakeErrorText(TrapFloorTakePrizeError error)
+        {
+            switch (error)
+            {
+                case TrapFloorTakePrizeError.None: return "this computer does not play the turn player's seat.";
+                case TrapFloorTakePrizeError.ActorIsNotActivePlayer: return "it is not this player's turn.";
+                case TrapFloorTakePrizeError.FloorNotRevealed: return "the tile is still face down.";
+                case TrapFloorTakePrizeError.FloorIsHole: return "that tile has collapsed or was already taken.";
+                case TrapFloorTakePrizeError.NotAPrize: return "that tile is not an Ability or Friend.";
+                case TrapFloorTakePrizeError.PawnNotOnTile: return "your pawn is not on that tile.";
+                case TrapFloorTakePrizeError.PaymentInvalid: return "the cards in your Console do not pay the cost exactly.";
+                case TrapFloorTakePrizeError.PaymentCardNotInConsole: return "a payment card is not in your Console.";
+                case TrapFloorTakePrizeError.PaymentCardLocked: return "a payment card is locked.";
+                case TrapFloorTakePrizeError.MatchRevisionConflict: return "the table changed at the same moment. Try again.";
+                default: return $"the table refused it ({error}).";
+            }
+        }
+
         internal static string PaymentVerb(PendingControllerPurchaseState state) =>
             state != null && state.Source == PendingPurchaseSource.Shop ? "BUY" : "TAKE";
 
@@ -481,7 +546,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             // ABIL-DECK: a card drawn from the Ability deck is bought out of the deck itself.
-            TabletopObjectId deckCardId = TakePendingDeckCard(cardDefinitionStableId);
+            TabletopObjectId deckCardId = PeekPendingDeckCard(cardDefinitionStableId); // B01: kept until it succeeds
             TrapFloorBuyFromShopResult result = host.TableAuthority.Submit<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(
                 new TrapFloorBuyFromShopCommand(
                     host.CreateCommandContext(host.trapFloorTurnState.ActivePlayerId),
@@ -491,10 +556,11 @@ namespace ConsoleCards.Presentation.Composition
                     deckCardId));
             if (!result.Succeeded)
             {
-                host.ShowMessage($"Shop purchase rejected: {result.Error}.");
+                host.ShowMessage($"Could not buy it: {PurchaseErrorText(result.Error)}");
                 return;
             }
 
+            pendingDeckCardId = TabletopObjectId.Empty;
             host.pendingControllerPurchaseState.Clear();
             host.pendingPurchaseDefinitionStableId = string.Empty;
             ReplaceCurrentUndoStateForPurchaseAssistance();
@@ -764,6 +830,12 @@ namespace ConsoleCards.Presentation.Composition
         private bool collapseWatching;
         private bool floorTurnCollapseDone;
 
+        internal void MarkFloorTurnCollapseDone()
+        {
+            floorTurnCollapseDone = true;
+            collapseWatching = false;
+        }
+
         private void ArmFloorCollapseForFloorTurn()
         {
             if (host.trapFloorTurnState == null
@@ -790,7 +862,9 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (floorTurnCollapseDone || host.trapFloorCollapseState.IsBoardExhausted) return;
+            if (floorTurnCollapseDone
+                || host.trapFloorCollapseState.IsBoardExhausted
+                || (host.trapFloorCollapseUseCase != null && host.trapFloorCollapseUseCase.NothingLeftToCollapse)) return;
             if (!collapseWatching)
             {
                 collapseWatching = true;
@@ -835,7 +909,13 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            PlayerId actor = host.trapFloorTurnState.FloorOperatorPlayerId;
+            if (host.trapFloorCollapseUseCase.NothingLeftToCollapse)
+            {
+                host.ShowMessage("No tile is left that can collapse."); // B02: Survival's Grand Exit never collapses
+                return false;
+            }
+
+            PlayerId actor = CollapseActorHere();
             TrapFloorCollapseResult begin = host.TableAuthority.Submit<TrapFloorBeginCollapseCommand, TrapFloorCollapseResult>(
                 afterThrow
                     ? new TrapFloorBeginCollapseCommand(host.CreateCommandContext(actor), askedXDieState, askedYDieState)
@@ -857,6 +937,23 @@ namespace ConsoleCards.Presentation.Composition
                 "FLOOR TURN — any player: roll the two floor dice (column and row): the tile they point at collapses.",
                 FeedbackSeverity.Info);
             return true;
+        }
+
+        // B02 (playtest: "collapse sometimes fails"): the collapse is run by the computer whose player threw the dice
+        // (another computer ignores that throw). Online, when the floor operator plays elsewhere, the player here acts.
+        private PlayerId CollapseActorHere()
+        {
+            PlayerId operatorId = host.trapFloorTurnState.FloorOperatorPlayerId;
+            if (operatorId.IsEmpty || host.IsPlayerOnThisComputer(operatorId)) return operatorId;
+            if (TryGetOfficialFloorfallDieViews(out DieView xDie, out _)
+                && xDie.DieState?.BaseState.PhysicalState != null
+                && !xDie.DieState.BaseState.PhysicalState.ControllingPlayerId.IsEmpty
+                && host.IsPlayerOnThisComputer(xDie.DieState.BaseState.PhysicalState.ControllingPlayerId))
+            {
+                return xDie.DieState.BaseState.PhysicalState.ControllingPlayerId;
+            }
+
+            return host.IsPlayerOnThisComputer(host.localPlayerId) && !host.localPlayerId.IsEmpty ? host.localPlayerId : operatorId;
         }
 
         internal void CompletePhysicalFloorCollapseIfSettled()
@@ -1157,7 +1254,7 @@ namespace ConsoleCards.Presentation.Composition
             host.FeedbackLine(
                 result.Succeeded
                     ? $"{FormatPlayerName(active)} drew {need} Controller Card{(need == 1 ? string.Empty : "s")}."
-                    : $"Draw rejected: {result.Error}.",
+                    : $"Could not draw: {DrawErrorText(result.Error)}",
                 result.Succeeded ? FeedbackSeverity.Info : FeedbackSeverity.Warning);
             RefreshTrapFloorStatusUi();
         }
@@ -1594,6 +1691,16 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            if (wasFloorTurn && host.physicalFloorCollapsePending)
+            {
+                // B02 (playtest): a collapse still waiting for its roll stops waiting when the floor turn ends, so a
+                // later throw in a player turn never resolves it. The next floor turn picks it up again.
+                host.physicalFloorCollapsePending = false;
+                host.physicalFloorCollapseActor = PlayerId.Empty;
+                ResetCollapsePreview();
+                host.FeedbackLine("The floor turn ended before the dice were rolled: no tile collapsed.", FeedbackSeverity.Warning);
+            }
+
             bool reactivatesPlayers = wasFloorTurn && host.trapFloorTurnState.IsCurrentFloorFailed; // knocked out = out for the floor
             PlayerId actor = host.trapFloorTurnState.IsCurrentFloorFailed
                 ? host.trapFloorTurnState.PlayerOrder[0]
@@ -1633,6 +1740,8 @@ namespace ConsoleCards.Presentation.Composition
                             == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound);
                 if (!knockedOut && !wasFloorTurn) RememberPrizeLeft(actor);
                 if (!wasFloorTurn) EndAbilityOffer(); // ABIL-DECK: what was not bought goes back; the deck is shuffled
+                // B01 (playtest): an unfinished payment ends with the turn, so it never blocks the next player.
+                if (!wasFloorTurn) DropPendingPayment("The unfinished payment ended with the turn. Its cards stay where they were placed.");
                 if (!knockedOut)
                 {
                     result = skipped
@@ -2124,9 +2233,42 @@ namespace ConsoleCards.Presentation.Composition
             PlayerId player = host.trapFloorTurnState != null && !host.trapFloorTurnState.ActivePlayerId.IsEmpty
                 ? host.trapFloorTurnState.ActivePlayerId
                 : host.localPlayerId;
+            // B03 (playtest: "cards sometimes fail to flip"): a flip that cannot happen says why.
+            if (IsFloorEnded())
+            {
+                host.ShowMessage("This floor has ended: its tiles stay as they are.");
+                return false;
+            }
+
+            if (!host.IsPlayerOnThisComputer(player))
+            {
+                host.ShowMessage($"It's {FormatPlayerName(player)}'s turn: their computer turns the tiles.");
+                return false;
+            }
+
+            if (host.trapFloorTurnState != null && host.trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
+            {
+                host.ShowMessage("Tiles turn over during a player's turn, not the floor turn.");
+                return false;
+            }
+
             bool flipped = TryLandingFlipNow(player, floorCardId, out _);
-            if (flipped) RefreshTrapFloorStatusUi();
-            return flipped;
+            if (!flipped)
+            {
+                host.ShowMessage("That tile can't be turned over now.");
+                return false;
+            }
+
+            RefreshTrapFloorStatusUi();
+            // B03: the turn player's pawn standing on the tile just turned (an exit in Free mode) is checked as a landing.
+            if (TryGetActivePawnTile(out _, out TrapFloorCoordinate pawnTile)
+                && host.trapFloorTemplate.TryGetFloorCardId(pawnTile, out TabletopObjectId underPawn)
+                && underPawn == floorCardId)
+            {
+                TryTakeExitsAfterMove(floorCardId);
+            }
+
+            return true;
         }
 
         // A face-down, standing floor tile of this table (F turns it like any card).
@@ -2970,7 +3112,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void BeginTakeFloorPrize()
         {
             host.ContextMenus.CloseContextMenu();
-            if (host.pendingControllerPurchaseState != null && host.pendingControllerPurchaseState.IsActive)
+            if (IsPaymentBlocking())
             {
                 host.ShowMessage("Finish or cancel the current payment first.");
                 return;
@@ -3056,7 +3198,7 @@ namespace ConsoleCards.Presentation.Composition
                     PawnTablePosition(takerPawn)));
             if (!result.Succeeded)
             {
-                host.ShowMessage($"Take rejected: {result.Error}.");
+                host.ShowMessage($"Could not take it: {TakeErrorText(result.Error)}");
                 return;
             }
 
@@ -3441,6 +3583,9 @@ namespace ConsoleCards.Presentation.Composition
             host.landingCheckPending = false;
             activePawnLeftGrid = false;
             RunLandingCheck(out TabletopObjectId activeLandedFloorCardId, out bool anyPawnMoved);
+            // B05 (playtest: "gameplay may continue after a terminal condition"): once the floor is won or lost, moving
+            // pawns triggers nothing more (the positions above are still recorded).
+            if (IsFloorEnded()) return;
             if (activePawnLeftGrid) KnockOutIfOffTheFloor(); // FIX-3
             if (!anyPawnMoved) return;
             if (host.trapFloorTurnState != null
@@ -3583,8 +3728,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             // Owner, 2026-11-05: in the default mode (Free) the table does nothing by itself; the player flips the
-            // tile (F or the menu's Flip).
-            if (PlayAssist.IsFree) return;
+            // tile (F or the menu's Flip). B05: nothing flips once the floor has ended.
+            if (PlayAssist.IsFree || IsFloorEnded()) return;
 
             // The landing triggers now (popup and effects); the tile on the table turns once the pawn is off it
             // (aside or ahead), or when the turn ends.

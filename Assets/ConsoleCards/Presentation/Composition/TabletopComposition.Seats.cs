@@ -570,7 +570,10 @@ namespace ConsoleCards.Presentation.Composition
         {
             RecordHandoverLine(message);
             // Owner, 2026-10-24: the Log already shows the line; only warnings also pop up as a message.
-            if (severity == FeedbackSeverity.Warning) runtimeUi.ShowFeedbackMessage(message, severity);
+            // B05/U05 (playtest: eliminated players got too little feedback): a loss (a player eliminated, a floor
+            // lost) pops up too; routine lines stay in the log.
+            if (severity == FeedbackSeverity.Warning || severity == FeedbackSeverity.Loss)
+                runtimeUi.ShowFeedbackMessage(message, severity);
         }
 
         internal string PlayerLabel(PlayerId player)

@@ -366,13 +366,19 @@ namespace ConsoleCards.Games.TrapFloor
         /// <summary>Survival (owner, 2026-11-04): the Grand Exit cannot collapse; a roll that lands on it is rolled again.</summary>
         public bool ProtectsGrandExit { get; set; }
 
+        /// <summary>
+        /// B02 (playtest): no tile is left that may collapse. With the Grand Exit protected (Survival), the Grand Exit
+        /// alone left standing counts as nothing left (every roll on it would ask for another roll, for ever).
+        /// </summary>
+        public bool NothingLeftToCollapse => state.UsableFloorCount <= (ProtectsGrandExit ? 1 : 0);
+
         public TrapFloorCollapseResult Begin(
             MatchState matchState,
             TrapFloorBeginCollapseCommand command)
         {
             TrapFloorCollapseError error = Validate(matchState, command, command?.Context ?? default);
             if (error != TrapFloorCollapseError.None) return Failure(error);
-            if (state.IsBoardExhausted)
+            if (NothingLeftToCollapse)
                 return TrapFloorCollapseResult.Failure(
                     CommandResultStatus.Rejected, TrapFloorCollapseError.BoardExhausted, true);
             if (state.IsCollapsePending) return Failure(TrapFloorCollapseError.CollapseAlreadyPending);

@@ -22,6 +22,12 @@ namespace ConsoleCards.Presentation.Input
 
         public bool HasInteractionRouter => interactionRouter != null;
 
+        /// <summary>
+        /// U02 (playtest: "unexpected rotation when players intend to zoom"): true when the pointer is over this view.
+        /// When set, the wheel turns the selected piece only while the pointer is over it, and zooms otherwise.
+        /// </summary>
+        public Func<TabletopObjectView, bool> PointerIsOver { get; set; }
+
         public TabletopInteractionRouter InteractionRouter => interactionRouter;
 
         public void ConfigureInteractionRouter(TabletopInteractionRouter router)
@@ -66,6 +72,11 @@ namespace ConsoleCards.Presentation.Input
             if (selectedView.IsPreviewing || IsContainedCard(selectedView))
             {
                 return TabletopScrollInputRoute.Suppressed;
+            }
+
+            if (PointerIsOver != null && !PointerIsOver(selectedView))
+            {
+                return TabletopScrollInputRoute.CameraZoom;
             }
 
             return TabletopScrollInputRoute.ObjectRotation;

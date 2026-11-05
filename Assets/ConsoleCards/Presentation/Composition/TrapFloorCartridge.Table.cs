@@ -210,6 +210,30 @@ namespace ConsoleCards.Presentation.Composition
 
             authority.Observe<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(OnShopCardBought);
             authority.Observe<TrapFloorTakePrizeCommand, TrapFloorTakePrizeResult>(OnPrizeTaken);
+            authority.Observe<TrapFloorResolveCollapseCommand, TrapFloorCollapseResult>(OnCollapseResolved);
+            authority.Observe<TrapFloorRevealFloorCommand, TrapFloorRevealFloorResult>(OnFloorRevealed);
+        }
+
+        // B02 (playtest): a collapse another computer resolved. Here too it counts as this floor turn's collapse (so this
+        // computer does not ask for a second one) and the tile shows as collapsed. The computer that resolved it has
+        // already done both.
+        private void OnCollapseResolved(TrapFloorResolveCollapseCommand command, TrapFloorCollapseResult result)
+        {
+            if (!host.ViewSync.Ready || !host.Replicated.Replaying || !result.Succeeded || result.RerollRequired) return;
+            if (result.CollapsedFloor == null) return;
+            if (host.trapFloorTurnState != null && host.trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
+                MarkFloorTurnCollapseDone();
+            ApplyCollapsedFloorPresentation(result.CollapsedFloor.FloorCardId);
+            RefreshTrapFloorStatusUi();
+        }
+
+        // B03 (playtest: "cards sometimes fail to flip"): a tile another computer revealed turns over here too.
+        private void OnFloorRevealed(TrapFloorRevealFloorCommand command, TrapFloorRevealFloorResult result)
+        {
+            if (!host.ViewSync.Ready || !host.Replicated.Replaying || !result.Succeeded) return;
+            if (host.Registry.TryGetCardView(command.FloorCardId, out CardView floorCardView)) RevealFloorCardView(floorCardView);
+            host.RefreshCardContentVisibility();
+            RefreshTrapFloorStatusUi();
         }
 
         private void OnShopCardBought(TrapFloorBuyFromShopCommand command, TrapFloorBuyFromShopResult result)
