@@ -207,7 +207,8 @@ namespace ConsoleCards.Presentation.UI
             SetInteractable(at + "Start", online.IsHost ? canStart : online.CanReady);
             TintImage(at + "Start", lit ? StartOn : StartOff);
             Tint(at + "Start/Label", lit ? StartOnWords : StartOffWords);
-            SetText(at + "Waiting", online.IsHost
+            SetText(at + "Waiting", !online.IsHost && !string.IsNullOrEmpty(online.Waiting) ? online.Waiting
+                : online.IsHost
                 ? online.Started && online.NotReady > 0 ? "A game is on: NEW GAME once everyone is READY again"
                 : online.NotReady > 0 ? $"Waiting for {online.NotReady} player{(online.NotReady == 1 ? string.Empty : "s")} to be ready" : string.Empty
                 : online.Ready ? "Waiting for the host to start" : "Press READY when you are");

@@ -29,6 +29,10 @@ namespace ConsoleCards.Presentation.Composition
         public PendingControllerPurchaseStateSnapshot PendingControllerPurchase { get; }
         public TableMarkSet TableMarks { get; }
 
+        /// <summary>M1a (2026-11-05): the same snapshot without the payment in progress, for sending to other computers.</summary>
+        public SessionUndoSnapshot WithoutPayment() =>
+            PendingControllerPurchase == null ? this : new SessionUndoSnapshot(Match, GameState, null, TableMarks);
+
         public static SessionUndoSnapshot Capture(
             MatchState match,
             ICartridgeUndoState gameState,

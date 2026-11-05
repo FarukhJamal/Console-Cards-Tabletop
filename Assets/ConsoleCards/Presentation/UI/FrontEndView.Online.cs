@@ -38,6 +38,9 @@ namespace ConsoleCards.Presentation.UI
         public string GameName = string.Empty;
         public string GameDetail = string.Empty;
         public int NotReady;
+
+        /// <summary>SEC-3 UI: replaces the READY hint (for example "This table is full…"); empty for the usual hint.</summary>
+        public string Waiting = string.Empty;
     }
 
     /// <summary>One room in the Lobby's list.</summary>

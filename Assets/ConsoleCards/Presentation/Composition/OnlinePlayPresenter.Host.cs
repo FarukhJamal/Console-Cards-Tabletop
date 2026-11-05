@@ -90,7 +90,13 @@ namespace ConsoleCards.Presentation.Composition
         {
             System.IO.BinaryReader reader = Reader(data);
             reader.ReadByte();
-            host.ShowMessage(reader.ReadString());
+            string text = reader.ReadString();
+            host.ShowMessage(text);
+            if (!sharedTable)
+            {
+                watchNotice = text; // SEC-3 UI: kept on the Room screen while this computer has no table
+                RefreshFrontEnd();
+            }
         }
 
         // ---------- a new host ----------

@@ -508,10 +508,12 @@ namespace ConsoleCards.Presentation.Composition
             if (host.activeSession == null || host.matchState == null) return null;
             try
             {
+                // M1a filtering (owner, 2026-11-05): a payment in progress names cards chosen from a Hand. No other
+                // computer uses it (each keeps its own, B01), so it never leaves this computer.
                 return TableWire.Write(new OnlineTablePacket
                 {
                     Setup = CaptureSetup(),
-                    Snapshot = host.SessionService.CaptureUndoSnapshot(),
+                    Snapshot = host.SessionService.CaptureUndoSnapshot().WithoutPayment(),
                 }, true);
             }
             catch (Exception exception)
@@ -741,9 +743,18 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // A joined computer asks the host to deal the next floor or restart the same game.
-        private void HostDeal(byte[] message)
+        private void HostDeal(Member member, byte[] message)
         {
             if (!sharedTable || host.activeSession == null) return;
+            // M1a (T5): a joined computer may ask for the next deal only when the floor has ended by the rules (its Start
+            // button on the floor-end chip). Free mode's manual End Floor is the host's. Anything else is refused.
+            if (host.trapFloorTemplate != null && !host.TrapFloorGame.IsCurrentFloorEnded)
+            {
+                Debug.Log($"[Online] Refused a deal asked by {member?.Name}: the floor has not ended.");
+                if (member != null) SendNotice(member, "The host deals the next floor once this one has ended.");
+                return;
+            }
+
             BinaryReader reader = Reader(message);
             reader.ReadByte();
             Guid template = ReadGuid(reader);
@@ -888,6 +899,15 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
+        private void RefuseFromWatcher(Member member, byte type)
+        {
+            refusedFromWatchers++;
+            if (refusedFromWatchers <= 5 || refusedFromWatchers % 50 == 0)
+                Debug.Log($"[Online] Refused message {type} from {member?.Name}: it has no seat ({refusedFromWatchers} refused).");
+        }
+
+        private int refusedFromWatchers;
+
         private void ApplyPoses(byte[] message)
         {
             LocalPhysicalObjectAuthority physics = host.physicalAuthority;
@@ -908,6 +928,14 @@ namespace ConsoleCards.Presentation.Composition
 
         private void HostReadTable(Member member, byte type, byte[] data)
         {
+            // M1a (owner, 2026-11-05: "the authoritative peer must validate… accepted actions"): a computer without a game
+            // seat changes nothing at the table: no commands, table pushes, piece positions, live moves or deals.
+            if (IsWatcher(member) && type != MsgNeedTable)
+            {
+                RefuseFromWatcher(member, type);
+                return;
+            }
+
             switch (type)
             {
                 case MsgCommand:
@@ -929,7 +957,7 @@ namespace ConsoleCards.Presentation.Composition
 
                     break;
                 case MsgDeal:
-                    HostDeal(data);
+                    HostDeal(member, data);
                     break;
                 case MsgLive:
                     HostLive(member, data); // SYNC-1

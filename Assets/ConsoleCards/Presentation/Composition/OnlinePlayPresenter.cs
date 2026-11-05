@@ -47,10 +47,42 @@ namespace ConsoleCards.Presentation.Composition
         private const byte MsgNotice = 17; // MP-5: a line from the host for one player
 
         // This computer in a room: the same while the game runs (a lost connection keeps it, a restart does not).
+        // REJOIN-1 (2026-11-05): in a room the key is the one saved for that room in this profile, so a restart gets the
+        // same seat back (UseRejoinKey). The instance id tells two running copies apart (a duplicate is refused).
         private static Guid clientKey = Guid.NewGuid();
+        private static Guid processInstance = Guid.NewGuid();
+        private string watchNotice; // REJOIN-1 / SEC-3 UI: why this computer has no table (shown on the Room screen)
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void NewKey() => clientKey = Guid.NewGuid();
+        private static void NewKey()
+        {
+            clientKey = Guid.NewGuid();
+            processInstance = Guid.NewGuid();
+        }
+
+        private const string RejoinFileName = "rejoin.txt";
+
+        // The saved key for this room (renewed), or a new one saved for next time. Never sent anywhere but the hello.
+        private void UseRejoinKey(string roomCode)
+        {
+            try
+            {
+                string folder = System.IO.Path.Combine(host.EnsureProfile().ActiveFolder, "online");
+                string file = System.IO.Path.Combine(folder, RejoinFileName);
+                string text = System.IO.File.Exists(file) ? System.IO.File.ReadAllText(file) : string.Empty;
+                RejoinCredentialBook book = RejoinCredentialBook.Parse(text, DateTime.UtcNow);
+                clientKey = book.KeyFor(roomCode, DateTime.UtcNow, out bool reused);
+                System.IO.Directory.CreateDirectory(folder);
+                System.IO.File.WriteAllText(file, book.Serialize());
+                Debug.Log(reused
+                    ? $"[Online] Using this profile's saved seat key for {roomCode}."
+                    : $"[Online] New seat key for {roomCode}.");
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[Online] The seat key could not be saved ({exception.Message}); a restart will not get the seat back.");
+            }
+        }
 
         private readonly TabletopComposition host;
         private IMultiplayerSession session;
@@ -75,7 +107,8 @@ namespace ConsoleCards.Presentation.Composition
             // SEC-1 (2026-11-05): true when Key is only the public id of the member's secret key (what the roster
             // carries). A computer that rejoins proves itself with the secret key; the public id alone gets nothing.
             public bool KeyIsPublic;
-            public bool WatchNoticeSent; // SEC-3: told once that watching is not available yet
+            public bool WatchNoticeSent; // SEC-3: told once per connection that watching is not available yet
+            public Guid Instance; // REJOIN-1: the running copy behind the current connection (host only)
             public string Name = string.Empty;
             public int Colour;
             public bool Ready;
@@ -326,6 +359,12 @@ namespace ConsoleCards.Presentation.Composition
             welcomed = false;
             clientInbox.Reset();
             clientSeq = 0;
+            if (!again)
+            {
+                watchNotice = null;
+                UseRejoinKey(session.RoomCode); // REJOIN-1: the same key as last time in this room, for this profile
+            }
+
             if (hosting)
             {
                 members.Clear();
@@ -502,6 +541,7 @@ namespace ConsoleCards.Presentation.Composition
                     RefreshFrontEnd();
                     break;
                 case MsgUndo:
+                    if (IsWatcher(member)) { RefuseFromWatcher(member, type); break; } // M1a: no seat, no Undo
                     HostUndo(member, data);
                     break;
                 case MsgBye:
@@ -539,6 +579,7 @@ namespace ConsoleCards.Presentation.Composition
             string name = Clean(reader.ReadString(), 24);
             int colour = reader.ReadInt32();
             string contentHash = reader.BaseStream.Position < reader.BaseStream.Length ? reader.ReadString() : string.Empty;
+            Guid instance = reader.BaseStream.Position + 16 <= reader.BaseStream.Length ? ReadGuid(reader) : Guid.Empty;
             if (protocol != Protocol || !string.Equals(version, UnityEngine.Application.version, StringComparison.Ordinal))
             {
                 Kick(connection, $"This room plays version {UnityEngine.Application.version} of the game and yours is {version}: both need the same version.");
@@ -546,6 +587,24 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             Member member = MemberWithKey(key);
+            // REJOIN-1: a seat is given back to a returning computer, swapped to the same running copy, or refused to a
+            // second copy while the seat is still connected (no take-over). Logged for the test checklist.
+            RejoinDecision decision = RejoinRules.Decide(member != null && !member.IsHost, member != null && member.Connected,
+                member != null ? member.Instance : Guid.Empty, instance);
+            if (member != null && member.IsHost)
+            {
+                Kick(connection, "That seat key belongs to the host.");
+                return;
+            }
+
+            if (decision == RejoinDecision.RefuseDuplicate)
+            {
+                Debug.Log($"[Online] Refused a second copy for {member.Name}'s seat (it is still connected).");
+                Kick(connection, "Your seat is already being played from another window or computer. Close it first, or wait a few seconds if it just closed.");
+                return;
+            }
+
+            if (decision != RejoinDecision.NewMember) Debug.Log($"[Online] {member.Name}: {decision}.");
             bool back = member != null;
             if (member != null && member.KeyIsPublic)
             {
@@ -571,6 +630,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             member.Name = UniqueName(member, name.Length > 0 ? name : "Player");
+            member.Instance = instance;
+            member.WatchNoticeSent = false; // SEC-3: each new connection of a watcher is told once
             member.Connection = connection;
             member.Connected = true;
             member.LeftAt = -1f;
@@ -676,6 +737,7 @@ namespace ConsoleCards.Presentation.Composition
             Member me = Me();
             writer.Write(me != null ? me.Colour : 0);
             writer.Write(roomContentHash); // MP-4: the host's content this computer already has
+            WriteGuid(processInstance); // REJOIN-1: which running copy this is
             SendToHost();
         }
 
@@ -1025,6 +1087,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             model.NotReady = notReady;
+            // SEC-3 UI (owner, 2026-11-05): a computer refused the table says why, instead of "Waiting for the host to start".
+            if (!sharedTable && !string.IsNullOrEmpty(watchNotice)) model.Waiting = watchNotice;
             return model;
         }
 

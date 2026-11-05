@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Presentation.UI;
 using ConsoleCards.Presentation.Views;
@@ -107,6 +108,8 @@ namespace ConsoleCards.Presentation.Composition
         private const float FloorEndedAutoDealSeconds = 5f;
 
         // POP-2: the floor is still over (lost, or won through an exit); false after an Undo took that back.
+        internal bool IsCurrentFloorEnded => IsFloorEnded(); // M1a: the host checks a joined computer's deal request
+
         private bool IsFloorEnded() =>
             host.trapFloorTurnState != null
             && (host.trapFloorTurnState.IsCurrentFloorFailed
@@ -255,6 +258,92 @@ namespace ConsoleCards.Presentation.Composition
                 },
                 close,
                 _ => close());
+        }
+
+        // ---------- Free mode: the floor is ended by hand (owner, 2026-11-05) ----------
+        // "Add a manual End Floor action… completed, failed, or abandoned… allow manual recording of the winner or result.
+        // Do not automatically resolve the floor or advance to the next one in Free Mode." The rules state (won / lost)
+        // is not touched: the result is the players' call, written to the log, and the next floor is dealt only when a
+        // player presses Next floor. Online, the host (the session controller) ends the floor.
+
+        internal const string ManualEndFloorLabel = "End Floor…";
+
+        internal void AddManualEndFloor(System.Collections.Generic.List<PopupActionOption> actions)
+        {
+            if (!PlayAssist.IsFree || host.trapFloorTemplate == null || host.trapFloorTurnState == null || IsFloorEnded()) return;
+            bool mayEnd = !host.IsOnlineTable || (host.HasOnline && host.Online.IsHosting);
+            actions.Add(new PopupActionOption(ManualEndFloorLabel, mayEnd, ShowManualEndFloor));
+        }
+
+        private void ShowManualEndFloor()
+        {
+            if (host.runtimeUi == null || host.trapFloorTemplate == null) return;
+            Action close = () => host.runtimeUi?.CloseTabletopPopup();
+            int number = host.trapFloorTemplate.FloorIndex + 1;
+            host.runtimeUi.ShowContextMenu(
+                new Vector2((Screen.width * 0.5f) - 200f, Screen.height * 0.6f),
+                $"END FLOOR {number}",
+                "Free mode: the table does not judge the floor. Say how it ended; nothing is dealt until you press Next floor.",
+                new[]
+                {
+                    new PopupActionOption("Completed…", true, () => { close(); ShowManualWinnerChoice(); }),
+                    new PopupActionOption("Failed", true, () => { close(); FinishManualFloor("failed", null); }),
+                    new PopupActionOption("Abandoned", true, () => { close(); FinishManualFloor("abandoned", null); }),
+                    new PopupActionOption("Cancel", true, close),
+                },
+                close,
+                _ => close());
+        }
+
+        private void ShowManualWinnerChoice()
+        {
+            Action close = () => host.runtimeUi?.CloseTabletopPopup();
+            System.Collections.Generic.List<PopupActionOption> options = new System.Collections.Generic.List<PopupActionOption>();
+            System.Collections.Generic.IReadOnlyList<PlayerId> order = host.trapFloorTurnState.PlayerOrder;
+            for (int i = 0; i < order.Count; i++)
+            {
+                PlayerId player = order[i];
+                string label = host.PlayerLabel(player);
+                options.Add(new PopupActionOption($"Winner: {label}", true, () => { close(); FinishManualFloor("completed", label); }));
+            }
+
+            options.Add(new PopupActionOption("Everyone still in", true, () => { close(); FinishManualFloor("completed", "everyone still in"); }));
+            options.Add(new PopupActionOption("No winner recorded", true, () => { close(); FinishManualFloor("completed", null); }));
+            options.Add(new PopupActionOption("Cancel", true, close));
+            host.runtimeUi.ShowContextMenu(
+                new Vector2((Screen.width * 0.5f) - 200f, Screen.height * 0.6f),
+                "FLOOR COMPLETED",
+                "Record who won it (optional). The rules are not checked in Free mode.",
+                options.ToArray(),
+                close,
+                _ => close());
+        }
+
+        private void FinishManualFloor(string result, string winner)
+        {
+            if (host.trapFloorTemplate == null || host.runtimeUi == null) return;
+            TrapFloorTemplateDefinition floor = host.trapFloorTemplate;
+            int number = floor.FloorIndex + 1;
+            bool last = floor.IsLastFloor;
+            string line = $"Floor {number} marked {result} by hand" + (string.IsNullOrEmpty(winner) ? "." : $"; winner: {winner}.");
+            host.FeedbackLine(line, FeedbackSeverity.Warning); // in the log, and shown once
+            Debug.Log($"[Floor] {line}");
+            bool goOn = result != "abandoned" && !last;
+            host.runtimeUi.ShowTableMilestone(new TableMilestoneModel(
+                $"FLOOR {number} {result.ToUpperInvariant()}",
+                result == "completed" ? TableNoticeTone.Won : TableNoticeTone.Caution,
+                goOn ? $"Floor {number + 1} of {floor.FloorCount}" : "A new game",
+                string.IsNullOrEmpty(winner) ? "Marked by hand (Free mode)" : $"Winner: {winner} (marked by hand)",
+                goOn ? "Next floor" : "New game",
+                () =>
+                {
+                    host.runtimeUi?.CloseTableMilestone();
+                    if (host.IsOnlineTable && !(host.HasOnline && host.Online.IsHosting)) return; // the host deals online
+                    DealFloor(goOn ? floor.FloorIndex + 1 : 0);
+                },
+                "Not yet",
+                () => host.runtimeUi?.CloseTableMilestone(),
+                0f)); // Free: never a countdown
         }
 
         // Sets the table up again at the given floor (0 = a new game at full size, or the start of stage

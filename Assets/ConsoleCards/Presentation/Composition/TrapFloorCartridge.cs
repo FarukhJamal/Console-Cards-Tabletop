@@ -5421,6 +5421,7 @@ namespace ConsoleCards.Presentation.Composition
                 // MP-P (owner, 2026-10-27: "why the button text is being changed?"): online, the turn's buttons belong
                 // to the computer that plays the seat; here they keep their words and are greyed out.
                 if (!host.IsPlayerOnThisComputer(host.trapFloorTurnState.ActivePlayerId)) GreyOut(actions);
+                AddManualEndFloor(actions); // Free: the players end the floor by hand (owner, 2026-11-05)
                 return actions;
             }
 
@@ -5443,6 +5444,7 @@ namespace ConsoleCards.Presentation.Composition
                 "End Floor Turn",
                 host.IsPlayerOnThisComputer(host.trapFloorTurnState.FloorOperatorPlayerId),
                 AdvanceTrapFloorTurn));
+            AddManualEndFloor(actions); // Free: the players end the floor by hand (owner, 2026-11-05)
             return actions;
         }
 
