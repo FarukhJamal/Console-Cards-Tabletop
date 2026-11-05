@@ -62,7 +62,9 @@ namespace ConsoleCards.Presentation.Composition
             CardDropTarget target,
             bool targetWouldAccept)
         {
+            ShowCarrySlotHints(); // SLOT-HINT: once per carried card
             ClearFeedback();
+            ApplyCarrySlotHints();
             if (feedbackTargetsByContainerId.TryGetValue(sourceContainerId, out ContainerFeedbackTarget sourceTarget))
             {
                 sourceTarget.SetSource();
@@ -95,6 +97,7 @@ namespace ConsoleCards.Presentation.Composition
 
         void IContainedCardDragFeedback.ShowRejected(ContainerId sourceContainerId, CardDropTarget target)
         {
+            HideCarrySlotHints(); // SLOT-HINT: the carry ended
             ClearFeedback();
             if (target.Kind == CardDropTargetKind.Container
                 && feedbackTargetsByContainerId.TryGetValue(target.ContainerId, out ContainerFeedbackTarget feedbackTarget))
@@ -108,6 +111,7 @@ namespace ConsoleCards.Presentation.Composition
 
         void IContainedCardDragFeedback.Clear()
         {
+            HideCarrySlotHints(); // SLOT-HINT: released or cancelled
             ClearFeedback();
         }
 

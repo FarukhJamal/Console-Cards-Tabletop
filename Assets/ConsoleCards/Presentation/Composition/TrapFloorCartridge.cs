@@ -1948,6 +1948,16 @@ namespace ConsoleCards.Presentation.Composition
                 host.FeedbackLine("The floor turn ended before the dice were rolled: no tile collapsed.", FeedbackSeverity.Warning);
             }
 
+            // AUTH-ET (owner approval, 2026-11-06): a joined computer no longer ends the turn on its own copy and pushes the
+            // whole table. It asks the host, which checks that this connection plays the turn's seat and that the turn is
+            // still the one asked about, ends it once, and sends everyone the resulting table. Offline and on the host the
+            // turn ends here as before.
+            if (host.TrySendEndTurnToHost(TrapFloorEndTurnRequest.For(host.trapFloorTurnState, skipped)))
+            {
+                host.ShowMessage("Ending the turn: the host confirms it.");
+                return;
+            }
+
             bool reactivatesPlayers = wasFloorTurn && host.trapFloorTurnState.IsCurrentFloorFailed; // knocked out = out for the floor
             PlayerId actor = host.trapFloorTurnState.IsCurrentFloorFailed
                 ? host.trapFloorTurnState.PlayerOrder[0]
@@ -6037,6 +6047,18 @@ namespace ConsoleCards.Presentation.Composition
                 return player;
 
             throw new InvalidOperationException("The active Player has no authored Controller Hand setup.");
+        }
+
+        /// <summary>AUTH-DRAW: true for a seat's Controller deck (draws from it go only into the sender's own Hand).</summary>
+        internal bool IsControllerDeck(ContainerId containerId)
+        {
+            if (host.trapFloorTemplate == null || containerId.IsEmpty) return false;
+            for (int i = 0; i < host.trapFloorTemplate.Players.Count; i++)
+            {
+                if (host.trapFloorTemplate.Players[i].ControllerDeckId == containerId) return true;
+            }
+
+            return false;
         }
 
         internal bool TryGetTrapFloorPlayerSetup(

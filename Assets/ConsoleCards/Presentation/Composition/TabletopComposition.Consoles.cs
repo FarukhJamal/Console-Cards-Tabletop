@@ -445,6 +445,92 @@ namespace ConsoleCards.Presentation.Composition
             return true;
         }
 
+        // ---- Carry hints (SLOT-HINT, 2026-11-06) ----
+        // While a card is carried, the Console slots that would take it are outlined with the slots' own "valid" look
+        // on this screen's own Console, so the real slot places are visible (the slots' "source" look was not used: its
+        // material renders as a solid magenta block). The card snaps into the slot under the pointer as its preview, and
+        // a slot that would refuse it turns red; the slot under
+        // the pointer then shows the usual valid (green) or refused (red) look on top. Only bound slots on the side
+        // facing up with an enabled, configured drop target count; a full slot, the card's own slot and a slot whose
+        // symbol the card does not carry (the magnet refuses it) are left out. A side slot that already holds cards
+        // and still has room is marked: it stacks. Presentation only: the drop still goes through the resolver and the
+        // transfer command, and the marks go with the drag's feedback when it is released or cancelled.
+        private readonly List<ContainerId> carrySlotHintIds = new List<ContainerId>(16);
+        private bool carrySlotHintsShown;
+        private CardView carrySlotHintCard;
+
+        internal void ShowCarrySlotHints()
+        {
+            if (!IsInitialized || catalogConsolePrefab == null || !TryGetDraggedCard(out CardView card)) return;
+            if (carrySlotHintsShown && ReferenceEquals(carrySlotHintCard, card)) return;
+            carrySlotHintIds.Clear();
+            carrySlotHintsShown = true;
+            carrySlotHintCard = card;
+            CardDefinition definition = ConsoleCardDefinition(card);
+            bool hasSymbols = CardHasConsoleSymbols(definition);
+            ContainerId cardContainer = card.CardState != null ? card.CardState.BaseState.ContainerId : ContainerId.Empty;
+            ConsoleLayoutData layout = GetConsoleLayout();
+            for (int i = 0; i < Registry.runtimeConsoleInstances.Count; i++)
+            {
+                RuntimeConsoleInstance instance = Registry.runtimeConsoleInstances[i];
+                for (int s = 0; s < instance.SlotViews.Length && s < instance.SlotVisuals.Length && s < layout.CardSlots.Count; s++)
+                {
+                    ConsoleSlotView slotView = instance.SlotViews[s];
+                    ConsoleSlotVisual slotVisual = instance.SlotVisuals[s];
+                    if (slotView == null
+                        || slotVisual == null
+                        || !slotView.IsBound
+                        || slotView.IsSideHidden
+                        || slotView.ContainerState == null
+                        || slotView.ContainerState.IsFull
+                        || slotView.ContainerId == cardContainer
+                        || slotVisual.DropTarget == null
+                        || !slotVisual.DropTarget.isActiveAndEnabled
+                        || !slotVisual.DropTarget.IsConfigured
+                        || slotVisual.TargetCollider == null
+                        || !slotVisual.TargetCollider.enabled)
+                    {
+                        continue;
+                    }
+
+                    // Only this screen's own Console (and Consoles nobody owns) is marked, so the table is not covered
+                    // in outlines; other Consoles still light up under the pointer as before.
+                    SeatId ownerSeat = slotView.ContainerState.OwnerSeatId;
+                    if (!ownerSeat.IsEmpty
+                        && !localPlayerId.IsEmpty
+                        && matchState.Seats.TryGetValue(ownerSeat, out SeatState ownerState)
+                        && ownerState.OccupantPlayerId != localPlayerId)
+                    {
+                        continue;
+                    }
+
+                    ConsoleSymbol symbol = layout.CardSlots[s].Symbol;
+                    if (hasSymbols && symbol != ConsoleSymbol.None && !definition.CarriesSymbol(symbol)) continue;
+                    carrySlotHintIds.Add(slotView.ContainerId);
+                }
+            }
+
+            Debug.Log($"[SlotHint] {carrySlotHintIds.Count} Console slot(s) marked for the carried card.");
+        }
+
+        // Called right after the drag feedback is cleared each frame: the marks first, the source and the slot under
+        // the pointer after (so those keep their own look).
+        private void ApplyCarrySlotHints()
+        {
+            if (!carrySlotHintsShown) return;
+            for (int i = 0; i < carrySlotHintIds.Count; i++)
+            {
+                if (feedbackTargetsByContainerId.TryGetValue(carrySlotHintIds[i], out ContainerFeedbackTarget target)) target.SetValid();
+            }
+        }
+
+        internal void HideCarrySlotHints()
+        {
+            carrySlotHintsShown = false;
+            carrySlotHintCard = null;
+            carrySlotHintIds.Clear();
+        }
+
         // ---- Symbol magnet (ICardDropMagnet) ----
         // A card fits the Console slots marked with its Console symbol or any of its icons (ICON-1) and is pulled
         // into the nearest one; a card without symbols fits any slot.

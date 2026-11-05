@@ -71,6 +71,10 @@ namespace ConsoleCards.Presentation.Composition
         /// <summary>True while this table is shared with other computers.</summary>
         internal bool IsOnlineTable => online != null && online.TableShared;
 
+        /// <summary>AUTH-ET: on a joined computer the End Turn request goes to the host; false offline and on the host.</summary>
+        internal bool TrySendEndTurnToHost(ConsoleCards.Games.TrapFloor.TrapFloorEndTurnRequest request) =>
+            online != null && online.TrySendEndTurnRequest(request);
+
         /// <summary>The shared command door (made with the table's door).</summary>
         internal ReplicatedTableAuthority Replicated
         {

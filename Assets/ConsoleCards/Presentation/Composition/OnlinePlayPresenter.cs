@@ -45,6 +45,7 @@ namespace ConsoleCards.Presentation.Composition
         private const byte MsgContent = 15; // MP-4: the host's game saves (not numbered: it can be large)
         private const byte MsgUndo = 16; // MP-5: a joined player's Undo / Redo, run by the host
         private const byte MsgNotice = 17; // MP-5: a line from the host for one player
+        private const byte MsgEndTurn = 19; // AUTH-ET: a joined player asks the host to end the turn it plays
 
         // This computer in a room: the same while the game runs (a lost connection keeps it, a restart does not).
         // REJOIN-1 (2026-11-05): in a room the key is the one saved for that room in this profile, so a restart gets the
@@ -187,6 +188,7 @@ namespace ConsoleCards.Presentation.Composition
             if (!sharedTable || player.IsEmpty) return true;
             Guid id = player.Value;
             if (!hosting) return id == myPlayer;
+            if (hostActingFor != Guid.Empty && id == hostActingFor) return true; // AUTH-ET: the host runs a checked request
             for (int i = 0; i < members.Count; i++)
             {
                 Member member = members[i];

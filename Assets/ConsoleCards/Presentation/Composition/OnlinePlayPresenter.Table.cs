@@ -477,6 +477,22 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            // AUTH-DUP / AUTH-DRAW (2026-11-06): a command id runs once; a draw goes only into the sender's own Hand.
+            HostCommandVerdict verdict = hostCommandPolicy.Check(host.matchState, new PlayerId(member.Player), command, controllerDeckCheck ??= new Func<ContainerId, bool>(host.TrapFloorGame.IsControllerDeck));
+            if (verdict == HostCommandVerdict.Duplicate)
+            {
+                Debug.Log($"[Authority] Ignored a repeated {command.GetType().Name} from {member.Name}.");
+                return; // it already ran and was sent; nothing changes
+            }
+
+            if (verdict != HostCommandVerdict.Allowed)
+            {
+                Debug.Log($"[Authority] Refused {command.GetType().Name} from {member.Name}: {verdict}.");
+                SendNotice(member, "The host refused that: Controller cards are drawn into your own hand only.");
+                SendTable(member);
+                return;
+            }
+
             ReplayOutcome outcome = Replicated.Replay(command);
             switch (outcome)
             {
@@ -940,6 +956,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 case MsgCommand:
                 case MsgTable:
+                case MsgEndTurn: // AUTH-ET: in order with the sender's commands
                     ReceiveOrdered(member.FromClient, data, member);
                     break;
                 case MsgNeedTable:
@@ -1045,6 +1062,9 @@ namespace ConsoleCards.Presentation.Composition
                         break;
                     case MsgCheck:
                         if (from == null) ClientCheck(data);
+                        break;
+                    case MsgEndTurn:
+                        if (from != null) HostEndTurn(from, data); // AUTH-ET
                         break;
                 }
             }
