@@ -282,6 +282,9 @@ namespace ConsoleCards.Presentation.Interaction
                 {
                     trayExitInProgress = true;
                     ClearHandReorderPreview(view);
+                    // HAND-2 (2026-11-06): the card left the hand's top edge; the hand drops to its resting strip so
+                    // the table under it (the player's own Console slots) can take the card.
+                    if (handView.TrayRig != null) handView.TrayRig.CarriedOut = true;
                 }
 
                 handView.SetTrayHandoffTarget(view, tablePosition, tableRotation);
@@ -300,6 +303,7 @@ namespace ConsoleCards.Presentation.Interaction
             else if (trayDragActive && handView.IsScreenPointInTray(screenPosition))
             {
                 // Back over the tray: stop holding it on the table and let it shrink back into the tray.
+                if (handView.TrayRig != null) handView.TrayRig.CarriedOut = false; // HAND-2
                 view.PhysicalObject.DisableForContainer();
                 trayDragOnTable = false;
                 trayExitInProgress = false;
@@ -981,6 +985,7 @@ namespace ConsoleCards.Presentation.Interaction
             trayDragActive = false;
             trayDragOnTable = false;
             trayExitInProgress = false;
+            if (handView != null && handView.TrayRig != null) handView.TrayRig.CarriedOut = false; // HAND-2
             handView?.EndTrayDrag();
         }
 

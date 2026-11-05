@@ -124,6 +124,24 @@ namespace ConsoleCards.Presentation.Views.Containers
             gameObject.SetActive(false);
         }
 
+        // HAND-1 (2026-11-06): the pointer's horizontal position, as a share of the screen width.
+        private static bool PointerWithinColumn(float halfWidthFraction)
+        {
+            Pointer pointer = Pointer.current;
+            if (pointer == null || Screen.width <= 0) return false;
+            float x = pointer.position.ReadValue().x / Screen.width;
+            return Mathf.Abs(x - 0.5f) <= halfWidthFraction;
+        }
+
+        private bool raised;
+
+        /// <summary>
+        /// HAND-2 (2026-11-06): set while a card taken out of this hand is carried above the hand's top edge. The
+        /// hand then rests (only its strip showing) until the card comes back down to that strip or is let go, so a
+        /// raised hand no longer hides, and catches drops meant for, the player's own Console under it.
+        /// </summary>
+        public bool CarriedOut { get; set; }
+
         private static bool PointerBelow(float viewportFraction)
         {
             Pointer pointer = Pointer.current;
@@ -249,10 +267,18 @@ namespace ConsoleCards.Presentation.Views.Containers
             }
             else
             {
-                // Up only while the pointer is over the hand's strip (its full height), as in TTS; carrying a piece
-                // does not raise it (owner, 2026-11-05).
+                // Up only while the pointer is over the hand's strip, as in TTS; carrying a piece does not raise it
+                // (owner, 2026-11-05).
+                // HAND-1 (2026-11-06): it used to rise whenever the pointer was in the bottom third of the screen,
+                // anywhere across its width, and the raised cards then took the clicks meant for the table under
+                // them (the Ability pile, beside the Console). Now it rises only when the pointer reaches the part of
+                // the cards that shows while they rest, within the row's own width, and stays up while the pointer
+                // is over the raised row.
                 float stripTop = BottomMarginFraction + (scaledDepth / viewportHeight) + 0.04f;
-                bool up = HeldUp || PointerBelow(stripTop);
+                float restingTop = BottomMarginFraction + (RestingVisibleFraction * scaledDepth / viewportHeight) + 0.02f;
+                float rowHalfWidth = (((Mathf.Max(0f, rowWidth) * 0.5f) + BandMargin) * scale) / Mathf.Max(0.0001f, viewportWidth);
+                raised = HeldUp || (PointerWithinColumn(rowHalfWidth) && PointerBelow(raised && !CarriedOut ? stripTop : restingTop));
+                bool up = raised;
                 float blend = 1f - Mathf.Exp(-PeekResponse * Time.unscaledDeltaTime);
                 peekAmount = Mathf.Lerp(peekAmount, up ? 0f : 1f, blend);
                 y -= peekAmount * scaledDepth * (1f - RestingVisibleFraction);
