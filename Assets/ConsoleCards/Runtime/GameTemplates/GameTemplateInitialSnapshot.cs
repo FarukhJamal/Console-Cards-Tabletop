@@ -198,6 +198,8 @@ namespace ConsoleCards.GameTemplates
             List<ObjectSnapshot> projectedObjects = new List<ObjectSnapshot>(objects.Count);
             foreach (ObjectSnapshot item in objects)
                 projectedObjects.Add(hiddenIdentity.Contains(item.Id) ? item.Hidden(alias(item.Id), hiddenDefinition) : item);
+            // The capture lists objects in the authority's creation order, which follows identity: list them by reference.
+            projectedObjects.Sort((x, y) => x.Id.Value.CompareTo(y.Id.Value));
 
             List<ContainerSnapshot> projectedContainers = new List<ContainerSnapshot>(containers.Count);
             foreach (ContainerSnapshot container in containers)
@@ -210,6 +212,7 @@ namespace ConsoleCards.GameTemplates
 
             List<TabletopObjectId> projectedTemplateObjects = new List<TabletopObjectId>(templateObjectIds.Count);
             foreach (TabletopObjectId id in templateObjectIds) projectedTemplateObjects.Add(Map(id));
+            projectedTemplateObjects.Sort((x, y) => x.Value.CompareTo(y.Value)); // template order follows identity
 
             GameTemplateInitialSnapshot projected = new GameTemplateInitialSnapshot(
                 MatchId, GameTemplateId, Revision, projectedObjects, projectedContainers, containerPlacements,

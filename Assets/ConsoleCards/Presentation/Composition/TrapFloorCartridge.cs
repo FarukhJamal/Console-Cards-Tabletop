@@ -1968,6 +1968,10 @@ namespace ConsoleCards.Presentation.Composition
             bool knockedOut = false;
             string trapSummary = string.Empty;
             int tilesSetAside = 0;
+            // COLLAPSE-UNDO (live test s142, 2026-11-06): undoing an End Floor Turn after this floor turn's collapse
+            // re-opened the floor turn with the one-collapse guard cleared, and a second tile collapsed. In Full that step is
+            // a rules result like the collapse itself, so it stands.
+            bool collapsedThisFloorTurn = wasFloorTurn && floorTurnCollapseDone;
             host.SessionService.BeginUndoBatch();
             try
             {
@@ -2010,6 +2014,8 @@ namespace ConsoleCards.Presentation.Composition
             {
                 host.SessionService.EndUndoBatch();
             }
+
+            if (collapsedThisFloorTurn && (knockedOut || result.Succeeded)) MarkLatestStepRulesResult(); // COLLAPSE-UNDO
 
             if (!knockedOut && !result.Succeeded)
             {

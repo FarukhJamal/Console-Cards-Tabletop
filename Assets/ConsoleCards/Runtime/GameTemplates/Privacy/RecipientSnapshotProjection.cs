@@ -34,13 +34,7 @@ namespace ConsoleCards.GameTemplates.Privacy
             if (match == null) throw new ArgumentNullException(nameof(match));
             if (sessionKey == null || sessionKey.Length < 16) throw new ArgumentException("a session key of 16+ bytes is required", nameof(sessionKey));
 
-            HashSet<TabletopObjectId> hidden = new HashSet<TabletopObjectId>();
-            foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in match.Cards)
-                if (!MayKnowIdentity(match, pair.Value, recipient)) hidden.Add(pair.Key);
-
-            HashSet<ContainerId> hiddenOrder = new HashSet<ContainerId>();
-            foreach (KeyValuePair<ContainerId, ContainerState> pair in match.Containers)
-                if (OrderIsHidden(match, pair.Value, recipient, hidden)) hiddenOrder.Add(pair.Key);
+            Classify(match, recipient, out HashSet<TabletopObjectId> hidden, out HashSet<ContainerId> hiddenOrder);
 
             using (HMACSHA256 mac = new HMACSHA256(sessionKey))
             {
@@ -60,6 +54,19 @@ namespace ConsoleCards.GameTemplates.Privacy
             }
         }
 
+        /// <summary>Which cards a recipient may not identify, and which containers' order it may not learn.</summary>
+        public static void Classify(MatchState match, PlayerId recipient, out HashSet<TabletopObjectId> hidden, out HashSet<ContainerId> hiddenOrder)
+        {
+            if (match == null) throw new ArgumentNullException(nameof(match));
+            hidden = new HashSet<TabletopObjectId>();
+            foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in match.Cards)
+                if (!MayKnowIdentity(match, pair.Value, recipient)) hidden.Add(pair.Key);
+
+            hiddenOrder = new HashSet<ContainerId>();
+            foreach (KeyValuePair<ContainerId, ContainerState> pair in match.Containers)
+                if (OrderIsHidden(match, pair.Value, recipient, hidden)) hiddenOrder.Add(pair.Key);
+        }
+
         /// <summary>A fresh random session key for the host (kept in memory on the host only).</summary>
         public static byte[] NewSessionKey()
         {
@@ -69,9 +76,12 @@ namespace ConsoleCards.GameTemplates.Privacy
         }
 
         /// <summary>
-        /// Whether a recipient may learn a card's identity. Pawns, tokens and dice are always public.
-        /// Own hand and own Console: known. A deck: unknown unless the card lies face up. AuthorityOnly: never.
-        /// Owner/seat-private objects: only their owner. Anything else: known when it lies face up.
+        /// Whether a recipient may learn a card's identity (doc 11 §12, the reconciled policy). Pawns, tokens and dice are
+        /// always public. A card in a Hand: its seat's player only (the hand's faces belong to its owner, doc 18 §15.11).
+        /// Anywhere on the table — Console slots, decks, piles, the floor — identity follows the physical face: face up is
+        /// public to everyone, face down is hidden from everyone, the Console's owner included (doc 18 §8: Console cards
+        /// "may remain face-up or be flipped"). AuthorityOnly: never. Objects or containers marked owner/seat-private:
+        /// only their owner, and then still only while the face rule allows it outside a hand.
         /// </summary>
         public static bool MayKnowIdentity(MatchState match, CardInstanceState card, PlayerId recipient)
         {
@@ -95,7 +105,6 @@ namespace ConsoleCards.GameTemplates.Privacy
                 if (container.Kind == ContainerKind.Hand) return seatIsMine;
                 if ((container.Visibility == ObjectVisibility.OwnerOnly || container.Visibility == ObjectVisibility.SeatOnly
                      || container.Visibility == ObjectVisibility.HiddenIdentityWithPublicBack) && !seatIsMine) return false;
-                if (seatIsMine) return true; // own Console slot or own private pile
             }
 
             return card.Face == CardFace.FaceUp;

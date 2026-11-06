@@ -96,6 +96,22 @@ namespace ConsoleCards.Presentation.Composition
             Debug.Log($"[Online] Your content for the room: {files.Count} files, {hostContentBundle.Length / 1024} KB.");
         }
 
+        private static bool StartsWithSaveMagic(string path)
+        {
+            try
+            {
+                using (FileStream stream = File.OpenRead(path))
+                {
+                    byte[] head = new byte[4];
+                    return stream.Read(head, 0, 4) == 4 && head[0] == (byte)'C' && head[1] == (byte)'C' && head[2] == (byte)'S' && head[3] == (byte)'1';
+                }
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
         // Every file under the game saves (relative, with '/'), largest last, within the room's limits.
         private static List<string> ContentFiles(string root, out long total)
         {
@@ -117,6 +133,9 @@ namespace ConsoleCards.Presentation.Composition
             int skipped = 0;
             for (int i = 0; i < found.Length; i++)
             {
+                // CONTENT-SAVE (s142 audit): table saves live in the profile's saves/ folder, not under games/, so none is
+                // sent today; a save copied into games/ by hand would be. A saved table holds every hidden card and the seed.
+                if (found[i].EndsWith(".ccsave", StringComparison.OrdinalIgnoreCase) || StartsWithSaveMagic(found[i])) continue;
                 long size;
                 try
                 {

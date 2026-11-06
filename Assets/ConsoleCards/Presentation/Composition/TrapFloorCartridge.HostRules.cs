@@ -257,6 +257,13 @@ namespace ConsoleCards.Presentation.Composition
             return TrapFloorUndoEligibility.IsRulesResult(a.Snapshot, b.Snapshot);
         }
 
+        // COLLAPSE-UNDO: the latest Undo step (just recorded) is a rules result in Full.
+        internal void MarkLatestStepRulesResult()
+        {
+            if (host.undoHistory.TryPeekUndo(out SessionUndoSnapshot _, out ActiveSessionUndoTransaction latest) && !latest.CommandId.IsEmpty)
+                hostRolledSteps.Add(latest.CommandId);
+        }
+
         // ---------- AUTH-DICE ----------
 
         private readonly TrapFloorHostDice hostDice = new TrapFloorHostDice();
