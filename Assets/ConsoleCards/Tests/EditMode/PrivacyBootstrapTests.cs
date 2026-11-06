@@ -125,9 +125,11 @@ namespace ConsoleCards.Tests
         public void Indistinguishable_TablesThatDifferOnlyInHiddenDeckOrder()
         {
             TrapFloorTestTable one = TrapFloorTestTable.Create(3, Seed), two = TrapFloorTestTable.Create(3, Seed);
-            foreach (PlayerId p in two.Players)
+            HashSet<ContainerId> decks = new HashSet<ContainerId>(); // seats may share one Controller deck
+            foreach (PlayerId p in two.Players) decks.Add(two.SetupOf(p).ControllerDeckId);
+            foreach (ContainerId deckId in decks)
             {
-                ContainerState deck = two.Match.Containers[two.SetupOf(p).ControllerDeckId];
+                ContainerState deck = two.Match.Containers[deckId];
                 List<TabletopObjectId> reversed = new List<TabletopObjectId>(deck.ObjectIds);
                 reversed.Reverse();
                 deck.ReplaceOrder(reversed);

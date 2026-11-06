@@ -257,12 +257,26 @@ namespace ConsoleCards.Presentation.Composition
             return TrapFloorUndoEligibility.IsRulesResult(a.Snapshot, b.Snapshot);
         }
 
-        // COLLAPSE-UNDO: the latest Undo step (just recorded) is a rules result in Full.
-        internal void MarkLatestStepRulesResult()
+        // COLLAPSE-ONCE (s143): one collapse per logical floor turn, remembered outside the Undo history.
+        private readonly TrapFloorFloorTurnLedger floorTurnLedger = new TrapFloorFloorTurnLedger();
+        private MatchId floorTurnLedgerMatch;
+
+        private long FloorTurnLedgerKey()
         {
-            if (host.undoHistory.TryPeekUndo(out SessionUndoSnapshot _, out ActiveSessionUndoTransaction latest) && !latest.CommandId.IsEmpty)
-                hostRolledSteps.Add(latest.CommandId);
+            if (host.matchState != null && host.matchState.Id != floorTurnLedgerMatch)
+            {
+                floorTurnLedger.Clear(); // a new floor (or a new table) starts its rounds again
+                floorTurnLedgerMatch = host.matchState.Id;
+            }
+
+            return TrapFloorHostDice.TurnKeyOf(host.trapFloorTurnState);
         }
+
+        internal bool FloorTurnMayCollapse() =>
+            floorTurnLedger.MayCollapse(FloorTurnLedgerKey(), TrapFloorFloorTurnLedger.CollapseHoles(host.trapFloorCollapseState));
+
+        internal void RecordFloorTurnCollapse() =>
+            floorTurnLedger.RecordCollapse(FloorTurnLedgerKey(), TrapFloorFloorTurnLedger.CollapseHoles(host.trapFloorCollapseState));
 
         // ---------- AUTH-DICE ----------
 

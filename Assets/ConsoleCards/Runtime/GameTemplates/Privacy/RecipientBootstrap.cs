@@ -171,6 +171,8 @@ namespace ConsoleCards.GameTemplates.Privacy
     /// <summary>One card moving, as one recipient may be told about it (the event replaces the replayed command).</summary>
     public sealed class RecipientCardEvent
     {
+        /// <summary>The reference this recipient knew the card by before the move (its handle, or its real id).</summary>
+        public TabletopObjectId PreviousReference;
         public TabletopObjectId Reference;
         public ContainerId From;
         public ContainerId To;

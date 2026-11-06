@@ -1057,6 +1057,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void MarkFloorTurnCollapseDone()
         {
             floorTurnCollapseDone = true;
+            RecordFloorTurnCollapse(); // COLLAPSE-ONCE
             collapseWatching = false;
         }
 
@@ -1090,6 +1091,7 @@ namespace ConsoleCards.Presentation.Composition
             // it (Collapse Floor), or by hand.
             if (PlayAssist.IsFree) { collapseWatching = false; return; }
             if (floorTurnCollapseDone
+                || !FloorTurnMayCollapse() // COLLAPSE-ONCE: survives an Undo of End Floor Turn
                 || host.trapFloorCollapseState.IsBoardExhausted
                 || (host.trapFloorCollapseUseCase != null && host.trapFloorCollapseUseCase.NothingLeftToCollapse)) return;
             if (!collapseWatching)
@@ -1223,6 +1225,17 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            if (!PlayAssist.IsFree && !FloorTurnMayCollapse()) // COLLAPSE-ONCE
+            {
+                host.physicalFloorCollapsePending = false;
+                host.physicalFloorCollapseActor = PlayerId.Empty;
+                ResetCollapsePreview();
+                floorTurnCollapseDone = true;
+                host.FeedbackLine("This floor turn has already collapsed a tile: one collapse per floor turn.", FeedbackSeverity.Warning);
+                RefreshTrapFloorStatusUi();
+                return;
+            }
+
             ResetCollapsePreview();
             TrapFloorCollapseResult result = host.TableAuthority.Submit<TrapFloorResolveCollapseCommand, TrapFloorCollapseResult>(
                 new TrapFloorResolveCollapseCommand(
@@ -1256,6 +1269,7 @@ namespace ConsoleCards.Presentation.Composition
             host.physicalFloorCollapsePending = false;
             host.physicalFloorCollapseActor = PlayerId.Empty;
             floorTurnCollapseDone = true; // COLLAPSE-3: one collapse per floor turn
+            RecordFloorTurnCollapse(); // COLLAPSE-ONCE
             ApplyCollapsedFloorPresentation(result.CollapsedFloor.FloorCardId);
             if (!PlayAssist.IsFree) KnockOutPawnsOnCollapsedTile(result.Roll.Coordinate); // FALL-1; decision C: not in Free
             host.selectionState?.ClearAll();
@@ -1968,10 +1982,6 @@ namespace ConsoleCards.Presentation.Composition
             bool knockedOut = false;
             string trapSummary = string.Empty;
             int tilesSetAside = 0;
-            // COLLAPSE-UNDO (live test s142, 2026-11-06): undoing an End Floor Turn after this floor turn's collapse
-            // re-opened the floor turn with the one-collapse guard cleared, and a second tile collapsed. In Full that step is
-            // a rules result like the collapse itself, so it stands.
-            bool collapsedThisFloorTurn = wasFloorTurn && floorTurnCollapseDone;
             host.SessionService.BeginUndoBatch();
             try
             {
@@ -2014,8 +2024,6 @@ namespace ConsoleCards.Presentation.Composition
             {
                 host.SessionService.EndUndoBatch();
             }
-
-            if (collapsedThisFloorTurn && (knockedOut || result.Succeeded)) MarkLatestStepRulesResult(); // COLLAPSE-UNDO
 
             if (!knockedOut && !result.Succeeded)
             {
@@ -6086,6 +6094,11 @@ namespace ConsoleCards.Presentation.Composition
             hostRefusal = null;
             if (command is TrapFloorRevealFloorCommand || command is TrapFloorClaimKeyCommand || command is TrapFloorAttemptEscapeCommand)
                 return HostAllowsTileCommand(command, sender); // AUTH-TILE
+            if (command is TrapFloorResolveCollapseCommand && PlayAssist.Level == PlayAssistLevel.Full && !FloorTurnMayCollapse())
+            {
+                hostRefusal = "The host refused that: this floor turn has already collapsed a tile."; // COLLAPSE-ONCE
+                return false;
+            }
             if (!(command is TrapFloorTakePrizeCommand take)) return HostAllowsMoveCommand(command, sender); // AUTH-MOVE
             if (host.trapFloorTemplate == null || host.matchState == null) return false;
             if (take.Context.RequestedByPlayerId != sender) return false;
