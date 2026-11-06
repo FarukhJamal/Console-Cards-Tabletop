@@ -643,8 +643,49 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (ApplyPacket(packet)) BroadcastTable(member);
-            else SendTable(member);
+            int ignored = KeepHostPieces(packet, member); // AUTH-PUSH
+            if (ApplyPacket(packet))
+            {
+                BroadcastTable(member);
+                if (ignored > 0) SendTable(member); // its pieces are set back to the host's
+            }
+            else
+            {
+                SendTable(member);
+            }
+        }
+
+        // AUTH-PUSH (2026-11-06): pieces and piles change only through commands the host checked. A joined computer's
+        // pushed table brings only the game's rules state (turns, eliminations, Keys, statuses) and drawings; its pieces
+        // and piles are replaced by the host's own before it is applied. Returns how many it tried to change.
+        private int KeepHostPieces(OnlineTablePacket packet, Member member)
+        {
+            if (packet.Snapshot == null || host.matchState == null) return 0;
+            int changes = 0;
+            try
+            {
+                MatchState mine = GameTemplateInitialSnapshot.Capture(host.matchState).Restore(Math.Max(1L, host.matchState.Revision));
+                MatchState theirs = packet.Snapshot.Match.Restore(Math.Max(1L, packet.Setup.Revision));
+                List<string> notes = new List<string>(4);
+                changes = TablePushGuard.CountPieceChanges(mine, theirs, notes);
+                if (changes > 0)
+                {
+                    Debug.Log($"[Authority] A table pushed by {member.Name} changed {changes} piece(s) or pile(s) outside the host-checked "
+                        + $"commands ({string.Join("; ", notes)}); the host's pieces were kept.");
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[Authority] A pushed table could not be compared ({exception.Message}); the host's pieces were kept.");
+            }
+
+            packet.Snapshot = SessionUndoSnapshot.Capture(
+                host.matchState,
+                packet.Snapshot.GameState,
+                null,
+                packet.Snapshot.TableMarks);
+            packet.Setup.Revision = Math.Max(host.matchState.Revision, packet.Setup.Revision);
+            return changes;
         }
 
         private void ClientTable(byte[] message)
