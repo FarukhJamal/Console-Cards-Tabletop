@@ -383,6 +383,7 @@ namespace ConsoleCards.Presentation.Composition
                 });
                 roomGame = string.Empty;
                 roomStarted = false;
+                PlayAssist.UseRoomLevel(PlayAssist.LocalLevel, false); // ASSIST-ROOM: the host's level is the room's
                 StopSharing();
                 session.UpdateRoom(roomGame, true);
                 ShowFrontEnd(FrontEndPage.Room, null);
@@ -412,6 +413,8 @@ namespace ConsoleCards.Presentation.Composition
             welcomed = false;
             roomGame = string.Empty;
             roomStarted = false;
+            PlayAssist.ClearRoomLevel(); // ASSIST-ROOM: this computer's own level again
+            sentAssist = -1;
             if (hadTable)
             {
                 host.ShowMessage($"{why} The table stays on this computer, offline.");
@@ -482,8 +485,17 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (hosting) TickHostRoom(now);
+            if (hosting && sentAssist >= 0 && sentAssist != (int)PlayAssist.Level)
+            {
+                // ASSIST-ROOM: the host changed Assist; everyone plays the new level.
+                Debug.Log($"[Online] Assist for this room: {PlayAssist.Name(PlayAssist.Level)} (host's choice).");
+                BroadcastRoster();
+            }
+
             TickTable(now);
         }
+
+        private int sentAssist = -1;
 
         private void TickHostRoom(float now)
         {
@@ -722,9 +734,23 @@ namespace ConsoleCards.Presentation.Composition
                 member.Player = ReadGuid(reader);
             }
 
+            // ASSIST-ROOM: the room's Assist level (one byte after the members; absent from older hosts).
+            if (reader.BaseStream.Position < reader.BaseStream.Length) UseRoomAssist(reader.ReadByte());
+
             Member me = Me();
             myPlayer = me != null ? me.Player : Guid.Empty;
             RefreshFrontEnd();
+        }
+
+        // ASSIST-ROOM: a joined computer plays the host's level; it says so when the level changes.
+        private void UseRoomAssist(byte level)
+        {
+            if (level > (byte)PlayAssistLevel.Full) return;
+            bool changed = !PlayAssist.IsSetByRoom || PlayAssist.Level != (PlayAssistLevel)level;
+            PlayAssist.UseRoomLevel((PlayAssistLevel)level, true);
+            if (!changed) return;
+            Debug.Log($"[Online] Assist for this room: {PlayAssist.Name((PlayAssistLevel)level)} (set by the host).");
+            if (sharedTable) host.ShowMessage($"The host set Assist to {PlayAssist.Name((PlayAssistLevel)level)} for everyone.");
         }
 
         // ---------- sending ----------
@@ -763,6 +789,10 @@ namespace ConsoleCards.Presentation.Composition
                 writer.Write(member.IsHost);
                 WriteGuid(member.Player);
             }
+
+            // ASSIST-ROOM: the host's level is the room's (rules run the same way on every computer).
+            writer.Write((byte)PlayAssist.Level);
+            sentAssist = (int)PlayAssist.Level;
 
             Flush();
             for (int i = 0; i < members.Count; i++)

@@ -153,10 +153,70 @@ namespace ConsoleCards.Presentation.Composition
 
         private TrapFloorTemplateDefinition winRecordedFor;
 
+        // FLOOREND-GUEST (2026-11-06): the floor-end panel was shown only on the computer whose game step ended the
+        // floor (live run: the host's collapse), so the other players saw "ALL PLAYERS ELIMINATED" with no result or
+        // next step. The panel is player feedback, not host administration: online, a floor end that arrives from
+        // another computer (its table or a replayed command) now shows the same panel here. Start on a joined
+        // computer asks the host to deal (existing MsgDeal path, refused unless the rules ended the floor).
+        private TrapFloorTemplateDefinition floorEndShownFor;
+
+        // NOTICE-REMOTE (2026-11-06, three-computer run): "X fell … ELIMINATED" was written only on the computer whose
+        // game step knocked X out; the others (the eliminated player's own computer included) only saw the HUD change.
+        // Online, a table or a replayed command from another computer is compared with what was here before it, and each
+        // player newly out (or escaped) is announced. A player knocked out on this computer is announced by its own step.
+        internal List<PlayerId> OutPlayersNow()
+        {
+            List<PlayerId> outPlayers = new List<PlayerId>();
+            if (!host.IsOnlineTable || host.trapFloorTurnState == null) return outPlayers;
+            IReadOnlyList<PlayerId> order = host.trapFloorTurnState.PlayerOrder;
+            for (int i = 0; i < order.Count; i++)
+            {
+                if (host.trapFloorTurnState.GetPlayerState(order[i]) == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound)
+                    outPlayers.Add(order[i]);
+            }
+
+            return outPlayers;
+        }
+
+        internal void AnnounceOutChanges(List<PlayerId> before)
+        {
+            if (before == null || !host.IsOnlineTable || host.trapFloorTurnState == null) return;
+            IReadOnlyList<PlayerId> order = host.trapFloorTurnState.PlayerOrder;
+            for (int i = 0; i < order.Count; i++)
+            {
+                PlayerId player = order[i];
+                if (before.Contains(player)
+                    || host.trapFloorTurnState.GetPlayerState(player) != TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound)
+                    continue;
+                bool escaped = host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsPlayerEscaped(player);
+                string name = FormatPlayerName(player);
+                Debug.Log($"[Floor] {name} {(escaped ? "escaped" : "is out for this floor")} (from another computer).");
+                host.FeedbackLine(
+                    escaped ? $"{name.ToUpperInvariant()} ESCAPED!" : $"{name.ToUpperInvariant()} is ELIMINATED for this floor.",
+                    escaped ? FeedbackSeverity.Info : FeedbackSeverity.Loss);
+            }
+        }
+
+        private void ShowFloorEndReachedElsewhere()
+        {
+            if (!host.IsOnlineTable || host.trapFloorTemplate == null || host.trapFloorTurnState == null) return;
+            if (!IsFloorEnded())
+            {
+                if (ReferenceEquals(floorEndShownFor, host.trapFloorTemplate)) floorEndShownFor = null; // Undo took it back
+                return;
+            }
+
+            if (ReferenceEquals(floorEndShownFor, host.trapFloorTemplate)) return;
+            bool won = !host.trapFloorTurnState.IsCurrentFloorFailed || FloorFailedCountsAsWin();
+            Debug.Log($"[Floor] Floor {host.trapFloorTemplate.FloorIndex + 1} ended on another computer ({(won ? "won" : "lost")}): showing the result here.");
+            ShowFloorEnded(won);
+        }
+
         // The floor's end: says what happened and offers the next floor (or a new game after the last one).
         internal void ShowFloorEnded(bool won, string detail = null)
         {
             if (host.runtimeUi == null || host.trapFloorTemplate == null) return;
+            floorEndShownFor = host.trapFloorTemplate; // FLOOREND-GUEST: shown here once for this floor
             string recap = host.TakeFloorRecap(); // doc 57: what the floor showed
             if (!string.IsNullOrEmpty(recap)) detail = string.IsNullOrEmpty(detail) ? recap : $"{detail} · {recap}";
             TrapFloorTemplateDefinition floor = host.trapFloorTemplate;

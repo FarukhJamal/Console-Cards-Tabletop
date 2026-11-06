@@ -1,6 +1,7 @@
 using System;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates;
+using ConsoleCards.Presentation.UI;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Composition
@@ -135,6 +136,8 @@ namespace ConsoleCards.Presentation.Composition
         {
             takingOver = false;
             hosting = true;
+            // ASSIST-ROOM: the room keeps the level it was playing; this computer now sends it.
+            PlayAssist.UseRoomLevel(PlayAssist.Level, false);
             float now = Time.unscaledTime;
             for (int i = 0; i < members.Count; i++)
             {

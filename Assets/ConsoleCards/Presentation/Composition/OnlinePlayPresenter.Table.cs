@@ -280,6 +280,11 @@ namespace ConsoleCards.Presentation.Composition
             else if (sharedTable && hosting)
             {
                 lock (SeedRandom) seed = SeedRandom.Next();
+#if UNITY_EDITOR
+                // DEV-FIXTURE: an Editor host may fix the deal's seed for a reproducible test floor; it travels to the
+                // joined computers in the normal table setup, so everyone deals the same floor.
+                if (TrapFloorDevFixtures.TryTakeDealSeed(out int fixtureSeed)) seed = fixtureSeed;
+#endif
                 lastFloorIndex = host.trapFloorNextFloorIndex;
             }
             else
@@ -478,7 +483,12 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             // AUTH-DUP / AUTH-DRAW (2026-11-06): a command id runs once; a draw goes only into the sender's own Hand.
-            HostCommandVerdict verdict = hostCommandPolicy.Check(host.matchState, new PlayerId(member.Player), command, controllerDeckCheck ??= new Func<ContainerId, bool>(host.TrapFloorGame.IsControllerDeck));
+            HostCommandVerdict verdict = hostCommandPolicy.Check(
+                host.matchState,
+                new PlayerId(member.Player),
+                command,
+                controllerDeckCheck ??= new Func<ContainerId, bool>(host.TrapFloorGame.IsControllerDeck),
+                gameCommandCheck ??= new Func<object, PlayerId, bool>(host.TrapFloorGame.HostAllowsCommand)); // AUTH-PRIZE
             if (verdict == HostCommandVerdict.Duplicate)
             {
                 Debug.Log($"[Authority] Ignored a repeated {command.GetType().Name} from {member.Name}.");
@@ -488,12 +498,16 @@ namespace ConsoleCards.Presentation.Composition
             if (verdict != HostCommandVerdict.Allowed)
             {
                 Debug.Log($"[Authority] Refused {command.GetType().Name} from {member.Name}: {verdict}.");
-                SendNotice(member, "The host refused that: Controller cards are drawn into your own hand only.");
+                SendNotice(member, verdict == HostCommandVerdict.RefusedByGame
+                    ? "The host refused that: on the host's table your pawn is not on that prize's tile."
+                    : "The host refused that: Controller cards are drawn into your own hand only.");
                 SendTable(member);
                 return;
             }
 
+            List<PlayerId> outBefore = host.TrapFloorGame.OutPlayersNow(); // NOTICE-REMOTE
             ReplayOutcome outcome = Replicated.Replay(command);
+            host.TrapFloorGame.AnnounceOutChanges(outBefore);
             switch (outcome)
             {
                 case ReplayOutcome.Accepted:
@@ -513,7 +527,9 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!sharedTable || awaitingTable) return;
             object command = TableWire.Read(message, 9, message.Length - 9, false);
+            List<PlayerId> outBefore = host.TrapFloorGame.OutPlayersNow(); // NOTICE-REMOTE
             ReplayOutcome outcome = Replicated.Replay(command);
+            host.TrapFloorGame.AnnounceOutChanges(outBefore);
             if (outcome == ReplayOutcome.Rejected || outcome == ReplayOutcome.Unknown) RequestTable("a change from the host did not fit this table");
         }
 
@@ -674,7 +690,10 @@ namespace ConsoleCards.Presentation.Composition
                     ok = BuildFromSetup(setup, out error);
                 }
 
+                // NOTICE-REMOTE (2026-11-06): eliminations and escapes made on another computer are announced here too.
+                List<PlayerId> outBefore = another ? null : host.TrapFloorGame.OutPlayersNow();
                 if (ok) ok = host.RestoreOnlineSnapshot(packet.Snapshot, setup.Revision, out error);
+                if (ok) host.TrapFloorGame.AnnounceOutChanges(outBefore);
             }
             catch (Exception exception)
             {

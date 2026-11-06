@@ -16,6 +16,11 @@ namespace ConsoleCards.Application.Authority
         /// <summary>A draw into a Hand that belongs to another seat (or to no one).</summary>
         DrawIntoAnotherHand = 2,
         MissingCommandId = 3,
+        /// <summary>
+        /// The game's own host-side check refused it against the host's state (AUTH-PRIZE: the taker's pawn is not on
+        /// the prize's tile in the host's table, whatever position the request names).
+        /// </summary>
+        RefusedByGame = 4,
     }
 
     /// <summary>
@@ -39,7 +44,14 @@ namespace ConsoleCards.Application.Authority
 
         /// <param name="isGuardedDeck">Decks whose draws must go into the sender's own Hand (a game's Controller decks).
         /// Draws from other piles keep the table's freedom (a Manual deal into every hand).</param>
-        public HostCommandVerdict Check(MatchState match, PlayerId sender, object command, Func<ContainerId, bool> isGuardedDeck)
+        /// <param name="gameAllows">Optional: the game's check of a command against the host's own state (false:
+        /// refused). Runs before the command id is remembered, so a refused command can be sent again once it fits.</param>
+        public HostCommandVerdict Check(
+            MatchState match,
+            PlayerId sender,
+            object command,
+            Func<ContainerId, bool> isGuardedDeck,
+            Func<object, PlayerId, bool> gameAllows = null)
         {
             if (command == null) throw new ArgumentNullException(nameof(command));
             CommandId id = command is ITabletopCommand tabletop ? tabletop.Context.Id : CommandId.Empty;
@@ -50,6 +62,7 @@ namespace ConsoleCards.Application.Authority
                 && isGuardedDeck(draw.SourceDeckContainerId)
                 && IsDrawIntoAnotherHand(match, sender, draw.DestinationContainerId))
                 return HostCommandVerdict.DrawIntoAnotherHand;
+            if (gameAllows != null && !gameAllows(command, sender)) return HostCommandVerdict.RefusedByGame;
             if (!id.IsEmpty) Remember(id);
             return HostCommandVerdict.Allowed;
         }

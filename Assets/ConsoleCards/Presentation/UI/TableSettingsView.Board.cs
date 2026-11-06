@@ -138,8 +138,10 @@ namespace ConsoleCards.Presentation.UI
                 Clear(assistButtons[i]);
                 assistButtons[i].onClick.AddListener(() =>
                 {
-                    PlayAssist.Level = (PlayAssistLevel)level;
+                    // ASSIST-ROOM: online, a joined computer plays the host's level and cannot change it.
+                    bool changed = PlayAssist.TryChoose((PlayAssistLevel)level);
                     ShowAssist();
+                    if (!changed && assistHint != null) assistHint.text = AssistSetByRoomText;
                 });
             }
 
@@ -156,8 +158,15 @@ namespace ConsoleCards.Presentation.UI
                 if (assistLabels[i] != null) assistLabels[i].color = on ? optionOnWords : optionOffWords;
             }
 
-            if (assistHint != null) assistHint.text = PlayAssist.Describe(PlayAssist.Level);
+            if (assistHint != null)
+            {
+                assistHint.text = PlayAssist.IsSetByRoom
+                    ? $"{PlayAssist.Describe(PlayAssist.Level)} {AssistSetByRoomText}"
+                    : PlayAssist.Describe(PlayAssist.Level);
+            }
         }
+
+        private const string AssistSetByRoomText = "Online: the host sets Assist for the whole room.";
 
         // The copy of a part of the Tips row, found in the Assist row by the same path.
         private T Twin<T>(Component original) where T : Component

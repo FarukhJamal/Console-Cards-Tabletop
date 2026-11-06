@@ -23,6 +23,7 @@ namespace ConsoleCards.Presentation.Composition
         private readonly TrapFloorEndTurnAuthority endTurnAuthority = new TrapFloorEndTurnAuthority();
         private readonly HostCommandPolicy hostCommandPolicy = new HostCommandPolicy();
         private Func<ContainerId, bool> controllerDeckCheck;
+        private Func<object, PlayerId, bool> gameCommandCheck; // AUTH-PRIZE
 
         // Set only on the host, only while it runs a request it has checked: the sender's seat counts as played here.
         private Guid hostActingFor;

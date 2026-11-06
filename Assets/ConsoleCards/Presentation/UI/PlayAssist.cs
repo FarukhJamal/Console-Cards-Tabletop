@@ -25,19 +25,63 @@ namespace ConsoleCards.Presentation.UI
         private const string Pref = "ConsoleCards.PlayAssist";
         private static int cached = -1;
 
+        // ASSIST-ROOM (2026-11-06, Full Mode configuration audit): online, the level is the room's, not each
+        // computer's. The rules code reads Level on whichever computer runs a game step (eliminations, exits, Key
+        // offers), so two computers on different levels enforced different rules in one match. The host's level is
+        // the room's; it reaches the joined computers in the roster, and a joined computer cannot change it.
+        private static int roomLevel = -1;
+        private static bool roomLocked;
+
+        /// <summary>The level in play: the room's while in an online room, else this computer's own choice.</summary>
         public static PlayAssistLevel Level
+        {
+            get => roomLevel >= 0 ? (PlayAssistLevel)roomLevel : LocalLevel;
+            set => TryChoose(value);
+        }
+
+        /// <summary>This computer's own choice, kept for play on this computer (Settings › GAME › Assist).</summary>
+        public static PlayAssistLevel LocalLevel
         {
             get
             {
                 if (cached < 0) cached = Mathf.Clamp(PlayerPrefs.GetInt(Pref, (int)PlayAssistLevel.Free), 0, 2);
                 return (PlayAssistLevel)cached;
             }
-            set
-            {
-                cached = Mathf.Clamp((int)value, 0, 2);
-                PlayerPrefs.SetInt(Pref, cached);
-                PlayerPrefs.Save();
-            }
+        }
+
+        /// <summary>True on a joined computer in an online room: the host sets the level for everyone.</summary>
+        public static bool IsSetByRoom => roomLevel >= 0 && roomLocked;
+
+        /// <summary>
+        /// Settings › Assist. False (nothing changes) on a joined computer: the room's host sets it. On the host it
+        /// changes the room's level too, which the roster then sends to everyone.
+        /// </summary>
+        public static bool TryChoose(PlayAssistLevel value)
+        {
+            if (IsSetByRoom) return false;
+            int level = Mathf.Clamp((int)value, 0, 2);
+            cached = level;
+            PlayerPrefs.SetInt(Pref, level);
+            PlayerPrefs.Save();
+            if (roomLevel >= 0) roomLevel = level;
+            return true;
+        }
+
+        /// <summary>
+        /// Online: the room's level. <paramref name="locked"/> is true on a joined computer (the host's level, from the
+        /// roster) and false on the host (its own level, which it sends).
+        /// </summary>
+        public static void UseRoomLevel(PlayAssistLevel level, bool locked)
+        {
+            roomLevel = Mathf.Clamp((int)level, 0, 2);
+            roomLocked = locked;
+        }
+
+        /// <summary>Back to this computer's own level (the room was left).</summary>
+        public static void ClearRoomLevel()
+        {
+            roomLevel = -1;
+            roomLocked = false;
         }
 
         /// <summary>True when the game asks nothing: its information popups become a short line at the top.</summary>

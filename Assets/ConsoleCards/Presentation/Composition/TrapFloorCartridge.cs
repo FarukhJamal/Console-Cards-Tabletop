@@ -4827,7 +4827,20 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             tooFarStateIndex = -1;
-            if (guidedMoveThisTurn || !IsWalkableTile(to.X, to.Y)) return null;
+            if (guidedMoveThisTurn) return null;
+            // RULE-HOLE (2026-11-06): a hand move onto a collapsed hole is a move the rules do not allow (doc 18:
+            // collapsed floor is "permanently unusable"; moves cannot cross holes). Like every other move the rules do
+            // not allow, it is reported (Full: a warning with Undo / Keep move; Reminders: a whisper; Free: nothing),
+            // never blocked, and it eliminates no one: no approved rule says a walk onto a hole is a fall.
+            if (!IsWalkableTile(to.X, to.Y))
+            {
+                bool inGrid = to.X >= TrapFloorCoordinate.MinimumAxisValue && to.Y >= TrapFloorCoordinate.MinimumAxisValue
+                    && to.X <= host.trapFloorTemplate.GridColumns && to.Y <= host.trapFloorTemplate.GridRows;
+                if (!inGrid) return null;
+                tooFarStateIndex = host.undoHistory.CurrentStateIndex;
+                return "That tile is a hole (collapsed floor cannot be stood on).";
+            }
+
             string problem = DescribeMoveProblem(moveStartTile.Value, to);
             if (problem == null) return null;
             tooFarStateIndex = host.undoHistory.CurrentStateIndex;
@@ -6061,6 +6074,32 @@ namespace ConsoleCards.Presentation.Composition
             return false;
         }
 
+        /// <summary>
+        /// AUTH-PRIZE (2026-11-06): the host's check of a joined computer's command against the host's own table,
+        /// before it is replayed. A prize may be taken only when, on the host's table, the sender's own pawn stands on
+        /// that prize's tile; the position written in the request is not trusted. Other commands: true.
+        /// </summary>
+        internal bool HostAllowsCommand(object command, PlayerId sender)
+        {
+            if (!(command is TrapFloorTakePrizeCommand take)) return true;
+            if (host.trapFloorTemplate == null || host.matchState == null) return false;
+            if (take.Context.RequestedByPlayerId != sender) return false;
+            return HostSeesPawnOnTile(sender, take.FloorCardId);
+        }
+
+        /// <summary>AUTH-PRIZE: true when, in this computer's table, the player's pawn stands on that floor tile.</summary>
+        internal bool HostSeesPawnOnTile(PlayerId player, TabletopObjectId floorCardId)
+        {
+            if (host.trapFloorTemplate == null
+                || !TryGetTrapFloorPlayerSetup(player, out TrapFloorPlayerSetupDefinition setup)
+                || !host.trapFloorTemplate.TryGetFloorCoordinate(floorCardId, out TrapFloorCoordinate cell))
+            {
+                return false;
+            }
+
+            return TryReadPawnTile(setup.PawnId, out TrapFloorCoordinate tile) && tile.Equals(cell);
+        }
+
         internal bool TryGetTrapFloorPlayerSetup(
             PlayerId playerId,
             out TrapFloorPlayerSetupDefinition resolvedPlayer)
@@ -6338,6 +6377,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             UpdateTurnOrderRule(); // IMP-1
             CompletePendingLandingFlip();
+            ShowFloorEndReachedElsewhere(); // FLOOREND-GUEST
             DiscardUsedAbility();
             GiveChosenAvatarsTheirAbilities(); // D2/D3
             DealArrangedBoardIfPlaced();

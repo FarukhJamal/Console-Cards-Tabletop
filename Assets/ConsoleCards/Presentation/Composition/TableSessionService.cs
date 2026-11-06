@@ -342,6 +342,9 @@ namespace ConsoleCards.Presentation.Composition
             // MP-2: in online play a joined computer asks the host for a new table; the deal's seed is shared.
             if (host.HasOnline && !host.Online.AllowTableReplacement(selection)) return false;
             if (host.HasOnline) host.Online.PrepareTableBuild();
+#if UNITY_EDITOR
+            if (!host.IsOnlineTable) TrapFloorDevFixtures.ApplyOfflineSeed(host); // DEV-FIXTURE (Editor only)
+#endif
 
             if (selection.Kind == TabletopSessionKind.GameTemplate
                 && host.Cartridges.TryGetTemplateSetup(selection.GameTemplateId, out _, out _))
