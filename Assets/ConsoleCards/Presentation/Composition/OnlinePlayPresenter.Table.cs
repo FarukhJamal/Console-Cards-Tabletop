@@ -499,8 +499,10 @@ namespace ConsoleCards.Presentation.Composition
             {
                 Debug.Log($"[Authority] Refused {command.GetType().Name} from {member.Name}: {verdict}.");
                 SendNotice(member, verdict == HostCommandVerdict.RefusedByGame
-                    ? "The host refused that: on the host's table your pawn is not on that prize's tile."
-                    : "The host refused that: Controller cards are drawn into your own hand only.");
+                    ? host.TrapFloorGame.HostRefusal ?? "The host refused that against its own table."
+                    : verdict == HostCommandVerdict.InvalidPosition
+                        ? "The host refused that: the position is not on the table."
+                        : "The host refused that: Controller cards are drawn into your own hand only.");
                 SendTable(member);
                 return;
             }
@@ -679,13 +681,45 @@ namespace ConsoleCards.Presentation.Composition
                 Debug.LogWarning($"[Authority] A pushed table could not be compared ({exception.Message}); the host's pieces were kept.");
             }
 
+            int rulesRefused = 0;
+            ICartridgeUndoState rules = KeepHostRules(packet.Snapshot.GameState, member, ref rulesRefused); // AUTH-RULES
             packet.Snapshot = SessionUndoSnapshot.Capture(
                 host.matchState,
-                packet.Snapshot.GameState,
+                rules,
                 null,
                 packet.Snapshot.TableMarks);
             packet.Setup.Revision = Math.Max(host.matchState.Revision, packet.Setup.Revision);
-            return changes;
+            return changes + rulesRefused;
+        }
+
+        // AUTH-RULES (owner, 2026-11-06): the game's rules state in a pushed table is merged against the host's own
+        // (TrapFloorRulesPushGuard): Keys, escapes, collapse, turn and floor result stay the host's; an elimination is
+        // applied by the host only when its own table shows why; the sender's own Trap outcomes and statuses are taken.
+        private ICartridgeUndoState KeepHostRules(ICartridgeUndoState pushed, Member member, ref int refusedCount)
+        {
+            if (host.trapFloorTemplate == null) return pushed; // another game: no rules state of Trap Floor's
+            List<string> refused = new List<string>(4);
+            ICartridgeUndoState merged;
+            try
+            {
+                merged = host.TrapFloorGame.HostMergePushedRules(pushed, new PlayerId(member.Player), refused, null);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[Authority] A pushed rules state could not be checked ({exception.Message}); the host's was kept.");
+                refusedCount++;
+                return host.TrapFloorGame.CaptureUndoState();
+            }
+
+            if (merged == null) return pushed;
+            if (refused.Count > 0)
+            {
+                refusedCount += refused.Count;
+                Debug.Log($"[Authority] A table pushed by {member.Name} tried to change rules state the host does not take from a push "
+                    + $"({string.Join("; ", refused)}); the host's values were kept.");
+            }
+
+            return merged;
         }
 
         private void ClientTable(byte[] message)

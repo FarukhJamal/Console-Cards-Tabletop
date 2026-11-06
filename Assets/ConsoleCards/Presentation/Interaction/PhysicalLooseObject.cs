@@ -279,6 +279,16 @@ namespace ConsoleCards.Presentation.Interaction
             PhysicalObjectState state = view.BoundState.PhysicalState;
             if (state == null || ReferenceEquals(state, applied)) return;
             bool stateHeld = state.Mode == PhysicalObjectMode.Held;
+            // HOLD-RESTORE (live test, 2026-11-06): online, a hold by this computer's own player can arrive in a whole
+            // table while no pointer here holds the piece (the host kept the pick-up of a move it then refused, and sent
+            // its table back). Taken as a hold, the next drag skipped BeginHold, so that move was never recorded as a
+            // step and the game never checked its landing. It is not a hold here: the piece settles where it is, and its
+            // resting state goes to the host as usual (which also ends the hold there).
+            if (stateHeld && !held && !userActionActive && !compoundActionActive
+                && authority.IsLocalPlayer != null && authority.IsLocalPlayer(state.ControllingPlayerId))
+            {
+                stateHeld = false;
+            }
             bool sampleDeliberateRotation = held && stateHeld && deliberateRotationPending;
             bool preserveHeldAnchor = held && hasPointerAnchor;
             Vector3 heldAnchorWorld = preserveHeldAnchor ? GrabAnchorWorld() : Vector3.zero;

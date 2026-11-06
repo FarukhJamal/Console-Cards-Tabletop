@@ -344,6 +344,9 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             public object Restore() => snapshot.Restore();
+
+            /// <summary>AUTH-RULES: the host merges a pushed rules state against its own.</summary>
+            internal TrapFloorSessionStateSnapshot Snapshot => snapshot;
         }
 
         // ---------- seats and turns ----------

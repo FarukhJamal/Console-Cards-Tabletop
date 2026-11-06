@@ -6081,10 +6081,13 @@ namespace ConsoleCards.Presentation.Composition
         /// </summary>
         internal bool HostAllowsCommand(object command, PlayerId sender)
         {
-            if (!(command is TrapFloorTakePrizeCommand take)) return true;
+            hostRefusal = null;
+            if (!(command is TrapFloorTakePrizeCommand take)) return HostAllowsMoveCommand(command, sender); // AUTH-MOVE
             if (host.trapFloorTemplate == null || host.matchState == null) return false;
             if (take.Context.RequestedByPlayerId != sender) return false;
-            return HostSeesPawnOnTile(sender, take.FloorCardId);
+            bool onTile = HostSeesPawnOnTile(sender, take.FloorCardId);
+            if (!onTile) hostRefusal = "The host refused that: on the host's table your pawn is not on that prize's tile.";
+            return onTile;
         }
 
         /// <summary>AUTH-PRIZE: true when, in this computer's table, the player's pawn stands on that floor tile.</summary>

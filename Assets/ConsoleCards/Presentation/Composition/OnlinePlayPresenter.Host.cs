@@ -1,4 +1,5 @@
 using System;
+using ConsoleCards.Application.Authority;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.Presentation.UI;
@@ -21,6 +22,7 @@ namespace ConsoleCards.Presentation.Composition
         private const float NewHostWaitSeconds = 30f;
 
         private Guid undoRequestPlayer; // host: the joined player whose Undo or Redo is being run
+        private readonly HostUndoPolicy undoPolicy = new HostUndoPolicy(); // UNDO-AUTH
         private string undoRefusal;
         private bool takingOver;
         private bool hostLossCheck;
@@ -31,8 +33,13 @@ namespace ConsoleCards.Presentation.Composition
         internal void AskHostToUndo(bool redo)
         {
             if (!InRoom || hosting) return;
+            // UNDO-AUTH (2026-11-06): the request names the change it means (as this table shows it) and carries its own id,
+            // so the host takes back only that change of this player's, once.
+            ActiveSessionUndoTransaction named = redo ? host.undoHistory.NextRedo : host.undoHistory.NextUndo;
             BeginMessage(MsgUndo);
             writer.Write(redo);
+            writer.Write(Guid.NewGuid().ToByteArray());
+            writer.Write((named != null ? named.CommandId.Value : Guid.Empty).ToByteArray());
             SendToHost();
             host.ShowMessage(redo ? "Asked the host to redo your move." : "Asked the host to undo your last move.");
         }
@@ -64,6 +71,33 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            // UNDO-AUTH: the host checks the request against its own history before anything is taken back.
+            Guid requestId = Guid.Empty;
+            CommandId namedChange = CommandId.Empty;
+            if (data.Length >= 2 + 16 + 16)
+            {
+                byte[] bytes = new byte[16];
+                Array.Copy(data, 2, bytes, 0, 16);
+                requestId = new Guid(bytes);
+                Array.Copy(data, 18, bytes, 0, 16);
+                namedChange = new CommandId(new Guid(bytes));
+            }
+
+            ActiveSessionUndoTransaction next = redo ? host.undoHistory.NextRedo : host.undoHistory.NextUndo;
+            HostUndoVerdict verdict = undoPolicy.Check(
+                new PlayerId(member.Player),
+                requestId,
+                namedChange,
+                next != null,
+                next != null ? next.CommandId : CommandId.Empty,
+                next != null ? next.ActorPlayerId : PlayerId.Empty);
+            if (verdict != HostUndoVerdict.Allowed)
+            {
+                Debug.Log($"[Authority] {(redo ? "Redo" : "Undo")} from {member.Name}: refused ({verdict}).");
+                if (verdict != HostUndoVerdict.Duplicate) SendNotice(member, HostUndoPolicy.Describe(verdict, redo));
+                return;
+            }
+
             undoRequestPlayer = member.Player;
             bool done;
             try
@@ -77,6 +111,7 @@ namespace ConsoleCards.Presentation.Composition
                 undoRequestPlayer = Guid.Empty;
             }
 
+            Debug.Log($"[Authority] {(redo ? "Redo" : "Undo")} from {member.Name}: {(done ? "accepted" : "not run")}.");
             if (!done) SendNotice(member, undoRefusal ?? (redo ? "There is nothing of yours to redo." : "There is nothing of yours to undo."));
         }
 

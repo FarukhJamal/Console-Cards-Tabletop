@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ConsoleCards.Application.Commands;
+using ConsoleCards.Application.UseCases;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Domain.Seats;
@@ -21,6 +22,11 @@ namespace ConsoleCards.Application.Authority
         /// the prize's tile in the host's table, whatever position the request names).
         /// </summary>
         RefusedByGame = 4,
+        /// <summary>
+        /// AUTH-POS (2026-11-06): a move or a physics resting place that is not a number or lies far off any table. The
+        /// network reader builds commands without their constructors' checks, so the host checks again.
+        /// </summary>
+        InvalidPosition = 5,
     }
 
     /// <summary>
@@ -62,6 +68,7 @@ namespace ConsoleCards.Application.Authority
                 && isGuardedDeck(draw.SourceDeckContainerId)
                 && IsDrawIntoAnotherHand(match, sender, draw.DestinationContainerId))
                 return HostCommandVerdict.DrawIntoAnotherHand;
+            if (!HasSanePosition(command)) return HostCommandVerdict.InvalidPosition;
             if (gameAllows != null && !gameAllows(command, sender)) return HostCommandVerdict.RefusedByGame;
             if (!id.IsEmpty) Remember(id);
             return HostCommandVerdict.Allowed;
@@ -81,6 +88,29 @@ namespace ConsoleCards.Application.Authority
             if (container.OwnerSeatId.IsEmpty || !match.Seats.TryGetValue(container.OwnerSeatId, out SeatState seat)) return true;
             return sender.IsEmpty || seat.OccupantPlayerId != sender;
         }
+
+        /// <summary>Further than this from the table's centre (in table units) is nowhere on any table.</summary>
+        public const double MaxDistance = 10000d;
+
+        /// <summary>AUTH-POS: false for a move or a resting place that is not finite or lies far off any table.</summary>
+        public static bool HasSanePosition(object command)
+        {
+            if (command is MoveObjectCommand move)
+                return Sane(move.TargetPose.Position.X) && Sane(move.TargetPose.Position.Y) && Finite(move.TargetPose.RotationDegrees);
+            if (command is CommitPhysicalObjectCommand commit)
+            {
+                if (commit.State == null) return true; // the use case refuses it
+                return Sane(commit.State.Position.X) && Sane(commit.State.Position.Y) && Sane(commit.State.Position.Z)
+                    && Finite(commit.State.Rotation.X) && Finite(commit.State.Rotation.Y)
+                    && Finite(commit.State.Rotation.Z) && Finite(commit.State.Rotation.W);
+            }
+
+            return true;
+        }
+
+        private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+        private static bool Sane(double value) => Finite(value) && Math.Abs(value) <= MaxDistance;
 
         private void Remember(CommandId id)
         {
