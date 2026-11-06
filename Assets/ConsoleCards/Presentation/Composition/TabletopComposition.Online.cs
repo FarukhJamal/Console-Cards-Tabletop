@@ -75,6 +75,27 @@ namespace ConsoleCards.Presentation.Composition
         internal bool TrySendEndTurnToHost(ConsoleCards.Games.TrapFloor.TrapFloorEndTurnRequest request) =>
             online != null && online.TrySendEndTurnRequest(request);
 
+        /// <summary>AUTH-DICE: a joined computer waits for the host's result of a rules die it threw (Full).</summary>
+        internal bool RulesDiceAwaitingHost => online != null && online.TableShared && online.RulesDiceAwaitingHost;
+
+        /// <summary>
+        /// AUTH-DICE: the host sent back this computer's own die throw with its own result. The step already ran here, so
+        /// the die is set to the host's face and resting place in place (same step, same revision) and shown again.
+        /// </summary>
+        internal void TakeHostDieResult(CommitPhysicalObjectCommand echoed)
+        {
+            if (matchState == null || echoed?.State == null || !echoed.SettledDieValue.HasValue) return;
+            if (!matchState.Dice.TryGetValue(echoed.ObjectId, out DieState die) || !matchState.ContainsObject(echoed.ObjectId)) return;
+            TabletopObjectState state = matchState.GetObject(echoed.ObjectId);
+            // DICE-LOOP: only a different number is a correction (the host sends the thrower's own throw back unchanged
+            // when it already shows the host's result); turning a die that shows the right number would wake it again.
+            if (die.CurrentValue == echoed.SettledDieValue.Value) return;
+            state.CorrectPhysicalState(echoed.State);
+            die.SetAcceptedRoll(new DieRoll(die.SideCount, echoed.SettledDieValue.Value));
+            PresentAcceptedObject(echoed.ObjectId);
+            Debug.Log($"[Authority] The host's result for the die you threw: {echoed.SettledDieValue.Value}.");
+        }
+
         /// <summary>The shared command door (made with the table's door).</summary>
         internal ReplicatedTableAuthority Replicated
         {

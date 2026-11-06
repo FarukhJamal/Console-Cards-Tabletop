@@ -60,6 +60,18 @@ namespace ConsoleCards.Core.Domain
             PhysicalRevision++;
         }
 
+        /// <summary>
+        /// AUTH-DICE (2026-11-06): the host replaced the resting place of a step this table already ran (a rules die turned
+        /// to the host's result). The same step, so the physical revision does not move: the next step from here still
+        /// names the revision the host has.
+        /// </summary>
+        public void CorrectPhysicalState(PhysicalObjectState state)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            if (!ContainerId.IsEmpty) throw new InvalidOperationException("Contained objects use Container layout.");
+            PhysicalState = state;
+        }
+
         public ContainerId ContainerId { get; private set; }
 
         public PlayerId OwnerPlayerId { get; private set; }

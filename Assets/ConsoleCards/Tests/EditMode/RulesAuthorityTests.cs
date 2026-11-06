@@ -56,17 +56,9 @@ namespace ConsoleCards.Tests
             }
         }
 
-        private sealed class Evidence : ITrapFloorHostEvidence
-        {
-            public readonly HashSet<PlayerId> OnHole = new HashSet<PlayerId>();
-            public readonly HashSet<PlayerId> Stuck = new HashSet<PlayerId>();
-            public bool FloorTurnAfterEachPlayer => false;
-            public bool StandsOnHoleOrOffFloor(PlayerId player) => OnHole.Contains(player);
-            public bool IsStuckWithoutKey(PlayerId player) => Stuck.Contains(player);
-        }
-
-        private static TrapFloorSessionState Merge(Rules host, Rules pushed, PlayerId sender, List<string> refused, Evidence evidence = null) =>
-            TrapFloorRulesPushGuard.Merge(host.Snap(), pushed.Snap(), sender, evidence ?? new Evidence(), refused).Restore();
+        // AUTH-RULES-2 (2026-11-06): the host takes nothing of a pushed rules state; it reports what the push tried.
+        private static TrapFloorSessionState Merge(Rules host, Rules pushed, PlayerId sender, List<string> refused) =>
+            TrapFloorRulesPushGuard.Merge(host.Snap(), pushed.Snap(), sender, refused).Restore();
 
         private static bool IsOut(TrapFloorSessionState state, PlayerId player) =>
             state.Turn.GetPlayerState(player) == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound;
@@ -148,7 +140,7 @@ namespace ConsoleCards.Tests
         }
 
         [Test]
-        public void ForgedStatus_ForAnotherPlayer_IsRefused_OwnIsTaken()
+        public void ForgedStatuses_AreRefused_TheSendersOwnToo()
         {
             Rules host = Rules.Create(), guest = Rules.Create();
             TabletopObjectId trap = guest.FloorCard(2, 1);
@@ -162,9 +154,10 @@ namespace ConsoleCards.Tests
                 new[] { new TrapFloorStickyStatusState(guest.P(2), 2, false, trap) }); // another player's (refused)
             List<string> refused = new List<string>();
             TrapFloorSessionState merged = Merge(host, guest, guest.P(1), refused);
-            Assert.AreEqual(1, merged.AbilityResolution.SlowStatuses.Count);
+            Assert.AreEqual(0, merged.AbilityResolution.SlowStatuses.Count, "a status comes only from a Trap the host applied");
             Assert.AreEqual(0, merged.AbilityResolution.StickyStatuses.Count);
-            Assert.IsTrue(refused.Exists(r => r.Contains("status")));
+            Assert.IsTrue(refused.Exists(r => r.Contains("Slow")), string.Join("; ", refused));
+            Assert.IsTrue(refused.Exists(r => r.Contains("Sticky")), string.Join("; ", refused));
         }
 
         [Test]
@@ -187,33 +180,83 @@ namespace ConsoleCards.Tests
             Assert.AreEqual(0, merged.AbilityResolution.SlowStatuses.Count);
         }
 
-        // ---------- AUTH-RULES: legitimate ----------
-
         [Test]
-        public void LegitimateSelfElimination_IsApplied_AndTheTurnMovesOnAsTheRulesSay()
+        public void SelfElimination_ByPush_IsRefused_ItComesAsAHostCheckedCommand()
         {
             Rules host = Rules.Create(), guest = Rules.Create();
             PlayerId active = guest.Turn.ActivePlayerId;
-            guest.Turn.MarkPlayerEliminatedForCurrentRound(active); // a Fall Trap on its own pawn
+            guest.Turn.MarkPlayerEliminatedForCurrentRound(active); // a modified client declares itself out
             List<string> refused = new List<string>();
             TrapFloorSessionState merged = Merge(host, guest, active, refused);
-            Assert.IsTrue(IsOut(merged, active));
-            Assert.AreEqual(guest.Turn.ActivePlayerId, merged.Turn.ActivePlayerId, "the host moved the turn on itself");
-            Assert.AreNotEqual(active, merged.Turn.ActivePlayerId);
-            Assert.AreEqual(0, refused.Count, string.Join("; ", refused));
+            Assert.IsFalse(IsOut(merged, active), "no concession in the rules: an elimination needs a reason on the host's table");
+            Assert.AreEqual(host.Turn.ActivePlayerId, merged.Turn.ActivePlayerId);
+            Assert.IsTrue(refused.Exists(r => r.Contains("elimination")), string.Join("; ", refused));
         }
 
         [Test]
-        public void LegitimateCollapseElimination_WithTheHostsEvidence_IsApplied()
+        public void ForgedTrapRemoval_OfTheSendersOwnWaitingTrap_IsRefused()
         {
             Rules host = Rules.Create(), guest = Rules.Create();
-            guest.Turn.MarkPlayerEliminatedForCurrentRound(guest.P(2)); // the floor operator's computer: seat 3 fell
-            Evidence evidence = new Evidence();
-            evidence.OnHole.Add(host.P(2)); // on the host's table seat 3 stands on the collapsed tile
+            TabletopObjectId tile = host.FloorCard(2, 1);
+            Assert.IsTrue(host.Table.Template.TryGetFloorCardState(host.Table.Match, tile, out TrapFloorFloorCardState floor));
+            if (floor.Content.Category != TrapFloorFloorContentCategory.Trap)
+            {
+                // The record needs Trap content: take any Trap tile of this deal.
+                foreach (KeyValuePair<TrapFloorCoordinate, TabletopObjectId> pair in host.Table.Template.FloorCardIds)
+                {
+                    if (host.Table.Template.TryGetFloorCardState(host.Table.Match, pair.Value, out floor)
+                        && floor.Content.Category == TrapFloorFloorContentCategory.Trap)
+                        break;
+                }
+            }
+
+            Assert.AreEqual(TrapFloorFloorContentCategory.Trap, floor.Content.Category, "the test deal has no Trap tile");
+            PlayerId me = host.P(0);
+            host.Ability.RecordRevealedTrap(3, me, floor); // the host saw the reveal: it waits for the sender
+            guest.Ability.RecordRevealedTrap(3, me, floor);
+            guest.Ability.TrapRecords[0].SetDisposition(TrapFloorTrapResolutionDisposition.Neutralized); // cleared by hand
             List<string> refused = new List<string>();
-            TrapFloorSessionState merged = Merge(host, guest, guest.P(1), refused, evidence);
-            Assert.IsTrue(IsOut(merged, host.P(2)));
-            Assert.AreEqual(0, refused.Count, string.Join("; ", refused));
+            TrapFloorSessionState merged = Merge(host, guest, me, refused);
+            Assert.IsTrue(merged.AbilityResolution.TrapRecords[0].IsPending, "a waiting Trap ends only by a host-run step");
+            Assert.IsTrue(refused.Exists(r => r.StartsWith("Trap outcomes")), string.Join("; ", refused));
+        }
+
+        [Test]
+        public void ForgedStatusRemoval_IsRefused_TheHostKeepsTheSlow()
+        {
+            Rules host = Rules.Create(), guest = Rules.Create();
+            PlayerId me = host.P(0);
+            host.Ability.Restore(
+                Array.Empty<TrapFloorTrapResolutionRecord>(), Array.Empty<TrapFloorAbilityActivationRecord>(), null, null,
+                Array.Empty<TrapFloorBlindStatusState>(),
+                new[] { new TrapFloorSlowStatusState(me, 2, -1, host.FloorCard(2, 1)) },
+                Array.Empty<TrapFloorStickyStatusState>());
+            List<string> refused = new List<string>();
+            TrapFloorSessionState merged = Merge(host, guest, me, refused); // the guest's copy dropped it
+            Assert.AreEqual(1, merged.AbilityResolution.SlowStatuses.Count);
+            Assert.IsTrue(refused.Exists(r => r.Contains("Slow")), string.Join("; ", refused));
+        }
+
+        [Test]
+        public void ForgedAbilityUse_AndForgedGuidance_AreRefused()
+        {
+            Rules host = Rules.Create(), guest = Rules.Create();
+            PlayerId me = host.P(0);
+            guest.Ability.RecordAbilityActivation(new TabletopObjectId(Guid.NewGuid()), me, 1);
+            List<string> refused = new List<string>();
+            TrapFloorSessionState merged = Merge(host, guest, me, refused);
+            Assert.AreEqual(0, merged.AbilityResolution.CopyAbilityActivations().Length);
+            Assert.IsTrue(refused.Exists(r => r.Contains("Ability uses")), string.Join("; ", refused));
+        }
+
+        [Test]
+        public void ForgedLogLines_AreNotTaken()
+        {
+            Rules host = Rules.Create(), guest = Rules.Create();
+            guest.Feed.RecordPlayerEliminated(5, guest.P(1)); // a log line with no step behind it
+            List<string> refused = new List<string>();
+            TrapFloorSessionState merged = Merge(host, guest, guest.P(1), refused);
+            Assert.AreEqual(host.Feed.Entries.Count, merged.Activity.Entries.Count, "the host's own log stands");
         }
 
         [Test]

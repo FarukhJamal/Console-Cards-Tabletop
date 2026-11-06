@@ -5,49 +5,23 @@ using ConsoleCards.Core.Identifiers;
 namespace ConsoleCards.Games.TrapFloor
 {
     /// <summary>
-    /// AUTH-RULES (2026-11-06): facts the host reads from its own table to judge a joined computer's rules-state change.
-    /// Implemented by the game on the host; never filled from what the sender wrote.
-    /// </summary>
-    public interface ITrapFloorHostEvidence
-    {
-        /// <summary>On the host's table the player's pawn stands on a collapsed tile, an empty cell, or off the floor.</summary>
-        bool StandsOnHoleOrOffFloor(PlayerId player);
-
-        /// <summary>The "stuck without a Key" rule holds for the player on the host's table (no Key of theirs, none left).</summary>
-        bool IsStuckWithoutKey(PlayerId player);
-
-        /// <summary>The host's derived turn setting (Impossible after an escape: a floor turn after each player).</summary>
-        bool FloorTurnAfterEachPlayer { get; }
-    }
-
-    /// <summary>
-    /// AUTH-RULES (owner, 2026-11-06: "a guest must not directly overwrite authoritative rules state through whole-table
-    /// uploads"): what of a joined computer's pushed Trap Floor rules state the host takes. Pure, so it is unit tested.
-    /// <list type="bullet">
-    /// <item><b>Host only (the pushed value is never taken):</b> Keys, escapes, floor won, the winner and the exit; collapsed
-    /// tiles, the collapse in progress and its roll; the turn order, round, phase, turn owner, floor operator and floor
-    /// failure. Each of these changes on the host only through a command it checked and ran (Claim Key, Attempt Escape,
-    /// Take / Collect Prize, Begin / Resolve Collapse, Reveal) or through the host-run End Turn.</item>
-    /// <item><b>Checked, then applied by the host:</b> an elimination is taken only when the sender eliminated itself, or
-    /// the host's own table shows why (the pawn on a hole or off the floor, the player escaped, or stuck without a Key).
-    /// The host applies it to its own turn state, so the turn moves on exactly as the rules move it; the pushed turn
-    /// position is never used. A pushed table can never bring an eliminated player back.</item>
-    /// <item><b>The sender's own records only:</b> Trap outcomes, Ability uses, Dodge / Rush guidance and Blind / Slow /
-    /// Sticky statuses are taken only for the sender's own player; statuses only for this round or later.</item>
-    /// <item><b>The activity log</b> is taken only when it adds lines after the host's own (display only).</item>
-    /// </list>
-    /// Remaining limit (documented in doc 10): a modified client can still change its <i>own</i> per-player records
-    /// (clear its own waiting Trap, drop its own Slow / Sticky), eliminate itself, and add log lines.
+    /// AUTH-RULES-2 (owner, 2026-11-06: "remove the remaining client rules-state upload privileges"): what of a joined
+    /// computer's pushed Trap Floor rules state the host takes. <b>Nothing.</b> Every rules step now reaches the host as a
+    /// command it replays against its own table (Claim Key, Attempt Escape, Take / Collect Prize, Begin / Resolve
+    /// Collapse, Reveal, Apply Trap, Launch Trap, Blind direction, Retrigger, Use Ability, Clear guidance, Eliminate) or
+    /// through the host-run End Turn, so the host's own rules state is already the result. A push that differs is
+    /// reported (it means a modified client, or a step not yet moved to a command) and the host's values are kept; the
+    /// sender is then set right. The activity log is display only: the host's own log stands, a different pushed log is
+    /// not counted as a refusal. Pure, so it is unit tested.
     /// </summary>
     public static class TrapFloorRulesPushGuard
     {
+        /// <returns>The host's own snapshot (always). <paramref name="refused"/> lists what the push tried to change.</returns>
         public static TrapFloorSessionStateSnapshot Merge(
             TrapFloorSessionStateSnapshot hostSnapshot,
             TrapFloorSessionStateSnapshot pushedSnapshot,
             PlayerId sender,
-            ITrapFloorHostEvidence evidence,
-            List<string> refused,
-            List<PlayerId> acceptedEliminations = null)
+            List<string> refused)
         {
             if (hostSnapshot == null) throw new ArgumentNullException(nameof(hostSnapshot));
             if (pushedSnapshot == null)
@@ -64,15 +38,12 @@ namespace ConsoleCards.Games.TrapFloor
 
             TrapFloorSessionState host = hostSnapshot.Restore();
             TrapFloorSessionState pushed = pushedSnapshot.Restore();
-            host.Turn.FloorTurnAfterEachPlayer = evidence != null && evidence.FloorTurnAfterEachPlayer;
-
             CompareObjective(host.Objective, pushed.Objective, refused);
             CompareCollapse(host.Collapse, pushed.Collapse, refused);
-            MergeEliminations(host, pushed, sender, evidence, refused, acceptedEliminations);
+            CompareEliminations(host.Turn, pushed.Turn, refused);
             CompareTurn(host.Turn, pushed.Turn, refused);
-            TrapFloorAbilityResolutionState ability = MergeAbility(host, pushed, sender, refused);
-            TrapFloorActivityFeedState activity = MergeActivity(host.Activity, pushed.Activity, refused);
-            return TrapFloorSessionStateSnapshot.Capture(activity, host.Objective, host.Collapse, host.Turn, ability);
+            CompareAbility(host.AbilityResolution, pushed.AbilityResolution, refused);
+            return hostSnapshot;
         }
 
         // ---------- host only ----------
@@ -137,18 +108,12 @@ namespace ConsoleCards.Games.TrapFloor
                 Note(refused, $"turn (pushed round {b.Round} {b.Phase} #{b.ActivePlayerIndex}, host round {a.Round} {a.Phase} #{a.ActivePlayerIndex})");
         }
 
-        // ---------- checked, applied by the host ----------
+        // ---------- eliminations and the per-player records ----------
 
-        private static void MergeEliminations(
-            TrapFloorSessionState host,
-            TrapFloorSessionState pushed,
-            PlayerId sender,
-            ITrapFloorHostEvidence evidence,
-            List<string> refused,
-            List<PlayerId> accepted)
+        private static void CompareEliminations(TrapFloorTurnState host, TrapFloorTurnState pushed, List<string> refused)
         {
-            HashSet<PlayerId> before = new HashSet<PlayerId>(host.Turn.CopyEliminatedPlayerIds());
-            PlayerId[] pushedOut = pushed.Turn.CopyEliminatedPlayerIds();
+            HashSet<PlayerId> before = new HashSet<PlayerId>(host.CopyEliminatedPlayerIds());
+            PlayerId[] pushedOut = pushed.CopyEliminatedPlayerIds();
             HashSet<PlayerId> pushedSet = new HashSet<PlayerId>(pushedOut);
             foreach (PlayerId player in before)
             {
@@ -157,178 +122,81 @@ namespace ConsoleCards.Games.TrapFloor
 
             for (int i = 0; i < pushedOut.Length; i++)
             {
-                PlayerId player = pushedOut[i];
-                if (before.Contains(player)) continue;
-                if (!host.Turn.ContainsPlayer(player) || host.Turn.IsCurrentFloorFailed)
-                {
-                    Note(refused, $"elimination of {Short(player)} (not in play)");
-                    continue;
-                }
-
-                bool allowed = player == sender
-                    || host.Objective.IsPlayerEscaped(player)
-                    || (evidence != null && (evidence.StandsOnHoleOrOffFloor(player) || evidence.IsStuckWithoutKey(player)));
-                if (!allowed)
-                {
-                    Note(refused, $"elimination of {Short(player)} (the host's table shows no reason)");
-                    continue;
-                }
-
-                host.Turn.MarkPlayerEliminatedForCurrentRound(player);
-                accepted?.Add(player);
+                if (!before.Contains(pushedOut[i])) Note(refused, $"elimination of {Short(pushedOut[i])}");
             }
         }
 
-        // ---------- the sender's own records ----------
-
-        private static TrapFloorAbilityResolutionState MergeAbility(
-            TrapFloorSessionState hostState,
-            TrapFloorSessionState pushedState,
-            PlayerId sender,
-            List<string> refused)
+        private static void CompareAbility(TrapFloorAbilityResolutionState host, TrapFloorAbilityResolutionState pushed, List<string> refused)
         {
-            TrapFloorAbilityResolutionState host = hostState.AbilityResolution;
-            TrapFloorAbilityResolutionState pushed = pushedState.AbilityResolution;
-            int round = hostState.Turn.CurrentRound;
-
-            // Trap outcomes: the host's records (a reveal is a command), with the sender's own outcomes and retriggers.
-            List<TrapFloorTrapResolutionRecord> traps = new List<TrapFloorTrapResolutionRecord>(host.CopyTrapRecords());
-            TrapFloorTrapResolutionRecord[] pushedTraps = pushed.CopyTrapRecords();
-            bool othersTraps = false;
-            for (int i = 0; i < pushedTraps.Length; i++)
+            TrapFloorTrapResolutionRecord[] a = host.CopyTrapRecords();
+            TrapFloorTrapResolutionRecord[] b = pushed.CopyTrapRecords();
+            bool same = a.Length == b.Length;
+            for (int i = 0; same && i < a.Length; i++)
             {
-                TrapFloorTrapResolutionRecord record = pushedTraps[i];
-                int index = IndexOf(traps, record);
-                if (index >= 0)
-                {
-                    if (traps[index].Disposition == record.Disposition) continue;
-                    if (record.AffectedPlayerId == sender) traps[index].SetDisposition(record.Disposition);
-                    else othersTraps = true;
-                }
-                else if (record.AffectedPlayerId == sender)
-                {
-                    traps.Add(record.Copy());
-                }
-                else
-                {
-                    othersTraps = true;
-                }
+                same = a[i].FloorCardId == b[i].FloorCardId
+                    && a[i].AffectedPlayerId == b[i].AffectedPlayerId
+                    && a[i].RevealedRevision == b[i].RevealedRevision
+                    && a[i].Disposition == b[i].Disposition;
             }
 
-            if (othersTraps) Note(refused, "another player's Trap outcome");
+            if (!same) Note(refused, $"Trap outcomes ({b.Length} pushed, {a.Length} on the host)");
 
-            // Ability uses: the host's, plus the sender's new ones.
-            List<TrapFloorAbilityActivationRecord> activations = new List<TrapFloorAbilityActivationRecord>(host.CopyAbilityActivations());
-            TrapFloorAbilityActivationRecord[] pushedActivations = pushed.CopyAbilityActivations();
-            bool othersActivations = false;
-            for (int i = 0; i < pushedActivations.Length; i++)
-            {
-                if (activations.Contains(pushedActivations[i])) continue;
-                if (pushedActivations[i].PlayerId == sender) activations.Add(pushedActivations[i]);
-                else othersActivations = true;
-            }
+            if (!SameSet(host.CopyAbilityActivations(), pushed.CopyAbilityActivations()))
+                Note(refused, "Ability uses");
 
-            if (othersActivations) Note(refused, "another player's Ability use");
-
-            // Dodge / Rush guidance: one at a time; the sender may set or clear only its own.
-            TrapFloorDodgeAssistanceState dodge = host.CopyDodgeAssistance();
-            TrapFloorRushAssistanceState rush = host.CopyRushAssistance();
+            TrapFloorDodgeAssistanceState hostDodge = host.CopyDodgeAssistance();
             TrapFloorDodgeAssistanceState pushedDodge = pushed.CopyDodgeAssistance();
+            TrapFloorRushAssistanceState hostRush = host.CopyRushAssistance();
             TrapFloorRushAssistanceState pushedRush = pushed.CopyRushAssistance();
-            bool mayChange = (dodge == null || dodge.PlayerId == sender)
-                && (rush == null || rush.PlayerId == sender)
-                && (pushedDodge == null || pushedDodge.PlayerId == sender)
-                && (pushedRush == null || pushedRush.PlayerId == sender);
-            if (mayChange)
-            {
-                dodge = pushedDodge;
-                rush = pushedRush;
-            }
-            else if (!SameGuide(dodge?.PlayerId, pushedDodge?.PlayerId) || !SameGuide(rush?.PlayerId, pushedRush?.PlayerId))
-            {
-                Note(refused, "another player's move guidance");
-            }
+            if (!SameGuide(hostDodge?.PlayerId, pushedDodge?.PlayerId, hostDodge?.TargetFloorCardIds, pushedDodge?.TargetFloorCardIds)
+                || !SameGuide(hostRush?.PlayerId, pushedRush?.PlayerId, hostRush?.TargetFloorCardIds, pushedRush?.TargetFloorCardIds))
+                Note(refused, "move guidance (lit tiles)");
 
-            // Statuses: other players' as on the host; the sender's own as pushed, for this round or later only.
-            bool othersStatus = false;
-            List<TrapFloorBlindStatusState> blind = Statuses(host.CopyBlindStatuses(), pushed.CopyBlindStatuses(), s => s.PlayerId, s => s.AppliesInRound, sender, round, ref othersStatus);
-            List<TrapFloorSlowStatusState> slow = Statuses(host.CopySlowStatuses(), pushed.CopySlowStatuses(), s => s.PlayerId, s => s.AppliesInRound, sender, round, ref othersStatus);
-            List<TrapFloorStickyStatusState> sticky = Statuses(host.CopyStickyStatuses(), pushed.CopyStickyStatuses(), s => s.PlayerId, s => s.AppliesInRound, sender, round, ref othersStatus);
-            if (othersStatus) Note(refused, "another player's status");
-
-            TrapFloorAbilityResolutionState merged = new TrapFloorAbilityResolutionState(host.MatchId);
-            merged.Restore(traps, activations, dodge, rush, blind, slow, sticky);
-            return merged;
+            if (!SameStatuses(host.CopyBlindStatuses(), pushed.CopyBlindStatuses(), s => s.PlayerId, s => s.AppliesInRound, s => s.DirectionRoll ?? 0))
+                Note(refused, "Blind statuses");
+            if (!SameStatuses(host.CopySlowStatuses(), pushed.CopySlowStatuses(), s => s.PlayerId, s => s.AppliesInRound, s => s.MovementModifier))
+                Note(refused, "Slow statuses");
+            if (!SameStatuses(host.CopyStickyStatuses(), pushed.CopyStickyStatuses(), s => s.PlayerId, s => s.AppliesInRound, s => 0))
+                Note(refused, "Sticky statuses");
         }
 
-        private static List<T> Statuses<T>(
-            T[] host,
-            T[] pushed,
-            Func<T, PlayerId> playerOf,
-            Func<T, int> roundOf,
-            PlayerId sender,
-            int round,
-            ref bool othersChanged)
+        private static bool SameStatuses<T>(T[] a, T[] b, Func<T, PlayerId> player, Func<T, int> round, Func<T, int> detail)
         {
-            List<T> result = new List<T>();
-            int hostOthers = 0;
-            for (int i = 0; i < host.Length; i++)
+            if (a.Length != b.Length) return false;
+            for (int i = 0; i < a.Length; i++)
             {
-                if (playerOf(host[i]) == sender) continue;
-                result.Add(host[i]);
-                hostOthers++;
+                bool found = false;
+                for (int j = 0; j < b.Length && !found; j++)
+                    found = player(a[i]) == player(b[j]) && round(a[i]) == round(b[j]) && detail(a[i]) == detail(b[j]);
+                if (!found) return false;
             }
 
-            int pushedOthers = 0;
-            for (int i = 0; i < pushed.Length; i++)
-            {
-                if (playerOf(pushed[i]) != sender)
-                {
-                    pushedOthers++;
-                    continue;
-                }
-
-                if (roundOf(pushed[i]) >= round) result.Add(pushed[i]);
-            }
-
-            if (hostOthers != pushedOthers) othersChanged = true;
-            return result;
+            return true;
         }
 
-        private static bool SameGuide(PlayerId? a, PlayerId? b) => a.HasValue == b.HasValue && (!a.HasValue || a.Value == b.Value);
-
-        private static int IndexOf(List<TrapFloorTrapResolutionRecord> records, TrapFloorTrapResolutionRecord record)
+        private static bool SameGuide(PlayerId? a, PlayerId? b, IReadOnlyList<TabletopObjectId> ta, IReadOnlyList<TabletopObjectId> tb)
         {
-            for (int i = 0; i < records.Count; i++)
+            if (a.HasValue != b.HasValue) return false;
+            if (!a.HasValue) return true;
+            if (a.Value != b.Value || ta.Count != tb.Count) return false;
+            for (int i = 0; i < ta.Count; i++)
             {
-                if (records[i].FloorCardId == record.FloorCardId
-                    && records[i].AffectedPlayerId == record.AffectedPlayerId
-                    && records[i].RevealedRevision == record.RevealedRevision)
-                    return i;
+                if (ta[i] != tb[i]) return false;
             }
 
-            return -1;
+            return true;
         }
 
-        // ---------- the log ----------
-
-        private static TrapFloorActivityFeedState MergeActivity(TrapFloorActivityFeedState host, TrapFloorActivityFeedState pushed, List<string> refused)
+        private static bool SameSet(TrapFloorAbilityActivationRecord[] a, TrapFloorAbilityActivationRecord[] b)
         {
-            TrapFloorActivityFeedState result = new TrapFloorActivityFeedState(host.MatchId);
-            IReadOnlyList<TrapFloorActivityEntry> a = host.Entries;
-            IReadOnlyList<TrapFloorActivityEntry> b = pushed.Entries;
-            bool extends = b.Count >= a.Count;
-            for (int i = 0; extends && i < a.Count; i++)
+            if (a.Length != b.Length) return false;
+            HashSet<TrapFloorAbilityActivationRecord> set = new HashSet<TrapFloorAbilityActivationRecord>(a);
+            for (int i = 0; i < b.Length; i++)
             {
-                extends = a[i].Sequence == b[i].Sequence
-                    && a[i].AcceptedRevision == b[i].AcceptedRevision
-                    && a[i].Kind == b[i].Kind
-                    && a[i].ActorPlayerId == b[i].ActorPlayerId;
+                if (!set.Contains(b[i])) return false;
             }
 
-            // Display only: a log that does not follow the host's is quietly not taken (not counted as a refusal).
-            result.RestoreEntries(extends ? b : a);
-            return result;
+            return true;
         }
 
         // ---------- helpers ----------

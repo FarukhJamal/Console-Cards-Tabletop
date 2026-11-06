@@ -20,6 +20,12 @@ namespace ConsoleCards.Application.Authority
         /// <summary>The latest change is not the one the request named (it was already taken back, or something
         /// happened since): a double press never takes back a second change.</summary>
         NotTheNamedChange = 7,
+        /// <summary>
+        /// AUTH-UNDO-2 (owner, 2026-11-06): the latest change is a rules result in Full (a host-rolled die a rule reads,
+        /// a Trap applied, a tile turned over, a collapse, an elimination). Taking it back would let a player throw again
+        /// for a better result or step out of a Trap: in Full it stands.
+        /// </summary>
+        RulesResult = 8,
     }
 
     /// <summary>
@@ -39,13 +45,15 @@ namespace ConsoleCards.Application.Authority
         /// <param name="hasNext">The host's history has a change to take back (Undo) or to make again (Redo).</param>
         /// <param name="nextCommandId">That change's command id on the host.</param>
         /// <param name="nextActor">The player who made it (empty: a game step).</param>
+        /// <param name="nextIsRulesResult">Full only: that change is a rules result the host marked (see RulesResult).</param>
         public HostUndoVerdict Check(
             PlayerId sender,
             Guid requestId,
             CommandId namedChange,
             bool hasNext,
             CommandId nextCommandId,
-            PlayerId nextActor)
+            PlayerId nextActor,
+            bool nextIsRulesResult = false)
         {
             if (requestId == Guid.Empty) return HostUndoVerdict.MissingRequestId;
             if (seen.Contains(requestId)) return HostUndoVerdict.Duplicate;
@@ -55,6 +63,7 @@ namespace ConsoleCards.Application.Authority
             if (nextActor.IsEmpty) return HostUndoVerdict.NoPlayer;
             if (nextActor != sender) return HostUndoVerdict.NotYourChange;
             if (namedChange.IsEmpty || namedChange != nextCommandId) return HostUndoVerdict.NotTheNamedChange;
+            if (nextIsRulesResult) return HostUndoVerdict.RulesResult;
             return HostUndoVerdict.Allowed;
         }
 
@@ -75,6 +84,7 @@ namespace ConsoleCards.Application.Authority
                 case HostUndoVerdict.NoPlayer: return $"The latest change was a game step: only the host can {what} it.";
                 case HostUndoVerdict.NotTheNamedChange: return $"That change was already taken back or something happened since: nothing more to {what}.";
                 case HostUndoVerdict.MissingRequestId: return $"The {what} request was not understood.";
+                case HostUndoVerdict.RulesResult: return $"That was a rules result (a die the rules read, a Trap, a turned tile, a collapse or an elimination): in Full it stands and cannot be taken back.";
                 default: return null;
             }
         }

@@ -208,6 +208,32 @@ namespace ConsoleCards.Presentation.Composition
             authority.Register<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(
                 command => host.trapFloorShopUseCase.Execute(host.matchState, command), result => result.Succeeded);
 
+            // AUTH-EFFECTS (owner, 2026-11-06): the Trap and Ability steps a player's own computer used to run on its copy
+            // of the rules state and push. Each is a command now: it runs here at once, and the host replays it against
+            // its own table (TrapFloorCartridge.HostRules.cs) before anyone else gets it.
+            authority.Register<TrapFloorApplyTrapCommand, TrapFloorTurnAdvanceResult>(
+                command => EffectExecutor().ApplyTrap(host.matchState, command), result => result.Succeeded);
+            authority.Register<TrapFloorLaunchTrapCommand, TrapFloorLaunchResult>(
+                command => EffectExecutor().LaunchTrap(host.matchState, command), result => result.Succeeded);
+            authority.Register<TrapFloorRollBlindDirectionCommand, TrapFloorBlindDirectionRollResult>(
+                command => EffectExecutor().RollBlindDirection(host.matchState, command), result => result.Succeeded);
+            authority.Register<TrapFloorRetriggerTrapCommand, TrapFloorEffectResult>(
+                command => EffectExecutor().RetriggerTrap(host.matchState, command), result => result.Succeeded);
+            authority.Register<TrapFloorUseAbilityCommand, TrapFloorAbilityActivationResult>(
+                command => EffectExecutor().UseAbility(host.matchState, command), result => result.Succeeded);
+            authority.Register<TrapFloorClearGuidanceCommand, TrapFloorEffectResult>(
+                command => EffectExecutor().ClearGuidance(host.matchState, command), result => result.Succeeded);
+            authority.Register<TrapFloorEliminatePlayerCommand, TrapFloorTurnAdvanceResult>(
+                command => EffectExecutor().Eliminate(host.matchState, command), result => result.Succeeded);
+            authority.Observe<TrapFloorApplyTrapCommand, TrapFloorTurnAdvanceResult>((c, r) => OnEffectAccepted());
+            authority.Observe<TrapFloorLaunchTrapCommand, TrapFloorLaunchResult>((c, r) => OnEffectAccepted(true));
+            authority.Observe<TrapFloorRollBlindDirectionCommand, TrapFloorBlindDirectionRollResult>((c, r) => OnEffectAccepted(false, c.DieId));
+            authority.Observe<TrapFloorRetriggerTrapCommand, TrapFloorEffectResult>((c, r) => OnEffectAccepted());
+            authority.Observe<TrapFloorUseAbilityCommand, TrapFloorAbilityActivationResult>((c, r) => OnEffectAccepted());
+            authority.Observe<TrapFloorClearGuidanceCommand, TrapFloorEffectResult>((c, r) => OnEffectAccepted());
+            authority.Observe<TrapFloorEliminatePlayerCommand, TrapFloorTurnAdvanceResult>((c, r) => OnEffectAccepted());
+            authority.Observe<TrapFloorResolveCollapseCommand, TrapFloorCollapseResult>((c, r) => FloorDiceRead()); // AUTH-DICE
+
             authority.Observe<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(OnShopCardBought);
             authority.Observe<TrapFloorTakePrizeCommand, TrapFloorTakePrizeResult>(OnPrizeTaken);
             authority.Observe<TrapFloorResolveCollapseCommand, TrapFloorCollapseResult>(OnCollapseResolved);

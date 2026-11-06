@@ -1298,10 +1298,10 @@ namespace ConsoleCards.Presentation.Composition
                     PlayerId actor = host.physicalFloorCollapseActor.IsEmpty
                         ? host.trapFloorTurnState.FloorOperatorPlayerId
                         : host.physicalFloorCollapseActor;
-                    TrapFloorTurnAdvanceResult knocked = host.trapFloorTurnService.MarkPlayerEliminatedForCurrentRound(
-                        host.matchState,
-                        host.CreateCommandContext(actor.IsEmpty ? player : actor),
-                        player);
+                    TrapFloorTurnAdvanceResult knocked = SubmitElimination( // AUTH-EFFECTS: every table sees the hole itself
+                        player,
+                        TrapFloorEliminationReason.Fell,
+                        actor.IsEmpty ? player : actor);
                     if (!knocked.Succeeded) continue;
                     anyOut = true;
                     host.FeedbackLine(
@@ -1553,11 +1553,11 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            TrapFloorBlindDirectionRollResult result =
-                host.trapFloorAbilityResolutionService.ResolveBlindDirection(
-                    host.matchState,
-                    host.CreateCommandContext(host.physicalBlindDirectionActor),
-                    host.physicalBlindDirectionDieId);
+            TrapFloorBlindDirectionRollResult result = // AUTH-EFFECTS: the d4 on the table that runs it (AUTH-DICE: the host's)
+                host.TableAuthority.Submit<TrapFloorRollBlindDirectionCommand, TrapFloorBlindDirectionRollResult>(
+                    new TrapFloorRollBlindDirectionCommand(
+                        host.CreateCommandContext(host.physicalBlindDirectionActor),
+                        host.physicalBlindDirectionDieId));
             if (!result.Succeeded)
             {
                 CancelPhysicalBlindDirection($"Blind direction rejected: {result.Error}.");
@@ -2650,11 +2650,9 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             PlayerId affectedPlayerId = host.trapFloorTurnState.ActivePlayerId;
-            TrapFloorTurnAdvanceResult result = host.trapFloorAbilityResolutionService.ResolveSupportedTrap(
-                host.matchState,
-                host.CreateCommandContext(affectedPlayerId),
-                floorCardId,
-                host.trapFloorTurnService);
+            // AUTH-EFFECTS: a command the host replays against its own table (the effect is decided there too).
+            TrapFloorTurnAdvanceResult result = host.TableAuthority.Submit<TrapFloorApplyTrapCommand, TrapFloorTurnAdvanceResult>(
+                new TrapFloorApplyTrapCommand(host.CreateCommandContext(affectedPlayerId), floorCardId));
             if (!result.Succeeded)
             {
                 host.ShowMessage($"Resolve Trap rejected: {result.Error}.");
@@ -2696,11 +2694,8 @@ namespace ConsoleCards.Presentation.Composition
             PlayerId affectedPlayerId = host.trapFloorTurnState.ActivePlayerId;
             bool spring = content.TrapEffect == TrapFloorTrapEffectCategory.SpringLaunch;
             string trapName = spring ? "SPRING" : "CRANE";
-            TrapFloorLaunchResult result = host.trapFloorAbilityResolutionService.ResolveLaunchTrap(
-                host.matchState,
-                host.CreateCommandContext(affectedPlayerId),
-                floorCardId,
-                host.trapFloorTurnService);
+            TrapFloorLaunchResult result = host.TableAuthority.Submit<TrapFloorLaunchTrapCommand, TrapFloorLaunchResult>( // AUTH-EFFECTS
+                new TrapFloorLaunchTrapCommand(host.CreateCommandContext(affectedPlayerId), floorCardId));
             if (!result.Succeeded)
             {
                 host.ShowMessage(result.Error == TrapFloorLaunchError.DieBeyondGrid
@@ -3038,11 +3033,8 @@ namespace ConsoleCards.Presentation.Composition
                 if (IsSurvivalEndgame()
                     && floor.Content.HasSupportedAssistedTrapEffect
                     && host.trapFloorAbilityResolutionService != null
-                    && host.trapFloorAbilityResolutionService.RetriggerRevealedTrap(
-                        host.matchState,
-                        host.CreateCommandContext(active),
-                        floorCardId,
-                        active))
+                    && host.TableAuthority.Submit<TrapFloorRetriggerTrapCommand, TrapFloorEffectResult>( // AUTH-EFFECTS
+                        new TrapFloorRetriggerTrapCommand(host.CreateCommandContext(active), floorCardId)).Succeeded)
                 {
                     RefreshTrapFloorStatusUi();
                     ShowTrapPopup(floor, "TRIGGERED AGAIN", backArtwork, frontArtwork);
@@ -4052,7 +4044,7 @@ namespace ConsoleCards.Presentation.Composition
             host.SessionService.BeginUndoBatch();
             try
             {
-                host.trapFloorTurnService.MarkPlayerEliminatedForCurrentRound(host.matchState, host.CreateCommandContext(active), active);
+                SubmitElimination(active, TrapFloorEliminationReason.Fell, active); // AUTH-EFFECTS: off the floor on every table
             }
             finally
             {
@@ -4190,10 +4182,13 @@ namespace ConsoleCards.Presentation.Composition
         private void ActivateAbility(ConsoleCardInserted insertion, CardDefinition definition, TrapFloorAbilityEffect effect)
         {
             IConsoleCardInteraction interaction = insertion;
-            TrapFloorAbilityActivationResult result = host.trapFloorAbilityResolutionService.Activate(
-                host.matchState,
-                insertion,
-                definition.ToData());
+            // AUTH-EFFECTS: the card in the slot is used through a command; every table (the host's first) reads the card
+            // and the waiting Trap from its own state.
+            TrapFloorAbilityActivationResult result = host.TableAuthority.Submit<TrapFloorUseAbilityCommand, TrapFloorAbilityActivationResult>(
+                new TrapFloorUseAbilityCommand(
+                    host.CreateCommandContext(insertion.ActorPlayerId),
+                    insertion.CardInstanceId,
+                    insertion.SlotContainerId));
             if (!result.Succeeded)
             {
                 host.ShowMessage(TrapFloorAbilityRejectionMessage(effect, result.Error));
@@ -4803,7 +4798,8 @@ namespace ConsoleCards.Presentation.Composition
                     }
 
                     if (host.trapFloorAbilityResolutionService != null
-                        && host.trapFloorAbilityResolutionService.ClearMovementAssistance())
+                        && host.TableAuthority.Submit<TrapFloorClearGuidanceCommand, TrapFloorEffectResult>( // AUTH-EFFECTS
+                            new TrapFloorClearGuidanceCommand(host.CreateCommandContext(host.trapFloorTurnState.ActivePlayerId))).Succeeded)
                         host.abilityTargetPresenter?.ClearCurrent();
                     return null;
                 }
@@ -6082,6 +6078,8 @@ namespace ConsoleCards.Presentation.Composition
         internal bool HostAllowsCommand(object command, PlayerId sender)
         {
             hostRefusal = null;
+            if (command is TrapFloorRevealFloorCommand || command is TrapFloorClaimKeyCommand || command is TrapFloorAttemptEscapeCommand)
+                return HostAllowsTileCommand(command, sender); // AUTH-TILE
             if (!(command is TrapFloorTakePrizeCommand take)) return HostAllowsMoveCommand(command, sender); // AUTH-MOVE
             if (host.trapFloorTemplate == null || host.matchState == null) return false;
             if (take.Context.RequestedByPlayerId != sender) return false;
@@ -6389,6 +6387,9 @@ namespace ConsoleCards.Presentation.Composition
         public void TickLate()
         {
             host.RefreshBoardCardBacksIfRoundChanged(); // the floor's backs change with the round
+            // AUTH-DICE (Full, joined computer): a die a rule reads was thrown here; nothing reads the dice until the host's
+            // result for it is back, so no collapse, Crane or Blind direction acts on a face the host then replaces.
+            if (host.RulesDiceAwaitingHost) return;
             // CRANE-1 first: while the Crane waits for its roll, the floor dice belong to it (owner, 2026-10-30: the
             // Crane roll was taken as a collapse roll and showed the collapse popup).
             CompleteCraneRollIfSettled();

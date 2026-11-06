@@ -84,13 +84,19 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             ActiveSessionUndoTransaction next = redo ? host.undoHistory.NextRedo : host.undoHistory.NextUndo;
+            // AUTH-UNDO-2 (owner, 2026-11-06): in Full a rules result stands (a host-rolled die, a Trap, a turned tile, a
+            // collapse, an elimination), so it is not taken back for a player who would throw again or step out of it.
+            bool rulesResult = false;
+            if (!redo && next != null && host.undoHistory.TryPeekUndo(out SessionUndoSnapshot before, out _))
+                rulesResult = host.TrapFloorGame.IsRulesResultStep(before.GameState, host.undoHistory.CurrentState.GameState, next.CommandId);
             HostUndoVerdict verdict = undoPolicy.Check(
                 new PlayerId(member.Player),
                 requestId,
                 namedChange,
                 next != null,
                 next != null ? next.CommandId : CommandId.Empty,
-                next != null ? next.ActorPlayerId : PlayerId.Empty);
+                next != null ? next.ActorPlayerId : PlayerId.Empty,
+                rulesResult);
             if (verdict != HostUndoVerdict.Allowed)
             {
                 Debug.Log($"[Authority] {(redo ? "Redo" : "Undo")} from {member.Name}: refused ({verdict}).");

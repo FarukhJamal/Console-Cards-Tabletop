@@ -4,6 +4,7 @@ using System.IO;
 using ConsoleCards.Application.Authority;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Random;
+using ConsoleCards.Application.UseCases;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates;
@@ -126,6 +127,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             door.ForgetAppliedCommands();
+            awaitingHostDice.Clear(); // AUTH-DICE
             dirty = false;
             matchReplaced = false;
             awaitingTable = false;
@@ -467,8 +469,55 @@ namespace ConsoleCards.Presentation.Composition
             }
             else
             {
+                if (command is CommitPhysicalObjectCommand thrown
+                    && thrown.SettledDieValue.HasValue
+                    && host.TrapFloorGame.IsRulesDie(thrown.ObjectId))
+                {
+                    // AUTH-DICE: the game reads this die only once the host's result is back (TickLate waits for it).
+                    awaitingHostDice[thrown.Context.Id] = Time.unscaledTime;
+                }
+
                 SendOrderedToHost(MsgCommand, payload);
             }
+        }
+
+        // ---------- AUTH-DICE ----------
+
+        private readonly Dictionary<CommandId, float> awaitingHostDice = new Dictionary<CommandId, float>();
+        private const float HostDieWaitSeconds = 4f;
+
+        /// <summary>
+        /// A joined computer threw a die a rule reads (Full) and the host's result is not back yet. The game does not read
+        /// the die meanwhile, so it never acts on a face the host then replaces.
+        /// </summary>
+        internal bool RulesDiceAwaitingHost
+        {
+            get
+            {
+                if (awaitingHostDice.Count == 0) return false;
+                float now = Time.unscaledTime;
+                List<CommandId> late = null;
+                foreach (KeyValuePair<CommandId, float> pair in awaitingHostDice)
+                {
+                    if (now - pair.Value > HostDieWaitSeconds) (late ??= new List<CommandId>()).Add(pair.Key);
+                }
+
+                if (late != null)
+                {
+                    for (int i = 0; i < late.Count; i++) awaitingHostDice.Remove(late[i]);
+                    Debug.LogWarning("[Authority] The host's die result did not come back in time; asking for the table.");
+                    RequestTable("a die result from the host did not come back");
+                }
+
+                return awaitingHostDice.Count > 0;
+            }
+        }
+
+        private void TakeHostDieResult(CommitPhysicalObjectCommand echoed)
+        {
+            bool waited = awaitingHostDice.Remove(echoed.Context.Id);
+            if (!waited || !echoed.SettledDieValue.HasValue) return;
+            host.TakeHostDieResult(echoed);
         }
 
         private void HostCommand(Member member, byte[] message)
@@ -507,6 +556,25 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            // AUTH-DICE (owner, 2026-11-06): in Full, a die a rule reads gets the host's own result; the command that is
+            // run and sent on (to the thrower too, which turns its die to match) carries it.
+            byte[] rewrittenPayload = null;
+            if (command is CommitPhysicalObjectCommand thrown
+                && host.TrapFloorGame.TryHostRulesDie(thrown, out CommitPhysicalObjectCommand hostResult))
+            {
+                try
+                {
+                    rewrittenPayload = TableWire.Write(hostResult, false);
+                    command = hostResult;
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning($"[Authority] The host's die result could not be sent ({exception.Message}); the throw is refused.");
+                    SendTable(member);
+                    return;
+                }
+            }
+
             List<PlayerId> outBefore = host.TrapFloorGame.OutPlayersNow(); // NOTICE-REMOTE
             ReplayOutcome outcome = Replicated.Replay(command);
             host.TrapFloorGame.AnnounceOutChanges(outBefore);
@@ -514,8 +582,9 @@ namespace ConsoleCards.Presentation.Composition
             {
                 case ReplayOutcome.Accepted:
                     BeginOrdered(MsgCommand);
-                    writer.Write(message, 9, message.Length - 9);
-                    BroadcastPrepared(null); // the sender too: it knows its own and skips it
+                    if (rewrittenPayload != null) writer.Write(rewrittenPayload);
+                    else writer.Write(message, 9, message.Length - 9);
+                    BroadcastPrepared(null); // the sender too: it knows its own and skips it (a host die result it takes)
                     break;
                 case ReplayOutcome.OtherTable:
                     break; // made on a table replaced since; the new one is already on its way to them
@@ -532,6 +601,8 @@ namespace ConsoleCards.Presentation.Composition
             List<PlayerId> outBefore = host.TrapFloorGame.OutPlayersNow(); // NOTICE-REMOTE
             ReplayOutcome outcome = Replicated.Replay(command);
             host.TrapFloorGame.AnnounceOutChanges(outBefore);
+            if (outcome == ReplayOutcome.AlreadyApplied && command is CommitPhysicalObjectCommand own)
+                TakeHostDieResult(own); // AUTH-DICE: our own throw came back; a rules die shows the host's result
             if (outcome == ReplayOutcome.Rejected || outcome == ReplayOutcome.Unknown) RequestTable("a change from the host did not fit this table");
         }
 
@@ -692,9 +763,9 @@ namespace ConsoleCards.Presentation.Composition
             return changes + rulesRefused;
         }
 
-        // AUTH-RULES (owner, 2026-11-06): the game's rules state in a pushed table is merged against the host's own
-        // (TrapFloorRulesPushGuard): Keys, escapes, collapse, turn and floor result stay the host's; an elimination is
-        // applied by the host only when its own table shows why; the sender's own Trap outcomes and statuses are taken.
+        // AUTH-RULES-2 (owner, 2026-11-06): the game's rules state in a pushed table is never taken. Every rules step comes
+        // as a command the host replayed (AUTH-EFFECTS), so the host's own state already holds it; a push that differs is
+        // logged and the sender is set right (TrapFloorRulesPushGuard).
         private ICartridgeUndoState KeepHostRules(ICartridgeUndoState pushed, Member member, ref int refusedCount)
         {
             if (host.trapFloorTemplate == null) return pushed; // another game: no rules state of Trap Floor's
@@ -702,7 +773,7 @@ namespace ConsoleCards.Presentation.Composition
             ICartridgeUndoState merged;
             try
             {
-                merged = host.TrapFloorGame.HostMergePushedRules(pushed, new PlayerId(member.Player), refused, null);
+                merged = host.TrapFloorGame.HostMergePushedRules(pushed, new PlayerId(member.Player), refused);
             }
             catch (Exception exception)
             {
@@ -784,6 +855,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             Replicated.ForgetAppliedCommands();
+            awaitingHostDice.Clear(); // AUTH-DICE: the table now holds the host's results
             dirty = false;
             matchReplaced = false;
             awaitingTable = false;

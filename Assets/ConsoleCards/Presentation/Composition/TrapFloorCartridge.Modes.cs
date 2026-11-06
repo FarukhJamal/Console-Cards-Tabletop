@@ -289,10 +289,7 @@ namespace ConsoleCards.Presentation.Composition
                     // The pawn leaves the floor and the player takes no more turns this floor.
                     EndAbilityOffer(); // as End Turn does: the Ability draw not bought goes back
                     SendEscapedPawnAway(active);
-                    host.trapFloorTurnService.MarkPlayerEliminatedForCurrentRound(
-                        host.matchState,
-                        host.CreateCommandContext(active),
-                        active);
+                    SubmitElimination(active, TrapFloorEliminationReason.Escaped, active); // AUTH-EFFECTS: the host sees the escape
                 }
             }
             finally
@@ -341,10 +338,10 @@ namespace ConsoleCards.Presentation.Composition
                         ? TeamHasKey(player)
                         : host.trapFloorObjectiveUseCase.HasClaimedKey(player);
                     if (hasKey) continue;
-                    TrapFloorTurnAdvanceResult knocked = host.trapFloorTurnService.MarkPlayerEliminatedForCurrentRound(
-                        host.matchState,
-                        host.CreateCommandContext(player),
-                        player);
+                    TrapFloorTurnAdvanceResult knocked = SubmitElimination( // AUTH-EFFECTS: every table checks "stuck" itself
+                        player,
+                        TrapFloorEliminationReason.StuckWithoutKey,
+                        host.trapFloorTurnState.ActivePlayerId);
                     if (!knocked.Succeeded) continue;
                     anyOut = true;
                     host.FeedbackLine(
