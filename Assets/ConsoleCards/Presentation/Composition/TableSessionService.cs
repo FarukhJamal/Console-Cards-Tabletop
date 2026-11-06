@@ -332,6 +332,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal bool TryReplaceTable(TabletopSessionSelection selection)
         {
+            host.privateViewActive = false; // PRIVACY-SCENE (s146): any new table leaves the development private view
             if (sessionBootstrapService == null || host.sessionTemplateCatalog == null)
             {
                 host.gameTemplatesPanelError = "Game Template loading is not configured.";

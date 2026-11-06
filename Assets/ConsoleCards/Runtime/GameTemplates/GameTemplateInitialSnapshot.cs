@@ -221,6 +221,17 @@ namespace ConsoleCards.GameTemplates
             return projected;
         }
 
+        // PRIVACY-SCENE (s146): the same table under another local session's ids (the development private view is
+        // shown in an Empty Table session, which keeps its own Match and Template ids).
+        public GameTemplateInitialSnapshot ForSession(MatchId matchId, GameTemplateId gameTemplateId)
+        {
+            GameTemplateInitialSnapshot copy = new GameTemplateInitialSnapshot(
+                matchId, gameTemplateId, Revision, objects, containers, containerPlacements, placedConsoles, seats, playAreas,
+                templateObjectIds, templateContainerIds, physicalCommands);
+            copy.placedBoards = placedBoards;
+            return copy;
+        }
+
         public MatchState Restore()
         {
             return Restore(Revision);

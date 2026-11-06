@@ -5010,8 +5010,7 @@ namespace ConsoleCards.Presentation.Composition
         internal const string CollapseHintId = "helper.trapfloor.collapse";
 
         internal static string CollapseHintText(TrapFloorCollapseRollState roll) =>
-            $"The floor dice rolled {roll.XAxisResult} and {roll.YAxisResult}: column {roll.XAxisResult}, "
-            + $"row {roll.YAxisResult} is a hole now. Moves cannot cross holes.";
+            TrapFloorCollapseHint.Text(roll.XAxisResult, roll.YAxisResult);
 
         /// <summary>
         /// REFUSAL-CORRECTION (s145): after this computer takes the host's table (for example when the host refused a
@@ -5022,8 +5021,10 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!IsShownHint(CollapseHintId)) return;
             TrapFloorCollapseRollState roll = host.trapFloorCollapseState?.LastRoll;
-            string expected = roll != null && host.trapFloorCollapseState.IsCollapsed(roll.FloorCardId) ? CollapseHintText(roll) : null;
-            if (host.shownHint == null || host.shownHint.Text != expected) host.RulesCardPanel.HideShownHint();
+            bool keep = TrapFloorCollapseHint.KeepAfterHostTable(
+                host.shownHint?.Text, roll != null, roll?.XAxisResult ?? 0, roll?.YAxisResult ?? 0,
+                roll != null && host.trapFloorCollapseState.IsCollapsed(roll.FloorCardId));
+            if (!keep) host.RulesCardPanel.HideShownHint();
         }
         // The holding reminder outranks every tip; the other reminders let a rule's own tip show first (twice at most).
         internal const int HoldHintPriority = 8;

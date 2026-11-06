@@ -607,6 +607,9 @@ namespace ConsoleCards.Presentation.Composition
                 member != null ? member.Instance : Guid.Empty, instance);
             if (member != null && member.IsHost)
             {
+                // REJOIN-DIAG (s146): which copy sent the host's own key (no key is logged).
+                Debug.Log($"[Online] Refused a hello carrying the host's own seat key from connection {connection} "
+                    + $"({(instance == processInstance ? "this same running copy" : instance == Guid.Empty ? "a copy that sent no instance id" : "another running copy")}).");
                 Kick(connection, "That seat key belongs to the host.");
                 return;
             }

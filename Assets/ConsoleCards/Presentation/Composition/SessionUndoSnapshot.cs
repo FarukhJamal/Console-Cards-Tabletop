@@ -30,6 +30,10 @@ namespace ConsoleCards.Presentation.Composition
         public TableMarkSet TableMarks { get; }
 
         /// <summary>M1a (2026-11-05): the same snapshot without the payment in progress, for sending to other computers.</summary>
+        /// <summary>PRIVACY-SCENE (s146): a recipient's table alone (no game rules state, no payment, no marks).</summary>
+        internal static SessionUndoSnapshot ForRecipientView(GameTemplateInitialSnapshot match) =>
+            new SessionUndoSnapshot(match, null, null, null);
+
         public SessionUndoSnapshot WithoutPayment() =>
             PendingControllerPurchase == null ? this : new SessionUndoSnapshot(Match, GameState, null, TableMarks);
 

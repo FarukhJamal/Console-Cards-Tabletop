@@ -37,6 +37,7 @@ using ConsoleCards.Presentation.UI;
 using ConsoleCards.Presentation.UI.Toolbox;
 using ConsoleCards.Presentation.Views;
 using ConsoleCards.Presentation.Views.Containers;
+using ConsoleCards.GameTemplates.Privacy;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -495,6 +496,14 @@ namespace ConsoleCards.Presentation.Composition
             string label)
         {
             visualReferences.AlignFaceLabelsToSurface(host.tabletopLocalOrderHeight);
+            // PRIVACY-SCENE (s146): a card this computer may not identify is drawn on its own path, never as a missing
+            // definition: no face art is looked up, no name is written, the game's card back is shown.
+            if (card.BaseState.DefinitionId.Equals(RecipientSnapshotProjection.HiddenDefinition))
+            {
+                ConfigureHiddenCardVisuals(visualReferences, card);
+                return;
+            }
+
             bool isButtonCard = host.IsButtonCard(card);
             bool isBoardPiece = host.ActiveCartridge.IsBoardTile(card.BaseState.Id); // also a lifted collapsed tile
             Color frontColor = isButtonCard
@@ -518,6 +527,19 @@ namespace ConsoleCards.Presentation.Composition
                 frontLabel = avatarDefinition.DisplayName;
                 frontArtwork = host.AvatarArt(avatarDefinition);
             }
+            else if (host.privateViewActive && !host.ActiveCartridge.IsBoardTile(card.BaseState.Id))
+            {
+                // PRIVACY-SCENE diagnostics (case 2): an identity was sent but this computer has no such card.
+                host.privateViewDiagnostics.MissingDefinition++;
+                Debug.LogError($"[PrivateView] Card {card.BaseState.Id} has definition {card.BaseState.DefinitionId}, which this computer does not know: drawn with the plain fallback. Not a hidden card.");
+            }
+
+            if (host.privateViewActive && authoredDefinition != null && frontArtwork == null)
+            {
+                host.privateViewDiagnostics.MissingFrontArt++; // case 3: the card is known, its picture is not
+                Debug.LogWarning($"[PrivateView] Card {card.BaseState.Id} ({authoredDefinition.DisplayName}) has no front picture here.");
+            }
+            else if (host.privateViewActive && (authoredDefinition != null || frontArtwork != null)) host.privateViewDiagnostics.PublicFaces++;
             if (isBoardPiece)
             {
                 // CART-1b: the game draws its own board tiles (their face, back, labels and art).
@@ -587,6 +609,28 @@ namespace ConsoleCards.Presentation.Composition
 
             // ICON-1, FRAME-1: the game's frame on the card front, with a tab and symbol at each icon place.
             host.ApplyCardIcons(visualReferences, isBoardPiece ? null : authoredDefinition, card.BaseState.DefinitionId);
+        }
+
+        private static readonly Color HiddenFaceColor = new Color(0.16f, 0.16f, 0.18f);
+        private static readonly Color HiddenBackColor = new Color(0.32f, 0.12f, 0.36f); // never the legacy fallback blue
+
+        // PRIVACY-SCENE (s146): the deliberate look of a hidden card (case 1). The back is the game's own card-back
+        // picture (public content); without one it is a named error, not the plain fallback.
+        private void ConfigureHiddenCardVisuals(CardVisualReferences visualReferences, CardInstanceState card)
+        {
+            Texture2D back = host.privateViewCardBack;
+            if (back == null) Debug.LogError($"[PrivateView] No card-back picture for hidden card {card.BaseState.Id}: shown in the hidden-card colour.");
+            host.ApplyCardArtwork(visualReferences.FaceUpRenderer, null);
+            host.ApplyCardArtwork(visualReferences.FaceDownRenderer, back);
+            host.ApplySuppliedModelArtwork(visualReferences, null, back, HiddenFaceColor, back != null ? Color.white : HiddenBackColor);
+            ApplyCardColor(visualReferences.FaceUpRenderer, HiddenFaceColor);
+            ApplyCardColor(visualReferences.FaceDownRenderer, back != null ? Color.white : HiddenBackColor);
+            ConfigureWorldLabel(visualReferences.FrontLabel, string.Empty, CardLabelCharacterSize, CardLabelFontSize);
+            ConfigureWorldLabel(visualReferences.BackLabel, string.Empty, CardBackLabelCharacterSize, CardLabelFontSize);
+            SetLabelRendererVisible(visualReferences.FrontLabel, false);
+            SetLabelRendererVisible(visualReferences.BackLabel, false);
+            host.ApplyCardIcons(visualReferences, null, card.BaseState.DefinitionId);
+            host.privateViewDiagnostics.HiddenBacks++;
         }
 
         internal static void SetLabelRendererVisible(TextMesh label, bool visible)
