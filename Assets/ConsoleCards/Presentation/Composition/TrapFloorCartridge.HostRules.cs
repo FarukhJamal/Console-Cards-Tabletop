@@ -318,8 +318,8 @@ namespace ConsoleCards.Presentation.Composition
                 commit.ExpectedPhysicalRevision,
                 value,
                 commit.RecordMode);
-            Debug.Log($"[Authority] Rules die (d{die.SideCount}) thrown by another computer: the host's result is {value} "
-                + $"(it showed {commit.SettledDieValue.Value}).");
+            Debug.Log($"[Authority] Rules die (d{die.SideCount}) thrown{(host.IsPlayerOnThisComputer(commit.Context.RequestedByPlayerId) && !host.Replicated.Replaying ? " here" : " by another computer")}: "
+                + $"the host's result is {value} (it showed {commit.SettledDieValue.Value}).");
             return true;
         }
 

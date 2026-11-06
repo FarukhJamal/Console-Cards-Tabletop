@@ -289,6 +289,32 @@ namespace ConsoleCards.Tests
             Assert.IsTrue(TrapFloorUndoEligibility.IsRulesResult(afterReveal, h.Snap()), "a Trap applied");
         }
 
+        // FAIR-UNDO (s141): an escape is batched with its elimination, so the step that escapes is a rules result and
+        // cannot be taken back in Full: undoing it cannot hand the floor's win back after later effects relied on it.
+        [Test]
+        public void UndoEligibility_AnEscapeStep_IsARulesResult()
+        {
+            Host h = Host.Create();
+            PlayerId me = h.Active;
+            TrapFloorSessionStateSnapshot before = h.Snap();
+            h.Ev.Escaped.Add(me);
+            Assert.IsTrue(h.Exec.Eliminate(h.T.Match, new TrapFloorEliminatePlayerCommand(h.Ctx(me), me, TrapFloorEliminationReason.Escaped)).Succeeded);
+            Assert.IsTrue(TrapFloorUndoEligibility.IsRulesResult(before, h.Snap()), "the escape's elimination");
+        }
+
+        // FAIR-UNDO (s141): the rules-result verdict does not depend on who asks (the host player's MayUndo applies the
+        // same IsRulesResultStep test locally; this pins that the policy has no seat-specific exception).
+        [Test]
+        public void RulesResultVerdict_DoesNotDependOnTheRequester()
+        {
+            HostUndoPolicy policy = new HostUndoPolicy();
+            PlayerId host = new PlayerId(Guid.NewGuid()), guest = new PlayerId(Guid.NewGuid());
+            CommandId step = CommandId.New();
+            Assert.AreEqual(policy.Check(guest, Guid.NewGuid(), step, true, step, guest, true),
+                policy.Check(host, Guid.NewGuid(), step, true, step, host, true));
+            Assert.AreEqual(HostUndoVerdict.RulesResult, policy.Check(host, Guid.NewGuid(), step, true, step, host, true));
+        }
+
         [Test]
         public void UndoEligibility_NothingRulesDriven_IsNotARulesResult()
         {

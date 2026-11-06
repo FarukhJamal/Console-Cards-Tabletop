@@ -52,6 +52,20 @@ namespace ConsoleCards.Presentation.Composition
         {
             undoRefusal = null;
             if (!sharedTable || transaction == null || transaction.ActorPlayerId.IsEmpty) return true;
+            // FAIR-UNDO (owner, 2026-11-06: "the host player must follow the same game-rule Undo restrictions as guests"):
+            // in Full the host player's own Undo of a rules result is refused as a guest's is. Requests from joined
+            // computers were checked already (HostUndo). There is no game-master override.
+            if (!redo && hosting && undoRequestPlayer == Guid.Empty
+                && host.undoHistory.TryPeekUndo(out SessionUndoSnapshot before, out ActiveSessionUndoTransaction latest)
+                && latest.CommandId == transaction.CommandId
+                && host.TrapFloorGame.IsRulesResultStep(before.GameState, host.undoHistory.CurrentState.GameState, transaction.CommandId))
+            {
+                undoRefusal = HostUndoPolicy.Describe(HostUndoVerdict.RulesResult, false);
+                host.ShowMessage(undoRefusal);
+                Debug.Log("[Authority] Undo by the host player: refused (RulesResult).");
+                return false;
+            }
+
             PlayerId actor = transaction.ActorPlayerId;
             bool allowed = undoRequestPlayer != Guid.Empty ? actor.Value == undoRequestPlayer : IsLocalPlayer(actor);
             if (allowed) return true;

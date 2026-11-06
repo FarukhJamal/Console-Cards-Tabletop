@@ -44,6 +44,13 @@ namespace ConsoleCards.Presentation.Interaction
         /// <summary>MP-2: false on a joined computer: a new piece's first resting place is the host's to commit.</summary>
         public Func<bool> MayCommitInitialState { get; set; }
 
+        /// <summary>
+        /// FAIR-DICE (owner, 2026-11-06: "the host player's rule-dependent dice must follow the same result-generation,
+        /// roll-locking and reroll rules as guests"): on the host, a settle of a die a rule reads is given the same host
+        /// result a guest's throw gets, before it is run. Null (or a null result): the commit runs as it is.
+        /// </summary>
+        public Func<CommitPhysicalObjectCommand, CommitPhysicalObjectCommand> RulesDieResult { get; set; }
+
         internal bool MayCommitFirstState => MayCommitInitialState == null || MayCommitInitialState();
 
         /// <summary>MP-2: true when another computer's player holds the piece (it cannot be taken from them).</summary>
@@ -111,9 +118,11 @@ namespace ConsoleCards.Presentation.Interaction
             if (IsLocalPlayer != null && !IsLocalPlayer(state.ControllingPlayerId)) return false; // MP-2: its own computer commits it
             if (!view.IsBound || !match.ContainsObject(view.ObjectId)
                 || !ReferenceEquals(view.BoundState, match.GetObject(view.ObjectId))) return false;
-            return tableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(new CommitPhysicalObjectCommand(
+            CommitPhysicalObjectCommand command = new CommitPhysicalObjectCommand(
                 new CommandContext(CommandId.New(), match.Id, state.ControllingPlayerId, match.Revision),
-                view.ObjectId, state, view.BoundState.PhysicalRevision, value, recordMode)).Succeeded;
+                view.ObjectId, state, view.BoundState.PhysicalRevision, value, recordMode);
+            if (value.HasValue && RulesDieResult != null) command = RulesDieResult(command) ?? command; // FAIR-DICE
+            return tableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(command).Succeeded;
         }
 
         internal bool Commit(TabletopObjectView view, PhysicalObjectState state, int? value)

@@ -61,6 +61,15 @@ namespace ConsoleCards.Presentation.Composition
         private readonly CommandScopedIdentitySource commandIds = new CommandScopedIdentitySource();
         private Func<PlayerId, bool> playerHereCheck;
         private Func<bool> initialPhysicsCheck;
+        private Func<CommitPhysicalObjectCommand, CommitPhysicalObjectCommand> rulesDieResult;
+
+        // FAIR-DICE: the host player's own throw of a die a rule reads (Full, online) gets the host result a guest's
+        // throw gets: the same random source, the same roll lock in a turn and the same re-rolls by the rules.
+        private CommitPhysicalObjectCommand HostPlayerRulesDieResult(CommitPhysicalObjectCommand commit)
+        {
+            if (online == null || !online.IsHosting || !online.TableShared) return null;
+            return TrapFloorGame.TryHostRulesDie(commit, out CommitPhysicalObjectCommand hostResult) ? hostResult : null;
+        }
 
         /// <summary>Online play: the room, its players and the shared table (made the first time it is needed).</summary>
         internal OnlinePlayPresenter Online => online ?? (online = new OnlinePlayPresenter(this));
@@ -173,6 +182,7 @@ namespace ConsoleCards.Presentation.Composition
             if (initialPhysicsCheck == null) initialPhysicsCheck = MayCommitFirstPhysicalState;
             physicalAuthority.IsLocalPlayer = playerHereCheck;
             physicalAuthority.MayCommitInitialState = initialPhysicsCheck;
+            physicalAuthority.RulesDieResult = rulesDieResult ??= HostPlayerRulesDieResult; // FAIR-DICE
         }
 
         private bool MayCommitFirstPhysicalState() => online == null || !online.IsClientTable;

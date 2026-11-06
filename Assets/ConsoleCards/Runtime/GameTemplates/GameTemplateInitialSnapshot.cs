@@ -179,6 +179,45 @@ namespace ConsoleCards.GameTemplates
             return snapshot;
         }
 
+        // PRIVACY-PROJECTION (doc 11 v2, slice P1; NOT wired to the network): a copy of this snapshot for one
+        // recipient. Objects named in hiddenIdentity keep their place, pose and face but lose their identity: their id
+        // becomes the recipient's opaque alias and their definition the neutral hidden one. Containers named in
+        // hiddenOrder list their objects in alias order, so the real order cannot be read back. The physical command
+        // history is dropped: command ids seed each command's random numbers, so they would let a shuffle be replayed.
+        public GameTemplateInitialSnapshot ProjectFor(
+            ICollection<TabletopObjectId> hiddenIdentity,
+            Func<TabletopObjectId, TabletopObjectId> alias,
+            ICollection<ContainerId> hiddenOrder,
+            ObjectDefinitionId hiddenDefinition)
+        {
+            if (hiddenIdentity == null) throw new ArgumentNullException(nameof(hiddenIdentity));
+            if (alias == null) throw new ArgumentNullException(nameof(alias));
+            if (hiddenOrder == null) throw new ArgumentNullException(nameof(hiddenOrder));
+            TabletopObjectId Map(TabletopObjectId id) => hiddenIdentity.Contains(id) ? alias(id) : id;
+
+            List<ObjectSnapshot> projectedObjects = new List<ObjectSnapshot>(objects.Count);
+            foreach (ObjectSnapshot item in objects)
+                projectedObjects.Add(hiddenIdentity.Contains(item.Id) ? item.Hidden(alias(item.Id), hiddenDefinition) : item);
+
+            List<ContainerSnapshot> projectedContainers = new List<ContainerSnapshot>(containers.Count);
+            foreach (ContainerSnapshot container in containers)
+            {
+                List<TabletopObjectId> order = new List<TabletopObjectId>(container.OrderedObjectIds.Count);
+                foreach (TabletopObjectId id in container.OrderedObjectIds) order.Add(Map(id));
+                if (hiddenOrder.Contains(container.Id)) order.Sort((a, b) => a.Value.CompareTo(b.Value));
+                projectedContainers.Add(container.WithOrder(order));
+            }
+
+            List<TabletopObjectId> projectedTemplateObjects = new List<TabletopObjectId>(templateObjectIds.Count);
+            foreach (TabletopObjectId id in templateObjectIds) projectedTemplateObjects.Add(Map(id));
+
+            GameTemplateInitialSnapshot projected = new GameTemplateInitialSnapshot(
+                MatchId, GameTemplateId, Revision, projectedObjects, projectedContainers, containerPlacements,
+                placedConsoles, seats, playAreas, projectedTemplateObjects, templateContainerIds, Array.Empty<CommandId>());
+            projected.placedBoards = placedBoards;
+            return projected;
+        }
+
         public MatchState Restore()
         {
             return Restore(Revision);
@@ -381,6 +420,26 @@ namespace ConsoleCards.GameTemplates
                     die.CurrentValue);
             }
 
+            // PRIVACY-PROJECTION: the same object with an opaque id and the neutral definition.
+            private ObjectSnapshot(ObjectSnapshot from, TabletopObjectId id, ObjectDefinitionId definitionId)
+            {
+                Id = id;
+                DefinitionId = definitionId;
+                Kind = from.Kind;
+                Pose = from.Pose;
+                PhysicalState = from.PhysicalState;
+                PhysicalRevision = from.PhysicalRevision;
+                OwnerPlayerId = from.OwnerPlayerId;
+                Visibility = from.Visibility;
+                IsUserLocked = from.IsUserLocked;
+                Face = from.Face;
+                DieSideCount = from.DieSideCount;
+                DieValue = from.DieValue;
+            }
+
+            public ObjectSnapshot Hidden(TabletopObjectId id, ObjectDefinitionId definitionId) =>
+                new ObjectSnapshot(this, id, definitionId);
+
             public TabletopObjectState CreateBaseState()
             {
                 TabletopObjectState state = new TabletopObjectState(
@@ -398,6 +457,20 @@ namespace ConsoleCards.GameTemplates
 
         private sealed class ContainerSnapshot
         {
+            // PRIVACY-PROJECTION: the same container listing a recipient's view of its objects.
+            private ContainerSnapshot(ContainerSnapshot from, IReadOnlyList<TabletopObjectId> order)
+            {
+                Id = from.Id;
+                Kind = from.Kind;
+                OwnerSeatId = from.OwnerSeatId;
+                Visibility = from.Visibility;
+                Capacity = from.Capacity;
+                ArrivalFace = from.ArrivalFace;
+                OrderedObjectIds = new ReadOnlyCollection<TabletopObjectId>(new List<TabletopObjectId>(order));
+            }
+
+            public ContainerSnapshot WithOrder(IReadOnlyList<TabletopObjectId> order) => new ContainerSnapshot(this, order);
+
             public ContainerSnapshot(ContainerState container)
             {
                 Id = container.Id;
