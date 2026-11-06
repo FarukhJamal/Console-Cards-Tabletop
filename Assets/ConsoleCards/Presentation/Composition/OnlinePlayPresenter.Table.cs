@@ -840,6 +840,7 @@ namespace ConsoleCards.Presentation.Composition
                 List<PlayerId> outBefore = another ? null : host.TrapFloorGame.OutPlayersNow();
                 if (ok) ok = host.RestoreOnlineSnapshot(packet.Snapshot, setup.Revision, out error);
                 if (ok) host.TrapFloorGame.AnnounceOutChanges(outBefore);
+                if (ok && !hosting) host.TrapFloorGame.RevalidateHintsAfterHostTable(); // REFUSAL-CORRECTION
             }
             catch (Exception exception)
             {

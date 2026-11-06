@@ -219,8 +219,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 return TrapFloorCartridge.HelperReminder(TrapFloorCartridge.CollapseHintId, trigger, context,
-                    $"The floor dice rolled {roll.XAxisResult} and {roll.YAxisResult}: column {roll.XAxisResult}, "
-                    + $"row {roll.YAxisResult} is a hole now. Moves cannot cross holes.",
+                    TrapFloorCartridge.CollapseHintText(roll),
                     TrapFloorCartridge.HelperHintPriority);
             }
 
