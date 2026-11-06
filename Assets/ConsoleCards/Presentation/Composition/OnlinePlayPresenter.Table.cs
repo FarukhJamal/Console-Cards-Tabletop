@@ -205,6 +205,12 @@ namespace ConsoleCards.Presentation.Composition
             roomGame = gameName ?? string.Empty;
             roomStarted = true;
             for (int i = 0; i < members.Count; i++) members[i].Ready = members[i].IsHost; // the next game asks again
+            if (PrivateDevSession.Enabled && StartPrivateHosting())
+            {
+                BroadcastRoster(); // PRIVACY-P4: seats as usual; no sharing, no content push, no table
+                return true;
+            }
+
             StartSharing(true);
             BroadcastRoster();
             SendContentToRoom(); // MP-4: everyone gets the host's content before the table dealt with it
@@ -279,6 +285,11 @@ namespace ConsoleCards.Presentation.Composition
                 seed = applySetup.Seed;
                 lastFloorIndex = applySetup.FloorIndex;
             }
+            else if (PreparePrivateHostSeed(out int privateDealSeed))
+            {
+                seed = privateDealSeed; // PRIVACY-P4: the host's own deal; the seed never leaves this computer
+                lastFloorIndex = host.trapFloorNextFloorIndex;
+            }
             else if (sharedTable && hosting)
             {
                 lock (SeedRandom) seed = SeedRandom.Next();
@@ -314,7 +325,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (!sharedTable || !hosting || seatPlayers.Count == 0) return;
+            if ((!sharedTable && !privateHosting) || !hosting || seatPlayers.Count == 0) return; // PRIVACY-P4: the room's seats too
             int count = selection.Kind == TabletopSessionKind.EmptyCustom ? seatPlayers.Count : players.Count;
             players.Clear();
             for (int i = 0; i < count; i++)

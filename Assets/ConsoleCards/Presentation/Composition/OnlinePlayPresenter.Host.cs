@@ -175,6 +175,14 @@ namespace ConsoleCards.Presentation.Composition
         private void HostMayHaveLeft()
         {
             if (hosting || members.Count < 2) return;
+            if (privateGuest)
+            {
+                // PRIVACY-P4: a private guest holds only its own package; it never becomes the host. It waits for its own
+                // connection to come back, and the session ends if the host is gone.
+                PrivateNote("Lost the room: a private guest never takes over; waiting for the host.");
+                session.ExpectNewHost(NewHostWaitSeconds);
+                return;
+            }
             if (IsNextHost())
             {
                 takingOver = true;
@@ -189,6 +197,15 @@ namespace ConsoleCards.Presentation.Composition
         // This computer now hosts the room it was in: the players stay, the table goes on from this computer's copy.
         private void TookOverRoom()
         {
+            if (privateGuest)
+            {
+                // PRIVACY-P4 guard: a filtered client must never be promoted to host.
+                takingOver = false;
+                EndPrivateSession("this computer was about to host the room, which a private guest never does");
+                session.LeaveRoom();
+                return;
+            }
+
             takingOver = false;
             hosting = true;
             // ASSIST-ROOM: the room keeps the level it was playing; this computer now sends it.

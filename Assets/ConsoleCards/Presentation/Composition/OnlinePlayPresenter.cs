@@ -403,6 +403,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private void LeftRoom(string why)
         {
+            if (InPrivateSession) EndPrivateSession(why); // PRIVACY-P4: no filtered table is kept as a game
             bool hadTable = sharedTable;
             StopSharing();
             ForgetRoomContent(); // MP-4: back to this profile's own cards, decks and rules
@@ -493,6 +494,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             TickTable(now);
+            TickPrivate(); // PRIVACY-P4 (private development session only)
         }
 
         private int sentAssist = -1;
@@ -511,7 +513,7 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = members.Count - 1; i >= 0; i--)
             {
                 Member member = members[i];
-                if (member.IsHost || member.Connected || sharedTable || member.LeftAt < 0f) continue;
+                if (member.IsHost || member.Connected || sharedTable || privateHosting || member.LeftAt < 0f) continue; // PRIVACY-P4: a seat waits too
                 if (now - member.LeftAt < LobbyGraceSeconds) continue;
                 members.RemoveAt(i);
                 removed = true;
@@ -537,6 +539,19 @@ namespace ConsoleCards.Presentation.Composition
 
             Member member = MemberAt(connection);
             if (member == null) return; // no hello yet
+            if (IsPrivateMessage(type))
+            {
+                HostReadPrivate(member, type, data); // PRIVACY-P4
+                return;
+            }
+
+            if (privateHosting && IsLegacyTableMessage(type))
+            {
+                legacyRefused++; // PRIVACY-P4: no command replay, table push or Undo in a private session
+                PrivateNote($"Refused normal-play table message {type} from {member.Name}.");
+                return;
+            }
+
             switch (type)
             {
                 case MsgReady:
@@ -559,7 +574,7 @@ namespace ConsoleCards.Presentation.Composition
                     HostUndo(member, data);
                     break;
                 case MsgBye:
-                    if (!sharedTable) members.Remove(member);
+                    if (!sharedTable && !privateHosting) members.Remove(member); // PRIVACY-P4: a private seat waits for its player
                     else
                     {
                         member.Connected = false;
@@ -594,7 +609,17 @@ namespace ConsoleCards.Presentation.Composition
             int colour = reader.ReadInt32();
             string contentHash = reader.BaseStream.Position < reader.BaseStream.Length ? reader.ReadString() : string.Empty;
             Guid instance = reader.BaseStream.Position + 16 <= reader.BaseStream.Length ? ReadGuid(reader) : Guid.Empty;
-            if (protocol != Protocol || !string.Equals(version, UnityEngine.Application.version, StringComparison.Ordinal))
+            if (protocol != HelloProtocol && (protocol == PrivateDevProtocol || HelloProtocol == PrivateDevProtocol))
+            {
+                // PRIVACY-P4: a private development session and a normal room never mix.
+                PrivateNote($"Refused a hello from connection {connection}: it is a {(protocol == PrivateDevProtocol ? "private development" : "normal online")} computer.");
+                Kick(connection, protocol == PrivateDevProtocol
+                    ? "This is a normal online room; your copy is in private development session mode."
+                    : "This room is a private development session; your copy plays normal online rooms.");
+                return;
+            }
+
+            if (protocol != HelloProtocol || !string.Equals(version, UnityEngine.Application.version, StringComparison.Ordinal))
             {
                 Kick(connection, $"This room plays version {UnityEngine.Application.version} of the game and yours is {version}: both need the same version.");
                 return;
@@ -639,7 +664,7 @@ namespace ConsoleCards.Presentation.Composition
                 member = new Member { Key = key, Colour = -1 };
                 members.Add(member);
                 member.Colour = NextFreeColour(member, 0, colour);
-                if (sharedTable) member.Player = OpenSeat();
+                if (sharedTable || privateHosting) member.Player = OpenSeat(); // PRIVACY-P4: an open seat, else a spectator
             }
             else if (member.Connected && member.Connection >= 0 && member.Connection != connection)
             {
@@ -660,6 +685,7 @@ namespace ConsoleCards.Presentation.Composition
             BroadcastRoster();
             RefreshHostContent(); // MP-4: the host's content goes first, then the table dealt with it
             SendContent(member);
+            if (privateHosting) SendPrivatePackage(member); // PRIVACY-P4: its own package (join, rejoin, late join), never the table
             if (sharedTable)
             {
                 SendTable(member);
@@ -685,6 +711,19 @@ namespace ConsoleCards.Presentation.Composition
         private void ClientRead(byte[] data)
         {
             byte type = data[0];
+            if (IsPrivateMessage(type))
+            {
+                ClientReadPrivate(type, data); // PRIVACY-P4
+                return;
+            }
+
+            if (PrivateDevSession.Enabled && IsLegacyTableMessage(type))
+            {
+                legacyRefused++; // PRIVACY-P4: a private guest never takes a full table, a command or a check
+                PrivateNote($"Dropped normal-play table message {type} from the host.");
+                return;
+            }
+
             switch (type)
             {
                 case MsgWelcome:
@@ -761,7 +800,7 @@ namespace ConsoleCards.Presentation.Composition
         private void SendHello()
         {
             BeginMessage(MsgHello);
-            writer.Write(Protocol);
+            writer.Write(HelloProtocol); // PRIVACY-P4: the private development session has its own protocol
             writer.Write(UnityEngine.Application.version);
             WriteGuid(clientKey);
             writer.Write(ProfileName());

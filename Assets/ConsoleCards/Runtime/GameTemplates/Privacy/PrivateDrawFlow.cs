@@ -89,11 +89,14 @@ namespace ConsoleCards.GameTemplates.Privacy
             }
         }
 
+        /// <summary>PRIVACY-P4 (s148): the public table template sent with every package (null: none).</summary>
+        public RecipientPublicLayout Layout { get; set; }
+
         /// <summary>First join, reconnect and late join alike: the recipient's own package. Never the full table.</summary>
         public byte[] Join(PlayerId recipient)
         {
             PlayerId who = seats.IsSeated(recipient) ? recipient : RecipientSnapshotProjection.Spectator;
-            return TableWire.Write(RecipientBootstrapPackage.Build(match, handles, who, labels), false);
+            return TableWire.Write(RecipientBootstrapPackage.Build(match, handles, who, labels, Layout), false);
         }
 
         public PrivateRequestVerdict Draw(PlayerId sender, PrivateDrawRequest request, out Dictionary<PlayerId, byte[]> updates)
@@ -144,6 +147,9 @@ namespace ConsoleCards.GameTemplates.Privacy
 
             if (!transfer.MoveBetweenContainers(match.Cards[real].BaseState, from, to).Succeeded) return PrivateRequestVerdict.InvalidDestination;
             if (face.HasValue) match.Cards[real].SetFace(face.Value);
+            else if (to.ArrivalFace != ContainerArrivalFace.Unchanged)
+                // The container's own arrival face, as the table's draw applies it (a card arriving in a hand turns face up).
+                match.Cards[real].SetFace(to.ArrivalFace == ContainerArrivalFace.FaceDown ? CardFace.FaceDown : CardFace.FaceUp);
 
             updates = new Dictionary<PlayerId, byte[]>();
             foreach (PlayerId r in Recipients)
@@ -225,6 +231,98 @@ namespace ConsoleCards.GameTemplates.Privacy
             lines.Sort(string.CompareOrdinal);
             using (SHA256 sha = SHA256.Create())
                 return Convert.ToBase64String(sha.ComputeHash(Encoding.UTF8.GetBytes(string.Join("\n", lines))));
+        }
+    }
+
+    /// <summary>
+    /// PRIVACY-P4 (s148): the client side of one update on the client's own table (the table its scene is built from).
+    /// The card the event names by its previous reference is taken out and put back under its new reference, with the
+    /// identity the host sent (the hidden definition for a back), in the event's container. Nothing else changes. The
+    /// host's digest is then checked against the whole table: a mismatch means the client asks for its own package
+    /// again (never a full table).
+    /// </summary>
+    public static class RecipientEventApplier
+    {
+        public static PrivateUpdate Read(byte[] updateBytes) =>
+            (PrivateUpdate)TableWire.Read(updateBytes, 0, updateBytes.Length, false);
+
+        /// <summary>Null when applied and the digest matches; otherwise what went wrong (the table may then be stale).</summary>
+        public static string Apply(MatchState table, PrivateUpdate update)
+        {
+            if (table == null) return "no table";
+            RecipientCardEvent ev = update?.Event;
+            if (ev == null) return "no event";
+            if (!table.Cards.TryGetValue(ev.PreviousReference, out CardInstanceState old)) return "the event names a card this table does not have";
+            if (ev.Definition.IsEmpty || ev.Reference.IsEmpty) return "the event has no reference or identity";
+            if (!ev.To.IsEmpty && !table.Containers.ContainsKey(ev.To)) return "the event names a container this table does not have";
+            if (!ev.Reference.Equals(ev.PreviousReference) && table.ContainsObject(ev.Reference)) return "the new reference is already in use";
+
+            TabletopObjectState was = old.BaseState;
+            table.RemoveObject(ev.PreviousReference); // also takes it out of its container
+            TabletopObjectState now = new TabletopObjectState(
+                ev.Reference, ev.Definition, TabletopObjectKind.Card, was.Pose, ContainerId.Empty,
+                was.OwnerPlayerId, was.Visibility, was.IsUserLocked);
+            table.AddUncontainedCard(new CardInstanceState(now, ev.FaceUp ? CardFace.FaceUp : CardFace.FaceDown));
+            if (!ev.To.IsEmpty && !new ContainerTransferService().PlaceIntoContainer(now, table.Containers[ev.To]).Succeeded)
+                return "the card could not be put in its container";
+
+            string digest = PrivateClientModel.FromTable(table).Digest();
+            return digest == update.Digest ? null : "the table no longer matches the host's check";
+        }
+    }
+
+    /// <summary>
+    /// PRIVACY-P4 (s148): what a guest may ask the host, as plain bytes (never a serialized object, so a client cannot
+    /// make the host build arbitrary types). It names the action and its public arguments only; never a seat or a
+    /// player: the host takes the sender from the room connection.
+    /// </summary>
+    public static class PrivateRequestCodec
+    {
+        public const byte KindDraw = 1;
+        public const byte KindPlace = 2;
+        public const int Size = 1 + 16 + 16 + 16;
+
+        public static byte[] Draw(PrivateDrawRequest request)
+        {
+            byte[] bytes = new byte[Size];
+            bytes[0] = KindDraw;
+            request.RequestId.ToByteArray().CopyTo(bytes, 1);
+            request.Deck.Value.ToByteArray().CopyTo(bytes, 17);
+            return bytes;
+        }
+
+        public static byte[] Place(PrivatePlaceRequest request)
+        {
+            byte[] bytes = new byte[Size];
+            bytes[0] = KindPlace;
+            request.RequestId.ToByteArray().CopyTo(bytes, 1);
+            request.Card.Value.ToByteArray().CopyTo(bytes, 17);
+            request.Destination.Value.ToByteArray().CopyTo(bytes, 33);
+            return bytes;
+        }
+
+        /// <summary>False for anything that is not exactly one well-formed request.</summary>
+        public static bool TryRead(byte[] bytes, int offset, out byte kind, out PrivateDrawRequest draw, out PrivatePlaceRequest place)
+        {
+            kind = 0;
+            draw = null;
+            place = null;
+            if (bytes == null || offset < 0 || bytes.Length - offset != Size) return false;
+            kind = bytes[offset];
+            Guid id = new Guid(Slice(bytes, offset + 1));
+            Guid a = new Guid(Slice(bytes, offset + 17));
+            Guid b = new Guid(Slice(bytes, offset + 33));
+            if (id == Guid.Empty) return false;
+            if (kind == KindDraw) { draw = new PrivateDrawRequest { RequestId = id, Deck = new ContainerId(a) }; return b == Guid.Empty; }
+            if (kind == KindPlace) { place = new PrivatePlaceRequest { RequestId = id, Card = new TabletopObjectId(a), Destination = new ContainerId(b) }; return true; }
+            return false;
+        }
+
+        private static byte[] Slice(byte[] bytes, int at)
+        {
+            byte[] part = new byte[16];
+            Array.Copy(bytes, at, part, 0, 16);
+            return part;
         }
     }
 }

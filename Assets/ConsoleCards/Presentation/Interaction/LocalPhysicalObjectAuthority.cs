@@ -116,6 +116,8 @@ namespace ConsoleCards.Presentation.Interaction
             AuthoritativeActionRecordMode recordMode)
         {
             if (IsLocalPlayer != null && !IsLocalPlayer(state.ControllingPlayerId)) return false; // MP-2: its own computer commits it
+            // PRIVACY-P4: a door that takes no physics commits (the private view's) is not asked every frame.
+            if (!tableAuthority.CanSubmit<CommitPhysicalObjectCommand>()) return false;
             if (!view.IsBound || !match.ContainsObject(view.ObjectId)
                 || !ReferenceEquals(view.BoundState, match.GetObject(view.ObjectId))) return false;
             CommitPhysicalObjectCommand command = new CommitPhysicalObjectCommand(
