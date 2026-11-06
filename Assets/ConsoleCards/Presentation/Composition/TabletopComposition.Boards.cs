@@ -109,15 +109,15 @@ namespace ConsoleCards.Presentation.Composition
         // cells (CART-1b: the cartridge gives the grid).
         private void ApplyTemplateBoardMat(BoxCollider boardCollider)
         {
-            if (boardMatPrefab == null || !ActiveCartridge.TryGetBoardGrid(out GridDefinitionData floor)) return;
+            if (boardMatPrefab == null || !TryGetTableBoardGrid(out GridDefinitionData floor)) return;
             // MAT-2 (owner, 2026-10-22: "board 6x6 visually and cards on 5x5"): the board keeps the first floor's spaces;
             // a smaller floor's tiles lie on them from the first row and column. BOARD-1 (owner, 2026-10-23): the spaces
             // fill the game's playmat like the printed board (Trap Floor: 10 x 6), and the board menu's Columns and
             // Rows (+ / -) set them exactly; the floor's tiles always land on spaces.
-            int removed = Math.Max(0, ActiveCartridge.BoardRemovedSpaces);
+            int removed = Math.Max(0, TableBoardRemovedSpaces);
             int floorColumns = floor.Columns + removed;
             int floorRows = floor.Rows + removed;
-            Vector2 playMat = ActiveCartridge.BoardMatSize;
+            Vector2 playMat = TableBoardMatSize;
             float spaceWidth = (float)floor.CellWidth;
             float spaceDepth = (float)floor.CellHeight;
             float gap = (float)Math.Max(floor.HorizontalSpacing, 0d);
@@ -128,7 +128,7 @@ namespace ConsoleCards.Presentation.Composition
                 spaceDepth,
                 gap,
                 playMat.x > 0f ? PlayMatSpaceFrame : BoardGrid.Standard.Frame);
-            if (templateBoardMat == null) templateBoardMat = CreateBoardMatInstance($"{ActiveCartridge.DisplayName} Board Mat", grid);
+            if (templateBoardMat == null) templateBoardMat = CreateBoardMatInstance($"{(privateViewActive ? "Private View" : ActiveCartridge.DisplayName)} Board Mat", grid);
             else templateBoardMat.Apply(grid);
             templateBoardMat.SetSurfaceEnabled(false); // the board's own surface holds the floor tiles
             Transform board = boardCollider.transform;
@@ -163,7 +163,7 @@ namespace ConsoleCards.Presentation.Composition
                 if (matWidth > grid.Width || matDepth > grid.Depth) templateBoardMat.SetSurfaceEnabled(true);
             }
 
-            templateBoardMat.SetMatPicture(ActiveCartridge.BoardMatPicture);
+            templateBoardMat.SetMatPicture(privateViewActive ? privateViewBoardPicture : ActiveCartridge.BoardMatPicture);
             if (gameBoardVisualRoot != null) gameBoardVisualRoot.gameObject.SetActive(false);
         }
 

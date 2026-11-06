@@ -586,7 +586,7 @@ namespace ConsoleCards.Presentation.Composition
         // its place in the table's player layout.
         internal bool TryGetGameSeat(PlayerId player, out CartridgeSeat seat)
         {
-            IReadOnlyList<CartridgeSeat> seats = ActiveCartridge.Seats;
+            IReadOnlyList<CartridgeSeat> seats = TableSeats;
             if (!player.IsEmpty && matchState != null)
             {
                 for (int i = 0; i < seats.Count; i++)

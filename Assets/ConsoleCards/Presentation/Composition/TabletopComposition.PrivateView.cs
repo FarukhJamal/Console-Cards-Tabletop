@@ -1,41 +1,193 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.Serialization;
 using System.Text;
 using ConsoleCards.Application.Authority;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Match;
+using ConsoleCards.Core.Domain.Seats;
 using ConsoleCards.Core.Identifiers;
+using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
+using ConsoleCards.GameTemplates.Definitions;
 using ConsoleCards.GameTemplates.Privacy;
 using ConsoleCards.Presentation.Views;
+using ConsoleCards.Presentation.Views.Containers;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Composition
 {
-    /// <summary>How the private view drew its cards (PRIVACY-SCENE diagnostics; the four cases stay apart).</summary>
+    /// <summary>
+    /// How the private view drew its cards (PRIVACY-SCENE diagnostics). The cases stay apart, and each set counts
+    /// cards, not drawing passes: a card styled twice is still one card.
+    /// </summary>
     internal sealed class PrivateViewDiagnostics
     {
-        public int HiddenBacks;       // case 1: legitimately hidden, drawn as the game's card back
-        public int MissingDefinition; // case 2: an identity was sent that this computer does not know
-        public int MissingFrontArt;   // case 3: the card is known, its picture is not
-        public int PublicFaces;       // public cards drawn with their own look
-        public int MissingViews;      // case 4: a card of the table got no view
+        public readonly HashSet<TabletopObjectId> HiddenBacks = new HashSet<TabletopObjectId>();       // A: legitimately hidden
+        public readonly HashSet<TabletopObjectId> MissingDefinition = new HashSet<TabletopObjectId>(); // B: identity sent, not known here
+        public readonly HashSet<TabletopObjectId> MissingFrontArt = new HashSet<TabletopObjectId>();   // C: known card, no picture
+        public readonly HashSet<TabletopObjectId> PublicFaces = new HashSet<TabletopObjectId>();       // public cards with their own look
+        public int MissingViews;                                                                        // D: a card of the table got no view
+        public int ArtPasses;                                                                           // how many times a card was styled
+
+        public void Note(HashSet<TabletopObjectId> set, TabletopObjectId id)
+        {
+            ArtPasses++;
+            set.Add(id);
+        }
+    }
+
+    /// <summary>
+    /// PRIVACY-SCENE-2 (s147): while a private view is shown, every table command is refused here. The filtered copy
+    /// is never changed by the legacy use cases, and nothing falls back to a full-state command. Results are the same
+    /// "not run" results the replicated door gives (Succeeded is false).
+    /// </summary>
+    internal sealed class PrivateViewRefusingAuthority : ITableAuthority
+    {
+        private readonly Func<ITableAuthority> listeners;
+        private readonly Dictionary<Type, object> notRun = new Dictionary<Type, object>();
+        private readonly Dictionary<Type, int> refusedByType = new Dictionary<Type, int>();
+
+        public string RefusedSummary()
+        {
+            List<string> parts = new List<string>();
+            foreach (KeyValuePair<Type, int> pair in refusedByType) parts.Add(pair.Key.Name + " " + pair.Value);
+            return parts.Count == 0 ? "none" : string.Join(", ", parts);
+        }
+
+        public PrivateViewRefusingAuthority(Func<ITableAuthority> listeners)
+        {
+            this.listeners = listeners;
+        }
+
+        public int Refused { get; private set; }
+        public string LastRefused { get; private set; }
+
+        public event Action<object> CommandAccepted
+        {
+            add => listeners().CommandAccepted += value;
+            remove => listeners().CommandAccepted -= value;
+        }
+
+        public void Observe<TCommand, TResult>(Action<TCommand, TResult> listener) where TCommand : class =>
+            listeners().Observe(listener);
+
+        public bool CanSubmit<TCommand>() where TCommand : class => false;
+
+        public TResult Submit<TCommand, TResult>(TCommand command) where TCommand : class
+        {
+            Refused++;
+            LastRefused = typeof(TCommand).Name;
+            int seen = refusedByType.TryGetValue(typeof(TCommand), out int count) ? count : 0;
+            refusedByType[typeof(TCommand)] = seen + 1;
+            // Once per command type (a settling piece asks every frame): the count is in the report.
+            if (seen == 0) Debug.LogWarning($"[PrivateView] Refused {typeof(TCommand).Name}: the private view has no private request for it yet, and it never runs a table command on its copy.");
+            if (typeof(TResult).IsValueType) return default;
+            if (!notRun.TryGetValue(typeof(TResult), out object result))
+            {
+                result = FormatterServices.GetUninitializedObject(typeof(TResult));
+                notRun.Add(typeof(TResult), result);
+            }
+
+            return (TResult)result;
+        }
     }
 
     public sealed partial class TabletopComposition
     {
-        // PRIVACY-SCENE (s146). Fields exist in every build; only the Editor entry below can turn the view on.
+        // PRIVACY-SCENE (s146/s147). The fields exist in every build; only the Editor entry below can turn the view on,
+        // and TryReplaceTable turns it off again.
         internal bool privateViewActive;
         internal Texture2D privateViewCardBack;
+        internal Texture2D privateViewBoardPicture;
         internal PrivateViewDiagnostics privateViewDiagnostics = new PrivateViewDiagnostics();
+        // What the received package says (never the host's objects): the public table template and the card labels.
+        internal RecipientPublicLayout privateViewLayout;
+        internal readonly List<RecipientLabel> privateViewLabels = new List<RecipientLabel>();
+        // The recipient's own identity (a client knows who it is; the package does not have to say).
+        internal PlayerId privateViewRecipient;
+        private readonly List<CartridgeSeat> privateViewSeats = new List<CartridgeSeat>(4);
+        private PrivateViewRefusingAuthority privateViewAuthority;
+
+        internal PrivateViewRefusingAuthority PrivateViewAuthority =>
+            privateViewAuthority ??= new PrivateViewRefusingAuthority(() => replicatedAuthority);
+
+        /// <summary>The seats the table builds its Consoles, hands and piles for: the game's, or the private view's public ones.</summary>
+        internal IReadOnlyList<CartridgeSeat> TableSeats => privateViewActive ? privateViewSeats : ActiveCartridge.Seats;
+
+        internal CartridgeSeat TableSeatAtLayoutIndex(int layoutSeatIndex)
+        {
+            if (!privateViewActive) return ActiveCartridge.Seats[layoutSeatIndex];
+            for (int i = 0; i < privateViewSeats.Count; i++)
+                if (privateViewSeats[i].LayoutSeatIndex == layoutSeatIndex) return privateViewSeats[i];
+            throw new InvalidOperationException($"The private view has no seat {layoutSeatIndex + 1}.");
+        }
+
+        internal bool TryGetTableBoardGrid(out GridDefinitionData grid)
+        {
+            if (!privateViewActive) return ActiveCartridge.TryGetBoardGrid(out grid);
+            grid = privateViewLayout?.Board?.Grid;
+            return grid != null;
+        }
+
+        internal int TableBoardRemovedSpaces =>
+            privateViewActive ? (privateViewLayout?.Board?.RemovedSpaces ?? 0) : ActiveCartridge.BoardRemovedSpaces;
+
+        internal Vector2 TableBoardMatSize =>
+            privateViewActive
+                ? (privateViewLayout?.Board != null ? new Vector2(privateViewLayout.Board.MatWidth, privateViewLayout.Board.MatDepth) : Vector2.zero)
+                : ActiveCartridge.BoardMatSize;
+
+        // Inside the Empty Table build, before any piece view: the package's labels, then the board under the pieces.
+        private void PreparePrivateViewTable()
+        {
+            for (int i = 0; i < privateViewLabels.Count; i++)
+                labelsByCardId[privateViewLabels[i].Reference] = privateViewLabels[i].Text;
+
+            RecipientBoardLayout board = privateViewLayout?.Board;
+            if (board == null || board.CentralPlayArea.IsEmpty || !matchState.PlayAreas.ContainsKey(board.CentralPlayArea)) return;
+            centralPlayAreaId = board.CentralPlayArea;
+            ProjectTemplateBoardSurface(); // the game table's own board placement and mat (no cartridge involved)
+        }
+
+        // Inside the Empty Table build, after the piece views: each public seat's Console, hand and piles, built by the
+        // game table's own builders from the public table template.
+        private void BuildPrivateViewSeats()
+        {
+            privateViewSeats.Clear();
+            handContainerId = ContainerId.Empty;
+            localPlayerLayoutSeatIndex = -1;
+            localSeatId = SeatId.Empty;
+            if (privateViewLayout == null) return;
+            List<RecipientSeatLayout> ordered = new List<RecipientSeatLayout>(privateViewLayout.Seats);
+            ordered.Sort((a, b) => a.LayoutSeatIndex.CompareTo(b.LayoutSeatIndex));
+            foreach (RecipientSeatLayout seat in ordered)
+            {
+                if (!matchState.Seats.TryGetValue(seat.Seat, out SeatState state)) continue;
+                privateViewSeats.Add(new CartridgeSeat(seat.LayoutSeatIndex, seat.Seat, seat.Hand, seat.ControllerDeck, seat.ActionArea, seat.Pawn, state.ConsolePose));
+                if (!privateViewRecipient.IsEmpty && state.OccupantPlayerId == privateViewRecipient)
+                {
+                    handContainerId = seat.Hand;
+                    localPlayerLayoutSeatIndex = seat.LayoutSeatIndex;
+                    localSeatId = seat.Seat;
+                }
+            }
+
+            if (!privateViewRecipient.IsEmpty) localPlayerId = privateViewRecipient;
+            BuildContainerViews();
+            BindContainerViews();
+            RefreshCardContentVisibility();
+        }
 
 #if UNITY_EDITOR
         /// <summary>
-        /// Development only (Editor, Play mode, an offline Trap Floor table): this computer plays the host, builds the
-        /// package <paramref name="seatIndex"/>'s player would receive (or a spectator's, for -1), and then rebuilds
-        /// this very scene from that package alone — as an Empty Table session, so no game cartridge, no Trap Floor
-        /// rules and no seed are involved. The scene is then inspected. Returns a report (no keys, no real hidden ids).
+        /// Development only (Editor, Play mode, an offline Trap Floor table first): this computer plays the host. The
+        /// first call copies the running table into a simulated host (and lays the PRIVACY-SCENE-2 fixture on the
+        /// copy); every call then builds the package <paramref name="seatIndex"/>'s player would receive (-1: a
+        /// spectator), and rebuilds this scene from that package's bytes alone, as an Empty Table session with the
+        /// public table template: no game cartridge, no Trap Floor rules, no seed. The scene is then inspected.
+        /// Returns a report (no keys and no real hidden ids).
         /// </summary>
         public static string ShowPrivateRecipientViewForDevelopment(TabletopComposition host, int seatIndex)
         {
@@ -47,39 +199,54 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!IsInitialized || matchState == null) return "[PrivateView] Start a Trap Floor table first.";
             if (IsOnlineTable) return "[PrivateView] Refused: only on an offline table (it never touches the network).";
-            if (trapFloorTemplate == null || trapFloorTurnState == null) return "[PrivateView] Refused: the table is not a Trap Floor game.";
-            if (privateViewActive) return "[PrivateView] Already showing a private view: open the main menu to leave it.";
+            if (!privateViewActive)
+            {
+                if (trapFloorTemplate == null || trapFloorTurnState == null) return "[PrivateView] Refused: the table is not a Trap Floor game.";
+                PrivateViewSimulatedHost.Capture(this);
+            }
+            else if (PrivateViewSimulatedHost.Current == null)
+            {
+                return "[PrivateView] The simulated host is gone: open the main menu and start a Trap Floor table again.";
+            }
 
-            // ---- host side: the full table is here; build what one recipient may receive ----
-            MatchState full = matchState;
-            IReadOnlyList<PlayerId> order = trapFloorTurnState.PlayerOrder;
-            PlayerId recipient = seatIndex >= 0 && seatIndex < order.Count ? order[seatIndex] : RecipientSnapshotProjection.Spectator;
+            PrivateViewSimulatedHost simulated = PrivateViewSimulatedHost.Current;
+
+            // ---- host side (the simulated host's copy of the full table) ----
+            MatchState full = simulated.Match;
+            PlayerId recipient = seatIndex >= 0 && seatIndex < simulated.Order.Count ? simulated.Order[seatIndex] : RecipientSnapshotProjection.Spectator;
             string who = recipient.IsEmpty ? "a spectator" : $"seat {seatIndex + 1}";
             RecipientSnapshotProjection.Classify(full, recipient, out HashSet<TabletopObjectId> hidden, out _);
-            HashSet<string> hiddenOnlyNames = HiddenOnlyNames(full, hidden, trapFloorTemplate.CardLabels);
+            HashSet<string> hiddenOnlyNames = HiddenOnlyNames(full, hidden, simulated.Labels);
+            HashSet<ObjectDefinitionId> hiddenOnlyDefinitions = HiddenOnlyDefinitions(full, hidden);
+            HashSet<Texture> hiddenOnlyPictures = HiddenOnlyPictures(full, hidden, hiddenOnlyDefinitions);
             List<Guid> hiddenRealIds = new List<Guid>();
             foreach (TabletopObjectId id in hidden) hiddenRealIds.Add(id.Value);
-
-            RecipientHandleTable handles = new RecipientHandleTable(RecipientSnapshotProjection.NewSessionKey());
-            byte[] bytes = TableWire.Write(RecipientBootstrapPackage.Build(full, handles, recipient, trapFloorTemplate.CardLabels), false);
+            byte[] bytes = TableWire.Write(RecipientBootstrapPackage.Build(full, simulated.Handles, recipient, simulated.Labels, simulated.Layout), false);
             int idsOnWire = 0;
             foreach (Guid id in hiddenRealIds) if (Contains(bytes, id.ToByteArray())) idsOnWire++;
+            int definitionsOnWire = 0;
+            foreach (ObjectDefinitionId definition in hiddenOnlyDefinitions) if (Contains(bytes, definition.Value.ToByteArray())) definitionsOnWire++;
             int namesOnWire = 0;
             List<string> wireNames = new List<string>();
             foreach (string name in hiddenOnlyNames) if (Contains(bytes, Encoding.UTF8.GetBytes(name))) { namesOnWire++; wireNames.Add(name); }
             HashSet<string> publicLabelTexts = new HashSet<string>();
-            foreach (KeyValuePair<TabletopObjectId, string> pair in trapFloorTemplate.CardLabels)
+            foreach (KeyValuePair<TabletopObjectId, string> pair in simulated.Labels)
                 if (!hidden.Contains(pair.Key) && full.Cards.ContainsKey(pair.Key) && !string.IsNullOrEmpty(pair.Value)) publicLabelTexts.Add(pair.Value);
-            Texture2D back = CurrentBoardCardBack(); // the game's public card-back picture
 
-            // ---- client side: everything below uses the received bytes only ----
+            // ---- client side: everything below uses the received bytes (and the game's public content) only ----
             RecipientBootstrapPackage received = (RecipientBootstrapPackage)TableWire.Read(bytes, 0, bytes.Length, false);
-            RecipientClientTable client = RecipientClientTable.Build(received); // checks the host's digest
-            if (!SessionService.TryReplaceTable(TabletopSessionSelection.EmptyCustom))
+            RecipientClientTable client = RecipientClientTable.Build(received); // checks the host's digest and the template
+            if (!SessionService.TryReplaceTable(TabletopSessionSelection.EmptyCustom)) // also takes down a previous private view
                 return "[PrivateView] The Empty Table session could not be made: " + (gameTemplatesPanelError ?? "unknown");
 
-            privateViewCardBack = back;
+            privateViewCardBack = simulated.CardBack;
+            privateViewBoardPicture = simulated.BoardPicture;
             privateViewDiagnostics = new PrivateViewDiagnostics();
+            privateViewLayout = received.Layout;
+            privateViewLabels.Clear();
+            if (received.Labels != null) privateViewLabels.AddRange(received.Labels);
+            privateViewRecipient = recipient;
+            int refusedBefore = PrivateViewAuthority.Refused;
             privateViewActive = true;
             GameTemplateInitialSnapshot shown = received.Table.ForSession(activeSession.CurrentMatch.Id, activeSession.CurrentMatch.GameTemplateId);
             if (!RestoreOnlineSnapshot(SessionUndoSnapshot.ForRecipientView(shown), Math.Max(1L, received.Table.Revision), out string error))
@@ -88,13 +255,40 @@ namespace ConsoleCards.Presentation.Composition
                 return "[PrivateView] The scene could not be built from the package: " + error;
             }
 
-            labelsByCardId.Clear();
-            if (received.Labels != null) foreach (RecipientLabel label in received.Labels) labelsByCardId[label.Reference] = label.Text;
-            RefreshAllCardArt();
             ShowMessage($"Private view ({who}): built from that player's package only. Development view: nothing here is sent anywhere.");
+            StringBuilder report = new StringBuilder();
+            report.Append($"[PrivateView] Scene built for {who} from {bytes.Length} package bytes. ");
+            report.Append($"Wire: hidden real ids {idsOnWire}/{hiddenRealIds.Count}, hidden-only definitions {definitionsOnWire}/{hiddenOnlyDefinitions.Count}, hidden-only names {namesOnWire}/{hiddenOnlyNames.Count}. ");
+            InspectPrivateScene(report, client, simulated, hidden, hiddenOnlyDefinitions, hiddenOnlyPictures, hiddenOnlyNames, recipient);
+            report.Append($"Commands refused while built: {PrivateViewAuthority.Refused - refusedBefore}{(PrivateViewAuthority.Refused > refusedBefore ? " (last: " + PrivateViewAuthority.LastRefused + ")" : string.Empty)}; refused since the first private view: {PrivateViewAuthority.RefusedSummary()}. ");
+            report.Append($"Fixture on the host copy: {simulated.FixtureSummary}.");
 
-            // ---- inspect the actual scene ----
-            int hiddenCards = 0, viewsWithHiddenFace = 0, namedViews = 0;
+            StringBuilder detail = new StringBuilder(report.ToString()).AppendLine();
+            foreach (string name in wireNames)
+            {
+                string inside = null;
+                foreach (string text in publicLabelTexts) if (text.IndexOf(name, StringComparison.Ordinal) >= 0) { inside = text; break; }
+                detail.AppendLine($"wire match '{name.Replace('\n', ' ')}': {(inside != null ? "inside public label '" + inside.Replace('\n', ' ') + "'" : "NOT inside any public label")}");
+            }
+
+            WritePrivateViewReport(who, detail.ToString(), false);
+            StartCoroutine(ScanPrivateSceneLater(who, hiddenRealIds, hiddenOnlyNames, hiddenOnlyDefinitions, hiddenOnlyPictures));
+            return report.ToString();
+        }
+
+        // Immediately after the build: the client table, every card view, its state, its definition, its pictures,
+        // its labels, the containers it is bound to and the drop targets; then the hands, Consoles and board.
+        private void InspectPrivateScene(
+            StringBuilder report,
+            RecipientClientTable client,
+            PrivateViewSimulatedHost simulated,
+            HashSet<TabletopObjectId> hidden,
+            HashSet<ObjectDefinitionId> hiddenOnlyDefinitions,
+            HashSet<Texture> hiddenOnlyPictures,
+            HashSet<string> hiddenOnlyNames,
+            PlayerId recipient)
+        {
+            int hiddenCards = 0, hiddenFacePictures = 0, hiddenLabels = 0;
             foreach (ClientCardView card in client.Cards)
             {
                 if (!Registry.TryGetCardView(card.Reference, out CardView view) || view == null)
@@ -107,55 +301,154 @@ namespace ConsoleCards.Presentation.Composition
                 hiddenCards++;
                 if (CardInspectPanel.TryGetCardVisualReferences(card.Reference, out CardVisualReferences visuals))
                 {
-                    if (!string.IsNullOrEmpty(visuals.FrontLabel?.text) || !string.IsNullOrEmpty(visuals.BackLabel?.text)) namedViews++;
+                    if (!string.IsNullOrEmpty(visuals.FrontLabel?.text) || !string.IsNullOrEmpty(visuals.BackLabel?.text)) hiddenLabels++;
                     Renderer face = visuals.FaceUpRenderer;
                     if (face != null && face.sharedMaterial != null && face.sharedMaterial.mainTexture != null
-                        && face.sharedMaterial.mainTexture != back) viewsWithHiddenFace++;
+                        && face.sharedMaterial.mainTexture != privateViewCardBack) hiddenFacePictures++;
                 }
             }
 
-            int realIdsInClient = 0;
-            foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in matchState.Cards) if (hidden.Contains(pair.Key)) realIdsInClient++;
-
-            StringBuilder report = new StringBuilder();
-            report.Append($"[PrivateView] Scene built for {who} from {bytes.Length} package bytes. ");
-            report.Append($"Wire: hidden real ids {idsOnWire}/{hiddenRealIds.Count}, hidden-only names {namesOnWire}/{hiddenOnlyNames.Count}. ");
-            report.Append($"Client table: {client.Cards.Count} cards ({hiddenCards} hidden), hidden real ids in the scene's match {realIdsInClient}. ");
-            report.Append($"Views: hidden backs {privateViewDiagnostics.HiddenBacks}, public faces {privateViewDiagnostics.PublicFaces}, ");
-            report.Append($"missing definition {privateViewDiagnostics.MissingDefinition}, missing front art {privateViewDiagnostics.MissingFrontArt}, ");
-            report.Append($"cards without a view {privateViewDiagnostics.MissingViews}, hidden views with a face picture {viewsWithHiddenFace}, hidden views with a label {namedViews}. ");
-            report.Append("Scene object scan: two frames later (after the host table's objects are destroyed), appended to the report file. ");
-            report.Append($"Card back picture: {(back != null ? "the game's board card back" : "MISSING")}.");
-            // Development evidence file (this computer only): which hidden-only names matched the bytes, and whether
-            // each one is only a part of a public label (a substring, not the hidden card itself).
-            StringBuilder detail = new StringBuilder(report.ToString()).AppendLine();
-            foreach (string name in wireNames)
+            // The scene's own table and views: never the host's objects, never a hidden real id or hidden-only definition.
+            int realIdsInMatch = 0, hiddenDefinitionsInMatch = 0, hostObjectsInViews = 0, viewsOutsideMatch = 0, hiddenIdViews = 0, hiddenDefinitionViews = 0;
+            foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in matchState.Cards)
             {
-                string inside = null;
-                foreach (string text in publicLabelTexts) if (text.IndexOf(name, StringComparison.Ordinal) >= 0) { inside = text; break; }
-                detail.AppendLine($"wire match '{name.Replace('\n', ' ')}': {(inside != null ? "inside public label '" + inside.Replace('\n', ' ') + "'" : "NOT inside any public label")}");
+                if (hidden.Contains(pair.Key)) realIdsInMatch++;
+                if (hiddenOnlyDefinitions.Contains(pair.Value.BaseState.DefinitionId)) hiddenDefinitionsInMatch++;
             }
 
-            try
+            foreach (CardView view in Registry.cardViews)
             {
-                string folder = System.IO.Path.GetFullPath(System.IO.Path.Combine(UnityEngine.Application.dataPath, "..", "Logs"));
-                System.IO.Directory.CreateDirectory(folder);
-                System.IO.File.WriteAllText(System.IO.Path.Combine(folder, "PrivateView-report.txt"), detail.ToString());
-            }
-            catch (Exception exception)
-            {
-                Debug.LogWarning("[PrivateView] The report file could not be written: " + exception.Message);
+                if (view == null || !view.IsBound || view.CardState == null) continue;
+                TabletopObjectId id = view.CardState.BaseState.Id;
+                if (!matchState.Cards.TryGetValue(id, out CardInstanceState own) || !ReferenceEquals(own, view.CardState)) viewsOutsideMatch++;
+                if (simulated.Match.Cards.TryGetValue(id, out CardInstanceState hostCard) && ReferenceEquals(hostCard, view.CardState)) hostObjectsInViews++;
+                if (hidden.Contains(id)) hiddenIdViews++;
+                if (hiddenOnlyDefinitions.Contains(view.CardState.BaseState.DefinitionId)) hiddenDefinitionViews++;
             }
 
-            StartCoroutine(ScanPrivateSceneLater(hiddenRealIds, hiddenOnlyNames));
-            return report.ToString();
+            int hiddenLabelEntries = 0;
+            foreach (KeyValuePair<TabletopObjectId, string> pair in labelsByCardId)
+            {
+                if (hidden.Contains(pair.Key)) hiddenLabelEntries++;
+                else if (pair.Value != null && hiddenOnlyNames.Contains(pair.Value)) hiddenLabelEntries++;
+            }
+
+            int hiddenPicturesOnRenderers = CountHiddenPicturesOnRenderers(hiddenOnlyPictures, true);
+            int hiddenPicturesAnywhere = CountHiddenPicturesOnRenderers(hiddenOnlyPictures);
+
+            // Containers: every container the views are bound to is the scene's own, with the host's public count.
+            int containerMismatch = 0;
+            foreach (KeyValuePair<ContainerId, ContainerState> pair in matchState.Containers)
+                if (!simulated.Match.Containers.TryGetValue(pair.Key, out ContainerState hostContainer) || hostContainer.Count != pair.Value.Count) containerMismatch++;
+
+            // Hands: this recipient's own hand view lists the references the package gave, in the package's order.
+            string ownHand = "none (spectator)";
+            if (handView != null && !handContainerId.IsEmpty)
+            {
+                ContainerState hand = matchState.GetContainer(handContainerId);
+                int known = 0;
+                for (int i = 0; i < hand.Count; i++)
+                    if (matchState.Cards.TryGetValue(hand.GetObjectAt(i), out CardInstanceState card)
+                        && !card.BaseState.DefinitionId.Equals(RecipientSnapshotProjection.HiddenDefinition)) known++;
+                ownHand = $"{hand.Count} cards ({known} with their faces), view bound to it: {handView.IsBound && handView.ContainerId == handContainerId}";
+            }
+
+            int otherHands = 0, otherHandCards = 0, otherHandFaces = 0;
+            foreach (HiddenHandView other in Registry.hiddenHandViews)
+            {
+                if (other == null || !other.IsBound) continue;
+                otherHands++;
+                ContainerState hand = other.ContainerState;
+                otherHandCards += hand.Count;
+                for (int i = 0; i < hand.Count; i++)
+                    if (matchState.Cards.TryGetValue(hand.GetObjectAt(i), out CardInstanceState card)
+                        && !card.BaseState.DefinitionId.Equals(RecipientSnapshotProjection.HiddenDefinition)) otherHandFaces++;
+            }
+
+            // Consoles: the slots are the prefab's authored slots, bound to the seat's slot containers, with drop targets.
+            int slots = 0, boundSlots = 0, slotTargets = 0, occupiedSlots = 0, faceDownSlotCards = 0, faceDownSlotIdentities = 0;
+            foreach (ConsoleSlotView slot in Registry.consoleSlotViews)
+            {
+                slots++;
+                if (slot == null || !slot.IsBound || !matchState.Containers.ContainsKey(slot.ContainerId)) continue;
+                boundSlots++;
+                if (Registry.consoleSlotVisualsByContainerId.TryGetValue(slot.ContainerId, out ConsoleSlotVisual slotVisual)
+                    && slotVisual.DropTarget != null && slotVisual.DropTarget.enabled) slotTargets++;
+                ContainerState container = slot.ContainerState;
+                if (container.Count > 0) occupiedSlots++;
+                for (int i = 0; i < container.Count; i++)
+                {
+                    if (!matchState.Cards.TryGetValue(container.GetObjectAt(i), out CardInstanceState card) || card.Face != CardFace.FaceDown) continue;
+                    faceDownSlotCards++;
+                    if (!card.BaseState.DefinitionId.Equals(RecipientSnapshotProjection.HiddenDefinition)) faceDownSlotIdentities++;
+                }
+            }
+
+            int unboundSlotComponents = 0;
+            foreach (ConsoleSlotView any in UnityEngine.Object.FindObjectsByType<ConsoleSlotView>(FindObjectsInactive.Exclude))
+                if (!any.IsBound) unboundSlotComponents++;
+
+            // Floor tiles: the revealed one carries its identity, the others are backs (the same for every recipient).
+            int revealedTiles = 0, unrevealedTiles = 0;
+            foreach (TabletopObjectId tile in simulated.FloorTiles)
+            {
+                if (!simulated.Match.Cards.TryGetValue(tile, out CardInstanceState hostTile)) continue;
+                if (hostTile.Face == CardFace.FaceUp)
+                {
+                    if (matchState.Cards.TryGetValue(tile, out CardInstanceState shownTile) && shownTile.BaseState.DefinitionId.Equals(hostTile.BaseState.DefinitionId)) revealedTiles++;
+                }
+                else unrevealedTiles++;
+            }
+
+            report.Append($"Client table: {client.Cards.Count} cards ({hiddenCards} hidden); in the scene's match: hidden real ids {realIdsInMatch}, hidden-only definitions {hiddenDefinitionsInMatch}. ");
+            report.Append($"Card views: hidden real ids {hiddenIdViews}, hidden-only definitions {hiddenDefinitionViews}, bound to the host's objects {hostObjectsInViews}, bound outside the scene's match {viewsOutsideMatch}; label entries for hidden cards {hiddenLabelEntries}; this scene's card renderers showing a hidden-only picture {hiddenPicturesOnRenderers} (scene-wide this frame {hiddenPicturesAnywhere}: the replaced views are destroyed at the end of the frame, see the scan below). ");
+            report.Append($"Drawing: hidden backs {privateViewDiagnostics.HiddenBacks.Count} cards, public faces {privateViewDiagnostics.PublicFaces.Count}, unknown definition {privateViewDiagnostics.MissingDefinition.Count}, missing front picture {privateViewDiagnostics.MissingFrontArt.Count}, cards without a view {privateViewDiagnostics.MissingViews}, art passes {privateViewDiagnostics.ArtPasses}; hidden views with a face picture {hiddenFacePictures}, with a label {hiddenLabels}. ");
+            report.Append($"Containers whose count differs from the host's {containerMismatch}. ");
+            report.Append($"Own hand: {ownHand}. Other hands: {otherHands} views, {otherHandCards} cards, {otherHandFaces} with a face. ");
+            report.Append($"Consoles: {Registry.playerConsoleViews.Count}; slots {slots}, bound {boundSlots}, with drop targets {slotTargets}, occupied {occupiedSlots}; face-down slot cards {faceDownSlotCards} ({faceDownSlotIdentities} with an identity); unbound slot components {unboundSlotComponents}. ");
+            report.Append($"Seats {privateViewSeats.Count}; board mat {(templateBoardMat != null ? "yes" : "NO")}; floor tiles revealed with their identity {revealedTiles}, still face down {unrevealedTiles}. ");
+            report.Append($"Card back picture: {(privateViewCardBack != null ? "the game's board card back" : "MISSING")}. ");
         }
 
-        private System.Collections.IEnumerator ScanPrivateSceneLater(List<Guid> hiddenRealIds, HashSet<string> hiddenOnlyNames)
+        // currentOnly: only renderers of this scene's own card views (the host's views being replaced are destroyed at
+        // the end of the frame, so right after the build they are still found by a scene-wide search).
+        private int CountHiddenPicturesOnRenderers(HashSet<Texture> hiddenOnlyPictures, bool currentOnly = false)
+        {
+            if (hiddenOnlyPictures.Count == 0) return 0;
+            HashSet<CardView> current = currentOnly ? new HashSet<CardView>(Registry.cardViews) : null;
+            int found = 0;
+            List<Material> materials = new List<Material>(4);
+            foreach (Renderer renderer in UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsInactive.Include))
+            {
+                if (renderer == null || renderer.gameObject.scene != gameObject.scene) continue;
+                if (current != null)
+                {
+                    CardView owner = renderer.GetComponentInParent<CardView>(true);
+                    if (owner == null || !current.Contains(owner)) continue;
+                }
+
+                renderer.GetSharedMaterials(materials);
+                foreach (Material material in materials)
+                {
+                    if (material == null) continue;
+                    if (material.mainTexture != null && hiddenOnlyPictures.Contains(material.mainTexture)) found++;
+                    else if (material.HasProperty("_BaseMap") && material.GetTexture("_BaseMap") is Texture baseMap && hiddenOnlyPictures.Contains(baseMap)) found++;
+                }
+            }
+
+            return found;
+        }
+
+        private System.Collections.IEnumerator ScanPrivateSceneLater(
+            string who,
+            List<Guid> hiddenRealIds,
+            HashSet<string> hiddenOnlyNames,
+            HashSet<ObjectDefinitionId> hiddenOnlyDefinitions,
+            HashSet<Texture> hiddenOnlyPictures)
         {
             yield return null;
             yield return null;
-            int leakedNames = 0, leakedIds = 0, objects = 0;
+            int leakedNames = 0, leakedIds = 0, objects = 0, coincidences = 0;
             Dictionary<string, int> where = new Dictionary<string, int>();
             void Note(GameObject go, string hiddenName, string kind)
             {
@@ -164,29 +457,58 @@ namespace ConsoleCards.Presentation.Composition
                 string key = kind + " '" + go.name + "' contains '" + hiddenName.Replace('\n', ' ') + "', under '" + root.name + "'";
                 where[key] = where.TryGetValue(key, out int n) ? n + 1 : 1;
             }
-            foreach (GameObject go in UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+
+            foreach (GameObject go in UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include))
             {
                 objects++;
                 string name = go.name;
                 foreach (Guid id in hiddenRealIds)
                     if (name.IndexOf(id.ToString("N"), StringComparison.OrdinalIgnoreCase) >= 0 || name.IndexOf(id.ToString(), StringComparison.OrdinalIgnoreCase) >= 0) leakedIds++;
+                // A hit on a card's own object counts as a leak; a hit on the room, the table or the UI (a hidden card
+                // called "Left" against "Front Left Leg") is a name coincidence and is listed apart.
+                bool onCard = go.GetComponentInParent<CardView>(true) != null;
                 foreach (string hiddenName in hiddenOnlyNames)
-                    if (name.IndexOf(hiddenName, StringComparison.Ordinal) >= 0) { leakedNames++; Note(go, hiddenName, "name"); }
+                    if (name.IndexOf(hiddenName, StringComparison.Ordinal) >= 0)
+                    {
+                        if (onCard) leakedNames++; else coincidences++;
+                        Note(go, hiddenName, onCard ? "CARD name" : "structural name");
+                    }
                 TextMesh text = go.GetComponent<TextMesh>();
                 if (text != null && !string.IsNullOrEmpty(text.text))
                     foreach (string hiddenName in hiddenOnlyNames) if (text.text.IndexOf(hiddenName, StringComparison.Ordinal) >= 0) { leakedNames++; Note(go, hiddenName, "TextMesh"); }
             }
 
-            string line = $"[PrivateView] Scene scan (2 frames later): {objects} objects; names or texts with a hidden real id {leakedIds}; with a hidden-only card name {leakedNames}.";
+            // Components, not names: every card view in the scene (bound or not) and every renderer's pictures.
+            int viewsWithHiddenDefinition = 0, viewsWithHiddenId = 0;
+            HashSet<Guid> hiddenIds = new HashSet<Guid>(hiddenRealIds);
+            foreach (CardView view in UnityEngine.Object.FindObjectsByType<CardView>(FindObjectsInactive.Include))
+            {
+                if (view == null || view.CardState == null) continue;
+                if (hiddenIds.Contains(view.CardState.BaseState.Id.Value)) viewsWithHiddenId++;
+                if (hiddenOnlyDefinitions.Contains(view.CardState.BaseState.DefinitionId)) viewsWithHiddenDefinition++;
+            }
+
+            int pictures = CountHiddenPicturesOnRenderers(hiddenOnlyPictures);
+            string line = $"[PrivateView] Scene scan for {who} (2 frames later): {objects} objects; names or texts with a hidden real id {leakedIds}; card objects or texts with a hidden-only card name {leakedNames} (structural name coincidences {coincidences}, listed below); "
+                + $"card view components holding a hidden real id {viewsWithHiddenId}, a hidden-only definition {viewsWithHiddenDefinition}; renderers showing a hidden-only picture {pictures}.";
             foreach (KeyValuePair<string, int> pair in where) line += System.Environment.NewLine + $"  hidden-only name in {pair.Key}: {pair.Value}";
             Debug.Log(line);
+            WritePrivateViewReport(who, line, true);
+        }
+
+        private static void WritePrivateViewReport(string who, string text, bool append)
+        {
             try
             {
-                string file = System.IO.Path.GetFullPath(System.IO.Path.Combine(UnityEngine.Application.dataPath, "..", "Logs", "PrivateView-report.txt"));
-                System.IO.File.AppendAllText(file, line + System.Environment.NewLine);
+                string folder = System.IO.Path.GetFullPath(System.IO.Path.Combine(UnityEngine.Application.dataPath, "..", "Logs"));
+                System.IO.Directory.CreateDirectory(folder);
+                string file = System.IO.Path.Combine(folder, "PrivateView-" + who.Replace(' ', '-') + ".txt");
+                if (append) System.IO.File.AppendAllText(file, text + System.Environment.NewLine);
+                else System.IO.File.WriteAllText(file, text + System.Environment.NewLine);
             }
-            catch (Exception)
+            catch (Exception exception)
             {
+                Debug.LogWarning("[PrivateView] The report file could not be written: " + exception.Message);
             }
         }
 
@@ -205,6 +527,34 @@ namespace ConsoleCards.Presentation.Composition
             return hiddenNames;
         }
 
+        // Definitions only hidden cards have (a definition a visible card also has may appear legitimately).
+        private static HashSet<ObjectDefinitionId> HiddenOnlyDefinitions(MatchState full, HashSet<TabletopObjectId> hidden)
+        {
+            HashSet<ObjectDefinitionId> hiddenDefinitions = new HashSet<ObjectDefinitionId>(), visible = new HashSet<ObjectDefinitionId>();
+            foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in full.Cards)
+                (hidden.Contains(pair.Key) ? hiddenDefinitions : visible).Add(pair.Value.BaseState.DefinitionId);
+            hiddenDefinitions.ExceptWith(visible);
+            return hiddenDefinitions;
+        }
+
+        // Front pictures only hidden cards have (from the game's content; a picture a visible card also shows is excluded).
+        private HashSet<Texture> HiddenOnlyPictures(MatchState full, HashSet<TabletopObjectId> hidden, HashSet<ObjectDefinitionId> hiddenOnlyDefinitions)
+        {
+            HashSet<Texture> pictures = new HashSet<Texture>(), visible = new HashSet<Texture>();
+            foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in full.Cards)
+            {
+                if (!TryGetCardLook(pair.Value.BaseState.DefinitionId, out CardDefinition definition)) continue;
+                Texture2D front = FrontArt(definition);
+                if (front == null) continue;
+                if (hidden.Contains(pair.Key) && hiddenOnlyDefinitions.Contains(pair.Value.BaseState.DefinitionId)) pictures.Add(front);
+                else visible.Add(front);
+            }
+
+            pictures.ExceptWith(visible);
+            if (privateViewCardBack != null) pictures.Remove(privateViewCardBack);
+            return pictures;
+        }
+
         private static bool Contains(byte[] haystack, byte[] needle)
         {
             for (int i = 0; i + needle.Length <= haystack.Length; i++)
@@ -215,6 +565,89 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Editor only: the simulated host of the private view. It holds a copy of the full table (with the fixture
+        /// laid on it), the turn order, the game's labels, the public table template and its handle table. The client
+        /// scene never reads it: each view is built from the bytes of the package made from it. Same process, so the
+        /// full table is still in this process's memory (doc 11 §19: no process-isolation claim).
+        /// </summary>
+        internal sealed class PrivateViewSimulatedHost
+        {
+            public static PrivateViewSimulatedHost Current { get; private set; }
+
+            public MatchState Match;
+            public List<PlayerId> Order;
+            public Dictionary<TabletopObjectId, string> Labels;
+            public RecipientPublicLayout Layout;
+            public RecipientHandleTable Handles;
+            public List<TabletopObjectId> FloorTiles;
+            public Texture2D CardBack;
+            public Texture2D BoardPicture;
+            public string FixtureSummary;
+
+            [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+            private static void Forget() => Current = null;
+
+            public static void Capture(TabletopComposition table)
+            {
+                PrivateViewSimulatedHost host = new PrivateViewSimulatedHost
+                {
+                    Match = GameTemplateInitialSnapshot.Capture(table.matchState).Restore(),
+                    Order = new List<PlayerId>(table.trapFloorTurnState.PlayerOrder),
+                    Labels = new Dictionary<TabletopObjectId, string>(),
+                    Handles = new RecipientHandleTable(RecipientSnapshotProjection.NewSessionKey()),
+                    FloorTiles = new List<TabletopObjectId>(table.trapFloorTemplate.FloorCardIds.Values),
+                    CardBack = table.CurrentBoardCardBack(),
+                    BoardPicture = table.ActiveCartridge.BoardMatPicture,
+                };
+                foreach (KeyValuePair<TabletopObjectId, string> label in table.trapFloorTemplate.CardLabels) host.Labels[label.Key] = label.Value;
+                host.Layout = PublicLayoutOf(table);
+                // The Console cards go in the first two slots on the Console's shown side after the first (a slot on
+                // the other side holds its cards under the mat, out of sight).
+                List<int> frontSlots = new List<int>();
+                ConsoleLayoutData consoleLayout = table.GetConsoleLayout();
+                for (int i = 1; i < consoleLayout.CardSlots.Count && frontSlots.Count < 2; i++)
+                    if (consoleLayout.CardSlots[i].Side != ConsoleMatSide.Back) frontSlots.Add(i);
+                RecipientViewFixture.Result fixture = RecipientViewFixture.Apply(host.Match, host.Layout.Seats, host.FloorTiles, 3, frontSlots.Count == 2 ? frontSlots : null);
+                host.FixtureSummary = $"{fixture.HandCards} hand cards, Console cards {fixture.ConsoleFaceUp} face up and {fixture.ConsoleFaceDown} face down, "
+                    + $"a loose card face up {(!fixture.LooseFaceUp.IsEmpty ? "yes" : "no")} and face down {(!fixture.LooseFaceDown.IsEmpty ? "yes" : "no")}, "
+                    + $"revealed tile {(!fixture.RevealedTile.IsEmpty ? "yes" : "no")}, unrevealed tiles {fixture.UnrevealedTiles}"
+                    + (fixture.Notes.Count > 0 ? " (" + string.Join("; ", fixture.Notes) + ")" : string.Empty);
+                Current = host;
+            }
+
+            // The public table template, from the game table's public structure (its seats and its board).
+            private static RecipientPublicLayout PublicLayoutOf(TabletopComposition table)
+            {
+                RecipientPublicLayout layout = new RecipientPublicLayout();
+                IReadOnlyList<CartridgeSeat> seats = table.ActiveCartridge.Seats;
+                for (int i = 0; i < seats.Count; i++)
+                {
+                    CartridgeSeat seat = seats[i];
+                    layout.Seats.Add(new RecipientSeatLayout
+                    {
+                        LayoutSeatIndex = seat.LayoutSeatIndex,
+                        Seat = seat.SeatId,
+                        Hand = seat.HandContainerId,
+                        ControllerDeck = seat.ControllerDeckId,
+                        ActionArea = seat.ActionAreaContainerId,
+                        Pawn = seat.PawnId,
+                    });
+                }
+
+                Vector2 mat = table.ActiveCartridge.BoardMatSize;
+                layout.Board = new RecipientBoardLayout
+                {
+                    CentralPlayArea = table.centralPlayAreaId,
+                    Grid = table.ActiveCartridge.TryGetBoardGrid(out GridDefinitionData grid) ? grid : null,
+                    RemovedSpaces = table.ActiveCartridge.BoardRemovedSpaces,
+                    MatWidth = mat.x,
+                    MatDepth = mat.y,
+                };
+                return layout;
+            }
         }
 #endif
     }

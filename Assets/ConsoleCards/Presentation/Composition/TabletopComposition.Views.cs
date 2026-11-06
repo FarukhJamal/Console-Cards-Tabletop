@@ -176,6 +176,13 @@ namespace ConsoleCards.Presentation.Composition
 
         private void BuildContainerViews()
         {
+            // PRIVACY-SCENE-2: a spectator's private view has no hand of its own (every hand is another player's).
+            if (!privateViewActive || !handContainerId.IsEmpty) BuildLocalHandView();
+            BuildSeatContainerViews();
+        }
+
+        private void BuildLocalHandView()
+        {
             localHandVisual = Spawner.CreateLocalHandVisual();
             handView = localHandVisual.GetView<HandView>();
             handView.ConfigurePresentation(presentationTransitions, localHandVisual.FeedbackRenderer);
@@ -196,8 +203,11 @@ namespace ConsoleCards.Presentation.Composition
                 handTrayRig.Activate();
                 handView.ConfigureTray(handTrayRig);
             }
+        }
 
-            IReadOnlyList<CartridgeSeat> seats = ActiveCartridge.Seats; // CART-1b: the game's seats
+        private void BuildSeatContainerViews()
+        {
+            IReadOnlyList<CartridgeSeat> seats = TableSeats; // CART-1b: the game's seats
             for (int playerIndex = 0; playerIndex < seats.Count; playerIndex++)
             {
                 CartridgeSeat player = seats[playerIndex];
@@ -275,9 +285,12 @@ namespace ConsoleCards.Presentation.Composition
 
         private void BindContainerViews()
         {
-            ContainerState hand = matchState.GetContainer(handContainerId);
+            if (handView != null)
+            {
+                ContainerState hand = matchState.GetContainer(handContainerId);
+                handView.Bind(hand, localHandVisual.LayoutAnchor, coordinateConverter, Registry.cardViews);
+            }
 
-            handView.Bind(hand, localHandVisual.LayoutAnchor, coordinateConverter, Registry.cardViews);
             foreach (StackRuntimeView stackRuntimeView in Registry.stackViewsByContainerId.Values)
             {
                 stackRuntimeView.View.Bind(
@@ -292,7 +305,7 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < Registry.runtimeConsoleInstances.Count; i++)
             {
                 RuntimeConsoleInstance instance = Registry.runtimeConsoleInstances[i];
-                CartridgeSeat player = ActiveCartridge.Seats[instance.LayoutSeatIndex];
+                CartridgeSeat player = TableSeatAtLayoutIndex(instance.LayoutSeatIndex);
                 BindConsole(
                     instance.View,
                     matchState.GetSeat(player.SeatId).Console,
@@ -327,7 +340,7 @@ namespace ConsoleCards.Presentation.Composition
                     instance.RowSpacing);
             }
 
-            ConfigureContainerLabel(localHandVisual.Label, "HAND");
+            if (localHandVisual != null) ConfigureContainerLabel(localHandVisual.Label, "HAND");
             RebuildLayoutViewCollection();
         }
 

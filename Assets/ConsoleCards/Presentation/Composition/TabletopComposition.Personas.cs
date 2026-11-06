@@ -81,7 +81,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            IReadOnlyList<CartridgeSeat> seats = ActiveCartridge.Seats;
+            IReadOnlyList<CartridgeSeat> seats = TableSeats; // PRIVACY-SCENE-2: the public seats in a private view
             if (seats.Count == 0 || !EnsurePersonaSet())
             {
                 HidePersonas();

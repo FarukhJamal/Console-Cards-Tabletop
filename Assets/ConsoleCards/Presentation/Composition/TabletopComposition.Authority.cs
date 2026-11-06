@@ -69,6 +69,8 @@ namespace ConsoleCards.Presentation.Composition
             get
             {
                 if (tableAuthority == null) tableAuthority = CreateTableAuthority();
+                // PRIVACY-SCENE-2: a private view never runs a table command on its filtered copy (no legacy fallback).
+                if (privateViewActive) return PrivateViewAuthority;
                 return replicatedAuthority; // MP-2: offline it passes every command straight to the local door
             }
         }

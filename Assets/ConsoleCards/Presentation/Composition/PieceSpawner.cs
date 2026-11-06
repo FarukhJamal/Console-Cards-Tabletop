@@ -392,7 +392,8 @@ namespace ConsoleCards.Presentation.Composition
         {
             ConsoleView view = UnityEngine.Object.Instantiate(host.catalogConsolePrefab);
             GameObject root = PrepareRuntimeRoot(view.gameObject, name);
-            if (!host.playerLayout.TryGetSeat(layoutSeatIndex, out _))
+            // PRIVACY-SCENE-2: a private view has no Player Layout object; its seats come from the public table template.
+            if (!host.privateViewActive && !host.playerLayout.TryGetSeat(layoutSeatIndex, out _))
             {
                 throw new InvalidOperationException("A game Console references a missing Player Layout Seat.");
             }
@@ -530,16 +531,16 @@ namespace ConsoleCards.Presentation.Composition
             else if (host.privateViewActive && !host.ActiveCartridge.IsBoardTile(card.BaseState.Id))
             {
                 // PRIVACY-SCENE diagnostics (case 2): an identity was sent but this computer has no such card.
-                host.privateViewDiagnostics.MissingDefinition++;
+                host.privateViewDiagnostics.Note(host.privateViewDiagnostics.MissingDefinition, card.BaseState.Id);
                 Debug.LogError($"[PrivateView] Card {card.BaseState.Id} has definition {card.BaseState.DefinitionId}, which this computer does not know: drawn with the plain fallback. Not a hidden card.");
             }
 
             if (host.privateViewActive && authoredDefinition != null && frontArtwork == null)
             {
-                host.privateViewDiagnostics.MissingFrontArt++; // case 3: the card is known, its picture is not
+                host.privateViewDiagnostics.Note(host.privateViewDiagnostics.MissingFrontArt, card.BaseState.Id); // case 3: the card is known, its picture is not
                 Debug.LogWarning($"[PrivateView] Card {card.BaseState.Id} ({authoredDefinition.DisplayName}) has no front picture here.");
             }
-            else if (host.privateViewActive && (authoredDefinition != null || frontArtwork != null)) host.privateViewDiagnostics.PublicFaces++;
+            else if (host.privateViewActive && (authoredDefinition != null || frontArtwork != null)) host.privateViewDiagnostics.Note(host.privateViewDiagnostics.PublicFaces, card.BaseState.Id);
             if (isBoardPiece)
             {
                 // CART-1b: the game draws its own board tiles (their face, back, labels and art).
@@ -630,7 +631,7 @@ namespace ConsoleCards.Presentation.Composition
             SetLabelRendererVisible(visualReferences.FrontLabel, false);
             SetLabelRendererVisible(visualReferences.BackLabel, false);
             host.ApplyCardIcons(visualReferences, null, card.BaseState.DefinitionId);
-            host.privateViewDiagnostics.HiddenBacks++;
+            host.privateViewDiagnostics.Note(host.privateViewDiagnostics.HiddenBacks, card.BaseState.Id);
         }
 
         internal static void SetLabelRendererVisible(TextMesh label, bool visible)

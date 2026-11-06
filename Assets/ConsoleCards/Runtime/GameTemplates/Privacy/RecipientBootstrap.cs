@@ -218,8 +218,10 @@ namespace ConsoleCards.GameTemplates.Privacy
         public GameTemplateInitialSnapshot Table;
         public List<RecipientLabel> Labels;
         public string Digest;
+        /// <summary>PRIVACY-SCENE-2 (s147): the public table template (seats, their containers, the board grid), or null.</summary>
+        public RecipientPublicLayout Layout;
 
-        public static RecipientBootstrapPackage Build(MatchState match, RecipientHandleTable handles, PlayerId recipient, IReadOnlyDictionary<TabletopObjectId, string> labels)
+        public static RecipientBootstrapPackage Build(MatchState match, RecipientHandleTable handles, PlayerId recipient, IReadOnlyDictionary<TabletopObjectId, string> labels, RecipientPublicLayout layout = null)
         {
             GameTemplateInitialSnapshot table = handles.Project(match, recipient);
             RecipientSnapshotProjection.Classify(match, recipient, out HashSet<TabletopObjectId> hidden, out _);
@@ -232,7 +234,7 @@ namespace ConsoleCards.GameTemplates.Privacy
                     if (!hidden.Contains(id) && match.ContainsObject(id)) visible.Add(new RecipientLabel { Reference = id, Text = labels[id] });
             }
 
-            return new RecipientBootstrapPackage { Table = table, Labels = visible, Digest = RecipientTableDigest.Of(table.Restore()) };
+            return new RecipientBootstrapPackage { Table = table, Labels = visible, Digest = RecipientTableDigest.Of(table.Restore()), Layout = layout };
         }
     }
 
@@ -282,6 +284,7 @@ namespace ConsoleCards.GameTemplates.Privacy
         public MatchState Table { get; private set; }
         public IReadOnlyList<ClientCardView> Cards { get; private set; }
         public IReadOnlyDictionary<ContainerId, int> Counts { get; private set; }
+        public RecipientPublicLayout Layout { get; private set; }
 
         public static RecipientClientTable Build(RecipientBootstrapPackage package)
         {
@@ -289,6 +292,8 @@ namespace ConsoleCards.GameTemplates.Privacy
             MatchState table = package.Table.Restore();
             if (RecipientTableDigest.Of(table) != package.Digest)
                 throw new InvalidOperationException("The table does not match the host's check: ask the host for the table again.");
+            string layoutProblem = package.Layout != null ? RecipientPublicLayout.Check(package.Layout, table) : null;
+            if (layoutProblem != null) throw new InvalidOperationException("The table template does not match the table: " + layoutProblem);
 
             Dictionary<TabletopObjectId, string> labels = new Dictionary<TabletopObjectId, string>();
             if (package.Labels != null) foreach (RecipientLabel label in package.Labels) labels[label.Reference] = label.Text;
@@ -312,7 +317,7 @@ namespace ConsoleCards.GameTemplates.Privacy
 
             Dictionary<ContainerId, int> counts = new Dictionary<ContainerId, int>();
             foreach (KeyValuePair<ContainerId, ContainerState> pair in table.Containers) counts[pair.Key] = pair.Value.Count;
-            return new RecipientClientTable { Table = table, Cards = cards, Counts = counts };
+            return new RecipientClientTable { Table = table, Cards = cards, Counts = counts, Layout = package.Layout };
         }
 
         // Another player's hand arrives face up (cards turn face up in any hand) but is drawn as backs.

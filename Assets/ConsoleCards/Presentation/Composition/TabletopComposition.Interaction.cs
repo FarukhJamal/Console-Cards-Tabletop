@@ -55,7 +55,11 @@ namespace ConsoleCards.Presentation.Composition
                 ConfigureFixedContainer(instance.Visual, instance.View);
             }
 
-            if (handView != null && !handView.IsTrayMode)
+            if (handView == null)
+            {
+                // PRIVACY-SCENE-2: a spectator's private view has no hand of its own.
+            }
+            else if (!handView.IsTrayMode)
             {
                 // Hands on table (F3): the table plate is the hand's drop target, as for any fixed container.
                 localHandVisual.SetBasePlateHidden(false);

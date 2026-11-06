@@ -73,7 +73,7 @@ namespace ConsoleCards.Presentation.Composition
         private void BuildToolboxRuntime()
         {
             TabletopPhysicsSettings.Apply();
-            SetGameBoardActive(activeSession.Selection.Kind == TabletopSessionKind.GameTemplate);
+            SetGameBoardActive(activeSession.Selection.Kind == TabletopSessionKind.GameTemplate || privateViewActive);
             physicalSurfaceQuery = new PhysicalTabletopSurfaces(targetCamera, coordinateConverter);
             physicalSurfaceQuery.ValidateSetup();
             physicalAuthority = new LocalPhysicalObjectAuthority(matchState, activeSession.Request.ActivePlayerIds,

@@ -671,11 +671,18 @@ namespace ConsoleCards.Presentation.Composition
                 ValidateInputPreInitializationState();
                 presentationTransitions = new TabletopPresentationTransitionController();
                 interactionOwnerId = InteractionOwnerId.New();
-                coordinateConverter = new TabletopCoordinateConverter(
-                    worldUnitsPerTableUnit,
-                    ResolveEmptyTableSurfaceHeight(),
-                    tabletopLayerHeight,
-                    tabletopLocalOrderHeight);
+                // PRIVACY-SCENE-2: a private view lays the host's table out as a game table does.
+                coordinateConverter = privateViewActive
+                    ? PhysicalTabletopSurfaces.CreateTemplateLayoutConverter(
+                        targetCamera,
+                        worldUnitsPerTableUnit,
+                        tabletopLayerHeight,
+                        tabletopLocalOrderHeight)
+                    : new TabletopCoordinateConverter(
+                        worldUnitsPerTableUnit,
+                        ResolveEmptyTableSurfaceHeight(),
+                        tabletopLayerHeight,
+                        tabletopLocalOrderHeight);
                 matchState = restoreInitialBaseline
                     ? activeSession.Reset()
                     : activeSession.CurrentMatch;
@@ -683,9 +690,12 @@ namespace ConsoleCards.Presentation.Composition
                 cameraInputAdapter.CameraController.ClearFramingTargets();
                 if (!rebuildingFromUndo) cameraInputAdapter.CameraController.ShowDefaultView();
                 BuildToolboxRuntime();
+                if (privateViewActive) PreparePrivateViewTable(); // PRIVACY-SCENE-2: labels and board before the pieces are laid on it
                 RebuildEmptyTableLooseObjectPresentation();
-                BuildEmptyTableHand();
+                if (privateViewActive) BuildPrivateViewSeats();
+                else BuildEmptyTableHand();
                 ProjectUnprojectedPlacedComponents();
+                if (privateViewActive) ConfigureDropTargets();
                 ConfigureTabletopCameraFraming(); // camera fix: views 1–4 work on the Empty Table too
                 // Owner, 2026-11-03 (MAKE A GAME / SANDBOX opened on a camera pressed against the table top): the
                 // default view came before the table was measured; the Empty Table now opens on the whole table.
