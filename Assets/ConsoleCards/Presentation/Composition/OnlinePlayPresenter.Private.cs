@@ -13,6 +13,7 @@ using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
 using ConsoleCards.GameTemplates.Definitions;
 using ConsoleCards.GameTemplates.Privacy;
+using ConsoleCards.Presentation.UI;
 using ConsoleCards.Presentation.Views;
 using UnityEngine;
 
@@ -110,6 +111,18 @@ namespace ConsoleCards.Presentation.Composition
         private Guid lastRequestId;
         private byte[] lastRequestBytes;
         private TabletopObjectId lastPlacedReference;
+        // PRIVACY-P5: a reference this computer knew a card by before it turned into a back here (a stale public ref).
+        private TabletopObjectId lastWithdrawnReference;
+        // PRIVACY-P5 (s149): how the scene follows an ordinary update. True: only the moved card's view and its two
+        // containers (the default). False: the whole scene is built again from this computer's own table (the s148
+        // behaviour, kept for measuring). A package (join, reconnect, resync, a mismatch) always builds the whole scene.
+        internal bool IncrementalScene = true;
+        private int fullBuilds;
+        private int incrementalUpdates;
+        private PendingSceneMeasure pendingMeasure;
+        private readonly float[] frameTimes = new float[60];
+        private int frameTimeCount;
+        private int frameTimeNext;
         private readonly List<string> privateLog = new List<string>(64);
         private PrivateSessionPanel privatePanel;
 
@@ -167,6 +180,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private void TickPrivate()
         {
+            TickPrivateGuestMeasure();
             if (!privateHosting || !hosting || session == null) return;
             if (!host.IsInitialized || host.matchState == null || host.trapFloorTemplate == null || host.trapFloorTurnState == null) return;
             if (!privateHostPending && ReferenceEquals(privateHostMatch, host.matchState)) return;
@@ -216,12 +230,21 @@ namespace ConsoleCards.Presentation.Composition
         // The host checks the exact bytes it sends (doc 11 §20): no real id of a card hidden from this recipient, no
         // definition only hidden cards have, no name only hidden cards have, not the deal's seed. Counts only: nothing
         // secret is written. The guest logs the SHA-256 of what it received, so both ends can be matched.
-        private void CheckSentBytes(byte[] bytes, PlayerId recipient, string what)
+        // PRIVACY-P5: an update names the card by the reference the recipient knew it by BEFORE the move. When a public
+        // card turns hidden (a Console card back to a hand, a card discarded face down), that is its real id, which this
+        // recipient already held while it was public: it is counted apart, so the check still shows any other.
+        private void CheckSentBytes(byte[] bytes, PlayerId recipient, string what, TabletopObjectId knewBefore = default)
         {
             MatchState full = host.matchState;
             RecipientSnapshotProjection.Classify(full, recipient, out HashSet<TabletopObjectId> hidden, out _);
             int ids = 0;
-            foreach (TabletopObjectId id in hidden) if (TabletopComposition.Contains(bytes, id.Value.ToByteArray())) ids++;
+            bool previousPublic = false;
+            foreach (TabletopObjectId id in hidden)
+            {
+                if (!TabletopComposition.Contains(bytes, id.Value.ToByteArray())) continue;
+                if (!knewBefore.IsEmpty && id == knewBefore) previousPublic = true;
+                else ids++;
+            }
             HashSet<ObjectDefinitionId> definitions = TabletopComposition.HiddenOnlyDefinitions(full, hidden);
             int defs = 0;
             foreach (ObjectDefinitionId definition in definitions) if (TabletopComposition.Contains(bytes, definition.Value.ToByteArray())) defs++;
@@ -229,8 +252,9 @@ namespace ConsoleCards.Presentation.Composition
             int named = 0;
             foreach (string name in names) if (TabletopComposition.Contains(bytes, Encoding.UTF8.GetBytes(name))) named++;
             bool seed = privateSeedKnown && TabletopComposition.Contains(bytes, BitConverter.GetBytes(privateSeed));
-            PrivateNote($"Sent {what}: {bytes.Length} bytes, sha256 {Sha(bytes)}; hidden real ids {ids}/{hidden.Count}, hidden-only definitions {defs}/{definitions.Count}, "
-                + $"hidden-only names {named}/{names.Count}, deal seed {(seed ? "FOUND" : "absent")}.");
+            PrivateNote($"Sent {what}: {bytes.Length} bytes, sha256 {Sha(bytes)}; hidden real ids {ids}/{hidden.Count}"
+                + (previousPublic ? " (plus the card's previous reference: its real id, which this recipient could identify before the move)" : string.Empty)
+                + $", hidden-only definitions {defs}/{definitions.Count}, hidden-only names {named}/{names.Count}, deal seed {(seed ? "FOUND" : "absent")}.");
         }
 
         private static string Sha(byte[] bytes)
@@ -276,7 +300,11 @@ namespace ConsoleCards.Presentation.Composition
             ContainerId from = ContainerId.Empty, to = ContainerId.Empty;
             string what;
             string before = HostTableFingerprint();
-            if (!PrivateRequestCodec.TryRead(data, 1, out byte kind, out PrivateDrawRequest draw, out PrivatePlaceRequest place))
+            // Who could identify the card BEFORE the move (for the sent-bytes check); filled after an accepted move.
+            Dictionary<PlayerId, bool> knownBefore = new Dictionary<PlayerId, bool>();
+            TabletopObjectId movedCard = TabletopObjectId.Empty;
+            Dictionary<TabletopObjectId, HashSet<PlayerId>> publicBefore = PublicCardsByRecipient();
+            if (!PrivateRequestCodec.TryRead(data, 1, out byte kind, out PrivateDrawRequest draw, out PrivatePlaceRequest place, out PrivateCardRequest card))
             {
                 verdict = PrivateRequestVerdict.UnknownReference;
                 what = "a malformed request";
@@ -290,13 +318,32 @@ namespace ConsoleCards.Presentation.Composition
                 to = seats.IsSeated(sender) ? seats.HandOf(sender) : ContainerId.Empty;
                 verdict = privateHost.Draw(sender, draw, out updates);
             }
-            else
+            else if (kind == PrivateRequestCodec.KindPlace)
             {
                 requestId = place.RequestId;
                 what = "Place face up";
-                to = place.Destination;
                 verdict = privateHost.Place(sender, place, out updates);
-                if (verdict == PrivateRequestVerdict.Accepted) from = new RoomSeats(this).HandOf(sender);
+            }
+            else if (kind == PrivateRequestCodec.KindReturn)
+            {
+                requestId = card.RequestId;
+                what = "Return to hand";
+                verdict = privateHost.Return(sender, card, out updates);
+            }
+            else
+            {
+                requestId = card.RequestId;
+                what = "Discard";
+                verdict = privateHost.Discard(sender, card, out updates);
+            }
+
+            if (verdict == PrivateRequestVerdict.Accepted)
+            {
+                from = privateHost.LastFrom;
+                to = privateHost.LastTo;
+                movedCard = privateHost.LastCard;
+                foreach (PlayerId r in privateHost.Recipients)
+                    knownBefore[r] = publicBefore.TryGetValue(movedCard, out HashSet<PlayerId> who) && who.Contains(r);
             }
 
             int sent = 0;
@@ -313,7 +360,11 @@ namespace ConsoleCards.Presentation.Composition
                     if (other.IsHost || !other.Connected || other.Connection < 0) continue;
                     PlayerId recipient = RecipientOf(other);
                     if (!updates.TryGetValue(recipient, out byte[] update)) continue;
-                    CheckSentBytes(update, recipient, $"{what} update to {other.Name}");
+                    // The previous reference counts apart only when it was this card's real id AND the recipient could
+                    // identify the card before the move (it was public then); a handle is never a real id.
+                    TabletopObjectId knewBefore = TabletopObjectId.Empty;
+                    if (knownBefore.TryGetValue(recipient, out bool knew) && knew) knewBefore = movedCard;
+                    CheckSentBytes(update, recipient, $"{what} update to {other.Name}", knewBefore);
                     SendPrivateBytes(other, MsgPrivateUpdate, update);
                     updatesSent++;
                     sent++;
@@ -322,14 +373,29 @@ namespace ConsoleCards.Presentation.Composition
             else
             {
                 string after = HostTableFingerprint();
-                PrivateNote($"Refused {what} from {member.Name}: {verdict}; host table {(before == after ? "unchanged" : "CHANGED")}.");
+                PrivateNote($"Refused {what} from {member.Name}: {verdict} (assist {PlayAssist.Level}); host table {(before == after ? "unchanged" : "CHANGED")}.");
             }
 
-            if (verdict == PrivateRequestVerdict.Accepted) PrivateNote($"Accepted {what} from {member.Name}; one recipient-specific update sent to each of the {sent} guest computer(s) here.");
+            if (verdict == PrivateRequestVerdict.Accepted) PrivateNote($"Accepted {what} from {member.Name} (assist {PlayAssist.Level}); one recipient-specific update sent to each of the {sent} guest computer(s) here.");
             BeginMessage(MsgPrivateVerdict);
             WriteGuid(requestId);
             writer.Write((byte)verdict);
             SendTo(member);
+        }
+
+        // Which recipients may identify each card right now (host side, for the sent-bytes check of the next update).
+        private Dictionary<TabletopObjectId, HashSet<PlayerId>> PublicCardsByRecipient()
+        {
+            Dictionary<TabletopObjectId, HashSet<PlayerId>> known = new Dictionary<TabletopObjectId, HashSet<PlayerId>>();
+            if (privateHost == null) return known;
+            foreach (PlayerId r in privateHost.Recipients)
+                foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in host.matchState.Cards)
+                    if (RecipientSnapshotProjection.MayKnowIdentity(host.matchState, pair.Value, r))
+                    {
+                        if (!known.TryGetValue(pair.Key, out HashSet<PlayerId> set)) known[pair.Key] = set = new HashSet<PlayerId>();
+                        set.Add(r);
+                    }
+            return known;
         }
 
         // Where every card is and how it lies (for the "a refused request changed nothing" check). Host side.
@@ -399,9 +465,20 @@ namespace ConsoleCards.Presentation.Composition
 
             public bool IsSeated(PlayerId player) => !player.IsEmpty && seated.Contains(player);
 
-            // Development slice: the game's turn order is not checked for these two development actions (they are
-            // table moves, not a Trap Floor rule). Seat, source, destination, reference and duplicates are checked.
-            public bool IsTurnOf(PlayerId player) => IsSeated(player);
+            // PRIVACY-P5 (s149), mode policy. Free and Reminders: tabletop freedom (any seated player, any time; the
+            // seat, source, destination, reference, privacy and duplicate checks still apply). Full: the game's own turn
+            // on the host's table (the active player, in its player turn, on a floor still being played).
+            public bool IsTurnOf(PlayerId player)
+            {
+                if (!IsSeated(player)) return false;
+                if (PlayAssist.Level != PlayAssistLevel.Full) return true;
+                TrapFloorTurnState turn = online.host.trapFloorTurnState;
+                return turn != null && !turn.IsCurrentFloorFailed && turn.Phase == TrapFloorTurnPhase.PlayerTurn && turn.ActivePlayerId == player;
+            }
+
+            // Full: the game's hand limit (its Controller configuration), as its draw bar uses it. Free / Reminders: none.
+            public int DrawLimit(PlayerId player) =>
+                PlayAssist.Level == PlayAssistLevel.Full ? online.host.trapFloorTemplate.GameDefinition.ControllerConfiguration.MaximumHandSize : -1;
 
             public ContainerId DeckOf(PlayerId player) => SetupOf(player)?.ControllerDeckId ?? ContainerId.Empty;
 
@@ -472,7 +549,11 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             PlayerId me = myPlayer == Guid.Empty ? RecipientSnapshotProjection.Spectator : new PlayerId(myPlayer);
-            if (!host.BuildPrivateRecipientScene(package, me, host.CurrentBoardCardBack(), host.TrapFloorGame.BoardMatPicture, out RecipientClientTable client, out string error))
+            PendingSceneMeasure measure = BeginSceneMeasure("full scene build from a package");
+            bool built = host.BuildPrivateRecipientScene(package, me, host.CurrentBoardCardBack(), host.TrapFloorGame.BoardMatPicture, out RecipientClientTable client, out string error);
+            fullBuilds++;
+            EndSceneWork(measure);
+            if (!built)
             {
                 PrivateNote("The scene could not be built from the package: " + error);
                 return;
@@ -512,14 +593,31 @@ namespace ConsoleCards.Presentation.Composition
 
             RecipientCardEvent ev = update.Event;
             bool identity = !ev.Definition.Equals(RecipientSnapshotProjection.HiddenDefinition);
-            if (!host.RebuildPrivateSceneFromOwnTable(out string error))
+            if (!identity && !ev.PreviousReference.Equals(ev.Reference)) lastWithdrawnReference = ev.PreviousReference;
+            PendingSceneMeasure measure = BeginSceneMeasure(IncrementalScene ? "incremental update" : "full scene rebuild");
+            string error;
+            bool shown = IncrementalScene ? host.ApplyPrivateEventToScene(ev, out error) : host.RebuildPrivateSceneFromOwnTable(out error);
+            if (!shown && IncrementalScene)
+            {
+                // The views could not follow the event: the whole scene is built again from this computer's own table
+                // (never from anything else). Counted, so a run shows how often it happens.
+                PrivateNote("The incremental update could not be shown (" + error + "): building the scene again from this computer's own table.");
+                measure.What = "full scene rebuild (after a failed incremental update)";
+                shown = host.RebuildPrivateSceneFromOwnTable(out error);
+                fullBuilds++;
+            }
+            else if (IncrementalScene) incrementalUpdates++;
+            else fullBuilds++;
+            EndSceneWork(measure);
+            if (!shown)
             {
                 PrivateNote("The scene could not follow the update: " + error);
                 return;
             }
 
-            PrivateNote($"Update {updatesReceived}: {bytes.Length} bytes, sha256 {Sha(bytes)}; a card moved {(identity ? "WITH its identity (" + CardName(ev.Definition) + ")" : "as a back")}, "
-                + $"face {(ev.FaceUp ? "up" : "down")}, into a container now holding {ev.ToCount}; digest matches the host's; own hand {OwnHandSummary()}.");
+            string kind = host.matchState.Containers.TryGetValue(ev.To, out ContainerState toContainer) ? toContainer.Kind.ToString() : "?";
+            PrivateNote($"Update {updatesReceived}: {bytes.Length} bytes, sha256 {Sha(bytes)}; a card moved {(identity ? "WITH its identity (" + CardName(ev.Definition) + ")" : "as a back")} "
+                + $"into a {kind} now holding {ev.ToCount}{(ev.PreviousReference.Equals(ev.Reference) ? "" : " (new reference here)")}; digest matches the host's; own hand {OwnHandSummary()}.");
         }
 
         private void GuestVerdict(byte[] bytes)
@@ -580,7 +678,8 @@ namespace ConsoleCards.Presentation.Composition
             if (privateHosting)
                 return $"HOST · packages sent {packagesSent}, updates sent {updatesSent}, legacy table messages refused {legacyRefused}";
             if (privateGuest)
-                return $"GUEST · packages {packagesReceived}, updates {updatesReceived}, digest mismatches {digestMismatches}, legacy table messages dropped {legacyRefused} · hand {OwnHandSummary()}";
+                return $"GUEST · packages {packagesReceived}, updates {updatesReceived}, digest mismatches {digestMismatches}, legacy table messages dropped {legacyRefused} · hand {OwnHandSummary()}\n"
+                    + $"scene: {(IncrementalScene ? "incremental" : "FULL REBUILD (measuring)")} · full builds {fullBuilds}, incremental updates {incrementalUpdates}";
             return InRoom ? "In a room (private development session ON): waiting for the host's table" : "Private development session ON: host or join a room";
         }
 
@@ -592,6 +691,173 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         internal void PrivatePlace() => PlaceInto(OwnFreeShownSlot(), false, "Place face up");
+
+        // PRIVACY-P5: the first card on this seat's Console back into its hand.
+        internal void PrivateReturn()
+        {
+            TabletopObjectId card = FirstOwnConsoleCard();
+            if (!privateGuest || card.IsEmpty) { PrivateNote("Return: no card on your Console."); return; }
+            SendPrivateRequest(PrivateRequestCodec.Card(PrivateRequestCodec.KindReturn, new PrivateCardRequest { RequestId = Guid.NewGuid(), Card = card }), "Return to hand");
+        }
+
+        // PRIVACY-P5: the first card in this seat's hand (else on its Console) onto the first public discard pile.
+        internal void PrivateDiscard()
+        {
+            RecipientSeatLayout seat = OwnSeat();
+            TabletopObjectId card = TabletopObjectId.Empty;
+            if (seat != null && host.matchState.Containers.TryGetValue(seat.Hand, out ContainerState hand) && hand.Count > 0) card = hand.GetObjectAt(0);
+            if (card.IsEmpty) card = FirstOwnConsoleCard();
+            ContainerId pile = PublicDiscardPile();
+            if (!privateGuest || card.IsEmpty || pile.IsEmpty) { PrivateNote("Discard: no card of yours, or no public discard pile."); return; }
+            SendPrivateRequest(PrivateRequestCodec.Card(PrivateRequestCodec.KindDiscard, new PrivateCardRequest { RequestId = Guid.NewGuid(), Card = card, Destination = pile }), "Discard");
+        }
+
+        // PRIVACY-P5 bad requests: a card in ANOTHER seat's hand (this computer's handle for that back), and the old
+        // public reference of a card that has since become a back here.
+        internal void PrivateDiscardOthersCard()
+        {
+            TabletopObjectId card = FirstCardInAnotherHand();
+            ContainerId pile = PublicDiscardPile();
+            if (card.IsEmpty || pile.IsEmpty) { PrivateNote("Other's card: no card in another hand."); return; }
+            SendPrivateRequest(PrivateRequestCodec.Card(PrivateRequestCodec.KindDiscard, new PrivateCardRequest { RequestId = Guid.NewGuid(), Card = card, Destination = pile }),
+                "Discard a card in ANOTHER seat's hand by this computer's handle (expect InvalidSource)");
+        }
+
+        internal void PrivateDiscardWithdrawn()
+        {
+            ContainerId pile = PublicDiscardPile();
+            if (lastWithdrawnReference.IsEmpty || pile.IsEmpty) { PrivateNote("Old public ref: no card has turned into a back here yet."); return; }
+            SendPrivateRequest(PrivateRequestCodec.Card(PrivateRequestCodec.KindDiscard, new PrivateCardRequest { RequestId = Guid.NewGuid(), Card = lastWithdrawnReference, Destination = pile }),
+                "Discard by the OLD public reference of a card now hidden here (expect HiddenRealId)");
+        }
+
+        // Discard into a seat's Console slot (not a public discard pile): expect InvalidDestination.
+        internal void PrivateDiscardIntoSlot()
+        {
+            RecipientSeatLayout seat = OwnSeat();
+            ContainerId slot = OwnFreeShownSlot();
+            if (seat == null || slot.IsEmpty || !host.matchState.Containers.TryGetValue(seat.Hand, out ContainerState hand) || hand.Count == 0) { PrivateNote("Bad discard: no card or slot."); return; }
+            SendPrivateRequest(PrivateRequestCodec.Card(PrivateRequestCodec.KindDiscard, new PrivateCardRequest { RequestId = Guid.NewGuid(), Card = hand.GetObjectAt(0), Destination = slot }),
+                "Discard into a Console slot, not a discard pile (expect InvalidDestination)");
+        }
+
+        internal void ToggleSceneMode()
+        {
+            IncrementalScene = !IncrementalScene;
+            PrivateNote(IncrementalScene ? "Scene mode: incremental (only the moved card and its containers)." : "Scene mode: FULL REBUILD per update (s148 behaviour, for measuring).");
+        }
+
+        private TabletopObjectId FirstOwnConsoleCard()
+        {
+            RecipientSeatLayout seat = OwnSeat();
+            if (seat == null || !host.matchState.Seats.TryGetValue(seat.Seat, out SeatState state) || state.Console == null) return TabletopObjectId.Empty;
+            for (int i = 1; i < state.Console.SlotCount; i++)
+                if (host.matchState.Containers.TryGetValue(state.Console.SlotContainerIds[i], out ContainerState slot) && slot.Count > 0) return slot.GetObjectAt(slot.TopIndex);
+            return TabletopObjectId.Empty;
+        }
+
+        private TabletopObjectId FirstCardInAnotherHand()
+        {
+            RecipientSeatLayout mine = OwnSeat();
+            if (host.privateViewLayout == null) return TabletopObjectId.Empty;
+            foreach (RecipientSeatLayout seat in host.privateViewLayout.Seats)
+            {
+                if (mine != null && seat.Seat == mine.Seat) continue;
+                if (host.matchState.Containers.TryGetValue(seat.Hand, out ContainerState hand) && hand.Count > 0) return hand.GetObjectAt(0);
+            }
+
+            return TabletopObjectId.Empty;
+        }
+
+        // A discard pile of the received table that no seat owns and that shows its cards (the host decides again).
+        private ContainerId PublicDiscardPile()
+        {
+            foreach (KeyValuePair<ContainerId, ContainerState> pair in host.matchState.Containers)
+                if (pair.Value.Kind == ContainerKind.DiscardPile && pair.Value.OwnerSeatId.IsEmpty && pair.Value.Visibility == ObjectVisibility.Public) return pair.Key;
+            return ContainerId.Empty;
+        }
+
+        // ---------- PRIVACY-P5: measuring how the scene follows an update ----------
+
+        private sealed class PendingSceneMeasure
+        {
+            public string What;
+            public HashSet<GameObject> Before;
+            public double CensusMs;
+            public double WorkMs;
+            public long Allocated;
+            public int CardViewsBefore;
+            public int CardViewsAfter;
+            public System.Diagnostics.Stopwatch Clock;
+            public long AllocatedAtStart;
+            public int CollectionsAtStart;
+            public int Collections;
+            public int FramesSeen;
+            public float WorstFrame;
+        }
+
+        private static HashSet<GameObject> GameObjectCensus()
+        {
+            Transform[] all = UnityEngine.Object.FindObjectsByType<Transform>(FindObjectsInactive.Include);
+            HashSet<GameObject> objects = new HashSet<GameObject>();
+            for (int i = 0; i < all.Length; i++) if (all[i] != null) objects.Add(all[i].gameObject);
+            return objects;
+        }
+
+        private PendingSceneMeasure BeginSceneMeasure(string what)
+        {
+            System.Diagnostics.Stopwatch census = System.Diagnostics.Stopwatch.StartNew();
+            PendingSceneMeasure m = new PendingSceneMeasure { What = what, Before = GameObjectCensus(), CardViewsBefore = host.Registry.cardViews.Count };
+            census.Stop();
+            m.CensusMs = census.Elapsed.TotalMilliseconds;
+            m.AllocatedAtStart = UnityEngine.Profiling.Profiler.GetMonoUsedSizeLong();
+            m.CollectionsAtStart = GC.CollectionCount(0);
+            m.Clock = System.Diagnostics.Stopwatch.StartNew();
+            return m;
+        }
+
+        private void EndSceneWork(PendingSceneMeasure m)
+        {
+            m.Clock.Stop();
+            m.WorkMs = m.Clock.Elapsed.TotalMilliseconds;
+            m.Allocated = UnityEngine.Profiling.Profiler.GetMonoUsedSizeLong() - m.AllocatedAtStart;
+            m.Collections = GC.CollectionCount(0) - m.CollectionsAtStart;
+            m.CardViewsAfter = host.Registry.cardViews.Count;
+            pendingMeasure = m; // finished on the next frame (destroyed objects are gone by then; that frame's time includes this one's work)
+        }
+
+        // Every frame on a guest: keeps recent frame times, and finishes a pending measurement.
+        private void TickPrivateGuestMeasure()
+        {
+            if (!privateGuest) return;
+            float dt = Time.unscaledDeltaTime * 1000f;
+            if (pendingMeasure == null)
+            {
+                frameTimes[frameTimeNext] = dt;
+                frameTimeNext = (frameTimeNext + 1) % frameTimes.Length;
+                if (frameTimeCount < frameTimes.Length) frameTimeCount++;
+                return;
+            }
+
+            // The work may land in the frame before or the one this Tick runs in (network messages are read at
+            // different points of the frame), so the worst of the next three frames is taken.
+            PendingSceneMeasure m = pendingMeasure;
+            m.WorstFrame = Math.Max(m.WorstFrame, dt);
+            if (++m.FramesSeen < 3) return;
+            dt = m.WorstFrame;
+            pendingMeasure = null;
+            HashSet<GameObject> after = GameObjectCensus();
+            int created = 0, destroyed = 0;
+            foreach (GameObject o in after) if (!m.Before.Contains(o)) created++;
+            foreach (GameObject o in m.Before) if (!after.Contains(o)) destroyed++;
+            float[] sorted = new float[frameTimeCount];
+            Array.Copy(frameTimes, sorted, frameTimeCount);
+            Array.Sort(sorted);
+            float median = frameTimeCount > 0 ? sorted[frameTimeCount / 2] : 0f;
+            PrivateNote($"Scene measure ({m.What}): work {m.WorkMs:F1} ms; worst of the next 3 frames {dt:F1} ms ({Math.Max(0d, dt - m.CensusMs):F1} ms without the measuring census of {m.CensusMs:F1} ms; "
+                + $"median of the last {frameTimeCount} frames {median:F1} ms); GameObjects created {created}, destroyed {destroyed} (scene now {after.Count}); "
+                + $"managed heap growth {m.Allocated / 1024d:F0} KB ({m.Collections} GC collections during the work); card views {m.CardViewsBefore} → {m.CardViewsAfter}.");
+        }
 
         internal void PrivateResendLast()
         {
@@ -845,7 +1111,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (Online == null || !PrivateDevSession.Enabled) return;
             const float width = 560f;
-            GUILayout.BeginArea(new Rect(Screen.width - width - 12f, 12f, width, folded ? 60f : 420f), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(Screen.width - width - 12f, 12f, width, folded ? 80f : 480f), GUI.skin.box);
             GUILayout.BeginHorizontal();
             GUILayout.Label("PRIVATE DEV SESSION · development only · not normal online play");
             if (GUILayout.Button(folded ? "Show" : "Hide", GUILayout.Width(60f))) folded = !folded;
@@ -858,14 +1124,24 @@ namespace ConsoleCards.Presentation.Composition
                     GUILayout.BeginHorizontal();
                     if (GUILayout.Button("Draw")) Online.PrivateDraw();
                     if (GUILayout.Button("Place face up")) Online.PrivatePlace();
+                    if (GUILayout.Button("Return to hand")) Online.PrivateReturn();
+                    if (GUILayout.Button("Discard")) Online.PrivateDiscard();
+                    GUILayout.EndHorizontal();
+                    GUILayout.BeginHorizontal();
                     if (GUILayout.Button("Resync (my package)")) Online.PrivateResync();
                     if (GUILayout.Button("Send scene check")) Online.PrivateSendInventory();
+                    if (GUILayout.Button(Online.IncrementalScene ? "Scene: incremental" : "Scene: FULL rebuild")) Online.ToggleSceneMode();
                     GUILayout.EndHorizontal();
                     GUILayout.BeginHorizontal();
                     if (GUILayout.Button("Bad: repeat last")) Online.PrivateResendLast();
                     if (GUILayout.Button("Bad: other seat")) Online.PrivatePlaceOnOtherSeat();
                     if (GUILayout.Button("Bad: made-up ref")) Online.PrivatePlaceForged();
                     if (GUILayout.Button("Bad: stale ref")) Online.PrivatePlaceStale();
+                    GUILayout.EndHorizontal();
+                    GUILayout.BeginHorizontal();
+                    if (GUILayout.Button("Bad: other's card")) Online.PrivateDiscardOthersCard();
+                    if (GUILayout.Button("Bad: old public ref")) Online.PrivateDiscardWithdrawn();
+                    if (GUILayout.Button("Bad: discard to slot")) Online.PrivateDiscardIntoSlot();
                     GUILayout.EndHorizontal();
                 }
 

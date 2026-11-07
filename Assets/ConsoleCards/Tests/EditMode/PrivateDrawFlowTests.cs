@@ -32,6 +32,7 @@ namespace ConsoleCards.Tests
                 return false;
             }
             public IReadOnlyList<PlayerId> Seated => T.Players;
+            public int DrawLimit(PlayerId player) => -1;
         }
 
         private static bool Carries(byte[] haystack, byte[] needle)

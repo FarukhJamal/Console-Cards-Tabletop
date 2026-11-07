@@ -60,7 +60,14 @@ namespace ConsoleCards.Editor.Board
         [MenuItem(Root + "Build second private-session guest (development build)", true)]
         private static bool CanBuildSecondGuest() => !UnityEngine.Application.isPlaying;
 
-        private static void BuildGuestInto(string folder)
+        // A development build of the same code with NO flag file: normal online play, for the legacy smoke test (s149).
+        [MenuItem(Root + "Build normal online test copy (development build, no private session)")]
+        private static void BuildNormalCopy() => BuildGuestInto("Builds/MLP/LG1", false);
+
+        [MenuItem(Root + "Build normal online test copy (development build, no private session)", true)]
+        private static bool CanBuildNormalCopy() => !UnityEngine.Application.isPlaying;
+
+        private static void BuildGuestInto(string folder, bool privateSession = true)
         {
             string exe = System.IO.Path.Combine(folder, "Console Cards.exe");
             System.Collections.Generic.List<string> scenes = new System.Collections.Generic.List<string>();
@@ -72,9 +79,11 @@ namespace ConsoleCards.Editor.Board
                 target = BuildTarget.StandaloneWindows64,
                 options = BuildOptions.Development,
             });
-            if (report.summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded)
+            string flag = System.IO.Path.Combine(folder, PrivateDevSession.FlagFileName);
+            if (!privateSession && System.IO.File.Exists(flag)) System.IO.File.Delete(flag);
+            if (privateSession && report.summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded)
             {
-                System.IO.File.WriteAllText(System.IO.Path.Combine(folder, PrivateDevSession.FlagFileName),
+                System.IO.File.WriteAllText(flag,
                     "Development only: this copy plays the private development session (doc 10 §57). Delete this file for normal online play.");
             }
 

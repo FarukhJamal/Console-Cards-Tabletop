@@ -251,6 +251,89 @@ namespace ConsoleCards.Presentation.Composition
             return false;
         }
 
+        /// <summary>
+        /// PRIVACY-P5 (s149): the narrow scene update for one accepted card event, after it was applied to this
+        /// computer's own table. Only the moved card's view is made again (its reference and identity may have changed:
+        /// a back has no face to keep), and only its source and destination containers lay out again. False when the
+        /// views cannot follow (the caller then builds the whole scene from this computer's own table).
+        /// </summary>
+        internal bool ApplyPrivateEventToScene(RecipientCardEvent ev, out string error)
+        {
+            error = null;
+            if (!privateViewActive || matchState == null) { error = "no private view"; return false; }
+            if (ev == null || !matchState.Cards.TryGetValue(ev.Reference, out CardInstanceState card)) { error = "the event's card is not in this table"; return false; }
+            try
+            {
+                bool identified = !card.BaseState.DefinitionId.Equals(RecipientSnapshotProjection.HiddenDefinition);
+                string keptLabel = null;
+                if (identified && labelsByCardId.TryGetValue(ev.PreviousReference, out string label)) keptLabel = label;
+                selectionState.ClearAll(); // as a deleted card's view is released (no selection names the old view)
+                // The selection presenter keeps its own list of highlight visuals; it is taken down while all of them are
+                // still configured (a released card's visual is cleared) and made again below from the registry.
+                inputFrameCoordinator.ClearSelectionPresenter();
+                // The old view is found by the id it is bound to: its card state has already left this table, so a
+                // lookup through the table would miss it.
+                if (HasRuntimeCardInstance(ev.PreviousReference)) ReleaseRuntimeCardInstance(ev.PreviousReference);
+                if (!ev.Reference.Equals(ev.PreviousReference) && HasRuntimeCardInstance(ev.Reference)) ReleaseRuntimeCardInstance(ev.Reference);
+                labelsByCardId.Remove(ev.Reference);
+                if (keptLabel != null) labelsByCardId[ev.Reference] = keptLabel; // a back keeps no name
+
+                CardView view = Spawner.CreateCardView(card, ResolveCardLabel(card), out var selectionVisual);
+                Registry.cardViews.Add(view);
+                Registry.cardSelectionVisuals.Add(selectionVisual);
+                RefreshContainerCardViewSources();
+                // Other seats' hands (drawn as backs) keep their own copy of the card views list and are not among the
+                // layout views refreshed above: they get the new list too, or they would still hold the released view.
+                for (int i = 0; i < Registry.hiddenHandViews.Count; i++)
+                    if (Registry.hiddenHandViews[i] != null) Registry.hiddenHandViews[i].SetCardViews(Registry.cardViews);
+                if (!ev.From.IsEmpty) ViewSync.SyncContainer(ev.From);
+                if (!ev.To.IsEmpty && ev.To != ev.From) ViewSync.SyncContainer(ev.To);
+                RefreshCardContentVisibility();
+                RefreshAcceptedCardFaces();
+                RefreshSelectionPresenterAfterRuntimeProjection();
+                Physics.SyncTransforms();
+            }
+            catch (Exception exception)
+            {
+                string trace = exception.StackTrace ?? string.Empty;
+                error = exception.GetType().Name + ": " + exception.Message + " at " + (trace.Length > 700 ? trace.Substring(0, 700) : trace);
+                try
+                {
+                    // The views are made again by the caller; the selection presenter must not keep a released visual.
+                    RefreshSelectionPresenterAfterRuntimeProjection();
+                }
+                catch (Exception again)
+                {
+                    error += " (selection presenter: " + again.Message + ")";
+                }
+
+                return false; // the caller builds the whole scene from this computer's own table
+            }
+
+            // The registry must match the table: one bound view per card, none for a card that is gone.
+            int bound = 0;
+            for (int i = 0; i < Registry.cardViews.Count; i++)
+                if (Registry.cardViews[i] != null && Registry.cardViews[i].IsBound) bound++;
+            if (bound != matchState.Cards.Count || !HasRuntimeCardInstance(ev.Reference))
+            {
+                error = $"card views {bound} for {matchState.Cards.Count} cards";
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool HasRuntimeCardInstance(TabletopObjectId id)
+        {
+            for (int i = 0; i < Registry.runtimeCardInstances.Count; i++)
+            {
+                CardView view = Registry.runtimeCardInstances[i].View;
+                if (view != null && view.ObjectId == id) return true;
+            }
+
+            return false;
+        }
+
         // The public table template, from the game table's public structure (its seats and its board). Host side.
         internal RecipientPublicLayout BuildPublicLayout()
         {

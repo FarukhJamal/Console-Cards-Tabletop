@@ -25,7 +25,9 @@ namespace ConsoleCards.GameTemplates.Privacy
         HiddenRealId,
         InvalidSource,
         InvalidDestination,
-        EmptyDeck
+        EmptyDeck,
+        /// <summary>PRIVACY-P5 (s149): Full only, the game's own limit says no (the hand already holds its maximum).</summary>
+        RuleRefused
     }
 
     /// <summary>"Draw the top card of my deck into my hand." The deck and the hand are public containers.</summary>
@@ -37,6 +39,18 @@ namespace ConsoleCards.GameTemplates.Privacy
 
     /// <summary>"Put this card of mine face up in this slot of my Console." The card is named by the sender's reference.</summary>
     public sealed class PrivatePlaceRequest
+    {
+        public Guid RequestId;
+        public TabletopObjectId Card;
+        public ContainerId Destination;
+    }
+
+    /// <summary>
+    /// PRIVACY-P5 (s149): "Put this card of mine back in my hand" (Return: Destination empty, the host takes the sender's
+    /// own hand) or "Put this card of mine on that public discard pile" (Discard). The card is named by the sender's
+    /// own reference; the destination never decides whose card it is.
+    /// </summary>
+    public sealed class PrivateCardRequest
     {
         public Guid RequestId;
         public TabletopObjectId Card;
@@ -59,6 +73,8 @@ namespace ConsoleCards.GameTemplates.Privacy
         ContainerId HandOf(PlayerId player);
         bool IsOwnConsoleSlot(PlayerId player, ContainerId slot);
         IReadOnlyList<PlayerId> Seated { get; }
+        /// <summary>PRIVACY-P5: the most cards the player's hand may hold after a Draw, or -1 for no limit (Free, Reminders).</summary>
+        int DrawLimit(PlayerId player);
     }
 
     /// <summary>Host side. Holds the only full table, the session key and the reference books.</summary>
@@ -89,6 +105,11 @@ namespace ConsoleCards.GameTemplates.Privacy
             }
         }
 
+        /// <summary>PRIVACY-P5 (s149): the source and destination of the last accepted move (the host's own scene follows them).</summary>
+        public ContainerId LastFrom { get; private set; }
+        public ContainerId LastTo { get; private set; }
+        public TabletopObjectId LastCard { get; private set; }
+
         /// <summary>PRIVACY-P4 (s148): the public table template sent with every package (null: none).</summary>
         public RecipientPublicLayout Layout { get; set; }
 
@@ -108,6 +129,8 @@ namespace ConsoleCards.GameTemplates.Privacy
             if (!match.Containers.TryGetValue(request.Deck, out ContainerState deck) || deck.Kind != ContainerKind.Deck) return PrivateRequestVerdict.InvalidSource;
             if (deck.Count == 0) return PrivateRequestVerdict.EmptyDeck;
             ContainerState hand = match.Containers[seats.HandOf(sender)];
+            int limit = seats.DrawLimit(sender);
+            if (limit >= 0 && hand.Count >= limit) return PrivateRequestVerdict.RuleRefused; // Full: the game's hand limit
             TabletopObjectId real = deck.GetObjectAt(deck.TopIndex); // the host decides which card it is
             return Move(real, deck, hand, null, out updates);
         }
@@ -125,6 +148,62 @@ namespace ConsoleCards.GameTemplates.Privacy
             if (!seats.IsOwnConsoleSlot(sender, request.Destination) || !match.Containers.TryGetValue(request.Destination, out ContainerState slot))
                 return PrivateRequestVerdict.InvalidDestination;
             return Move(real, match.Containers[card.BaseState.ContainerId], slot, CardFace.FaceUp, out updates);
+        }
+
+        /// <summary>
+        /// PRIVACY-P5 (s149): a card of the sender's own Console back into the sender's own hand. The hand's arrival face
+        /// applies (as a draw); every other recipient then holds the card under a fresh handle, as a back.
+        /// </summary>
+        public PrivateRequestVerdict Return(PlayerId sender, PrivateCardRequest request, out Dictionary<PlayerId, byte[]> updates)
+        {
+            updates = null;
+            PrivateRequestVerdict check = Common(sender, request?.RequestId ?? Guid.Empty, needsTurn: true);
+            if (check != PrivateRequestVerdict.Accepted) return check;
+            ContainerId handId = seats.HandOf(sender);
+            if (!request.Destination.IsEmpty && request.Destination != handId) return PrivateRequestVerdict.InvalidDestination; // only one's own hand
+            PrivateRequestVerdict source = ResolveOwnCard(sender, request.Card, allowHand: false, out TabletopObjectId real, out ContainerState from);
+            if (source != PrivateRequestVerdict.Accepted) return source;
+            if (!match.Containers.TryGetValue(handId, out ContainerState hand)) return PrivateRequestVerdict.InvalidDestination;
+            return Move(real, from, hand, null, out updates);
+        }
+
+        /// <summary>
+        /// PRIVACY-P5 (s149): a card of the sender's own hand or own Console onto a public discard pile (a discard pile
+        /// that belongs to no seat and shows its cards to everyone). The pile's own arrival face applies.
+        /// </summary>
+        public PrivateRequestVerdict Discard(PlayerId sender, PrivateCardRequest request, out Dictionary<PlayerId, byte[]> updates)
+        {
+            updates = null;
+            PrivateRequestVerdict check = Common(sender, request?.RequestId ?? Guid.Empty, needsTurn: true);
+            if (check != PrivateRequestVerdict.Accepted) return check;
+            PrivateRequestVerdict source = ResolveOwnCard(sender, request.Card, allowHand: true, out TabletopObjectId real, out ContainerState from);
+            if (source != PrivateRequestVerdict.Accepted) return source;
+            if (!IsPublicDiscardPile(request.Destination, out ContainerState pile)) return PrivateRequestVerdict.InvalidDestination;
+            return Move(real, from, pile, null, out updates);
+        }
+
+        /// <summary>A discard pile no seat owns, whose cards everyone may see.</summary>
+        public bool IsPublicDiscardPile(ContainerId id, out ContainerState pile)
+        {
+            return match.Containers.TryGetValue(id, out pile)
+                && pile.Kind == ContainerKind.DiscardPile
+                && pile.OwnerSeatId.IsEmpty
+                && pile.Visibility == ObjectVisibility.Public;
+        }
+
+        // The sender's own card, named by the sender's own reference: in its own hand (when allowed) or in one of its
+        // own Console slots. Another seat's card, a forged or withdrawn handle, or a hidden card's real id is refused.
+        private PrivateRequestVerdict ResolveOwnCard(PlayerId sender, TabletopObjectId reference, bool allowHand, out TabletopObjectId real, out ContainerState from)
+        {
+            from = null;
+            ReferenceResolution resolution = handles.Resolve(match, sender, reference, out real);
+            if (resolution == ReferenceResolution.Unknown) return PrivateRequestVerdict.UnknownReference;
+            if (resolution == ReferenceResolution.HiddenRealId) return PrivateRequestVerdict.HiddenRealId;
+            if (!match.Cards.TryGetValue(real, out CardInstanceState card)) return PrivateRequestVerdict.InvalidSource;
+            ContainerId at = card.BaseState.ContainerId;
+            bool own = (allowHand && at == seats.HandOf(sender)) || (!at.IsEmpty && seats.IsOwnConsoleSlot(sender, at));
+            if (!own || !match.Containers.TryGetValue(at, out from)) return PrivateRequestVerdict.InvalidSource;
+            return PrivateRequestVerdict.Accepted;
         }
 
         private PrivateRequestVerdict Common(PlayerId sender, Guid requestId, bool needsTurn)
@@ -151,6 +230,9 @@ namespace ConsoleCards.GameTemplates.Privacy
                 // The container's own arrival face, as the table's draw applies it (a card arriving in a hand turns face up).
                 match.Cards[real].SetFace(to.ArrivalFace == ContainerArrivalFace.FaceDown ? CardFace.FaceDown : CardFace.FaceUp);
 
+            LastCard = real;
+            LastFrom = from.Id;
+            LastTo = to.Id;
             updates = new Dictionary<PlayerId, byte[]>();
             foreach (PlayerId r in Recipients)
             {
@@ -280,6 +362,8 @@ namespace ConsoleCards.GameTemplates.Privacy
     {
         public const byte KindDraw = 1;
         public const byte KindPlace = 2;
+        public const byte KindReturn = 3;  // PRIVACY-P5: card, no destination (the host takes the sender's own hand)
+        public const byte KindDiscard = 4; // PRIVACY-P5: card, discard pile
         public const int Size = 1 + 16 + 16 + 16;
 
         public static byte[] Draw(PrivateDrawRequest request)
@@ -299,6 +383,33 @@ namespace ConsoleCards.GameTemplates.Privacy
             request.Card.Value.ToByteArray().CopyTo(bytes, 17);
             request.Destination.Value.ToByteArray().CopyTo(bytes, 33);
             return bytes;
+        }
+
+        public static byte[] Card(byte kind, PrivateCardRequest request)
+        {
+            if (kind != KindReturn && kind != KindDiscard) throw new ArgumentOutOfRangeException(nameof(kind));
+            byte[] bytes = new byte[Size];
+            bytes[0] = kind;
+            request.RequestId.ToByteArray().CopyTo(bytes, 1);
+            request.Card.Value.ToByteArray().CopyTo(bytes, 17);
+            request.Destination.Value.ToByteArray().CopyTo(bytes, 33);
+            return bytes;
+        }
+
+        /// <summary>PRIVACY-P5: also reads Return and Discard (as <paramref name="card"/>).</summary>
+        public static bool TryRead(byte[] bytes, int offset, out byte kind, out PrivateDrawRequest draw, out PrivatePlaceRequest place, out PrivateCardRequest card)
+        {
+            card = null;
+            if (TryRead(bytes, offset, out kind, out draw, out place)) return true;
+            if (bytes == null || offset < 0 || bytes.Length - offset != Size) return false;
+            kind = bytes[offset];
+            Guid id = new Guid(Slice(bytes, offset + 1));
+            Guid a = new Guid(Slice(bytes, offset + 17));
+            Guid b = new Guid(Slice(bytes, offset + 33));
+            if (id == Guid.Empty || a == Guid.Empty) return false;
+            if (kind == KindReturn) { card = new PrivateCardRequest { RequestId = id, Card = new TabletopObjectId(a), Destination = new ContainerId(b) }; return b == Guid.Empty; }
+            if (kind == KindDiscard) { card = new PrivateCardRequest { RequestId = id, Card = new TabletopObjectId(a), Destination = new ContainerId(b) }; return b != Guid.Empty; }
+            return false;
         }
 
         /// <summary>False for anything that is not exactly one well-formed request.</summary>
