@@ -992,6 +992,9 @@ namespace ConsoleCards.Presentation.Composition
         private bool collapseWatching;
         private bool floorTurnCollapseDone;
 
+        /// <summary>P7: why the last End Floor Turn was refused here (null when it was not), for the host's answer to a guest.</summary>
+        internal string lastFloorTurnRefusal;
+
         // AUTH-5: Trap Floor's public state (no hands, no face-down contents) as one number, the same on every computer
         // whose game state agrees. Collections are summed so their order does not matter.
         internal ulong PublicStateHash()
@@ -1444,7 +1447,7 @@ namespace ConsoleCards.Presentation.Composition
                 FloorPopupArt(floor, out _, out front);
             }
 
-            host.runtimeUi.ShowFocusedCardReveal(new FocusedCardRevealModel(
+            ShowRevealFor(host.physicalFloorCollapseActor, new FocusedCardRevealModel(
                 floorCardId,
                 host.CurrentBoardCardBack(),
                 front,
@@ -1923,6 +1926,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void AdvanceTrapFloorTurn(bool skipped)
         {
+            lastFloorTurnRefusal = null; // P7: set again below only when the game's rule refuses this one
             host.EnsureInitialized();
             if (host.trapFloorTurnState == null || host.trapFloorTurnService == null)
             {
@@ -1953,6 +1957,17 @@ namespace ConsoleCards.Presentation.Composition
                 host.FeedbackLine(
                     $"Press {CollapsePreviewLabel()} first (or Undo the roll), then End Floor Turn.",
                     FeedbackSeverity.Warning);
+                return;
+            }
+
+            // P7 Gate 0 (s153): in Full the floor turn may not end while its collapse is still owed (the same conditions
+            // the game arms the dice with). Decided where the turn is ended for real: offline, on a host, on a private
+            // host (a joined legacy computer asks its host, which decides with its own state).
+            if (wasFloorTurn && !(host.HasOnline && host.Online.IsJoinedSharedClient) && FloorTurnCollapseOwed())
+            {
+                lastFloorTurnRefusal = "Full: the floor must collapse first. Roll the two floor dice, then End Floor Turn.";
+                host.FeedbackLine(lastFloorTurnRefusal, FeedbackSeverity.Warning);
+                RefreshTrapFloorStatusUi();
                 return;
             }
 
@@ -2828,7 +2843,7 @@ namespace ConsoleCards.Presentation.Composition
                 body,
                 "OK",
                 CloseFocusedSearchReveal);
-            host.runtimeUi.ShowFocusedCardReveal(model);
+            ShowRevealFor(host.trapFloorTurnState != null ? host.trapFloorTurnState.ActivePlayerId : PlayerId.Empty, model);
         }
 
         // ---------- TRAP-2 / PRIZE-3 popups (owner, 2026-10-22, gameplay reference, doc 34) ----------
@@ -2877,6 +2892,29 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // The Trap popup: its effect, NOW or NEXT ROUND, and Apply (a held Reaction may stop it instead).
+        /// <summary>
+        /// P7 Gate 2 (s153): the game's own "you landed on…", Trap, prize, Key and collapse popups belong to one player. On a
+        /// private host, when that player plays on another computer, the popup goes to that computer (its text and
+        /// buttons; the choice comes back and runs here, on the authority, exactly as the button would). Everywhere else,
+        /// and for this computer's own players, it shows here as before.
+        /// </summary>
+        private void ShowRevealFor(PlayerId actor, FocusedCardRevealModel model)
+        {
+            if (model == null || host.runtimeUi == null) return;
+            // Free and Reminders turn most of these into a line here (TableUiController): only what would ask is relayed.
+            // Live finding (s154): a guest's own move runs here for that guest (the host acts for it), so "not on this
+            // computer" is asked of the room, not of who is acting now.
+            if (host.HasOnline && host.Online.IsPrivateHost && !actor.IsEmpty && host.Online.IsPlayerOnAnotherComputer(actor)
+                && (!PlayAssist.IsQuiet || model.CompletionLabel == "Take it" || model.CompletionLabel == "Collapse" || model.CompletionLabel == "Roll the dice")
+                && host.Online.TrySendPrivatePrompt(actor, model))
+            {
+                host.FeedbackLine($"{FormatPlayerName(actor)} decides on their computer: {model.CardTitle}.", FeedbackSeverity.Info);
+                return;
+            }
+
+            host.runtimeUi.ShowFocusedCardReveal(model);
+        }
+
         private void ShowTrapPopup(TrapFloorFloorCardState floor, string header, Texture backArtwork, Texture frontArtwork)
         {
             if (host.runtimeUi == null || host.trapFloorTurnState == null) return;
@@ -2887,7 +2925,7 @@ namespace ConsoleCards.Presentation.Composition
                 + (usableReactions > 0
                     ? $"\n\nYou hold {usableReactions} Reaction{(usableReactions == 1 ? string.Empty : "s")} that can stop it."
                     : string.Empty);
-            host.runtimeUi.ShowFocusedCardReveal(new FocusedCardRevealModel(
+            ShowRevealFor(host.trapFloorTurnState != null ? host.trapFloorTurnState.ActivePlayerId : PlayerId.Empty, new FocusedCardRevealModel(
                 trapId,
                 backArtwork,
                 frontArtwork,
@@ -2913,7 +2951,7 @@ namespace ConsoleCards.Presentation.Composition
             if (host.runtimeUi == null || !TrapFloorTakePrizeUseCase.IsPrize(floor.Content)) return false;
             if (IsSurvivalEndgame())
             {
-                host.runtimeUi.ShowFocusedCardReveal(new FocusedCardRevealModel(
+                ShowRevealFor(host.trapFloorTurnState != null ? host.trapFloorTurnState.ActivePlayerId : PlayerId.Empty, new FocusedCardRevealModel(
                     floor.ObjectId,
                     backArtwork,
                     frontArtwork,
@@ -2933,7 +2971,7 @@ namespace ConsoleCards.Presentation.Composition
                 ? "It is free."
                 : $"Cost {InputCostNotation.Format(cost)}: pay it from your Hand through your Console.";
             PlayerId active = host.trapFloorTurnState.ActivePlayerId;
-            host.runtimeUi.ShowFocusedCardReveal(new FocusedCardRevealModel(
+            ShowRevealFor(host.trapFloorTurnState != null ? host.trapFloorTurnState.ActivePlayerId : PlayerId.Empty, new FocusedCardRevealModel(
                 floor.ObjectId,
                 backArtwork,
                 frontArtwork,
@@ -3099,7 +3137,7 @@ namespace ConsoleCards.Presentation.Composition
                 ? host.FrontArt(keyDefinition)
                 : null;
             TabletopObjectId keyId = floorCard.ObjectId;
-            host.runtimeUi.ShowFocusedCardReveal(new FocusedCardRevealModel(
+            ShowRevealFor(host.trapFloorTurnState != null ? host.trapFloorTurnState.ActivePlayerId : PlayerId.Empty, new FocusedCardRevealModel(
                 keyId,
                 host.CurrentBoardCardBack(),
                 frontArtwork,

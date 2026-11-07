@@ -406,6 +406,9 @@ namespace ConsoleCards.Presentation.UI
         }
 
         public TabletopObjectId CardId { get; }
+        /// <summary>P7: shown in full even where the quiet levels turn popups into a line (a popup the host relays to the player it belongs to).</summary>
+        public bool AlwaysAsk { get; set; }
+
         public Texture BackArtwork { get; }
         public Texture FrontArtwork { get; }
         public string HeaderTitle { get; }

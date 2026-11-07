@@ -172,6 +172,12 @@ namespace ConsoleCards.Presentation.Interaction
         /// </summary>
         public int PlayerRolls { get; private set; }
 
+        /// <summary>
+        /// P7 (s154): a player's throw on another computer, accepted on this computer (the authority) and shown here at
+        /// rest. It is that player's real roll, so a game waiting for a roll counts it as one.
+        /// </summary>
+        public void CountAcceptedRemoteRoll() => PlayerRolls++;
+
         public bool IsHeld => held;
 
         /// <summary>B07: lying still on the table (not held, not moving): a carried piece passes over it.</summary>

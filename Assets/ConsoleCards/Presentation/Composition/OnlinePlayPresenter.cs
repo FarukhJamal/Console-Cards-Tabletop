@@ -183,6 +183,19 @@ namespace ConsoleCards.Presentation.Composition
         /// True when the seat is played on this computer: offline every seat is; online a joined computer plays its
         /// own seat, and the host its own, the open seats and the seats of players who are away.
         /// </summary>
+        /// <summary>
+        /// P7 (s154): the player plays on a joined computer that is connected now, whether or not the host is running a
+        /// request for them at this moment (IsLocalPlayer answers true then, for the checked request's own steps).
+        /// </summary>
+        internal bool IsPlayerOnAnotherComputer(PlayerId player)
+        {
+            // A private room is not a shared table (each computer has its own), but its guests still play elsewhere.
+            if ((!sharedTable && !IsPrivateHost) || !hosting || player.IsEmpty) return false;
+            for (int i = 0; i < members.Count; i++)
+                if (members[i].Player == player.Value) return !members[i].IsHost && members[i].Connected;
+            return false;
+        }
+
         internal bool IsLocalPlayer(PlayerId player)
         {
             if (!sharedTable || player.IsEmpty) return true;
@@ -446,6 +459,7 @@ namespace ConsoleCards.Presentation.Composition
             member.Connection = -1;
             member.Ready = false;
             member.LeftAt = Time.unscaledTime;
+            PrivateMemberGone(member); // P7: a staged payment goes back (private development session only)
             if (sharedTable) host.ShowMessage($"{member.Name} lost the connection; their seat waits for them (you play it meanwhile).");
             BroadcastRoster();
             RefreshFrontEnd();
@@ -580,6 +594,7 @@ namespace ConsoleCards.Presentation.Composition
                         member.Connected = false;
                         member.Ready = false;
                         member.LeftAt = Time.unscaledTime;
+                        PrivateMemberGone(member); // P7
                         host.ShowMessage($"{member.Name} left the room; their seat waits for them (you play it meanwhile).");
                     }
 

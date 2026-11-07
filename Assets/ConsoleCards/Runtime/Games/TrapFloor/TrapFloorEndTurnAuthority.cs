@@ -50,6 +50,9 @@ namespace ConsoleCards.Games.TrapFloor
         /// <summary>No Trap Floor turn on this table.</summary>
         NoTurn = 6,
         MissingRequestId = 7,
+        /// <summary>P7: the request was the turn owner's, but the game's own rule refused to end the turn yet (Full: the
+        /// floor turn still owes its collapse). Nothing changed.</summary>
+        RuleRefused = 8,
     }
 
     /// <summary>

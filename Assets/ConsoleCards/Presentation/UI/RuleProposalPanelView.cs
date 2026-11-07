@@ -19,14 +19,19 @@ namespace ConsoleCards.Presentation.UI
     /// <summary>One player's agreement button.</summary>
     public readonly struct RuleProposalVoter
     {
-        public RuleProposalVoter(string label, bool agreed)
+        public RuleProposalVoter(string label, bool agreed) : this(label, agreed, true) { }
+
+        /// <summary>P7: <paramref name="canVote"/> false shows another computer's player (their own computer agrees for them).</summary>
+        public RuleProposalVoter(string label, bool agreed, bool canVote)
         {
             Label = label ?? string.Empty;
             Agreed = agreed;
+            CanVote = canVote;
         }
 
         public string Label { get; }
         public bool Agreed { get; }
+        public bool CanVote { get; }
     }
 
     /// <summary>What the rule proposal panel shows (doc 23, R3).</summary>
@@ -125,8 +130,8 @@ namespace ConsoleCards.Presentation.UI
                 agreeButtons[i].gameObject.SetActive(used);
                 if (!used) continue;
                 RuleProposalVoter voter = model.Voters[i];
-                agreeLabels[i].text = voter.Agreed ? $"{voter.Label}: agreed" : $"{voter.Label}: agree";
-                agreeButtons[i].interactable = !voter.Agreed;
+                agreeLabels[i].text = voter.Agreed ? $"{voter.Label}: agreed" : voter.CanVote ? $"{voter.Label}: agree" : $"{voter.Label}: waiting";
+                agreeButtons[i].interactable = !voter.Agreed && voter.CanVote;
                 int index = i;
                 agreeButtons[i].onClick.AddListener(() => actions?.Agree?.Invoke(index));
             }

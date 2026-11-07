@@ -133,6 +133,54 @@ namespace ConsoleCards.Tests
         private static HashSet<TabletopObjectId> Refs(MatchState table, ContainerId container) => new HashSet<TabletopObjectId>(table.Containers[container].ObjectIds);
 
         [Test]
+        public void PieceRestingPlace_AndDieFace_ReachEveryRecipient_AsOneRevision()
+        {
+            // P7 (s154), live finding: a pawn put down by the table's physics records only its physical state (its pose
+            // stays where it was made), and a die's face is its value. Both are public; both must reach every guest.
+            Room r = Room.Open();
+            TabletopObjectId pawn = r.T.SetupOf(r.A).PawnId;
+            TabletopObjectId die = default;
+            int sides = 0;
+            foreach (var pair in r.T.Match.Dice) { die = pair.Key; sides = pair.Value.SideCount; break; }
+            Assert.IsFalse(die.IsEmpty, "the table has a die");
+            int face = r.T.Match.Dice[die].CurrentValue % sides + 1;
+            PhysicalObjectState rest = new PhysicalObjectState(new PhysicalVector3(1.5f, 0.1f, -2.25f), new PhysicalRotation(0f, 0f, 0f, 1f),
+                default, default, PhysicalObjectMode.Sleeping, r.A);
+            long revision = r.Host.Revision;
+            Dictionary<PlayerId, byte[]> updates = r.Host.Apply(() =>
+            {
+                r.T.Match.GetObject(pawn).SetPhysicalState(rest);
+                r.T.Match.GetObject(die).SetPhysicalState(rest);
+                r.T.Match.Dice[die].SetAcceptedRoll(new ConsoleCards.Core.Domain.Dice.DieRoll(sides, face));
+            });
+            Assert.AreEqual(revision + 1, r.Host.Revision, "one revision");
+            AssertNoHiddenIds(r, updates);
+            Dictionary<PlayerId, PrivateChangeSummary> seen = r.Deliver(updates);
+            foreach (PlayerId p in r.Host.Recipients)
+            {
+                Assert.IsTrue(seen[p].Moved.Contains(pawn) && seen[p].Moved.Contains(die), $"{p}: the pawn and the die are moved");
+                PhysicalObjectState at = r.Tables[p].GetObject(pawn).PhysicalState;
+                Assert.IsNotNull(at, $"{p}: the pawn's resting place");
+                Assert.AreEqual(1.5f, at.Position.X, 1e-4f);
+                Assert.AreEqual(-2.25f, at.Position.Z, 1e-4f);
+                Assert.AreEqual(face, r.Tables[p].Dice[die].CurrentValue, $"{p}: the die shows the host's face");
+            }
+
+            r.AssertEveryoneMatchesTheHost();
+            Assert.IsNull(r.Host.Apply(() => { }), "nothing changed: nothing is published");
+
+            // A piece still moving is not sent (the recipient's own physics would run it and report a new throw);
+            // where it comes to rest is.
+            PhysicalObjectState flying = new PhysicalObjectState(new PhysicalVector3(0.5f, 0.6f, 0.5f), new PhysicalRotation(0f, 0f, 0f, 1f),
+                new PhysicalVector3(1f, 0f, 0f), default, PhysicalObjectMode.Dynamic, r.A);
+            Assert.IsNull(r.Host.Apply(() => r.T.Match.GetObject(pawn).SetPhysicalState(flying)), "in flight: nothing is published");
+            PhysicalObjectState landed = new PhysicalObjectState(new PhysicalVector3(0.75f, 0.1f, 0.5f), new PhysicalRotation(0f, 0f, 0f, 1f),
+                default, default, PhysicalObjectMode.Sleeping, r.A);
+            r.Deliver(r.Host.Apply(() => r.T.Match.GetObject(pawn).SetPhysicalState(landed)));
+            foreach (PlayerId p in r.Host.Recipients) Assert.AreEqual(0.75f, r.Tables[p].GetObject(pawn).PhysicalState.Position.X, 1e-4f, $"{p}: where it came to rest");
+        }
+
+        [Test]
         public void DomainDrawOfThree_IsOneRevision_EachRecipientGetsOnlyWhatItMayKnow()
         {
             Room r = Room.Open();

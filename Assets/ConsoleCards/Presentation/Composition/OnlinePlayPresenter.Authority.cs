@@ -29,6 +29,9 @@ namespace ConsoleCards.Presentation.Composition
         private Guid hostActingFor;
 
         /// <summary>A joined computer's End Turn goes to the host. False offline, on the host, or while away.</summary>
+        /// <summary>P7: a joined computer of a normal shared table (its host decides turns).</summary>
+        internal bool IsJoinedSharedClient => sharedTable && !hosting && session != null;
+
         internal bool TrySendEndTurnRequest(TrapFloorEndTurnRequest request)
         {
             // PRIVACY-P6A: on the host of a private development session the host's own End Turn goes through the private
@@ -106,7 +109,7 @@ namespace ConsoleCards.Presentation.Composition
                 || after.IsCurrentFloorFailed
                 || TrapFloorEndTurnAuthority.TurnOwnerOf(after) != ownerBefore;
             Debug.Log($"[Authority] End Turn from {member.Name}: accepted, {(moved ? "turn ended" : "the turn did not end (a step is still waiting)")}.");
-            if (!moved) SendNotice(member, "The host could not end the turn yet: a step is still waiting (see the table).");
+            if (!moved) SendNotice(member, host.TrapFloorGame.lastFloorTurnRefusal ?? "The host could not end the turn yet: a step is still waiting (see the table).");
             dirty = false;
             matchReplaced = false;
             SendWholeTable(); // everyone, the sender too, gets the host's table

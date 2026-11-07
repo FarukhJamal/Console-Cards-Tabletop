@@ -275,6 +275,26 @@ namespace ConsoleCards.Presentation.Composition
         internal bool FloorTurnMayCollapse() =>
             floorTurnLedger.MayCollapse(FloorTurnLedgerKey(), TrapFloorFloorTurnLedger.CollapseHoles(host.trapFloorCollapseState));
 
+        /// <summary>
+        /// P7 Gate 0 (s153): Full only. The floor turn still owes its collapse when the game's own arming would still watch
+        /// the dice for it (ArmFloorCollapseForFloorTurn's conditions, nothing new): a floor turn, the floor not ended, no
+        /// collapse yet this floor turn (COLLAPSE-3 flag and the COLLAPSE-ONCE ledger), the board not exhausted, a tile
+        /// left that may collapse (Survival keeps the Grand Exit), or a collapse waiting for a re-roll. Free never owes one
+        /// (owner decision C); Reminders keeps the B02 warning only.
+        /// </summary>
+        internal bool FloorTurnCollapseOwed()
+        {
+            if (PlayAssist.Level != PlayAssistLevel.Full) return false;
+            if (host.trapFloorTurnState == null || host.trapFloorCollapseState == null || host.trapFloorTemplate == null) return false;
+            if (host.trapFloorTurnState.Phase != TrapFloorTurnPhase.FloorTurn || host.trapFloorTurnState.IsCurrentFloorFailed) return false;
+            if (host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsWon) return false;
+            if (host.trapFloorCollapseState.IsCollapsePending) return true; // a roll that must be thrown again (beyond the floor, a hole)
+            if (floorTurnCollapseDone || !FloorTurnMayCollapse()) return false;
+            if (host.trapFloorCollapseState.IsBoardExhausted) return false;
+            if (host.trapFloorCollapseUseCase != null && host.trapFloorCollapseUseCase.NothingLeftToCollapse) return false;
+            return true;
+        }
+
         internal void RecordFloorTurnCollapse() =>
             floorTurnLedger.RecordCollapse(FloorTurnLedgerKey(), TrapFloorFloorTurnLedger.CollapseHoles(host.trapFloorCollapseState));
 
@@ -341,6 +361,65 @@ namespace ConsoleCards.Presentation.Composition
                 commit.RecordMode);
             Debug.Log($"[Authority] Rules die (d{die.SideCount}) thrown{(host.IsPlayerOnThisComputer(commit.Context.RequestedByPlayerId) && !host.Replicated.Replaying ? " here" : " by another computer")}: "
                 + $"the host's result is {value} (it showed {commit.SettledDieValue.Value}).");
+            return true;
+        }
+
+        /// <summary>
+        /// P7 Gate 1 (s153): a die a private guest threw came to rest at <paramref name="at"/> showing <paramref name="thrown"/>
+        /// on its computer. On this table (the authority) it rests there; in Full a rules die (the floor dice, a Blind d4)
+        /// shows the host's result (AUTH-DICE: decided once per die and turn, re-rolled only where the rules ask), and the
+        /// step is a rules result (it cannot be undone in Full). Free and Reminders keep the face thrown.
+        /// </summary>
+        internal bool TryHostThrowDie(PlayerId sender, TabletopObjectId dieId, TabletopPose at, int thrown, out int value, out string refusal)
+        {
+            value = thrown;
+            refusal = null;
+            if (host.matchState == null || !host.matchState.Dice.TryGetValue(dieId, out DieState die) || !host.Registry.TryGetDieView(dieId, out DieView view)
+                || view.PhysicalObject == null || host.physicalAuthority == null)
+            {
+                refusal = "That die cannot be thrown here.";
+                return false;
+            }
+
+            if (thrown < 1 || thrown > die.SideCount) { refusal = "Not a face of that die."; return false; }
+            TabletopObjectState state = host.matchState.GetObject(dieId);
+            if (!host.physicalAuthority.Surfaces.TryResolveAuthoredLooseObject(at, sender, view.PhysicalObject.PhysicalCollider, state.IsUserLocked, out PhysicalObjectState placed))
+            {
+                refusal = "That place is not on the table.";
+                return false;
+            }
+
+            bool rules = PlayAssist.Level == PlayAssistLevel.Full && host.trapFloorTemplate != null && IsRulesDie(dieId);
+            if (rules)
+            {
+                TrapFloorTemplateDefinition template = host.trapFloorTemplate;
+                bool xAxis = dieId == template.FloorfallXAxisDieId;
+                bool yAxis = dieId == template.FloorfallYAxisDieId;
+                value = hostDice.Decide(
+                    dieId,
+                    die.SideCount,
+                    TrapFloorHostDice.TurnKeyOf(host.trapFloorTurnState),
+                    v => (xAxis && v > template.GridColumns) || (yAxis && v > template.GridRows),
+                    sides => System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, sides + 1));
+            }
+
+            if (!view.TryGetValueRotation(value, at.RotationDegrees, out Quaternion shown)) { refusal = "That face cannot be shown."; return false; }
+            CommitPhysicalObjectCommand commit = new CommitPhysicalObjectCommand(
+                host.CreateCommandContext(sender),
+                dieId,
+                // At rest with the face shown (live finding: the resolver's place is Dynamic, and a die's face is only
+                // accepted for a die at rest).
+                new PhysicalObjectState(placed.Position, new PhysicalRotation(shown.x, shown.y, shown.z, shown.w), default, default, PhysicalObjectMode.Sleeping, placed.ControllingPlayerId),
+                state.PhysicalRevision,
+                value,
+                AuthoritativeActionRecordMode.Transaction);
+            if (rules) hostRolledSteps.Add(commit.Context.Id);
+            bool done = host.TableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(commit).Succeeded;
+            if (!done) { refusal = "The table refused the throw."; return false; }
+            view.ApplyAcceptedState();
+            // A real roll by that player (the floor's own wait for a roll counts rolls made on this computer only).
+            view.PhysicalObject.CountAcceptedRemoteRoll();
+            Debug.Log($"[Authority] Private die (d{die.SideCount}) thrown by another computer: {(rules ? $"the host's result is {value} (it showed {thrown})" : $"{value} as thrown")}.");
             return true;
         }
 

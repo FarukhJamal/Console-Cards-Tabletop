@@ -6,6 +6,8 @@ using System.Text;
 using ConsoleCards.Application.Authority;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
+using ConsoleCards.Application.UseCases;
+using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Match;
@@ -84,8 +86,12 @@ namespace ConsoleCards.Presentation.Composition
         private const byte MsgPrivateTurn = 46;       // PRIVACY-P6A host → guest: one accepted turn transition (public, with its revision)
         private const byte MsgPrivateTurnVerdict = 47; // PRIVACY-P6A host → guest: what became of the guest's End Turn request
         private const byte MsgPrivateShop = 48;       // PRIVACY-P6C host → guest: the Shop's public list (game data, as the Shop shows every player)
+        private const byte MsgPrivateRuleVote = 49;   // P7 host → guest: a rule proposal opened, changed or closed (public)
+        private const byte MsgPrivateRuleBallot = 50; // P7 guest → host: this computer's player's vote on that proposal
+        private const byte MsgPrivatePrompt = 51;     // P7 host → guest: one of the game's popups for this computer's player
+        private const byte MsgPrivatePromptAnswer = 52; // P7 guest → host: the button that player pressed
 
-        private static bool IsPrivateMessage(byte type) => type >= MsgPrivatePackage && type <= MsgPrivateShop;
+        private static bool IsPrivateMessage(byte type) => type >= MsgPrivatePackage && type <= MsgPrivatePromptAnswer;
 
         // Normal-play table messages: never used, and refused, in a private session.
         private static bool IsLegacyTableMessage(byte type) =>
@@ -378,12 +384,13 @@ namespace ConsoleCards.Presentation.Composition
                     hash = hash * 31 + pair.Key.GetHashCode();
                     hash = hash * 31 + state.ContainerId.GetHashCode();
                     hash = hash * 31 + (int)pair.Value.Face;
-                    if (state.ContainerId.IsEmpty) hash = hash * 31 + PoseHash(state);
+                    if (state.ContainerId.IsEmpty) hash = hash * 31 + PoseHash(state) + RestHash(state);
                 }
 
-                foreach (KeyValuePair<TabletopObjectId, PawnState> pair in table.Pawns) hash = hash * 31 + PoseHash(pair.Value.BaseState);
-                foreach (KeyValuePair<TabletopObjectId, ConsoleCards.Core.Domain.Dice.DieState> pair in table.Dice) hash = hash * 31 + PoseHash(pair.Value.BaseState);
-                foreach (KeyValuePair<TabletopObjectId, TokenState> pair in table.Tokens) hash = hash * 31 + PoseHash(pair.Value.BaseState);
+                // P7 (s154): a piece the physics put down changes only its physical state; a die its face too.
+                foreach (KeyValuePair<TabletopObjectId, PawnState> pair in table.Pawns) hash = hash * 31 + PoseHash(pair.Value.BaseState) + RestHash(pair.Value.BaseState);
+                foreach (KeyValuePair<TabletopObjectId, ConsoleCards.Core.Domain.Dice.DieState> pair in table.Dice) hash = hash * 31 + PoseHash(pair.Value.BaseState) + RestHash(pair.Value.BaseState) + pair.Value.CurrentValue * 7919;
+                foreach (KeyValuePair<TabletopObjectId, TokenState> pair in table.Tokens) hash = hash * 31 + PoseHash(pair.Value.BaseState) + RestHash(pair.Value.BaseState);
                 foreach (KeyValuePair<ContainerId, ContainerState> pair in table.Containers)
                 {
                     hash = hash * 31 + pair.Key.GetHashCode();
@@ -392,6 +399,19 @@ namespace ConsoleCards.Presentation.Composition
 
                 foreach (KeyValuePair<SeatId, SeatState> pair in table.Seats) hash = hash * 3 + (pair.Value.Console != null && pair.Value.Console.ShowsBack ? 1 : 0);
                 return hash;
+            }
+        }
+
+        // Where a piece rests (its physical state once at rest; nothing while it moves: sent once it rests).
+        private static int RestHash(TabletopObjectState state)
+        {
+            PhysicalObjectState rest = PrivateChangeSetBuilder.RestingPlace(state.PhysicalState);
+            if (rest == null) return 0;
+            unchecked
+            {
+                // Coarse (2 cm, about a degree): a hair's settling is not a change to send (the change set has the same rule).
+                return (int)Math.Round(rest.Position.X * 50) * 83492791 ^ (int)Math.Round(rest.Position.Y * 50) * 2654435 ^ (int)Math.Round(rest.Position.Z * 50) * 40503
+                    ^ (int)Math.Round(rest.Rotation.W * 50) * 97 ^ (int)Math.Round(rest.Rotation.Y * 50) * 31;
             }
         }
 
@@ -575,6 +595,12 @@ namespace ConsoleCards.Presentation.Composition
                 case MsgPrivateInventory:
                     HostCheckInventory(member, data);
                     break;
+                case MsgPrivateRuleBallot:
+                    HostRuleBallot(member, data);
+                    break;
+                case MsgPrivatePromptAnswer:
+                    HostPromptAnswer(member, data);
+                    break;
                 default:
                     PrivateNote($"Refused private message {type} from {member.Name}: hosts do not take it.");
                     break;
@@ -663,7 +689,31 @@ namespace ConsoleCards.Presentation.Composition
             {
                 requestId = place.RequestId;
                 what = "Place face up";
+                // P7 (s154): a guest's card put into its own Console slot is a staged payment until it is confirmed or
+                // cancelled; where it came from is remembered so it can go back if that computer goes away.
+                List<TabletopObjectId> handBefore = null;
+                Dictionary<TabletopObjectId, bool> facesBefore = null;
+                RoomSeats stageSeats = new RoomSeats(this);
+                if (!member.IsHost && host.matchState.Containers.TryGetValue(stageSeats.HandOf(sender), out ContainerState handState))
+                {
+                    handBefore = new List<TabletopObjectId>(handState.ObjectIds);
+                    facesBefore = new Dictionary<TabletopObjectId, bool>();
+                    foreach (TabletopObjectId id in handBefore)
+                        if (host.matchState.Cards.TryGetValue(id, out CardInstanceState c)) facesBefore[id] = c.Face == CardFace.FaceUp;
+                }
+
                 verdict = privateHost.Place(sender, place, out updates);
+                if (verdict == PrivateRequestVerdict.Accepted && handBefore != null && privateHost.LastFrom == stageSeats.HandOf(sender)
+                    && stageSeats.IsOwnConsoleSlot(sender, privateHost.LastTo) && handBefore.Contains(privateHost.LastCard))
+                {
+                    if (!hostStaged.TryGetValue(sender.Value, out List<StagedOrigin> staged)) hostStaged[sender.Value] = staged = new List<StagedOrigin>();
+                    staged.RemoveAll(o => o.Card == privateHost.LastCard);
+                    staged.Add(new StagedOrigin
+                    {
+                        Card = privateHost.LastCard, Slot = privateHost.LastTo, From = privateHost.LastFrom,
+                        Index = handBefore.IndexOf(privateHost.LastCard), FaceUp = facesBefore.TryGetValue(privateHost.LastCard, out bool up) && up, Valid = true,
+                    });
+                }
             }
             else if (kind == PrivateRequestCodec.KindReturn)
             {
@@ -762,6 +812,12 @@ namespace ConsoleCards.Presentation.Composition
                     ? $"round {roundBefore} {phaseBefore} → round {snap.Round} {(TrapFloorTurnPhase)snap.Phase}, turn of {SeatName(new PlayerId(snap.TurnOwner))}"
                     : "the game's own turn service did not end the turn (a step is still waiting)")
                 + $"; revision {revisionBefore} → {privateHost.Revision}; card or piece changes from the turn's own steps: {(updates != null && HostFingerprintFast() != cardsBeforeFingerprint ? "yes (in the same change set)" : "none")}.");
+            if (!moved && host.TrapFloorGame.lastFloorTurnRefusal != null)
+            {
+                PrivateNote($"Refused End Turn from {actor} by the game's rule: {host.TrapFloorGame.lastFloorTurnRefusal}");
+                return TrapFloorEndTurnVerdict.RuleRefused;
+            }
+
             return verdict;
         }
 
@@ -857,6 +913,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             HostSceneState sceneBefore = CaptureHostScene();
+            StagedOrigin staging = StagingOriginFor(member, sender, resolved);
             bool done = false;
             if (privateTransactionDepth > 0)
             {
@@ -897,6 +954,7 @@ namespace ConsoleCards.Presentation.Composition
 
             operationsAccepted++;
             if (member.IsHost) hostOwnAccepted++;
+            NoteStaging(sender, resolved, staging);
             PrivateNote($"Accepted {op.Kind} from {actor} (assist {PlayAssist.Level}); revision {revisionBefore} → {privateHost.Revision}; each guest computer here got its own change set.");
             return PrivateRequestVerdict.Accepted;
         }
@@ -920,10 +978,81 @@ namespace ConsoleCards.Presentation.Composition
                     return host.TableAuthority.Submit<ReorderContainerCommand, ReorderContainerResult>(new ReorderContainerCommand(Ctx(sender), op.Container, resolved.RealCard, resolved.FromIndex, op.B)).Succeeded;
                 case PrivateOperationKind.DrawCount:
                     return host.TableAuthority.Submit<DrawCardsCommand, DrawCardsResult>(new DrawCardsCommand(Ctx(sender), op.Container, op.Destination, op.A)).Succeeded;
+                case PrivateOperationKind.MovePiece:
+                    return ExecutePieceMove(sender, resolved.RealCard, op.Pose);
+                case PrivateOperationKind.ThrowDie:
+                {
+                    bool thrownDone = host.TrapFloorGame.TryHostThrowDie(sender, resolved.RealCard, op.Pose, op.A, out int shownValue, out string dieRefusal);
+                    if (thrownDone) diceThrowsAccepted++; else { diceThrowsRefused++; PrivateNote("Die throw refused: " + dieRefusal); }
+                    if (thrownDone && shownValue != op.A) diceThrowsReplaced++;
+                    if (thrownDone) PrivateNote($"Die throw: the table shows {shownValue}{(shownValue != op.A ? $" (the host's result; the thrower's die showed {op.A})" : " (as thrown)")}.");
+                    return thrownDone;
+                }
                 default:
                     return false;
             }
         }
+
+        private int pieceMovesAccepted, pieceMovesRefused;
+        private int diceThrowsAccepted, diceThrowsRefused, diceThrowsReplaced;
+
+        /// <summary>
+        /// P7 Gate 1 (s153): a pawn put down by a seat, on the authority. In Full the game's own host move check
+        /// (AUTH-MOVE: turn, own pawn, out players, holes, straight line, distance, Sticky, Blind, lit tiles) decides
+        /// first; Free and Reminders keep tabletop freedom (that check allows everything there). The pawn then rests where
+        /// the table's own surface resolver puts it (as the game's own guided move does), so the game's landing check
+        /// runs on this table exactly as for a pawn dropped here, and its rule steps follow as rule commands.
+        /// </summary>
+        private bool ExecutePieceMove(PlayerId sender, TabletopObjectId pieceId, TabletopPose pose)
+        {
+            if (!host.Registry.TryGetPawnView(pieceId, out PawnView pawnView) || !host.matchState.ContainsObject(pieceId)) return false;
+            TabletopObjectState piece = host.matchState.GetObject(pieceId);
+            TabletopPose target = new TabletopPose(pose.Position, pose.RotationDegrees, piece.Pose.Layer, piece.Pose.LocalOrder);
+            if (host.trapFloorTemplate != null
+                && !host.TrapFloorGame.HostAllowsCommand(new MoveObjectCommand(Ctx(sender), pieceId, target), sender))
+            {
+                pieceMovesRefused++;
+                lastPieceRefusal = host.TrapFloorGame.HostRefusal ?? "The host refused that move.";
+                PrivateNote("Pawn move refused by the game's move rules: " + lastPieceRefusal);
+                return false;
+            }
+
+            bool moved;
+            if (piece.PhysicalState != null && host.physicalAuthority != null && pawnView.PhysicalObject != null)
+            {
+                if (!host.physicalAuthority.Surfaces.TryResolveAuthoredLooseObject(target, sender, pawnView.PhysicalObject.PhysicalCollider, piece.IsUserLocked, out PhysicalObjectState placed))
+                {
+                    pieceMovesRefused++;
+                    lastPieceRefusal = "That place is not on the table.";
+                    return false;
+                }
+
+                // At rest where it was put (the resolver's place is Dynamic: the host's physics would move it again,
+                // unpublished).
+                PhysicalObjectState resting = new PhysicalObjectState(placed.Position, placed.Rotation, default, default, PhysicalObjectMode.Sleeping, placed.ControllingPlayerId);
+                moved = host.TableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(
+                    new CommitPhysicalObjectCommand(host.CreateCommandContext(sender), pieceId, resting, piece.PhysicalRevision, null, AuthoritativeActionRecordMode.Transaction)).Succeeded;
+            }
+            else
+            {
+                moved = host.TableAuthority.Submit<MoveObjectCommand, MoveObjectResult>(new MoveObjectCommand(Ctx(sender), pieceId, target)).Succeeded;
+            }
+
+            if (moved)
+            {
+                pieceMovesAccepted++;
+                // The table's pose follows the accepted resting place (a physical commit records only the physical state):
+                // the game's next move check and every guest read the pawn where it now stands.
+                TabletopObjectState now = host.matchState.GetObject(pieceId);
+                now.SetPose(new TabletopPose(target.Position, now.Pose.RotationDegrees, now.Pose.Layer, now.Pose.LocalOrder));
+                pawnView.ApplyAcceptedState();
+                lastPieceRefusal = null;
+            }
+            else pieceMovesRefused++;
+            return moved;
+        }
+
+        private string lastPieceRefusal;
 
         // PRIVACY-P6B: Undo on the private path. Only the authority's own history; only the sender's own latest
         // change (HostUndoPolicy, as for a joined computer in normal play); in Full a rules result stands; a request
@@ -1142,6 +1271,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             operationsAccepted++;
+            ForgetStaged(sender, resolved.RealCards); // P7: paid with, or put back: no longer staged
             if (tx.Kind == PrivateTransactionKind.ShopBuy) purchasesAccepted++;
             if (member.IsHost) hostOwnAccepted++;
             PrivateNote(tx.Kind == PrivateTransactionKind.ShopBuy
@@ -1162,6 +1292,105 @@ namespace ConsoleCards.Presentation.Composition
 
         // Cancel Payment on the authority, as the game's own cancel does it (owner decision D): each staged card back to
         // its pile and place (or its spot), lowest place first, with its face. Checked already: the payer's own places.
+        // ---------- P7 Gate 0: the host's own record of what a guest staged in its Console ----------
+        // A guest's payment is staged by ordinary moves from its Hand into its own Console slots; the paying state itself
+        // lives on the guest. The host records, from the moves it accepted, where each such card came from (Hand, place,
+        // face), so that when that guest's computer goes away mid-payment the host puts the cards back itself: nothing is
+        // lost, nothing is left half-staged, and the reconnected player finds its Hand as it was. A purchase or a Cancel
+        // takes the cards off the record; so does any later move of the card out of that slot.
+
+        private struct StagedOrigin
+        {
+            public TabletopObjectId Card;
+            public ContainerId Slot;
+            public ContainerId From;
+            public int Index;
+            public bool FaceUp;
+            public bool Valid;
+        }
+
+        private readonly Dictionary<Guid, List<StagedOrigin>> hostStaged = new Dictionary<Guid, List<StagedOrigin>>();
+        private int stagedRestoredOnLeave;
+
+        private StagedOrigin StagingOriginFor(Member member, PlayerId sender, PrivateResolvedOperation resolved)
+        {
+            StagedOrigin origin = default;
+            if (member.IsHost || resolved == null || resolved.Operation.Kind != PrivateOperationKind.Transfer || resolved.Operation.HasPose) return origin;
+            RoomSeats seats = new RoomSeats(this);
+            PrivateOperation op = resolved.Operation;
+            if (op.Container != seats.HandOf(sender) || !seats.IsOwnConsoleSlot(sender, op.Destination)) return origin;
+            if (!host.matchState.Containers.TryGetValue(op.Container, out ContainerState hand) || !host.matchState.Cards.TryGetValue(resolved.RealCard, out CardInstanceState card)) return origin;
+            origin.Card = resolved.RealCard;
+            origin.Slot = op.Destination;
+            origin.From = op.Container;
+            origin.Index = hand.IndexOf(resolved.RealCard);
+            origin.FaceUp = card.Face == CardFace.FaceUp;
+            origin.Valid = origin.Index >= 0;
+            return origin;
+        }
+
+        private void NoteStaging(PlayerId sender, PrivateResolvedOperation resolved, StagedOrigin staging)
+        {
+            if (sender.IsEmpty || resolved == null) return;
+            if (!hostStaged.TryGetValue(sender.Value, out List<StagedOrigin> list)) hostStaged[sender.Value] = list = new List<StagedOrigin>();
+            // Any accepted move of a recorded card out of its slot ends its record (a manual return, a move elsewhere).
+            if (!resolved.RealCard.IsEmpty)
+                list.RemoveAll(o => o.Card == resolved.RealCard && (!host.matchState.Cards.TryGetValue(o.Card, out CardInstanceState c) || c.BaseState.ContainerId != o.Slot));
+            if (staging.Valid && !list.Exists(o => o.Card == staging.Card)) list.Add(staging);
+        }
+
+        private void ForgetStaged(PlayerId sender, IReadOnlyList<TabletopObjectId> cards)
+        {
+            if (sender.IsEmpty || cards == null || !hostStaged.TryGetValue(sender.Value, out List<StagedOrigin> list)) return;
+            foreach (TabletopObjectId id in cards) list.RemoveAll(o => o.Card == id);
+        }
+
+        /// <summary>P7: a guest's computer went away (left or lost the connection): what it had staged goes back.</summary>
+        private void PrivateMemberGone(Member member)
+        {
+            if (!privateHosting || privateHost == null || member == null || member.IsHost || member.Player == Guid.Empty) return;
+            int stagedCount = hostStaged.TryGetValue(member.Player, out List<StagedOrigin> list) ? list.Count : 0;
+            PrivateNote($"{member.Name} went away (its connection closed); cards it had staged in its Console: {stagedCount}.");
+            if (list == null || list.Count == 0) return;
+            PlayerId player = new PlayerId(member.Player);
+            PrivateTransaction tx = new PrivateTransaction { Kind = PrivateTransactionKind.PaymentRestore, RequestId = Guid.NewGuid(), Revision = privateHost.Revision };
+            List<TabletopObjectId> real = new List<TabletopObjectId>();
+            foreach (StagedOrigin o in list)
+            {
+                if (!host.matchState.Cards.TryGetValue(o.Card, out CardInstanceState card) || card.BaseState.ContainerId != o.Slot) continue; // already moved on
+                tx.Items.Add(new PrivateTransactionItem { Container = o.From, Index = o.Index, FaceUp = o.FaceUp });
+                real.Add(o.Card);
+            }
+
+            list.Clear();
+            if (real.Count == 0) return;
+            PrivateResolvedTransaction resolved = new PrivateResolvedTransaction { Transaction = tx };
+            resolved.RealCards.AddRange(real);
+            long before = privateHost.Revision;
+            int restored = 0;
+            BeginPrivateTransaction();
+            bool passing = privateInterceptor.PassThrough;
+            bool ownBatch = !host.undoBatchActive;
+            if (ownBatch) host.SessionService.BeginUndoBatch();
+            HostSceneState sceneBefore = CaptureHostScene();
+            privateInterceptor.PassThrough = true;
+            try
+            {
+                RestoreStagedCards(player, resolved, out restored);
+            }
+            finally
+            {
+                privateInterceptor.PassThrough = passing;
+                if (ownBatch) host.SessionService.EndUndoBatch();
+                HostSceneFollow(sceneBefore);
+                privateTransactionSteps++;
+                EndPrivateTransaction($"{member.Name}'s staged payment put back (the computer went away)");
+            }
+
+            stagedRestoredOnLeave += restored;
+            PrivateNote($"{member.Name} went away with {real.Count} card(s) staged in its Console: {restored} put back where they came from (revision {before} → {privateHost.Revision}).");
+        }
+
         private bool RestoreStagedCards(PlayerId sender, PrivateResolvedTransaction resolved, out int restored)
         {
             restored = 0;
@@ -1205,8 +1434,14 @@ namespace ConsoleCards.Presentation.Composition
         internal void BeginPrivateTransaction()
         {
             if (!privateHosting || privateHost == null) return;
-            if (privateTransactionDepth++ == 0) privateTransactionSteps = 0;
+            if (privateTransactionDepth++ == 0)
+            {
+                privateTransactionSteps = 0;
+                privateTransactionTurn = CurrentTurnSnapshot();
+            }
         }
+
+        private PrivateTurnSnapshot privateTransactionTurn;
 
         internal void EndPrivateTransaction(string what)
         {
@@ -1214,8 +1449,49 @@ namespace ConsoleCards.Presentation.Composition
             if (--privateTransactionDepth > 0) return;
             if (privateTransactionSteps == 0 || privateHost == null) return;
             long before = privateHost.Revision;
-            SendPublish(privateHost.PublishChanges(null, CurrentHud()), what);
-            PrivateNote($"{what}: {privateTransactionSteps} step(s) on the host's table, one revision for every guest ({before} → {privateHost.Revision}).");
+            PrivateTurnSnapshot now = CurrentTurnSnapshot();
+            bool turnChanged = !SameTurn(privateTransactionTurn, now); // P7: a rule step can end a floor or knock a player out
+            SendPublish(privateHost.PublishChanges(turnChanged ? now : null, CurrentHud()), what);
+            if (turnChanged) turnTransitions++;
+            PrivateNote($"{what}: {privateTransactionSteps} step(s) on the host's table, one revision for every guest ({before} → {privateHost.Revision}){(turnChanged ? "; the turn changed with it" : string.Empty)}.");
+        }
+
+        private static bool SameTurn(PrivateTurnSnapshot a, PrivateTurnSnapshot b) =>
+            a != null && b != null && a.Round == b.Round && a.Phase == b.Phase && a.TurnOwner == b.TurnOwner && a.ActivePlayer == b.ActivePlayer && a.Ended == b.Ended;
+
+        private int hostRuleSteps; // P7: the game's own rule commands run on the private host
+
+        /// <summary>
+        /// P7 (s153): on a private host, the game's own Trap Floor rule commands (reveal, Trap, Ability, Key, escape,
+        /// prize, collapse, elimination, guidance, Blind roll...) that the host's cartridge issues are the existing rules
+        /// running on the authority. They run once on the host's table and every guest gets one change set (its own
+        /// projection, with the turn when it changed). The Shop purchase keeps its own transaction path (P6C). Guests
+        /// never run these: their cartridge is empty and their requests reach the host as private operations.
+        /// </summary>
+        internal bool TryRunHostRuleCommand<TCommand, TResult>(TCommand command, out TResult result) where TCommand : class
+        {
+            result = default;
+            if (!privateHosting || privateHost == null || command == null) return false;
+            Type type = typeof(TCommand);
+            if (type.Namespace != "ConsoleCards.Games.TrapFloor" || !type.Name.StartsWith("TrapFloor", StringComparison.Ordinal)) return false;
+            if (command is TrapFloorBuyFromShopCommand) return false;
+            BeginPrivateTransaction();
+            HostSceneState sceneBefore = CaptureHostScene();
+            privateInterceptor.PassThrough = true;
+            try
+            {
+                result = host.TableAuthority.Submit<TCommand, TResult>(command);
+            }
+            finally
+            {
+                privateInterceptor.PassThrough = false;
+                privateTransactionSteps++;
+                hostRuleSteps++;
+                HostSceneFollow(sceneBefore);
+                EndPrivateTransaction("Rule step " + type.Name.Substring("TrapFloor".Length).Replace("Command", string.Empty));
+            }
+
+            return true;
         }
 
         private static bool ResultSucceeded(object result)
@@ -1374,6 +1650,12 @@ namespace ConsoleCards.Presentation.Composition
                     break;
                 case MsgPrivateShop:
                     GuestShopCatalog(payload);
+                    break;
+                case MsgPrivateRuleVote:
+                    GuestRuleVote(payload);
+                    break;
+                case MsgPrivatePrompt:
+                    GuestPrompt(payload);
                     break;
                 default:
                     PrivateNote($"Ignored private message {type}: guests do not take it.");
@@ -1624,6 +1906,56 @@ namespace ConsoleCards.Presentation.Composition
                     op.B = ro.ToIndex;
                     what = "hand reorder (table gesture)";
                     break;
+                // P7 Gate 1: a pawn is moved on the host. While it is carried nothing is committed here (the view follows the
+                // hand as a preview); where it is put down goes to the host, whose change set places it (or, refused, it
+                // goes back to where this table still has it).
+                case CommitPhysicalObjectCommand carried when IsPawn(carried.ObjectId) && carried.State != null
+                    && (carried.State.Mode == PhysicalObjectMode.Held || carried.State.Mode == PhysicalObjectMode.Dynamic):
+                    return true; // carried or still falling: only where it comes to rest is sent
+                case CommitPhysicalObjectCommand put when IsPawn(put.ObjectId) && put.State != null:
+                    op.Kind = PrivateOperationKind.MovePiece;
+                    op.Card = put.ObjectId;
+                    op.HasPose = true;
+                    op.Pose = PoseOf(put);
+                    // A resting piece may report itself again every frame: one request per place it comes to rest.
+                    if (guestLastPiecePlace.TryGetValue(put.ObjectId, out TableCoordinate sentAt)
+                        && Math.Abs(sentAt.X - op.Pose.Position.X) < 0.01d && Math.Abs(sentAt.Y - op.Pose.Position.Y) < 0.01d)
+                        return true;
+                    guestLastPiecePlace[put.ObjectId] = op.Pose.Position;
+                    what = "pawn move (table gesture)";
+                    guestPieceMoves[op.RequestId] = put.ObjectId;
+                    break;
+                // P7 Gate 1: a die thrown here. While it flies nothing is committed (the view shows the throw); where it
+                // comes to rest and the face it shows go to the host, whose change set shows the accepted face.
+                case CommitPhysicalObjectCommand flying when IsDie(flying.ObjectId) && flying.State != null
+                    && (flying.State.Mode == PhysicalObjectMode.Held || flying.State.Mode == PhysicalObjectMode.Dynamic || !flying.SettledDieValue.HasValue):
+                    return true;
+                case CommitPhysicalObjectCommand landed when IsDie(landed.ObjectId) && landed.State != null:
+                {
+                    op.Kind = PrivateOperationKind.ThrowDie;
+                    op.Card = landed.ObjectId;
+                    op.HasPose = true;
+                    op.Pose = PoseOf(landed);
+                    op.A = landed.SettledDieValue.Value;
+                    // A die that settles again where the table already has it, showing the table's face, is not a new throw
+                    // (DICE-LOOP: the host's face shown here wakes the die once).
+                    if (host.matchState.Dice.TryGetValue(landed.ObjectId, out var shownDie) && shownDie.CurrentValue == op.A
+                        && guestLastPiecePlace.TryGetValue(landed.ObjectId, out TableCoordinate dieAt)
+                        && Math.Abs(dieAt.X - op.Pose.Position.X) < 0.05d && Math.Abs(dieAt.Y - op.Pose.Position.Y) < 0.05d)
+                        return true;
+                    guestLastPiecePlace[landed.ObjectId] = op.Pose.Position;
+                    guestPieceMoves[op.RequestId] = landed.ObjectId;
+                    what = $"die throw ({op.A} here)";
+                    break;
+                }
+                case MoveObjectCommand mv when IsPawn(mv.ObjectId):
+                    op.Kind = PrivateOperationKind.MovePiece;
+                    op.Card = mv.ObjectId;
+                    op.HasPose = true;
+                    op.Pose = mv.TargetPose;
+                    what = "pawn move (table gesture)";
+                    guestPieceMoves[op.RequestId] = mv.ObjectId;
+                    break;
                 default:
                     return false;
             }
@@ -1631,6 +1963,306 @@ namespace ConsoleCards.Presentation.Composition
             forwardedCommands++;
             SendPrivateRequest(PrivateOperationCodec.Write(op), what);
             return true;
+        }
+
+        private readonly Dictionary<Guid, TabletopObjectId> guestPieceMoves = new Dictionary<Guid, TabletopObjectId>();
+        private readonly Dictionary<TabletopObjectId, TableCoordinate> guestLastPiecePlace = new Dictionary<TabletopObjectId, TableCoordinate>();
+
+        private bool IsPawn(TabletopObjectId id) => host.matchState != null && host.matchState.Pawns.ContainsKey(id);
+        private bool IsDie(TabletopObjectId id) => host.matchState != null && host.matchState.Dice.ContainsKey(id);
+
+        // Where a physical commit puts the piece on the table (the table's own coordinates, its turn on the table).
+        private TabletopPose PoseOf(CommitPhysicalObjectCommand commit)
+        {
+            TabletopObjectState state = host.matchState.ContainsObject(commit.ObjectId) ? host.matchState.GetObject(commit.ObjectId) : null;
+            TabletopPose basis = state != null ? state.Pose : TabletopPose.Default;
+            if (commit.State == null || host.coordinateConverter == null) return basis;
+            TableCoordinate at = host.coordinateConverter.ToTableCoordinate(new Vector3(commit.State.Position.X, commit.State.Position.Y, commit.State.Position.Z));
+            return new TabletopPose(at, basis.RotationDegrees, basis.Layer, basis.LocalOrder);
+        }
+
+        // P7: the host refused a pawn move this table sent: the pawn goes back to where this table has it.
+        private void GuestPieceVerdict(Guid requestId, PrivateRequestVerdict verdict)
+        {
+            if (!guestPieceMoves.TryGetValue(requestId, out TabletopObjectId piece)) return;
+            guestPieceMoves.Remove(requestId);
+            if (verdict == PrivateRequestVerdict.Accepted) return;
+            guestLastPiecePlace.Remove(piece); // the same place may be asked for again
+            if (host.matchState != null && host.matchState.ContainsObject(piece)) host.PresentAcceptedObject(piece);
+            host.ShowMessage(verdict == PrivateRequestVerdict.RuleRefused ? "The host refused that move (the game's move rules)." : $"The host refused that move ({verdict}).");
+        }
+
+        // ---------- P7 Gate 2: the game's popups for a player on another computer ----------
+
+        private sealed class PendingPrompt
+        {
+            public PlayerId Actor;
+            public FocusedCardRevealModel Model;
+            public PrivateTurnSnapshot Turn;
+        }
+
+        private readonly Dictionary<Guid, PendingPrompt> hostPrompts = new Dictionary<Guid, PendingPrompt>();
+        private int promptsSent, promptsAnswered, promptsRefused;
+        private Guid guestPromptId;
+
+        /// <summary>Host: sends the popup to the computer that plays <paramref name="actor"/>. False when it is not connected (the popup then shows here).</summary>
+        internal bool TrySendPrivatePrompt(PlayerId actor, FocusedCardRevealModel model)
+        {
+            if (!privateHosting || privateHost == null || model == null) return false;
+            Member target = null;
+            for (int i = 0; i < members.Count; i++)
+                if (!members[i].IsHost && members[i].Connected && members[i].Connection >= 0 && members[i].Player == actor.Value) target = members[i];
+            if (target == null) return false;
+            // One popup at a time per player: a newer one replaces the one it was still showing.
+            List<Guid> old = new List<Guid>();
+            foreach (KeyValuePair<Guid, PendingPrompt> pair in hostPrompts) if (pair.Value.Actor == actor) old.Add(pair.Key);
+            foreach (Guid id in old) hostPrompts.Remove(id);
+            Guid promptId = Guid.NewGuid();
+            hostPrompts[promptId] = new PendingPrompt { Actor = actor, Model = model, Turn = CurrentTurnSnapshot() };
+            TabletopObjectId shownCard = privateHost.ReferenceFor(actor, model.CardId);
+            using (MemoryStream stream = new MemoryStream())
+            using (BinaryWriter w = new BinaryWriter(stream))
+            {
+                w.Write((byte)1);
+                w.Write(promptId.ToByteArray());
+                w.Write(shownCard.Value.ToByteArray());
+                w.Write(model.HeaderTitle ?? string.Empty);
+                w.Write(model.ResultState ?? string.Empty);
+                w.Write(model.CardTitle ?? string.Empty);
+                w.Write(model.CardSubtitle ?? string.Empty);
+                w.Write(model.Body ?? string.Empty);
+                w.Write(model.CompletionLabel ?? string.Empty);
+                w.Write(model.Secondary != null ? model.SecondaryLabel ?? string.Empty : string.Empty);
+                w.Flush();
+                byte[] bytes = stream.ToArray();
+                CheckSentBytes(bytes, actor, "game popup");
+                SendPrivateBytes(target, MsgPrivatePrompt, bytes);
+            }
+
+            promptsSent++;
+            PrivateNote($"Sent the game's popup \"{model.HeaderTitle}: {model.CardTitle}\" to {target.Name} (prompt {promptId.ToString().Substring(0, 8)}).");
+            return true;
+        }
+
+        private void HostPromptAnswer(Member member, byte[] data)
+        {
+            // [type][16 prompt][1 choice: 0 main, 1 second]
+            string verdict;
+            PendingPrompt prompt = null;
+            Guid promptId = Guid.Empty;
+            if (data == null || data.Length != 18 || data[17] > 1) verdict = "Malformed";
+            else
+            {
+                byte[] id = new byte[16];
+                Array.Copy(data, 1, id, 0, 16);
+                promptId = new Guid(id);
+                if (!hostPrompts.TryGetValue(promptId, out prompt)) verdict = "Unknown or already answered";
+                else if (member.Player != prompt.Actor.Value) verdict = "NotYourPopup";
+                else if (!SameTurn(prompt.Turn, CurrentTurnSnapshot())) verdict = "Stale (the turn has moved on)";
+                else if (data[17] == 1 && prompt.Model.Secondary == null) verdict = "NoSecondButton";
+                else verdict = "Accepted";
+            }
+
+            if (verdict != "Accepted")
+            {
+                promptsRefused++;
+                if (verdict.StartsWith("Stale", StringComparison.Ordinal)) hostPrompts.Remove(promptId);
+                PrivateNote($"Refused a popup answer from {member.Name}: {verdict}.");
+                return;
+            }
+
+            hostPrompts.Remove(promptId);
+            promptsAnswered++;
+            PrivateNote($"{member.Name} pressed \"{(data[17] == 1 ? prompt.Model.SecondaryLabel : prompt.Model.CompletionLabel)}\" on \"{prompt.Model.CardTitle}\": running it on the host's table.");
+            hostActingFor = member.Player;
+            try
+            {
+                if (data[17] == 1) prompt.Model.Secondary(); else prompt.Model.Completed();
+            }
+            finally
+            {
+                hostActingFor = Guid.Empty;
+            }
+        }
+
+        private void GuestPrompt(byte[] bytes)
+        {
+            try
+            {
+                using (BinaryReader r = new BinaryReader(new MemoryStream(bytes, false)))
+                {
+                    if (r.ReadByte() != 1) return;
+                    Guid promptId = new Guid(r.ReadBytes(16));
+                    TabletopObjectId card = new TabletopObjectId(new Guid(r.ReadBytes(16)));
+                    string header = r.ReadString(), state = r.ReadString(), title = r.ReadString(), subtitle = r.ReadString(), body = r.ReadString();
+                    string main = r.ReadString(), second = r.ReadString();
+                    guestPromptId = promptId;
+                    if (host.runtimeUi == null || card.IsEmpty) return;
+                    host.runtimeUi.ShowFocusedCardReveal(new FocusedCardRevealModel(
+                        card, null, null, header, state, title, subtitle, body, main,
+                        () => GuestPromptAnswer(promptId, 0),
+                        string.IsNullOrEmpty(second) ? null : second,
+                        string.IsNullOrEmpty(second) ? null : (Action)(() => GuestPromptAnswer(promptId, 1)))
+                    {
+                        AlwaysAsk = true, // the host's level decided that this asks; this computer's own level does not hide it
+                    });
+                    PrivateNote($"The host's game asks: {header} {title} ({main}{(string.IsNullOrEmpty(second) ? string.Empty : " / " + second)}).");
+                }
+            }
+            catch (Exception exception)
+            {
+                PrivateNote("A popup from the host could not be read: " + exception.Message);
+            }
+        }
+
+        private void GuestPromptAnswer(Guid promptId, byte choice)
+        {
+            host.runtimeUi?.CloseFocusedCardSelection();
+            if (promptId != guestPromptId || promptId == Guid.Empty) return;
+            guestPromptId = Guid.Empty;
+            BeginMessage(MsgPrivatePromptAnswer);
+            writer.Write(promptId.ToByteArray());
+            writer.Write(choice);
+            SendToHost();
+            PrivateNote($"Sent this computer's answer ({(choice == 0 ? "main" : "second")} button) to popup {promptId.ToString().Substring(0, 8)}.");
+        }
+
+        // ---------- P7 Gate 0: rule votes, one per player, on that player's own computer ----------
+
+        private int ruleBallotsAccepted, ruleBallotsRefused;
+        private byte[] lastRuleVoteBytes;
+        private Guid guestRuleProposal;
+        private bool guestRuleVoted;
+
+        /// <summary>Host: a proposal opened, changed (someone agreed) or closed. Public text and who agreed; sent to every guest.</summary>
+        internal void PrivateRuleVoteChanged(Guid proposal, bool open, string current, string preview, IReadOnlyList<PlayerId> voters, IReadOnlyList<bool> agreed, string message)
+        {
+            if (!privateHosting) return;
+            using (MemoryStream stream = new MemoryStream())
+            using (BinaryWriter w = new BinaryWriter(stream))
+            {
+                w.Write((byte)1); // version
+                w.Write(open);
+                w.Write(proposal.ToByteArray());
+                w.Write(current ?? string.Empty);
+                w.Write(preview ?? string.Empty);
+                w.Write(message ?? string.Empty);
+                w.Write(voters.Count);
+                for (int i = 0; i < voters.Count; i++)
+                {
+                    w.Write(voters[i].Value.ToByteArray());
+                    w.Write(host.PlayerLabel(voters[i]) ?? string.Empty);
+                    w.Write(i < agreed.Count && agreed[i]);
+                }
+
+                w.Flush();
+                lastRuleVoteBytes = stream.ToArray();
+            }
+
+            int sent = 0;
+            for (int i = 0; i < members.Count; i++)
+            {
+                Member member = members[i];
+                if (member.IsHost || !member.Connected || member.Connection < 0) continue;
+                SendPrivateBytes(member, MsgPrivateRuleVote, lastRuleVoteBytes);
+                sent++;
+            }
+
+            PrivateNote($"Rule proposal {proposal.ToString().Substring(0, 8)} {(open ? "open" : "closed")}: sent to {sent} guest(s) ({lastRuleVoteBytes.Length} bytes){(open ? string.Empty : ": " + message)}.");
+        }
+
+        private void HostRuleBallot(Member member, byte[] data)
+        {
+            // [type][16 proposal][1 agree]
+            PlayerId voter = member.Player == Guid.Empty ? PlayerId.Empty : new PlayerId(member.Player);
+            string verdict;
+            if (data == null || data.Length != 1 + 16 + 1 || data[17] > 1) verdict = "Malformed";
+            else if (!new RoomSeats(this).IsSeated(voter)) verdict = "NotSeated";
+            else
+            {
+                byte[] id = new byte[16];
+                Array.Copy(data, 1, id, 0, 16);
+                verdict = host.RulesCardPanel.ReceiveRemoteBallot(voter, new Guid(id), data[17] == 1);
+            }
+
+            if (verdict.StartsWith("Agreed", StringComparison.Ordinal) || verdict == "Rejected") ruleBallotsAccepted++;
+            else ruleBallotsRefused++;
+            PrivateNote($"Rule vote from {member.Name}: {verdict}.");
+        }
+
+        private void GuestRuleVote(byte[] bytes)
+        {
+            try
+            {
+                using (BinaryReader r = new BinaryReader(new MemoryStream(bytes, false)))
+                {
+                    if (r.ReadByte() != 1) return;
+                    bool open = r.ReadBoolean();
+                    Guid proposal = new Guid(r.ReadBytes(16));
+                    string current = r.ReadString(), preview = r.ReadString(), message = r.ReadString();
+                    int count = r.ReadInt32();
+                    if (count < 0 || count > 8) return;
+                    RuleProposalVoter[] voters = new RuleProposalVoter[count];
+                    int agreedCount = 0;
+                    int mine = -1;
+                    for (int i = 0; i < count; i++)
+                    {
+                        Guid player = new Guid(r.ReadBytes(16));
+                        string label = r.ReadString();
+                        bool agreed = r.ReadBoolean();
+                        if (agreed) agreedCount++;
+                        if (player == myPlayer) mine = i;
+                        voters[i] = new RuleProposalVoter(label, agreed, player == myPlayer && !agreed);
+                    }
+
+                    if (proposal != guestRuleProposal) guestRuleVoted = false;
+                    guestRuleProposal = open ? proposal : Guid.Empty;
+                    if (host.runtimeUi == null) return;
+                    if (!open)
+                    {
+                        host.runtimeUi.CloseRuleProposal();
+                        host.ruleProposalOpen = false;
+                        if (!string.IsNullOrEmpty(message)) host.FeedbackLine(message, FeedbackSeverity.Info);
+                        PrivateNote("Rule proposal closed by the host: " + message);
+                        return;
+                    }
+
+                    RuleProposalModel model = new RuleProposalModel
+                    {
+                        Agreeing = true,
+                        CurrentText = current,
+                        PreviewText = preview,
+                        Voters = voters,
+                        Status = $"{agreedCount} of {count} agreed. Everyone must agree; one \"No\" keeps the rules."
+                            + (mine < 0 ? " You are watching: no vote." : guestRuleVoted ? " Your vote is in." : string.Empty),
+                    };
+                    RuleProposalActions actions = new RuleProposalActions
+                    {
+                        Step = _ => { },
+                        TextChanged = _ => { },
+                        Propose = () => { },
+                        Agree = index => { if (index == mine) GuestBallot(true); },
+                        Reject = () => { if (mine >= 0) GuestBallot(false); else host.runtimeUi.CloseRuleProposal(); },
+                    };
+                    host.ruleProposalOpen = host.runtimeUi.ShowRuleProposal(model, actions);
+                    PrivateNote($"Rule proposal {proposal.ToString().Substring(0, 8)} from the host: {agreedCount}/{count} agreed; this computer's player {(mine < 0 ? "is not a voter" : "votes here")}.");
+                }
+            }
+            catch (Exception exception)
+            {
+                PrivateNote("A rule proposal could not be read: " + exception.Message);
+            }
+        }
+
+        private void GuestBallot(bool agree)
+        {
+            if (guestRuleProposal == Guid.Empty || guestRuleVoted) return;
+            guestRuleVoted = true;
+            BeginMessage(MsgPrivateRuleBallot);
+            writer.Write(guestRuleProposal.ToByteArray());
+            writer.Write(agree);
+            SendToHost();
+            PrivateNote($"Sent this computer's vote ({(agree ? "agree" : "no")}) on proposal {guestRuleProposal.ToString().Substring(0, 8)}.");
         }
 
         // PRIVACY-P6B: the status card the host sent, on this guest's own HUD (with its End Turn and Undo).
@@ -2202,6 +2834,66 @@ namespace ConsoleCards.Presentation.Composition
             }), "Draw 3");
         }
 
+        // P7 (s154): pawn and die requests from the panel. They are the same MovePiece / ThrowDie requests the table's own
+        // drag and throw send (GuestForward), for a test that cannot rely on a mouse gesture reaching a 3D piece.
+        internal void PrivatePawnStep(int dx, int dy, bool othersPawn = false)
+        {
+            RecipientSeatLayout seat = OwnSeat();
+            RecipientPublicLayout layout = privateHosting ? privateHost?.Layout : host.privateViewLayout;
+            TabletopObjectId pawn = default;
+            if (!othersPawn && seat != null) pawn = seat.Pawn;
+            if (othersPawn && layout != null)
+                foreach (RecipientSeatLayout other in layout.Seats) if ((seat == null || other.Seat != seat.Seat) && !other.Pawn.IsEmpty) { pawn = other.Pawn; break; }
+            if (pawn.IsEmpty || host.matchState == null || !host.matchState.ContainsObject(pawn)) { PrivateNote("Pawn step: no pawn."); return; }
+
+            TableCoordinate from = host.matchState.GetObject(pawn).Pose.Position;
+            double len = Math.Sqrt(dx * dx + dy * dy);
+            double ux = dx / len, uy = dy / len;
+            double best = double.MaxValue;
+            TableCoordinate to = from;
+            foreach (var pair in host.matchState.Cards)
+            {
+                TabletopObjectState s = pair.Value.BaseState;
+                if (!s.ContainerId.IsEmpty) continue;
+                double ox = s.Pose.Position.X - from.X, oy = s.Pose.Position.Y - from.Y;
+                double along = ox * ux + oy * uy;
+                double across = Math.Abs(ox * uy - oy * ux);
+                if (along < 0.2d || across > 0.35d * along || along >= best) continue;
+                best = along;
+                to = s.Pose.Position;
+            }
+
+            if (best == double.MaxValue) { PrivateNote("Pawn step: no tile that way."); return; }
+            TabletopPose pose = host.matchState.GetObject(pawn).Pose;
+            SendPrivateRequest(PrivateOperationCodec.Write(new PrivateOperation
+            {
+                Kind = PrivateOperationKind.MovePiece, RequestId = Guid.NewGuid(), Card = pawn, HasPose = true,
+                Pose = new TabletopPose(to, pose.RotationDegrees, pose.Layer, pose.LocalOrder),
+            }), $"Pawn step ({dx},{dy}){(othersPawn ? " of ANOTHER seat's pawn (expect a refusal in Full)" : string.Empty)} to ({to.X:0.00},{to.Y:0.00})");
+        }
+
+        private int panelDieIndex;
+
+        internal void PrivateThrowDie(int face = 0)
+        {
+            if (host.matchState == null || host.matchState.Dice.Count == 0) { PrivateNote("Throw: no die."); return; }
+            int index = panelDieIndex++ % host.matchState.Dice.Count, at_ = 0;
+            foreach (var pair in host.matchState.Dice)
+            {
+                if (at_++ != index) continue;
+                TabletopPose at = pair.Value.BaseState.Pose;
+                int shown = face > 0 ? face : (pair.Value.CurrentValue % pair.Value.SideCount) + 1; // a face other than the shown one
+                SendPrivateRequest(PrivateOperationCodec.Write(new PrivateOperation
+                {
+                    Kind = PrivateOperationKind.ThrowDie, RequestId = Guid.NewGuid(), Card = pair.Key, HasPose = true, A = shown,
+                    Pose = new TabletopPose(new TableCoordinate(at.Position.X + 0.05d, at.Position.Y), at.RotationDegrees, at.Layer, at.LocalOrder),
+                }), face > pair.Value.SideCount ? $"Throw die {index + 1} (d{pair.Value.SideCount}) claiming face {face} (expect a refusal)" : $"Throw die {index + 1} of {host.matchState.Dice.Count} (d{pair.Value.SideCount}, {shown} here)");
+                return;
+            }
+
+            PrivateNote("Throw: no die.");
+        }
+
         private void GuestVerdict(byte[] bytes)
         {
             if (bytes.Length < 17) return;
@@ -2213,6 +2905,7 @@ namespace ConsoleCards.Presentation.Composition
             PrivateNote($"Host's answer to request {requestId.ToString().Substring(0, 8)}: {verdict}{(bytes.Length >= 18 && verdict == PrivateRequestVerdict.RuleRefused ? " (" + (TrapFloorShopError)detail + ")" : string.Empty)}.");
             host.ShowMessage($"Host: {verdict}.");
             GuestTransactionVerdict(requestId, verdict, detail);
+            GuestPieceVerdict(requestId, verdict);
         }
 
         private void GuestTurn(byte[] bytes)
@@ -2260,7 +2953,9 @@ namespace ConsoleCards.Presentation.Composition
             Array.Copy(bytes, 0, id, 0, 16);
             TrapFloorEndTurnVerdict verdict = (TrapFloorEndTurnVerdict)bytes[16];
             PrivateNote($"Host's answer to End Turn {new Guid(id).ToString().Substring(0, 8)}: {verdict}.");
-            host.ShowMessage($"Host: End Turn {verdict}.");
+            host.ShowMessage(verdict == TrapFloorEndTurnVerdict.RuleRefused
+                ? "Host: the floor must collapse first. Roll the two floor dice, then End Floor Turn."
+                : $"Host: End Turn {verdict}.");
         }
 
         private string TurnText(PrivateTurnSnapshot turn)
@@ -2724,6 +3419,10 @@ namespace ConsoleCards.Presentation.Composition
         internal void BeginPrivateTransaction() { }
         internal void RefreshPrivateGuestShopEntry() { }
         internal void EndPrivateTransaction(string what) { }
+        internal bool TryRunHostRuleCommand<TCommand, TResult>(TCommand command, out TResult result) where TCommand : class { result = default; return false; }
+        internal void PrivateRuleVoteChanged(Guid proposal, bool open, string current, string preview, IReadOnlyList<PlayerId> voters, IReadOnlyList<bool> agreed, string message) { }
+        private void PrivateMemberGone(Member member) { }
+        internal bool TrySendPrivatePrompt(PlayerId actor, FocusedCardRevealModel model) => false;
         private bool MayUndoOnPrivateHost(ActiveSessionUndoTransaction transaction, bool redo) => true;
         private int legacyRefused;
         private void PrivateNote(string line) { }
@@ -2776,6 +3475,8 @@ namespace ConsoleCards.Presentation.Composition
             // PRIVACY-P6B: card and deck gestures (drag, draw, flip, shuffle, hand reorder) go through the private
             // pipeline as the host's own seat; the gesture's own command then runs on the authority.
             if (online.TryRunHostOwnCommand(command, out result)) return true;
+            // P7: the game's own rule commands (the host's cartridge) run on the authority and are published.
+            if (online.TryRunHostRuleCommand(command, out result)) return true;
 
             if (PoseOnly.Contains(typeof(TCommand).Name)) return false;
             int seen = refused.TryGetValue(typeof(TCommand), out int count) ? count : 0;
@@ -2893,6 +3594,19 @@ namespace ConsoleCards.Presentation.Composition
             if (GUILayout.Button("Bad: underpay")) Online.PrivateShopUnderpay();
             if (GUILayout.Button("Bad: pay w/ other's")) Online.PrivateShopOthersCards();
             if (Online.IsPrivateHost && GUILayout.Button("Assist: " + PlayAssist.Name(PlayAssist.Level))) Online.PrivateCycleAssist();
+            GUILayout.EndHorizontal();
+            // P7 (s154): pawn and die requests (the same ones the table's drag and throw send).
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Pawn +X")) Online.PrivatePawnStep(1, 0);
+            if (GUILayout.Button("Pawn -X")) Online.PrivatePawnStep(-1, 0);
+            if (GUILayout.Button("Pawn +Y")) Online.PrivatePawnStep(0, 1);
+            if (GUILayout.Button("Pawn -Y")) Online.PrivatePawnStep(0, -1);
+            if (GUILayout.Button("Bad: diag")) Online.PrivatePawnStep(1, 1);
+            if (GUILayout.Button("Bad: other's pawn")) Online.PrivatePawnStep(1, 0, true);
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Throw die")) Online.PrivateThrowDie();
+            if (GUILayout.Button("Bad: die face 99")) Online.PrivateThrowDie(99);
             GUILayout.EndHorizontal();
         }
 

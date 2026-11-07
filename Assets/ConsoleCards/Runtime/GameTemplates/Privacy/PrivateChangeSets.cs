@@ -29,6 +29,10 @@ namespace ConsoleCards.GameTemplates.Privacy
         public ObjectVisibility Visibility;
         public bool Locked;
         public bool FaceUp;
+        /// <summary>P7 (s154): a piece's resting place as the table's physics has it (public; null: none).</summary>
+        public PhysicalObjectState Physical;
+        /// <summary>P7 (s154): a die's face (0: not a die).</summary>
+        public int DieValue;
     }
 
     /// <summary>
@@ -203,19 +207,48 @@ namespace ConsoleCards.GameTemplates.Privacy
 
         private static void AddPoseChanges(PrivateChangeSet set, MatchState previous, MatchState current)
         {
+            // P7 (s154): a piece the table's physics put down records its resting place as its physical state (the
+            // pose stays where it was made), and a die's thrown face is its value: both are public and both are sent.
             List<TabletopObjectState> moved = new List<TabletopObjectState>();
             foreach (KeyValuePair<TabletopObjectId, PawnState> pair in current.Pawns)
-                if (PoseChanged(previous.Pawns[pair.Key].BaseState, pair.Value.BaseState)) moved.Add(pair.Value.BaseState);
+                if (PieceChanged(previous.Pawns[pair.Key].BaseState, pair.Value.BaseState)) moved.Add(pair.Value.BaseState);
             foreach (KeyValuePair<TabletopObjectId, DieState> pair in current.Dice)
-                if (PoseChanged(previous.Dice[pair.Key].BaseState, pair.Value.BaseState)) moved.Add(pair.Value.BaseState);
+                if (PieceChanged(previous.Dice[pair.Key].BaseState, pair.Value.BaseState) || previous.Dice[pair.Key].CurrentValue != pair.Value.CurrentValue) moved.Add(pair.Value.BaseState);
             foreach (KeyValuePair<TabletopObjectId, TokenState> pair in current.Tokens)
-                if (PoseChanged(previous.Tokens[pair.Key].BaseState, pair.Value.BaseState)) moved.Add(pair.Value.BaseState);
+                if (PieceChanged(previous.Tokens[pair.Key].BaseState, pair.Value.BaseState)) moved.Add(pair.Value.BaseState);
             moved.Sort((a, b) => a.Id.Value.CompareTo(b.Id.Value));
-            foreach (TabletopObjectState state in moved) set.Upserts.Add(Record(state, true));
+            foreach (TabletopObjectState state in moved)
+            {
+                PrivateObjectRecord record = Record(state, true);
+                if (current.Dice.TryGetValue(state.Id, out DieState die)) record.DieValue = die.CurrentValue;
+                set.Upserts.Add(record);
+            }
+        }
+
+        private static bool PieceChanged(TabletopObjectState a, TabletopObjectState b) => PoseChanged(a, b) || PhysicalChanged(a.PhysicalState, b.PhysicalState);
+
+        /// <summary>A resting place a recipient may be sent (a piece in flight or in a hand is not: the recipient's own
+        /// physics would run it and report where it settles as a new throw).</summary>
+        public static PhysicalObjectState RestingPlace(PhysicalObjectState state) =>
+            state != null && (state.Mode == PhysicalObjectMode.Sleeping || state.Mode == PhysicalObjectMode.SleepingUnresolved) ? state : null;
+
+        private static bool PhysicalChanged(PhysicalObjectState a, PhysicalObjectState b)
+        {
+            if (b != null && RestingPlace(b) == null) return false; // still moving: sent once it rests
+            a = RestingPlace(a);
+            if (a == null || b == null) return !ReferenceEquals(a, b);
+            if (a.Mode != b.Mode) return true;
+            // Live finding (s154): a piece put down at rest settles again by a hair on the host's physics; that is not a
+            // move worth a revision for every guest (a centimetre, about half a degree).
+            const float near = 0.01f;
+            return Math.Abs(a.Position.X - b.Position.X) > near || Math.Abs(a.Position.Y - b.Position.Y) > near || Math.Abs(a.Position.Z - b.Position.Z) > near
+                || Math.Abs(a.Rotation.X - b.Rotation.X) > near || Math.Abs(a.Rotation.Y - b.Rotation.Y) > near
+                || Math.Abs(a.Rotation.Z - b.Rotation.Z) > near || Math.Abs(a.Rotation.W - b.Rotation.W) > near;
         }
 
         private static PrivateObjectRecord Record(TabletopObjectState state, bool faceUp) => new PrivateObjectRecord
         {
+            Physical = state.ContainerId.IsEmpty ? RestingPlace(state.PhysicalState) : null,
             Reference = state.Id,
             Definition = state.DefinitionId,
             Kind = state.Kind,
@@ -232,7 +265,7 @@ namespace ConsoleCards.GameTemplates.Privacy
             TabletopObjectState x = a.BaseState, y = b.BaseState;
             if (a.Face != b.Face || x.ContainerId != y.ContainerId || !x.DefinitionId.Equals(y.DefinitionId)) return true;
             if (x.OwnerPlayerId != y.OwnerPlayerId || x.Visibility != y.Visibility || x.IsUserLocked != y.IsUserLocked) return true;
-            return y.ContainerId.IsEmpty && PoseChanged(x, y); // a card in a container lies where the container lays it out
+            return y.ContainerId.IsEmpty && (PoseChanged(x, y) || PhysicalChanged(x.PhysicalState, y.PhysicalState)); // a card in a container lies where the container lays it out
         }
 
         private static bool PoseChanged(TabletopObjectState a, TabletopObjectState b)
@@ -349,7 +382,14 @@ namespace ConsoleCards.GameTemplates.Privacy
                 if (record.Kind != TabletopObjectKind.Card)
                 {
                     if (!table.ContainsObject(record.Reference)) return "a record names a piece this table does not have";
-                    table.GetObject(record.Reference).SetPose(record.Pose);
+                    TabletopObjectState piece = table.GetObject(record.Reference);
+                    piece.SetPose(record.Pose);
+                    if (record.Physical != null && piece.ContainerId.IsEmpty) piece.SetPhysicalState(record.Physical);
+                    if (record.DieValue > 0 && table.Dice.TryGetValue(record.Reference, out DieState die))
+                    {
+                        if (record.DieValue > die.SideCount) return "a die record shows a face that die does not have";
+                        die.SetAcceptedRoll(new DieRoll(die.SideCount, record.DieValue));
+                    }
                     summary?.Moved.Add(record.Reference);
                     continue;
                 }
@@ -358,6 +398,7 @@ namespace ConsoleCards.GameTemplates.Privacy
                 TabletopObjectState state = new TabletopObjectState(
                     record.Reference, record.Definition, TabletopObjectKind.Card, record.Pose, ContainerId.Empty,
                     record.Owner, record.Visibility, record.Locked);
+                if (record.Container.IsEmpty && record.Physical != null) state.SetPhysicalState(record.Physical);
                 table.AddUncontainedCard(new CardInstanceState(state, record.FaceUp ? CardFace.FaceUp : CardFace.FaceDown));
                 if (!record.Container.IsEmpty && !transfer.PlaceIntoContainer(state, table.Containers[record.Container]).Succeeded)
                     return "a card could not be put in its container";
@@ -397,6 +438,11 @@ namespace ConsoleCards.GameTemplates.Privacy
         Reorder = 23,
         DrawCount = 24,
         Undo = 25,
+        /// <summary>P7: a loose piece (a pawn) put down at a place on the table. Pieces are public: named by real id.</summary>
+        MovePiece = 26,
+        /// <summary>P7: a die came to rest after a throw (its place, and the face it showed here in A). In Full a rules
+        /// die's face is the host's (AUTH-DICE); otherwise the face thrown stands.</summary>
+        ThrowDie = 27,
     }
 
     public sealed class PrivateOperation
@@ -426,7 +472,7 @@ namespace ConsoleCards.GameTemplates.Privacy
         private const int Length = 1 + 1 + 16 + 16 + 16 + 16 + 1 + 8 + 8 + 4 + 4 + 4 + 1 + 4 + 4 + 8;
 
         public static bool IsOperation(byte[] bytes, int offset) =>
-            bytes != null && offset >= 0 && bytes.Length - offset >= 1 && bytes[offset] >= (byte)PrivateOperationKind.Transfer && bytes[offset] <= (byte)PrivateOperationKind.Undo;
+            bytes != null && offset >= 0 && bytes.Length - offset >= 1 && bytes[offset] >= (byte)PrivateOperationKind.Transfer && bytes[offset] <= (byte)PrivateOperationKind.ThrowDie;
 
         public static byte[] Write(PrivateOperation op)
         {
@@ -512,6 +558,10 @@ namespace ConsoleCards.GameTemplates.Privacy
                     return op.Card.IsEmpty && !op.Container.IsEmpty && !op.Destination.IsEmpty && !op.HasPose && op.A >= 1 && op.A <= 20;
                 case PrivateOperationKind.Undo:
                     return op.Card.IsEmpty && op.Container.IsEmpty && op.Destination.IsEmpty && !op.HasPose && op.Revision >= 0;
+                case PrivateOperationKind.MovePiece:
+                    return !op.Card.IsEmpty && op.Container.IsEmpty && op.Destination.IsEmpty && op.HasPose;
+                case PrivateOperationKind.ThrowDie:
+                    return !op.Card.IsEmpty && op.Container.IsEmpty && op.Destination.IsEmpty && op.HasPose && op.A >= 1 && op.A <= 100;
                 default:
                     return false;
             }

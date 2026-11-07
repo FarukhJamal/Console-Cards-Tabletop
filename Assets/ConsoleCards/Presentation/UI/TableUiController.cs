@@ -1404,7 +1404,7 @@ namespace ConsoleCards.Presentation.UI
         {
             // Owner, 2026-11-03 (doc 57, Assist FREE / REMINDERS): the game's "you landed on…" and trap popups become a
             // short line at the top; only a real choice (take a prize, collapse the tile, roll for the Crane) still asks.
-            if (model != null && PlayAssist.IsQuiet && !IsRealChoice(model))
+            if (model != null && !model.AlwaysAsk && PlayAssist.IsQuiet && !IsRealChoice(model))
             {
                 ShowTableNews(QuietRevealLine(model), new Color(0.949f, 0.463f, 0.180f, 1f));
                 // Picking a Key up is what landing on it does at a real table (owner's playtest, 2026-11-04: the Key

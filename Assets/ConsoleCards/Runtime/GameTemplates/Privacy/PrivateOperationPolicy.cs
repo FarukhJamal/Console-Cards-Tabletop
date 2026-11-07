@@ -34,7 +34,9 @@ namespace ConsoleCards.GameTemplates.Privacy
             resolved = null;
             if (op == null) return PrivateRequestVerdict.UnknownReference;
             if (!seats.IsSeated(sender)) return PrivateRequestVerdict.NotSeated;
-            if (op.Kind != PrivateOperationKind.Undo && !seats.IsTurnOf(sender)) return PrivateRequestVerdict.NotYourTurn;
+            // P7: a die may be thrown by any seated player (a floor turn's dice: "anyone rolls"); which throws a rule reads
+            // is the game's own business on the host.
+            if (op.Kind != PrivateOperationKind.Undo && op.Kind != PrivateOperationKind.ThrowDie && !seats.IsTurnOf(sender)) return PrivateRequestVerdict.NotYourTurn;
             if (!host.AcceptRequest(op.RequestId)) return PrivateRequestVerdict.Duplicate;
             SeatId seat = SeatOf(match, sender);
             resolved = new PrivateResolvedOperation { Operation = op, FromIndex = -1 };
@@ -58,6 +60,25 @@ namespace ConsoleCards.GameTemplates.Privacy
                     PrivateRequestVerdict card = ResolveCard(match, host, seats, sender, seat, op.Card, out TabletopObjectId real, out _);
                     if (card != PrivateRequestVerdict.Accepted) return card;
                     resolved.RealCard = real;
+                    return PrivateRequestVerdict.Accepted;
+                }
+
+                case PrivateOperationKind.MovePiece:
+                {
+                    // P7: a loose piece (a pawn) only. Cards move by Transfer, dice by their throw; neither is a piece.
+                    if (match.Cards.ContainsKey(op.Card) || match.Dice.ContainsKey(op.Card)) return PrivateRequestVerdict.InvalidSource;
+                    if (!match.ContainsObject(op.Card)) return PrivateRequestVerdict.UnknownReference;
+                    if (!match.GetObject(op.Card).ContainerId.IsEmpty) return PrivateRequestVerdict.InvalidSource;
+                    resolved.RealCard = op.Card;
+                    return PrivateRequestVerdict.Accepted; // the game's own move rules decide on the host (Full)
+                }
+
+                case PrivateOperationKind.ThrowDie:
+                {
+                    if (!match.Dice.TryGetValue(op.Card, out var die) || !match.ContainsObject(op.Card)) return match.ContainsObject(op.Card) ? PrivateRequestVerdict.InvalidSource : PrivateRequestVerdict.UnknownReference;
+                    if (!match.GetObject(op.Card).ContainerId.IsEmpty) return PrivateRequestVerdict.InvalidSource;
+                    if (op.A > die.SideCount) return PrivateRequestVerdict.InvalidSource; // not a face of that die
+                    resolved.RealCard = op.Card;
                     return PrivateRequestVerdict.Accepted;
                 }
 

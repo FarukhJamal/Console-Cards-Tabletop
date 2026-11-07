@@ -181,6 +181,67 @@ namespace ConsoleCards.Tests
             CollectionAssert.AreEqual(places, r.T.CardPlaces());
         }
 
+        // P7 Gate 0 (s153): what a purchase actually grants, checked against the game's own rule
+        // (TrapFloorBuyFromShopUseCase + TrapFloorTakePrizeUseCase.TryResolveDestination): Trap Floor has no Action/Ability
+        // container, so the bought card lies loose beside the buyer's Console (its AbilityOverflowPose), face up, public,
+        // owned by the buyer, of the bought definition, exactly one; it is NOT in the Hand (the HUD hand count does not
+        // change). Every seat sees it with its face (a public card). A second purchase does not land on the first.
+        private static int LooseFaceUp(MatchState table, Guid definition)
+        {
+            int n = 0;
+            foreach (CardInstanceState card in table.Cards.Values)
+                if (card.BaseState.ContainerId.IsEmpty && card.Face == CardFace.FaceUp
+                    && card.BaseState.DefinitionId.Equals(new ObjectDefinitionId(definition))) n++;
+            return n;
+        }
+
+        [Test]
+        public void Purchase_GrantsOnePublicFaceUpCard_BesideTheBuyersConsole_NotInTheHand()
+        {
+            Room r = Room.Open();
+            CardDefinitionData ability = r.T.PricedAbility();
+            Guid definition = Guid.Parse(ability.StableId);
+            TrapFloorPlayerSetupDefinition buyer = r.T.SetupOf(r.Buyer);
+            ContainerId hand = buyer.HandContainerId;
+            int handBefore = r.T.Match.Containers[hand].Count;
+            Dictionary<PlayerId, int> seen = new Dictionary<PlayerId, int>();
+            foreach (PlayerId p in r.Host.Recipients) seen[p] = LooseFaceUp(r.Tables[p], definition);
+
+            List<TabletopObjectId> payment = r.Stage(ability);
+            PrivateTransaction tx = r.Buy(r.Buyer, ability, payment);
+            Assert.AreEqual(PrivateRequestVerdict.Accepted, PrivateTransactionPolicy.Check(r.T.Match, r.S, r.Host, r.Buyer, tx, out PrivateResolvedTransaction resolved));
+            TrapFloorBuyFromShopResult result = r.Run(r.Buyer, ability, resolved, out Dictionary<PlayerId, byte[]> updates);
+            Assert.IsTrue(result.Succeeded, result.Error.ToString());
+            r.Deliver(updates);
+
+            Assert.IsTrue(buyer.ActionAbilityAreaContainerId.IsEmpty, "Trap Floor seats have no Ability container (the rule this test pins)");
+            Assert.IsFalse(result.PlacedInHand);
+            Assert.IsTrue(result.DestinationContainerId.IsEmpty, "loose, beside the Console");
+            CardInstanceState granted = r.T.Match.Cards[result.GrantedCardId];
+            Assert.IsTrue(granted.BaseState.DefinitionId.Equals(new ObjectDefinitionId(definition)), "the bought definition");
+            Assert.AreEqual(CardFace.FaceUp, granted.Face);
+            Assert.AreEqual(ObjectVisibility.Public, granted.BaseState.Visibility);
+            Assert.IsTrue(granted.BaseState.ContainerId.IsEmpty);
+            Assert.AreEqual(r.Buyer, granted.BaseState.OwnerPlayerId, "owned by the buyer");
+            double dx = granted.BaseState.Pose.Position.X - buyer.AbilityOverflowPose.Position.X;
+            double dy = granted.BaseState.Pose.Position.Y - buyer.AbilityOverflowPose.Position.Y;
+            Assert.LessOrEqual(Math.Sqrt((dx * dx) + (dy * dy)), 3.0d, "beside the buyer's own Console");
+            Assert.AreEqual(handBefore, r.T.Match.Containers[hand].Count, "the grant does not go into the Hand (payment here came from the deck)");
+            foreach (PlayerId p in r.Host.Recipients)
+                Assert.AreEqual(seen[p] + 1, LooseFaceUp(r.Tables[p], definition), $"{p} sees exactly one new face-up {ability.DisplayName}");
+            r.AssertEveryoneMatchesTheHost();
+
+            // A second purchase lies beside the first, not on it.
+            List<TabletopObjectId> second = r.Stage(ability);
+            PrivateTransaction tx2 = r.Buy(r.Buyer, ability, second);
+            Assert.AreEqual(PrivateRequestVerdict.Accepted, PrivateTransactionPolicy.Check(r.T.Match, r.S, r.Host, r.Buyer, tx2, out PrivateResolvedTransaction resolved2));
+            TrapFloorBuyFromShopResult result2 = r.Run(r.Buyer, ability, resolved2, out Dictionary<PlayerId, byte[]> updates2);
+            Assert.IsTrue(result2.Succeeded, result2.Error.ToString());
+            r.Deliver(updates2);
+            Assert.AreNotEqual(granted.BaseState.Pose.Position, r.T.Match.Cards[result2.GrantedCardId].BaseState.Pose.Position);
+            r.AssertEveryoneMatchesTheHost();
+        }
+
         [Test]
         public void InsufficientPayment_RefusedByTheGame_NothingMoves_NoCardGranted()
         {

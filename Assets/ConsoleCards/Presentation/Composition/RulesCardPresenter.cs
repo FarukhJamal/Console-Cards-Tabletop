@@ -218,6 +218,14 @@ namespace ConsoleCards.Presentation.Composition
         internal void BeginRuleProposal()
         {
             if (host.runtimeUi == null || host.activeSession == null) return;
+            // P7 Gate 0 (s153): a private guest's table is the host's projection; a change made here would change this
+            // computer alone. The proposal is made on the host's computer; every player then votes on their own computer.
+            if (host.HasOnline && host.Online.IsPrivateGuest)
+            {
+                host.FeedbackLine("Private session: rule changes are proposed on the host's computer; you vote here when one is open.", FeedbackSeverity.Info);
+                return;
+            }
+
             ruleProposalAgreeing = false;
             ruleProposalVoters.Clear();
             ruleProposalAgreed.Clear();
@@ -288,7 +296,7 @@ namespace ConsoleCards.Presentation.Composition
             RuleProposalVoter[] voters = new RuleProposalVoter[ruleProposalVoters.Count];
             for (int i = 0; i < voters.Length; i++)
             {
-                voters[i] = new RuleProposalVoter(host.PlayerLabel(ruleProposalVoters[i]), ruleProposalAgreed[i]);
+                voters[i] = new RuleProposalVoter(host.PlayerLabel(ruleProposalVoters[i]), ruleProposalAgreed[i], VotesHere(i));
                 if (ruleProposalAgreed[i]) agreed++;
             }
 
@@ -379,7 +387,66 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             ruleProposalAgreeing = true;
+            ruleProposalId = Guid.NewGuid();
             ShowRuleProposalUi();
+            AnnounceVote(true, null);
+        }
+
+        // ---------- P7 Gate 0: one vote per player, on that player's own computer (private session) ----------
+
+        internal Guid ruleProposalId;
+
+        private bool PrivateHostVoting => host.HasOnline && host.Online.IsPrivateHost;
+
+        // Offline and in normal play every button works on this screen (the game's own local vote, unchanged). On a
+        // private host only the players this computer plays can agree here; the others agree on their own computer.
+        private bool VotesHere(int voter) =>
+            !PrivateHostVoting || (voter >= 0 && voter < ruleProposalVoters.Count && !host.Online.IsPlayerOnAnotherComputer(ruleProposalVoters[voter]));
+
+        private void AnnounceVote(bool open, string message)
+        {
+            if (!PrivateHostVoting) return;
+            string preview = string.Empty, current = string.Empty;
+            if (ruleProposalEntryId == null) preview = ruleProposalSetIndex >= 0 ? $"Switch to: {RuleSetAt(ruleProposalSetIndex).DisplayName}" : string.Empty;
+            else if (ActiveRuleSet.TryGetEntry(ruleProposalEntryId, out RuleEntry entry))
+            {
+                current = entry.FormatText();
+                preview = entry.WithChange(ruleProposalText, ruleProposalValue).FormatText();
+            }
+
+            host.Online.PrivateRuleVoteChanged(ruleProposalId, open, current, preview, ruleProposalVoters, ruleProposalAgreed, message);
+        }
+
+        /// <summary>
+        /// P7: a player's vote sent from their own computer, checked on the host: an open proposal, this proposal (not an
+        /// earlier one), a player who votes on it, once. Agree counts as that player's agreement (the game's own vote:
+        /// everyone must agree); No ends it at once ("one No keeps the rules"). Returns what became of it.
+        /// </summary>
+        internal string ReceiveRemoteBallot(PlayerId voter, Guid proposal, bool agree)
+        {
+            if (!ruleProposalAgreeing || ruleProposalId == Guid.Empty) return "NoProposal";
+            if (proposal != ruleProposalId) return "Stale";
+            int index = ruleProposalVoters.IndexOf(voter);
+            if (index < 0) return "NotAVoter";
+            if (!host.Online.IsPlayerOnAnotherComputer(voter)) return "NotYourComputer"; // the host's own players vote on the host
+            if (ruleProposalAgreed[index]) return "Duplicate";
+            if (!agree)
+            {
+                RejectRuleProposal();
+                return "Rejected";
+            }
+
+            ruleProposalAgreed[index] = true;
+            for (int i = 0; i < ruleProposalAgreed.Count; i++)
+            {
+                if (ruleProposalAgreed[i]) continue;
+                ShowRuleProposalUi();
+                AnnounceVote(true, null);
+                return "Agreed";
+            }
+
+            CommitRuleProposal();
+            return "Agreed (everyone)";
         }
 
         // A changed setting is tried before it is proposed (for example floor counts must still fill the grid):
@@ -419,12 +486,19 @@ namespace ConsoleCards.Presentation.Composition
         internal void AgreeRuleProposal(int voter)
         {
             if (!ruleProposalAgreeing || voter < 0 || voter >= ruleProposalAgreed.Count) return;
+            if (!VotesHere(voter))
+            {
+                host.FeedbackLine($"{host.PlayerLabel(ruleProposalVoters[voter])} agrees on their own computer.", FeedbackSeverity.Info);
+                return;
+            }
+
             ruleProposalAgreed[voter] = true;
             for (int i = 0; i < ruleProposalAgreed.Count; i++)
             {
                 if (!ruleProposalAgreed[i])
                 {
                     ShowRuleProposalUi();
+                    AnnounceVote(true, null);
                     return;
                 }
             }
@@ -439,6 +513,8 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void CloseRuleProposal(string message)
         {
+            if (ruleProposalAgreeing && ruleProposalId != Guid.Empty) AnnounceVote(false, message ?? "The proposal was closed.");
+            ruleProposalId = Guid.Empty;
             host.ruleProposalOpen = false;
             ruleProposalAgreeing = false;
             host.runtimeUi?.CloseRuleProposal();
