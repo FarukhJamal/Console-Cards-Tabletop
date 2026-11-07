@@ -51,6 +51,10 @@ namespace ConsoleCards.Presentation.Composition
         internal bool MayUndo(ActiveSessionUndoTransaction transaction, bool redo)
         {
             undoRefusal = null;
+            // PRIVACY-P6B: on the host of a private development session the host player's own Undo meets the same
+            // check as a guest's (its own latest change only; in Full a rules result stands). A guest's Undo was checked
+            // already (RunPrivateUndo sets undoRequestPlayer). Redo is not on the private path yet.
+            if (privateHosting && hosting && undoRequestPlayer == Guid.Empty) return MayUndoOnPrivateHost(transaction, redo);
             if (!sharedTable || transaction == null || transaction.ActorPlayerId.IsEmpty) return true;
             // FAIR-UNDO (owner, 2026-11-06: "the host player must follow the same game-rule Undo restrictions as guests"):
             // in Full the host player's own Undo of a rules result is refused as a guest's is. Requests from joined

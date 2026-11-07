@@ -5117,6 +5117,14 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            // PRIVACY-P6B: a private guest's table holds no turn state of its own (only its package); its status card is
+            // the host's public HUD, so the table's own refresh shows that rather than clearing the card.
+            if (host.HasOnline && host.Online.IsPrivateGuest)
+            {
+                host.Online.ShowPrivateGuestHud();
+                return;
+            }
+
             if (host.trapFloorObjectiveState != null && host.trapFloorTurnState != null)
             {
                 // UX-1: the turn names the player's colour, and the strip's chip shows it.
@@ -5199,6 +5207,33 @@ namespace ConsoleCards.Presentation.Composition
 
             FloorfallStatusModel floorfall = BuildFloorfallStatusModel();
             host.runtimeUi.ShowTrapFloorStatus(status, floorfall, host.AddHandTrayToggleAction(BuildTrapFloorAssistedActions()));
+        }
+
+        // PRIVACY-P6B (s151): the public part of the status card, built from the host's own game state for a private
+        // guest's HUD: the round, the turn line, the players' colours and the turn player's card (Keys, effects, hand
+        // count, floor). Everything here is shown to every player at the table; no card identity is in it.
+        internal bool TryBuildPublicHud(out string round, out string phase, out Color? turnColor, out List<TrapFloorHudPlayer> players, out TrapFloorPlayerCardModel card)
+        {
+            round = phase = null;
+            turnColor = null;
+            players = null;
+            card = null;
+            if (host.trapFloorObjectiveState == null || host.trapFloorTurnState == null) return false;
+            PlayerId turnPlayerId = host.trapFloorTurnState.IsCurrentFloorFailed
+                ? PlayerId.Empty
+                : host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                    ? host.trapFloorTurnState.ActivePlayerId
+                    : host.trapFloorTurnState.FloorOperatorPlayerId;
+            turnColor = host.TryGetSeatIndex(turnPlayerId, out int turnSeatIndex) ? PlayerSeatColor(turnSeatIndex) : (Color?)null;
+            phase = host.trapFloorTurnState.IsCurrentFloorFailed
+                ? "ALL PLAYERS ELIMINATED"
+                : host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                    ? $"{(turnColor.HasValue ? PlayerColorName(turnSeatIndex) : FormatPlayerName(turnPlayerId).ToUpperInvariant())}'S TURN" + TurnMovesText()
+                    : "FLOOR TURN";
+            round = $"ROUND {host.trapFloorTurnState.CurrentRound}";
+            players = BuildHudPlayers(turnPlayerId);
+            card = BuildPlayerCard(turnPlayerId);
+            return true;
         }
 
         // V5: " - 2 MOVES" after the turn player's name (nothing outside a player turn).

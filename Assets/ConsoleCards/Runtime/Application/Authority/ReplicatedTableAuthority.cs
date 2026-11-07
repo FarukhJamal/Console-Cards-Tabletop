@@ -57,6 +57,13 @@ namespace ConsoleCards.Application.Authority
     /// </list>
     /// Offline it adds nothing: Submit is the local authority's Submit.
     /// </summary>
+    /// <summary>PRIVACY-P6A: takes a command before the door runs it (development private session host only).</summary>
+    public interface ITableCommandInterceptor
+    {
+        /// <summary>True when it took the command (its result is then the command's result); false to let the door run it.</summary>
+        bool TrySubmit<TCommand, TResult>(TCommand command, out TResult result) where TCommand : class;
+    }
+
     public sealed class ReplicatedTableAuthority : ITableAuthority
     {
         private readonly LocalTableAuthority inner;
@@ -119,8 +126,16 @@ namespace ConsoleCards.Application.Authority
 
         public bool CanSubmit<TCommand>() where TCommand : class => inner.CanSubmit<TCommand>();
 
+        /// <summary>
+        /// PRIVACY-P6A (s150): set only on the host of a private development session (null everywhere else, so normal
+        /// play and offline play are unchanged). It sees every command made on this computer first and may take it: the
+        /// host's own card actions then go through the same private request pipeline as a guest's.
+        /// </summary>
+        public ITableCommandInterceptor Interceptor { get; set; }
+
         public TResult Submit<TCommand, TResult>(TCommand command) where TCommand : class
         {
+            if (Interceptor != null && Interceptor.TrySubmit(command, out TResult taken)) return taken;
             if (Mode == TableReplicationMode.Offline) return inner.Submit<TCommand, TResult>(command);
             if (command == null) throw new ArgumentNullException(nameof(command));
             if (replaying) return NotRun<TResult>(); // the computer that made the change sends this one too

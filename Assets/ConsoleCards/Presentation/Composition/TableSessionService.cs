@@ -214,6 +214,14 @@ namespace ConsoleCards.Presentation.Composition
                 sessionSubtitle = "Your game";
             }
 
+            // PRIVACY-P6B: a private guest's table is only its own package (an empty custom table holding it); the
+            // private development path plays Trap Floor, so the chip says so rather than "EMPTY TABLE".
+            if (!isGameSession && host.HasOnline && host.Online.IsPrivateGuest)
+            {
+                sessionTitle = "TRAP FLOOR";
+                sessionSubtitle = "Private session (development)";
+            }
+
             host.runtimeUi.ShowActiveSession(
                 sessionTitle,
                 sessionSubtitle,
@@ -562,6 +570,12 @@ namespace ConsoleCards.Presentation.Composition
 
         public bool UndoLatestAction(PlayerId requestingPlayerId)
         {
+            if (host.HasOnline && host.Online.IsPrivateGuest)
+            {
+                host.Online.PrivateUndo(); // PRIVACY-P6B: the host decides; this filtered table is never taken back here
+                return false;
+            }
+
             if (host.IsOnlineTable && host.Online.IsClientTable && !host.Online.ApplyingTable)
             {
                 host.Online.AskHostToUndo(false); // MP-5: a joined player's Undo is run by the host, for their own moves
@@ -578,7 +592,7 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            if (host.IsOnlineTable && !host.Online.MayUndo(transaction, false)) return false; // MP-5: your own moves only
+            if ((host.IsOnlineTable || (host.HasOnline && host.Online.IsPrivateHost)) && !host.Online.MayUndo(transaction, false)) return false; // MP-5: your own moves only (PRIVACY-P6B: a private host too)
 
 #if CONSOLECARDS_LOG_UNDO
             Debug.Log(
@@ -659,6 +673,12 @@ namespace ConsoleCards.Presentation.Composition
 
         public bool RedoLatestAction(PlayerId requestingPlayerId)
         {
+            if (host.HasOnline && host.Online.IsPrivateGuest)
+            {
+                host.ShowMessage("Private session: Redo is not available yet.");
+                return false;
+            }
+
             if (host.IsOnlineTable && host.Online.IsClientTable && !host.Online.ApplyingTable)
             {
                 host.Online.AskHostToUndo(true); // MP-5
@@ -675,7 +695,7 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            if (host.IsOnlineTable && !host.Online.MayUndo(transaction, true)) return false; // MP-5
+            if ((host.IsOnlineTable || (host.HasOnline && host.Online.IsPrivateHost)) && !host.Online.MayUndo(transaction, true)) return false; // MP-5
 
             long redoRevision;
             try

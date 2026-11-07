@@ -171,8 +171,14 @@ namespace ConsoleCards.GameTemplates.Privacy
     /// <summary>One card moving, as one recipient may be told about it (the event replaces the replayed command).</summary>
     public sealed class RecipientCardEvent
     {
-        /// <summary>The reference this recipient knew the card by before the move (its handle, or its real id).</summary>
+        /// <summary>
+        /// The reference this recipient knew the card by before the move (its handle, or its real id). PRIVACY-P6A: empty
+        /// when the move hides a card this recipient could see: then <see cref="FromIndex"/> names its old place instead,
+        /// so the card's real id is not sent again.
+        /// </summary>
         public TabletopObjectId PreviousReference;
+        /// <summary>PRIVACY-P6A: with an empty PreviousReference, the card's index in <see cref="From"/> before the move (-1: not public).</summary>
+        public int FromIndex = -1;
         public TabletopObjectId Reference;
         public ContainerId From;
         public ContainerId To;
@@ -220,6 +226,12 @@ namespace ConsoleCards.GameTemplates.Privacy
         public string Digest;
         /// <summary>PRIVACY-SCENE-2 (s147): the public table template (seats, their containers, the board grid), or null.</summary>
         public RecipientPublicLayout Layout;
+        /// <summary>PRIVACY-P6A (s150): the host's authoritative revision this package shows.</summary>
+        public long Revision;
+        /// <summary>PRIVACY-P6A: the public turn (round, phase, whose turn), or null.</summary>
+        public PrivateTurnSnapshot Turn;
+        /// <summary>PRIVACY-P6B: the public status card, or null.</summary>
+        public PrivateHudSnapshot Hud;
 
         public static RecipientBootstrapPackage Build(MatchState match, RecipientHandleTable handles, PlayerId recipient, IReadOnlyDictionary<TabletopObjectId, string> labels, RecipientPublicLayout layout = null)
         {

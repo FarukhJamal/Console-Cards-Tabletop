@@ -31,6 +31,9 @@ namespace ConsoleCards.Presentation.Composition
         /// <summary>A joined computer's End Turn goes to the host. False offline, on the host, or while away.</summary>
         internal bool TrySendEndTurnRequest(TrapFloorEndTurnRequest request)
         {
+            // PRIVACY-P6A: on the host of a private development session the host's own End Turn goes through the private
+            // pipeline's check (the same one a guest's request meets); false everywhere else, so normal play is unchanged.
+            if (TryRunHostOwnPrivateEndTurn(request)) return true;
             if (!sharedTable || hosting || session == null || awaitingTable) return false;
             // Changes this computer made outside the command door (a pawn hop, a flipped tile) go first, in order.
             if (dirty || matchReplaced)

@@ -75,14 +75,34 @@ namespace ConsoleCards.Presentation.Composition
 
         public bool CanSubmit<TCommand>() where TCommand : class => false;
 
+        /// <summary>
+        /// PRIVACY-P6B: set on a private guest. A table gesture it can describe (a card drag, a draw, a flip, a shuffle,
+        /// a hand reorder) is sent to the host as a private request and true comes back: nothing runs here, the host's
+        /// change set moves the cards. Everything else is still refused.
+        /// </summary>
+        public Func<object, bool> Forward;
+
+        public int Forwarded { get; private set; }
+
         public TResult Submit<TCommand, TResult>(TCommand command) where TCommand : class
         {
+            if (Forward != null && Forward(command))
+            {
+                Forwarded++;
+                return NotRun<TResult>();
+            }
+
             Refused++;
             LastRefused = typeof(TCommand).Name;
             int seen = refusedByType.TryGetValue(typeof(TCommand), out int count) ? count : 0;
             refusedByType[typeof(TCommand)] = seen + 1;
             // Once per command type (a settling piece asks every frame): the count is in the report.
             if (seen == 0) Debug.LogWarning($"[PrivateView] Refused {typeof(TCommand).Name}: the private view has no private request for it yet, and it never runs a table command on its copy.");
+            return NotRun<TResult>();
+        }
+
+        private TResult NotRun<TResult>()
+        {
             if (typeof(TResult).IsValueType) return default;
             if (!notRun.TryGetValue(typeof(TResult), out object result))
             {
@@ -315,6 +335,72 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < Registry.cardViews.Count; i++)
                 if (Registry.cardViews[i] != null && Registry.cardViews[i].IsBound) bound++;
             if (bound != matchState.Cards.Count || !HasRuntimeCardInstance(ev.Reference))
+            {
+                error = $"card views {bound} for {matchState.Cards.Count} cards";
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// PRIVACY-P6B (s151): the narrow scene update for one change set already applied to this computer's own table:
+        /// the views of the cards it took out are released, the views of the cards it put in are made, pieces it moved
+        /// are shown where they lie, and only the containers it touched lay out again. False when the views cannot
+        /// follow (the caller then builds the whole scene from this computer's own table).
+        /// </summary>
+        internal bool ApplyPrivateChangesToScene(PrivateChangeSummary summary, out string error)
+        {
+            error = null;
+            if (!privateViewActive || matchState == null) { error = "no private view"; return false; }
+            try
+            {
+                selectionState.ClearAll();
+                inputFrameCoordinator.ClearSelectionPresenter();
+                Dictionary<TabletopObjectId, string> kept = new Dictionary<TabletopObjectId, string>();
+                foreach (TabletopObjectId id in summary.Released)
+                {
+                    if (labelsByCardId.TryGetValue(id, out string label)) kept[id] = label;
+                    if (HasRuntimeCardInstance(id)) ReleaseRuntimeCardInstance(id);
+                    labelsByCardId.Remove(id);
+                }
+
+                foreach (TabletopObjectId id in summary.Created)
+                {
+                    if (!matchState.Cards.TryGetValue(id, out CardInstanceState card)) { error = "a made card is not in this table"; return false; }
+                    if (HasRuntimeCardInstance(id)) ReleaseRuntimeCardInstance(id);
+                    bool identified = !card.BaseState.DefinitionId.Equals(RecipientSnapshotProjection.HiddenDefinition);
+                    if (identified && kept.TryGetValue(id, out string label)) labelsByCardId[id] = label; // a back keeps no name
+                    CardView view = Spawner.CreateCardView(card, ResolveCardLabel(card), out var selectionVisual);
+                    Registry.cardViews.Add(view);
+                    Registry.cardSelectionVisuals.Add(selectionVisual);
+                }
+
+                RefreshContainerCardViewSources();
+                for (int i = 0; i < Registry.hiddenHandViews.Count; i++)
+                    if (Registry.hiddenHandViews[i] != null) Registry.hiddenHandViews[i].SetCardViews(Registry.cardViews);
+                foreach (ContainerId container in summary.Containers) ViewSync.SyncContainer(container);
+                foreach (TabletopObjectId id in summary.Created)
+                    if (matchState.Cards.TryGetValue(id, out CardInstanceState card) && card.BaseState.ContainerId.IsEmpty) PresentAcceptedObject(id);
+                foreach (TabletopObjectId id in summary.Moved) PresentAcceptedObject(id);
+                RefreshCardContentVisibility();
+                RefreshAcceptedCardFaces();
+                RefreshSelectionPresenterAfterRuntimeProjection();
+                Physics.SyncTransforms();
+            }
+            catch (Exception exception)
+            {
+                string trace = exception.StackTrace ?? string.Empty;
+                error = exception.GetType().Name + ": " + exception.Message + " at " + (trace.Length > 700 ? trace.Substring(0, 700) : trace);
+                try { RefreshSelectionPresenterAfterRuntimeProjection(); }
+                catch (Exception again) { error += " (selection presenter: " + again.Message + ")"; }
+                return false;
+            }
+
+            int bound = 0;
+            for (int i = 0; i < Registry.cardViews.Count; i++)
+                if (Registry.cardViews[i] != null && Registry.cardViews[i].IsBound) bound++;
+            if (bound != matchState.Cards.Count)
             {
                 error = $"card views {bound} for {matchState.Cards.Count} cards";
                 return false;

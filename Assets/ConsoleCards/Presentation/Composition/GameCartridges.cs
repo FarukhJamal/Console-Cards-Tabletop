@@ -548,7 +548,16 @@ namespace ConsoleCards.Presentation.Composition
 
         public void RenderStatusUi()
         {
-            if (host.runtimeUi != null && host.IsInitialized) host.runtimeUi.HideTrapFloorStatus();
+            if (host.runtimeUi == null || !host.IsInitialized) return;
+            // PRIVACY-P6B: a private guest's table is an empty custom table holding only its package; its status card
+            // is the host's public HUD, so the refresh shows that rather than clearing it.
+            if (host.HasOnline && host.Online.IsPrivateGuest)
+            {
+                host.Online.ShowPrivateGuestHud();
+                return;
+            }
+
+            host.runtimeUi.HideTrapFloorStatus();
         }
 
         public void RefreshStatusUi() => host.MarkTableUiDirty();

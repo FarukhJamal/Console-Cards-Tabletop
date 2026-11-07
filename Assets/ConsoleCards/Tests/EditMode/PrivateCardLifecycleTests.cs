@@ -161,12 +161,12 @@ namespace ConsoleCards.Tests
                 Assert.AreEqual(0, table.Containers[slot].Count, "the slot is empty everywhere");
             }
 
-            // The update bytes name no hidden card of B's table by its real id, except this card's previous reference
-            // (its real id, which B held while the card lay face up on the Console).
+            // The update bytes name no hidden card of B's table by its real id. PRIVACY-P6A: not even this card's: B's
+            // update names B's old view by its public place (the slot it left), not by the real id B saw (P5 sent it).
             RecipientSnapshotProjection.Classify(r.T.Match, r.B, out HashSet<TabletopObjectId> hiddenFromB, out _);
             foreach (TabletopObjectId id in hiddenFromB)
-                if (id != card) Assert.IsFalse(Carries(returned[r.B], id.Value.ToByteArray()), "no other hidden real id in B's update");
-            Assert.AreEqual(card, RecipientEventApplier.Read(returned[r.B]).Event.PreviousReference, "B's update names the card by what B knew it as");
+                Assert.IsFalse(Carries(returned[r.B], id.Value.ToByteArray()), "no hidden real id in B's update");
+            Assert.IsTrue(RecipientEventApplier.Read(returned[r.B]).Event.PreviousReference.IsEmpty, "B's update names the card by its old place only");
 
             // The old public reference does not reach the card any more for a recipient who may not identify it.
             Assert.AreEqual(PrivateRequestVerdict.HiddenRealId, r.Host.Discard(r.B, Req(card, r.Discard()), out _));

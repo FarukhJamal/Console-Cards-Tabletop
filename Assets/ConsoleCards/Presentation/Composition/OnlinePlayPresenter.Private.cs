@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using ConsoleCards.Application.Authority;
+using ConsoleCards.Application.Commands;
+using ConsoleCards.Application.Results;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Domain.Match;
@@ -77,8 +80,10 @@ namespace ConsoleCards.Presentation.Composition
         private const byte MsgPrivateVerdict = 43;    // host → guest: what became of the guest's request
         private const byte MsgPrivateNeedPackage = 44; // guest → host: my table no longer matches; send my package again
         private const byte MsgPrivateInventory = 45;  // guest → host: what my scene holds (dev evidence, checked by the host)
+        private const byte MsgPrivateTurn = 46;       // PRIVACY-P6A host → guest: one accepted turn transition (public, with its revision)
+        private const byte MsgPrivateTurnVerdict = 47; // PRIVACY-P6A host → guest: what became of the guest's End Turn request
 
-        private static bool IsPrivateMessage(byte type) => type >= MsgPrivatePackage && type <= MsgPrivateInventory;
+        private static bool IsPrivateMessage(byte type) => type >= MsgPrivatePackage && type <= MsgPrivateTurnVerdict;
 
         // Normal-play table messages: never used, and refused, in a private session.
         private static bool IsLegacyTableMessage(byte type) =>
@@ -125,6 +130,33 @@ namespace ConsoleCards.Presentation.Composition
         private int frameTimeNext;
         private readonly List<string> privateLog = new List<string>(64);
         private PrivateSessionPanel privatePanel;
+        // PRIVACY-P6A (s150): one pipeline for every seat's actions, the host's own included.
+        private PrivateHostInterceptor privateInterceptor;
+        private readonly TrapFloorEndTurnAuthority privateEndTurnAuthority = new TrapFloorEndTurnAuthority();
+        private bool privateEndTurnRunning; // the host runs a checked End Turn through the game's own turn service
+        private int hostOwnAccepted;
+        private int hostOwnRefused;
+        private int turnTransitions;
+        private int resyncRequests;     // guests' NeedPackage requests received (host)
+        // Guest: the host's revision this computer's table shows, and how updates arrived.
+        private long privateRevision = -1;
+        private int staleIgnored;
+        private int revisionGaps;
+        private int turnUpdatesReceived;
+        private PrivateTurnSnapshot privateTurn;
+        private byte[] lastEndTurnBytes;
+        // PRIVACY-P6B (s151)
+        private int fallbackPackages;   // host: packages sent because a change could not be told as object changes
+        private int sweeps;             // host: change sets published for changes made outside a private request
+        private int operationsAccepted;
+        private int operationsRefused;
+        private float nextSweepAt;
+        private int lastPublishedFingerprint;
+        private string lastPublishedHudSignature;
+        private PrivateHudSnapshot privateHud; // guest: the status card the host sent
+        private float nextHudRenderAt;
+        private int changeSetsApplied;
+        private int forwardedCommands;  // guest: table gestures sent to the host as private requests
 
         internal IReadOnlyList<string> PrivateLog => privateLog;
 
@@ -181,24 +213,237 @@ namespace ConsoleCards.Presentation.Composition
         private void TickPrivate()
         {
             TickPrivateGuestMeasure();
+            TickPrivateGuestHud();
             if (!privateHosting || !hosting || session == null) return;
             if (!host.IsInitialized || host.matchState == null || host.trapFloorTemplate == null || host.trapFloorTurnState == null) return;
-            if (!privateHostPending && ReferenceEquals(privateHostMatch, host.matchState)) return;
-            // A new table on the host (the first deal, a reset, an Undo step): each guest gets its own package again.
+            if (privateHostPending || privateHost == null)
+            {
+                StartPrivateTable();
+                return;
+            }
+
+            if (!ReferenceEquals(privateHostMatch, host.matchState))
+            {
+                PrivateTableReplaced("the host's table was replaced (Undo, reset or a new floor)");
+                return;
+            }
+
+            // PRIVACY-P6B: anything that changed the host's table outside a private request (a pose, a game step the
+            // host ran) reaches every guest as a filtered change set; checked cheaply four times a second.
+            if (Time.unscaledTime < nextSweepAt) return;
+            nextSweepAt = Time.unscaledTime + 0.25f;
+            int fingerprint = HostFingerprintFast();
+            PrivateHudSnapshot hud = CurrentHud();
+            string hudSignature = hud?.Signature();
+            if (fingerprint == lastPublishedFingerprint && hudSignature == lastPublishedHudSignature) return;
+            Dictionary<PlayerId, byte[]> updates = privateHost.PublishChanges(null, hud);
+            if (updates != null) sweeps++;
+            SendPublish(updates, "change made outside a private request");
+        }
+
+        // The first deal: each guest gets its own package.
+        private void StartPrivateTable()
+        {
             bool first = privateHostPending;
             privateHostPending = false;
             privateHostMatch = host.matchState;
             privateHost = new PrivateTableHost(host.matchState, new RoomSeats(this), host.trapFloorTemplate.CardLabels, RecipientSnapshotProjection.NewSessionKey())
             {
                 Layout = host.BuildPublicLayout(),
+                // PRIVACY-P6B: Draw/Place/Return/Discard run through the table's own command door.
+                TransferExecutor = ExecuteTransferOnAuthority,
+                HudSource = CurrentHud,
             };
-            PrivateNote(first ? "Host table dealt: sending each guest its own package." : "The host's table was replaced: sending each guest its own package again.");
+            privateHost.SetInitialTurn(CurrentTurnSnapshot());
+            privateHost.SetInitialHud(CurrentHud());
+            privateEndTurnAuthority.Clear();
+            // PRIVACY-P6A: from here every command made on the host's own computer meets the private pipeline first.
+            if (privateInterceptor == null) privateInterceptor = new PrivateHostInterceptor(this);
+            host.Replicated.Interceptor = privateInterceptor;
+            PrivateNote(first ? "Host table dealt: sending each guest its own package." : "A new private table: sending each guest its own package.");
             for (int i = 0; i < members.Count; i++)
             {
                 Member member = members[i];
                 if (member.IsHost || !member.Connected || member.Connection < 0) continue;
                 SendPrivatePackage(member);
             }
+
+            lastPublishedFingerprint = HostFingerprintFast();
+            lastPublishedHudSignature = privateHost.Hud?.Signature();
+        }
+
+        // PRIVACY-P6B: the host's table object was replaced by one that continues it (Undo, a reset, a new floor). The
+        // private authority keeps its handles, revision and what each guest was sent: the difference goes out as change
+        // sets, or, where it cannot be told as object changes (containers made or removed), as that guest's package.
+        private void PrivateTableReplaced(string why)
+        {
+            privateHostMatch = host.matchState;
+            privateHost.Rebind(host.matchState);
+            privateHost.Layout = host.BuildPublicLayout();
+            PrivateNote("Private table: " + why + "; sending what changed.");
+            HostSceneFollow(null);
+            SendPublish(privateHost.PublishChanges(CurrentTurnSnapshot(), CurrentHud()), why);
+        }
+
+        // Sends one publish: each guest its own update, or its own package when its change could not be told.
+        private void SendPublish(Dictionary<PlayerId, byte[]> updates, string what)
+        {
+            if (privateHost == null) return;
+            lastPublishedFingerprint = HostFingerprintFast();
+            lastPublishedHudSignature = privateHost.Hud?.Signature();
+            if (updates == null) return;
+            int sent = 0, packages = 0;
+            for (int i = 0; i < members.Count; i++)
+            {
+                Member other = members[i];
+                if (other.IsHost || !other.Connected || other.Connection < 0) continue;
+                PlayerId recipient = RecipientOf(other);
+                if (privateHost.NeedPackage.Contains(recipient))
+                {
+                    SendPrivatePackage(other);
+                    fallbackPackages++;
+                    packages++;
+                    continue;
+                }
+
+                if (!updates.TryGetValue(recipient, out byte[] update)) continue;
+                CheckSentBytes(update, recipient, $"{what} (revision {privateHost.Revision}) to {other.Name}");
+                SendPrivateBytes(other, MsgPrivateUpdate, update);
+                updatesSent++;
+                sent++;
+            }
+
+            if (packages > 0) PrivateNote($"Revision {privateHost.Revision} ({what}): {packages} guest(s) took their own package instead (fallback; the change made or removed a container or piece). Total fallbacks {fallbackPackages}.");
+        }
+
+        // A cheap fingerprint of the host's table (every object's place, face and pose; every container's order).
+        private int HostFingerprintFast()
+        {
+            MatchState table = host.matchState;
+            if (table == null) return 0;
+            unchecked
+            {
+                int hash = 17;
+                foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in table.Cards)
+                {
+                    TabletopObjectState state = pair.Value.BaseState;
+                    hash = hash * 31 + pair.Key.GetHashCode();
+                    hash = hash * 31 + state.ContainerId.GetHashCode();
+                    hash = hash * 31 + (int)pair.Value.Face;
+                    if (state.ContainerId.IsEmpty) hash = hash * 31 + PoseHash(state);
+                }
+
+                foreach (KeyValuePair<TabletopObjectId, PawnState> pair in table.Pawns) hash = hash * 31 + PoseHash(pair.Value.BaseState);
+                foreach (KeyValuePair<TabletopObjectId, ConsoleCards.Core.Domain.Dice.DieState> pair in table.Dice) hash = hash * 31 + PoseHash(pair.Value.BaseState);
+                foreach (KeyValuePair<TabletopObjectId, TokenState> pair in table.Tokens) hash = hash * 31 + PoseHash(pair.Value.BaseState);
+                foreach (KeyValuePair<ContainerId, ContainerState> pair in table.Containers)
+                {
+                    hash = hash * 31 + pair.Key.GetHashCode();
+                    for (int i = 0; i < pair.Value.Count; i++) hash = hash * 7 + pair.Value.GetObjectAt(i).GetHashCode();
+                }
+
+                foreach (KeyValuePair<SeatId, SeatState> pair in table.Seats) hash = hash * 3 + (pair.Value.Console != null && pair.Value.Console.ShowsBack ? 1 : 0);
+                return hash;
+            }
+        }
+
+        private static int PoseHash(TabletopObjectState state)
+        {
+            unchecked
+            {
+                return (int)Math.Round(state.Pose.Position.X * 500) * 73856093 ^ (int)Math.Round(state.Pose.Position.Y * 500) * 19349663 ^ (int)Math.Round(state.Pose.RotationDegrees * 5);
+            }
+        }
+
+        // PRIVACY-P6B: Draw/Place/Return/Discard on the authority, through the table's own command door (the game's
+        // rules, its Undo history and its views follow). One Undo step.
+        private bool ExecuteTransferOnAuthority(PlayerId sender, TabletopObjectId real, ContainerState from, ContainerState to, CardFace? face)
+        {
+            bool passing = privateInterceptor.PassThrough;
+            privateInterceptor.PassThrough = true;
+            host.SessionService.BeginUndoBatch();
+            try
+            {
+                bool moved = from.Kind == ContainerKind.Deck && to.Kind == ContainerKind.Hand && from.TryPeekTop(out TabletopObjectId top) && top == real
+                    ? host.TableAuthority.Submit<DrawCardsCommand, DrawCardsResult>(new DrawCardsCommand(Ctx(sender), from.Id, to.Id, 1)).Succeeded
+                    : host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(TransferCardCommand.ToContainer(Ctx(sender), real, from.Id, to.Id)).Succeeded;
+                if (moved && face.HasValue && host.matchState.Cards.TryGetValue(real, out CardInstanceState card) && card.Face != face.Value
+                    && !host.TableAuthority.Submit<FlipCardCommand, FlipCardResult>(new FlipCardCommand(Ctx(sender), real, face.Value)).Succeeded)
+                    PrivateNote("The card moved but the table refused to turn it over (it stays as it lies).");
+                return moved;
+            }
+            finally
+            {
+                host.SessionService.EndUndoBatch();
+                privateInterceptor.PassThrough = passing;
+            }
+        }
+
+        private CommandContext Ctx(PlayerId sender) => new CommandContext(CommandId.New(), host.matchState.Id, sender, null);
+
+        // PRIVACY-P6B: the host's own views follow a change made for another seat (the table's own view sync leaves
+        // a change to the computer whose gesture made it, and on the host every seat counts as played here).
+        private sealed class HostSceneState
+        {
+            public readonly Dictionary<TabletopObjectId, long> Cards = new Dictionary<TabletopObjectId, long>();
+            public readonly Dictionary<ContainerId, int> Orders = new Dictionary<ContainerId, int>();
+        }
+
+        private HostSceneState CaptureHostScene()
+        {
+            HostSceneState state = new HostSceneState();
+            foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in host.matchState.Cards)
+                state.Cards[pair.Key] = ((long)pair.Value.BaseState.ContainerId.GetHashCode() << 8) ^ (long)pair.Value.Face ^ ((long)PoseHash(pair.Value.BaseState) << 20);
+            foreach (KeyValuePair<ContainerId, ContainerState> pair in host.matchState.Containers)
+            {
+                int hash = pair.Value.Count;
+                unchecked { for (int i = 0; i < pair.Value.Count; i++) hash = hash * 31 + pair.Value.GetObjectAt(i).GetHashCode(); }
+                state.Orders[pair.Key] = hash;
+            }
+
+            return state;
+        }
+
+        private void HostSceneFollow(HostSceneState before)
+        {
+            try
+            {
+                HostSceneState after = CaptureHostScene();
+                foreach (KeyValuePair<ContainerId, int> pair in after.Orders)
+                    if (before == null || !before.Orders.TryGetValue(pair.Key, out int was) || was != pair.Value) host.ViewSync.SyncContainer(pair.Key);
+                foreach (KeyValuePair<TabletopObjectId, long> pair in after.Cards)
+                    if (before != null && before.Cards.TryGetValue(pair.Key, out long was) && was != pair.Value && host.matchState.Cards[pair.Key].BaseState.ContainerId.IsEmpty)
+                        host.PresentAcceptedObject(pair.Key);
+                host.RefreshCardContentVisibility();
+                host.RefreshAcceptedCardFaces();
+            }
+            catch (Exception exception)
+            {
+                PrivateNote("The host's views could not follow a change for another seat: " + exception.Message);
+            }
+        }
+
+        private PrivateHudSnapshot CurrentHud()
+        {
+            if (host.TrapFloorGame == null || !host.TrapFloorGame.TryBuildPublicHud(out string round, out string phase, out Color? color, out List<TrapFloorHudPlayer> players, out TrapFloorPlayerCardModel card))
+                return null;
+            PrivateHudSnapshot hud = new PrivateHudSnapshot { Round = round, Phase = phase, HasTurnColor = color.HasValue };
+            if (color.HasValue) { hud.TurnR = color.Value.r; hud.TurnG = color.Value.g; hud.TurnB = color.Value.b; }
+            if (players != null)
+                foreach (TrapFloorHudPlayer player in players)
+                    hud.Players.Add(new PrivateHudPlayer { Name = player.Name, R = player.Color.r, G = player.Color.g, B = player.Color.b, A = player.Color.a, Active = player.Active });
+            if (card != null)
+            {
+                hud.HasCard = true;
+                hud.CardTitle = card.Title;
+                hud.CardAvatar = card.Avatar;
+                hud.CardKeys = card.Keys;
+                hud.CardStatus = card.Status;
+                hud.CardInHand = card.InHand;
+                hud.CardFloor = card.Floor;
+            }
+
+            return hud;
         }
 
         // The recipient a member is: its seat's player when seated at this table, else a spectator. From the room's
@@ -230,21 +475,15 @@ namespace ConsoleCards.Presentation.Composition
         // The host checks the exact bytes it sends (doc 11 §20): no real id of a card hidden from this recipient, no
         // definition only hidden cards have, no name only hidden cards have, not the deal's seed. Counts only: nothing
         // secret is written. The guest logs the SHA-256 of what it received, so both ends can be matched.
-        // PRIVACY-P5: an update names the card by the reference the recipient knew it by BEFORE the move. When a public
-        // card turns hidden (a Console card back to a hand, a card discarded face down), that is its real id, which this
-        // recipient already held while it was public: it is counted apart, so the check still shows any other.
-        private void CheckSentBytes(byte[] bytes, PlayerId recipient, string what, TabletopObjectId knewBefore = default)
+        // PRIVACY-P6A: strict. A card that turns hidden for a recipient is named by its old public place, not by its
+        // real id (P5 still sent that id and counted it apart), so every hidden real id in the bytes counts.
+        private void CheckSentBytes(byte[] bytes, PlayerId recipient, string what)
         {
             MatchState full = host.matchState;
             RecipientSnapshotProjection.Classify(full, recipient, out HashSet<TabletopObjectId> hidden, out _);
             int ids = 0;
-            bool previousPublic = false;
             foreach (TabletopObjectId id in hidden)
-            {
-                if (!TabletopComposition.Contains(bytes, id.Value.ToByteArray())) continue;
-                if (!knewBefore.IsEmpty && id == knewBefore) previousPublic = true;
-                else ids++;
-            }
+                if (TabletopComposition.Contains(bytes, id.Value.ToByteArray())) ids++;
             HashSet<ObjectDefinitionId> definitions = TabletopComposition.HiddenOnlyDefinitions(full, hidden);
             int defs = 0;
             foreach (ObjectDefinitionId definition in definitions) if (TabletopComposition.Contains(bytes, definition.Value.ToByteArray())) defs++;
@@ -253,7 +492,6 @@ namespace ConsoleCards.Presentation.Composition
             foreach (string name in names) if (TabletopComposition.Contains(bytes, Encoding.UTF8.GetBytes(name))) named++;
             bool seed = privateSeedKnown && TabletopComposition.Contains(bytes, BitConverter.GetBytes(privateSeed));
             PrivateNote($"Sent {what}: {bytes.Length} bytes, sha256 {Sha(bytes)}; hidden real ids {ids}/{hidden.Count}"
-                + (previousPublic ? " (plus the card's previous reference: its real id, which this recipient could identify before the move)" : string.Empty)
                 + $", hidden-only definitions {defs}/{definitions.Count}, hidden-only names {named}/{names.Count}, deal seed {(seed ? "FOUND" : "absent")}.");
         }
 
@@ -278,7 +516,8 @@ namespace ConsoleCards.Presentation.Composition
                     HostPrivateRequest(member, data);
                     break;
                 case MsgPrivateNeedPackage:
-                    PrivateNote($"{member.Name} asked for its package again (its table did not match).");
+                    resyncRequests++;
+                    PrivateNote($"{member.Name} asked for its package again (resync request {resyncRequests}).");
                     SendPrivatePackage(member);
                     break;
                 case MsgPrivateInventory:
@@ -292,19 +531,56 @@ namespace ConsoleCards.Presentation.Composition
 
         private void HostPrivateRequest(Member member, byte[] data)
         {
-            // The sender's seat comes from the connection's member, never from the request (which names none).
+            if (PrivateOperationCodec.IsOperation(data, 1))
+            {
+                Guid operationId = Guid.Empty;
+                PrivateRequestVerdict operationVerdict = PrivateOperationCodec.TryRead(data, 1, out PrivateOperation op)
+                    ? RunPrivateOperation(member, op, null, out operationId)
+                    : PrivateRequestVerdict.UnknownReference;
+                if (op == null) PrivateNote($"Refused a malformed operation from {member.Name}.");
+                BeginMessage(MsgPrivateVerdict);
+                WriteGuid(operationId);
+                writer.Write((byte)operationVerdict);
+                SendTo(member);
+                return;
+            }
+
+            if (data.Length == 1 + PrivateRequestCodec.Size && data[1] == PrivateRequestCodec.KindEndTurn)
+            {
+                TrapFloorEndTurnVerdict turnVerdict = RunPrivateEndTurn(member, data, 1, out Guid turnRequestId);
+                BeginMessage(MsgPrivateTurnVerdict);
+                WriteGuid(turnRequestId);
+                writer.Write((byte)turnVerdict);
+                SendTo(member);
+                return;
+            }
+
+            PrivateRequestVerdict verdict = RunPrivateCardRequest(member, data, 1, out Guid requestId);
+            BeginMessage(MsgPrivateVerdict);
+            WriteGuid(requestId);
+            writer.Write((byte)verdict);
+            SendTo(member);
+        }
+
+        // PRIVACY-P6A (Task 1): THE pipeline for a card action, whoever made it. A guest's request (its bytes as they
+        // came) and the host's own action (the same codec bytes, built on this computer) both come here; the sender is
+        // the room member the action came from (a guest's connection, or the host's own seat), never a value read from
+        // the request. The host's seat gets no exception: the same seat, turn, hand-limit, reference, source,
+        // destination and duplicate checks apply. One accepted action: one revision, one recipient-specific update
+        // for every guest, the host's own scene following its table.
+        private PrivateRequestVerdict RunPrivateCardRequest(Member member, byte[] data, int offset, out Guid requestId)
+        {
             PlayerId sender = member.Player == Guid.Empty ? PlayerId.Empty : new PlayerId(member.Player);
-            Guid requestId = Guid.Empty;
+            string actor = member.IsHost ? "the host's own seat" : member.Name;
+            requestId = Guid.Empty;
             PrivateRequestVerdict verdict;
             Dictionary<PlayerId, byte[]> updates = null;
             ContainerId from = ContainerId.Empty, to = ContainerId.Empty;
             string what;
             string before = HostTableFingerprint();
-            // Who could identify the card BEFORE the move (for the sent-bytes check); filled after an accepted move.
-            Dictionary<PlayerId, bool> knownBefore = new Dictionary<PlayerId, bool>();
-            TabletopObjectId movedCard = TabletopObjectId.Empty;
-            Dictionary<TabletopObjectId, HashSet<PlayerId>> publicBefore = PublicCardsByRecipient();
-            if (!PrivateRequestCodec.TryRead(data, 1, out byte kind, out PrivateDrawRequest draw, out PrivatePlaceRequest place, out PrivateCardRequest card))
+            long revisionBefore = privateHost.Revision;
+            HostSceneState sceneBefore = CaptureHostScene();
+            if (!PrivateRequestCodec.TryRead(data, offset, out byte kind, out PrivateDrawRequest draw, out PrivatePlaceRequest place, out PrivateCardRequest card))
             {
                 verdict = PrivateRequestVerdict.UnknownReference;
                 what = "a malformed request";
@@ -313,9 +589,6 @@ namespace ConsoleCards.Presentation.Composition
             {
                 requestId = draw.RequestId;
                 what = "Draw";
-                RoomSeats seats = new RoomSeats(this);
-                from = draw.Deck;
-                to = seats.IsSeated(sender) ? seats.HandOf(sender) : ContainerId.Empty;
                 verdict = privateHost.Draw(sender, draw, out updates);
             }
             else if (kind == PrivateRequestCodec.KindPlace)
@@ -337,65 +610,377 @@ namespace ConsoleCards.Presentation.Composition
                 verdict = privateHost.Discard(sender, card, out updates);
             }
 
-            if (verdict == PrivateRequestVerdict.Accepted)
+            if (verdict == PrivateRequestVerdict.Accepted && updates != null)
             {
                 from = privateHost.LastFrom;
                 to = privateHost.LastTo;
-                movedCard = privateHost.LastCard;
-                foreach (PlayerId r in privateHost.Recipients)
-                    knownBefore[r] = publicBefore.TryGetValue(movedCard, out HashSet<PlayerId> who) && who.Contains(r);
-            }
-
-            int sent = 0;
-            if (verdict == PrivateRequestVerdict.Accepted && updates != null)
-            {
                 // The host's own scene follows its table.
                 host.ViewSync.SyncContainer(from);
                 host.ViewSync.SyncContainer(to);
-                host.RefreshCardContentVisibility();
-                host.RefreshAcceptedCardFaces();
-                for (int i = 0; i < members.Count; i++)
-                {
-                    Member other = members[i];
-                    if (other.IsHost || !other.Connected || other.Connection < 0) continue;
-                    PlayerId recipient = RecipientOf(other);
-                    if (!updates.TryGetValue(recipient, out byte[] update)) continue;
-                    // The previous reference counts apart only when it was this card's real id AND the recipient could
-                    // identify the card before the move (it was public then); a handle is never a real id.
-                    TabletopObjectId knewBefore = TabletopObjectId.Empty;
-                    if (knownBefore.TryGetValue(recipient, out bool knew) && knew) knewBefore = movedCard;
-                    CheckSentBytes(update, recipient, $"{what} update to {other.Name}", knewBefore);
-                    SendPrivateBytes(other, MsgPrivateUpdate, update);
-                    updatesSent++;
-                    sent++;
-                }
+                HostSceneFollow(sceneBefore);
+                SendPublish(updates, what + " update");
+                if (member.IsHost) hostOwnAccepted++;
+                PrivateNote($"Accepted {what} from {actor} (assist {PlayAssist.Level}); revision {revisionBefore} → {privateHost.Revision}; each guest computer here got its own change set.");
             }
             else
             {
+                if (member.IsHost) hostOwnRefused++;
                 string after = HostTableFingerprint();
-                PrivateNote($"Refused {what} from {member.Name}: {verdict} (assist {PlayAssist.Level}); host table {(before == after ? "unchanged" : "CHANGED")}.");
+                PrivateNote($"Refused {what} from {actor}: {verdict} (assist {PlayAssist.Level}); host table {(before == after ? "unchanged" : "CHANGED")}, revision {(privateHost.Revision == revisionBefore ? "unchanged" : "CHANGED")} ({privateHost.Revision}).");
             }
 
-            if (verdict == PrivateRequestVerdict.Accepted) PrivateNote($"Accepted {what} from {member.Name} (assist {PlayAssist.Level}); one recipient-specific update sent to each of the {sent} guest computer(s) here.");
-            BeginMessage(MsgPrivateVerdict);
-            WriteGuid(requestId);
-            writer.Write((byte)verdict);
-            SendTo(member);
+            return verdict;
         }
 
-        // Which recipients may identify each card right now (host side, for the sent-bytes check of the next update).
-        private Dictionary<TabletopObjectId, HashSet<PlayerId>> PublicCardsByRecipient()
+        // PRIVACY-P6A (Task 3): End Turn on the private path, for a guest and for the host's own seat alike. The check is
+        // the game's own End Turn authority (seat from the connection, turn owner, round/phase still current, request id
+        // once); the transition is the game's own turn service (AdvanceTrapFloorTurn), run once. PRIVACY-P6B: every
+        // guest then gets one change set with the public turn, the status card and whatever the game's own turn steps
+        // changed on the table (a tile turned over, an ability offer shuffled back), filtered for it.
+        private TrapFloorEndTurnVerdict RunPrivateEndTurn(Member member, byte[] data, int offset, out Guid requestId)
         {
-            Dictionary<TabletopObjectId, HashSet<PlayerId>> known = new Dictionary<TabletopObjectId, HashSet<PlayerId>>();
-            if (privateHost == null) return known;
-            foreach (PlayerId r in privateHost.Recipients)
-                foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in host.matchState.Cards)
-                    if (RecipientSnapshotProjection.MayKnowIdentity(host.matchState, pair.Value, r))
-                    {
-                        if (!known.TryGetValue(pair.Key, out HashSet<PlayerId> set)) known[pair.Key] = set = new HashSet<PlayerId>();
-                        set.Add(r);
-                    }
-            return known;
+            requestId = Guid.Empty;
+            string actor = member.IsHost ? "the host's own seat" : member.Name;
+            if (!PrivateRequestCodec.TryReadEndTurn(data, offset, out PrivateEndTurnRequest wire))
+            {
+                PrivateNote($"Refused a malformed End Turn from {actor}.");
+                return TrapFloorEndTurnVerdict.MissingRequestId;
+            }
+
+            requestId = wire.RequestId;
+            PlayerId sender = member.Player == Guid.Empty ? PlayerId.Empty : new PlayerId(member.Player);
+            if (!new RoomSeats(this).IsSeated(sender)) sender = PlayerId.Empty; // a watcher has no turn to end
+            TrapFloorEndTurnRequest request = new TrapFloorEndTurnRequest(wire.RequestId, wire.Round, (TrapFloorTurnPhase)wire.Phase, wire.TurnOwner, wire.Skipped);
+            bool won = host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsWon;
+            long revisionBefore = privateHost.Revision;
+            TrapFloorEndTurnVerdict verdict = privateEndTurnAuthority.Check(host.trapFloorTurnState, sender, request, won);
+            if (verdict != TrapFloorEndTurnVerdict.Accepted)
+            {
+                PrivateNote($"Refused End Turn from {actor}: {verdict} (asked for round {wire.Round}, {(TrapFloorTurnPhase)wire.Phase}); turn and revision unchanged ({privateHost.Revision}).");
+                return verdict;
+            }
+
+            TrapFloorTurnState turn = host.trapFloorTurnState;
+            int roundBefore = turn.CurrentRound;
+            TrapFloorTurnPhase phaseBefore = turn.Phase;
+            PlayerId ownerBefore = TrapFloorEndTurnAuthority.TurnOwnerOf(turn);
+            int cardsBeforeFingerprint = HostFingerprintFast();
+            HostSceneState sceneBefore = CaptureHostScene();
+            privateEndTurnRunning = true;
+            privateInterceptor.PassThrough = true; // the game's own turn steps use the game's own commands
+            hostActingFor = member.Player;
+            try
+            {
+                host.TrapFloorGame.AdvanceTrapFloorTurn(request.Skipped);
+            }
+            finally
+            {
+                hostActingFor = Guid.Empty;
+                privateInterceptor.PassThrough = false;
+                privateEndTurnRunning = false;
+            }
+
+            TrapFloorTurnState now = host.trapFloorTurnState;
+            bool moved = now == null || now.CurrentRound != roundBefore || now.Phase != phaseBefore || now.IsCurrentFloorFailed
+                || TrapFloorEndTurnAuthority.TurnOwnerOf(now) != ownerBefore;
+            if (moved) turnTransitions++;
+            // PRIVACY-P6B: what the game's own turn steps changed (a tile turned over, an ability offer shuffled back, a
+            // pawn moved by a Trap) goes out with the turn in one change set per guest, one revision.
+            HostSceneFollow(sceneBefore);
+            Dictionary<PlayerId, byte[]> updates = privateHost.PublishChanges(moved ? CurrentTurnSnapshot() : null, CurrentHud());
+            SendPublish(updates, "End Turn");
+            PrivateTurnSnapshot snap = CurrentTurnSnapshot();
+            PrivateNote($"Accepted End Turn from {actor}: " + (moved
+                    ? $"round {roundBefore} {phaseBefore} → round {snap.Round} {(TrapFloorTurnPhase)snap.Phase}, turn of {SeatName(new PlayerId(snap.TurnOwner))}"
+                    : "the game's own turn service did not end the turn (a step is still waiting)")
+                + $"; revision {revisionBefore} → {privateHost.Revision}; card or piece changes from the turn's own steps: {(updates != null && HostFingerprintFast() != cardsBeforeFingerprint ? "yes (in the same change set)" : "none")}.");
+            return verdict;
+        }
+
+        // PRIVACY-P6B: the host player's own Undo on a private host (see MayUndo).
+        private bool MayUndoOnPrivateHost(ActiveSessionUndoTransaction transaction, bool redo)
+        {
+            Member me = HostMember();
+            string refusal = null;
+            if (redo) refusal = "Private session: Redo is not available yet.";
+            else if (transaction == null || me == null) refusal = "There is nothing to undo.";
+            else if (transaction.ActorPlayerId.IsEmpty || transaction.ActorPlayerId.Value != me.Player)
+                refusal = $"The latest change is {(transaction.ActorPlayerId.IsEmpty ? "a game step" : NameOf(transaction.ActorPlayerId) ?? "another player's")}: only its own player can undo it.";
+            else if (host.undoHistory.TryPeekUndo(out SessionUndoSnapshot before, out ActiveSessionUndoTransaction latest)
+                && latest.CommandId == transaction.CommandId
+                && host.TrapFloorGame.IsRulesResultStep(before.GameState, host.undoHistory.CurrentState.GameState, transaction.CommandId))
+                refusal = HostUndoPolicy.Describe(HostUndoVerdict.RulesResult, false);
+            if (refusal == null) return true;
+            undoRefusal = refusal;
+            host.ShowMessage(refusal);
+            PrivateNote("Refused the host player's own Undo: " + refusal);
+            return false;
+        }
+
+        private PrivateTurnSnapshot CurrentTurnSnapshot()
+        {
+            TrapFloorTurnState turn = host.trapFloorTurnState;
+            if (turn == null) return new PrivateTurnSnapshot { Round = 0, Phase = 0, Ended = true };
+            return new PrivateTurnSnapshot
+            {
+                Round = turn.CurrentRound,
+                Phase = (int)turn.Phase,
+                TurnOwner = TrapFloorEndTurnAuthority.TurnOwnerOf(turn).Value,
+                ActivePlayer = turn.ActivePlayerId.Value,
+                Ended = turn.IsCurrentFloorFailed || (host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsWon)
+            };
+        }
+
+        // "seat 2" for a player of this table (public: the seat layout), else "a watcher".
+        private string SeatName(PlayerId player)
+        {
+            if (player.IsEmpty || host.matchState == null) return "nobody";
+            RecipientPublicLayout layout = privateHosting ? privateHost?.Layout : host.privateViewLayout;
+            if (layout != null)
+                for (int i = 0; i < layout.Seats.Count; i++)
+                    if (host.matchState.Seats.TryGetValue(layout.Seats[i].Seat, out SeatState state) && state.OccupantPlayerId == player)
+                        return (player.Value == myPlayer ? "YOU, " : string.Empty) + "seat " + (i + 1);
+            return "a player";
+        }
+
+        private Member HostMember()
+        {
+            for (int i = 0; i < members.Count; i++) if (members[i].IsHost) return members[i];
+            return null;
+        }
+
+        // PRIVACY-P6A: the host's own action (its panel, or its own drag through the interceptor) as the same bytes a
+        // guest sends, run through the same pipeline with the host's own seat as the sender.
+        private bool RunHostOwnRequest(byte[] request, string what)
+        {
+            Member me = HostMember();
+            if (!privateHosting || privateHost == null || me == null) { PrivateNote(what + ": no private table here yet."); return false; }
+            if (request.Length == PrivateRequestCodec.Size && request[0] == PrivateRequestCodec.KindEndTurn)
+            {
+                TrapFloorEndTurnVerdict turnVerdict = RunPrivateEndTurn(me, request, 0, out _);
+                if (turnVerdict != TrapFloorEndTurnVerdict.Accepted) host.ShowMessage($"Private session: End Turn refused ({turnVerdict}).");
+                return turnVerdict == TrapFloorEndTurnVerdict.Accepted;
+            }
+
+            PrivateRequestVerdict verdict = RunPrivateCardRequest(me, request, 0, out _);
+            if (verdict != PrivateRequestVerdict.Accepted) host.ShowMessage($"Private session: {what} refused ({verdict}).");
+            return verdict == PrivateRequestVerdict.Accepted;
+        }
+
+        // PRIVACY-P6B: THE pipeline for a general card or deck operation, whoever asks: a guest's request bytes, or
+        // the host's own gesture (its own references for the cards, then the gesture's own command). The same check
+        // (PrivateOperationPolicy) for every seat; the table's own command does the work on the authority; every
+        // guest gets its own change set. <paramref name="runOwnCommand"/>: the host's gesture's command (null: build it).
+        private PrivateRequestVerdict RunPrivateOperation(Member member, PrivateOperation op, Func<bool> runOwnCommand, out Guid requestId)
+        {
+            requestId = op.RequestId;
+            string actor = member.IsHost ? "the host's own seat" : member.Name;
+            PlayerId sender = member.Player == Guid.Empty ? PlayerId.Empty : new PlayerId(member.Player);
+            if (privateHost == null) return PrivateRequestVerdict.NotSeated;
+            if (op.Kind == PrivateOperationKind.Undo) return RunPrivateUndo(member, op);
+            long revisionBefore = privateHost.Revision;
+            string before = HostTableFingerprint();
+            PrivateRequestVerdict verdict = PrivateOperationPolicy.Check(host.matchState, new RoomSeats(this), privateHost, sender, op, out PrivateResolvedOperation resolved);
+            if (verdict != PrivateRequestVerdict.Accepted)
+            {
+                operationsRefused++;
+                PrivateNote($"Refused {op.Kind} from {actor}: {verdict} (assist {PlayAssist.Level}); host table {(before == HostTableFingerprint() ? "unchanged" : "CHANGED")}, revision {(privateHost.Revision == revisionBefore ? "unchanged" : "CHANGED")} ({privateHost.Revision}).");
+                return verdict;
+            }
+
+            HostSceneState sceneBefore = CaptureHostScene();
+            bool done = false;
+            Dictionary<PlayerId, byte[]> updates = privateHost.Apply(() =>
+            {
+                bool passing = privateInterceptor.PassThrough;
+                privateInterceptor.PassThrough = true;
+                try
+                {
+                    done = runOwnCommand != null ? runOwnCommand() : ExecuteOperation(sender, resolved);
+                }
+                finally
+                {
+                    privateInterceptor.PassThrough = passing;
+                }
+            }, null, (Func<PrivateHudSnapshot>)CurrentHud);
+            HostSceneFollow(sceneBefore);
+            SendPublish(updates, op.Kind + " update");
+            if (!done)
+            {
+                operationsRefused++;
+                PrivateNote($"Refused {op.Kind} from {actor}: the table's own rules refused it (RuleRefused); revision {revisionBefore} → {privateHost.Revision}.");
+                return PrivateRequestVerdict.RuleRefused;
+            }
+
+            operationsAccepted++;
+            if (member.IsHost) hostOwnAccepted++;
+            PrivateNote($"Accepted {op.Kind} from {actor} (assist {PlayAssist.Level}); revision {revisionBefore} → {privateHost.Revision}; each guest computer here got its own change set.");
+            return PrivateRequestVerdict.Accepted;
+        }
+
+        // The table's own command for a checked operation, with the real ids the check resolved.
+        private bool ExecuteOperation(PlayerId sender, PrivateResolvedOperation resolved)
+        {
+            PrivateOperation op = resolved.Operation;
+            switch (op.Kind)
+            {
+                case PrivateOperationKind.Transfer:
+                    return host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(op.HasPose
+                        ? TransferCardCommand.ToTabletop(Ctx(sender), resolved.RealCard, op.Container, op.Pose)
+                        : TransferCardCommand.ToContainer(Ctx(sender), resolved.RealCard, op.Container, op.Destination)).Succeeded;
+                case PrivateOperationKind.Flip:
+                    return host.TableAuthority.Submit<FlipCardCommand, FlipCardResult>(new FlipCardCommand(Ctx(sender), resolved.RealCard, op.FaceUp ? CardFace.FaceUp : CardFace.FaceDown)).Succeeded;
+                case PrivateOperationKind.Shuffle:
+                    // The host's own random source; neither the seed nor the order leaves this computer.
+                    return host.TableAuthority.Submit<ShuffleDeckCommand, ShuffleDeckResult>(new ShuffleDeckCommand(Ctx(sender), op.Container)).Succeeded;
+                case PrivateOperationKind.Reorder:
+                    return host.TableAuthority.Submit<ReorderContainerCommand, ReorderContainerResult>(new ReorderContainerCommand(Ctx(sender), op.Container, resolved.RealCard, resolved.FromIndex, op.B)).Succeeded;
+                case PrivateOperationKind.DrawCount:
+                    return host.TableAuthority.Submit<DrawCardsCommand, DrawCardsResult>(new DrawCardsCommand(Ctx(sender), op.Container, op.Destination, op.A)).Succeeded;
+                default:
+                    return false;
+            }
+        }
+
+        // PRIVACY-P6B: Undo on the private path. Only the authority's own history; only the sender's own latest
+        // change (HostUndoPolicy, as for a joined computer in normal play); in Full a rules result stands; a request
+        // made before something else happened (another revision) is stale; a request id runs once. The table that
+        // results reaches every guest as its own change set (or its own package where a container came back).
+        private PrivateRequestVerdict RunPrivateUndo(Member member, PrivateOperation op)
+        {
+            string actor = member.IsHost ? "the host's own seat" : member.Name;
+            PlayerId sender = member.Player == Guid.Empty ? PlayerId.Empty : new PlayerId(member.Player);
+            if (!new RoomSeats(this).IsSeated(sender)) return PrivateRequestVerdict.NotSeated;
+            ActiveSessionUndoTransaction next = host.undoHistory.NextUndo;
+            bool rulesResult = false;
+            if (next != null && host.undoHistory.TryPeekUndo(out SessionUndoSnapshot before, out _))
+                rulesResult = host.TrapFloorGame.IsRulesResultStep(before.GameState, host.undoHistory.CurrentState.GameState, next.CommandId);
+            if (op.Revision != privateHost.Revision)
+            {
+                operationsRefused++;
+                undoPolicy.Check(sender, op.RequestId, CommandId.Empty, false, CommandId.Empty, PlayerId.Empty); // the id is used up
+                PrivateNote($"Refused Undo from {actor}: stale (its table shows revision {op.Revision}, the host's is {privateHost.Revision}); nothing taken back.");
+                return PrivateRequestVerdict.StaleRevision;
+            }
+
+            HostUndoVerdict verdict = undoPolicy.Check(sender, op.RequestId, next != null ? next.CommandId : CommandId.Empty, next != null,
+                next != null ? next.CommandId : CommandId.Empty, next != null ? next.ActorPlayerId : PlayerId.Empty, rulesResult);
+            if (verdict != HostUndoVerdict.Allowed)
+            {
+                operationsRefused++;
+                PrivateNote($"Refused Undo from {actor}: {verdict}; nothing taken back (revision {privateHost.Revision}).");
+                switch (verdict)
+                {
+                    case HostUndoVerdict.Duplicate: return PrivateRequestVerdict.Duplicate;
+                    case HostUndoVerdict.NotYourChange:
+                    case HostUndoVerdict.NoPlayer: return PrivateRequestVerdict.NotYourChange;
+                    case HostUndoVerdict.RulesResult: return PrivateRequestVerdict.RuleRefused;
+                    default: return PrivateRequestVerdict.NothingToUndo;
+                }
+            }
+
+            long revisionBefore = privateHost.Revision;
+            undoRequestPlayer = member.Player;
+            bool done;
+            try
+            {
+                done = host.SessionService.UndoLatestAction(sender);
+            }
+            finally
+            {
+                undoRequestPlayer = Guid.Empty;
+            }
+
+            if (!done) { operationsRefused++; PrivateNote($"Undo from {actor}: the table did not take it back."); return PrivateRequestVerdict.NothingToUndo; }
+            PrivateTableReplaced($"Undo of {next.Description} for {actor}");
+            operationsAccepted++;
+            PrivateNote($"Accepted Undo from {actor}: revision {revisionBefore} → {privateHost.Revision}.");
+            return PrivateRequestVerdict.Accepted;
+        }
+
+        /// <summary>
+        /// PRIVACY-P6B: the host's own table gesture (a card drag, a draw, a flip, a shuffle, a hand reorder) as the same
+        /// operation a guest sends, named by the host's own references; the gesture's own command then runs.
+        /// </summary>
+        internal bool TryRunHostOwnCommand<TCommand, TResult>(TCommand command, out TResult result) where TCommand : class
+        {
+            result = default;
+            Member me = HostMember();
+            if (me == null || privateHost == null) return false;
+            PlayerId self = new PlayerId(me.Player);
+            PrivateOperation op = new PrivateOperation { RequestId = Guid.NewGuid() };
+            switch (command)
+            {
+                case TransferCardCommand t:
+                    op.Kind = PrivateOperationKind.Transfer;
+                    op.Card = privateHost.ReferenceFor(self, t.CardObjectId);
+                    op.Container = t.ExpectedSourceContainerId;
+                    op.Destination = t.DestinationContainerId;
+                    op.HasPose = t.TargetTablePose.HasValue;
+                    if (op.HasPose) op.Pose = t.TargetTablePose.Value;
+                    break;
+                case DrawCardsCommand d:
+                    op.Kind = PrivateOperationKind.DrawCount;
+                    op.Container = d.SourceDeckContainerId;
+                    op.Destination = d.DestinationContainerId;
+                    op.A = d.Count;
+                    break;
+                case FlipCardCommand f:
+                    op.Kind = PrivateOperationKind.Flip;
+                    op.Card = privateHost.ReferenceFor(self, f.ObjectId);
+                    op.FaceUp = f.TargetFace == CardFace.FaceUp;
+                    break;
+                case ShuffleDeckCommand sh:
+                    op.Kind = PrivateOperationKind.Shuffle;
+                    op.Container = sh.DeckContainerId;
+                    break;
+                case ReorderContainerCommand ro:
+                    op.Kind = PrivateOperationKind.Reorder;
+                    op.Container = ro.ContainerId;
+                    op.Card = privateHost.ReferenceFor(self, ro.ObjectId);
+                    op.A = ro.FromIndex;
+                    op.B = ro.ToIndex;
+                    break;
+                default:
+                    return false;
+            }
+
+            TResult captured = default;
+            PrivateRequestVerdict verdict = RunPrivateOperation(me, op, () =>
+            {
+                captured = host.TableAuthority.Submit<TCommand, TResult>(command);
+                return ResultSucceeded(captured);
+            }, out _);
+            if (verdict != PrivateRequestVerdict.Accepted && verdict != PrivateRequestVerdict.RuleRefused)
+                host.ShowMessage($"Private session: {op.Kind} refused ({verdict}).");
+            result = captured;
+            return true;
+        }
+
+        private static bool ResultSucceeded(object result)
+        {
+            switch (result)
+            {
+                case TransferCardResult r: return r.Succeeded;
+                case DrawCardsResult r: return r.Succeeded;
+                case FlipCardResult r: return r.Succeeded;
+                case ShuffleDeckResult r: return r.Succeeded;
+                case ReorderContainerResult r: return r.Succeeded;
+                default: return false;
+            }
+        }
+
+        /// <summary>PRIVACY-P6A: the host's own End Turn button (the game's AdvanceTrapFloorTurn asks here first) goes through the same check.</summary>
+        internal bool TryRunHostOwnPrivateEndTurn(TrapFloorEndTurnRequest request)
+        {
+            if (!privateHosting || !hosting || privateHost == null || privateEndTurnRunning) return false;
+            byte[] bytes = PrivateRequestCodec.EndTurn(new PrivateEndTurnRequest
+            {
+                RequestId = request.RequestId, Round = request.Round, Phase = (int)request.Phase, TurnOwner = request.TurnOwner, Skipped = request.Skipped
+            });
+            lastEndTurnBytes = bytes;
+            RunHostOwnRequest(bytes, "End Turn");
+            return true;
         }
 
         // Where every card is and how it lies (for the "a refused request changed nothing" check). Host side.
@@ -519,6 +1104,12 @@ namespace ConsoleCards.Presentation.Composition
                 case MsgPrivateVerdict:
                     GuestVerdict(payload);
                     break;
+                case MsgPrivateTurn:
+                    GuestTurn(payload);
+                    break;
+                case MsgPrivateTurnVerdict:
+                    GuestTurnVerdict(payload);
+                    break;
                 default:
                     PrivateNote($"Ignored private message {type}: guests do not take it.");
                     break;
@@ -561,7 +1152,13 @@ namespace ConsoleCards.Presentation.Composition
 
             int hidden = 0;
             foreach (ClientCardView card in client.Cards) if (card.IsHidden) hidden++;
-            PrivateNote($"Received package {packagesReceived}: {bytes.Length} bytes, sha256 {Sha(bytes)}; {client.Cards.Count} cards ({hidden} as backs); "
+            privateRevision = package.Revision; // PRIVACY-P6A: this table now shows the host's revision
+            privateTurn = package.Turn;
+            privateHud = package.Hud;
+            // PRIVACY-P6B: this computer's own table gestures go to the host as private requests (never run here).
+            host.PrivateViewAuthority.Forward = GuestForward;
+            RenderPrivateHud();
+            PrivateNote($"Received package {packagesReceived} (revision {package.Revision}; turn {TurnText(privateTurn)}): {bytes.Length} bytes, sha256 {Sha(bytes)}; {client.Cards.Count} cards ({hidden} as backs); "
                 + $"own hand {OwnHandSummary()}; scene built from it alone (legacy table messages dropped so far: {legacyRefused}).");
             host.ShowMessage("Private development session: your table is built from your own package only.");
         }
@@ -582,14 +1179,40 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            // PRIVACY-P6A: ordering. An update this table already shows (or older) is ignored; one after a gap means an
+            // update was missed: the table asks for its own package (recovery, counted).
+            PrivateRevisionStep step = PrivateRevisionGate.Next(privateRevision, update.Revision);
+            if (step == PrivateRevisionStep.AlreadyShown)
+            {
+                staleIgnored++;
+                PrivateNote($"Update {updatesReceived} (revision {update.Revision}) ignored: this table already shows revision {privateRevision}.");
+                return;
+            }
+
+            if (step == PrivateRevisionStep.Gap)
+            {
+                revisionGaps++;
+                PrivateNote($"Update {updatesReceived} has revision {update.Revision} but this table shows {privateRevision}: one was missed. Asking for this computer's package.");
+                AskForOwnPackage();
+                return;
+            }
+
+            if (update.Changes != null)
+            {
+                GuestChangeSet(update, bytes);
+                return;
+            }
+
             string problem = RecipientEventApplier.Apply(host.matchState, update);
             if (problem != null)
             {
                 digestMismatches++;
-                PrivateNote($"Update {updatesReceived} ({bytes.Length} bytes) did not apply: {problem}. Asking the host for this computer's package (never a full table).");
+                PrivateNote($"Update {updatesReceived} ({bytes.Length} bytes, revision {update.Revision}) did not apply: {problem}. Asking the host for this computer's package (never a full table).");
                 AskForOwnPackage();
                 return;
             }
+
+            privateRevision = update.Revision;
 
             RecipientCardEvent ev = update.Event;
             bool identity = !ev.Definition.Equals(RecipientSnapshotProjection.HiddenDefinition);
@@ -616,8 +1239,237 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             string kind = host.matchState.Containers.TryGetValue(ev.To, out ContainerState toContainer) ? toContainer.Kind.ToString() : "?";
-            PrivateNote($"Update {updatesReceived}: {bytes.Length} bytes, sha256 {Sha(bytes)}; a card moved {(identity ? "WITH its identity (" + CardName(ev.Definition) + ")" : "as a back")} "
+            PrivateNote($"Update {updatesReceived} (revision {update.Revision}): {bytes.Length} bytes, sha256 {Sha(bytes)}; a card moved {(identity ? "WITH its identity (" + CardName(ev.Definition) + ")" : "as a back")} "
                 + $"into a {kind} now holding {ev.ToCount}{(ev.PreviousReference.Equals(ev.Reference) ? "" : " (new reference here)")}; digest matches the host's; own hand {OwnHandSummary()}.");
+        }
+
+        // PRIVACY-P6B: one change set (any number of cards, the turn, the status card) on this computer's own table,
+        // then on its scene: only the changed cards' views and their containers.
+        private void GuestChangeSet(PrivateUpdate update, byte[] bytes)
+        {
+            PrivateChangeSet set = update.Changes;
+            if (set.NeedsPackage)
+            {
+                PrivateNote($"Update {updatesReceived} (revision {update.Revision}) says this computer's package follows ({set.PackageReason}).");
+                return; // the host sends the package itself
+            }
+
+            PrivateChangeSummary summary = new PrivateChangeSummary();
+            string problem = RecipientEventApplier.Apply(host.matchState, update, summary);
+            if (problem != null)
+            {
+                digestMismatches++;
+                PrivateNote($"Change set {updatesReceived} ({bytes.Length} bytes, revision {update.Revision}) did not apply: {problem}. Asking the host for this computer's package (never a full table).");
+                AskForOwnPackage();
+                return;
+            }
+
+            privateRevision = update.Revision;
+            changeSetsApplied++;
+            if (summary.Withdrawn.Count > 0) lastWithdrawnReference = summary.Withdrawn[0];
+            if (set.Turn != null) privateTurn = set.Turn;
+            if (set.Hud != null) privateHud = set.Hud;
+            if (set.Turn != null || set.Hud != null) RenderPrivateHud();
+            bool objects = summary.Released.Count + summary.Created.Count + summary.Moved.Count + summary.Containers.Count > 0;
+            if (objects)
+            {
+                PendingSceneMeasure measure = BeginSceneMeasure(IncrementalScene ? $"incremental change set ({summary.Created.Count} card views made)" : "full scene rebuild");
+                string error;
+                bool shown = IncrementalScene ? host.ApplyPrivateChangesToScene(summary, out error) : host.RebuildPrivateSceneFromOwnTable(out error);
+                if (!shown && IncrementalScene)
+                {
+                    PrivateNote("The change set could not be shown incrementally (" + error + "): building the scene again from this computer's own table.");
+                    measure.What = "full scene rebuild (after a failed incremental change set)";
+                    shown = host.RebuildPrivateSceneFromOwnTable(out error);
+                    fullBuilds++;
+                }
+                else if (IncrementalScene) incrementalUpdates++;
+                else fullBuilds++;
+                EndSceneWork(measure);
+                if (!shown) { PrivateNote("The scene could not follow the change set: " + error); return; }
+            }
+
+            int backs = 0, faces = 0;
+            foreach (TabletopObjectId id in summary.Created)
+                if (host.matchState.Cards.TryGetValue(id, out CardInstanceState card))
+                {
+                    if (card.BaseState.DefinitionId.Equals(RecipientSnapshotProjection.HiddenDefinition)) backs++;
+                    else faces++;
+                }
+
+            PrivateNote($"Change set {updatesReceived} (revision {update.Revision}): {bytes.Length} bytes, sha256 {Sha(bytes)}; {summary.Released.Count} card view(s) taken down, "
+                + $"{summary.Created.Count} made ({faces} with their faces, {backs} as backs), {summary.Moved.Count} piece(s) moved, {set.Orders.Count} order(s), {summary.Containers.Count} container(s) laid out"
+                + $"{(set.Turn != null ? "; turn: " + TurnText(privateTurn) : string.Empty)}; digest matches the host's; own hand {OwnHandSummary()}.");
+            if (set.Turn != null) host.ShowMessage("Private session: " + TurnText(privateTurn) + ".");
+        }
+
+        // PRIVACY-P6B: a table gesture made on this guest (its own references) goes to the host as a private request.
+        // True: sent (nothing runs here; the host's change set moves the cards). False: no private request for it.
+        private bool GuestForward(object command)
+        {
+            if (!privateGuest) return false;
+            PrivateOperation op = new PrivateOperation { RequestId = Guid.NewGuid() };
+            string what;
+            switch (command)
+            {
+                case TransferCardCommand t:
+                    op.Kind = PrivateOperationKind.Transfer;
+                    op.Card = t.CardObjectId;
+                    op.Container = t.ExpectedSourceContainerId;
+                    op.Destination = t.DestinationContainerId;
+                    op.HasPose = t.TargetTablePose.HasValue;
+                    if (op.HasPose) op.Pose = t.TargetTablePose.Value;
+                    what = "card move (table gesture)";
+                    break;
+                case DrawCardsCommand d:
+                    op.Kind = PrivateOperationKind.DrawCount;
+                    op.Container = d.SourceDeckContainerId;
+                    op.Destination = d.DestinationContainerId;
+                    op.A = d.Count;
+                    what = $"draw {d.Count} (table gesture)";
+                    break;
+                case FlipCardCommand f:
+                    op.Kind = PrivateOperationKind.Flip;
+                    op.Card = f.ObjectId;
+                    op.FaceUp = f.TargetFace == CardFace.FaceUp;
+                    what = "flip (table gesture)";
+                    break;
+                case ShuffleDeckCommand sh when !sh.CutOnly:
+                    op.Kind = PrivateOperationKind.Shuffle;
+                    op.Container = sh.DeckContainerId;
+                    what = "shuffle (table gesture)";
+                    break;
+                case ReorderContainerCommand ro:
+                    op.Kind = PrivateOperationKind.Reorder;
+                    op.Container = ro.ContainerId;
+                    op.Card = ro.ObjectId;
+                    op.A = ro.FromIndex;
+                    op.B = ro.ToIndex;
+                    what = "hand reorder (table gesture)";
+                    break;
+                default:
+                    return false;
+            }
+
+            forwardedCommands++;
+            SendPrivateRequest(PrivateOperationCodec.Write(op), what);
+            return true;
+        }
+
+        // PRIVACY-P6B: the status card the host sent, on this guest's own HUD (with its End Turn and Undo).
+        private void RenderPrivateHud()
+        {
+            if (!privateGuest || privateHud == null || host.runtimeUi == null) return;
+            try
+            {
+                List<TrapFloorHudPlayer> players = new List<TrapFloorHudPlayer>();
+                foreach (PrivateHudPlayer p in privateHud.Players) players.Add(new TrapFloorHudPlayer(p.Name, new Color(p.R, p.G, p.B, p.A), p.Active));
+                TrapFloorPlayerCardModel card = privateHud.HasCard
+                    ? new TrapFloorPlayerCardModel(privateHud.CardTitle, privateHud.CardAvatar, privateHud.CardKeys, privateHud.CardStatus, privateHud.CardInHand, privateHud.CardFloor)
+                    : null;
+                TrapFloorStatusModel status = new TrapFloorStatusModel(
+                    privateHud.Round, privateHud.Phase, string.Empty, string.Empty, string.Empty, string.Empty,
+                    privateHud.HasTurnColor ? new Color(privateHud.TurnR, privateHud.TurnG, privateHud.TurnB) : (Color?)null,
+                    players, card);
+                bool mine = privateTurn != null && !privateTurn.Ended && privateTurn.TurnOwner == myPlayer;
+                List<PopupActionOption> actions = new List<PopupActionOption>
+                {
+                    new PopupActionOption(privateTurn != null && privateTurn.Phase == (int)TrapFloorTurnPhase.FloorTurn ? "End Floor Turn" : "End Turn", mine, () => PrivateEndTurn()),
+                    new PopupActionOption("Undo my last", true, PrivateUndo),
+                };
+                host.runtimeUi.ShowTrapFloorStatus(status, new FloorfallStatusModel(false, string.Empty, string.Empty, string.Empty), actions);
+                nextHudRenderAt = Time.unscaledTime + 1f;
+            }
+            catch (Exception exception)
+            {
+                PrivateNote("The private status card could not be shown: " + exception.Message);
+                privateHud = null;
+            }
+        }
+
+        /// <summary>PRIVACY-P6B: the table's own status refresh on a private guest shows the host's public HUD (never clears it).</summary>
+        internal void ShowPrivateGuestHud() => RenderPrivateHud();
+
+        // The table's own status refresh may clear the card; it is shown again once a second while the session runs.
+        private void TickPrivateGuestHud()
+        {
+            if (!privateGuest || privateHud == null || Time.unscaledTime < nextHudRenderAt) return;
+            RenderPrivateHud();
+        }
+
+        /// <summary>PRIVACY-P6B: Undo this seat's own latest change (the host decides; nothing is taken back here).</summary>
+        internal void PrivateUndo()
+        {
+            if (!InPrivateSession) return;
+            long shown = privateHosting ? (privateHost?.Revision ?? 0) : privateRevision;
+            SendPrivateRequest(PrivateOperationCodec.Write(new PrivateOperation { Kind = PrivateOperationKind.Undo, RequestId = Guid.NewGuid(), Revision = shown }), $"Undo my last change (table shows revision {shown})");
+        }
+
+        internal void PrivateUndoStale()
+        {
+            if (!InPrivateSession) return;
+            long shown = (privateHosting ? (privateHost?.Revision ?? 0) : privateRevision) - 1;
+            SendPrivateRequest(PrivateOperationCodec.Write(new PrivateOperation { Kind = PrivateOperationKind.Undo, RequestId = Guid.NewGuid(), Revision = Math.Max(0, shown) }), "Undo against an OLDER revision (expect StaleRevision)");
+        }
+
+        // PRIVACY-P6B dev controls: flip the first card of this seat's Console (else of its hand); shuffle a deck this
+        // seat may use; move the first hand card to the end of the hand; draw three.
+        // PRIVACY-P6B: the host's own panel names a card the way a guest would: by the host seat's own reference for it
+        // (a hidden card's real id is refused for every seat, the host's own included). A guest's table holds its
+        // references already.
+        private TabletopObjectId PanelRef(TabletopObjectId card)
+        {
+            if (!privateHosting || privateHost == null || card.IsEmpty) return card;
+            Member me = HostMember();
+            return me == null ? card : privateHost.ReferenceFor(new PlayerId(me.Player), card);
+        }
+
+        internal void PrivateFlip()
+        {
+            TabletopObjectId card = FirstOwnConsoleCard();
+            RecipientSeatLayout seat = OwnSeat();
+            if (card.IsEmpty && seat != null && host.matchState.Containers.TryGetValue(seat.Hand, out ContainerState hand) && hand.Count > 0) card = hand.GetObjectAt(0);
+            if (card.IsEmpty || !host.matchState.Cards.TryGetValue(card, out CardInstanceState state)) { PrivateNote("Flip: no card of yours."); return; }
+            SendPrivateRequest(PrivateOperationCodec.Write(new PrivateOperation
+            {
+                Kind = PrivateOperationKind.Flip, RequestId = Guid.NewGuid(), Card = PanelRef(card), FaceUp = state.Face != CardFace.FaceUp
+            }), state.Face == CardFace.FaceUp ? "Flip face down" : "Flip face up");
+        }
+
+        internal void PrivateShuffle(bool othersDeck = false)
+        {
+            RecipientSeatLayout seat = OwnSeat();
+            ContainerId deck = ContainerId.Empty;
+            if (!othersDeck && seat != null) deck = seat.ControllerDeck;
+            if (othersDeck)
+            {
+                RecipientPublicLayout layout = privateHosting ? privateHost?.Layout : host.privateViewLayout;
+                if (layout != null) foreach (RecipientSeatLayout other in layout.Seats) if (seat == null || other.Seat != seat.Seat) { deck = other.ControllerDeck; break; }
+            }
+
+            if (deck.IsEmpty) { PrivateNote("Shuffle: no deck."); return; }
+            SendPrivateRequest(PrivateOperationCodec.Write(new PrivateOperation { Kind = PrivateOperationKind.Shuffle, RequestId = Guid.NewGuid(), Container = deck }),
+                othersDeck ? "Shuffle ANOTHER seat's deck (expect WrongSeat unless it is shared)" : "Shuffle my deck");
+        }
+
+        internal void PrivateReorder()
+        {
+            RecipientSeatLayout seat = OwnSeat();
+            if (seat == null || !host.matchState.Containers.TryGetValue(seat.Hand, out ContainerState hand) || hand.Count < 2) { PrivateNote("Reorder: fewer than 2 cards in hand."); return; }
+            SendPrivateRequest(PrivateOperationCodec.Write(new PrivateOperation
+            {
+                Kind = PrivateOperationKind.Reorder, RequestId = Guid.NewGuid(), Container = seat.Hand, Card = PanelRef(hand.GetObjectAt(0)), A = 0, B = hand.Count - 1
+            }), "Move my first hand card to the end");
+        }
+
+        internal void PrivateDrawThree()
+        {
+            RecipientSeatLayout seat = OwnSeat();
+            if (seat == null) { PrivateNote("Draw 3: no seat."); return; }
+            SendPrivateRequest(PrivateOperationCodec.Write(new PrivateOperation
+            {
+                Kind = PrivateOperationKind.DrawCount, RequestId = Guid.NewGuid(), Container = seat.ControllerDeck, Destination = seat.Hand, A = 3
+            }), "Draw 3");
         }
 
         private void GuestVerdict(byte[] bytes)
@@ -628,6 +1480,61 @@ namespace ConsoleCards.Presentation.Composition
             PrivateRequestVerdict verdict = (PrivateRequestVerdict)bytes[16];
             PrivateNote($"Host's answer to request {new Guid(id).ToString().Substring(0, 8)}: {verdict}.");
             host.ShowMessage($"Host: {verdict}.");
+        }
+
+        private void GuestTurn(byte[] bytes)
+        {
+            turnUpdatesReceived++;
+            SaveReceived("turn", bytes);
+            PrivateTurnUpdate update;
+            try
+            {
+                update = (PrivateTurnUpdate)ConsoleCards.Application.Authority.TableWire.Read(bytes, 0, bytes.Length, false);
+            }
+            catch (Exception exception)
+            {
+                PrivateNote("A turn update could not be read: " + exception.Message);
+                AskForOwnPackage();
+                return;
+            }
+
+            PrivateRevisionStep step = PrivateRevisionGate.Next(privateRevision, update.Revision);
+            if (step == PrivateRevisionStep.AlreadyShown)
+            {
+                staleIgnored++;
+                PrivateNote($"Turn update (revision {update.Revision}) ignored: this table already shows revision {privateRevision}.");
+                return;
+            }
+
+            if (step == PrivateRevisionStep.Gap || update.Turn == null)
+            {
+                revisionGaps++;
+                PrivateNote($"Turn update has revision {update.Revision} but this table shows {privateRevision}: asking for this computer's package.");
+                AskForOwnPackage();
+                return;
+            }
+
+            privateRevision = update.Revision;
+            privateTurn = update.Turn;
+            PrivateNote($"Turn update (revision {update.Revision}, {bytes.Length} bytes, sha256 {Sha(bytes)}): now {TurnText(privateTurn)}.");
+            host.ShowMessage("Private session: " + TurnText(privateTurn) + ".");
+        }
+
+        private void GuestTurnVerdict(byte[] bytes)
+        {
+            if (bytes.Length < 17) return;
+            byte[] id = new byte[16];
+            Array.Copy(bytes, 0, id, 0, 16);
+            TrapFloorEndTurnVerdict verdict = (TrapFloorEndTurnVerdict)bytes[16];
+            PrivateNote($"Host's answer to End Turn {new Guid(id).ToString().Substring(0, 8)}: {verdict}.");
+            host.ShowMessage($"Host: End Turn {verdict}.");
+        }
+
+        private string TurnText(PrivateTurnSnapshot turn)
+        {
+            if (turn == null) return "no turn known";
+            if (turn.Ended) return $"round {turn.Round}, the floor has ended";
+            return $"round {turn.Round}, {(TrapFloorTurnPhase)turn.Phase}, turn of {SeatName(new PlayerId(turn.TurnOwner))}";
         }
 
         private void AskForOwnPackage()
@@ -654,7 +1561,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private RecipientSeatLayout OwnSeat()
         {
-            RecipientPublicLayout layout = host.privateViewLayout;
+            RecipientPublicLayout layout = privateHosting ? privateHost?.Layout : host.privateViewLayout;
             if (layout == null || myPlayer == Guid.Empty || host.matchState == null) return null;
             foreach (RecipientSeatLayout seat in layout.Seats)
                 if (host.matchState.Seats.TryGetValue(seat.Seat, out SeatState state) && state.OccupantPlayerId.Value == myPlayer) return seat;
@@ -676,17 +1583,19 @@ namespace ConsoleCards.Presentation.Composition
         internal string PrivateStatus()
         {
             if (privateHosting)
-                return $"HOST · packages sent {packagesSent}, updates sent {updatesSent}, legacy table messages refused {legacyRefused}";
+                return $"HOST · revision {privateHost?.Revision ?? 0} · packages sent {packagesSent}, updates sent {updatesSent}, resync requests {resyncRequests}, legacy refused {legacyRefused}\n"
+                    + $"own actions accepted {hostOwnAccepted}, refused {hostOwnRefused}; turn transitions {turnTransitions}; operations accepted {operationsAccepted}, refused {operationsRefused}; sweeps {sweeps}; fallback packages {fallbackPackages}; "
+                    + $"commands not private yet {privateInterceptor?.RefusedSummary() ?? "none"} · {TurnText(privateHost?.Turn)} · hand {OwnHandSummary()}";
             if (privateGuest)
-                return $"GUEST · packages {packagesReceived}, updates {updatesReceived}, digest mismatches {digestMismatches}, legacy table messages dropped {legacyRefused} · hand {OwnHandSummary()}\n"
-                    + $"scene: {(IncrementalScene ? "incremental" : "FULL REBUILD (measuring)")} · full builds {fullBuilds}, incremental updates {incrementalUpdates}";
+                return $"GUEST · revision {privateRevision} · packages {packagesReceived}, updates {updatesReceived}, turn updates {turnUpdatesReceived}, digest mismatches {digestMismatches}, gaps {revisionGaps}, stale ignored {staleIgnored}, legacy dropped {legacyRefused}\n"
+                    + $"{TurnText(privateTurn)} · hand {OwnHandSummary()} · scene: {(IncrementalScene ? "incremental" : "FULL REBUILD (measuring)")} · full builds {fullBuilds}, incremental updates {incrementalUpdates}, change sets {changeSetsApplied}, gestures sent {forwardedCommands}";
             return InRoom ? "In a room (private development session ON): waiting for the host's table" : "Private development session ON: host or join a room";
         }
 
         internal void PrivateDraw()
         {
             RecipientSeatLayout seat = OwnSeat();
-            if (!privateGuest || seat == null) { PrivateNote("Draw: no seat of yours in the private table."); return; }
+            if (!InPrivateSession || seat == null) { PrivateNote("Draw: no seat of yours in the private table."); return; }
             SendPrivateRequest(PrivateRequestCodec.Draw(new PrivateDrawRequest { RequestId = Guid.NewGuid(), Deck = seat.ControllerDeck }), "Draw");
         }
 
@@ -696,8 +1605,8 @@ namespace ConsoleCards.Presentation.Composition
         internal void PrivateReturn()
         {
             TabletopObjectId card = FirstOwnConsoleCard();
-            if (!privateGuest || card.IsEmpty) { PrivateNote("Return: no card on your Console."); return; }
-            SendPrivateRequest(PrivateRequestCodec.Card(PrivateRequestCodec.KindReturn, new PrivateCardRequest { RequestId = Guid.NewGuid(), Card = card }), "Return to hand");
+            if (!InPrivateSession || card.IsEmpty) { PrivateNote("Return: no card on your Console."); return; }
+            SendPrivateRequest(PrivateRequestCodec.Card(PrivateRequestCodec.KindReturn, new PrivateCardRequest { RequestId = Guid.NewGuid(), Card = PanelRef(card) }), "Return to hand");
         }
 
         // PRIVACY-P5: the first card in this seat's hand (else on its Console) onto the first public discard pile.
@@ -708,8 +1617,8 @@ namespace ConsoleCards.Presentation.Composition
             if (seat != null && host.matchState.Containers.TryGetValue(seat.Hand, out ContainerState hand) && hand.Count > 0) card = hand.GetObjectAt(0);
             if (card.IsEmpty) card = FirstOwnConsoleCard();
             ContainerId pile = PublicDiscardPile();
-            if (!privateGuest || card.IsEmpty || pile.IsEmpty) { PrivateNote("Discard: no card of yours, or no public discard pile."); return; }
-            SendPrivateRequest(PrivateRequestCodec.Card(PrivateRequestCodec.KindDiscard, new PrivateCardRequest { RequestId = Guid.NewGuid(), Card = card, Destination = pile }), "Discard");
+            if (!InPrivateSession || card.IsEmpty || pile.IsEmpty) { PrivateNote("Discard: no card of yours, or no public discard pile."); return; }
+            SendPrivateRequest(PrivateRequestCodec.Card(PrivateRequestCodec.KindDiscard, new PrivateCardRequest { RequestId = Guid.NewGuid(), Card = PanelRef(card), Destination = pile }), "Discard");
         }
 
         // PRIVACY-P5 bad requests: a card in ANOTHER seat's hand (this computer's handle for that back), and the old
@@ -737,8 +1646,32 @@ namespace ConsoleCards.Presentation.Composition
             RecipientSeatLayout seat = OwnSeat();
             ContainerId slot = OwnFreeShownSlot();
             if (seat == null || slot.IsEmpty || !host.matchState.Containers.TryGetValue(seat.Hand, out ContainerState hand) || hand.Count == 0) { PrivateNote("Bad discard: no card or slot."); return; }
-            SendPrivateRequest(PrivateRequestCodec.Card(PrivateRequestCodec.KindDiscard, new PrivateCardRequest { RequestId = Guid.NewGuid(), Card = hand.GetObjectAt(0), Destination = slot }),
+            SendPrivateRequest(PrivateRequestCodec.Card(PrivateRequestCodec.KindDiscard, new PrivateCardRequest { RequestId = Guid.NewGuid(), Card = PanelRef(hand.GetObjectAt(0)), Destination = slot }),
                 "Discard into a Console slot, not a discard pile (expect InvalidDestination)");
+        }
+
+        // PRIVACY-P6A: End Turn for the turn this computer believes it is (the guest's last turn update or package; the
+        // host's own turn state). staleRound: one round earlier (expect StaleTurn, or NotTurnOwner when not yours).
+        internal void PrivateEndTurn(bool staleRound = false)
+        {
+            PrivateTurnSnapshot turn = privateHosting ? CurrentTurnSnapshot() : privateTurn;
+            if (!InPrivateSession || turn == null) { PrivateNote("End Turn: no turn known here yet."); return; }
+            byte[] bytes = PrivateRequestCodec.EndTurn(new PrivateEndTurnRequest
+            {
+                RequestId = Guid.NewGuid(),
+                Round = staleRound ? turn.Round - 1 : turn.Round,
+                Phase = turn.Phase,
+                TurnOwner = new PlayerId(turn.TurnOwner == Guid.Empty ? Guid.NewGuid() : turn.TurnOwner),
+                Skipped = false
+            });
+            lastEndTurnBytes = bytes;
+            SendPrivateRequest(bytes, staleRound ? "End Turn for an EARLIER round (expect StaleTurn or NotTurnOwner)" : $"End Turn ({TurnText(turn)})");
+        }
+
+        internal void PrivateResendEndTurn()
+        {
+            if (lastEndTurnBytes == null) { PrivateNote("No End Turn to send again."); return; }
+            SendPrivateRequest(lastEndTurnBytes, "the last End Turn again, same request id (expect Duplicate)");
         }
 
         internal void ToggleSceneMode()
@@ -862,6 +1795,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void PrivateResendLast()
         {
             if (lastRequestBytes == null) { PrivateNote("No request to send again."); return; }
+            if (privateHosting) { RunHostOwnRequest(lastRequestBytes, "the last request again, same request id (expect Duplicate)"); return; }
             BeginMessage(MsgPrivateRequest);
             writer.Write(lastRequestBytes);
             SendToHost();
@@ -896,22 +1830,38 @@ namespace ConsoleCards.Presentation.Composition
         private void PlaceInto(ContainerId slot, bool _, string what)
         {
             RecipientSeatLayout seat = OwnSeat();
-            if (!privateGuest || seat == null || !host.matchState.Containers.TryGetValue(seat.Hand, out ContainerState hand) || hand.Count == 0)
+            if (!InPrivateSession || seat == null || !host.matchState.Containers.TryGetValue(seat.Hand, out ContainerState hand) || hand.Count == 0)
             {
                 PrivateNote(what + ": no card in your hand.");
                 return;
             }
 
             if (slot.IsEmpty) { PrivateNote(what + ": no slot."); return; }
-            TabletopObjectId card = hand.GetObjectAt(0); // the card is named by this computer's own reference for it
+            TabletopObjectId card = PanelRef(hand.GetObjectAt(0)); // the card is named by this computer's own reference for it
             lastPlacedReference = card;
             SendPrivateRequest(PrivateRequestCodec.Place(new PrivatePlaceRequest { RequestId = Guid.NewGuid(), Card = card, Destination = slot }), what);
         }
 
         private void SendPrivateRequest(byte[] request, string what)
         {
-            lastRequestBytes = request;
+            if (request[0] != PrivateRequestCodec.KindEndTurn) lastRequestBytes = request;
             lastRequestId = new Guid(new ReadOnlySpan<byte>(request, 1, 16));
+            if (privateHosting)
+            {
+                // PRIVACY-P6A: the host's own panel goes through the same pipeline as a guest's request.
+                PrivateNote($"Host's own {what} (request {lastRequestId.ToString().Substring(0, 8)}).");
+                if (PrivateOperationCodec.IsOperation(request, 0))
+                {
+                    Member me = HostMember();
+                    PrivateRequestVerdict v = me != null && PrivateOperationCodec.TryRead(request, 0, out PrivateOperation op) ? RunPrivateOperation(me, op, null, out _) : PrivateRequestVerdict.UnknownReference;
+                    if (v != PrivateRequestVerdict.Accepted) host.ShowMessage($"Private session: {what} refused ({v}).");
+                    return;
+                }
+
+                RunHostOwnRequest(request, what);
+                return;
+            }
+
             BeginMessage(MsgPrivateRequest);
             writer.Write(request);
             SendToHost();
@@ -1005,6 +1955,11 @@ namespace ConsoleCards.Presentation.Composition
             privateHost = null;
             privateHostMatch = null;
             privateHostPending = false;
+            if (host.Replicated != null && ReferenceEquals(host.Replicated.Interceptor, privateInterceptor)) host.Replicated.Interceptor = null;
+            privateRevision = -1;
+            privateTurn = null;
+            privateHud = null;
+            host.PrivateViewAuthority.Forward = null;
             if (guest && host.privateViewActive)
             {
                 // The filtered table is not kept as if it were a game: the scene goes back to an empty table.
@@ -1020,12 +1975,82 @@ namespace ConsoleCards.Presentation.Composition
         private void ClientReadPrivate(byte type, byte[] data) { }
         private void SendPrivatePackage(Member member) { }
         private void EndPrivateSession(string why) { }
+        internal bool TryRunHostOwnPrivateEndTurn(TrapFloorEndTurnRequest request) => false;
+        internal void PrivateUndo() { }
+        internal void ShowPrivateGuestHud() { }
+        private bool MayUndoOnPrivateHost(ActiveSessionUndoTransaction transaction, bool redo) => true;
         private int legacyRefused;
         private void PrivateNote(string line) { }
 #endif
     }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+    /// <summary>
+    /// PRIVACY-P6A (s150, Task 1): on the host of a private development session, every command made on this computer
+    /// meets this first (ReplicatedTableAuthority.Interceptor). The host's own card actions are not run on its table
+    /// directly: a card drag or draw becomes the same private request a guest sends, through the same pipeline
+    /// (OnlinePlayPresenter.RunPrivateCardRequest), so its seat gets no exception and every guest gets its update.
+    /// Commands that only move or turn a piece on the table (no container, face or identity change) still run on the
+    /// host's own table (their sync is the later physics milestone). Every other table command (shuffle, flip, split,
+    /// create, delete, a draw into another container...) has no private request yet and is refused, never run silently
+    /// on the host's table alone. While the host runs an accepted End Turn through the game's own turn service the
+    /// game's own commands pass (PassThrough); whatever they change in cards is then sent as packages (counted).
+    /// </summary>
+    internal sealed class PrivateHostInterceptor : ITableCommandInterceptor
+    {
+        // By type name: these only set a piece's place, turn or lock on the table (no container, face or identity).
+        private static readonly HashSet<string> PoseOnly = new HashSet<string>
+        {
+            "MoveObjectCommand",
+            "CommitPhysicalObjectCommand",
+            "RotateObjectCommand",
+            "MoveContainerCommand",
+            "MoveBoardCommand",
+            "SetObjectLockedCommand",
+        };
+
+        private readonly OnlinePlayPresenter online;
+        private readonly Dictionary<Type, int> refused = new Dictionary<Type, int>();
+        private readonly Dictionary<Type, object> notRun = new Dictionary<Type, object>();
+        internal bool PassThrough;
+
+        internal PrivateHostInterceptor(OnlinePlayPresenter online) => this.online = online;
+
+        internal string RefusedSummary()
+        {
+            if (refused.Count == 0) return "none";
+            List<string> parts = new List<string>();
+            foreach (KeyValuePair<Type, int> pair in refused) parts.Add(pair.Key.Name + " " + pair.Value);
+            return string.Join(", ", parts);
+        }
+
+        public bool TrySubmit<TCommand, TResult>(TCommand command, out TResult result) where TCommand : class
+        {
+            result = default;
+            if (PassThrough || command == null) return false;
+            // PRIVACY-P6B: card and deck gestures (drag, draw, flip, shuffle, hand reorder) go through the private
+            // pipeline as the host's own seat; the gesture's own command then runs on the authority.
+            if (online.TryRunHostOwnCommand(command, out result)) return true;
+
+            if (PoseOnly.Contains(typeof(TCommand).Name)) return false;
+            int seen = refused.TryGetValue(typeof(TCommand), out int count) ? count : 0;
+            refused[typeof(TCommand)] = seen + 1;
+            if (seen == 0) Debug.LogWarning($"[PrivateSession] Refused the host's own {typeof(TCommand).Name}: no private request for it yet; it is not run on the host's table alone.");
+            if (!typeof(TResult).IsValueType)
+            {
+                if (!notRun.TryGetValue(typeof(TResult), out object empty))
+                {
+                    empty = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(TResult));
+                    notRun.Add(typeof(TResult), empty);
+                }
+
+                result = (TResult)empty;
+            }
+
+            return true;
+        }
+    }
+
     /// <summary>PRIVACY-P4: what a guest's scene holds, sent to the host for its check. Plain bytes (no object graph).</summary>
     internal sealed class PrivateSceneInventory
     {
@@ -1107,11 +2132,27 @@ namespace ConsoleCards.Presentation.Composition
         private Vector2 scroll;
         private bool folded;
 
+        // PRIVACY-P6B: the general operations, the same row on host and guests.
+        private void DrawOperationRow()
+        {
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Flip")) Online.PrivateFlip();
+            if (GUILayout.Button("Shuffle my deck")) Online.PrivateShuffle();
+            if (GUILayout.Button("Hand: first→last")) Online.PrivateReorder();
+            if (GUILayout.Button("Draw 3")) Online.PrivateDrawThree();
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Undo my last")) Online.PrivateUndo();
+            if (GUILayout.Button("Bad: stale Undo")) Online.PrivateUndoStale();
+            if (GUILayout.Button("Bad: other's deck")) Online.PrivateShuffle(true);
+            GUILayout.EndHorizontal();
+        }
+
         private void OnGUI()
         {
             if (Online == null || !PrivateDevSession.Enabled) return;
             const float width = 560f;
-            GUILayout.BeginArea(new Rect(Screen.width - width - 12f, 12f, width, folded ? 80f : 480f), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(Screen.width - width - 12f, 12f, width, folded ? 80f : 560f), GUI.skin.box);
             GUILayout.BeginHorizontal();
             GUILayout.Label("PRIVATE DEV SESSION · development only · not normal online play");
             if (GUILayout.Button(folded ? "Show" : "Hide", GUILayout.Width(60f))) folded = !folded;
@@ -1119,6 +2160,24 @@ namespace ConsoleCards.Presentation.Composition
             GUILayout.Label(Online.PrivateStatus());
             if (!folded)
             {
+                if (Online.IsPrivateHost)
+                {
+                    // PRIVACY-P6A: the host's own seat, through the same pipeline as a guest's request.
+                    GUILayout.BeginHorizontal();
+                    if (GUILayout.Button("Draw")) Online.PrivateDraw();
+                    if (GUILayout.Button("Place face up")) Online.PrivatePlace();
+                    if (GUILayout.Button("Return to hand")) Online.PrivateReturn();
+                    if (GUILayout.Button("Discard")) Online.PrivateDiscard();
+                    GUILayout.EndHorizontal();
+                    GUILayout.BeginHorizontal();
+                    if (GUILayout.Button("End Turn")) Online.PrivateEndTurn();
+                    if (GUILayout.Button("Bad: End Turn again")) Online.PrivateResendEndTurn();
+                    if (GUILayout.Button("Bad: stale End Turn")) Online.PrivateEndTurn(true);
+                    if (GUILayout.Button("Bad: repeat last")) Online.PrivateResendLast();
+                    GUILayout.EndHorizontal();
+                    DrawOperationRow();
+                }
+
                 if (Online.IsPrivateGuest)
                 {
                     GUILayout.BeginHorizontal();
@@ -1127,6 +2186,12 @@ namespace ConsoleCards.Presentation.Composition
                     if (GUILayout.Button("Return to hand")) Online.PrivateReturn();
                     if (GUILayout.Button("Discard")) Online.PrivateDiscard();
                     GUILayout.EndHorizontal();
+                    GUILayout.BeginHorizontal();
+                    if (GUILayout.Button("End Turn")) Online.PrivateEndTurn();
+                    if (GUILayout.Button("Bad: End Turn again")) Online.PrivateResendEndTurn();
+                    if (GUILayout.Button("Bad: stale End Turn")) Online.PrivateEndTurn(true);
+                    GUILayout.EndHorizontal();
+                    DrawOperationRow();
                     GUILayout.BeginHorizontal();
                     if (GUILayout.Button("Resync (my package)")) Online.PrivateResync();
                     if (GUILayout.Button("Send scene check")) Online.PrivateSendInventory();
