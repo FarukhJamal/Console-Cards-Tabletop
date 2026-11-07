@@ -562,7 +562,12 @@ namespace ConsoleCards.Presentation.Composition
 
         public void RefreshStatusUi() => host.MarkTableUiDirty();
 
-        public void RefreshShopEntry() => host.runtimeUi?.ShowShopEntry(null);
+        public void RefreshShopEntry()
+        {
+            // PRIVACY-P6C: a private guest's Shop entry follows the host's public Shop state (never hidden here).
+            if (host.HasOnline && host.Online.IsPrivateGuest) { host.Online.RefreshPrivateGuestShopEntry(); return; }
+            host.runtimeUi?.ShowShopEntry(null);
+        }
 
         public void AddHintHelpers()
         {

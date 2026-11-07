@@ -243,6 +243,9 @@ namespace ConsoleCards.Presentation.Composition
 
             toRestore.Sort((a, b) => a.Value.Index.CompareTo(b.Value.Index)); // lowest place first keeps the order
             int restored = 0;
+            // PRIVACY-P6C: on a private host the cancel is one transaction: every guest gets its result once.
+            bool privateTransaction = host.HasOnline && host.Online.IsPrivateHost;
+            if (privateTransaction) host.Online.BeginPrivateTransaction();
             host.SessionService.BeginUndoBatch();
             try
             {
@@ -290,6 +293,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 host.SessionService.EndUndoBatch();
                 paymentOrigins.Clear();
+                if (privateTransaction) host.Online.EndPrivateTransaction("Cancel Payment (the host's own)");
             }
 
             for (int i = 0; i < toRestore.Count; i++)

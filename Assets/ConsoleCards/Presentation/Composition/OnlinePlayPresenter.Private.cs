@@ -14,6 +14,7 @@ using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Games.TrapFloor;
 using ConsoleCards.Definitions;
 using ConsoleCards.GameTemplates;
+using ConsoleCards.GameTemplates.ControllerInputs;
 using ConsoleCards.GameTemplates.Definitions;
 using ConsoleCards.GameTemplates.Privacy;
 using ConsoleCards.Presentation.UI;
@@ -82,8 +83,9 @@ namespace ConsoleCards.Presentation.Composition
         private const byte MsgPrivateInventory = 45;  // guest → host: what my scene holds (dev evidence, checked by the host)
         private const byte MsgPrivateTurn = 46;       // PRIVACY-P6A host → guest: one accepted turn transition (public, with its revision)
         private const byte MsgPrivateTurnVerdict = 47; // PRIVACY-P6A host → guest: what became of the guest's End Turn request
+        private const byte MsgPrivateShop = 48;       // PRIVACY-P6C host → guest: the Shop's public list (game data, as the Shop shows every player)
 
-        private static bool IsPrivateMessage(byte type) => type >= MsgPrivatePackage && type <= MsgPrivateTurnVerdict;
+        private static bool IsPrivateMessage(byte type) => type >= MsgPrivatePackage && type <= MsgPrivateShop;
 
         // Normal-play table messages: never used, and refused, in a private session.
         private static bool IsLegacyTableMessage(byte type) =>
@@ -138,6 +140,7 @@ namespace ConsoleCards.Presentation.Composition
         private int hostOwnRefused;
         private int turnTransitions;
         private int resyncRequests;     // guests' NeedPackage requests received (host)
+        private int purchasesAccepted;  // PRIVACY-P6C: Shop purchases the host ran (any seat)
         // Guest: the host's revision this computer's table shows, and how updates arrived.
         private long privateRevision = -1;
         private int staleIgnored;
@@ -230,7 +233,7 @@ namespace ConsoleCards.Presentation.Composition
 
             // PRIVACY-P6B: anything that changed the host's table outside a private request (a pose, a game step the
             // host ran) reaches every guest as a filtered change set; checked cheaply four times a second.
-            if (Time.unscaledTime < nextSweepAt) return;
+            if (Time.unscaledTime < nextSweepAt || privateTransactionDepth > 0) return;
             nextSweepAt = Time.unscaledTime + 0.25f;
             int fingerprint = HostFingerprintFast();
             PrivateHudSnapshot hud = CurrentHud();
@@ -249,11 +252,12 @@ namespace ConsoleCards.Presentation.Composition
             privateHostMatch = host.matchState;
             privateHost = new PrivateTableHost(host.matchState, new RoomSeats(this), host.trapFloorTemplate.CardLabels, RecipientSnapshotProjection.NewSessionKey())
             {
-                Layout = host.BuildPublicLayout(),
+                Layout = BuildPrivateLayout(),
                 // PRIVACY-P6B: Draw/Place/Return/Discard run through the table's own command door.
                 TransferExecutor = ExecuteTransferOnAuthority,
                 HudSource = CurrentHud,
             };
+            privateShopCatalog = BuildShopCatalog();
             privateHost.SetInitialTurn(CurrentTurnSnapshot());
             privateHost.SetInitialHud(CurrentHud());
             privateEndTurnAuthority.Clear();
@@ -272,6 +276,49 @@ namespace ConsoleCards.Presentation.Composition
             lastPublishedHudSignature = privateHost.Hud?.Signature();
         }
 
+        // PRIVACY-P6C: the public layout, with each seat's payment slots (its Console slots but Main) for the Shop.
+        private RecipientPublicLayout BuildPrivateLayout()
+        {
+            RecipientPublicLayout layout = host.BuildPublicLayout();
+            if (layout == null || host.trapFloorTemplate == null) return layout;
+            foreach (RecipientSeatLayout seat in layout.Seats)
+                foreach (TrapFloorPlayerSetupDefinition setup in host.trapFloorTemplate.Players)
+                    if (setup.SeatId == seat.Seat)
+                        for (int i = 0; i < setup.SideSlotContainerIds.Count; i++) seat.SideSlots.Add(setup.SideSlotContainerIds[i]);
+            return layout;
+        }
+
+        // PRIVACY-P6C: the Shop's public list (the game's own catalog and prices, the Controller Cards' buttons).
+        private PrivateShopCatalog BuildShopCatalog()
+        {
+            GameDefinitionData game = host.trapFloorTemplate?.GameDefinition;
+            if (game == null) return null;
+            List<CardDefinitionData> controllers = new List<CardDefinitionData>();
+            for (int i = 0; i < game.Cards.Count; i++) if (game.Cards[i].RepresentedControllerInput.HasValue) controllers.Add(game.Cards[i]);
+            return PrivateShopCatalog.From(TrapFloorShop.Catalog(game), controllers);
+        }
+
+        private PrivateShopCatalog privateShopCatalog;
+
+        // PRIVACY-P6C: the Shop's public list, its own message after the package (so the package's byte check stays
+        // strict). Checked too: no real id of a hidden card, no definition only hidden cards have, not the seed. Its
+        // names are the Shop's (every player may open the Shop and read them).
+        private void SendShopCatalog(Member member)
+        {
+            if (privateShopCatalog == null || member == null || !member.Connected || member.Connection < 0) return;
+            byte[] bytes = TableWire.Write(privateShopCatalog, false);
+            PlayerId recipient = RecipientOf(member);
+            RecipientSnapshotProjection.Classify(host.matchState, recipient, out HashSet<TabletopObjectId> hidden, out _);
+            int ids = 0, defs = 0;
+            foreach (TabletopObjectId id in hidden) if (TabletopComposition.Contains(bytes, id.Value.ToByteArray())) ids++;
+            HashSet<ObjectDefinitionId> definitions = TabletopComposition.HiddenOnlyDefinitions(host.matchState, hidden);
+            foreach (ObjectDefinitionId definition in definitions) if (TabletopComposition.Contains(bytes, definition.Value.ToByteArray())) defs++;
+            bool seed = privateSeedKnown && TabletopComposition.Contains(bytes, BitConverter.GetBytes(privateSeed));
+            PrivateNote($"Sent the Shop's public list to {member.Name}: {bytes.Length} bytes, {privateShopCatalog.Entries.Count} Abilities, {privateShopCatalog.Controllers.Count} Controller Cards; "
+                + $"hidden real ids {ids}/{hidden.Count}, hidden-only definition ids {defs}/{definitions.Count}, deal seed {(seed ? "FOUND" : "absent")}.");
+            SendPrivateBytes(member, MsgPrivateShop, bytes);
+        }
+
         // PRIVACY-P6B: the host's table object was replaced by one that continues it (Undo, a reset, a new floor). The
         // private authority keeps its handles, revision and what each guest was sent: the difference goes out as change
         // sets, or, where it cannot be told as object changes (containers made or removed), as that guest's package.
@@ -279,7 +326,8 @@ namespace ConsoleCards.Presentation.Composition
         {
             privateHostMatch = host.matchState;
             privateHost.Rebind(host.matchState);
-            privateHost.Layout = host.BuildPublicLayout();
+            privateHost.Layout = BuildPrivateLayout();
+            privateShopCatalog = BuildShopCatalog();
             PrivateNote("Private table: " + why + "; sending what changed.");
             HostSceneFollow(null);
             SendPublish(privateHost.PublishChanges(CurrentTurnSnapshot(), CurrentHud()), why);
@@ -361,7 +409,10 @@ namespace ConsoleCards.Presentation.Composition
         {
             bool passing = privateInterceptor.PassThrough;
             privateInterceptor.PassThrough = true;
-            host.SessionService.BeginUndoBatch();
+            // PRIVACY-P6C: inside a batch already open (Cancel Payment's), this step joins it (a second Begin used to
+            // reset the open batch and end it early, so the cancel became several Undo steps).
+            bool ownBatch = !host.undoBatchActive;
+            if (ownBatch) host.SessionService.BeginUndoBatch();
             try
             {
                 bool moved = from.Kind == ContainerKind.Deck && to.Kind == ContainerKind.Hand && from.TryPeekTop(out TabletopObjectId top) && top == real
@@ -374,7 +425,7 @@ namespace ConsoleCards.Presentation.Composition
             }
             finally
             {
-                host.SessionService.EndUndoBatch();
+                if (ownBatch) host.SessionService.EndUndoBatch();
                 privateInterceptor.PassThrough = passing;
             }
         }
@@ -427,7 +478,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (host.TrapFloorGame == null || !host.TrapFloorGame.TryBuildPublicHud(out string round, out string phase, out Color? color, out List<TrapFloorHudPlayer> players, out TrapFloorPlayerCardModel card))
                 return null;
-            PrivateHudSnapshot hud = new PrivateHudSnapshot { Round = round, Phase = phase, HasTurnColor = color.HasValue };
+            PrivateHudSnapshot hud = new PrivateHudSnapshot { Round = round, Phase = phase, HasTurnColor = color.HasValue, ShopOpen = host.TrapFloorGame.IsShopOpen() };
             if (color.HasValue) { hud.TurnR = color.Value.r; hud.TurnG = color.Value.g; hud.TurnB = color.Value.b; }
             if (players != null)
                 foreach (TrapFloorHudPlayer player in players)
@@ -463,6 +514,7 @@ namespace ConsoleCards.Presentation.Composition
             CheckSentBytes(package, recipient, $"package to {member.Name}");
             SendPrivateBytes(member, MsgPrivatePackage, package);
             packagesSent++;
+            SendShopCatalog(member);
         }
 
         private void SendPrivateBytes(Member member, byte type, byte[] payload)
@@ -531,6 +583,22 @@ namespace ConsoleCards.Presentation.Composition
 
         private void HostPrivateRequest(Member member, byte[] data)
         {
+            if (PrivateTransactionCodec.IsTransaction(data, 1))
+            {
+                Guid transactionId = Guid.Empty;
+                byte detail = 0;
+                PrivateRequestVerdict transactionVerdict = PrivateTransactionCodec.TryRead(data, 1, out PrivateTransaction tx)
+                    ? RunPrivateTransaction(member, tx, null, out transactionId, out detail)
+                    : PrivateRequestVerdict.UnknownReference;
+                if (tx == null) PrivateNote($"Refused a malformed payment request from {member.Name}.");
+                BeginMessage(MsgPrivateVerdict);
+                WriteGuid(transactionId);
+                writer.Write((byte)transactionVerdict);
+                writer.Write(detail); // the game's own reason (TrapFloorShopError) when its purchase refused it
+                SendTo(member);
+                return;
+            }
+
             if (PrivateOperationCodec.IsOperation(data, 1))
             {
                 Guid operationId = Guid.Empty;
@@ -790,6 +858,21 @@ namespace ConsoleCards.Presentation.Composition
 
             HostSceneState sceneBefore = CaptureHostScene();
             bool done = false;
+            if (privateTransactionDepth > 0)
+            {
+                // PRIVACY-P6C: one step of a transaction the host's own game runs (Cancel Payment puts several cards
+                // back): it runs now, and every guest gets the transaction's result once, when it ends.
+                bool passingNow = privateInterceptor.PassThrough;
+                privateInterceptor.PassThrough = true;
+                try { done = runOwnCommand != null ? runOwnCommand() : ExecuteOperation(sender, resolved); }
+                finally { privateInterceptor.PassThrough = passingNow; }
+                HostSceneFollow(sceneBefore);
+                privateTransactionSteps++;
+                if (done) operationsAccepted++; else operationsRefused++;
+                PrivateNote($"{(done ? "Accepted" : "Refused (table rules)")} {op.Kind} from {actor} as step {privateTransactionSteps} of a transaction; sent when it ends.");
+                return done ? PrivateRequestVerdict.Accepted : PrivateRequestVerdict.RuleRefused;
+            }
+
             Dictionary<PlayerId, byte[]> updates = privateHost.Apply(() =>
             {
                 bool passing = privateInterceptor.PassThrough;
@@ -941,11 +1024,13 @@ namespace ConsoleCards.Presentation.Composition
                     op.A = ro.FromIndex;
                     op.B = ro.ToIndex;
                     break;
+                case TrapFloorBuyFromShopCommand buy:
+                    return TryRunHostOwnPurchase(me, self, buy, command, out result);
                 default:
                     return false;
             }
 
-            TResult captured = default;
+            TResult captured = RefusedResults.Of<TResult>(); // PRIVACY-P6C: refused unless the command ran
             PrivateRequestVerdict verdict = RunPrivateOperation(me, op, () =>
             {
                 captured = host.TableAuthority.Submit<TCommand, TResult>(command);
@@ -957,10 +1042,187 @@ namespace ConsoleCards.Presentation.Composition
             return true;
         }
 
+        // PRIVACY-P6C: the host player's own Confirm Payment (the game's Shop flow on this computer) as the same Shop
+        // purchase a guest sends: its own references for the payment cards, the same checks, then the game's command.
+        private bool TryRunHostOwnPurchase<TCommand, TResult>(Member me, PlayerId self, TrapFloorBuyFromShopCommand buy, TCommand command, out TResult result) where TCommand : class
+        {
+            PrivateTransaction tx = new PrivateTransaction
+            {
+                Kind = PrivateTransactionKind.ShopBuy,
+                RequestId = Guid.NewGuid(),
+                Revision = privateHost.Revision,
+                Definition = Guid.TryParse(buy.CardDefinitionStableId, out Guid definition) ? definition : Guid.Empty,
+            };
+            foreach (TabletopObjectId paid in buy.PaymentCardIds) tx.Items.Add(new PrivateTransactionItem { Card = privateHost.ReferenceFor(self, paid) });
+            TResult captured = RefusedResults.Of<TResult>();
+            PrivateRequestVerdict verdict = RunPrivateTransaction(me, tx, () =>
+            {
+                captured = host.TableAuthority.Submit<TCommand, TResult>(command);
+                return ResultSucceeded(captured);
+            }, out _, out _);
+            if (verdict != PrivateRequestVerdict.Accepted && verdict != PrivateRequestVerdict.RuleRefused)
+                host.ShowMessage($"Private session: the purchase was refused ({verdict}).");
+            result = captured;
+            return true;
+        }
+
+        // PRIVACY-P6C: THE pipeline for Confirm Payment (a Shop purchase) and Cancel Payment (staged cards back), whoever
+        // asks. Who may ask: PrivateTransactionPolicy (seat, Full turn, one request id once, the revision the buyer
+        // confirmed against, its own payment cards in its own Console). What is a legal purchase: the game's own
+        // TrapFloorBuyFromShopUseCase (whose turn and phase, the exact price, side slots, unlocked cards, the
+        // destination), all checked before anything changes. One accepted request: one Undo step, one revision, every
+        // guest its own change set. <paramref name="detail"/>: the game's reason when its purchase refused (a TrapFloorShopError).
+        private PrivateRequestVerdict RunPrivateTransaction(Member member, PrivateTransaction tx, Func<bool> runOwnCommand, out Guid requestId, out byte detail)
+        {
+            requestId = tx.RequestId;
+            detail = 0;
+            string actor = member.IsHost ? "the host's own seat" : member.Name;
+            PlayerId sender = member.Player == Guid.Empty ? PlayerId.Empty : new PlayerId(member.Player);
+            if (privateHost == null) return PrivateRequestVerdict.NotSeated;
+            string label = tx.Kind == PrivateTransactionKind.ShopBuy ? "Confirm Payment (Shop purchase)" : "Cancel Payment (staged cards back)";
+            long revisionBefore = privateHost.Revision;
+            string before = HostTableFingerprint();
+            PrivateRequestVerdict verdict = PrivateTransactionPolicy.Check(host.matchState, new RoomSeats(this), privateHost, sender, tx, out PrivateResolvedTransaction resolved);
+            CardDefinitionData bought = null;
+            string why = verdict.ToString();
+            if (verdict == PrivateRequestVerdict.Accepted && tx.Kind == PrivateTransactionKind.ShopBuy)
+            {
+                if (!host.TrapFloorGame.IsShopOpen()) { verdict = PrivateRequestVerdict.RuleRefused; why = "the Shop is closed in the rules in play"; }
+                else if (!TryFindShopCard(tx.Definition, out bought)) { verdict = PrivateRequestVerdict.UnknownReference; why = "no such Ability in the Shop"; }
+            }
+
+            if (verdict != PrivateRequestVerdict.Accepted)
+            {
+                operationsRefused++;
+                PrivateNote($"Refused {label} from {actor}: {why} ({PlayAssist.Name(PlayAssist.Level)}); host table {(before == HostTableFingerprint() ? "unchanged" : "CHANGED")}, revision {(privateHost.Revision == revisionBefore ? "unchanged" : "CHANGED")} ({privateHost.Revision}).");
+                return verdict;
+            }
+
+            HostSceneState sceneBefore = CaptureHostScene();
+            bool done = false;
+            TrapFloorShopError shopError = TrapFloorShopError.None;
+            int restored = 0;
+            Dictionary<PlayerId, byte[]> updates = privateHost.Apply(() =>
+            {
+                bool passing = privateInterceptor.PassThrough;
+                privateInterceptor.PassThrough = true;
+                // One Undo step: a Cancel's several moves are folded into one batch; a purchase is ONE game command and
+                // records its own step as the game does offline (live run, 2026-11-07: a batch around it ended on the
+                // purchase's follow-up acceptance, which is not a completed transaction: "Only completed transactions may
+                // enter Undo history", and the purchase was then published by the sweep instead of as this request).
+                bool ownBatch = tx.Kind == PrivateTransactionKind.PaymentRestore && !host.undoBatchActive;
+                if (ownBatch) host.SessionService.BeginUndoBatch();
+                try
+                {
+                    if (tx.Kind == PrivateTransactionKind.PaymentRestore) done = RestoreStagedCards(sender, resolved, out restored);
+                    else if (runOwnCommand != null) done = runOwnCommand();
+                    else
+                    {
+                        TrapFloorBuyFromShopResult result = host.TableAuthority.Submit<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(
+                            new TrapFloorBuyFromShopCommand(Ctx(sender), bought.StableId, TabletopObjectId.New(), resolved.RealCards));
+                        done = result.Succeeded;
+                        shopError = result.Error;
+                    }
+                }
+                finally
+                {
+                    if (ownBatch) host.SessionService.EndUndoBatch();
+                    privateInterceptor.PassThrough = passing;
+                }
+            }, null, (Func<PrivateHudSnapshot>)CurrentHud);
+            HostSceneFollow(sceneBefore);
+            SendPublish(updates, label);
+            if (!done)
+            {
+                operationsRefused++;
+                detail = (byte)shopError;
+                PrivateNote($"Refused {label} from {actor}: the game's own rules refused it ({(tx.Kind == PrivateTransactionKind.ShopBuy ? shopError.ToString() : "a card could not go back")}); "
+                    + $"host table {(before == HostTableFingerprint() ? "unchanged" : "CHANGED")} (revision {revisionBefore} → {privateHost.Revision}, no card moved).");
+                return PrivateRequestVerdict.RuleRefused;
+            }
+
+            operationsAccepted++;
+            if (tx.Kind == PrivateTransactionKind.ShopBuy) purchasesAccepted++;
+            if (member.IsHost) hostOwnAccepted++;
+            PrivateNote(tx.Kind == PrivateTransactionKind.ShopBuy
+                ? $"Accepted {label} from {actor} ({PlayAssist.Name(PlayAssist.Level)}): {(bought != null ? bought.DisplayName : "an Ability")} for {tx.Items.Count} payment card(s); revision {revisionBefore} → {privateHost.Revision}; each guest computer here got its own change set."
+                : $"Accepted {label} from {actor}: {restored} of {tx.Items.Count} card(s) put back; revision {revisionBefore} → {privateHost.Revision}, one change set each.");
+            return PrivateRequestVerdict.Accepted;
+        }
+
+        private bool TryFindShopCard(Guid definition, out CardDefinitionData card)
+        {
+            card = null;
+            GameDefinitionData game = host.trapFloorTemplate?.GameDefinition;
+            if (game == null) return false;
+            foreach (CardDefinitionData candidate in TrapFloorShop.Catalog(game))
+                if (Guid.TryParse(candidate.StableId, out Guid id) && id == definition) { card = candidate; return true; }
+            return false;
+        }
+
+        // Cancel Payment on the authority, as the game's own cancel does it (owner decision D): each staged card back to
+        // its pile and place (or its spot), lowest place first, with its face. Checked already: the payer's own places.
+        private bool RestoreStagedCards(PlayerId sender, PrivateResolvedTransaction resolved, out int restored)
+        {
+            restored = 0;
+            List<int> order = new List<int>();
+            for (int i = 0; i < resolved.RealCards.Count; i++) order.Add(i);
+            order.Sort((a, b) => resolved.Transaction.Items[a].Index.CompareTo(resolved.Transaction.Items[b].Index));
+            bool all = true;
+            foreach (int i in order)
+            {
+                PrivateTransactionItem item = resolved.Transaction.Items[i];
+                TabletopObjectId real = resolved.RealCards[i];
+                if (!host.matchState.Cards.TryGetValue(real, out CardInstanceState card)) { all = false; continue; }
+                ContainerId from = card.BaseState.ContainerId;
+                bool moved;
+                if (item.HasPose)
+                    moved = from.IsEmpty || host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(TransferCardCommand.ToTabletop(Ctx(sender), real, from, item.Pose)).Succeeded;
+                else
+                    moved = from == item.Container || host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(TransferCardCommand.ToContainer(Ctx(sender), real, from, item.Container)).Succeeded;
+                if (!moved) { all = false; continue; }
+                if (!item.HasPose && host.matchState.Containers.TryGetValue(item.Container, out ContainerState pile))
+                {
+                    int now = pile.IndexOf(real);
+                    int wanted = Math.Min(item.Index, pile.Count - 1);
+                    if (now >= 0 && now != wanted)
+                        host.TableAuthority.Submit<ReorderContainerCommand, ReorderContainerResult>(new ReorderContainerCommand(Ctx(sender), item.Container, real, now, wanted));
+                }
+
+                CardFace face = item.FaceUp ? CardFace.FaceUp : CardFace.FaceDown;
+                if (card.Face != face) host.TableAuthority.Submit<FlipCardCommand, FlipCardResult>(new FlipCardCommand(Ctx(sender), real, face));
+                if (from != item.Container || item.HasPose) restored++;
+            }
+
+            return all;
+        }
+
+        // PRIVACY-P6C: a game step on the host that is several table commands (the game's own Cancel Payment) reaches
+        // every guest once, as one revision, when it ends; the sweep waits for it.
+        private int privateTransactionDepth;
+        private int privateTransactionSteps;
+
+        internal void BeginPrivateTransaction()
+        {
+            if (!privateHosting || privateHost == null) return;
+            if (privateTransactionDepth++ == 0) privateTransactionSteps = 0;
+        }
+
+        internal void EndPrivateTransaction(string what)
+        {
+            if (privateTransactionDepth == 0) return;
+            if (--privateTransactionDepth > 0) return;
+            if (privateTransactionSteps == 0 || privateHost == null) return;
+            long before = privateHost.Revision;
+            SendPublish(privateHost.PublishChanges(null, CurrentHud()), what);
+            PrivateNote($"{what}: {privateTransactionSteps} step(s) on the host's table, one revision for every guest ({before} → {privateHost.Revision}).");
+        }
+
         private static bool ResultSucceeded(object result)
         {
             switch (result)
             {
+                case TrapFloorBuyFromShopResult r: return r.Succeeded;
                 case TransferCardResult r: return r.Succeeded;
                 case DrawCardsResult r: return r.Succeeded;
                 case FlipCardResult r: return r.Succeeded;
@@ -1110,6 +1372,9 @@ namespace ConsoleCards.Presentation.Composition
                 case MsgPrivateTurnVerdict:
                     GuestTurnVerdict(payload);
                     break;
+                case MsgPrivateShop:
+                    GuestShopCatalog(payload);
+                    break;
                 default:
                     PrivateNote($"Ignored private message {type}: guests do not take it.");
                     break;
@@ -1158,6 +1423,7 @@ namespace ConsoleCards.Presentation.Composition
             // PRIVACY-P6B: this computer's own table gestures go to the host as private requests (never run here).
             host.PrivateViewAuthority.Forward = GuestForward;
             RenderPrivateHud();
+            GuestPaymentFollow(); // PRIVACY-P6C: a payment staged before a resync continues with the new table
             PrivateNote($"Received package {packagesReceived} (revision {package.Revision}; turn {TurnText(privateTurn)}): {bytes.Length} bytes, sha256 {Sha(bytes)}; {client.Cards.Count} cards ({hidden} as backs); "
                 + $"own hand {OwnHandSummary()}; scene built from it alone (legacy table messages dropped so far: {legacyRefused}).");
             host.ShowMessage("Private development session: your table is built from your own package only.");
@@ -1273,6 +1539,7 @@ namespace ConsoleCards.Presentation.Composition
             bool objects = summary.Released.Count + summary.Created.Count + summary.Moved.Count + summary.Containers.Count > 0;
             if (objects)
             {
+                int reusedBefore = host.privateViewsReused;
                 PendingSceneMeasure measure = BeginSceneMeasure(IncrementalScene ? $"incremental change set ({summary.Created.Count} card views made)" : "full scene rebuild");
                 string error;
                 bool shown = IncrementalScene ? host.ApplyPrivateChangesToScene(summary, out error) : host.RebuildPrivateSceneFromOwnTable(out error);
@@ -1285,8 +1552,17 @@ namespace ConsoleCards.Presentation.Composition
                 }
                 else if (IncrementalScene) incrementalUpdates++;
                 else fullBuilds++;
+                int reused = host.privateViewsReused - reusedBefore;
+                if (reused > 0) measure.What = $"incremental change set ({summary.Created.Count} new references: {reused} plain-back views rebound, {summary.Created.Count - reused} made)";
                 EndSceneWork(measure);
-                if (!shown) { PrivateNote("The scene could not follow the change set: " + error); return; }
+                if (!shown)
+                {
+                    // The views could not follow even from this computer's own table: the scene is not left stale; this
+                    // computer's own package is asked for again (counted; never a full table).
+                    PrivateNote("The scene could not follow the change set: " + error + ". Asking the host for this computer's package (never a full table).");
+                    AskForOwnPackage();
+                    return;
+                }
             }
 
             int backs = 0, faces = 0;
@@ -1301,6 +1577,7 @@ namespace ConsoleCards.Presentation.Composition
                 + $"{summary.Created.Count} made ({faces} with their faces, {backs} as backs), {summary.Moved.Count} piece(s) moved, {set.Orders.Count} order(s), {summary.Containers.Count} container(s) laid out"
                 + $"{(set.Turn != null ? "; turn: " + TurnText(privateTurn) : string.Empty)}; digest matches the host's; own hand {OwnHandSummary()}.");
             if (set.Turn != null) host.ShowMessage("Private session: " + TurnText(privateTurn) + ".");
+            GuestPaymentFollow();
         }
 
         // PRIVACY-P6B: a table gesture made on this guest (its own references) goes to the host as a private request.
@@ -1372,12 +1649,18 @@ namespace ConsoleCards.Presentation.Composition
                     privateHud.HasTurnColor ? new Color(privateHud.TurnR, privateHud.TurnG, privateHud.TurnB) : (Color?)null,
                     players, card);
                 bool mine = privateTurn != null && !privateTurn.Ended && privateTurn.TurnOwner == myPlayer;
-                List<PopupActionOption> actions = new List<PopupActionOption>
+                List<PopupActionOption> actions = new List<PopupActionOption>();
+                if (GuestPaymentActive)
                 {
-                    new PopupActionOption(privateTurn != null && privateTurn.Phase == (int)TrapFloorTurnPhase.FloorTurn ? "End Floor Turn" : "End Turn", mine, () => PrivateEndTurn()),
-                    new PopupActionOption("Undo my last", true, PrivateUndo),
-                };
+                    // PRIVACY-P6C: the game's own payment buttons while this seat is paying.
+                    actions.Add(new PopupActionOption("Confirm Payment", guestPayment.IsPaymentComplete && !guestConfirmSent, GuestConfirmPayment));
+                    actions.Add(new PopupActionOption("Cancel Payment", true, () => GuestCancelPayment("Payment cancelled.")));
+                }
+
+                actions.Add(new PopupActionOption(privateTurn != null && privateTurn.Phase == (int)TrapFloorTurnPhase.FloorTurn ? "End Floor Turn" : "End Turn", mine, () => PrivateEndTurn()));
+                actions.Add(new PopupActionOption("Undo my last", true, PrivateUndo));
                 host.runtimeUi.ShowTrapFloorStatus(status, new FloorfallStatusModel(false, string.Empty, string.Empty, string.Empty), actions);
+                RefreshGuestShopEntry();
                 nextHudRenderAt = Time.unscaledTime + 1f;
             }
             catch (Exception exception)
@@ -1395,6 +1678,453 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!privateGuest || privateHud == null || Time.unscaledTime < nextHudRenderAt) return;
             RenderPrivateHud();
+        }
+
+
+        // ---------- PRIVACY-P6C: the Shop and Payment on a private guest ----------
+        // The game's own flow, on this computer's own table: the Shop popup (the game's catalog, prices and cost
+        // services, from the host's public Shop list), the card choice popup, the chosen cards placed in this seat's
+        // Console with ordinary table moves (public, as in normal play), then Confirm Payment (one request: the host
+        // runs the game's purchase) or Cancel Payment (one request: the staged cards go back). The choice itself stays
+        // on this computer until Confirm, as in normal play.
+
+        private PrivateShopCatalog privateShop;
+        private GameDefinitionData privateShopDefinition;
+        private PendingControllerPurchaseState guestPayment;
+        private readonly Dictionary<TabletopObjectId, PrivateTransactionItem> guestPaymentOrigins = new Dictionary<TabletopObjectId, PrivateTransactionItem>();
+        private string guestPickedDefinition = string.Empty;
+        private Guid guestConfirmRequest = Guid.Empty;
+        private Guid guestCancelRequest = Guid.Empty;
+        private bool guestConfirmSent;
+        private byte[] lastShopBuyBytes;
+
+        private bool GuestPaymentActive => guestPayment != null && guestPayment.IsActive;
+
+        private void GuestShopCatalog(byte[] bytes)
+        {
+            try
+            {
+                privateShop = (PrivateShopCatalog)ConsoleCards.Application.Authority.TableWire.Read(bytes, 0, bytes.Length, false);
+                privateShopDefinition = privateShop?.ToDefinition();
+            }
+            catch (Exception exception)
+            {
+                privateShop = null;
+                privateShopDefinition = null;
+                PrivateNote("The Shop's list could not be read: " + exception.Message);
+                return;
+            }
+
+            PrivateNote($"Received the Shop's public list: {bytes.Length} bytes, {privateShop.Entries.Count} Abilities, {privateShop.Controllers.Count} Controller Cards{(privateShopDefinition == null ? " (could not be read as game data)" : string.Empty)}.");
+            RefreshGuestShopEntry();
+        }
+
+        internal void RefreshPrivateGuestShopEntry() => RefreshGuestShopEntry();
+
+        private void RefreshGuestShopEntry()
+        {
+            if (!privateGuest || host.runtimeUi == null) return;
+            bool open = privateHud != null && privateHud.ShopOpen && privateShopDefinition != null;
+            host.runtimeUi.ShowShopEntry(open ? (Action)OpenGuestShop : null);
+        }
+
+        private bool GuestShopBuyingTurn() =>
+            privateGuest && privateTurn != null && !privateTurn.Ended && privateTurn.Phase == (int)TrapFloorTurnPhase.PlayerTurn && privateTurn.ActivePlayer == myPlayer;
+
+        private ContainerState GuestHand()
+        {
+            RecipientSeatLayout seat = OwnSeat();
+            return seat != null && host.matchState != null && host.matchState.Containers.TryGetValue(seat.Hand, out ContainerState hand) ? hand : null;
+        }
+
+        private void OpenGuestShop()
+        {
+            if (privateShopDefinition == null || privateHud == null || !privateHud.ShopOpen) { host.ShowMessage("The Shop is closed in the rules in play."); return; }
+            if (GuestPaymentActive) { host.ShowMessage("Finish or cancel the current payment first."); return; }
+            host.runtimeUi.ShowActionAbilityPurchase(BuildGuestShopOptions(), GuestPickShopItem, host.runtimeUi.CloseActionAbilityPurchase,
+                GuestShopBuyingTurn() ? "You are buying." : "You can look; buying is on a player's own turn.", "SHOP", "ABILITIES");
+        }
+
+        // The game's own Shop list (TrapFloorShop.Catalog), its prices and what this seat's own Hand can pay.
+        private List<ActionAbilityPurchaseOption> BuildGuestShopOptions()
+        {
+            List<ActionAbilityPurchaseOption> options = new List<ActionAbilityPurchaseOption>();
+            ContainerState hand = GuestShopBuyingTurn() ? GuestHand() : null;
+            ControllerInputCostEvaluator evaluator = new ControllerInputCostEvaluator();
+            foreach (CardDefinitionData definition in TrapFloorShop.Catalog(privateShopDefinition))
+            {
+                bool forSale = TrapFloorShop.IsForSale(definition);
+                string cost = forSale ? InputCostNotation.Format(definition.InputCost) : "not set yet";
+                bool canPay = false;
+                string affordability;
+                if (!forSale) affordability = "Not for sale until the rules give it a price.";
+                else if (hand == null) affordability = "Buying is on a player's own turn.";
+                else
+                {
+                    ControllerInputCostEvaluation evaluation = evaluator.Evaluate(host.matchState, hand, definition.InputCost, privateShopDefinition);
+                    canPay = evaluation.CanPay;
+                    affordability = canPay ? "Your Hand can pay this." : $"Your Hand cannot pay {cost} yet.";
+                }
+
+                Texture artwork = null;
+                if (Guid.TryParse(definition.StableId, out Guid id) && host.TryGetAuthoredCardDefinition(new ObjectDefinitionId(id), out CardDefinition authored)) artwork = host.FrontArt(authored);
+                options.Add(new ActionAbilityPurchaseOption(definition.StableId, definition.DisplayName, definition.Description, cost, artwork, canPay, affordability, forSale,
+                    TrapFloorShop.IsAction(definition) ? "Action" : TrapFloorShop.IsReaction(definition) ? "Reaction" : string.Empty));
+            }
+
+            return options;
+        }
+
+        private void GuestPickShopItem(string stableId)
+        {
+            if (GuestPaymentActive) { host.runtimeUi?.SetActionAbilityPurchaseStatus("Finish or cancel the current payment first."); return; }
+            if (!GuestShopBuyingTurn()) { host.runtimeUi?.SetActionAbilityPurchaseStatus("Only the player whose turn it is can buy."); return; }
+            if (!privateShopDefinition.TryGetCard(stableId, out CardDefinitionData bought) || !TrapFloorShop.IsForSale(bought))
+            {
+                host.runtimeUi?.SetActionAbilityPurchaseStatus("Not for sale until the rules give it a price.");
+                return;
+            }
+
+            ContainerState hand = GuestHand();
+            if (hand == null || !ControllerInputCardCatalog.TryCreate(privateShopDefinition, out ControllerInputCardCatalog catalog)) { host.runtimeUi?.SetActionAbilityPurchaseStatus("This price could not be read."); return; }
+            guestPickedDefinition = stableId;
+            List<FocusedCardOptionModel> cards = new List<FocusedCardOptionModel>(hand.Count);
+            for (int i = 0; i < hand.Count; i++)
+            {
+                TabletopObjectId cardId = hand.GetObjectAt(i);
+                if (!host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card)) continue;
+                bool known = catalog.TryGetInput(card.BaseState.DefinitionId, out ControllerInput input);
+                bool eligible = known && bought.InputCost.Accepts(input);
+                CardDefinition authored = null;
+                string name = host.TryGetAuthoredCardDefinition(card.BaseState.DefinitionId, out authored) ? authored.DisplayName : "Controller Card";
+                cards.Add(new FocusedCardOptionModel(cardId, name, known ? input.ToString() : "Not eligible", host.FrontArt(authored), eligible));
+            }
+
+            bool canPay = new ControllerInputCostEvaluator().Evaluate(host.matchState, hand, bought.InputCost, privateShopDefinition).CanPay;
+            host.runtimeUi.ShowFocusedCardSelection(new FocusedCardSelectionModel(
+                $"BUY {bought.DisplayName.ToUpperInvariant()} — HAND",
+                $"Choose {InputCostNotation.Format(bought.InputCost)} from your Hand.",
+                canPay ? "Pick the cards that pay the cost." : $"Missing: your Hand cannot pay {InputCostNotation.Format(bought.InputCost)}",
+                "Confirm Cards",
+                cards,
+                bought.InputCost.CardCount,
+                GuestPaymentReady,
+                GuestConfirmCards,
+                () => { guestPickedDefinition = string.Empty; host.runtimeUi?.CloseFocusedCardSelection(); host.ShowMessage("Payment cancelled."); }));
+        }
+
+        private bool GuestPaymentReady(IReadOnlyList<TabletopObjectId> selected)
+        {
+            ContainerState hand = GuestHand();
+            if (hand == null || string.IsNullOrEmpty(guestPickedDefinition) || !privateShopDefinition.TryGetCard(guestPickedDefinition, out CardDefinitionData bought)) return false;
+            for (int i = 0; i < selected.Count; i++) if (!hand.Contains(selected[i])) return false;
+            return new ControllerInputCostEvaluator().EvaluateExact(host.matchState, selected, bought.InputCost, privateShopDefinition).CanPay;
+        }
+
+        // Confirm Cards: the payment begins on this computer (nothing is sent; the cards are placed next).
+        private void GuestConfirmCards(IReadOnlyList<TabletopObjectId> selected)
+        {
+            if (!GuestPaymentReady(selected)) { host.ShowMessage("Choose exactly the cards the cost asks for."); return; }
+            GuestBeginPayment(guestPickedDefinition, selected);
+            guestPickedDefinition = string.Empty;
+            host.runtimeUi?.CloseFocusedCardSelection();
+        }
+
+        private void GuestBeginPayment(string definition, IReadOnlyList<TabletopObjectId> selected)
+        {
+            if (guestPayment == null || guestPayment.MatchId != host.matchState.Id) guestPayment = new PendingControllerPurchaseState(host.matchState.Id);
+            guestPayment.Begin(new PlayerId(myPlayer), definition, selected, PendingPurchaseSource.Shop);
+            guestConfirmSent = false;
+            // Owner decision D: where each chosen card was (its pile, place and face), to put it back on Cancel.
+            guestPaymentOrigins.Clear();
+            foreach (TabletopObjectId id in selected)
+            {
+                if (!host.matchState.Cards.TryGetValue(id, out CardInstanceState card)) continue;
+                ContainerId at = card.BaseState.ContainerId;
+                int index = !at.IsEmpty && host.matchState.Containers.TryGetValue(at, out ContainerState pile) ? pile.IndexOf(id) : -1;
+                guestPaymentOrigins[id] = new PrivateTransactionItem { Card = id, Container = at, Index = Math.Max(0, index), HasPose = at.IsEmpty, Pose = card.BaseState.Pose, FaceUp = card.Face == CardFace.FaceUp };
+            }
+
+            if (host.pendingControllerPurchaseState == null) host.pendingControllerPurchaseState = guestPayment; // the Hand highlights the chosen cards
+            PrivateNote($"Payment begun here: {selected.Count} chosen card(s) for {GuestShopName(definition)} (on this computer only until Confirm).");
+            host.ShowMessage($"BUY {GuestShopName(definition).ToUpperInvariant()} — Place the chosen cards in your Console, then Confirm Payment");
+            RenderPrivateHud();
+        }
+
+        private string GuestShopName(string definition) =>
+            privateShopDefinition != null && privateShopDefinition.TryGetCard(definition, out CardDefinitionData card) ? card.DisplayName : "ABILITY";
+
+        // After every change set: which chosen cards are now in this seat's payment slots (as the game's own payment
+        // tracks Console insertions), a card with the same button standing in for a chosen one (BUY-1), and the
+        // payment dropped when the turn has moved on (B01: its cards go back).
+        private void GuestPaymentFollow()
+        {
+            if (!GuestPaymentActive) return;
+            if (!GuestShopBuyingTurn()) { GuestCancelPayment("The turn moved on: the unfinished payment was cancelled."); return; }
+            RecipientSeatLayout seat = OwnSeat();
+            if (seat == null) return;
+            PlayerId me = new PlayerId(myPlayer);
+            ControllerInputCardCatalog.TryCreate(privateShopDefinition, out ControllerInputCardCatalog catalog);
+            foreach (ContainerId slot in seat.SideSlots)
+            {
+                if (!host.matchState.Containers.TryGetValue(slot, out ContainerState pile)) continue;
+                for (int i = 0; i < pile.Count; i++)
+                {
+                    TabletopObjectId id = pile.GetObjectAt(i);
+                    bool chosen = false;
+                    foreach (TabletopObjectId c in guestPayment.SelectedCardIds) if (c == id) chosen = true;
+                    if (!chosen && catalog != null && host.matchState.Cards.TryGetValue(id, out CardInstanceState placed) && catalog.TryGetInput(placed.BaseState.DefinitionId, out ControllerInput input))
+                        foreach (TabletopObjectId c in new List<TabletopObjectId>(guestPayment.SelectedCardIds))
+                            if (!guestPayment.IsInserted(c) && host.matchState.Cards.TryGetValue(c, out CardInstanceState other) && catalog.TryGetInput(other.BaseState.DefinitionId, out ControllerInput wanted) && wanted == input)
+                            {
+                                if (guestPayment.ReplaceSelected(c, id) && guestPaymentOrigins.TryGetValue(c, out PrivateTransactionItem origin))
+                                {
+                                    guestPaymentOrigins.Remove(c);
+                                    guestPaymentOrigins[id] = new PrivateTransactionItem { Card = id, Container = origin.Container, Index = origin.Index, HasPose = origin.HasPose, Pose = origin.Pose, FaceUp = origin.FaceUp };
+                                }
+
+                                break;
+                            }
+
+                    guestPayment.RecordConsoleInsertion(me, me, slot, id, seat.SideSlots);
+                }
+            }
+
+            foreach (TabletopObjectId c in guestPayment.SelectedCardIds)
+            {
+                if (!guestPayment.IsInserted(c)) continue;
+                ContainerId at = host.matchState.Cards.TryGetValue(c, out CardInstanceState card) ? card.BaseState.ContainerId : ContainerId.Empty;
+                // Taken out of the payment slots again: no longer paid in (the slot it left is one of the seat's slots).
+                if (!seat.SideSlots.Contains(at) && seat.SideSlots.Count > 0) guestPayment.RecordConsoleRemoval(me, me, seat.SideSlots[0], c, seat.SideSlots);
+            }
+
+            RenderPrivateHud();
+        }
+
+        // Confirm Payment: one request; the host runs the game's purchase once (a second Confirm with the same request
+        // id is refused as Duplicate there).
+        private void GuestConfirmPayment()
+        {
+            if (!GuestPaymentActive || !guestPayment.IsPaymentComplete) { host.ShowMessage("Place the chosen cards in your Console first."); return; }
+            if (guestConfirmSent) { host.ShowMessage("The purchase is with the host already."); return; }
+            if (!Guid.TryParse(guestPayment.PurchasedCardDefinitionStableId, out Guid definition)) return;
+            PrivateTransaction tx = new PrivateTransaction { Kind = PrivateTransactionKind.ShopBuy, RequestId = Guid.NewGuid(), Revision = privateRevision, Definition = definition };
+            foreach (TabletopObjectId id in guestPayment.SelectedCardIds) tx.Items.Add(new PrivateTransactionItem { Card = id });
+            lastShopBuyBytes = PrivateTransactionCodec.Write(tx);
+            guestConfirmRequest = tx.RequestId;
+            guestConfirmSent = true;
+            SendPrivateRequest(lastShopBuyBytes, $"Confirm Payment: buy {GuestShopName(guestPayment.PurchasedCardDefinitionStableId)} with {tx.Items.Count} card(s) (table shows revision {privateRevision})");
+            RenderPrivateHud();
+        }
+
+        // Cancel Payment (also on End Turn and when the turn moves on): one request puts every staged card back where
+        // it was; the payment ends here at once.
+        private void GuestCancelPayment(string message)
+        {
+            if (!GuestPaymentActive) return;
+            PrivateTransaction tx = new PrivateTransaction { Kind = PrivateTransactionKind.PaymentRestore, RequestId = Guid.NewGuid(), Revision = privateRevision };
+            foreach (TabletopObjectId id in guestPayment.SelectedCardIds)
+            {
+                if (!guestPaymentOrigins.TryGetValue(id, out PrivateTransactionItem origin) || !host.matchState.Cards.TryGetValue(id, out CardInstanceState card)) continue;
+                bool back = origin.HasPose ? card.BaseState.ContainerId.IsEmpty : card.BaseState.ContainerId == origin.Container;
+                if (back && (card.Face == CardFace.FaceUp) == origin.FaceUp) continue;
+                tx.Items.Add(origin);
+            }
+
+            guestPayment.Clear();
+            guestPaymentOrigins.Clear();
+            guestConfirmSent = false;
+            if (ReferenceEquals(host.pendingControllerPurchaseState, guestPayment)) host.pendingControllerPurchaseState = null;
+            if (tx.Items.Count > 0)
+            {
+                guestCancelRequest = tx.RequestId;
+                SendPrivateRequest(PrivateTransactionCodec.Write(tx), $"Cancel Payment: {tx.Items.Count} staged card(s) back");
+            }
+
+            host.ShowMessage(tx.Items.Count > 0 ? $"{message} {tx.Items.Count} card(s) go back where they were." : message);
+            PrivateNote($"Payment ended here: {message} ({tx.Items.Count} card(s) to put back).");
+            RenderPrivateHud();
+        }
+
+        private void GuestTransactionVerdict(Guid id, PrivateRequestVerdict verdict, byte detail)
+        {
+            if (id == guestConfirmRequest && guestConfirmRequest != Guid.Empty)
+            {
+                if (verdict == PrivateRequestVerdict.Accepted)
+                {
+                    string name = GuestPaymentActive ? GuestShopName(guestPayment.PurchasedCardDefinitionStableId) : "the Ability";
+                    guestPayment?.Clear();
+                    guestPaymentOrigins.Clear();
+                    if (ReferenceEquals(host.pendingControllerPurchaseState, guestPayment)) host.pendingControllerPurchaseState = null;
+                    host.ShowMessage($"Bought {name} from the Shop.");
+                }
+                else
+                {
+                    guestConfirmSent = false; // the payment stays; fix it or cancel it
+                    string reason = verdict == PrivateRequestVerdict.RuleRefused ? TrapFloorCartridge.PurchaseErrorText((TrapFloorShopError)detail) : verdict.ToString();
+                    host.ShowMessage($"Could not buy it: {reason}");
+                }
+
+                RenderPrivateHud();
+                return;
+            }
+
+            if (id == guestCancelRequest && guestCancelRequest != Guid.Empty && verdict != PrivateRequestVerdict.Accepted)
+                host.ShowMessage($"The host could not put the staged cards back ({verdict}); they stay where they are.");
+        }
+
+        // ---------- PRIVACY-P6C dev controls (both sides): the game's own payment flow, driven from the panel ----------
+
+        internal void PrivateShopStage()
+        {
+            if (privateHosting) { HostShopStage(); return; }
+            if (privateShopDefinition == null) { PrivateNote("Shop: no Shop list here."); return; }
+            if (GuestPaymentActive) { PrivateNote("Shop: a payment is already staged."); return; }
+            if (privateHud == null || !privateHud.ShopOpen) { PrivateNote("Shop: the Shop is closed in the rules in play (as the Shop entry shows)."); return; }
+            if (!GuestShopBuyingTurn()) { PrivateNote("Shop: not this seat's turn (buying is on a player's own turn)."); return; }
+            ContainerState hand = GuestHand();
+            if (hand == null) return;
+            foreach (CardDefinitionData definition in TrapFloorShop.Catalog(privateShopDefinition))
+            {
+                if (!TrapFloorShop.IsForSale(definition)) continue;
+                ControllerInputCostEvaluation evaluation = new ControllerInputCostEvaluator().Evaluate(host.matchState, hand, definition.InputCost, privateShopDefinition);
+                if (!evaluation.CanPay) continue;
+                GuestBeginPayment(definition.StableId, evaluation.PaymentCardIds);
+                List<ContainerId> slots = FreeSideSlots(evaluation.PaymentCardIds.Count);
+                if (slots.Count < evaluation.PaymentCardIds.Count) { PrivateNote("Shop: not enough free payment slots in the Console."); return; }
+                for (int i = 0; i < evaluation.PaymentCardIds.Count; i++)
+                    SendPrivateRequest(PrivateRequestCodec.Place(new PrivatePlaceRequest { RequestId = Guid.NewGuid(), Card = evaluation.PaymentCardIds[i], Destination = slots[i] }), $"Stage payment card {i + 1}/{evaluation.PaymentCardIds.Count} into the Console");
+                return;
+            }
+
+            PrivateNote("Shop: this Hand cannot pay for any Ability.");
+        }
+
+        internal void PrivateShopConfirm()
+        {
+            if (privateHosting) { host.TrapFloorGame.ConfirmPendingActionAbilityPurchase(); return; }
+            GuestConfirmPayment();
+        }
+
+        internal void PrivateShopCancel()
+        {
+            if (privateHosting) { host.TrapFloorGame.CancelPendingActionAbilityPurchase(); return; }
+            GuestCancelPayment("Payment cancelled.");
+        }
+
+        internal void PrivateShopConfirmAgain()
+        {
+            if (lastShopBuyBytes == null) { PrivateNote("Bad Confirm again: no Confirm sent yet."); return; }
+            SendPrivateRequest(lastShopBuyBytes, "Confirm Payment AGAIN, same request id (expect Duplicate; nothing bought twice)");
+        }
+
+        // Pay with one card too few (or, with no payment staged, the first own Console card): expect RuleRefused (PaymentInvalid).
+        internal void PrivateShopUnderpay()
+        {
+            List<TabletopObjectId> cards = new List<TabletopObjectId>();
+            string definition = GuestPaymentActive ? guestPayment.PurchasedCardDefinitionStableId : FirstForSaleDefinition();
+            if (GuestPaymentActive) for (int i = 0; i < guestPayment.SelectedCardIds.Count - 1; i++) cards.Add(guestPayment.SelectedCardIds[i]);
+            if (cards.Count == 0) { TabletopObjectId first = FirstOwnConsoleCard(); if (!first.IsEmpty) cards.Add(PanelRef(first)); }
+            if (cards.Count == 0 || !Guid.TryParse(definition, out Guid id)) { PrivateNote("Bad underpay: no card in this Console to pay with."); return; }
+            PrivateTransaction tx = new PrivateTransaction { Kind = PrivateTransactionKind.ShopBuy, RequestId = Guid.NewGuid(), Revision = ShownRevision(), Definition = id };
+            foreach (TabletopObjectId card in cards) tx.Items.Add(new PrivateTransactionItem { Card = card });
+            SendPrivateRequest(PrivateTransactionCodec.Write(tx), $"Buy with {cards.Count} card(s), too few (expect RuleRefused: PaymentInvalid; nothing moves)");
+        }
+
+        // Pay with another seat's card (one in its Console, else a back in its Hand): expect InvalidSource.
+        internal void PrivateShopOthersCards()
+        {
+            TabletopObjectId card = OtherSeatConsoleCard();
+            if (card.IsEmpty) card = FirstCardInAnotherHand();
+            string definition = FirstForSaleDefinition();
+            if (card.IsEmpty || !Guid.TryParse(definition, out Guid id)) { PrivateNote("Bad pay with another seat's card: none found."); return; }
+            PrivateTransaction tx = new PrivateTransaction { Kind = PrivateTransactionKind.ShopBuy, RequestId = Guid.NewGuid(), Revision = ShownRevision(), Definition = id };
+            tx.Items.Add(new PrivateTransactionItem { Card = PanelRef(card) });
+            SendPrivateRequest(PrivateTransactionCodec.Write(tx), "Buy with ANOTHER seat's card (expect InvalidSource or HiddenRealId; nothing moves)");
+        }
+
+        private long ShownRevision() => privateHosting ? (privateHost?.Revision ?? 0) : privateRevision;
+
+        private string FirstForSaleDefinition()
+        {
+            GameDefinitionData game = privateHosting ? host.trapFloorTemplate?.GameDefinition : privateShopDefinition;
+            if (game == null) return string.Empty;
+            foreach (CardDefinitionData definition in TrapFloorShop.Catalog(game)) if (TrapFloorShop.IsForSale(definition)) return definition.StableId;
+            return string.Empty;
+        }
+
+        private TabletopObjectId OtherSeatConsoleCard()
+        {
+            RecipientSeatLayout own = OwnSeat();
+            RecipientPublicLayout layout = privateHosting ? privateHost?.Layout : host.privateViewLayout;
+            if (layout == null) return TabletopObjectId.Empty;
+            foreach (RecipientSeatLayout seat in layout.Seats)
+            {
+                if (own != null && seat.Seat == own.Seat) continue;
+                foreach (ContainerId slot in seat.SideSlots)
+                    if (host.matchState.Containers.TryGetValue(slot, out ContainerState pile) && pile.Count > 0) return pile.GetObjectAt(0);
+            }
+
+            return TabletopObjectId.Empty;
+        }
+
+        // The empty payment slots of this seat's Console, on its shown side first.
+        private List<ContainerId> FreeSideSlots(int wanted)
+        {
+            List<ContainerId> free = new List<ContainerId>();
+            RecipientSeatLayout seat = OwnSeat();
+            if (seat == null) return free;
+            foreach (ContainerId slot in seat.SideSlots)
+                if (free.Count < wanted && host.matchState.Containers.TryGetValue(slot, out ContainerState pile) && pile.Count == 0) free.Add(slot);
+            return free;
+        }
+
+        // The host player's own payment through the game's own Shop flow (TrapFloorCartridge): the purchase popup's
+        // choice, then the chosen cards dragged into the Console (each through the private pipeline), then Confirm.
+        private void HostShopStage()
+        {
+            TrapFloorCartridge game = host.TrapFloorGame;
+            if (!game.IsShopBuyingTurn()) { PrivateNote("Shop: not the host seat's turn."); return; }
+            if (!game.IsShopOpen()) { PrivateNote("Shop: the Shop is closed in the rules in play (as the Shop entry shows)."); return; }
+            RecipientSeatLayout seat = OwnSeat();
+            if (seat == null || !host.matchState.Containers.TryGetValue(seat.Hand, out ContainerState hand)) return;
+            foreach (ActionAbilityPurchaseOption option in game.BuildActionAbilityPurchaseOptions())
+            {
+                if (!option.ForSale || !option.CanAfford || !host.trapFloorTemplate.GameDefinition.TryGetCard(option.CardDefinitionStableId, out CardDefinitionData definition)) continue;
+                ControllerInputCostEvaluation evaluation = new ControllerInputCostEvaluator().Evaluate(host.matchState, hand, definition.InputCost, host.trapFloorTemplate.GameDefinition);
+                if (!evaluation.CanPay) continue;
+                List<ContainerId> slots = FreeSideSlots(evaluation.PaymentCardIds.Count);
+                if (slots.Count < evaluation.PaymentCardIds.Count) { PrivateNote("Shop: not enough free payment slots in the Console."); return; }
+                game.TryPurchaseActionAbilityFromPopup(option.CardDefinitionStableId);
+                game.ConfirmFocusedPurchasePayment(evaluation.PaymentCardIds);
+                PlayerId me = new PlayerId(HostMember().Player);
+                for (int i = 0; i < evaluation.PaymentCardIds.Count; i++)
+                {
+                    TabletopObjectId card = evaluation.PaymentCardIds[i];
+                    host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(TransferCardCommand.ToContainer(host.CreateCommandContext(me), card, seat.Hand, slots[i]));
+                    if (host.matchState.Cards.TryGetValue(card, out CardInstanceState state) && state.Face != CardFace.FaceUp)
+                        host.TableAuthority.Submit<FlipCardCommand, FlipCardResult>(new FlipCardCommand(host.CreateCommandContext(me), card, CardFace.FaceUp));
+                    // A drag into the Console tells the game through the table's drop handler; a transfer made here
+                    // does not, so the payment is told the same way a drop tells it (live run, 2026-11-07: the host's
+                    // staged cards were not counted and Confirm said "Place the chosen cards in your Console first").
+                    if (host.matchState.Cards.TryGetValue(card, out CardInstanceState placed) && placed.BaseState.ContainerId == slots[i])
+                        game.HandlePendingPurchaseConsoleInteraction(new ConsoleCards.Core.Events.ConsoleCardInserted(
+                            new ConsoleCards.Core.Events.DomainEventContext(host.matchState.Id, host.matchState.Revision),
+                            me, card, placed.BaseState.DefinitionId, me, slots[i]));
+                }
+
+                PrivateNote($"Host Shop: staged {evaluation.PaymentCardIds.Count} card(s) for {definition.DisplayName} through the game's own payment flow.");
+                return;
+            }
+
+            PrivateNote("Shop: the host seat's Hand cannot pay for any Ability.");
+        }
+
+        // PRIVACY-P6C dev control: the host's Assist level (Free → Reminders → Full), for the live Full-mode run.
+        internal void PrivateCycleAssist()
+        {
+            PlayAssist.Level = (PlayAssistLevel)(((int)PlayAssist.Level + 1) % 3);
+            PrivateNote($"Assist is now {PlayAssist.Name(PlayAssist.Level)} on this computer.");
         }
 
         /// <summary>PRIVACY-P6B: Undo this seat's own latest change (the host decides; nothing is taken back here).</summary>
@@ -1478,8 +2208,11 @@ namespace ConsoleCards.Presentation.Composition
             byte[] id = new byte[16];
             Array.Copy(bytes, 0, id, 0, 16);
             PrivateRequestVerdict verdict = (PrivateRequestVerdict)bytes[16];
-            PrivateNote($"Host's answer to request {new Guid(id).ToString().Substring(0, 8)}: {verdict}.");
+            byte detail = bytes.Length >= 18 ? bytes[17] : (byte)0;
+            Guid requestId = new Guid(id);
+            PrivateNote($"Host's answer to request {requestId.ToString().Substring(0, 8)}: {verdict}{(bytes.Length >= 18 && verdict == PrivateRequestVerdict.RuleRefused ? " (" + (TrapFloorShopError)detail + ")" : string.Empty)}.");
             host.ShowMessage($"Host: {verdict}.");
+            GuestTransactionVerdict(requestId, verdict, detail);
         }
 
         private void GuestTurn(byte[] bytes)
@@ -1656,6 +2389,8 @@ namespace ConsoleCards.Presentation.Composition
         {
             PrivateTurnSnapshot turn = privateHosting ? CurrentTurnSnapshot() : privateTurn;
             if (!InPrivateSession || turn == null) { PrivateNote("End Turn: no turn known here yet."); return; }
+            // PRIVACY-P6C: an unfinished payment ends with the turn (its staged cards go back first, as in normal play).
+            if (GuestPaymentActive && !staleRound) GuestCancelPayment("Turn ended: the unfinished payment was cancelled.");
             byte[] bytes = PrivateRequestCodec.EndTurn(new PrivateEndTurnRequest
             {
                 RequestId = Guid.NewGuid(),
@@ -1850,6 +2585,14 @@ namespace ConsoleCards.Presentation.Composition
             {
                 // PRIVACY-P6A: the host's own panel goes through the same pipeline as a guest's request.
                 PrivateNote($"Host's own {what} (request {lastRequestId.ToString().Substring(0, 8)}).");
+                if (PrivateTransactionCodec.IsTransaction(request, 0))
+                {
+                    Member self = HostMember();
+                    PrivateRequestVerdict tv = self != null && PrivateTransactionCodec.TryRead(request, 0, out PrivateTransaction tx) ? RunPrivateTransaction(self, tx, null, out _, out _) : PrivateRequestVerdict.UnknownReference;
+                    if (tv != PrivateRequestVerdict.Accepted) host.ShowMessage($"Private session: {what} refused ({tv}).");
+                    return;
+                }
+
                 if (PrivateOperationCodec.IsOperation(request, 0))
                 {
                     Member me = HostMember();
@@ -1978,6 +2721,9 @@ namespace ConsoleCards.Presentation.Composition
         internal bool TryRunHostOwnPrivateEndTurn(TrapFloorEndTurnRequest request) => false;
         internal void PrivateUndo() { }
         internal void ShowPrivateGuestHud() { }
+        internal void BeginPrivateTransaction() { }
+        internal void RefreshPrivateGuestShopEntry() { }
+        internal void EndPrivateTransaction(string what) { }
         private bool MayUndoOnPrivateHost(ActiveSessionUndoTransaction transaction, bool redo) => true;
         private int legacyRefused;
         private void PrivateNote(string line) { }
@@ -2011,7 +2757,6 @@ namespace ConsoleCards.Presentation.Composition
 
         private readonly OnlinePlayPresenter online;
         private readonly Dictionary<Type, int> refused = new Dictionary<Type, int>();
-        private readonly Dictionary<Type, object> notRun = new Dictionary<Type, object>();
         internal bool PassThrough;
 
         internal PrivateHostInterceptor(OnlinePlayPresenter online) => this.online = online;
@@ -2036,17 +2781,8 @@ namespace ConsoleCards.Presentation.Composition
             int seen = refused.TryGetValue(typeof(TCommand), out int count) ? count : 0;
             refused[typeof(TCommand)] = seen + 1;
             if (seen == 0) Debug.LogWarning($"[PrivateSession] Refused the host's own {typeof(TCommand).Name}: no private request for it yet; it is not run on the host's table alone.");
-            if (!typeof(TResult).IsValueType)
-            {
-                if (!notRun.TryGetValue(typeof(TResult), out object empty))
-                {
-                    empty = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(TResult));
-                    notRun.Add(typeof(TResult), empty);
-                }
-
-                result = (TResult)empty;
-            }
-
+            // PRIVACY-P6C: a refused command reports a refusal (a default result reads as Accepted).
+            result = RefusedResults.Of<TResult>();
             return true;
         }
     }
@@ -2146,13 +2882,25 @@ namespace ConsoleCards.Presentation.Composition
             if (GUILayout.Button("Bad: stale Undo")) Online.PrivateUndoStale();
             if (GUILayout.Button("Bad: other's deck")) Online.PrivateShuffle(true);
             GUILayout.EndHorizontal();
+            // PRIVACY-P6C: the Shop and Payment (the game's own flow) and its bad requests.
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Shop: stage")) Online.PrivateShopStage();
+            if (GUILayout.Button("Confirm Payment")) Online.PrivateShopConfirm();
+            if (GUILayout.Button("Cancel Payment")) Online.PrivateShopCancel();
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Bad: Confirm again")) Online.PrivateShopConfirmAgain();
+            if (GUILayout.Button("Bad: underpay")) Online.PrivateShopUnderpay();
+            if (GUILayout.Button("Bad: pay w/ other's")) Online.PrivateShopOthersCards();
+            if (Online.IsPrivateHost && GUILayout.Button("Assist: " + PlayAssist.Name(PlayAssist.Level))) Online.PrivateCycleAssist();
+            GUILayout.EndHorizontal();
         }
 
         private void OnGUI()
         {
             if (Online == null || !PrivateDevSession.Enabled) return;
             const float width = 560f;
-            GUILayout.BeginArea(new Rect(Screen.width - width - 12f, 12f, width, folded ? 80f : 560f), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(Screen.width - width - 12f, 12f, width, folded ? 80f : 620f), GUI.skin.box);
             GUILayout.BeginHorizontal();
             GUILayout.Label("PRIVATE DEV SESSION · development only · not normal online play");
             if (GUILayout.Button(folded ? "Show" : "Hide", GUILayout.Width(60f))) folded = !folded;

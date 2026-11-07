@@ -358,10 +358,34 @@ namespace ConsoleCards.Presentation.Composition
                 selectionState.ClearAll();
                 inputFrameCoordinator.ClearSelectionPresenter();
                 Dictionary<TabletopObjectId, string> kept = new Dictionary<TabletopObjectId, string>();
+                // PRIVACY-P6C: a card back that is withdrawn (a shuffle renews every handle of the deck) gives its view to
+                // a new back: the same plain back, rebound to the new reference (its old reference, state, name and
+                // selection are dropped first), instead of destroying and making the whole deck again.
+                Dictionary<TabletopObjectId, RuntimeCardInstance> instanceById = new Dictionary<TabletopObjectId, RuntimeCardInstance>();
+                for (int i = 0; i < Registry.runtimeCardInstances.Count; i++)
+                {
+                    RuntimeCardInstance instance = Registry.runtimeCardInstances[i];
+                    if (instance.View != null && instance.View.IsBound) instanceById[instance.View.ObjectId] = instance;
+                }
+
+                // Kept per pile: a back is reused only by a new back in the SAME pile (a shuffle renews a deck in place).
+                // A back that changes pile (a draw into another seat's hand) is made again the usual way (live run,
+                // 2026-11-07: rebinding a deck back into a hidden hand threw; three new views there cost little).
+                Dictionary<ContainerId, Stack<RuntimeCardInstance>> reusableBacks = new Dictionary<ContainerId, Stack<RuntimeCardInstance>>();
                 foreach (TabletopObjectId id in summary.Released)
                 {
                     if (labelsByCardId.TryGetValue(id, out string label)) kept[id] = label;
-                    if (HasRuntimeCardInstance(id)) ReleaseRuntimeCardInstance(id);
+                    if (instanceById.TryGetValue(id, out RuntimeCardInstance released))
+                    {
+                        if (IsReusablePlainBack(released))
+                        {
+                            ContainerId pile = released.View.CardState.BaseState.ContainerId;
+                            if (!reusableBacks.TryGetValue(pile, out Stack<RuntimeCardInstance> inPile)) reusableBacks[pile] = inPile = new Stack<RuntimeCardInstance>();
+                            inPile.Push(released);
+                        }
+                        else ReleaseRuntimeCardInstance(id);
+                    }
+
                     labelsByCardId.Remove(id);
                 }
 
@@ -371,10 +395,25 @@ namespace ConsoleCards.Presentation.Composition
                     if (HasRuntimeCardInstance(id)) ReleaseRuntimeCardInstance(id);
                     bool identified = !card.BaseState.DefinitionId.Equals(RecipientSnapshotProjection.HiddenDefinition);
                     if (identified && kept.TryGetValue(id, out string label)) labelsByCardId[id] = label; // a back keeps no name
+                    if (!identified && !card.BaseState.ContainerId.IsEmpty && !ActiveCartridge.IsBoardTile(id)
+                        && reusableBacks.TryGetValue(card.BaseState.ContainerId, out Stack<RuntimeCardInstance> samePile) && samePile.Count > 0)
+                    {
+                        RebindPlainBack(samePile.Pop(), card);
+                        privateViewsReused++;
+                        continue;
+                    }
+
                     CardView view = Spawner.CreateCardView(card, ResolveCardLabel(card), out var selectionVisual);
                     Registry.cardViews.Add(view);
                     Registry.cardSelectionVisuals.Add(selectionVisual);
                 }
+
+                foreach (Stack<RuntimeCardInstance> pileLeft in reusableBacks.Values)
+                    while (pileLeft.Count > 0)
+                    {
+                        RuntimeCardInstance left = pileLeft.Pop();
+                        if (left.View != null && left.View.IsBound) ReleaseRuntimeCardInstance(left.View.ObjectId);
+                    }
 
                 RefreshContainerCardViewSources();
                 for (int i = 0; i < Registry.hiddenHandViews.Count; i++)
@@ -397,16 +436,65 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            int bound = 0;
+            int bound = 0, stale = 0;
+            HashSet<TabletopObjectId> withdrawn = new HashSet<TabletopObjectId>(summary.Released);
             for (int i = 0; i < Registry.cardViews.Count; i++)
-                if (Registry.cardViews[i] != null && Registry.cardViews[i].IsBound) bound++;
-            if (bound != matchState.Cards.Count)
             {
-                error = $"card views {bound} for {matchState.Cards.Count} cards";
+                CardView view = Registry.cardViews[i];
+                if (view == null || !view.IsBound) continue;
+                bound++;
+                // PRIVACY-P6C: no view may still answer to a withdrawn reference, or hold a card this table no longer has.
+                if (!matchState.Cards.ContainsKey(view.ObjectId) || (withdrawn.Contains(view.ObjectId) && view.CardState != null
+                        && !ReferenceEquals(matchState.Cards[view.ObjectId], view.CardState))) stale++;
+            }
+
+            if (bound != matchState.Cards.Count || stale > 0)
+            {
+                error = $"card views {bound} for {matchState.Cards.Count} cards, {stale} bound to a withdrawn or replaced card";
                 return false;
             }
 
             return true;
+        }
+
+        /// <summary>PRIVACY-P6C: views kept for a new back instead of being made again (a shuffle's whole deck), this session.</summary>
+        internal int privateViewsReused;
+
+        // A view showing a plain card back in a pile: its card carries the hidden definition (no name, no art, no face).
+        // Only a whole view is reused: its root, its visual references and (when it has one) a live highlight. A part
+        // already destroyed reads as null in a player build (live run, 2026-11-07: a NullReferenceException in the
+        // rebind on the second reused back); such a view is released and made again the usual way instead.
+        private bool IsReusablePlainBack(RuntimeCardInstance instance)
+        {
+            CardView view = instance?.View;
+            if (view == null || instance.Root == null || instance.VisualReferences == null) return false;
+            TabletopSelectionVisual selection = instance.SelectionVisual;
+            if (!ReferenceEquals(selection, null) && (selection == null || !selection.IsConfigured || selection.HighlightRoot == null)) return false;
+            return view.IsBound && view.CardState != null
+                && view.CardState.BaseState.DefinitionId.Equals(RecipientSnapshotProjection.HiddenDefinition)
+                && !view.CardState.BaseState.ContainerId.IsEmpty
+                && !ActiveCartridge.IsBoardTile(view.ObjectId);
+        }
+
+        // The view takes the new back: unbound from the old reference first (state and face hold dropped), its look set
+        // again from the new card (a plain back), its selection cleared and its name the new card's.
+        private void RebindPlainBack(RuntimeCardInstance instance, CardInstanceState card)
+        {
+            CardView view = instance.View;
+            // The selection visual stays configured (it belongs to this same view): Clear() would unconfigure it and the
+            // selection presenter then throws on it (live run, 2026-11-07: "TabletopSelectionVisual is not configured"
+            // on the first reused back, and the fallback rebuild failed on the same visual). Only the highlight goes off.
+            if (instance.SelectionVisual != null && instance.SelectionVisual.IsConfigured && instance.SelectionVisual.HighlightRoot != null)
+            {
+                instance.SelectionVisual.SetSelected(false);
+                ApplySelectionHighlightHide(instance.SelectionVisual);
+            }
+            presentationTransitions?.Forget(view.transform);
+            view.Unbind();
+            string label = ResolveCardLabel(card);
+            Spawner.ConfigureCardVisuals(instance.VisualReferences, card, label);
+            view.Bind(card, coordinateConverter);
+            instance.Root.name = $"Card {label}";
         }
 
         private bool HasRuntimeCardInstance(TabletopObjectId id)

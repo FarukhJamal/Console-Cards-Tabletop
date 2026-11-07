@@ -60,6 +60,8 @@ namespace ConsoleCards.GameTemplates.Privacy
         public List<PrivateHudPlayer> Players = new List<PrivateHudPlayer>();
         public bool HasCard;
         public string CardTitle, CardAvatar, CardKeys, CardStatus, CardInHand, CardFloor;
+        /// <summary>PRIVACY-P6C: the Shop is open in the rules in play (public).</summary>
+        public bool ShopOpen;
 
         /// <summary>For "did it change": every field in order.</summary>
         public string Signature()
@@ -67,7 +69,7 @@ namespace ConsoleCards.GameTemplates.Privacy
             System.Text.StringBuilder b = new System.Text.StringBuilder();
             b.Append(Round).Append('|').Append(Phase).Append('|').Append(HasTurnColor).Append(TurnR).Append(TurnG).Append(TurnB);
             foreach (PrivateHudPlayer p in Players) b.Append('|').Append(p.Name).Append(p.R).Append(p.G).Append(p.B).Append(p.A).Append(p.Active);
-            b.Append('|').Append(HasCard).Append(CardTitle).Append(CardAvatar).Append(CardKeys).Append(CardStatus).Append(CardInHand).Append(CardFloor);
+            b.Append('|').Append(HasCard).Append(CardTitle).Append(CardAvatar).Append(CardKeys).Append(CardStatus).Append(CardInHand).Append(CardFloor).Append('|').Append(ShopOpen);
             return b.ToString();
         }
     }

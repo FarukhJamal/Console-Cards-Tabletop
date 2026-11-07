@@ -23,6 +23,8 @@ namespace ConsoleCards.GameTemplates.Privacy
         public ContainerId Hand;
         public ContainerId ControllerDeck;
         public ContainerId ActionArea;
+        /// <summary>PRIVACY-P6C: the seat's Console slots that take payment cards (every slot but Main; public).</summary>
+        public List<ContainerId> SideSlots = new List<ContainerId>();
         /// <summary>The seat's pawn (pawns are public pieces), or empty.</summary>
         public TabletopObjectId Pawn;
     }
