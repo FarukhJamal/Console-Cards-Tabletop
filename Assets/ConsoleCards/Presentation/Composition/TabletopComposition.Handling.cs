@@ -66,6 +66,9 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (matchState == null || !matchState.Containers.TryGetValue(pileId, out ContainerState pile) || pile.Count == 0) return;
             if (handView == null || !handView.IsBound) return;
+            // P8A (owner, 2026-11-08): in Full, Abilities are bought (Draw 3 Abilities), so the Ability deck has no Search.
+            if (ActiveCartridge is TrapFloorCartridge && trapFloorTemplate != null && pileId == trapFloorTemplate.AbilityDeckId
+                && ConsoleCards.Presentation.UI.PlayAssist.Level == ConsoleCards.Presentation.UI.PlayAssistLevel.Full) return;
             actions.Add(new PopupActionOption("Search", true, () =>
             {
                 ContextMenus.CloseContextMenu();

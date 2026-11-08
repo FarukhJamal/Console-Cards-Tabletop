@@ -123,8 +123,10 @@ namespace ConsoleCards.Presentation.Composition
         private const byte MsgPrivatePromptAnswer = 52; // P7 guest → host: the button that player pressed
         private const byte MsgPrivateSelection = 53;    // P7 (s155) host → guest: one of the game's card choices for this computer's player
         private const byte MsgPrivateSelectionAnswer = 54; // P7 guest → host: the cards that player picked, or none (closed)
+        private const byte MsgPrivateAbilityDraw = 55;  // P8A guest → host: "Draw 3 Abilities" on this player's turn
+        private const byte MsgPrivateAbilityOffer = 56; // P8A host → guest: the Abilities drawn (game definitions; public once drawn)
 
-        private static bool IsPrivateMessage(byte type) => type >= MsgPrivatePackage && type <= MsgPrivateSelectionAnswer;
+        private static bool IsPrivateMessage(byte type) => type >= MsgPrivatePackage && type <= MsgPrivateAbilityOffer;
 
         // Normal-play table messages: never used, and refused, in a private session.
         private static bool IsLegacyTableMessage(byte type) =>
@@ -695,6 +697,9 @@ namespace ConsoleCards.Presentation.Composition
                     break;
                 case MsgPrivateRuleBallot:
                     HostRuleBallot(member, data);
+                    break;
+                case MsgPrivateAbilityDraw:
+                    HostAbilityDraw(member);
                     break;
                 case MsgPrivatePromptAnswer:
                     HostPromptAnswer(member, data);
@@ -1361,9 +1366,13 @@ namespace ConsoleCards.Presentation.Composition
             PrivateRequestVerdict verdict = PrivateTransactionPolicy.Check(host.matchState, new RoomSeats(this), privateHost, sender, tx, out PrivateResolvedTransaction resolved);
             CardDefinitionData bought = null;
             string why = verdict.ToString();
+            // P8A: a card of this turn's Ability draw is bought out of the deck, whether or not the Shop rule is on.
+            TabletopObjectId offerCard = tx.Kind == PrivateTransactionKind.ShopBuy
+                ? host.TrapFloorGame.PeekAbilityOfferCard(sender, tx.Definition.ToString())
+                : TabletopObjectId.Empty;
             if (verdict == PrivateRequestVerdict.Accepted && tx.Kind == PrivateTransactionKind.ShopBuy)
             {
-                if (!host.TrapFloorGame.IsShopOpen()) { verdict = PrivateRequestVerdict.RuleRefused; why = "the Shop is closed in the rules in play"; }
+                if (offerCard.IsEmpty && !host.TrapFloorGame.IsShopOpen()) { verdict = PrivateRequestVerdict.RuleRefused; why = "the Shop is closed in the rules in play"; }
                 else if (!TryFindShopCard(tx.Definition, out bought)) { verdict = PrivateRequestVerdict.UnknownReference; why = "no such Ability in the Shop"; }
             }
 
@@ -1395,7 +1404,7 @@ namespace ConsoleCards.Presentation.Composition
                     else
                     {
                         TrapFloorBuyFromShopResult result = host.TableAuthority.Submit<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(
-                            new TrapFloorBuyFromShopCommand(Ctx(sender), bought.StableId, TabletopObjectId.New(), resolved.RealCards));
+                            new TrapFloorBuyFromShopCommand(Ctx(sender), bought.StableId, TabletopObjectId.New(), resolved.RealCards, offerCard));
                         done = result.Succeeded;
                         shopError = result.Error;
                     }
@@ -1849,6 +1858,9 @@ namespace ConsoleCards.Presentation.Composition
                     break;
                 case MsgPrivateShop:
                     GuestShopCatalog(payload);
+                    break;
+                case MsgPrivateAbilityOffer:
+                    GuestAbilityOffer(payload);
                     break;
                 case MsgPrivateRuleVote:
                     GuestRuleVote(payload);
@@ -2772,6 +2784,9 @@ namespace ConsoleCards.Presentation.Composition
                     actions.Add(new PopupActionOption("Cancel Payment", true, () => GuestCancelPayment("Payment cancelled.")));
                 }
 
+                // P8A: this turn's draw of 3 Abilities (the host draws them; buying is the Shop's own payment here).
+                if (mine && !GuestPaymentActive && privateTurn.Phase == (int)TrapFloorTurnPhase.PlayerTurn)
+                    actions.Add(new PopupActionOption("Draw 3 Abilities", true, GuestRequestAbilityDraw));
                 actions.Add(new PopupActionOption(privateTurn != null && privateTurn.Phase == (int)TrapFloorTurnPhase.FloorTurn ? "End Floor Turn" : "End Turn", mine, () => PrivateEndTurn()));
                 actions.Add(new PopupActionOption("Undo my last", true, PrivateUndo));
                 host.runtimeUi.ShowTrapFloorStatus(status, new FloorfallStatusModel(false, string.Empty, string.Empty, string.Empty), actions);
@@ -2888,6 +2903,48 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             return options;
+        }
+
+        // ---------- P8A: Draw 3 Abilities for a guest ----------
+
+        private void GuestRequestAbilityDraw()
+        {
+            if (GuestPaymentActive) { host.ShowMessage("Finish or cancel the current payment first."); return; }
+            BeginMessage(MsgPrivateAbilityDraw);
+            SendToHost();
+            PrivateNote("Asked the host for this turn's draw of 3 Abilities.");
+        }
+
+        // Host: the turn player on another computer asks for this turn's draw; the host draws (or reopens) it and sends
+        // which Abilities lie there. Only in Full; in Free and Reminders players draw by hand.
+        private void HostAbilityDraw(Member member)
+        {
+            PlayerId sender = member.Player == Guid.Empty ? PlayerId.Empty : new PlayerId(member.Player);
+            List<string> drawn = new List<string>();
+            bool ok = PlayAssist.Level == PlayAssistLevel.Full && host.TrapFloorGame.TryPrepareAbilityOfferFor(sender, out drawn);
+            byte[] payload = System.Text.Encoding.UTF8.GetBytes(ok ? string.Join("\n", drawn) : string.Empty);
+            SendPrivateBytes(member, MsgPrivateAbilityOffer, payload);
+            PrivateNote(ok ? $"{member.Name}: this turn's Ability draw sent ({drawn.Count})." : $"{member.Name}: no Ability draw now (not their turn, a payment open, not Full, or the deck is empty).");
+        }
+
+        private void GuestAbilityOffer(byte[] bytes)
+        {
+            string text = bytes == null ? string.Empty : System.Text.Encoding.UTF8.GetString(bytes);
+            if (text.Length == 0 || privateShopDefinition == null)
+            {
+                host.ShowMessage("No Ability draw now: it is on your own turn in Full, with no payment open.");
+                return;
+            }
+
+            HashSet<string> drawn = new HashSet<string>(text.Split('\n'), StringComparer.Ordinal);
+            List<ActionAbilityPurchaseOption> options = new List<ActionAbilityPurchaseOption>();
+            foreach (ActionAbilityPurchaseOption option in BuildGuestShopOptions())
+            {
+                if (drawn.Contains(option.CardDefinitionStableId)) options.Add(option);
+            }
+
+            host.runtimeUi.ShowActionAbilityPurchase(options, GuestPickShopItem, host.runtimeUi.CloseActionAbilityPurchase,
+                "Pick one to buy. What you do not buy goes back; the deck is shuffled when your turn ends.", "ABILITY DRAW", "DRAWN");
         }
 
         private void GuestPickShopItem(string stableId)

@@ -465,6 +465,53 @@ namespace ConsoleCards.Presentation.Composition
             return count;
         }
 
+        // P8A (owner, 2026-11-08): the same draw of 3 for a player on another computer (a private guest). Fills this
+        // turn's offer from the top of the Ability deck as OpenAbilityOffer does and names what was drawn (for sale only).
+        internal bool TryPrepareAbilityOfferFor(PlayerId player, out List<string> drawnStableIds)
+        {
+            drawnStableIds = new List<string>(AbilityOfferSize);
+            if (player.IsEmpty || host.trapFloorTurnState == null || host.trapFloorTurnState.IsCurrentFloorFailed
+                || host.trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn
+                || host.trapFloorTurnState.ActivePlayerId != player
+                || IsPaymentBlocking()
+                || !TryGetAbilityDeck(out ContainerState deck))
+            {
+                return false;
+            }
+
+            if (!IsAbilityOfferTurn())
+            {
+                if (deck.Count < AbilityOfferSize && AbilityDiscardCount() > 0) RefillAbilityDeckFromDiscard(deck);
+                abilityOffer.Clear();
+                for (int i = deck.Count - 1; i >= 0 && abilityOffer.Count < AbilityOfferSize; i--) abilityOffer.Add(deck.GetObjectAt(i));
+                abilityOfferTurnState = host.trapFloorTurnState;
+                abilityOfferRound = host.trapFloorTurnState.CurrentRound;
+                abilityOfferPlayer = host.trapFloorTurnState.ActivePlayerId;
+            }
+
+            for (int i = 0; i < abilityOffer.Count; i++)
+            {
+                if (deck.Contains(abilityOffer[i]) && TryGetDeckCardDefinition(abilityOffer[i], out CardDefinitionData definition))
+                    drawnStableIds.Add(definition.StableId);
+            }
+
+            return drawnStableIds.Count > 0;
+        }
+
+        // A card of this turn's draw (still in the Ability deck) that the turn player buys: its id, else empty.
+        internal TabletopObjectId PeekAbilityOfferCard(PlayerId player, string cardDefinitionStableId)
+        {
+            if (player.IsEmpty || !IsAbilityOfferTurn() || abilityOfferPlayer != player || !TryGetAbilityDeck(out ContainerState deck)) return TabletopObjectId.Empty;
+            for (int i = 0; i < abilityOffer.Count; i++)
+            {
+                if (deck.Contains(abilityOffer[i]) && TryGetDeckCardDefinition(abilityOffer[i], out CardDefinitionData definition)
+                    && string.Equals(definition.StableId, cardDefinitionStableId, StringComparison.Ordinal))
+                    return abilityOffer[i];
+            }
+
+            return TabletopObjectId.Empty;
+        }
+
         internal void OpenAbilityOffer()
         {
             host.ContextMenus.CloseContextMenu();
