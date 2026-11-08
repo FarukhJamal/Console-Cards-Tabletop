@@ -44,13 +44,14 @@ namespace ConsoleCards.Tests
         }
 
         /// <summary>Same seed, same IDs: two calls build two identical tables (as two computers replaying one game).</summary>
-        public static TrapFloorTestTable Create(int playerCount = 2, int seed = 11, GameDefinitionData game = null)
+        public static TrapFloorTestTable Create(
+            int playerCount = 2, int seed = 11, GameDefinitionData game = null, int floorIndex = 0, TrapFloorFloorRecipe recipe = null)
         {
             TrapFloorTestTable table = new TrapFloorTestTable();
             table.Game = game ?? LoadGame();
             table.Template = TrapFloorTemplateFactory.CreateStandardFourPlayer(
-                new SystemRandomValueSource(seed), table.Game, table.Game.Modes[0].StableId, null, 0, null, playerCount, null, null,
-                new TrapFloorFloorRecipe(3, 3, true, 1));
+                new SystemRandomValueSource(seed), table.Game, table.Game.Modes[0].StableId, null, floorIndex, null, playerCount, null, null,
+                recipe ?? new TrapFloorFloorRecipe(3, 3, true, 1));
             table.Players = new PlayerId[playerCount];
             for (int i = 0; i < playerCount; i++)
                 table.Players[i] = new PlayerId(new Guid(0x0C0FFEE0 + i, 0, 0, new byte[] { 1, 2, 3, 4, 5, 6, 7, (byte)i }));

@@ -168,7 +168,9 @@ namespace ConsoleCards.Presentation.Composition
                 trapFloorCollapseState,
                 trapFloorActivityFeed)
             {
-                ProtectsGrandExit = TrapFloorGame.WinMode == TrapFloorWinMode.Survival,
+                // Owner, 2026-11-08 (P7): every floor's Grand Exit is protected from Floorfall in every mode (it was
+                // Survival only). A roll on it is thrown again, as a roll on a hole is; the Secret Exit is not protected.
+                ProtectsGrandExit = true,
                 // AUTH-3: a collapse begins only in a floor turn of a floor still in play.
                 MayBeginCollapse = () => trapFloorTurnState != null
                     && !trapFloorTurnState.IsCurrentFloorFailed

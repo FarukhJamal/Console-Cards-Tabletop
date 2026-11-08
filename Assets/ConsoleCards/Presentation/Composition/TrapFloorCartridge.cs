@@ -1246,7 +1246,10 @@ namespace ConsoleCards.Presentation.Composition
                     ? $"Floorfall rolled {result.Roll.XAxisResult}/{result.Roll.YAxisResult}: beyond the "
                         + $"{host.trapFloorTemplate.GridColumns}×{host.trapFloorTemplate.GridRows} floor: roll "
                         + (rerollX && rerollY ? "both dice" : rerollX ? "the column die" : "the row die") + " again."
-                    : $"Floor {result.Roll.Coordinate} is already collapsed: roll both floor dice again.",
+                    : host.trapFloorCollapseState != null && host.trapFloorCollapseState.IsCollapsed(result.Roll.FloorCardId)
+                        ? $"Floor {result.Roll.Coordinate} is already collapsed: roll both floor dice again."
+                        // Owner, 2026-11-08: the Grand Exit never collapses. The line does not name the tile.
+                        : $"Floor {result.Roll.Coordinate} cannot collapse: roll both floor dice again.",
                     FeedbackSeverity.Warning);
                 AskForFloorDiceRoll(rerollX, rerollY); // DICE-1: the player rolls again
 
