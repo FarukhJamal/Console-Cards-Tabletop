@@ -5257,12 +5257,12 @@ namespace ConsoleCards.Presentation.Composition
                     ? PlayerSeatColor(turnSeatIndex)
                     : (Color?)null;
                 // V5 (owner, 2026-10-24: follow the Figma): "RED'S TURN - 2 MOVES"; the effects are on the player card.
-                string phase = host.trapFloorTurnState.IsCurrentFloorFailed
+                string phase = EndedFloorPhaseText() ?? (host.trapFloorTurnState.IsCurrentFloorFailed
                     ? "ALL PLAYERS ELIMINATED"
                     : host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
                         ? $"{(turnColor.HasValue ? PlayerColorName(turnSeatIndex) : FormatPlayerName(turnPlayerId).ToUpperInvariant())}'S TURN"
                             + TurnMovesText()
-                        : "FLOOR TURN";
+                        : "FLOOR TURN");
                 string turnDetail = CurrentTrapFloorCollapseStatusText();
                 if (!host.trapFloorTurnState.IsCurrentFloorFailed
                     && host.trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
@@ -5345,15 +5345,25 @@ namespace ConsoleCards.Presentation.Composition
                     ? host.trapFloorTurnState.ActivePlayerId
                     : host.trapFloorTurnState.FloorOperatorPlayerId;
             turnColor = host.TryGetSeatIndex(turnPlayerId, out int turnSeatIndex) ? PlayerSeatColor(turnSeatIndex) : (Color?)null;
-            phase = host.trapFloorTurnState.IsCurrentFloorFailed
+            phase = EndedFloorPhaseText() ?? (host.trapFloorTurnState.IsCurrentFloorFailed
                 ? "ALL PLAYERS ELIMINATED"
                 : host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
                     ? $"{(turnColor.HasValue ? PlayerColorName(turnSeatIndex) : FormatPlayerName(turnPlayerId).ToUpperInvariant())}'S TURN" + TurnMovesText()
-                    : "FLOOR TURN";
+                    : "FLOOR TURN");
             round = $"ROUND {host.trapFloorTurnState.CurrentRound}";
             players = BuildHudPlayers(turnPlayerId);
             card = BuildPlayerCard(turnPlayerId);
             return true;
+        }
+
+        // P7 (s159, three-process run): once the floor is won the strip said the last turn player's turn ("GREEN'S TURN
+        // - 2 MOVES") on the host and, through the public HUD, on every joined computer, so no screen but the host's
+        // own banner named the result. The result is public; the strip now says it (null: the floor is still played).
+        internal string EndedFloorPhaseText()
+        {
+            if (host.trapFloorObjectiveState == null || !host.trapFloorObjectiveState.IsWon) return null;
+            bool lastFloor = host.trapFloorTemplate != null && host.trapFloorTemplate.FloorIndex + 1 >= host.trapFloorTemplate.FloorCount;
+            return lastFloor ? "GAME WON" : "FLOOR WON";
         }
 
         // V5: " - 2 MOVES" after the turn player's name (nothing outside a player turn).

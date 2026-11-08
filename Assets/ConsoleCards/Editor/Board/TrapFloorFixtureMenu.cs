@@ -37,6 +37,31 @@ namespace ConsoleCards.Editor.Board
             Debug.Log(TrapFloorDevFixtures.DescribeFloor(table));
         }
 
+        // P7 (s159) scenario seam: setup only; the step onto the target is made through the production request path.
+        private const string Stage = "Console Cards/Debug/Scenarios/";
+
+        private static void StageNextTo(string target) =>
+            Debug.Log(TrapFloorDevFixtures.StageActivePawnNextTo(Object.FindFirstObjectByType<TabletopComposition>(), target));
+
+        [MenuItem(Stage + "Stage turn pawn next to: Key")] private static void NextToKey() => StageNextTo("Key");
+        [MenuItem(Stage + "Stage turn pawn next to: Grand Exit")] private static void NextToGrand() => StageNextTo("Grand Exit");
+        [MenuItem(Stage + "Stage turn pawn next to: Secret Exit")] private static void NextToSecret() => StageNextTo("Secret Exit");
+        [MenuItem(Stage + "Stage turn pawn next to: Fall Trap")] private static void NextToFall() => StageNextTo("Fall Trap");
+        [MenuItem(Stage + "Stage turn pawn next to: Slow Trap")] private static void NextToSlow() => StageNextTo("Slow Trap");
+        [MenuItem(Stage + "Stage turn pawn next to: Spring Trap")] private static void NextToSpring() => StageNextTo("Spring Trap");
+        [MenuItem(Stage + "Stage turn pawn next to: Crane Trap")] private static void NextToCrane() => StageNextTo("Crane Trap");
+        [MenuItem(Stage + "Stage turn pawn next to: Blind Trap")] private static void NextToBlind() => StageNextTo("Blind Trap");
+        [MenuItem(Stage + "Stage turn pawn next to: Sticky Trap")] private static void NextToSticky() => StageNextTo("Sticky Trap");
+
+        [MenuItem(Stage + "Report state")]
+        private static void Report() => Debug.Log(TrapFloorDevFixtures.Report(Object.FindFirstObjectByType<TabletopComposition>()));
+
+        [MenuItem(Stage + "Stage turn pawn next to: Key", true)] private static bool C1() => UnityEngine.Application.isPlaying;
+        [MenuItem(Stage + "Stage turn pawn next to: Grand Exit", true)] private static bool C2() => UnityEngine.Application.isPlaying;
+        [MenuItem(Stage + "Stage turn pawn next to: Secret Exit", true)] private static bool C3() => UnityEngine.Application.isPlaying;
+        [MenuItem(Stage + "Stage turn pawn next to: Fall Trap", true)] private static bool C4() => UnityEngine.Application.isPlaying;
+        [MenuItem(Stage + "Report state", true)] private static bool C5() => UnityEngine.Application.isPlaying;
+
         [MenuItem(Root + "Describe Floor (Play mode)", true)]
         private static bool CanDescribe() => UnityEngine.Application.isPlaying;
     }

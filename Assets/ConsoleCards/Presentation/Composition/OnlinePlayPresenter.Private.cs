@@ -173,6 +173,21 @@ namespace ConsoleCards.Presentation.Composition
 
         internal IReadOnlyList<string> PrivateLog => privateLog;
 
+#if UNITY_EDITOR
+        // P7 (s159): host-only scenario setup from the panel (Editor only; never in a build).
+        internal void ScenarioStage(string target)
+        {
+            if (!privateHosting) return;
+            PrivateNote(TrapFloorDevFixtures.StageActivePawnNextTo(host, target));
+        }
+
+        internal void ScenarioReport()
+        {
+            if (!privateHosting) return;
+            foreach (string line in TrapFloorDevFixtures.Report(host).Split('\n')) PrivateNote(line.TrimEnd('\r'));
+        }
+#endif
+
         private void PrivateNote(string line)
         {
             Debug.Log("[PrivateSession] " + line);
@@ -4109,6 +4124,26 @@ namespace ConsoleCards.Presentation.Composition
                     if (GUILayout.Button("Bad: repeat last")) Online.PrivateResendLast();
                     GUILayout.EndHorizontal();
                     DrawOperationRow();
+#if UNITY_EDITOR
+                    // P7 (s159): the scenario seam in the panel, not an Editor menu. A native menu held open blocks the
+                    // Editor's player loop, and the guests' connections time out. Setup only; the step onto the target is
+                    // still made through the production request path (Pawn ±X/Y on the seat whose turn it is).
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label("Scenario:", GUILayout.Width(62f));
+                    if (GUILayout.Button("→Key")) Online.ScenarioStage("Key");
+                    if (GUILayout.Button("→Grand")) Online.ScenarioStage("Grand Exit");
+                    if (GUILayout.Button("→Secret")) Online.ScenarioStage("Secret Exit");
+                    if (GUILayout.Button("→Fall")) Online.ScenarioStage("Fall Trap");
+                    if (GUILayout.Button("Report")) Online.ScenarioReport();
+                    GUILayout.EndHorizontal();
+                    GUILayout.BeginHorizontal();
+                    if (GUILayout.Button("→Slow")) Online.ScenarioStage("Slow Trap");
+                    if (GUILayout.Button("→Spring")) Online.ScenarioStage("Spring Trap");
+                    if (GUILayout.Button("→Crane")) Online.ScenarioStage("Crane Trap");
+                    if (GUILayout.Button("→Blind")) Online.ScenarioStage("Blind Trap");
+                    if (GUILayout.Button("→Sticky")) Online.ScenarioStage("Sticky Trap");
+                    GUILayout.EndHorizontal();
+#endif
                 }
 
                 if (Online.IsPrivateGuest)

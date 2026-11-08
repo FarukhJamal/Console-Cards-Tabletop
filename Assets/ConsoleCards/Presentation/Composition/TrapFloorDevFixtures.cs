@@ -3,6 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using ConsoleCards.Application.Random;
+using ConsoleCards.Core.Coordinates;
+using ConsoleCards.Core.Domain;
+using ConsoleCards.Presentation.Views;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Games.TrapFloor;
 using UnityEngine;
@@ -124,6 +127,99 @@ namespace ConsoleCards.Presentation.Composition
 
             cells.Sort((a, b) => a.Y != b.Y ? a.Y.CompareTo(b.Y) : a.X.CompareTo(b.X));
             return cells;
+        }
+
+        // ---------- P7 (s159) SCENARIO SEAM: deterministic situations without random play ----------
+        // Setup only. A scenario puts the turn player's pawn on a tile next to a named target (a Key, an exit, a Trap)
+        // so the gameplay under test is the next step, made through the production path (a guest's private pawn
+        // request, or the host's own). The setup is written straight into the host's table (no command, no landing
+        // rules run, the tile it stands on stays as it was); the host's piece sweep then publishes the pawn's new
+        // public place to every guest like any host-side change. Nothing hidden is sent: a pawn's place is public.
+        // Editor only (this whole file), host only (it refuses on a joined computer), logged as "[Scenario] SETUP".
+
+        /// <summary>Places the turn player's pawn next to the nearest tile named <paramref name="targetName"/>; returns the step to take.</summary>
+        public static string StageActivePawnNextTo(TabletopComposition host, string targetName)
+        {
+            if (host == null || host.trapFloorTemplate == null || host.TrapFloorGame == null || host.trapFloorTurnState == null || host.matchState == null)
+                return "[Scenario] FAIL setup: no Trap Floor table in play.";
+            if (host.HasOnline && host.Online.InRoom && !host.Online.IsPrivateHost)
+                return "[Scenario] FAIL setup: only the host may stage a scenario.";
+            TrapFloorCartridge game = host.TrapFloorGame;
+            TrapFloorTurnState turn = host.trapFloorTurnState;
+            if (turn.IsCurrentFloorFailed || turn.Phase != TrapFloorTurnPhase.PlayerTurn)
+                return "[Scenario] FAIL setup: not a player turn.";
+            PlayerId active = turn.ActivePlayerId;
+            if (!game.TryGetTrapFloorPlayerSetup(active, out TrapFloorPlayerSetupDefinition setup)
+                || !host.matchState.Pawns.TryGetValue(setup.PawnId, out PawnState pawn))
+                return "[Scenario] FAIL setup: the turn player has no pawn.";
+            TrapFloorTemplateDefinition template = host.trapFloorTemplate;
+            game.TryReadPawnTile(setup.PawnId, out TrapFloorCoordinate from);
+            int[] dx = { 1, -1, 0, 0 }, dy = { 0, 0, 1, -1 };
+            TrapFloorCoordinate? bestTarget = null, bestStand = null;
+            int bestDistance = int.MaxValue;
+            foreach (TrapFloorCoordinate target in CellsNamed(template, targetName))
+            {
+                if (!template.TryGetFloorCardId(target, out TabletopObjectId targetId)) continue;
+                if (host.trapFloorCollapseState != null && host.trapFloorCollapseState.IsCollapsed(targetId)) continue;
+                if (host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.TryGetClaim(targetId, out _)) continue; // a Key already taken
+                for (int d = 0; d < 4; d++)
+                {
+                    int x = target.X + dx[d], y = target.Y + dy[d];
+                    if (x < 1 || y < 1 || x > template.GridColumns || y > template.GridRows || !game.IsWalkableTile(x, y)) continue;
+                    int distance = Math.Abs(x - from.X) + Math.Abs(y - from.Y);
+                    if (distance >= bestDistance) continue;
+                    bestDistance = distance;
+                    bestTarget = target;
+                    bestStand = new TrapFloorCoordinate(x, y);
+                }
+            }
+
+            if (!bestStand.HasValue) return $"[Scenario] FAIL setup: no open tile next to a '{targetName}' on this floor.";
+            if (!template.TryGetFloorCardId(bestStand.Value, out TabletopObjectId standId)
+                || !host.matchState.Cards.TryGetValue(standId, out CardInstanceState standCard))
+                return "[Scenario] FAIL setup: the tile to stand on is missing.";
+            PawnView view = null;
+            foreach (PawnView candidate in host.Registry.pawnViews)
+                if (candidate != null && candidate.IsBound && candidate.ObjectId == setup.PawnId) view = candidate;
+            TabletopObjectState state = pawn.BaseState;
+            TabletopPose pose = new TabletopPose(standCard.BaseState.Pose.Position, state.Pose.RotationDegrees, state.Pose.Layer, state.Pose.LocalOrder);
+            if (state.PhysicalState != null && view != null && view.PhysicalObject != null && host.physicalAuthority != null)
+            {
+                if (!host.physicalAuthority.Surfaces.TryResolveAuthoredLooseObject(pose, active, view.PhysicalObject.PhysicalCollider, state.IsUserLocked, out PhysicalObjectState placed))
+                    return "[Scenario] FAIL setup: the tile's place is not on the table.";
+                state.SetPhysicalState(view.PhysicalObject.RestingOnTable(placed));
+            }
+
+            state.SetPose(pose);
+            view?.ApplyAcceptedState();
+            game.ForgetMoveStartForScenario(setup.PawnId, bestStand.Value); // this turn's move now counts from the staged tile
+            int stepX = bestTarget.Value.X - bestStand.Value.X, stepY = bestTarget.Value.Y - bestStand.Value.Y;
+            return $"[Scenario] SETUP (host-only, no rules run): {host.FormatPlayerName(active)}'s pawn {from} → {bestStand.Value}, next to "
+                + $"'{targetName}' at {bestTarget.Value}. Production step to make now: Pawn ({stepX:+0;-0;0},{stepY:+0;-0;0}).";
+        }
+
+        /// <summary>The state every computer must agree on, from the host's table (Editor Console only; names no hidden tile).</summary>
+        public static string Report(TabletopComposition host)
+        {
+            if (host == null || host.trapFloorTemplate == null || host.trapFloorTurnState == null) return "[Scenario] REPORT: no Trap Floor table in play.";
+            TrapFloorTurnState turn = host.trapFloorTurnState;
+            TrapFloorTemplateDefinition template = host.trapFloorTemplate;
+            StringBuilder text = new StringBuilder();
+            text.Append($"[Scenario] REPORT floor {template.FloorIndex + 1}/{template.FloorCount} ({template.GridColumns}×{template.GridRows}), round {turn.CurrentRound}, "
+                + $"phase {turn.Phase}, floor failed {turn.IsCurrentFloorFailed}, won {host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsWon}, "
+                + $"keys {host.trapFloorObjectiveState?.CollectedKeyCount ?? 0}/{host.trapFloorObjectiveState?.RequiredKeyCount ?? 0}, revision {host.matchState?.Revision ?? 0}");
+            for (int i = 0; i < template.Players.Count; i++)
+            {
+                TrapFloorPlayerSetupDefinition player = template.Players[i];
+                PlayerId id = PlayerId.Empty;
+                if (host.matchState != null && host.matchState.Seats.TryGetValue(player.SeatId, out ConsoleCards.Core.Domain.Seats.SeatState seat)) id = seat.OccupantPlayerId;
+                string where = host.TrapFloorGame.TryReadPawnTile(player.PawnId, out TrapFloorCoordinate tile) ? tile.ToString() : "off the floor";
+                string status = id.IsEmpty ? "empty" : host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsPlayerEscaped(id) ? "ESCAPED"
+                    : turn.GetPlayerState(id) == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound ? "OUT" : "in";
+                text.Append($"\n  seat {i + 1}: {status}, pawn {where}, keys held {host.TrapFloorGame.KeysHeldBy(id)}{(turn.ActivePlayerId == id ? " ← turn" : string.Empty)}");
+            }
+
+            return text.ToString();
         }
 
         private static string Short(string name)

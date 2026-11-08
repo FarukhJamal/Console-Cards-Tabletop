@@ -427,6 +427,18 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- AUTH-MOVE ----------
 
+        /// <summary>P7 (s159) scenario seam (Editor fixtures only call it): this turn's move counts again from where the pawn now stands.</summary>
+        internal void ForgetMoveStartForScenario(TabletopObjectId pawnId, TrapFloorCoordinate stagedTile)
+        {
+            hostMoveRound = -1;
+            moveTurnRound = -1;
+            EnsureMoveTurn();
+            // The landing scan and the turn's straight-line check both count from the staged tile, not the tile the
+            // pawn stood on before setup (setup is not a move; it ran no rules and spent nothing).
+            landingPawnTiles[pawnId] = stagedTile;
+            moveStartTile = stagedTile;
+        }
+
         // A joined computer's pawn move, on the host, in Full only. True when it may run; else HostRefusal says why.
         private bool HostAllowsPawnMove(PlayerId sender, TabletopObjectId objectId, TableCoordinate? targetPosition)
         {
