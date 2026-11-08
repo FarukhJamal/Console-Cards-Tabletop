@@ -163,7 +163,12 @@ namespace ConsoleCards.GameTemplates.Privacy
             if (resolution == ReferenceResolution.HiddenRealId) return PrivateRequestVerdict.HiddenRealId;
             if (!match.Cards.TryGetValue(real, out CardInstanceState card)) return PrivateRequestVerdict.InvalidSource;
             at = card.BaseState.ContainerId;
-            if (at.IsEmpty) return PrivateRequestVerdict.Accepted; // a card loose on the table
+            // A card loose on the table: any seat's, unless it belongs to another player (P7, s157: an Ability bought or
+            // won lies loose beside its owner's Console; only its owner may pick it up and put it to use).
+            if (at.IsEmpty)
+                return card.BaseState.OwnerPlayerId.IsEmpty || card.BaseState.OwnerPlayerId == sender
+                    ? PrivateRequestVerdict.Accepted
+                    : PrivateRequestVerdict.WrongSeat;
             return match.Containers.TryGetValue(at, out ContainerState container) && MayUseHere(match, seats, host, sender, seat, container)
                 ? PrivateRequestVerdict.Accepted
                 : PrivateRequestVerdict.InvalidSource;

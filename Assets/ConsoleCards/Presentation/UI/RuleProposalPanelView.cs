@@ -141,7 +141,10 @@ namespace ConsoleCards.Presentation.UI
             textInput.onValueChanged.AddListener(value => actions?.TextChanged?.Invoke(value));
             proposeButton.onClick.AddListener(() => actions?.Propose?.Invoke());
             rejectButton.onClick.AddListener(() => actions?.Reject?.Invoke());
-            dismissOverlayButton.onClick.AddListener(() => actions?.Reject?.Invoke());
+            // P7 (s157): a click outside the panel is never a ballot. While the proposer edits it still cancels the
+            // proposal (no decision yet); while the players agree it does nothing, so only the "No" button counts as No.
+            bool agreeing = model.Agreeing;
+            dismissOverlayButton.onClick.AddListener(() => { if (!agreeing) actions?.Reject?.Invoke(); });
         }
 
         public override void Unbind()

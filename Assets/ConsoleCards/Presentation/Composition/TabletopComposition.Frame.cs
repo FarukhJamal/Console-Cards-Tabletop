@@ -83,7 +83,7 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
-        private void HandleConsoleCardInteractionAccepted(IConsoleCardInteraction interaction)
+        internal void HandleConsoleCardInteractionAccepted(IConsoleCardInteraction interaction)
         {
             if (interaction == null)
             {

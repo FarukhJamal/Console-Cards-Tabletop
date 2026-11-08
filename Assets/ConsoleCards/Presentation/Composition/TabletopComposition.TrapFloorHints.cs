@@ -118,8 +118,26 @@ namespace ConsoleCards.Presentation.Composition
         // trapfloor.prize: the active pawn stands on a face-up Ability or Friend it may take.
         internal sealed class PrizeHintHelper : TrapFloorHintHelper
         {
+            private PlayerId shownFor;
+            private int shownRound = -1;
+
             public PrizeHintHelper(TabletopComposition owner) : base(owner, "trapfloor.prize")
             {
+            }
+
+            // P7 (s157): the line speaks about one turn's pawn on one tile; it goes once that is no longer so (another
+            // turn, another phase, the pawn moved off, the prize taken, the floor over), instead of staying up.
+            public override void Tick(HintLevel level)
+            {
+                if (!owner.TrapFloorGame.IsShownHint(TrapFloorCartridge.PrizeHintId)) { shownRound = -1; return; }
+                TrapFloorTurnState turn = owner.trapFloorTurnState;
+                if (shownRound < 0 && turn != null) { shownFor = turn.ActivePlayerId; shownRound = turn.CurrentRound; }
+                bool stale = level == HintLevel.Off || turn == null || turn.IsCurrentFloorFailed || turn.Phase != TrapFloorTurnPhase.PlayerTurn
+                    || turn.ActivePlayerId != shownFor || turn.CurrentRound != shownRound || owner.ActivePlayerPlaysElsewhere
+                    || !owner.TrapFloorGame.TryGetActivePawnPrizeTile(out _);
+                if (!stale) return;
+                shownRound = -1;
+                owner.RulesCardPanel.HideShownHint();
             }
 
             public override HintEntry Explain(string trigger, string context, HintLevel level)
@@ -149,8 +167,31 @@ namespace ConsoleCards.Presentation.Composition
         {
             private readonly List<string> lines = new List<string>(4);
 
+            private PlayerId shownFor;
+            private int shownRound = -1;
+
             public TrapsWaitingHintHelper(TabletopComposition owner) : base(owner, "trapfloor.traps-waiting")
             {
+            }
+
+            // P7 (s157, "stale hint banner persists into another turn"): the line is about the effects waiting on one
+            // turn's End Turn; it goes when that turn is over (or nothing waits any more), instead of staying up.
+            public override void Tick(HintLevel level)
+            {
+                if (!owner.TrapFloorGame.IsShownHint(TrapFloorCartridge.TrapsWaitingHintId)) { shownRound = -1; return; }
+                TrapFloorTurnState turn = owner.trapFloorTurnState;
+                if (shownRound < 0 && turn != null) { shownFor = turn.ActivePlayerId; shownRound = turn.CurrentRound; }
+                bool stale = level == HintLevel.Off || turn == null || turn.IsCurrentFloorFailed || turn.Phase != TrapFloorTurnPhase.PlayerTurn
+                    || turn.ActivePlayerId != shownFor || turn.CurrentRound != shownRound || owner.ActivePlayerPlaysElsewhere;
+                if (!stale)
+                {
+                    lines.Clear();
+                    stale = owner.TrapFloorGame.PendingEndTurnEffects(turn.ActivePlayerId, lines) == 0;
+                }
+
+                if (!stale) return;
+                shownRound = -1;
+                owner.RulesCardPanel.HideShownHint();
             }
 
             public override HintEntry Explain(string trigger, string context, HintLevel level)
@@ -184,8 +225,23 @@ namespace ConsoleCards.Presentation.Composition
             private TrapFloorCollapseRollState rollBeforeFloorTurn;
             private TrapFloorCollapseRollState shownRoll;
 
+            private int explainedRound = -1;
+            private PlayerId explainedFor;
+
             public CollapseTargetHintHelper(TabletopComposition owner) : base(owner, "trapfloor.collapse")
             {
+            }
+
+            // P7 (s157, live run: "the floor dice rolled …: column …, row … is a hole now" stayed up for the whole next
+            // round): the line explains the collapse to the turn right after the floor turn; it goes when that turn ends.
+            private void HideExplanationAfterFirstTurn(TrapFloorTurnState turn)
+            {
+                if (!owner.TrapFloorGame.IsShownHint(TrapFloorCartridge.CollapseHintId)) { explainedRound = -1; return; }
+                if (turn == null || turn.IsCurrentFloorFailed) { explainedRound = -1; owner.RulesCardPanel.HideShownHint(); return; }
+                if (explainedRound < 0) { explainedRound = turn.CurrentRound; explainedFor = turn.ActivePlayerId; return; }
+                if (turn.CurrentRound == explainedRound && turn.ActivePlayerId == explainedFor) return;
+                explainedRound = -1;
+                owner.RulesCardPanel.HideShownHint();
             }
 
             public override void Tick(HintLevel level)
@@ -200,8 +256,11 @@ namespace ConsoleCards.Presentation.Composition
                 {
                     rollBeforeFloorTurn = collapse?.LastRoll; // a roll from an earlier floor turn is not shown
                     Hide();
+                    HideExplanationAfterFirstTurn(turn);
                     return;
                 }
+
+                explainedRound = -1;
 
                 TrapFloorCollapseRollState roll = collapse.LastRoll;
                 if (level == HintLevel.Off || roll == null || roll == rollBeforeFloorTurn)

@@ -6,6 +6,7 @@ using System.Text;
 using ConsoleCards.Application.Authority;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
+using ConsoleCards.Core.Events;
 using ConsoleCards.Application.UseCases;
 using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
@@ -345,6 +346,7 @@ namespace ConsoleCards.Presentation.Composition
             privateHost.Layout = BuildPrivateLayout();
             privateShopCatalog = BuildShopCatalog();
             PrivateNote("Private table: " + why + "; sending what changed.");
+            RetireGuestPopups(why);
             HostSceneFollow(null);
             SendPublish(privateHost.PublishChanges(CurrentTurnSnapshot(), CurrentHud()), why);
         }
@@ -785,6 +787,10 @@ namespace ConsoleCards.Presentation.Composition
                 host.ViewSync.SyncContainer(to);
                 HostSceneFollow(sceneBefore);
                 SendPublish(updates, what + " update");
+                // P7 (s157): a card put into a Console slot tells the cartridge in play exactly as a drop on this
+                // computer's own table does (its own Console rules: an Ability offers itself, a payment card is counted).
+                // Generic: the cartridge decides what an insertion means; nothing here knows the game.
+                if (kind == PrivateRequestCodec.KindPlace) RaisePrivateConsoleInsertion(sender, privateHost.LastCard, privateHost.LastTo);
                 if (member.IsHost) hostOwnAccepted++;
                 PrivateNote($"Accepted {what} from {actor} (assist {PlayAssist.Level}); revision {revisionBefore} → {privateHost.Revision}; each guest computer here got its own change set.");
             }
@@ -856,6 +862,7 @@ namespace ConsoleCards.Presentation.Composition
             Dictionary<PlayerId, byte[]> updates = privateHost.PublishChanges(moved ? CurrentTurnSnapshot() : null, CurrentHud());
             SendPublish(updates, "End Turn");
             PrivateTurnSnapshot snap = CurrentTurnSnapshot();
+            if (moved) RetireGuestPopups(snap.Ended ? "the floor ended" : "the turn moved on", snap.Ended ? null : snap);
             PrivateNote($"Accepted End Turn from {actor}: " + (moved
                     ? $"round {roundBefore} {phaseBefore} → round {snap.Round} {(TrapFloorTurnPhase)snap.Phase}, turn of {SeatName(new PlayerId(snap.TurnOwner))}"
                     : "the game's own turn service did not end the turn (a step is still waiting)")
@@ -958,6 +965,7 @@ namespace ConsoleCards.Presentation.Composition
             PlayerId sender = member.Player == Guid.Empty ? PlayerId.Empty : new PlayerId(member.Player);
             if (privateHost == null) return PrivateRequestVerdict.NotSeated;
             if (op.Kind == PrivateOperationKind.Undo) return RunPrivateUndo(member, op);
+            operationConsoleInteractions.Clear();
             long revisionBefore = privateHost.Revision;
             string before = HostTableFingerprint();
             PrivateRequestVerdict verdict = PrivateOperationPolicy.Check(host.matchState, new RoomSeats(this), privateHost, sender, op, out PrivateResolvedOperation resolved);
@@ -1011,8 +1019,22 @@ namespace ConsoleCards.Presentation.Composition
             operationsAccepted++;
             if (member.IsHost) hostOwnAccepted++;
             NoteStaging(sender, resolved, staging);
+            RaiseOperationConsoleInteractions();
             PrivateNote($"Accepted {op.Kind} from {actor} (assist {PlayAssist.Level}); revision {revisionBefore} → {privateHost.Revision}; each guest computer here got its own change set.");
             return PrivateRequestVerdict.Accepted;
+        }
+
+        private readonly List<IConsoleCardInteraction> operationConsoleInteractions = new List<IConsoleCardInteraction>(2);
+
+        // P7 (s157): generic. A card put into (or taken out of) a Console slot by a private request reaches the cartridge in
+        // play exactly as the same drop on the host's own table does; the cartridge decides what it means (Trap Floor: an
+        // owned Ability offers itself to the Console's owner only; a payment card is counted).
+        private void RaiseOperationConsoleInteractions()
+        {
+            if (operationConsoleInteractions.Count == 0) return;
+            IConsoleCardInteraction[] raised = operationConsoleInteractions.ToArray();
+            operationConsoleInteractions.Clear();
+            foreach (IConsoleCardInteraction interaction in raised) host.HandleConsoleCardInteractionAccepted(interaction);
         }
 
         // The table's own command for a checked operation, with the real ids the check resolved.
@@ -1022,9 +1044,15 @@ namespace ConsoleCards.Presentation.Composition
             switch (op.Kind)
             {
                 case PrivateOperationKind.Transfer:
-                    return host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(op.HasPose
+                {
+                    TransferCardResult moved = host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(op.HasPose
                         ? TransferCardCommand.ToTabletop(Ctx(sender), resolved.RealCard, op.Container, op.Pose)
-                        : TransferCardCommand.ToContainer(Ctx(sender), resolved.RealCard, op.Container, op.Destination)).Succeeded;
+                        : TransferCardCommand.ToContainer(Ctx(sender), resolved.RealCard, op.Container, op.Destination));
+                    // P7 (s157): what the move did to a Console (a card in or out of a slot), told to the cartridge in play
+                    // once the change is published, as a drop on this computer's own table tells it.
+                    if (moved.Succeeded) operationConsoleInteractions.AddRange(moved.ConsoleInteractions);
+                    return moved.Succeeded;
+                }
                 case PrivateOperationKind.Flip:
                     return host.TableAuthority.Submit<FlipCardCommand, FlipCardResult>(new FlipCardCommand(Ctx(sender), resolved.RealCard, op.FaceUp ? CardFace.FaceUp : CardFace.FaceDown)).Succeeded;
                 case PrivateOperationKind.Shuffle:
@@ -1563,6 +1591,7 @@ namespace ConsoleCards.Presentation.Composition
             bool turnChanged = !SameTurn(privateTransactionTurn, now); // P7: a rule step can end a floor or knock a player out
             SendPublish(privateHost.PublishChanges(turnChanged ? now : null, CurrentHud()), what);
             if (turnChanged) turnTransitions++;
+            if (turnChanged) RetireGuestPopups(now.Ended ? "the floor ended" : "the turn moved on", now.Ended ? null : now);
             PrivateNote($"{what}: {privateTransactionSteps} step(s) on the host's table, one revision for every guest ({before} → {privateHost.Revision}){(turnChanged ? "; the turn changed with it" : string.Empty)}.");
         }
 
@@ -2157,6 +2186,52 @@ namespace ConsoleCards.Presentation.Composition
             return true;
         }
 
+        // P7 (s157): popups and choices the host's game sent that can no longer be answered (their floor ended, or the
+        // table was replaced by a new floor, an Undo or a reset) are taken back from the guest that shows them: the
+        // guest closes it and nothing is decided. An end-of-floor announcement (sent once the floor had ended) stays.
+        // With a turn given (the turn moved on, live run s157: a prize popup stayed on the screen of a player who had
+        // escaped): only what was asked of a player in an earlier turn who does not own the new one (the host refuses
+        // their answer as stale anyway); a choice the new turn's owner was just asked stays.
+        private bool StillAnswerable(PlayerId actor, PrivateTurnSnapshot asked, PrivateTurnSnapshot now) =>
+            now != null && (asked == null || SameTurn(asked, now) || actor.Value == now.TurnOwner);
+
+        private void RetireGuestPopups(string why, PrivateTurnSnapshot now = null)
+        {
+            if (!privateHosting) return;
+            int retired = 0;
+            foreach (KeyValuePair<Guid, PendingPrompt> pair in new List<KeyValuePair<Guid, PendingPrompt>>(hostPrompts))
+            {
+                if (pair.Value.Turn != null && pair.Value.Turn.Ended) continue;
+                if (StillAnswerable(pair.Value.Actor, pair.Value.Turn, now)) continue;
+                hostPrompts.Remove(pair.Key);
+                SendRetire(pair.Value.Actor, MsgPrivatePrompt, pair.Key);
+                retired++;
+            }
+
+            foreach (KeyValuePair<Guid, PendingSelection> pair in new List<KeyValuePair<Guid, PendingSelection>>(hostSelections))
+            {
+                if (pair.Value.Turn != null && pair.Value.Turn.Ended) continue;
+                if (StillAnswerable(pair.Value.Actor, pair.Value.Turn, now)) continue;
+                hostSelections.Remove(pair.Key);
+                SendRetire(pair.Value.Actor, MsgPrivateSelection, pair.Key);
+                retired++;
+            }
+
+            if (retired > 0) PrivateNote($"Took back {retired} unanswered guest popup(s): {why}.");
+        }
+
+        private void SendRetire(PlayerId actor, byte type, Guid id)
+        {
+            for (int i = 0; i < members.Count; i++)
+            {
+                if (members[i].IsHost || !members[i].Connected || members[i].Connection < 0 || members[i].Player != actor.Value) continue;
+                byte[] payload = new byte[17];
+                payload[0] = 2; // 2: take back (1: show)
+                Array.Copy(id.ToByteArray(), 0, payload, 1, 16);
+                SendPrivateBytes(members[i], type, payload);
+            }
+        }
+
         private void HostPromptAnswer(Member member, byte[] data)
         {
             // [type][16 prompt][1 choice: 0 main, 1 second]
@@ -2204,7 +2279,18 @@ namespace ConsoleCards.Presentation.Composition
             {
                 using (BinaryReader r = new BinaryReader(new MemoryStream(bytes, false)))
                 {
-                    if (r.ReadByte() != 1) return;
+                    byte version = r.ReadByte();
+                    if (version == 2)
+                    {
+                        Guid retired = new Guid(r.ReadBytes(16));
+                        if (retired != guestPromptId || retired == Guid.Empty) return;
+                        guestPromptId = Guid.Empty;
+                        host.runtimeUi?.CloseFocusedCardSelection();
+                        PrivateNote("The host took back a popup that can no longer be answered (its floor ended or the table was replaced).");
+                        return;
+                    }
+
+                    if (version != 1) return;
                     Guid promptId = new Guid(r.ReadBytes(16));
                     TabletopObjectId card = new TabletopObjectId(new Guid(r.ReadBytes(16)));
                     string header = r.ReadString(), state = r.ReadString(), title = r.ReadString(), subtitle = r.ReadString(), body = r.ReadString();
@@ -2392,7 +2478,18 @@ namespace ConsoleCards.Presentation.Composition
             {
                 using (BinaryReader r = new BinaryReader(new MemoryStream(bytes, false)))
                 {
-                    if (r.ReadByte() != 1) return;
+                    byte version = r.ReadByte();
+                    if (version == 2)
+                    {
+                        Guid retired = new Guid(r.ReadBytes(16));
+                        if (retired != guestSelectionId || retired == Guid.Empty) return;
+                        guestSelectionId = Guid.Empty;
+                        host.runtimeUi?.CloseFocusedCardSelection();
+                        PrivateNote("The host took back a choice that can no longer be made (its floor ended or the table was replaced).");
+                        return;
+                    }
+
+                    if (version != 1) return;
                     Guid selectionId = new Guid(r.ReadBytes(16));
                     string title = r.ReadString(), instruction = r.ReadString(), status = r.ReadString(), confirm = r.ReadString(), cancel = r.ReadString();
                     int max = r.ReadInt32(), count = r.ReadInt32();
@@ -3573,6 +3670,42 @@ namespace ConsoleCards.Presentation.Composition
             PrivateNote("Asked the host for this computer's own package (recipient-specific resync).");
         }
 
+        // P7 (s157): an Ability this seat owns, lying loose beside its Console (where a bought or won Ability goes), into
+        // this seat's first free shown Console slot: the same Transfer request the table's drag of that card sends. The
+        // bad request picks another player's owned card (expect WrongSeat).
+        internal void PrivateAbilityToConsole(bool others = false)
+        {
+            RecipientSeatLayout seat = OwnSeat();
+            if (!InPrivateSession || seat == null || host.matchState == null) { PrivateNote("Ability: no seat of yours in the private table."); return; }
+            PlayerId me = new PlayerId(myPlayer);
+            TabletopObjectId found = TabletopObjectId.Empty;
+            string name = string.Empty;
+            foreach (CardInstanceState card in host.matchState.Cards.Values)
+            {
+                TabletopObjectState state = card.BaseState;
+                if (!state.ContainerId.IsEmpty || state.OwnerPlayerId.IsEmpty || (state.OwnerPlayerId == me) == others) continue;
+                if (state.DefinitionId.Equals(RecipientSnapshotProjection.HiddenDefinition)) continue;
+                if (!host.TryGetCardLook(state.DefinitionId, out ConsoleCards.Definitions.CardDefinition definition)
+                    || definition.ConsoleBehavior != ConsoleCardBehavior.ActivateOnInsert) continue;
+                found = state.Id;
+                name = definition.DisplayName;
+                break;
+            }
+
+            if (found.IsEmpty)
+            {
+                PrivateNote("Ability: no owned Ability lying loose beside " + (others ? "another player's" : "your") + " Console (buy one in the Shop or take one from the floor first).");
+                return;
+            }
+
+            ContainerId slot = OwnFreeShownSlot();
+            if (slot.IsEmpty) { PrivateNote("Ability: no free Console slot."); return; }
+            SendPrivateRequest(PrivateOperationCodec.Write(new PrivateOperation
+            {
+                Kind = PrivateOperationKind.Transfer, RequestId = Guid.NewGuid(), Card = PanelRef(found), Container = ContainerId.Empty, Destination = slot,
+            }), others ? $"{name} from ANOTHER player (expect WrongSeat)" : $"{name} → Console");
+        }
+
         private void PlaceInto(ContainerId slot, bool _, string what)
         {
             RecipientSeatLayout seat = OwnSeat();
@@ -3586,6 +3719,14 @@ namespace ConsoleCards.Presentation.Composition
             TabletopObjectId card = PanelRef(hand.GetObjectAt(0)); // the card is named by this computer's own reference for it
             lastPlacedReference = card;
             SendPrivateRequest(PrivateRequestCodec.Place(new PrivatePlaceRequest { RequestId = Guid.NewGuid(), Card = card, Destination = slot }), what);
+        }
+
+        private void RaisePrivateConsoleInsertion(PlayerId sender, TabletopObjectId card, ContainerId slot)
+        {
+            if (card.IsEmpty || slot.IsEmpty || !host.matchState.Cards.TryGetValue(card, out CardInstanceState placed) || placed.BaseState.ContainerId != slot) return;
+            host.HandleConsoleCardInteractionAccepted(new ConsoleCards.Core.Events.ConsoleCardInserted(
+                new ConsoleCards.Core.Events.DomainEventContext(host.matchState.Id, host.matchState.Revision),
+                sender, card, placed.BaseState.DefinitionId, sender, slot));
         }
 
         private void SendPrivateRequest(byte[] request, string what)
@@ -3925,6 +4066,10 @@ namespace ConsoleCards.Presentation.Composition
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Throw die")) Online.PrivateThrowDie();
             if (GUILayout.Button("Bad: die face 99")) Online.PrivateThrowDie(99);
+            // P7 (s157): an owned Ability from this seat's own area into a free Console slot (the same Place request the
+            // table's drag sends; the host's game then offers it to this seat only).
+            if (GUILayout.Button("Ability → Console")) Online.PrivateAbilityToConsole();
+            if (GUILayout.Button("Bad: other's Ability")) Online.PrivateAbilityToConsole(true);
             GUILayout.EndHorizontal();
         }
 

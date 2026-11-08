@@ -393,6 +393,33 @@ namespace ConsoleCards.Tests
             Assert.IsFalse(PrivateOperationPolicy.IsOtherSeatsPile(layout, seatB, deck), "a pile shared by every seat");
         }
 
+        // P7 (s157): an owned card lying loose (a bought or won Ability beside its owner's Console) is picked up only by
+        // its owner, into its owner's own Console; another seat is refused whichever reference it uses.
+        [Test]
+        public void Policy_LooseOwnedCard_OnlyItsOwnerMovesIt()
+        {
+            Room r = Room.Open();
+            ContainerId deckA = r.T.SetupOf(r.A).ControllerDeckId, handA = r.T.SetupOf(r.A).HandContainerId;
+            r.Deliver(r.Host.Apply(() => new DrawCardsUseCase().Execute(r.T.Match, new DrawCardsCommand(r.T.Context(r.A), deckA, handA, 1))));
+            TabletopObjectId card = r.T.Match.Containers[handA].GetObjectAt(0);
+            r.Deliver(r.Host.Apply(() =>
+            {
+                TabletopObjectState state = r.T.Match.Cards[card].BaseState;
+                Assert.IsTrue(new ContainerTransferService().RemoveFromContainer(state, r.T.Match.Containers[handA]).Succeeded);
+                state.SetOwner(r.A);
+            }));
+            Assert.IsTrue(r.T.Match.Cards[card].BaseState.ContainerId.IsEmpty, "the card lies loose");
+            ContainerId slotA = r.T.SetupOf(r.A).SideSlotContainerIds[0], slotB = r.T.SetupOf(r.B).SideSlotContainerIds[0];
+            PrivateOperation Pick(PlayerId who, ContainerId to) => new PrivateOperation
+            {
+                Kind = PrivateOperationKind.Transfer, RequestId = Guid.NewGuid(), Card = r.Host.ReferenceFor(who, card), Container = ContainerId.Empty, Destination = to,
+            };
+            Assert.AreEqual(PrivateRequestVerdict.WrongSeat, PrivateOperationPolicy.Check(r.T.Match, r.S, r.Host, r.B, Pick(r.B, slotB), out _), "another player's owned card");
+            Assert.AreEqual(PrivateRequestVerdict.InvalidDestination, PrivateOperationPolicy.Check(r.T.Match, r.S, r.Host, r.A, Pick(r.A, slotB), out _), "not into another seat's Console");
+            Assert.AreEqual(PrivateRequestVerdict.Accepted, PrivateOperationPolicy.Check(r.T.Match, r.S, r.Host, r.A, Pick(r.A, slotA), out PrivateResolvedOperation resolved), "its owner, into its own Console");
+            Assert.AreEqual(card, resolved.RealCard);
+        }
+
         [Test]
         public void Policy_SameRulesForEverySeat_RefusesCrossSeatStaleHiddenAndDuplicate()
         {

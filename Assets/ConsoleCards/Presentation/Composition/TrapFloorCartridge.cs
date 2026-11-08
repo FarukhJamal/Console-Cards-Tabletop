@@ -2624,7 +2624,7 @@ namespace ConsoleCards.Presentation.Composition
                 return TrapFloorObjectiveUseCase.IsGrandExit(floorCard.Content)
                     ? $"{description}\nEvery player still in stands here with the team's Keys to win the floor. "
                         + $"KEYS {host.trapFloorObjectiveState.CollectedKeyCount} / {host.trapFloorObjectiveState.RequiredKeyCount}"
-                    : $"{description}\nLand here holding a Key you claimed to win the floor.";
+                    : $"{description}\nYou escape here with a Key you claimed (it is used up); the floor ends when every player still in has escaped.";
             }
 
             return description;
@@ -3271,6 +3271,13 @@ namespace ConsoleCards.Presentation.Composition
 
             if (TryAutoMovePawnToFloor(player, startId, out _))
             {
+                if (host.trapFloorTurnState != null && host.trapFloorTurnState.ActivePlayerId == player)
+                {
+                    EnsureMoveTurn();
+                    moveStartTile = setup.StartingCorner; // the pawn's coordinate; the move count is not reset
+                    moveSpentByRule = true;
+                }
+
                 CollectTakenPrizesOffPawns(); // the prize the pawn just left goes by the Console now
                 host.FeedbackLine($"{FormatPlayerName(player)} goes back to the starting tile.", FeedbackSeverity.Info);
             }
@@ -3313,7 +3320,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 if (result.Error == TrapFloorObjectiveError.EscaperHasNoKey)
                 {
-                    host.ShowMessage("SECRET EXIT — claim a Key first, then land here to win the floor.");
+                    host.ShowMessage("SECRET EXIT — claim a Key first, then land here to escape.");
                 }
                 else if (result.Error == TrapFloorObjectiveError.RequiredKeysMissing)
                 {
@@ -4594,6 +4601,12 @@ namespace ConsoleCards.Presentation.Composition
         internal int moveTurnRound = -1;
         internal PlayerId moveTurnPlayer;
         internal TrapFloorCoordinate? moveStartTile;
+        // P7 (s157, owner decision 2: "separate the pawn's current coordinate from its remaining movement allowance"):
+        // a rule that puts the pawn back on its starting tile (a Key or prize taken) moves the pawn, not the turn's move
+        // count. The pawn's tile is now the start, and the move it made this turn (one straight line, doc 18 §15.2) is
+        // spent: no approved rule gives a new move from there, so none is invented (nothing is blocked; Undo / Keep move
+        // as for every move the rules do not allow).
+        internal bool moveSpentByRule;
         internal bool guidedMoveThisTurn;
         internal int tooFarStateIndex = -1;
         internal readonly List<TabletopObjectId> reachTileIds = new List<TabletopObjectId>();
@@ -4624,6 +4637,7 @@ namespace ConsoleCards.Presentation.Composition
             moveTurnRound = host.trapFloorTurnState.CurrentRound;
             moveTurnPlayer = host.trapFloorTurnState.ActivePlayerId;
             moveStartTile = null;
+            moveSpentByRule = false;
             guidedMoveThisTurn = false;
             tooFarStateIndex = -1;
         }
@@ -4699,6 +4713,12 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 onlyDirection = blind.MovementDirection;
+            }
+
+            if (moveSpentByRule)
+            {
+                Debug.Log("[Hints] No reach lights: this turn's move ended when the pawn went back to its starting tile.", host);
+                return;
             }
 
             TrapFloorCoordinate start = moveStartTile ?? current;
@@ -4957,6 +4977,7 @@ namespace ConsoleCards.Presentation.Composition
         internal string DescribeMoveProblem(TrapFloorCoordinate start, TrapFloorCoordinate to)
         {
             if (to.Equals(start)) return null;
+            if (moveSpentByRule) return "This turn's move ended when your pawn went back to its starting tile; the rules give no further move this turn.";
             TrapFloorBlindMovementDirection? onlyDirection = null;
             if (TryGetActiveBlindStatus(out TrapFloorBlindStatusState blind))
             {
