@@ -204,6 +204,51 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         /// <summary>The state every computer must agree on, from the host's table (Editor Console only; names no hidden tile).</summary>
+        // ---------- Host-side dice seam (Editor only) ----------
+        private static readonly Dictionary<TabletopObjectId, Queue<int>> queuedFaces = new Dictionary<TabletopObjectId, Queue<int>>();
+
+        internal static bool TryTakeQueuedFace(TabletopObjectId dieId, int sides, out int face)
+        {
+            face = 0;
+            if (!queuedFaces.TryGetValue(dieId, out Queue<int> q) || q.Count == 0) return false;
+            face = q.Dequeue();
+            if (face < 1 || face > sides) return false;
+            Debug.Log($"[Scenario] DICE: the host's random face for this die was set by the scenario: {face}.");
+            return true;
+        }
+
+        /// <summary>
+        /// Setup only: the next host result for each floor die points at the named exit (its tile stays secret to the
+        /// guests; only the host log names it). The throw, the reroll rule and the collapse are the production path.
+        /// </summary>
+        public static string AimFloorDiceAt(TabletopComposition host, string exitKind)
+        {
+            if (host == null || (host.HasOnline && host.Online.InRoom && !host.Online.IsPrivateHost)) return "[Scenario] FAIL setup: host only.";
+            TrapFloorTemplateDefinition template = host.trapFloorTemplate;
+            if (template == null || host.matchState == null) return "[Scenario] FAIL setup: no Trap Floor table.";
+            foreach (KeyValuePair<TrapFloorCoordinate, TabletopObjectId> pair in template.FloorCardIds)
+            {
+                if (!template.TryGetFloorCardState(host.matchState, pair.Value, out TrapFloorFloorCardState floor)
+                    || floor.Content.Category != TrapFloorFloorContentCategory.SecretExit) continue;
+                bool grand = TrapFloorObjectiveUseCase.IsGrandExit(floor.Content);
+                if (grand != (exitKind == "Grand Exit")) continue;
+                if (host.trapFloorCollapseState != null && host.trapFloorCollapseState.IsCollapsed(pair.Value)) continue;
+                Enqueue(template.FloorfallXAxisDieId, pair.Key.X);
+                Enqueue(template.FloorfallYAxisDieId, pair.Key.Y);
+                return $"[Scenario] SETUP (host-only): the next floor dice will be {pair.Key.X}/{pair.Key.Y}, the {exitKind} "
+                    + "(host log only). Now throw both floor dice in the floor turn.";
+            }
+
+            return $"[Scenario] FAIL setup: this floor has no standing {exitKind} (floor {template.FloorIndex + 1}, {template.GridColumns}×{template.GridRows}).";
+        }
+
+        private static void Enqueue(TabletopObjectId dieId, int face)
+        {
+            if (!queuedFaces.TryGetValue(dieId, out Queue<int> q)) queuedFaces[dieId] = q = new Queue<int>();
+            q.Clear();
+            q.Enqueue(face);
+        }
+
         public static string Report(TabletopComposition host)
         {
             if (host == null || host.trapFloorTemplate == null || host.trapFloorTurnState == null) return "[Scenario] REPORT: no Trap Floor table in play.";

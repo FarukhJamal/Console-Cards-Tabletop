@@ -15,9 +15,11 @@ namespace ConsoleCards.Tests
         private static TrapFloorCoordinate C(int x, int y) => new TrapFloorCoordinate(x, y);
 
         private static TrapFloorEscapeOutlook Outlook(int size, TrapFloorCoordinate pawn, ISet<TrapFloorCoordinate> holes,
-            ISet<TrapFloorCoordinate> exits, ISet<TrapFloorCoordinate> faceDown = null, bool moveCard = false) =>
+            ISet<TrapFloorCoordinate> exits, ISet<TrapFloorCoordinate> faceDown = null, bool moveCard = false,
+            ISet<TrapFloorCoordinate> takeable = null, bool shopOpen = false) =>
             TrapFloorEscapeOutlook.Evaluate(size, size, pawn, holes.Contains, exits.Contains,
-                (faceDown ?? new HashSet<TrapFloorCoordinate>()).Contains, moveCard);
+                (faceDown ?? new HashSet<TrapFloorCoordinate>()).Contains, moveCard,
+                (takeable ?? new HashSet<TrapFloorCoordinate>()).Contains, shopOpen);
 
         // ---------- Escape outlook (reachability) ----------
 
@@ -27,7 +29,7 @@ namespace ConsoleCards.Tests
             // 4×4, Grand Exit at (4,4) ringed by holes (3,4) and (4,3); the pawn at (1,1).
             var holes = new HashSet<TrapFloorCoordinate> { C(3, 4), C(4, 3) };
             var exits = new HashSet<TrapFloorCoordinate> { C(4, 4) };
-            Assert.AreEqual(TrapFloorEscapeVerdict.NoEscape, Outlook(4, C(1, 1), holes, exits).Verdict);
+            Assert.AreEqual(TrapFloorEscapeVerdict.Impossible, Outlook(4, C(1, 1), holes, exits).Verdict);
         }
 
         [Test]
@@ -35,7 +37,7 @@ namespace ConsoleCards.Tests
         {
             var holes = new HashSet<TrapFloorCoordinate> { C(3, 4) };
             var exits = new HashSet<TrapFloorCoordinate> { C(4, 4) };
-            Assert.AreEqual(TrapFloorEscapeVerdict.CanReachExit, Outlook(4, C(1, 1), holes, exits).Verdict, "around by (4,3)");
+            Assert.AreEqual(TrapFloorEscapeVerdict.Possible, Outlook(4, C(1, 1), holes, exits).Verdict, "around by (4,3)");
         }
 
         [Test]
@@ -63,8 +65,8 @@ namespace ConsoleCards.Tests
         {
             var exitsAfterSecretLost = new HashSet<TrapFloorCoordinate> { C(5, 5) }; // the Secret Exit's hole is not an exit
             var holes = new HashSet<TrapFloorCoordinate> { C(1, 5) }; // where the Secret Exit was
-            Assert.AreEqual(TrapFloorEscapeVerdict.CanReachExit, Outlook(5, C(1, 1), holes, exitsAfterSecretLost).Verdict);
-            Assert.AreEqual(TrapFloorEscapeVerdict.CanReachExit,
+            Assert.AreEqual(TrapFloorEscapeVerdict.Possible, Outlook(5, C(1, 1), holes, exitsAfterSecretLost).Verdict);
+            Assert.AreEqual(TrapFloorEscapeVerdict.Possible,
                 Outlook(4, C(1, 1), new HashSet<TrapFloorCoordinate>(), new HashSet<TrapFloorCoordinate> { C(4, 4) }).Verdict,
                 "a 4×4 floor without a Secret Exit is winnable by the Grand Exit");
         }
@@ -75,6 +77,46 @@ namespace ConsoleCards.Tests
             var holes = new HashSet<TrapFloorCoordinate> { C(1, 1) };
             Assert.AreEqual(TrapFloorEscapeVerdict.Undetermined,
                 Outlook(4, C(1, 1), holes, new HashSet<TrapFloorCoordinate> { C(4, 4) }).Verdict);
+        }
+
+        [Test]
+        public void CutOff_ButAFaceUpAbilityOrFriendStillTakeable_IsUndetermined()
+        {
+            var holes = new HashSet<TrapFloorCoordinate> { C(3, 4), C(4, 3) };
+            var exits = new HashSet<TrapFloorCoordinate> { C(4, 4) };
+            var takeable = new HashSet<TrapFloorCoordinate> { C(2, 1) };
+            Assert.AreEqual(TrapFloorEscapeVerdict.Undetermined, Outlook(4, C(1, 1), holes, exits, null, false, takeable).Verdict,
+                "future card acquisition is still possible");
+        }
+
+        [Test]
+        public void CutOff_ButTheShopIsOpen_IsUndetermined()
+        {
+            var holes = new HashSet<TrapFloorCoordinate> { C(3, 4), C(4, 3) };
+            var exits = new HashSet<TrapFloorCoordinate> { C(4, 4) };
+            Assert.AreEqual(TrapFloorEscapeVerdict.Undetermined, Outlook(4, C(1, 1), holes, exits, null, false, null, true).Verdict);
+        }
+
+        [Test]
+        public void NoEscapeElimination_IsAcceptedOnlyWhenTheHostProvedIt()
+        {
+            PlayerId trapped = new PlayerId(System.Guid.NewGuid()), other = new PlayerId(System.Guid.NewGuid());
+            var evidence = new ProvenTrapped(trapped);
+            Assert.IsTrue(TrapFloorEliminationRules.HasReason(TrapFloorEliminationReason.NoEscapePossible, trapped, evidence));
+            Assert.IsFalse(TrapFloorEliminationRules.HasReason(TrapFloorEliminationReason.NoEscapePossible, other, evidence),
+                "undetermined or possible: nobody is put out");
+        }
+
+        private sealed class ProvenTrapped : ITrapFloorEffectEvidence
+        {
+            private readonly PlayerId trapped;
+            public ProvenTrapped(PlayerId trapped) => this.trapped = trapped;
+            public bool IsEscaped(PlayerId player) => false;
+            public bool StandsOnHoleOrOffFloor(PlayerId player) => false;
+            public bool IsStuckWithoutKey(PlayerId player) => false;
+            public bool CannotEscape(PlayerId player) => player == trapped;
+            public bool StandsOnFloorCard(PlayerId player, TabletopObjectId floorCardId) => false;
+            public bool IsSurvivalEndgame => false;
         }
 
         // ---------- Grand Exit invariant (a defect, never a loss) ----------

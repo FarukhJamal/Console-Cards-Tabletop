@@ -1262,8 +1262,8 @@ namespace ConsoleCards.Presentation.Composition
             floorTurnCollapseDone = true; // COLLAPSE-3: one collapse per floor turn
             RecordFloorTurnCollapse(); // COLLAPSE-ONCE
             ApplyCollapsedFloorPresentation(result.CollapsedFloor.FloorCardId);
-            ReviewFloorStanding($"collapse {result.Roll.Coordinate}"); // P7 (s162): Grand Exit invariant, escape outlook
             if (!PlayAssist.IsFree) KnockOutPawnsOnCollapsedTile(result.Roll.Coordinate); // FALL-1; decision C: not in Free
+            ReviewFloorStanding($"collapse {result.Roll.Coordinate}"); // P7: Grand Exit invariant; no-escape (after falls)
             host.selectionState?.ClearAll();
             host.selectionPresenter?.Refresh();
             RefreshTrapFloorStatusUi();
@@ -3055,6 +3055,11 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void ReplaceCurrentUndoStateForPurchaseAssistance()
         {
+            // P7 closure (2026-11-08, live: taking a free floor Ability threw "The Undo transaction Before state is not the
+            // current authoritative history state"): inside an Undo batch (the prize take, its payment and the return to
+            // the move origin are one step) the batch records the whole step when it ends; replacing the current state
+            // here would swap out the batch's Before state.
+            if (host.undoBatchActive) return;
             if (host.undoTrackedMatch != host.matchState || host.undoHistory.CurrentStateIndex < 0) return;
             host.undoHistory.ReplaceCurrentState(host.SessionService.CaptureUndoSnapshot());
             host.SessionService.RefreshUndoUi();
@@ -4336,7 +4341,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (host.undoTrackedMatch == host.matchState && host.undoHistory.CurrentStateIndex >= 0)
+            if (!host.undoBatchActive && host.undoTrackedMatch == host.matchState && host.undoHistory.CurrentStateIndex >= 0)
             {
                 // The accepted transfer already owns this transaction. Replace its After snapshot
                 // with the Trap Floor interpretation instead of creating a second history entry.

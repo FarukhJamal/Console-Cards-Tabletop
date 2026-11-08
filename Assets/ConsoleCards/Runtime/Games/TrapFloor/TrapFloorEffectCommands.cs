@@ -104,6 +104,11 @@ namespace ConsoleCards.Games.TrapFloor
         StuckWithoutKey = 2,
         /// <summary>The pawn stands on a collapsed tile, an empty cell, or off the floor (fell).</summary>
         Fell = 3,
+        /// <summary>
+        /// Owner decision 2026-11-08 (option A): the host proved no legal way to escape is left for this player
+        /// (TrapFloorEscapeVerdict.Impossible). Never on an undetermined outlook.
+        /// </summary>
+        NoEscapePossible = 4,
     }
 
     /// <summary>A player is out for the floor, for a reason the table that runs it must see for itself.</summary>
@@ -157,6 +162,8 @@ namespace ConsoleCards.Games.TrapFloor
         bool IsEscaped(PlayerId player);
         bool StandsOnHoleOrOffFloor(PlayerId player);
         bool IsStuckWithoutKey(PlayerId player);
+        /// <summary>The authoritative host proved escape impossible for this player (false wherever that is not proven).</summary>
+        bool CannotEscape(PlayerId player);
         bool StandsOnFloorCard(PlayerId player, TabletopObjectId floorCardId);
         bool IsSurvivalEndgame { get; }
     }
@@ -172,6 +179,7 @@ namespace ConsoleCards.Games.TrapFloor
                 case TrapFloorEliminationReason.Escaped: return evidence.IsEscaped(player);
                 case TrapFloorEliminationReason.StuckWithoutKey: return evidence.IsStuckWithoutKey(player);
                 case TrapFloorEliminationReason.Fell: return evidence.StandsOnHoleOrOffFloor(player);
+                case TrapFloorEliminationReason.NoEscapePossible: return evidence.CannotEscape(player);
                 default: return false; // no concession in the rules: a player cannot simply declare themselves out
             }
         }

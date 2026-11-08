@@ -184,6 +184,8 @@ namespace ConsoleCards.Presentation.Composition
                     && !collapsed.IsTakenPrize;
             }
 
+            public bool CannotEscape(PlayerId player) => game.IsProvenTrapped(player);
+
             public bool IsStuckWithoutKey(PlayerId player)
             {
                 TabletopComposition host = game.host;
@@ -343,7 +345,7 @@ namespace ConsoleCards.Presentation.Composition
                 die.SideCount,
                 TrapFloorHostDice.TurnKeyOf(host.trapFloorTurnState),
                 v => (xAxis && v > template.GridColumns) || (yAxis && v > template.GridRows), // the rules ask for a re-roll
-                sides => System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, sides + 1));
+                sides => HostRandomFace(commit.ObjectId, sides));
             if (commit.RecordMode == AuthoritativeActionRecordMode.Transaction) hostRolledSteps.Add(commit.Context.Id);
             // DICE-LOOP (live test, 2026-11-06): the die already shows the host's result (the throw happened to land on it,
             // or it settled again after the host turned it). Nothing is replaced, so the thrower's die is not turned
@@ -362,6 +364,16 @@ namespace ConsoleCards.Presentation.Composition
             Debug.Log($"[Authority] Rules die (d{die.SideCount}) thrown{(host.IsPlayerOnThisComputer(commit.Context.RequestedByPlayerId) && !host.Replicated.Replaying ? " here" : " by another computer")}: "
                 + $"the host's result is {value} (it showed {commit.SettledDieValue.Value}).");
             return true;
+        }
+
+        // The host's random face for a rules die. In the Editor only, a scenario may queue the next face for a die (the
+        // host-side RNG seam); the rules (re-roll beyond the floor, the Grand Exit's protection) still decide the result.
+        private static int HostRandomFace(TabletopObjectId dieId, int sides)
+        {
+#if UNITY_EDITOR
+            if (TrapFloorDevFixtures.TryTakeQueuedFace(dieId, sides, out int queued)) return queued;
+#endif
+            return System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, sides + 1);
         }
 
         /// <summary>
@@ -400,7 +412,7 @@ namespace ConsoleCards.Presentation.Composition
                     die.SideCount,
                     TrapFloorHostDice.TurnKeyOf(host.trapFloorTurnState),
                     v => (xAxis && v > template.GridColumns) || (yAxis && v > template.GridRows),
-                    sides => System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, sides + 1));
+                    sides => HostRandomFace(dieId, sides));
             }
 
             if (!view.TryGetValueRotation(value, at.RotationDegrees, out Quaternion shown)) { refusal = "That face cannot be shown."; return false; }

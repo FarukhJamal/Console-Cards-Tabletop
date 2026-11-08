@@ -181,6 +181,12 @@ namespace ConsoleCards.Presentation.Composition
             PrivateNote(TrapFloorDevFixtures.StageActivePawnNextTo(host, target));
         }
 
+        internal void ScenarioAimDice(string exitKind)
+        {
+            if (!privateHosting) return;
+            PrivateNote(TrapFloorDevFixtures.AimFloorDiceAt(host, exitKind));
+        }
+
         internal void ScenarioReport()
         {
             if (!privateHosting) return;
@@ -4142,6 +4148,11 @@ namespace ConsoleCards.Presentation.Composition
                     if (GUILayout.Button("→Crane")) Online.ScenarioStage("Crane Trap");
                     if (GUILayout.Button("→Blind")) Online.ScenarioStage("Blind Trap");
                     if (GUILayout.Button("→Sticky")) Online.ScenarioStage("Sticky Trap");
+                    GUILayout.EndHorizontal();
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label("Dice at:", GUILayout.Width(62f));
+                    if (GUILayout.Button("Grand Exit")) Online.ScenarioAimDice("Grand Exit");
+                    if (GUILayout.Button("Secret Exit")) Online.ScenarioAimDice("Secret Exit");
                     GUILayout.EndHorizontal();
 #endif
                 }

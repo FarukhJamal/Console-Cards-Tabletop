@@ -26,6 +26,8 @@ namespace ConsoleCards.Tests
             public bool IsEscaped(PlayerId player) => Escaped.Contains(player);
             public bool StandsOnHoleOrOffFloor(PlayerId player) => OnHole.Contains(player);
             public bool IsStuckWithoutKey(PlayerId player) => Stuck.Contains(player);
+            public readonly HashSet<PlayerId> Trapped = new HashSet<PlayerId>();
+            public bool CannotEscape(PlayerId player) => Trapped.Contains(player);
             public bool StandsOnFloorCard(PlayerId player, TabletopObjectId floorCardId) =>
                 Standing.TryGetValue(player, out TabletopObjectId on) && on == floorCardId;
         }

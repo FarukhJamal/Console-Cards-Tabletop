@@ -114,6 +114,7 @@ namespace ConsoleCards.Presentation.UI
             public string Number;
             public string Text;
             public bool House;
+            public string Entry; // the rule's stable ID: a click proposes a change (P7 closure, doc 23 R3)
         }
 
         private sealed class Page
@@ -135,6 +136,7 @@ namespace ConsoleCards.Presentation.UI
             public Text BadgeNumber;
             public GameObject Tag;
             public Text Body;
+            public Button Change;
         }
 
         private readonly List<Page> pages = new List<Page>();
@@ -143,6 +145,9 @@ namespace ConsoleCards.Presentation.UI
         private readonly List<Row> leftRows = new List<Row>();
         private readonly List<Row> rightRows = new List<Row>();
         private readonly StringBuilder pinnedText = new StringBuilder(512);
+        // P7 closure (2026-11-08): the book on the table is what the rulebook button opens, so it must offer the same
+        // "propose a change" as the 2D rulebook (house rules, doc 23 §8; the Shop rule is turned on this way).
+        private Action<string> proposeChange;
         private string eyebrow = "RULEBOOK";
         private int stepInSection;
         private Canvas readingCanvasComponent;
@@ -192,9 +197,9 @@ namespace ConsoleCards.Presentation.UI
             openFullRulebook = full;
             readingCanvasComponent = readingCanvas.GetComponent<Canvas>();
             Listen(previousButton, PreviousSpread);
-            Listen(previousHalf, PreviousSpread);
+            Listen(previousHalf, () => { if (!ProposeUnderPointer()) PreviousSpread(); });
             Listen(nextButton, NextSpread);
-            Listen(nextHalf, NextSpread);
+            Listen(nextHalf, () => { if (!ProposeUnderPointer()) NextSpread(); });
             Listen(closeButton, Close);
             Listen(moreButton, PressMore);
             Listen(bookmarkButton, ToggleBookmark);
@@ -219,6 +224,7 @@ namespace ConsoleCards.Presentation.UI
             pages.Clear();
             sectionPages.Clear();
             sectionHouse.Clear();
+            proposeChange = rules?.Actions?.ProposeChange;
             string game = rules == null || string.IsNullOrEmpty(rules.GameName) ? string.Empty : rules.GameName.ToUpperInvariant();
             coverTitle.text = game.Length > 0 ? $"RULEBOOK\n<size={coverGameSize}>{game}</size>" : "RULEBOOK";
             eyebrow = game.Length > 0 ? $"{game} · RULEBOOK" : "RULEBOOK";
@@ -229,6 +235,7 @@ namespace ConsoleCards.Presentation.UI
             {
                 title.Intro = (rules.IsHouseRules ? $"{rules.SetName} · house rules" : rules.SetName)
                     + "\n\nThe tabs on the right go to each part. A rule this table changed shows as HOUSE RULE AT THIS TABLE."
+                    + (rules.Actions?.ProposeChange != null ? " Click a rule to propose a change." : string.Empty)
                     + (string.IsNullOrEmpty(rules.PendingText) ? string.Empty : "\n\n" + rules.PendingText);
             }
 
@@ -300,7 +307,7 @@ namespace ConsoleCards.Presentation.UI
             // A numbered rule keeps its number; a bullet ("•") is numbered in its part, as the board's steps are.
             stepInSection++;
             string number = line.Number.Length > 0 && char.IsDigit(line.Number[0]) ? line.Number : stepInSection.ToString();
-            page.Steps.Add(new Step { Number = number, Text = BoldLead(line.Text), House = line.Changed });
+            page.Steps.Add(new Step { Number = number, Text = BoldLead(line.Text), House = line.Changed, Entry = line.EntryStableId });
             page.Height += height;
             return page;
         }
@@ -656,7 +663,48 @@ namespace ConsoleCards.Presentation.UI
                 row.Badge.SetActive(!step.House);
                 row.BadgeNumber.text = step.Number;
                 row.Body.text = step.Text;
+                string entry = step.Entry;
+                bool canChange = proposeChange != null && !string.IsNullOrEmpty(entry);
+                row.Body.raycastTarget = canChange; // otherwise the click goes on to the page (turns it)
+                row.Change.interactable = canChange;
+                row.Change.onClick.RemoveAllListeners();
+                if (canChange)
+                {
+                    row.Change.onClick.AddListener(() =>
+                    {
+                        Action<string> propose = proposeChange;
+                        Close(); // the proposal panel is a 2D panel; the open book would sit over it
+                        propose?.Invoke(entry);
+                    });
+                }
             }
+        }
+
+        // The half-page buttons lie over the steps, so a click on a rule reaches them: a rule that can be changed takes it
+        // (opens its proposal); anywhere else the page turns as before.
+        private bool ProposeUnderPointer()
+        {
+            Mouse mouse = Mouse.current;
+            if (mouse == null || proposeChange == null) return false;
+            Vector2 point = mouse.position.ReadValue();
+            UnityEngine.Camera eye = readingCanvasComponent != null && readingCanvasComponent.worldCamera != null
+                ? readingCanvasComponent.worldCamera
+                : readingCamera;
+            return ProposeUnder(leftRows, point, eye) || ProposeUnder(rightRows, point, eye);
+        }
+
+        private static bool ProposeUnder(List<Row> rows, Vector2 point, UnityEngine.Camera eye)
+        {
+            for (int i = 0; i < rows.Count; i++)
+            {
+                Row row = rows[i];
+                if (!row.Root.activeInHierarchy || !row.Change.interactable) continue;
+                if (!RectTransformUtility.RectangleContainsScreenPoint(row.Body.rectTransform, point, eye)) continue;
+                row.Change.onClick.Invoke();
+                return true;
+            }
+
+            return false;
         }
 
         private static Row MakeRow(Side side)
@@ -664,6 +712,11 @@ namespace ConsoleCards.Presentation.UI
             GameObject go = Instantiate(side.RowTemplate, side.Steps);
             go.name = "Step";
             Transform root = go.transform;
+            Text body = root.Find("Words/Body").GetComponent<Text>();
+            Button change = body.GetComponent<Button>();
+            if (change == null) change = body.gameObject.AddComponent<Button>();
+            change.transition = Selectable.Transition.None;
+            change.targetGraphic = body;
             return new Row
             {
                 Root = go,
@@ -672,7 +725,8 @@ namespace ConsoleCards.Presentation.UI
                 Badge = root.Find("Badge").gameObject,
                 BadgeNumber = root.Find("Badge/Number").GetComponent<Text>(),
                 Tag = root.Find("Words/Tag").gameObject,
-                Body = root.Find("Words/Body").GetComponent<Text>(),
+                Body = body,
+                Change = change,
             };
         }
 
