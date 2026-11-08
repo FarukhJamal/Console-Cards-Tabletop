@@ -125,8 +125,9 @@ namespace ConsoleCards.Presentation.Composition
         private const byte MsgPrivateSelectionAnswer = 54; // P7 guest → host: the cards that player picked, or none (closed)
         private const byte MsgPrivateAbilityDraw = 55;  // P8A guest → host: "Draw 3 Abilities" on this player's turn
         private const byte MsgPrivateAbilityOffer = 56; // P8A host → guest: the Abilities drawn (game definitions; public once drawn)
+        private const byte MsgPrivateTableRoles = 57;   // P8A host → guest: public roles of table parts (the Ability deck) and the room's rules level
 
-        private static bool IsPrivateMessage(byte type) => type >= MsgPrivatePackage && type <= MsgPrivateAbilityOffer;
+        private static bool IsPrivateMessage(byte type) => type >= MsgPrivatePackage && type <= MsgPrivateTableRoles;
 
         // Normal-play table messages: never used, and refused, in a private session.
         private static bool IsLegacyTableMessage(byte type) =>
@@ -142,6 +143,13 @@ namespace ConsoleCards.Presentation.Composition
         internal bool InPrivateSession => privateHosting || privateGuest;
 
         internal bool IsPrivateGuest => privateGuest;
+
+        // P8A (owner, 2026-11-08: "privacy of the data, not a game that behaves differently"): the public facts a guest's
+        // own menus need to offer what the host's offer (which deck is the Ability deck, whether the room plays Full).
+        private ContainerId guestAbilityDeckId;
+        private bool guestRoomFull;
+        internal ContainerId GuestAbilityDeckId => privateGuest ? guestAbilityDeckId : ContainerId.Empty;
+        internal bool GuestRoomFull => privateGuest && guestRoomFull;
         internal bool IsPrivateHost => privateHosting;
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -292,6 +300,14 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            // P8A: the room's rules level changed (Settings or the panel): every guest's menus follow it.
+            bool fullNow = PlayAssist.Level == PlayAssistLevel.Full;
+            if (fullNow != lastRolesFull)
+            {
+                lastRolesFull = fullNow;
+                for (int i = 0; i < members.Count; i++) if (!members[i].IsHost) SendPrivateTableRoles(members[i]);
+            }
+
             if (!ReferenceEquals(privateHostMatch, host.matchState))
             {
                 PrivateTableReplaced("the host's table was replaced (Undo, reset or a new floor)");
@@ -386,6 +402,28 @@ namespace ConsoleCards.Presentation.Composition
             PrivateNote($"Sent the Shop's public list to {member.Name}: {bytes.Length} bytes, {privateShopCatalog.Entries.Count} Abilities, {privateShopCatalog.Controllers.Count} Controller Cards; "
                 + $"hidden real ids {ids}/{hidden.Count}, hidden-only definition ids {defs}/{definitions.Count}, deal seed {(seed ? "FOUND" : "absent")}.");
             SendPrivateBytes(member, MsgPrivateShop, bytes);
+            SendPrivateTableRoles(member);
+        }
+
+        // P8A: which container is the Ability deck (public: every player sees the deck) and the room's rules level.
+        private bool lastRolesFull = true;
+
+        private void SendPrivateTableRoles(Member member)
+        {
+            if (host.trapFloorTemplate == null) return;
+            byte[] roles = new byte[17];
+            host.trapFloorTemplate.AbilityDeckId.Value.ToByteArray().CopyTo(roles, 0);
+            roles[16] = (byte)(PlayAssist.Level == PlayAssistLevel.Full ? 1 : 0);
+            SendPrivateBytes(member, MsgPrivateTableRoles, roles);
+        }
+
+        private void GuestTableRoles(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length < 17) return;
+            byte[] id = new byte[16];
+            Array.Copy(bytes, 0, id, 0, 16);
+            guestAbilityDeckId = new ContainerId(new Guid(id));
+            guestRoomFull = bytes[16] == 1;
         }
 
         // PRIVACY-P6B: the host's table object was replaced by one that continues it (Undo, a reset, a new floor). The
@@ -1862,6 +1900,9 @@ namespace ConsoleCards.Presentation.Composition
                 case MsgPrivateAbilityOffer:
                     GuestAbilityOffer(payload);
                     break;
+                case MsgPrivateTableRoles:
+                    GuestTableRoles(payload);
+                    break;
                 case MsgPrivateRuleVote:
                     GuestRuleVote(payload);
                     break;
@@ -2784,9 +2825,6 @@ namespace ConsoleCards.Presentation.Composition
                     actions.Add(new PopupActionOption("Cancel Payment", true, () => GuestCancelPayment("Payment cancelled.")));
                 }
 
-                // P8A: this turn's draw of 3 Abilities (the host draws them; buying is the Shop's own payment here).
-                if (mine && !GuestPaymentActive && privateTurn.Phase == (int)TrapFloorTurnPhase.PlayerTurn)
-                    actions.Add(new PopupActionOption("Draw 3 Abilities", true, GuestRequestAbilityDraw));
                 actions.Add(new PopupActionOption(privateTurn != null && privateTurn.Phase == (int)TrapFloorTurnPhase.FloorTurn ? "End Floor Turn" : "End Turn", mine, () => PrivateEndTurn()));
                 actions.Add(new PopupActionOption("Undo my last", true, PrivateUndo));
                 host.runtimeUi.ShowTrapFloorStatus(status, new FloorfallStatusModel(false, string.Empty, string.Empty, string.Empty), actions);
@@ -2907,7 +2945,7 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- P8A: Draw 3 Abilities for a guest ----------
 
-        private void GuestRequestAbilityDraw()
+        internal void GuestRequestAbilityDraw()
         {
             if (GuestPaymentActive) { host.ShowMessage("Finish or cancel the current payment first."); return; }
             BeginMessage(MsgPrivateAbilityDraw);
@@ -3999,6 +4037,7 @@ namespace ConsoleCards.Presentation.Composition
         private void EndPrivateSession(string why) { }
         internal bool TryRunHostOwnPrivateEndTurn(TrapFloorEndTurnRequest request) => false;
         internal void PrivateUndo() { }
+        internal void GuestRequestAbilityDraw() { }
         internal void ShowPrivateGuestHud() { }
         internal void BeginPrivateTransaction() { }
         internal void RefreshPrivateGuestShopEntry() { }

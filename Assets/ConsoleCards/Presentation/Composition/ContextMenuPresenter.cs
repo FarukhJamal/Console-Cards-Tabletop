@@ -558,14 +558,17 @@ namespace ConsoleCards.Presentation.Composition
             AddControllerDrawAction(actions, targetDeckId);
             // P8A (owner, 2026-11-08): in Full, Abilities are bought, never drawn into the hand: the Ability deck's menu
             // opens this turn's draw of 3 (the cards shown with their cost; Buy runs the usual payment).
-            bool fullAbilityDeck = host.ActiveCartridge is TrapFloorCartridge
-                && host.trapFloorTemplate != null
-                && targetDeckId == host.trapFloorTemplate.AbilityDeckId
-                && PlayAssist.Level == PlayAssistLevel.Full;
-            if (fullAbilityDeck && ((TrapFloorCartridge)host.ActiveCartridge).TryGetAbilityOfferAction(out string offerLabel))
+            // The same entry on every computer: a guest knows the Ability deck and the room's rules level from the host's
+            // public table roles; the host draws, the buyer's own screen shows the Shop window.
+            bool fullAbilityDeck = host.IsFullAbilityDeck(targetDeckId);
+            if (fullAbilityDeck)
             {
-                TrapFloorCartridge offerGame = (TrapFloorCartridge)host.ActiveCartridge;
-                actions.Add(new PopupActionOption(offerLabel, true, offerGame.OpenAbilityOffer));
+                actions.Add(new PopupActionOption("Draw 3 Abilities", true, () =>
+                {
+                    CloseContextMenu();
+                    if (host.HasOnline && host.Online.IsPrivateGuest) host.Online.GuestRequestAbilityDraw();
+                    else if (host.ActiveCartridge is TrapFloorCartridge game) game.OpenAbilityOffer();
+                }));
             }
 
             if (!fullAbilityDeck && host.HasLocalHand() && !host.ActiveCartridge.IsAssistedControllerDeck(targetDeckId) && targetDeck.Count > 0)

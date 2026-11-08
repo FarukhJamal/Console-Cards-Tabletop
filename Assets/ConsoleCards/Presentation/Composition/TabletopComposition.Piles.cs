@@ -156,13 +156,21 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
+        // P8A: the Ability deck in a room that plays Full, on the host (its own game) and on a private guest (the host's
+        // public table roles): the same answer on every computer, so every player's menus behave the same.
+        internal bool IsFullAbilityDeck(ContainerId deckId)
+        {
+            if (deckId.IsEmpty) return false;
+            if (HasOnline && Online.IsPrivateGuest) return deckId == Online.GuestAbilityDeckId && Online.GuestRoomFull;
+            return ActiveCartridge is TrapFloorCartridge && trapFloorTemplate != null
+                && deckId == trapFloorTemplate.AbilityDeckId && PlayAssist.Level == PlayAssistLevel.Full;
+        }
+
         private DrawCardsResult DrawCards(ContainerId sourceDeckContainerId, int count)
         {
             EnsureInitialized();
             // P8A (owner, 2026-11-08): in Full, an Ability reaches a hand only by being bought.
-            if (ActiveCartridge is TrapFloorCartridge && trapFloorTemplate != null
-                && sourceDeckContainerId == trapFloorTemplate.AbilityDeckId
-                && PlayAssist.Level == PlayAssistLevel.Full)
+            if (IsFullAbilityDeck(sourceDeckContainerId))
             {
                 ShowMessage("Abilities are bought, not drawn: right-click the Ability deck → Draw 3 Abilities.");
                 return DrawCardsResult.Failure(CommandResultStatus.Rejected, DrawCardsError.InvalidCount);

@@ -527,6 +527,13 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            if (host.trapFloorTurnState != null && host.HasOnline && host.Online.IsPrivateHost
+                && host.Online.IsPlayerOnAnotherComputer(host.trapFloorTurnState.ActivePlayerId))
+            {
+                host.ShowMessage("It is another player's turn: they draw their Abilities on their own computer.");
+                return;
+            }
+
             if (!TryGetAbilityDeck(out ContainerState deck)) return;
             if (!IsAbilityOfferTurn())
             {
@@ -548,60 +555,48 @@ namespace ConsoleCards.Presentation.Composition
             ShowAbilityOffer(deck);
         }
 
+        // P8A (owner, 2026-11-08): this turn's draw shows in the Shop window, on every computer the same way: only the
+        // drawn Abilities, each with its cost and whether the Hand can pay; Buy runs the Shop's own payment for that card.
         private void ShowAbilityOffer(ContainerState deck)
         {
-            ContainerState hand = null;
-            if (TryGetTrapFloorPlayerSetup(host.trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition setup))
-            {
-                host.matchState.Containers.TryGetValue(setup.HandContainerId, out hand);
-            }
-
-            ControllerInputCostEvaluator evaluator = new ControllerInputCostEvaluator();
-            List<FocusedCardOptionModel> options = new List<FocusedCardOptionModel>(AbilityOfferSize);
+            PlayerId buyer = host.trapFloorTurnState.ActivePlayerId;
+            HashSet<string> drawn = new HashSet<string>(StringComparer.Ordinal);
             for (int i = 0; i < abilityOffer.Count; i++)
             {
-                TabletopObjectId cardId = abilityOffer[i];
-                if (!deck.Contains(cardId) || !TryGetDeckCardDefinition(cardId, out CardDefinitionData definition)) continue;
-                bool canPay = hand != null
-                    && evaluator.Evaluate(host.matchState, hand, definition.InputCost, host.trapFloorTemplate.GameDefinition).CanPay;
-                string cost = InputCostNotation.Format(definition.InputCost);
-                CardDefinition authored = null;
-                if (host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card))
-                {
-                    host.TryGetAuthoredCardDefinition(card.BaseState.DefinitionId, out authored);
-                }
-
-                options.Add(new FocusedCardOptionModel(
-                    cardId,
-                    definition.DisplayName,
-                    canPay ? $"{cost} — you can pay" : $"{cost} — your Hand cannot pay yet",
-                    host.FrontArt(authored),
-                    canPay));
+                if (deck.Contains(abilityOffer[i]) && TryGetDeckCardDefinition(abilityOffer[i], out CardDefinitionData definition))
+                    drawn.Add(definition.StableId);
             }
 
-            if (options.Count == 0)
+            if (drawn.Count == 0 || host.runtimeUi == null)
             {
                 host.ShowMessage("Nothing left in this turn's Ability draw.");
                 RefreshTrapFloorStatusUi();
                 return;
             }
 
-            ShowSelectionFor(host.trapFloorTurnState.ActivePlayerId, new FocusedCardSelectionModel(
-                "ABILITY DRAW — BUY?",
-                "Pick one to buy: pay its cost from your Hand through your Console. Come back for another from the "
-                    + "turn menu. What you do not buy goes back, and the deck is shuffled when your turn ends.",
-                $"{options.Count} drawn",
-                "Buy",
+            List<ActionAbilityPurchaseOption> options = new List<ActionAbilityPurchaseOption>();
+            foreach (ActionAbilityPurchaseOption option in BuildActionAbilityPurchaseOptions())
+            {
+                if (drawn.Contains(option.CardDefinitionStableId)) options.Add(option);
+            }
+
+            host.runtimeUi.ShowActionAbilityPurchase(
                 options,
-                1,
-                selected => selected.Count == 1,
-                selected => BeginDeckPurchase(selected[0]),
-                () =>
+                stableId =>
                 {
-                    host.runtimeUi?.CloseFocusedCardSelection();
-                    RefreshTrapFloorStatusUi();
+                    TabletopObjectId card = PeekAbilityOfferCard(buyer, stableId);
+                    if (card.IsEmpty)
+                    {
+                        host.runtimeUi?.SetActionAbilityPurchaseStatus("That card is no longer in this turn's draw.");
+                        return;
+                    }
+
+                    BeginDeckPurchase(card);
                 },
-                "Close"));
+                host.runtimeUi.CloseActionAbilityPurchase,
+                "Pick one to buy. What you do not buy goes back; the deck is shuffled when your turn ends.",
+                "ABILITY DRAW",
+                "DRAWN");
         }
 
         // The game's card behind a deck card (its cost and name).
