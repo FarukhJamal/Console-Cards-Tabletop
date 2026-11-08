@@ -3905,6 +3905,15 @@ namespace ConsoleCards.Presentation.Composition
             keyRevealedThisLanding = floorCardId; // KEYS-2 / PRIZE-3: this landing's popup comes from the reveal
             host.ReactToRevealedTile(floorCardId, result.FloorCard.Content.Category.ToString()); // doc 57: a ring in its colour
             bool waits = IsAnyPawnOnFloorCard(floorCardId);
+            // P8A (owner, 2026-11-08): in Full the tile turns over the moment the pawn lands, together with its message
+            // (the pawn hops while it turns, as at the end of a turn), so the player sees what they landed on first.
+            // Free and Reminders keep the table rule: the tile turns once the pawn is off it.
+            if (waits && PlayAssist.Level == PlayAssistLevel.Full)
+            {
+                HopPawnsOffFloorCard(floorCardId);
+                waits = false;
+            }
+
             if (host.Registry.TryGetCardView(floorCardId, out CardView floorCardView))
             {
                 if (waits) floorCardView.SetHoldFaceDown(true); // the card is revealed; the tile turns later

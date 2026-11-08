@@ -159,6 +159,15 @@ namespace ConsoleCards.Presentation.Composition
         private DrawCardsResult DrawCards(ContainerId sourceDeckContainerId, int count)
         {
             EnsureInitialized();
+            // P8A (owner, 2026-11-08): in Full, an Ability reaches a hand only by being bought.
+            if (ActiveCartridge is TrapFloorCartridge && trapFloorTemplate != null
+                && sourceDeckContainerId == trapFloorTemplate.AbilityDeckId
+                && PlayAssist.Level == PlayAssistLevel.Full)
+            {
+                ShowMessage("Abilities are bought, not drawn: right-click the Ability deck → Draw 3 Abilities.");
+                return DrawCardsResult.Failure(CommandResultStatus.Rejected, DrawCardsError.InvalidCount);
+            }
+
             int requestedCount = count;
             // H1: a draw from a player's own deck fills that player's hand, whoever's turn it is.
             ContainerId targetHandId = DrawTargetHandFor(sourceDeckContainerId);

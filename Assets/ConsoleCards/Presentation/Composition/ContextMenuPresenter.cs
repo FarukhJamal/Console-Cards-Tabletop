@@ -556,7 +556,19 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             AddControllerDrawAction(actions, targetDeckId);
-            if (host.HasLocalHand() && !host.ActiveCartridge.IsAssistedControllerDeck(targetDeckId) && targetDeck.Count > 0)
+            // P8A (owner, 2026-11-08): in Full, Abilities are bought, never drawn into the hand: the Ability deck's menu
+            // opens this turn's draw of 3 (the cards shown with their cost; Buy runs the usual payment).
+            bool fullAbilityDeck = host.ActiveCartridge is TrapFloorCartridge
+                && host.trapFloorTemplate != null
+                && targetDeckId == host.trapFloorTemplate.AbilityDeckId
+                && PlayAssist.Level == PlayAssistLevel.Full;
+            if (fullAbilityDeck && ((TrapFloorCartridge)host.ActiveCartridge).TryGetAbilityOfferAction(out string offerLabel))
+            {
+                TrapFloorCartridge offerGame = (TrapFloorCartridge)host.ActiveCartridge;
+                actions.Add(new PopupActionOption(offerLabel, true, offerGame.OpenAbilityOffer));
+            }
+
+            if (!fullAbilityDeck && host.HasLocalHand() && !host.ActiveCartridge.IsAssistedControllerDeck(targetDeckId) && targetDeck.Count > 0)
             {
                 actions.Add(new PopupActionOption(
                     "Draw into hand…",
