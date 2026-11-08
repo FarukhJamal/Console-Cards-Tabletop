@@ -400,7 +400,7 @@ namespace ConsoleCards.Presentation.Composition
             string status = string.IsNullOrEmpty(missing)
                 ? "Pick the cards that pay the cost."
                 : $"Missing: {missing}";
-            host.runtimeUi.ShowFocusedCardSelection(new FocusedCardSelectionModel(
+            ShowSelectionFor(host.trapFloorTurnState != null ? host.trapFloorTurnState.ActivePlayerId : PlayerId.Empty, new FocusedCardSelectionModel(
                 $"BUY {purchasedDefinition.DisplayName.ToUpperInvariant()} — HAND",
                 $"Choose {FormatPurchaseInputCost(purchasedDefinition.InputCost)} from your Hand.",
                 status,
@@ -2291,14 +2291,26 @@ namespace ConsoleCards.Presentation.Composition
                     return false;
                 }
 
+                // P7 PHYS-DEDUP (found live, 2026-11-08): the resolver's place is Dynamic, so a Trap's or End Turn's
+                // move went out with the turn as "still moving" and the pawn reached every guest one revision later,
+                // when the host's physics put it to sleep. The pawn is put down at rest on its tile instead (as a
+                // player's own pawn step is): one logical move, one revision.
+                PhysicalObjectState resting = pawnView.PhysicalObject.RestingOnTable(placed); // on what is under it (a floor card)
                 moved = host.TableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(
                     new CommitPhysicalObjectCommand(
                         host.CreateCommandContext(player),
                         pawn.BaseState.Id,
-                        placed,
+                        resting,
                         pawn.BaseState.PhysicalRevision,
                         null,
                         AuthoritativeActionRecordMode.Transaction)).Succeeded;
+                if (moved)
+                {
+                    // A physical commit records only the physical state: the table's pose follows the tile, so the
+                    // next move check and every guest read the pawn where it now stands.
+                    TabletopObjectState now = host.matchState.GetObject(pawn.BaseState.Id);
+                    now.SetPose(new TabletopPose(targetPose.Position, now.Pose.RotationDegrees, now.Pose.Layer, now.Pose.LocalOrder));
+                }
             }
             else
             {
@@ -2901,6 +2913,7 @@ namespace ConsoleCards.Presentation.Composition
         private void ShowRevealFor(PlayerId actor, FocusedCardRevealModel model)
         {
             if (model == null || host.runtimeUi == null) return;
+            model = AsOneRevision(model);
             // Free and Reminders turn most of these into a line here (TableUiController): only what would ask is relayed.
             // Live finding (s154): a guest's own move runs here for that guest (the host acts for it), so "not on this
             // computer" is asked of the room, not of who is acting now.
@@ -2913,6 +2926,46 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             host.runtimeUi.ShowFocusedCardReveal(model);
+        }
+
+        /// <summary>
+        /// P7 (s155): the game's own card choices (use an Ability, which Reaction, which drawn Ability, which Hand cards
+        /// pay) belong to one player. On a private host, when that player plays on another computer, the choice goes to
+        /// that computer and its picks come back to run here, checked by the same rule; otherwise it shows here.
+        /// </summary>
+        /// <summary>
+        /// P7 PHYS-DEDUP (found live, 2026-11-08): a popup's button is one logical action, but it can be several rule
+        /// steps plus the cartridge's own follow-up (Take Key: the claim, then the pawn back to its start). On a private
+        /// host each step reached every guest as its own revision, and the follow-up one more after it. The button now
+        /// runs as one private transaction: one revision for every guest when it is done.
+        /// </summary>
+        private FocusedCardRevealModel AsOneRevision(FocusedCardRevealModel model)
+        {
+            if (!host.HasOnline || !host.Online.IsPrivateHost) return model;
+            Action completed = model.Completed, secondary = model.Secondary;
+            string what = "Popup \"" + model.CardTitle + "\"";
+            Action Wrap(Action run, string label) => run == null ? null : () =>
+            {
+                host.Online.BeginPrivateTransaction();
+                try { run(); }
+                finally { host.Online.EndPrivateTransaction(what + ": " + label); }
+            };
+            return new FocusedCardRevealModel(model.CardId, model.BackArtwork, model.FrontArtwork, model.HeaderTitle, model.ResultState,
+                model.CardTitle, model.CardSubtitle, model.Body, model.CompletionLabel, Wrap(completed, model.CompletionLabel),
+                model.SecondaryLabel, Wrap(secondary, model.SecondaryLabel)) { AlwaysAsk = model.AlwaysAsk };
+        }
+
+        private void ShowSelectionFor(PlayerId actor, FocusedCardSelectionModel model)
+        {
+            if (model == null || host.runtimeUi == null) return;
+            if (host.HasOnline && host.Online.IsPrivateHost && !actor.IsEmpty && host.Online.IsPlayerOnAnotherComputer(actor)
+                && host.Online.TrySendPrivateSelection(actor, model))
+            {
+                host.FeedbackLine($"{FormatPlayerName(actor)} chooses on their computer: {model.Title}.", FeedbackSeverity.Info);
+                return;
+            }
+
+            host.runtimeUi.ShowFocusedCardSelection(model);
         }
 
         private void ShowTrapPopup(TrapFloorFloorCardState floor, string header, Texture backArtwork, Texture frontArtwork)
@@ -3476,7 +3529,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             string costText = InputCostNotation.Format(prizeDefinition.InputCost);
-            host.runtimeUi.ShowFocusedCardSelection(new FocusedCardSelectionModel(
+            ShowSelectionFor(host.trapFloorTurnState != null ? host.trapFloorTurnState.ActivePlayerId : PlayerId.Empty, new FocusedCardSelectionModel(
                 $"TAKE {prizeDefinition.DisplayName.ToUpperInvariant()} — HAND",
                 $"Choose {costText} from your Hand.",
                 string.IsNullOrEmpty(missing)

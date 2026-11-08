@@ -117,6 +117,10 @@ namespace ConsoleCards.Presentation.Composition
                 Registry.pawnSelectionVisuals.Add(selectionVisual);
             }
 
+            // P7 (live finding, 2026-11-08): a private guest's scene is an Empty Table built here, so its pawns never got
+            // their seats' colours and labels (the game table's own builder does that). The host's layout names them.
+            if (privateViewActive) Spawner.ConfigureOfficialPawnPresentation();
+
             foreach (TokenState token in matchState.Tokens.Values)
             {
                 TokenView view = Spawner.CreateTokenView(token, out TabletopSelectionVisual selectionVisual, 1f);

@@ -409,7 +409,9 @@ namespace ConsoleCards.Presentation.Composition
                 dieId,
                 // At rest with the face shown (live finding: the resolver's place is Dynamic, and a die's face is only
                 // accepted for a die at rest).
-                new PhysicalObjectState(placed.Position, new PhysicalRotation(shown.x, shown.y, shown.z, shown.w), default, default, PhysicalObjectMode.Sleeping, placed.ControllingPlayerId),
+                // P7 PHYS-DEDUP (2026-11-08): on the table, not the resolver's 6 cm settling clearance above it (each
+                // host-decided d6 fell those 6 cm after its throw: one more revision for every guest).
+                view.PhysicalObject.RestingOnTable(placed.WithRotation(new PhysicalRotation(shown.x, shown.y, shown.z, shown.w))),
                 state.PhysicalRevision,
                 value,
                 AuthoritativeActionRecordMode.Transaction);

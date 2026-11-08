@@ -150,10 +150,24 @@ namespace ConsoleCards.Presentation.Composition
         internal void ConfigureOfficialPawnPresentation()
         {
             ClearOfficialPawnPresentation();
-            IReadOnlyList<CartridgeSeat> seats = host.ActiveCartridge.Seats; // CART-1b: each seat's own pawn
+            // CART-1b: each seat's own pawn. P7 (s155): a private guest's scene has no cartridge seats; its public table
+            // template (the host's layout) names each seat's pawn and place, so its pawns get their seats' colours too.
+            // Live finding (2026-11-08): a guest's scene can still hold its own cartridge's seats (its own pawn ids,
+            // not the host's), so every pawn there kept the default colour. A private guest takes the host's layout.
+            List<(TabletopObjectId PawnId, int LayoutSeatIndex)> seats = new List<(TabletopObjectId, int)>();
+            if (host.privateViewActive && host.privateViewLayout != null)
+            {
+                foreach (var layoutSeat in host.privateViewLayout.Seats)
+                    if (!layoutSeat.Pawn.IsEmpty && host.matchState != null && host.matchState.Pawns.ContainsKey(layoutSeat.Pawn))
+                        seats.Add((layoutSeat.Pawn, layoutSeat.LayoutSeatIndex));
+            }
+            else
+            {
+                foreach (CartridgeSeat seat in host.ActiveCartridge.Seats) seats.Add((seat.PawnId, seat.LayoutSeatIndex));
+            }
             for (int playerIndex = 0; playerIndex < seats.Count; playerIndex++)
             {
-                CartridgeSeat player = seats[playerIndex];
+                var player = seats[playerIndex];
                 if (player.PawnId.IsEmpty) continue; // a game without pawns
                 int playerNumber = player.LayoutSeatIndex + 1;
                 PawnView officialView = null;

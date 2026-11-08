@@ -60,6 +60,13 @@ namespace ConsoleCards.Presentation.Composition
     public sealed partial class TabletopComposition
     {
 
+        /// <summary>
+        /// P7 (s155): on a private host, the active player plays on another computer. The helper lines that talk to the
+        /// active player as "you" are not shown here (they would speak to the host player about someone else).
+        /// </summary>
+        internal bool ActivePlayerPlaysElsewhere =>
+            HasOnline && Online.IsPrivateHost && trapFloorTurnState != null && Online.IsPlayerOnAnotherComputer(trapFloorTurnState.ActivePlayerId);
+
         internal abstract class TrapFloorHintHelper : IGameHintHelper
         {
             protected readonly TabletopComposition owner;
@@ -122,6 +129,7 @@ namespace ConsoleCards.Presentation.Composition
                     && (Is(context, nameof(TrapFloorFloorContentCategory.Ability))
                         || Is(context, nameof(TrapFloorFloorContentCategory.Friend)));
                 if ((!moved && !revealed)
+                    || owner.ActivePlayerPlaysElsewhere // P7: "you" would be another computer's player
                     || owner.TrapFloorGame.tooFarStateIndex >= 0 // the move is not allowed: say that, not "take it"
                     || (owner.pendingControllerPurchaseState != null && owner.pendingControllerPurchaseState.IsActive)
                     || !owner.TrapFloorGame.TryGetActivePawnPrizeTile(out TrapFloorFloorCardState prize))
@@ -149,6 +157,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 if (!Is(trigger, HintTriggers.ContentRevealed)
                     || !Is(context, nameof(TrapFloorFloorContentCategory.Trap))
+                    || owner.ActivePlayerPlaysElsewhere // P7: "you" would be another computer's player
                     || owner.trapFloorTurnState == null
                     || owner.trapFloorTurnState.IsCurrentFloorFailed
                     || owner.trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)

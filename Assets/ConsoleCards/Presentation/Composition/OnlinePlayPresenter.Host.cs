@@ -183,8 +183,10 @@ namespace ConsoleCards.Presentation.Composition
             {
                 // PRIVACY-P4: a private guest holds only its own package; it never becomes the host. It waits for its own
                 // connection to come back, and the session ends if the host is gone.
-                PrivateNote("Lost the room: a private guest never takes over; waiting for the host.");
-                session.ExpectNewHost(NewHostWaitSeconds);
+                // P7 (s155): no new host is ever coming, so nothing waits for one: the guest's own reconnect tries get
+                // it back into a room that still exists (only its connection dropped), and a room that is gone (the
+                // host left) ends the session at once ("the room has closed"), instead of retrying for half a minute.
+                PrivateNote("Lost the room: a private guest never takes over; getting back in if the room is still there.");
                 return;
             }
             if (IsNextHost())

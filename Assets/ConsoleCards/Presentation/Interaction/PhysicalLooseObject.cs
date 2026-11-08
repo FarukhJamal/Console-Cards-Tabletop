@@ -79,6 +79,7 @@ namespace ConsoleCards.Presentation.Interaction
 
         private TabletopObjectView view;
         private Rigidbody body;
+        private const float RestingMaxDepenetrationVelocity = 0.5f; // metres a second
         private Collider physicalCollider;
         private LocalPhysicalObjectAuthority authority;
         private PhysicalObjectInteractionProfile profile;
@@ -171,6 +172,32 @@ namespace ConsoleCards.Presentation.Interaction
         /// date, physics waking it) does not count, so a game asking for a roll waits for a real one.
         /// </summary>
         public int PlayerRolls { get; private set; }
+
+        private int restingJitterSnaps;
+        /// <summary>PHYS-DEDUP: how often a piece at an accepted rest was held there instead of committing a hair's move.</summary>
+        public int RestingJitterSnaps => restingJitterSnaps;
+
+        // A body that woke without anyone moving it, still within a centimetre and about a degree of the resting state
+        // this table accepted for it. Anything larger (a real push, a fall, a throw) is a move and is committed as before.
+        private bool IsRestingJitter()
+        {
+            if (applied == null || userActionActive || compoundActionActive || held) return false;
+            if (applied.Mode != PhysicalObjectMode.Sleeping && applied.Mode != PhysicalObjectMode.SleepingUnresolved) return false;
+            if ((body.position - Vector(applied.Position)).sqrMagnitude > 0.01f * 0.01f) return false;
+            return Quaternion.Angle(body.rotation, Rotation(applied.Rotation)) <= 1f;
+        }
+
+        // P7 (found live, 2026-11-08): a game pawn the table put down on its tile was knocked metres away when the rule
+        // steps laid the floor out again (a collapse, then the next round), and the game read that pawn as off its tile.
+        // A pawn moves when a player moves it or when the table moves it; woken at rest with neither, it goes back.
+        private bool IsKnockedFromRest()
+        {
+            if (!(view is PawnView) || applied == null || userActionActive || compoundActionActive || held) return false;
+            return applied.Mode == PhysicalObjectMode.Sleeping || applied.Mode == PhysicalObjectMode.SleepingUnresolved;
+        }
+
+        private int knockedPawnSnaps;
+        public int KnockedPawnSnaps => knockedPawnSnaps;
 
         /// <summary>
         /// P7 (s154): a player's throw on another computer, accepted on this computer (the authority) and shown here at
@@ -1008,6 +1035,38 @@ namespace ConsoleCards.Presentation.Interaction
                 if (settledAccepted && playerAction) PlayerRolls++;
                 if (settledAccepted && playerAction && value.HasValue) DieSettled?.Invoke(this, value.Value);
             }
+            else if (IsKnockedFromRest())
+            {
+                if ((body.position - Vector(applied.Position)).sqrMagnitude > 0.05f * 0.05f)
+                {
+                    knockedPawnSnaps++;
+                    Debug.Log($"[Physics] {name} was knocked from its place without a player's move: back where the table put it ({knockedPawnSnaps}).");
+                }
+                else restingJitterSnaps++;
+                body.position = Vector(applied.Position);
+                body.rotation = Rotation(applied.Rotation);
+                transform.SetPositionAndRotation(body.position, body.rotation);
+                body.linearVelocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+                body.Sleep();
+                dynamicFrames = 0;
+                restTimer = 0f;
+            }
+            else if (Time.unscaledTime >= nextCheckpoint && IsRestingJitter())
+            {
+                // PHYS-DEDUP (P7 live finding, s155): a piece just accepted at rest woke by a hair (the physics settling
+                // it into its resting contact). That is not a move: it stays at its accepted resting place, asleep,
+                // and nothing is committed (each such commit was one more revision for every guest).
+                body.position = Vector(applied.Position);
+                body.rotation = Rotation(applied.Rotation);
+                transform.SetPositionAndRotation(body.position, body.rotation);
+                body.linearVelocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+                body.Sleep();
+                dynamicFrames = 0;
+                restTimer = 0f;
+                restingJitterSnaps++;
+            }
             else if (Time.unscaledTime >= nextCheckpoint)
             {
                 nextCheckpoint = Time.unscaledTime + 0.25f;
@@ -1338,6 +1397,19 @@ namespace ConsoleCards.Presentation.Interaction
             int? value = null,
             AuthoritativeActionRecordMode recordMode = AuthoritativeActionRecordMode.None)
         {
+            // P7 PHYS-DEDUP diagnostic (live finding, 2026-11-08: a guest's pawn went back to its old tile one revision
+            // after its accepted step): a commit far from the accepted place with no player action is not a settle.
+            PhysicalObjectState bound = view.BoundState.PhysicalState;
+            if (bound != null && state != null && !userActionActive && !compoundActionActive && !held)
+            {
+                float dx = state.Position.X - bound.Position.X, dy = state.Position.Y - bound.Position.Y, dz = state.Position.Z - bound.Position.Z;
+                if (dx * dx + dy * dy + dz * dz > 0.09f)
+                {
+                    Debug.LogWarning($"[Physics] {name} commits {state.Mode} {Mathf.Sqrt(dx * dx + dy * dy + dz * dz):0.00} m from its accepted place "
+                        + $"({bound.Mode}; applied here {(applied == null ? "none" : ReferenceEquals(applied, bound) ? "same" : applied.Mode + " elsewhere")}) without a player action.");
+                }
+            }
+
             if (!authority.Commit(view, state, value, recordMode)) return false;
             applied = view.BoundState.PhysicalState;
             RecordAcceptedPose(applied);
@@ -1358,7 +1430,10 @@ namespace ConsoleCards.Presentation.Interaction
             body.mass = profile.Mass;
             body.linearDamping = profile.LinearDamping;
             body.angularDamping = profile.AngularDamping;
-            body.maxDepenetrationVelocity = Physics.defaultMaxDepenetrationVelocity;
+            // P7 (found live, 2026-11-08): a piece at rest on a floor card that a rule step lays out again (a collapse,
+            // a new floor) was pushed out of the overlap at Unity's default 10 m/s and thrown metres across the table, off
+            // its tile (the game then read it as out). A piece the table rests is eased out of an overlap instead.
+            body.maxDepenetrationVelocity = RestingMaxDepenetrationVelocity;
         }
 
         private void InitializePointerAnchor(Vector2 screenPosition)
@@ -1621,6 +1696,59 @@ namespace ConsoleCards.Presentation.Interaction
         public static PhysicalObjectState State(Vector3 p, Quaternion q, Vector3 v, Vector3 w, PhysicalObjectMode mode, PlayerId actor) =>
             new PhysicalObjectState(new PhysicalVector3(p.x, p.y, p.z), new PhysicalRotation(q.x, q.y, q.z, q.w),
                 new PhysicalVector3(v.x, v.y, v.z), new PhysicalVector3(w.x, w.y, w.z), mode, actor);
+        /// <summary>
+        /// P7 PHYS-DEDUP (found live, 2026-11-08): the surface resolver places a loose piece its settling clearance
+        /// (PhysicalTabletopSurfaces.PlacementClearance, 6 cm) above the table, to drop. A piece the authority puts down
+        /// at rest (a pawn step, a host-decided die, a Trap's move) rests ON the table: committed asleep 6 cm up, it fell
+        /// as soon as anything woke it, and that fall was one more revision for every guest.
+        /// </summary>
+        public static PhysicalObjectState RestingOnSurface(PhysicalObjectState placed, bool isUserLocked)
+        {
+            float drop = isUserLocked ? 0f : PhysicalTabletopSurfaces.PlacementClearance; // the resolver adds none to a locked piece
+            return new PhysicalObjectState(
+                new PhysicalVector3(placed.Position.X, placed.Position.Y - drop, placed.Position.Z),
+                placed.Rotation, default, default, PhysicalObjectMode.Sleeping, placed.ControllingPlayerId);
+        }
+
+        /// <summary>
+        /// P7 PHYS-DEDUP, corrected (live finding, 2026-11-08): the table surface is not what a piece rests on (a pawn
+        /// stands on a floor card lying on the board), so taking the whole clearance off put it inside the card, and the
+        /// physics threw pieces across the table when anything woke them. The piece is swept straight down from the
+        /// resolver's place, against everything there, and rests where it first touches.
+        /// </summary>
+        public PhysicalObjectState RestingOnTable(PhysicalObjectState placed)
+        {
+            if (placed == null) return null;
+            if (body == null) return RestingOnSurface(placed, false);
+            Vector3 position = Vector(placed.Position);
+            Quaternion rotation = Rotation(placed.Rotation);
+            Vector3 oldPosition = body.position;
+            Quaternion oldRotation = body.rotation;
+            bool wasSleeping = body.IsSleeping();
+            float drop = PhysicalTabletopSurfaces.PlacementClearance;
+            try
+            {
+                body.position = position;
+                body.rotation = rotation;
+                transform.SetPositionAndRotation(position, rotation);
+                Physics.SyncTransforms();
+                if (body.SweepTest(Vector3.down, out RaycastHit hit, PhysicalTabletopSurfaces.PlacementClearance + 0.05f, QueryTriggerInteraction.Ignore))
+                    drop = Mathf.Max(0f, hit.distance - 0.001f); // a millimetre above what it rests on
+            }
+            finally
+            {
+                body.position = oldPosition;
+                body.rotation = oldRotation;
+                transform.SetPositionAndRotation(oldPosition, oldRotation);
+                Physics.SyncTransforms();
+                if (wasSleeping) body.Sleep();
+            }
+
+            return new PhysicalObjectState(
+                new PhysicalVector3(position.x, position.y - drop, position.z),
+                placed.Rotation, default, default, PhysicalObjectMode.Sleeping, placed.ControllingPlayerId);
+        }
+
         public static Vector3 Vector(PhysicalVector3 p) => new Vector3(p.X, p.Y, p.Z);
         public static Quaternion Rotation(PhysicalRotation q) => new Quaternion(q.X, q.Y, q.Z, q.W);
     }

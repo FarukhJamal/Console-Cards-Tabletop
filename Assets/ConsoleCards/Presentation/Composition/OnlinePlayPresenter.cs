@@ -118,6 +118,7 @@ namespace ConsoleCards.Presentation.Composition
             public Guid Player; // the table seat this computer plays (empty: watching)
             public int Connection = -1; // host only
             public float LeftAt = -1f; // host only
+            public float StagedCleanupAt = -1f; // host only, P7: when a departed guest's staged payment goes back
             public long SentSeq; // host only: ordered messages sent to this computer
             public string ContentHash = string.Empty; // host only: the host content this computer has (MP-4)
             public readonly Inbox FromClient = new Inbox(); // host only: ordered messages from it
@@ -309,9 +310,23 @@ namespace ConsoleCards.Presentation.Composition
             session.ConnectionJoined += OnConnectionJoined;
             session.ConnectionLeft += OnConnectionLeft;
             session.MessageReceived += OnMessageReceived;
+            MultiplayerSessions.Leaving -= SayGoodbyeOnQuit;
+            MultiplayerSessions.Leaving += SayGoodbyeOnQuit;
             subscribed = true;
             lastState = session.State;
         }
+
+        // P7 (s155): the window is closing: a guest tells its host while the connection is still open (Bye), so the host
+        // knows at once instead of waiting for the transport to notice.
+        private void SayGoodbyeOnQuit()
+        {
+            if (session == null || !InRoom || hosting || goodbyeSent) return;
+            goodbyeSent = true;
+            SendSmall(MsgBye);
+            Debug.Log("[Online] Leaving: told the host this window is closing.");
+        }
+
+        private bool goodbyeSent;
 
         /// <summary>The game's scene is closing (a profile switch reloads it): leave the room cleanly.</summary>
         internal void Dispose()
@@ -326,6 +341,7 @@ namespace ConsoleCards.Presentation.Composition
                 session.ConnectionJoined -= OnConnectionJoined;
                 session.ConnectionLeft -= OnConnectionLeft;
                 session.MessageReceived -= OnMessageReceived;
+                MultiplayerSessions.Leaving -= SayGoodbyeOnQuit;
                 subscribed = false;
             }
 
@@ -454,12 +470,16 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             Member member = MemberAt(connection);
+            // P7 (s155): every leave is logged (the private path showed nothing, which read as "never detected").
+            Debug.Log(member == null
+                ? $"[Online] Connection {connection} closed (no member: it said goodbye already, had not said hello, or a newer connection replaced it)."
+                : $"[Online] {member.Name}'s connection closed (connection {connection}); their seat waits for them.");
             if (member == null) return;
             member.Connected = false;
             member.Connection = -1;
             member.Ready = false;
             member.LeftAt = Time.unscaledTime;
-            PrivateMemberGone(member); // P7: a staged payment goes back (private development session only)
+            PrivateMemberGone(member, false); // P7: the connection dropped: its staged payment waits for it a while
             if (sharedTable) host.ShowMessage($"{member.Name} lost the connection; their seat waits for them (you play it meanwhile).");
             BroadcastRoster();
             RefreshFrontEnd();
@@ -588,14 +608,17 @@ namespace ConsoleCards.Presentation.Composition
                     HostUndo(member, data);
                     break;
                 case MsgBye:
+                    Debug.Log($"[Online] {member.Name} said goodbye (connection {member.Connection}): their window closed or they left.");
                     if (!sharedTable && !privateHosting) members.Remove(member); // PRIVACY-P4: a private seat waits for its player
                     else
                     {
                         member.Connected = false;
                         member.Ready = false;
                         member.LeftAt = Time.unscaledTime;
-                        PrivateMemberGone(member); // P7
-                        host.ShowMessage($"{member.Name} left the room; their seat waits for them (you play it meanwhile).");
+                        PrivateMemberGone(member, true); // P7: it said goodbye: a confirmed departure
+                        host.ShowMessage(privateHosting
+                            ? $"{member.Name} left the room; their seat waits for them."
+                            : $"{member.Name} left the room; their seat waits for them (you play it meanwhile).");
                     }
 
                     member.Connection = -1;
@@ -687,6 +710,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             member.Name = UniqueName(member, name.Length > 0 ? name : "Player");
+            bool sameRunningCopy = back && member.Instance != Guid.Empty && member.Instance == instance;
+            if (back) PrivateMemberBack(member, sameRunningCopy); // P7: a staged payment kept or put back, once
             member.Instance = instance;
             member.WatchNoticeSent = false; // SEC-3: each new connection of a watcher is told once
             member.Connection = connection;

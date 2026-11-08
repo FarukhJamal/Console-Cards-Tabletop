@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using ConsoleCards.Application.Authority;
 using UnityEngine;
 #if UNITY_EDITOR
@@ -17,15 +18,59 @@ namespace ConsoleCards.Networking
         private static void Register()
         {
             FusionMultiplayerSession.Closing = false;
+            quitAgreed = false;
             MultiplayerSessions.Reset();
             MultiplayerSessions.SetFactory(() => new FusionMultiplayerSession());
             // MP-2: leaving the game (or Play mode in the Editor) closes the connection; nothing reconnects after it.
             UnityEngine.Application.quitting -= LeaveOnQuit;
             UnityEngine.Application.quitting += LeaveOnQuit;
+            UnityEngine.Application.wantsToQuit -= AskToQuit;
+            UnityEngine.Application.wantsToQuit += AskToQuit;
+        }
+
+        // P7 (found live, 2026-11-08): when the window closes, Fusion's own NetworkRunner.OnApplicationQuit shuts the
+        // runner down BEFORE Application.quitting reaches LeaveOnQuit, so the guest's goodbye was never sent and the
+        // shutdown looked like a lost connection ("getting back into the room…") while the game was ending. Now the
+        // first quit request in a room is held for a moment: say goodbye while the connection is still open, close
+        // the connection on purpose, then quit. A killed process skips all of this (the host's transport timeout and
+        // the departure grace cover that case).
+        private static bool quitAgreed;
+        private const int GoodbyeDelayMs = 600;
+
+        private static bool AskToQuit()
+        {
+            if (quitAgreed) return true;
+            IMultiplayerSession session = MultiplayerSessions.Current;
+            if (session == null || (session.State != MultiplayerSessionState.InRoom
+                && session.State != MultiplayerSessionState.Reconnecting))
+            {
+                quitAgreed = true;
+                return true;
+            }
+
+            quitAgreed = true;
+            MultiplayerSessions.RaiseLeaving();
+            _ = QuitAfterGoodbye();
+            return false;
+        }
+
+        private static async Task QuitAfterGoodbye()
+        {
+            try
+            {
+                await Task.Delay(GoodbyeDelayMs); // a few network ticks: the goodbye leaves before the runner closes
+            }
+            finally
+            {
+                FusionMultiplayerSession.Closing = true;
+                MultiplayerSessions.Current?.Disconnect();
+                UnityEngine.Application.Quit();
+            }
         }
 
         private static void LeaveOnQuit()
         {
+            MultiplayerSessions.RaiseLeaving(); // P7: a guest says goodbye first (sent while the connection is still open)
             FusionMultiplayerSession.Closing = true;
             MultiplayerSessions.Current?.Disconnect();
         }

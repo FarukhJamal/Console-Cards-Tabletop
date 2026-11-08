@@ -152,12 +152,31 @@ namespace ConsoleCards.Application.Authority
             factory = create;
         }
 
+        /// <summary>
+        /// P7 (s155): raised when the game (or Play mode) is ending, before the connection closes, so a guest can say
+        /// goodbye to its host while it still can (without it a closed window was only noticed by the transport).
+        /// </summary>
+        public static event Action Leaving;
+
+        /// <summary>Called by the networking assembly when the game is ending, before it disconnects.</summary>
+        public static void RaiseLeaving()
+        {
+            Action listeners = Leaving;
+            if (listeners == null) return;
+            foreach (Delegate listener in listeners.GetInvocationList())
+            {
+                try { ((Action)listener)(); }
+                catch (Exception) { } // leaving goes on
+            }
+        }
+
         /// <summary>Forgets the session (play mode starting again in the Editor).</summary>
         public static void Reset()
         {
             current?.Disconnect();
             current = null;
             factory = null;
+            Leaving = null;
         }
     }
 }

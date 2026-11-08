@@ -157,7 +157,7 @@ namespace ConsoleCards.Presentation.Composition
                     usable,
                     true),
             };
-            host.runtimeUi.ShowFocusedCardSelection(new FocusedCardSelectionModel(
+            ShowSelectionFor(player, new FocusedCardSelectionModel(
                 title,
                 what,
                 status,
@@ -233,7 +233,7 @@ namespace ConsoleCards.Presentation.Composition
 
             string trapName = trap != null ? trap.Content.DisplayName : "The trap";
             string effectText = trap != null ? TrapEffectText(trap.Content.TrapEffect) : string.Empty;
-            host.runtimeUi.ShowFocusedCardSelection(new FocusedCardSelectionModel(
+            ShowSelectionFor(player, new FocusedCardSelectionModel(
                 $"{trapName.ToUpperInvariant()} IS WAITING",
                 $"If it applies: {effectText} Pick a Reaction to stop it: Check makes it harmless, Dodge steps you "
                     + "off it, Shield blocks what it does.",
@@ -539,7 +539,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            host.runtimeUi.ShowFocusedCardSelection(new FocusedCardSelectionModel(
+            ShowSelectionFor(host.trapFloorTurnState.ActivePlayerId, new FocusedCardSelectionModel(
                 "ABILITY DRAW — BUY?",
                 "Pick one to buy: pay its cost from your Hand through your Console. Come back for another from the "
                     + "turn menu. What you do not buy goes back, and the deck is shuffled when your turn ends.",
