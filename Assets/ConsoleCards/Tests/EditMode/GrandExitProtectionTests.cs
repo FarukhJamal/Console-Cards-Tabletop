@@ -64,7 +64,7 @@ namespace ConsoleCards.Tests
 
         // ---------- Floorfall on the host's collapse use case ----------
 
-        private sealed class Floorfall
+        internal sealed class Floorfall
         {
             public TrapFloorTestTable T;
             public TrapFloorCollapseState State;

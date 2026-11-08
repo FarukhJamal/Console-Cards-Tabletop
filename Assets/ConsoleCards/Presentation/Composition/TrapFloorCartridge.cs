@@ -1262,6 +1262,7 @@ namespace ConsoleCards.Presentation.Composition
             floorTurnCollapseDone = true; // COLLAPSE-3: one collapse per floor turn
             RecordFloorTurnCollapse(); // COLLAPSE-ONCE
             ApplyCollapsedFloorPresentation(result.CollapsedFloor.FloorCardId);
+            ReviewFloorStanding($"collapse {result.Roll.Coordinate}"); // P7 (s162): Grand Exit invariant, escape outlook
             if (!PlayAssist.IsFree) KnockOutPawnsOnCollapsedTile(result.Roll.Coordinate); // FALL-1; decision C: not in Free
             host.selectionState?.ClearAll();
             host.selectionPresenter?.Refresh();

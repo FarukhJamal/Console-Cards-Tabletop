@@ -440,6 +440,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (host.trapFloorTemplate == null) return;
+            ReviewFloorStanding("deal"); // P7 (s162): every floor holds one standing Grand Exit
             host.ShowMessage(floorIndex == 0
                 ? stageIndex > 0 ? $"STAGE {stageIndex + 1}: {StageName(stageIndex)} — Floor 1." : "A new game: Floor 1."
                 : $"FLOOR {host.trapFloorTemplate.FloorIndex + 1} of {host.trapFloorTemplate.FloorCount} — "
