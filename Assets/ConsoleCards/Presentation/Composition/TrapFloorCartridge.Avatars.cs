@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
 using ConsoleCards.Core.Domain;
@@ -62,13 +64,25 @@ namespace ConsoleCards.Presentation.Composition
                 host.SessionService.BeginUndoBatch();
                 try
                 {
+                    // P8A (owner, 2026-11-08): the starting Abilities slide out beside the player's Console (the spot a
+                    // bought card uses), not into the hand.
+                    List<TableCoordinate> loose = new List<TableCoordinate>();
+                    foreach (CardInstanceState lying in host.matchState.Cards.Values)
+                    {
+                        if (lying.BaseState.ContainerId.IsEmpty && !lying.BaseState.IsUserLocked) loose.Add(lying.BaseState.Pose.Position);
+                    }
+
                     for (int a = 0; a < abilityCount; a++)
                     {
                         TabletopObjectId cardId = TrapFloorTemplateFactory.StartingAbilityCardId(avatarIndex, a);
                         if (!host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card) || card.BaseState.ContainerId != pile) continue;
+                        TabletopPose beside = TrapFloorTakePrizeUseCase.NextFreeOverflowPose(setup.AbilityOverflowPose, loose);
                         TransferCardResult result = host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(
-                            new TransferCardCommand(host.CreateCommandContext(player), cardId, pile, setup.HandContainerId, null));
-                        if (result.Succeeded) given++;
+                            new TransferCardCommand(host.CreateCommandContext(player), cardId, pile, ContainerId.Empty, beside));
+                        if (!result.Succeeded) continue;
+                        loose.Add(beside.Position);
+                        host.PresentAcceptedObject(cardId);
+                        given++;
                     }
                 }
                 finally
@@ -77,13 +91,12 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 host.ViewSync.SyncContainer(pile);
-                host.ViewSync.SyncContainer(setup.HandContainerId);
                 host.RefreshAcceptedCardFaces();
             }
 
             string who = FormatPlayerName(player);
             host.GameplayLog(given > 0
-                ? $"{who} chose the {avatarName}: {given} starting Abilit{(given == 1 ? "y" : "ies")} went to their hand."
+                ? $"{who} chose the {avatarName}: {given} starting Abilit{(given == 1 ? "y" : "ies")} were placed beside their Console."
                 : $"{who} chose the {avatarName}.");
         }
 

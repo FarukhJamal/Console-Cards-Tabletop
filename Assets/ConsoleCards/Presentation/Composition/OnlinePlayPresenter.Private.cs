@@ -532,7 +532,8 @@ namespace ConsoleCards.Presentation.Composition
             if (ownBatch) host.SessionService.BeginUndoBatch();
             try
             {
-                bool moved = from.Kind == ContainerKind.Deck && to.Kind == ContainerKind.Hand && from.TryPeekTop(out TabletopObjectId top) && top == real
+                bool moved = AbilityDrawRefusedInFull(from.Id, to.Id) ? false
+                    : from.Kind == ContainerKind.Deck && to.Kind == ContainerKind.Hand && from.TryPeekTop(out TabletopObjectId top) && top == real
                     ? host.TableAuthority.Submit<DrawCardsCommand, DrawCardsResult>(new DrawCardsCommand(Ctx(sender), from.Id, to.Id, 1)).Succeeded
                     : host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(TransferCardCommand.ToContainer(Ctx(sender), real, from.Id, to.Id)).Succeeded;
                 if (moved && face.HasValue && host.matchState.Cards.TryGetValue(real, out CardInstanceState card) && card.Face != face.Value
@@ -1111,6 +1112,7 @@ namespace ConsoleCards.Presentation.Composition
                 case PrivateOperationKind.Reorder:
                     return host.TableAuthority.Submit<ReorderContainerCommand, ReorderContainerResult>(new ReorderContainerCommand(Ctx(sender), op.Container, resolved.RealCard, resolved.FromIndex, op.B)).Succeeded;
                 case PrivateOperationKind.DrawCount:
+                    if (AbilityDrawRefusedInFull(op.Container, op.Destination)) return false;
                     return host.TableAuthority.Submit<DrawCardsCommand, DrawCardsResult>(new DrawCardsCommand(Ctx(sender), op.Container, op.Destination, op.A)).Succeeded;
                 case PrivateOperationKind.MovePiece:
                     return ExecutePieceMove(sender, resolved.RealCard, op.Pose);
@@ -2167,6 +2169,16 @@ namespace ConsoleCards.Presentation.Composition
 
         private readonly Dictionary<Guid, TabletopObjectId> guestPieceMoves = new Dictionary<Guid, TabletopObjectId>();
         private readonly Dictionary<TabletopObjectId, TableCoordinate> guestLastPiecePlace = new Dictionary<TabletopObjectId, TableCoordinate>();
+
+        // P8A (owner, 2026-11-08): in Full an Ability reaches a hand only by being bought (Draw 3 Abilities / Shop), so
+        // the host refuses any draw or move from the Ability deck straight into a hand.
+        private bool AbilityDrawRefusedInFull(ContainerId from, ContainerId to)
+        {
+            if (PlayAssist.Level != PlayAssistLevel.Full || host.trapFloorTemplate == null || from != host.trapFloorTemplate.AbilityDeckId) return false;
+            if (host.matchState == null || !host.matchState.Containers.TryGetValue(to, out ContainerState toState) || toState.Kind != ContainerKind.Hand) return false;
+            PrivateNote("Refused: in Full, Abilities are bought (Draw 3 Abilities), not drawn into a hand.");
+            return true;
+        }
 
         private bool IsPawn(TabletopObjectId id) => host.matchState != null && host.matchState.Pawns.ContainsKey(id);
         private bool IsDie(TabletopObjectId id) => host.matchState != null && host.matchState.Dice.ContainsKey(id);
