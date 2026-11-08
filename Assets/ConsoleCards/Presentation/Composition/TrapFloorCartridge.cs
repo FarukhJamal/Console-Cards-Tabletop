@@ -912,15 +912,18 @@ namespace ConsoleCards.Presentation.Composition
             PhysicalObjectState state = DiePhysicalState(dieId);
             if (state == null) return false;
             if (!asked) return state.Mode == PhysicalObjectMode.Sleeping;
-            if (NotRolledHere(state, askedState)) return false;
-            if (!PlayerRolledSince(dieId, ref askedBody, ref askedRolls))
+            // P7 (s158) DICE-EVENT: the explicit roll count decides, never a change of pose (live run s157: a host-decided
+            // result equal to the face already shown, at the same resting place, was not counted and the collapse never began).
+            bool rolled = PlayerRolledSince(dieId, ref askedBody, ref askedRolls);
+            TrapFloorDieRollStep step = TrapFloorDiceRollGate.Next(rolled, state.Mode);
+            if (!rolled)
             {
                 // Moved without a player's roll here: that resting place is the new starting point.
                 if (state.Mode == PhysicalObjectMode.Sleeping || state.Mode == PhysicalObjectMode.SleepingUnresolved) askedState = state;
                 return false;
             }
 
-            if (state.Mode == PhysicalObjectMode.SleepingUnresolved)
+            if (step == TrapFloorDieRollStep.Cocked)
             {
                 askedState = state;
                 MarkPlayerRolls(dieId, ref askedBody, ref askedRolls); // the next roll counts
@@ -928,29 +931,7 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            return state.Mode == PhysicalObjectMode.Sleeping;
-        }
-
-        // MP-2 (owner, 2026-10-27: "collapsing floor is happening automatically"): a die is not rolled when its state is
-        // the one asked for, or the same pose (that state copied to this computer with a whole table, a new object), and
-        // a die another computer's player threw is resolved on that computer (its result comes here as changes).
-        private bool NotRolledHere(PhysicalObjectState state, PhysicalObjectState askedState)
-        {
-            if (ReferenceEquals(state, askedState)) return true;
-            if (state != null && askedState != null
-                && state.Mode == askedState.Mode
-                && state.Position.X == askedState.Position.X
-                && state.Position.Y == askedState.Position.Y
-                && state.Position.Z == askedState.Position.Z
-                && state.Rotation.X == askedState.Rotation.X
-                && state.Rotation.Y == askedState.Rotation.Y
-                && state.Rotation.Z == askedState.Rotation.Z
-                && state.Rotation.W == askedState.Rotation.W)
-            {
-                return true;
-            }
-
-            return state != null && !host.IsPlayerOnThisComputer(state.ControllingPlayerId);
+            return step == TrapFloorDieRollStep.Read;
         }
 
         internal void CompletePhysicalFloorfallIfSettled()
@@ -1559,7 +1540,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (NotRolledHere(physicalState, askedBlindDieState)) return; // DICE-1: not rolled yet (MP-2: or rolled elsewhere)
+            // P7 (s158) DICE-EVENT: an accepted roll counts even when the d4 rests where it was with the same face.
             if (!PlayerRolledSince(host.physicalBlindDirectionDieId, ref askedBlindDieBody, ref askedBlindDieRolls))
             {
                 askedBlindDieState = physicalState; // MP-2: settled again without a player's roll
@@ -2296,6 +2277,12 @@ namespace ConsoleCards.Presentation.Composition
                 // when the host's physics put it to sleep. The pawn is put down at rest on its tile instead (as a
                 // player's own pawn step is): one logical move, one revision.
                 PhysicalObjectState resting = pawnView.PhysicalObject.RestingOnTable(placed); // on what is under it (a floor card)
+                // P7 (s158) UNDO-POSE: the table's pose is set as part of the same accepted move (before the commit), so the
+                // Undo snapshot recorded when it is accepted holds the pawn on its new tile (live run s157: after a Key's
+                // return to start, Undo of the next move put the pawn back on the Key tile).
+                TabletopObjectState autoMoved = host.matchState.GetObject(pawn.BaseState.Id);
+                TabletopPose autoPoseBefore = autoMoved.Pose;
+                autoMoved.SetPose(new TabletopPose(targetPose.Position, autoPoseBefore.RotationDegrees, autoPoseBefore.Layer, autoPoseBefore.LocalOrder));
                 moved = host.TableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(
                     new CommitPhysicalObjectCommand(
                         host.CreateCommandContext(player),
@@ -2304,13 +2291,7 @@ namespace ConsoleCards.Presentation.Composition
                         pawn.BaseState.PhysicalRevision,
                         null,
                         AuthoritativeActionRecordMode.Transaction)).Succeeded;
-                if (moved)
-                {
-                    // A physical commit records only the physical state: the table's pose follows the tile, so the
-                    // next move check and every guest read the pawn where it now stands.
-                    TabletopObjectState now = host.matchState.GetObject(pawn.BaseState.Id);
-                    now.SetPose(new TabletopPose(targetPose.Position, now.Pose.RotationDegrees, now.Pose.Layer, now.Pose.LocalOrder));
-                }
+                if (!moved) autoMoved.SetPose(autoPoseBefore);
             }
             else
             {
@@ -3207,7 +3188,19 @@ namespace ConsoleCards.Presentation.Composition
                 }));
         }
 
+        // P7 (s158) UNDO-KEY root cause (live run s157/s158: a guest's Undo after a Key claim put its pawn back on the Key
+        // tile with the Key still claimed): the claim and the rules' return to the starting tile were two Undo steps, so
+        // one Undo took back only the forced move. A claim, with everything the rules do because of it, is one Undo step:
+        // an allowed Undo restores the table as it was before the claim (pawn on the Key tile, Key not taken).
         internal void ClaimTrapFloorKey(TabletopObjectId floorCardId)
+        {
+            bool batch = !host.undoBatchActive;
+            if (batch) host.SessionService.BeginUndoBatch();
+            try { ClaimTrapFloorKeyOnce(floorCardId); }
+            finally { if (batch) host.SessionService.EndUndoBatch(); }
+        }
+
+        private void ClaimTrapFloorKeyOnce(TabletopObjectId floorCardId)
         {
             if (host.trapFloorObjectiveUseCase == null)
             {
@@ -3550,7 +3543,18 @@ namespace ConsoleCards.Presentation.Composition
                 CancelFocusedPurchaseSelection));
         }
 
+        // P7 (s158) UNDO-KEY: a prize taken, its payment and the rules' return to the starting tile are one Undo step.
         internal void CompleteTakeFloorPrize(
+            TabletopObjectId floorCardId,
+            IReadOnlyList<TabletopObjectId> paymentCardIds)
+        {
+            bool batch = !host.undoBatchActive;
+            if (batch) host.SessionService.BeginUndoBatch();
+            try { CompleteTakeFloorPrizeOnce(floorCardId, paymentCardIds); }
+            finally { if (batch) host.SessionService.EndUndoBatch(); }
+        }
+
+        private void CompleteTakeFloorPrizeOnce(
             TabletopObjectId floorCardId,
             IReadOnlyList<TabletopObjectId> paymentCardIds)
         {

@@ -390,6 +390,34 @@ namespace ConsoleCards.Games.TrapFloor
             turn == null ? 0 : ((long)turn.CurrentRound << 20) | ((long)turn.Phase << 16) | (uint)(turn.CapturePosition().ActivePlayerIndex & 0xFFFF);
     }
 
+    /// <summary>What a rule waiting for a die does with it now.</summary>
+    public enum TrapFloorDieRollStep
+    {
+        /// <summary>Not rolled since the rule asked (or still moving): keep waiting.</summary>
+        Wait,
+        /// <summary>Rolled since the rule asked and at rest: read the result once.</summary>
+        Read,
+        /// <summary>Rolled but cocked: ask for another roll.</summary>
+        Cocked,
+    }
+
+    /// <summary>
+    /// P7 (s158) DICE-EVENT: whether a rule that asked for a roll reads the die now. A roll is an explicit event — a
+    /// player's throw on the computer that runs the rule, or a throw from another computer that the host accepted (its
+    /// result is the host's) — counted when it happens. It is never inferred from the die having moved: an accepted roll
+    /// whose host result is the face the die already showed, resting where it already rested, still resolves once.
+    /// A die that only settled again (a rebuilt table, physics waking it) is not a roll. Pure, so it is tested.
+    /// </summary>
+    public static class TrapFloorDiceRollGate
+    {
+        public static TrapFloorDieRollStep Next(bool rolledSinceAsked, PhysicalObjectMode mode)
+        {
+            if (!rolledSinceAsked) return TrapFloorDieRollStep.Wait;
+            if (mode == PhysicalObjectMode.SleepingUnresolved) return TrapFloorDieRollStep.Cocked;
+            return mode == PhysicalObjectMode.Sleeping ? TrapFloorDieRollStep.Read : TrapFloorDieRollStep.Wait;
+        }
+    }
+
     /// <summary>
     /// AUTH-UNDO-2 (owner, 2026-11-06: "do not allow a player to repeatedly Undo an unfavorable rules-driven dice result"):
     /// whether one Undo step holds a rules result, judged from the step's own before and after rules state: a tile

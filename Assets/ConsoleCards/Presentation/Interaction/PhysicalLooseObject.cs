@@ -144,6 +144,7 @@ namespace ConsoleCards.Presentation.Interaction
         // POL-2: a short kinematic glide onto a board space or a card centre (springy settle).
         private bool gliding;
         private bool glideRestoreKinematic;
+        private bool glideRestoreCollisions = true;
         private Vector3 glideFromPosition;
         private Quaternion glideFromRotation;
         private Vector3 glideToPosition;
@@ -326,6 +327,7 @@ namespace ConsoleCards.Presentation.Interaction
             bool preserveHeldAnchor = held && hasPointerAnchor;
             Vector3 heldAnchorWorld = preserveHeldAnchor ? GrabAnchorWorld() : Vector3.zero;
             applied = state;
+            if (gliding && body != null) body.detectCollisions = glideRestoreCollisions; // P7 (s158): see GlideFrom
             gliding = false; // a newly accepted pose wins over a running glide
             actor = state.ControllingPlayerId;
             if (state.Mode != PhysicalObjectMode.Sleeping && state.Mode != PhysicalObjectMode.SleepingUnresolved)
@@ -727,7 +729,12 @@ namespace ConsoleCards.Presentation.Interaction
                 return;
             }
 
-            if (!gliding) glideRestoreKinematic = body.isKinematic;
+            if (!gliding)
+            {
+                glideRestoreKinematic = body.isKinematic;
+                glideRestoreCollisions = body.detectCollisions;
+            }
+
             glideFromPosition = fromPosition;
             glideFromRotation = fromRotation;
             glideToPosition = toPosition;
@@ -737,6 +744,11 @@ namespace ConsoleCards.Presentation.Interaction
             glideOvershoot = Mathf.Max(0f, overshoot);
             gliding = true;
             body.isKinematic = true;
+            // P7 (s158) PHYS-GLIDE root cause: a kinematic body moved by MovePosition has unlimited mass, so a tile sliding
+            // to the collapsed pile across the board shoved every pawn and card on its path (live: "Game Pawn was knocked
+            // from its place" right after End Floor Turn). The glide is only a picture of a move already accepted: the
+            // body passes through other pieces while it glides and collides again where it lands.
+            body.detectCollisions = false;
             body.position = fromPosition;
             body.rotation = fromRotation;
             transform.SetPositionAndRotation(fromPosition, fromRotation);
@@ -769,6 +781,7 @@ namespace ConsoleCards.Presentation.Interaction
             body.position = glideToPosition;
             body.rotation = glideToRotation;
             transform.SetPositionAndRotation(glideToPosition, glideToRotation);
+            body.detectCollisions = glideRestoreCollisions;
             body.isKinematic = glideRestoreKinematic;
             if (!body.isKinematic)
             {

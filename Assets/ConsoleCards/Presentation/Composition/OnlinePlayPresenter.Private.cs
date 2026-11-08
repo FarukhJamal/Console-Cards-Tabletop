@@ -1114,8 +1114,15 @@ namespace ConsoleCards.Presentation.Composition
                 // At rest where it was put (the resolver's place is Dynamic: the host's physics would move it again,
                 // unpublished).
                 PhysicalObjectState resting = pawnView.PhysicalObject.RestingOnTable(placed); // on what is under it, not 6 cm above it
+                // P7 (s158) UNDO-POSE: the table's pose is part of the same accepted move. It is set before the commit, so
+                // the Undo snapshot taken when the commit is accepted (and the game's landing check) see the pawn where it
+                // now stands, not where it stood (live run s157: an Undo put a pawn back on a Key tile it had left).
+                TabletopObjectState movedPiece = host.matchState.GetObject(pieceId);
+                TabletopPose poseBefore = movedPiece.Pose;
+                movedPiece.SetPose(new TabletopPose(target.Position, poseBefore.RotationDegrees, poseBefore.Layer, poseBefore.LocalOrder));
                 moved = host.TableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(
                     new CommitPhysicalObjectCommand(host.CreateCommandContext(sender), pieceId, resting, piece.PhysicalRevision, null, AuthoritativeActionRecordMode.Transaction)).Succeeded;
+                if (!moved) movedPiece.SetPose(poseBefore);
             }
             else
             {
@@ -1128,7 +1135,8 @@ namespace ConsoleCards.Presentation.Composition
                 // The table's pose follows the accepted resting place (a physical commit records only the physical state):
                 // the game's next move check and every guest read the pawn where it now stands.
                 TabletopObjectState now = host.matchState.GetObject(pieceId);
-                now.SetPose(new TabletopPose(target.Position, now.Pose.RotationDegrees, now.Pose.Layer, now.Pose.LocalOrder));
+                if (!now.Pose.Position.Equals(target.Position))
+                    now.SetPose(new TabletopPose(target.Position, now.Pose.RotationDegrees, now.Pose.Layer, now.Pose.LocalOrder));
                 pawnView.ApplyAcceptedState();
                 lastPieceRefusal = null;
             }

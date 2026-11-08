@@ -810,6 +810,18 @@ namespace ConsoleCards.Presentation.Composition
 
                 Quaternion turn = piece.PhysicalObject.Body != null ? piece.PhysicalObject.Body.rotation : piece.transform.rotation;
                 placed = placed.WithRotation(new PhysicalRotation(turn.x, turn.y, turn.z, turn.w));
+                // P7 (s158) PHYS-REST root cause: the resolver's place is Dynamic and a settling clearance above whatever
+                // lies there, so a piece the game set down (a collapsed tile onto its pile) fell, slid off the stack and was
+                // committed again by this computer's physics without anyone moving it (live: cards "commit Dynamic
+                // 0.9–1.5 m … without a player action", one more revision for every guest each time). A piece the game
+                // places is put down at rest on what is under it, as the game's own pawn moves are.
+                placed = piece.PhysicalObject.RestingOnTable(placed);
+                // P7 (s158) the table's pose moves with it, in the same accepted action (the physical commit records only the
+                // physical state): readers of the pose (the collapsed pile's "still in its cell" check, the Undo snapshot,
+                // every guest) see the piece where it now is. Before this every collapsed tile was slid to the pile again
+                // after each floor turn.
+                TabletopPose poseBefore = state.Pose;
+                state.SetPose(new TabletopPose(pose.Position, poseBefore.RotationDegrees, pose.Layer, poseBefore.LocalOrder));
                 accepted = TableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(
                     new CommitPhysicalObjectCommand(
                         CreateCommandContext(),
@@ -818,6 +830,7 @@ namespace ConsoleCards.Presentation.Composition
                         state.PhysicalRevision,
                         null,
                         AuthoritativeActionRecordMode.Transaction)).Succeeded;
+                if (!accepted) state.SetPose(poseBefore);
             }
 
             if (accepted) piece.ApplyAcceptedState();
