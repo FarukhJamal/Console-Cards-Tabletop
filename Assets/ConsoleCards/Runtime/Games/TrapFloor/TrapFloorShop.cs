@@ -239,8 +239,10 @@ namespace ConsoleCards.Games.TrapFloor
             {
                 if (template.AbilityDeckId.IsEmpty
                     || !matchState.Containers.TryGetValue(template.AbilityDeckId, out abilityDeck)
-                    || !abilityDeck.Contains(command.SourceCardId)
                     || !matchState.Cards.TryGetValue(command.SourceCardId, out deckCard)
+                    // P8A: a card of this turn's draw lies dealt face up on the table (loose); the caller (the host)
+                    // names only cards of that draw.
+                    || !(abilityDeck.Contains(command.SourceCardId) || deckCard.BaseState.ContainerId.IsEmpty)
                     || deckCard.BaseState.DefinitionId != new ObjectDefinitionId(definitionGuid))
                     return Failure(CommandResultStatus.Rejected, TrapFloorShopError.SourceCardNotInAbilityDeck);
             }
@@ -273,10 +275,20 @@ namespace ConsoleCards.Games.TrapFloor
                 // The drawn card itself leaves the deck for the buyer (face up, theirs): into the Hand, or (TABLE-1)
                 // loose beside the Console when the Hand is full.
                 ContainerTransferService deckTransfer = new ContainerTransferService();
-                ContainerTransferResult moved = destination != null
-                    ? deckTransfer.MoveBetweenContainers(deckCard.BaseState, abilityDeck, destination)
-                    : deckTransfer.RemoveFromContainer(deckCard.BaseState, abilityDeck);
-                if (!moved.Succeeded) return Failure(CommandResultStatus.Rejected, TrapFloorShopError.MutationFailed);
+                bool dealt = deckCard.BaseState.ContainerId.IsEmpty;
+                if (dealt) deckCard.BaseState.SetUserLocked(false);
+                if (dealt)
+                {
+                    if (destination != null && !deckTransfer.PlaceIntoContainer(deckCard.BaseState, destination).Succeeded)
+                        return Failure(CommandResultStatus.Rejected, TrapFloorShopError.MutationFailed);
+                }
+                else
+                {
+                    ContainerTransferResult moved = destination != null
+                        ? deckTransfer.MoveBetweenContainers(deckCard.BaseState, abilityDeck, destination)
+                        : deckTransfer.RemoveFromContainer(deckCard.BaseState, abilityDeck);
+                    if (!moved.Succeeded) return Failure(CommandResultStatus.Rejected, TrapFloorShopError.MutationFailed);
+                }
                 if (destination == null) deckCard.BaseState.SetPose(TrapFloorTakePrizeUseCase.FreeOverflowPose(matchState, player, deckCard.BaseState.Id));
                 deckCard.BaseState.SetOwner(actor);
                 deckCard.BaseState.SetVisibility(destination != null ? destination.Visibility : ObjectVisibility.Public);

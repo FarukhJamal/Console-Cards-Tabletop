@@ -197,6 +197,29 @@ namespace ConsoleCards.Presentation.Composition
             return false;
         }
 
+        /// <summary>
+        /// P8A: on the host of a private room, the player belongs to a joined computer, connected at this moment or not.
+        /// (IsPlayerOnAnotherComputer answers false while that computer is still joining, which made the host take a
+        /// guest's question on its own screen.)
+        /// </summary>
+        internal bool IsGuestsPlayer(PlayerId player)
+        {
+            if (!IsPrivateHost || !hosting || player.IsEmpty) return false;
+            for (int i = 0; i < members.Count; i++)
+                if (members[i].Player == player.Value) return !members[i].IsHost;
+            return false;
+        }
+
+        // P8A diagnostics: how this computer sees the room and that player (no keys, no ids).
+        internal string DescribeForDraft(PlayerId player)
+        {
+            string who = "not a room member";
+            for (int i = 0; i < members.Count; i++)
+                if (members[i].Player == player.Value)
+                    who = (members[i].IsHost ? "the host's player" : "a guest's player") + (members[i].Connected ? ", connected" : ", not connected");
+            return $"private host {IsPrivateHost}, hosting {hosting}, shared table {sharedTable}, private dev session {PrivateDevSession.Enabled}, {members.Count} member(s), {who}";
+        }
+
         internal bool IsLocalPlayer(PlayerId player)
         {
             if (!sharedTable || player.IsEmpty) return true;

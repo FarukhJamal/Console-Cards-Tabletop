@@ -2455,7 +2455,8 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (reference.IsEmpty || host.matchState == null || !host.matchState.Cards.TryGetValue(reference, out CardInstanceState card)) return null;
             if (card.BaseState.DefinitionId.Equals(RecipientSnapshotProjection.HiddenDefinition)) return null;
-            return host.TryGetCardLook(card.BaseState.DefinitionId, out ConsoleCards.Definitions.CardDefinition definition) ? host.FrontArt(definition) : null;
+            if (host.TryGetCardLook(card.BaseState.DefinitionId, out ConsoleCards.Definitions.CardDefinition definition)) return host.FrontArt(definition);
+            return host.TryGetAvatarLook(card.BaseState.DefinitionId, out ConsoleCards.Definitions.AvatarDefinition avatar) ? host.AvatarArt(avatar) : null; // P8A: Avatar draft
         }
 
         // ---------- P7 (s155): the game's card choices for a player on another computer ----------
@@ -2479,6 +2480,23 @@ namespace ConsoleCards.Presentation.Composition
 
         /// <summary>Host: sends the choice to the computer that plays <paramref name="actor"/>. False when it is not connected
         /// or a card cannot be named for it (the choice then shows here, as before).</summary>
+        // P8A: a choice the host's game asked of this player that is still open (not answered, not taken back).
+        internal bool HasPendingPrivateSelection(PlayerId actor, string title)
+        {
+            foreach (PendingSelection pending in hostSelections.Values)
+                if (pending.Actor == actor && pending.Model != null && string.Equals(pending.Model.Title, title, StringComparison.Ordinal)) return true;
+            return false;
+        }
+
+        // P8A: a choice can reach this player's own computer now (the private table runs and that computer is connected).
+        internal bool CanSendPrivateSelection(PlayerId actor)
+        {
+            if (!privateHosting || privateHost == null || privateHostPending) return false;
+            for (int i = 0; i < members.Count; i++)
+                if (!members[i].IsHost && members[i].Connected && members[i].Connection >= 0 && members[i].Player == actor.Value) return true;
+            return false;
+        }
+
         internal bool TrySendPrivateSelection(PlayerId actor, FocusedCardSelectionModel model)
         {
             if (!privateHosting || privateHost == null || model == null) return false;
@@ -2636,7 +2654,7 @@ namespace ConsoleCards.Presentation.Composition
                         chosen => chosen.Count >= 1 && chosen.Count <= max, // the host checks the game's own rule
                         chosen => GuestSelectionAnswer(selectionId, false, chosen),
                         () => GuestSelectionAnswer(selectionId, true, null),
-                        string.IsNullOrEmpty(cancel) ? null : cancel));
+                        string.IsNullOrEmpty(cancel) ? null : cancel) { Spread = FocusedCardSelectionModel.IsSpreadTitle(title) });
                     PrivateNote($"The host's game asks you to choose: {title} ({count} card(s); {confirm}{(string.IsNullOrEmpty(cancel) ? string.Empty : " / " + cancel)}).");
                 }
             }
@@ -4048,6 +4066,8 @@ namespace ConsoleCards.Presentation.Composition
         private void PrivateMemberBack(Member member, bool sameRunningCopy) { }
         internal bool TrySendPrivatePrompt(PlayerId actor, FocusedCardRevealModel model) => false;
         internal bool TrySendPrivateSelection(PlayerId actor, FocusedCardSelectionModel model) => false;
+        internal bool CanSendPrivateSelection(PlayerId actor) => false;
+        internal bool HasPendingPrivateSelection(PlayerId actor, string title) => false;
         private bool MayUndoOnPrivateHost(ActiveSessionUndoTransaction transaction, bool redo) => true;
         private int legacyRefused;
         private void PrivateNote(string line) { }

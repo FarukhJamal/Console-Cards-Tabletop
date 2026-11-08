@@ -6631,6 +6631,7 @@ namespace ConsoleCards.Presentation.Composition
             ShowFloorEndReachedElsewhere(); // FLOOREND-GUEST
             DiscardUsedAbility();
             GiveChosenAvatarsTheirAbilities(); // D2/D3
+            TickAvatarDraft(); // P8A: Full, each player picks an Avatar from a popup
             DealArrangedBoardIfPlaced();
         }
 

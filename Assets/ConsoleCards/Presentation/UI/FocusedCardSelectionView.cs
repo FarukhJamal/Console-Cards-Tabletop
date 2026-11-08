@@ -234,7 +234,8 @@ namespace ConsoleCards.Presentation.UI
 
         private void ArrangeFan(bool animateEntry)
         {
-            float spacing = fanSpacing;
+            bool spread = model != null && model.Spread;
+            float spacing = spread ? fanSpacing * 1.75f : fanSpacing;
             float width = Mathf.Max(fanMinimumWidth, ((optionViews.Count - 1) * spacing) + 170f);
             optionsRoot.sizeDelta = new Vector2(width, fanHeight);
             float center = (optionViews.Count - 1) * 0.5f;
@@ -246,8 +247,8 @@ namespace ConsoleCards.Presentation.UI
                 card.anchorMax = new Vector2(0f, 0.5f);
                 card.pivot = new Vector2(0.5f, 0.5f);
                 optionViews[i].SetFanPose(
-                    new Vector2((width * 0.5f) + (offset * spacing), -Mathf.Abs(offset) * fanDropPerCard),
-                    -offset * fanTiltPerCard,
+                    new Vector2((width * 0.5f) + (offset * spacing), spread ? 0f : -Mathf.Abs(offset) * fanDropPerCard),
+                    spread ? 0f : -offset * fanTiltPerCard,
                     animateEntry);
             }
             optionsScrollRect.horizontalNormalizedPosition = 0.5f;
@@ -372,6 +373,13 @@ namespace ConsoleCards.Presentation.UI
 
         /// <summary>The cancel button's words ("Not now", "Let it happen"); empty: "Cancel".</summary>
         public string CancelLabel { get; }
+
+        /// <summary>P8A: the cards side by side at full size (no fan, no overlap), e.g. the Avatar draft.</summary>
+        public bool Spread { get; set; }
+
+        /// <summary>Choices shown spread (side by side): the Avatar draft. A guest rebuilds the model from its title.</summary>
+        public const string AvatarDraftTitle = "CHOOSE YOUR AVATAR";
+        public static bool IsSpreadTitle(string title) => string.Equals(title, AvatarDraftTitle, StringComparison.Ordinal);
     }
 
     public sealed class FocusedCardRevealModel

@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Results;
+using ConsoleCards.Application.UseCases;
+using ConsoleCards.Core.Domain.Match;
+using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Containers;
 using ConsoleCards.Core.Events;
@@ -407,6 +410,70 @@ namespace ConsoleCards.Presentation.Composition
         // those; the rest go back and the deck is shuffled when the turn ends. One draw per turn. Event-time only.
         internal const int AbilityOfferSize = 3;
         private readonly List<TabletopObjectId> abilityOffer = new List<TabletopObjectId>(AbilityOfferSize);
+        // P8A (owner, 2026-11-08, as at the real table): this turn's draw lies dealt face up beside the buyer's Console,
+        // locked (it is bought, never picked up into a hand); what is not bought goes back into the deck at End Turn.
+        private readonly HashSet<TabletopObjectId> dealtOffer = new HashSet<TabletopObjectId>();
+
+        // A card of this turn's draw that can still be bought: still in the deck, or dealt and still lying out.
+        private bool IsOfferCardAvailable(ContainerState deck, TabletopObjectId cardId) =>
+            deck.Contains(cardId)
+            || (dealtOffer.Contains(cardId) && host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card) && card.BaseState.ContainerId.IsEmpty);
+
+        // Deals this turn's draw out of the deck: face up, locked, in a row beside the buyer's Console (one Undo step).
+        private void DealAbilityOffer(ContainerState deck, PlayerId buyer)
+        {
+            if (!TryGetTrapFloorPlayerSetup(buyer, out TrapFloorPlayerSetupDefinition setup)) return;
+            TabletopPose basePose = setup.AbilityOverflowPose;
+            double radians = basePose.RotationDegrees * Math.PI / 180d;
+            double acrossX = Math.Sin(radians), acrossY = Math.Cos(radians);
+            double alongX = Math.Cos(radians), alongY = -Math.Sin(radians);
+            bool batch = !host.undoBatchActive;
+            if (batch) host.SessionService.BeginUndoBatch();
+            try
+            {
+                for (int i = 0; i < abilityOffer.Count; i++)
+                {
+                    TabletopObjectId cardId = abilityOffer[i];
+                    if (!deck.Contains(cardId)) continue;
+                    TabletopPose pose = new TabletopPose(
+                        new TableCoordinate(
+                            basePose.Position.X - (acrossX * 1.3d) + (alongX * i * 0.6d),
+                            basePose.Position.Y - (acrossY * 1.3d) + (alongY * i * 0.6d)),
+                        basePose.RotationDegrees, basePose.Layer, basePose.LocalOrder + i);
+                    TransferCardResult moved = host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(
+                        new TransferCardCommand(host.CreateCommandContext(buyer), cardId, deck.Id, ContainerId.Empty, pose));
+                    if (!moved.Succeeded) continue;
+                    host.TableAuthority.Submit<FlipCardCommand, FlipCardResult>(new FlipCardCommand(host.CreateCommandContext(buyer), cardId, CardFace.FaceUp));
+                    host.TableAuthority.Submit<SetObjectLockedCommand, CommandResult>(new SetObjectLockedCommand(host.CreateCommandContext(buyer), cardId, true));
+                    dealtOffer.Add(cardId);
+                    host.PresentAcceptedObject(cardId);
+                }
+            }
+            finally
+            {
+                if (batch) host.SessionService.EndUndoBatch();
+            }
+
+            host.ViewSync.SyncContainer(deck.Id);
+            host.RefreshAcceptedCardFaces();
+        }
+
+        // End Turn: what was not bought goes back into the deck (the deck is then shuffled).
+        private void ReturnDealtOffer(PlayerId owner)
+        {
+            if (dealtOffer.Count == 0 || !TryGetAbilityDeck(out ContainerState deck)) return;
+            foreach (TabletopObjectId cardId in dealtOffer)
+            {
+                if (!host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card) || !card.BaseState.ContainerId.IsEmpty) continue;
+                CommandContext context = host.CreateCommandContext(owner);
+                if (card.BaseState.IsUserLocked) host.TableAuthority.Submit<SetObjectLockedCommand, CommandResult>(new SetObjectLockedCommand(context, cardId, false));
+                host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(TransferCardCommand.ToContainer(host.CreateCommandContext(owner), cardId, ContainerId.Empty, deck.Id));
+            }
+
+            dealtOffer.Clear();
+            host.ViewSync.SyncContainer(deck.Id);
+            host.RefreshAcceptedCardFaces();
+        }
         private TrapFloorTurnState abilityOfferTurnState;
         private int abilityOfferRound = -1;
         private PlayerId abilityOfferPlayer;
@@ -459,7 +526,7 @@ namespace ConsoleCards.Presentation.Composition
             int count = 0;
             for (int i = 0; i < abilityOffer.Count; i++)
             {
-                if (deck.Contains(abilityOffer[i])) count++;
+                if (IsOfferCardAvailable(deck, abilityOffer[i])) count++;
             }
 
             return count;
@@ -487,11 +554,12 @@ namespace ConsoleCards.Presentation.Composition
                 abilityOfferTurnState = host.trapFloorTurnState;
                 abilityOfferRound = host.trapFloorTurnState.CurrentRound;
                 abilityOfferPlayer = host.trapFloorTurnState.ActivePlayerId;
+                DealAbilityOffer(deck, player);
             }
 
             for (int i = 0; i < abilityOffer.Count; i++)
             {
-                if (deck.Contains(abilityOffer[i]) && TryGetDeckCardDefinition(abilityOffer[i], out CardDefinitionData definition))
+                if (IsOfferCardAvailable(deck, abilityOffer[i]) && TryGetDeckCardDefinition(abilityOffer[i], out CardDefinitionData definition))
                     drawnStableIds.Add(definition.StableId);
             }
 
@@ -504,7 +572,7 @@ namespace ConsoleCards.Presentation.Composition
             if (player.IsEmpty || !IsAbilityOfferTurn() || abilityOfferPlayer != player || !TryGetAbilityDeck(out ContainerState deck)) return TabletopObjectId.Empty;
             for (int i = 0; i < abilityOffer.Count; i++)
             {
-                if (deck.Contains(abilityOffer[i]) && TryGetDeckCardDefinition(abilityOffer[i], out CardDefinitionData definition)
+                if (IsOfferCardAvailable(deck, abilityOffer[i]) && TryGetDeckCardDefinition(abilityOffer[i], out CardDefinitionData definition)
                     && string.Equals(definition.StableId, cardDefinitionStableId, StringComparison.Ordinal))
                     return abilityOffer[i];
             }
@@ -550,6 +618,7 @@ namespace ConsoleCards.Presentation.Composition
                 abilityOfferTurnState = host.trapFloorTurnState;
                 abilityOfferRound = host.trapFloorTurnState.CurrentRound;
                 abilityOfferPlayer = host.trapFloorTurnState.ActivePlayerId;
+                DealAbilityOffer(deck, abilityOfferPlayer);
             }
 
             ShowAbilityOffer(deck);
@@ -563,7 +632,7 @@ namespace ConsoleCards.Presentation.Composition
             HashSet<string> drawn = new HashSet<string>(StringComparer.Ordinal);
             for (int i = 0; i < abilityOffer.Count; i++)
             {
-                if (deck.Contains(abilityOffer[i]) && TryGetDeckCardDefinition(abilityOffer[i], out CardDefinitionData definition))
+                if (IsOfferCardAvailable(deck, abilityOffer[i]) && TryGetDeckCardDefinition(abilityOffer[i], out CardDefinitionData definition))
                     drawn.Add(definition.StableId);
             }
 
@@ -708,6 +777,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void EndAbilityOffer()
         {
             bool drawn = IsAbilityOfferTurn() && abilityOffer.Count > 0;
+            ReturnDealtOffer(abilityOfferPlayer);
             abilityOffer.Clear();
             abilityOfferTurnState = null;
             abilityOfferRound = -1;
