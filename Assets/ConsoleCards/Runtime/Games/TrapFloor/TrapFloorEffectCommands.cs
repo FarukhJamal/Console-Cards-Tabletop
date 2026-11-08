@@ -391,6 +391,25 @@ namespace ConsoleCards.Games.TrapFloor
     }
 
     /// <summary>What a rule waiting for a die does with it now.</summary>
+    /// <summary>
+    /// P7 (s160, owner rule 2026-11-08 "movement origin return"): after a Key, Ability or Friend is taken from a floor
+    /// tile, the pawn goes back to the tile THIS move began on (C3 → C5 takes a Key → back to C3), never to the spawn
+    /// corner unless that is where the move began. Null: the pawn stays (no move origin known, the pawn already stands
+    /// on it, or the origin tile cannot be stood on any more). Pure; the cartridge supplies the facts.
+    /// </summary>
+    public static class TrapFloorPickupReturn
+    {
+        public static TrapFloorCoordinate? Destination(
+            TrapFloorCoordinate? moveOrigin,
+            TrapFloorCoordinate pawnTile,
+            Func<TrapFloorCoordinate, bool> standable)
+        {
+            if (!moveOrigin.HasValue || moveOrigin.Value == pawnTile) return null;
+            if (standable != null && !standable(moveOrigin.Value)) return null;
+            return moveOrigin.Value;
+        }
+    }
+
     public enum TrapFloorDieRollStep
     {
         /// <summary>Not rolled since the rule asked (or still moving): keep waiting.</summary>

@@ -346,7 +346,7 @@ MonoBehaviour:
       hintHelper: 
       modeStableIds: []
     - stableId: tf-goal-secret-exit
-      text: 'Exits are taken by landing on them, one player at a time; the floor ends when everyone still in has escaped. A Key used at the Secret Exit is gone, and the Secret Exit can collapse. Free for all: one Key each; you need your own Key for the Grand Exit (6×6: 3 Keys, Grand and Secret Exit; 5×5: 2 Keys, Grand and Secret; 4×4: 2 Keys, Grand). Team Play (2 v 2): a Key belongs to whoever took it and one player may carry them all; your team needs a Key for the Grand Exit (6×6: 3 Keys, Grand and Secret; 5×5 and 4×4: 2 Keys, Grand). With no Key and none left to take, you are out. Taking a Key or a blue card sends your pawn back to its starting tile. Win the 4×4 to win the game.'
+      text: 'Exits are taken by landing on them, one player at a time; the floor ends when everyone still in has escaped. A Key used at the Secret Exit is gone, and the Secret Exit can collapse. Free for all: one Key each; you need your own Key for the Grand Exit (6×6: 3 Keys, Grand and Secret Exit; 5×5: 2 Keys, Grand and Secret; 4×4: 2 Keys, Grand). Team Play (2 v 2): a Key belongs to whoever took it and one player may carry them all; your team needs a Key for the Grand Exit (6×6: 3 Keys, Grand and Secret; 5×5 and 4×4: 2 Keys, Grand). With no Key and none left to take, you are out. Taking a Key, an Ability or a Friend sends your pawn back to the tile its move began on (not to your starting tile, unless the move began there). Win the 4×4 to win the game.'
       settingKind: 0
       settingKey: 
       value: ''

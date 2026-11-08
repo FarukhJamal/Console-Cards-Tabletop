@@ -593,7 +593,7 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // The rules move the pawn on their own this turn: a Spring or Crane the player revealed this turn (its target
-        // comes from the Trap and the dice), or the way back to the starting tile after a Key or a prize was taken.
+        // comes from the Trap and the dice), or the way back to the move origin after a Key or a prize was taken.
         private bool RuleMoveExpected(PlayerId sender, TrapFloorPlayerSetupDefinition setup, TrapFloorCoordinate? current, TrapFloorCoordinate? target)
         {
             TrapFloorAbilityResolutionState state = host.trapFloorAbilityResolutionState;
@@ -608,7 +608,9 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
-            if (setup == null || !target.HasValue || !current.HasValue || target.Value != setup.StartingCorner) return false;
+            // The way back after a Key or prize goes to the tile the move began on (owner rule 2026-11-08).
+            TrapFloorCoordinate? origin = setup != null ? CurrentMoveOrigin(sender) : null;
+            if (setup == null || !target.HasValue || !current.HasValue || !origin.HasValue || target.Value != origin.Value) return false;
             if (!host.trapFloorTemplate.TryGetFloorCardId(current.Value, out TabletopObjectId onId)) return false;
             bool keyTaken = host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.HasPlayerClaimedKey(onId, sender);
             bool prizeTaken = host.trapFloorCollapseState != null

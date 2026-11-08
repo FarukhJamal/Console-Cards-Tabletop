@@ -2824,7 +2824,9 @@ namespace ConsoleCards.Presentation.Composition
 
             if (TryOfferPrizePopup(revealedFloor, header, backArtwork, frontArtwork)) return;
 
-            string state = $"{revealedFloor.Content.Category.ToString().ToUpperInvariant()} • REVEALED";
+            // P7 (s160): every exit card is of the SecretExit category (the Grand Exit carries a tag), so the badge read
+            // "SECRETEXIT" over the Grand Exit. The badge names the card's kind as players know it.
+            string state = $"{RevealBadgeKind(revealedFloor.Content)} • REVEALED";
             FocusedCardRevealModel model = new FocusedCardRevealModel(
                 revealedId,
                 backArtwork,
@@ -3236,44 +3238,59 @@ namespace ConsoleCards.Presentation.Composition
             host.FeedbackLine( // KEYS-1: always shown
                 $"{FormatPlayerName(result.Activity.ActorPlayerId)} took {result.FloorCard.Content.DisplayName}.",
                 FeedbackSeverity.Info);
-            ReturnPawnToStart(result.Activity.ActorPlayerId, floorCardId); // rules: back to where the pawn started
+            ReturnPawnToMoveOrigin(result.Activity.ActorPlayerId, floorCardId); // rules: back to the tile the move began on
             EliminateStuckPlayers();
         }
 
-        // Rules (owner, 2026-11-04): "when the player is stepping in a key card or blue card you go back to your default
-        // starting card and obtain that key or blue card". Only when the pawn still stands on that tile. Event-time only.
-        internal void ReturnPawnToStart(PlayerId player, TabletopObjectId fromFloorCardId)
+        // Rules: after a Key or a prize (Ability, Friend) is taken from a floor tile, the pawn goes back to the tile THIS
+        // move began on. Owner, 2026-11-08 (P7 rule correction, replaces 2026-11-04 "back to your default starting
+        // card"): C3 → C5 takes a Key → back to C3, not to the spawn corner (unless the move began there).
+        // Positions kept apart: spawn = setup.StartingCorner; turn start = hostMoveStart (HostRules); move origin =
+        // moveStartTile (captured by the landing scan from the tile the pawn left, before the move's landing rules
+        // run); pawn = TryReadPawnTile. Only when the pawn still stands on the tile. Event-time only. The move count
+        // is not reset and no move is given back (moveSpentByRule).
+        internal void ReturnPawnToMoveOrigin(PlayerId player, TabletopObjectId fromFloorCardId)
         {
             if (player.IsEmpty
                 || host.trapFloorTemplate == null
                 || !TryGetTrapFloorPlayerSetup(player, out TrapFloorPlayerSetupDefinition setup)
                 || !TryReadPawnTile(setup.PawnId, out TrapFloorCoordinate tile)
                 || !host.trapFloorTemplate.TryGetFloorCardId(tile, out TabletopObjectId onId)
-                || onId != fromFloorCardId
-                || tile == setup.StartingCorner
-                || !host.trapFloorTemplate.TryGetFloorCardId(setup.StartingCorner, out TabletopObjectId startId))
+                || onId != fromFloorCardId)
             {
                 return;
             }
 
-            if (host.trapFloorCollapseState != null && host.trapFloorCollapseState.IsCollapsed(startId))
+            TrapFloorCoordinate? origin = CurrentMoveOrigin(player);
+            TrapFloorCoordinate? destination = TrapFloorPickupReturn.Destination(origin, tile, c => IsWalkableTile(c.X, c.Y));
+            if (!destination.HasValue)
             {
-                host.FeedbackLine($"{FormatPlayerName(player)}'s starting tile is gone, so the pawn stays here.", FeedbackSeverity.Info);
+                if (origin.HasValue && origin.Value != tile)
+                    host.FeedbackLine($"{FormatPlayerName(player)}'s tile the move began on is gone, so the pawn stays here.", FeedbackSeverity.Info);
                 return;
             }
 
-            if (TryAutoMovePawnToFloor(player, startId, out _))
+            if (!host.trapFloorTemplate.TryGetFloorCardId(destination.Value, out TabletopObjectId originId)) return;
+            if (TryAutoMovePawnToFloor(player, originId, out _))
             {
                 if (host.trapFloorTurnState != null && host.trapFloorTurnState.ActivePlayerId == player)
                 {
                     EnsureMoveTurn();
-                    moveStartTile = setup.StartingCorner; // the pawn's coordinate; the move count is not reset
+                    moveStartTile = destination.Value; // the pawn's coordinate; the move count is not reset
                     moveSpentByRule = true;
                 }
 
                 CollectTakenPrizesOffPawns(); // the prize the pawn just left goes by the Console now
-                host.FeedbackLine($"{FormatPlayerName(player)} goes back to the starting tile.", FeedbackSeverity.Info);
+                host.FeedbackLine($"{FormatPlayerName(player)} goes back to the tile the move began on.", FeedbackSeverity.Info);
             }
+        }
+
+        // The tile the turn player's current move began on (null: no move this turn, or not the turn player).
+        internal TrapFloorCoordinate? CurrentMoveOrigin(PlayerId player)
+        {
+            if (host.trapFloorTurnState == null || host.trapFloorTurnState.ActivePlayerId != player) return null;
+            EnsureMoveTurn();
+            return moveStartTile;
         }
 
         // The Keys a player holds now (a Key used at the Secret Exit is gone).
@@ -3611,7 +3628,7 @@ namespace ConsoleCards.Presentation.Composition
                 $"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} took {prizeName}. "
                     + "It goes by their Console when the pawn moves off.",
                 FeedbackSeverity.Info);
-            ReturnPawnToStart(host.trapFloorTurnState.ActivePlayerId, floorCardId); // rules: back to the start, prize in hand
+            ReturnPawnToMoveOrigin(host.trapFloorTurnState.ActivePlayerId, floorCardId); // rules: back to the move origin, prize in hand
         }
 
         // TABLE-1: the Controller Cards that paid went back into the Controller deck: lay out the deck and the
@@ -4721,7 +4738,7 @@ namespace ConsoleCards.Presentation.Composition
 
             if (moveSpentByRule)
             {
-                Debug.Log("[Hints] No reach lights: this turn's move ended when the pawn went back to its starting tile.", host);
+                Debug.Log("[Hints] No reach lights: this turn's move ended when the pawn went back to the tile the move began on.", host);
                 return;
             }
 
@@ -4981,7 +4998,7 @@ namespace ConsoleCards.Presentation.Composition
         internal string DescribeMoveProblem(TrapFloorCoordinate start, TrapFloorCoordinate to)
         {
             if (to.Equals(start)) return null;
-            if (moveSpentByRule) return "This turn's move ended when your pawn went back to its starting tile; the rules give no further move this turn.";
+            if (moveSpentByRule) return "This turn's move ended when your pawn went back to the tile the move began on; the rules give no further move this turn.";
             TrapFloorBlindMovementDirection? onlyDirection = null;
             if (TryGetActiveBlindStatus(out TrapFloorBlindStatusState blind))
             {
@@ -5354,6 +5371,19 @@ namespace ConsoleCards.Presentation.Composition
             players = BuildHudPlayers(turnPlayerId);
             card = BuildPlayerCard(turnPlayerId);
             return true;
+        }
+
+        // The kind a revealed tile's badge names (the Grand Exit is a SecretExit-category card with a tag).
+        internal static string RevealBadgeKind(TrapFloorFloorContentDefinition content)
+        {
+            if (content == null) return "TILE";
+            switch (content.Category)
+            {
+                case TrapFloorFloorContentCategory.SecretExit:
+                    return TrapFloorObjectiveUseCase.IsGrandExit(content) ? "GRAND EXIT" : "SECRET EXIT";
+                default:
+                    return content.Category.ToString().ToUpperInvariant();
+            }
         }
 
         // P7 (s159, three-process run): once the floor is won the strip said the last turn player's turn ("GREEN'S TURN

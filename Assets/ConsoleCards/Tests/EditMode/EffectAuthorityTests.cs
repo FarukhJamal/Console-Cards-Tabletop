@@ -335,5 +335,49 @@ namespace ConsoleCards.Tests
             Assert.AreEqual(HostUndoVerdict.Allowed, policy.Check(me, Guid.NewGuid(), step, true, step, me, false));
             Assert.IsNotNull(HostUndoPolicy.Describe(HostUndoVerdict.RulesResult, false));
         }
+
+        // ---------- P7 (s160) owner rule 2026-11-08: a revealed Trap is inactive ----------
+
+        [Test]
+        public void RevealedTrap_IsInactive_NoLaterLandingRevealsOrAppliesItAgain()
+        {
+            Host h = WithTile(AppliedTrap, out TabletopObjectId tile);
+            h.Land(tile);
+            PlayerId first = h.Active;
+            Assert.IsTrue(h.Exec.ApplyTrap(h.T.Match, new TrapFloorApplyTrapCommand(h.Ctx(first), tile)).Succeeded,
+                "the first landing's own effect runs");
+            int statuses = h.Ability.BlindStatuses.Count + h.Ability.SlowStatuses.Count + h.Ability.StickyStatuses.Count;
+            Dictionary<PlayerId, TrapFloorCurrentFloorPlayerState> states = new Dictionary<PlayerId, TrapFloorCurrentFloorPlayerState>();
+            foreach (PlayerId p in h.T.Players) states[p] = h.T.Turn.GetPlayerState(p);
+            long revision = h.T.Match.Revision;
+
+            foreach (PlayerId p in h.T.Players) // the original player again, and every other player
+            {
+                TrapFloorRevealFloorResult again = h.Reveal.Execute(h.T.Match, new TrapFloorRevealFloorCommand(h.Ctx(p), tile));
+                Assert.IsFalse(again.Succeeded, "a face-up Trap is not revealed again");
+                if (p == h.Active) Assert.AreEqual(TrapFloorRevealFloorError.FloorAlreadyRevealed, again.Error);
+                Assert.IsFalse(h.Exec.ApplyTrap(h.T.Match, new TrapFloorApplyTrapCommand(h.Ctx(p), tile)).Succeeded,
+                    "a resolved Trap does not act again");
+            }
+
+            Assert.AreEqual(statuses, h.Ability.BlindStatuses.Count + h.Ability.SlowStatuses.Count + h.Ability.StickyStatuses.Count);
+            foreach (PlayerId p in h.T.Players) Assert.AreEqual(states[p], h.T.Turn.GetPlayerState(p), "no one is put out again");
+            Assert.AreEqual(revision, h.T.Match.Revision, "no change is made");
+        }
+
+        // ---------- P7 (s160) owner rule 2026-11-08: back to the tile the move began on ----------
+
+        [Test]
+        public void PickupReturn_GoesToTheMoveOrigin_NotTheSpawnCorner()
+        {
+            TrapFloorCoordinate spawn = new TrapFloorCoordinate(1, 1);
+            TrapFloorCoordinate c3 = new TrapFloorCoordinate(3, 3), c5 = new TrapFloorCoordinate(3, 5);
+            Assert.AreEqual(c3, TrapFloorPickupReturn.Destination(c3, c5, _ => true), "C3 → C5 takes a Key → back to C3");
+            Assert.AreNotEqual(spawn, TrapFloorPickupReturn.Destination(c3, c5, _ => true));
+            Assert.AreEqual(spawn, TrapFloorPickupReturn.Destination(spawn, c5, _ => true), "the spawn only when the move began there");
+            Assert.IsNull(TrapFloorPickupReturn.Destination(null, c5, _ => true), "no move known: the pawn stays");
+            Assert.IsNull(TrapFloorPickupReturn.Destination(c5, c5, _ => true), "already there: nothing to move");
+            Assert.IsNull(TrapFloorPickupReturn.Destination(c3, c5, t => t != c3), "the origin is a hole: the pawn stays");
+        }
     }
 }

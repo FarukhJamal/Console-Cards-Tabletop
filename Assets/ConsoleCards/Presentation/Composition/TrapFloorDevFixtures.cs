@@ -157,11 +157,13 @@ namespace ConsoleCards.Presentation.Composition
             int[] dx = { 1, -1, 0, 0 }, dy = { 0, 0, 1, -1 };
             TrapFloorCoordinate? bestTarget = null, bestStand = null;
             int bestDistance = int.MaxValue;
+            int named = 0, collapsed = 0, taken = 0;
             foreach (TrapFloorCoordinate target in CellsNamed(template, targetName))
             {
+                named++;
                 if (!template.TryGetFloorCardId(target, out TabletopObjectId targetId)) continue;
-                if (host.trapFloorCollapseState != null && host.trapFloorCollapseState.IsCollapsed(targetId)) continue;
-                if (host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.TryGetClaim(targetId, out _)) continue; // a Key already taken
+                if (host.trapFloorCollapseState != null && host.trapFloorCollapseState.IsCollapsed(targetId)) { collapsed++; continue; }
+                if (host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.TryGetClaim(targetId, out _)) { taken++; continue; } // a Key already taken
                 for (int d = 0; d < 4; d++)
                 {
                     int x = target.X + dx[d], y = target.Y + dy[d];
@@ -174,7 +176,10 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
-            if (!bestStand.HasValue) return $"[Scenario] FAIL setup: no open tile next to a '{targetName}' on this floor.";
+            if (!bestStand.HasValue)
+                return named == 0
+                    ? $"[Scenario] FAIL setup: this floor has no '{targetName}' (floor {template.FloorIndex + 1}, {template.GridColumns}×{template.GridRows})."
+                    : $"[Scenario] FAIL setup: '{targetName}' ×{named} on this floor: {collapsed} collapsed, {taken} already taken, the rest have no open neighbour.";
             if (!template.TryGetFloorCardId(bestStand.Value, out TabletopObjectId standId)
                 || !host.matchState.Cards.TryGetValue(standId, out CardInstanceState standCard))
                 return "[Scenario] FAIL setup: the tile to stand on is missing.";
