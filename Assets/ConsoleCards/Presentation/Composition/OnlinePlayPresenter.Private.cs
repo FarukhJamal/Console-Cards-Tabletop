@@ -68,8 +68,37 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         public static void SetEditorEnabled(bool on) => editorOn = on;
+
+        // P8A (owner, 2026-11-08: "I need to test the original build, not the test build"): the developer test panel can
+        // be switched off while the private session keeps working. Editor: Console Cards › Debug › Privacy › Hide test
+        // panel (kept between Play runs). Guest build: a file named PanelHiddenFileName next to the game (the guest build
+        // menu writes it when the Editor setting is on).
+        public const string PanelHiddenFileName = "hide-dev-panel.txt";
+        public const string PanelHiddenPrefKey = "ConsoleCards.HideDevPanel";
+#if !UNITY_EDITOR
+        private static int panelHiddenFlag = -1;
+#endif
+
+        public static bool PanelHidden
+        {
+            get
+            {
+#if UNITY_EDITOR
+                return UnityEditor.EditorPrefs.GetBool(PanelHiddenPrefKey, false);
+#else
+                if (panelHiddenFlag < 0)
+                {
+                    try { panelHiddenFlag = File.Exists(Path.Combine(UnityEngine.Application.dataPath, "..", PanelHiddenFileName)) ? 1 : 0; }
+                    catch (Exception) { panelHiddenFlag = 0; }
+                }
+
+                return panelHiddenFlag == 1;
+#endif
+            }
+        }
 #else
         public static bool Enabled => false;
+        public static bool PanelHidden => true;
 #endif
     }
 
@@ -4104,7 +4133,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private void OnGUI()
         {
-            if (Online == null || !PrivateDevSession.Enabled) return;
+            if (Online == null || !PrivateDevSession.Enabled || PrivateDevSession.PanelHidden) return;
             const float width = 560f;
             GUILayout.BeginArea(new Rect(Screen.width - width - 12f, 12f, width, folded ? 80f : 620f), GUI.skin.box);
             GUILayout.BeginHorizontal();

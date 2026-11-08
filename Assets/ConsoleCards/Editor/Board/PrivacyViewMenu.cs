@@ -39,6 +39,27 @@ namespace ConsoleCards.Editor.Board
                 : "[PrivateSession] Private development session OFF: normal online play.");
         }
 
+        // P8A: hide the developer test panel (Editor now, and guest builds made while it is on). Gameplay is unchanged.
+        private const string HidePanelItem = Root + "Hide test panel (Editor and new guest builds)";
+
+        [MenuItem(HidePanelItem)]
+        private static void ToggleHidePanel()
+        {
+            bool hide = !EditorPrefs.GetBool(PrivateDevSession.PanelHiddenPrefKey, false);
+            EditorPrefs.SetBool(PrivateDevSession.PanelHiddenPrefKey, hide);
+            Menu.SetChecked(HidePanelItem, hide);
+            Debug.Log(hide
+                ? "[PrivateSession] Test panel HIDDEN in this Editor; guest builds made now get hide-dev-panel.txt."
+                : "[PrivateSession] Test panel SHOWN in this Editor; guest builds made now show it.");
+        }
+
+        [MenuItem(HidePanelItem, true)]
+        private static bool ToggleHidePanelCheck()
+        {
+            Menu.SetChecked(HidePanelItem, EditorPrefs.GetBool(PrivateDevSession.PanelHiddenPrefKey, false));
+            return true;
+        }
+
         [MenuItem(SessionItem, true)]
         private static bool ToggleSessionCheck()
         {
@@ -85,6 +106,14 @@ namespace ConsoleCards.Editor.Board
             {
                 System.IO.File.WriteAllText(flag,
                     "Development only: this copy plays the private development session (doc 10 §57). Delete this file for normal online play.");
+            }
+
+            string hideFlag = System.IO.Path.Combine(folder, PrivateDevSession.PanelHiddenFileName);
+            bool hidePanel = EditorPrefs.GetBool(PrivateDevSession.PanelHiddenPrefKey, false);
+            if (report.summary.result == UnityEditor.Build.Reporting.BuildResult.Succeeded)
+            {
+                if (hidePanel) System.IO.File.WriteAllText(hideFlag, "Hides the developer test panel. Delete this file to show it again.");
+                else if (System.IO.File.Exists(hideFlag)) System.IO.File.Delete(hideFlag);
             }
 
             Debug.Log($"[PrivateSession] Guest build: {report.summary.result}, {report.summary.totalErrors} errors, {report.summary.totalTime.TotalSeconds:F0} s → {exe}");
