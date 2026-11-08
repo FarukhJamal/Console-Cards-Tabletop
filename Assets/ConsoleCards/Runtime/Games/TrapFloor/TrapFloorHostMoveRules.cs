@@ -65,8 +65,8 @@ namespace ConsoleCards.Games.TrapFloor
     /// AUTH-MOVE (owner, 2026-11-06: "FULL: use the existing game's defined rules to validate movement on the host"): the
     /// host's check of a pawn move sent by a joined computer, in Full only. The same rules the player's own computer
     /// shows as "Move not allowed" (doc 18 §15.2, H3, RULE-HOLE), decided on the host's table. Manual and Reminders are
-    /// not checked here (tabletop freedom). Moves that keep the pawn on the same tile, and moves off the floor (a fall),
-    /// are never refused. Pure, so it is unit tested.
+    /// not checked here (tabletop freedom). Moves that keep the pawn on the same tile are never refused; a move off the floor (a fall) is
+    /// allowed for the turn player's own pawn only. Pure, so it is unit tested.
     /// </summary>
     public static class TrapFloorHostMoveRules
     {
@@ -75,10 +75,18 @@ namespace ConsoleCards.Games.TrapFloor
             if (f == null) throw new ArgumentNullException(nameof(f));
             if (!f.FullRules || f.PawnOwner.IsEmpty) return TrapFloorHostMoveVerdict.Allowed; // tabletop freedom
             if (Nullable.Equals(f.Target, f.Current)) return TrapFloorHostMoveVerdict.Allowed; // settling in place
-            if (!f.Target.HasValue) return TrapFloorHostMoveVerdict.Allowed; // off the floor: a fall, never refused
             if (f.Sender != f.PawnOwner) return TrapFloorHostMoveVerdict.NotYourPawn;
             if (f.PawnOwnerOut) return TrapFloorHostMoveVerdict.PlayerIsOut;
             if (!f.IsPlayerTurn || f.ActivePlayer != f.Sender) return TrapFloorHostMoveVerdict.NotYourTurn;
+            // P8A (2026-11-08, live: a stray click after right-click → Move put a pawn on the board's edge and the host
+            // took it): stepping off the floor is still a deliberate fall, but only for the player's own pawn, on their
+            // own turn, while they may still move (not Stuck, not already moved by an Ability or Trap).
+            if (!f.Target.HasValue)
+            {
+                if (f.Stuck) return TrapFloorHostMoveVerdict.Stuck;
+                if (f.GuidedMoveDone) return TrapFloorHostMoveVerdict.NotALitTile;
+                return TrapFloorHostMoveVerdict.Allowed;
+            }
 
             TrapFloorCoordinate to = f.Target.Value;
             if (f.Walkable == null || !f.Walkable(to.X, to.Y)) return TrapFloorHostMoveVerdict.OntoHole;

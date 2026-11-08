@@ -371,6 +371,32 @@ namespace ConsoleCards.Tests
         }
 
         [Test]
+        public void Full_OffTheFloor_IsAFallOnlyForTheTurnPlayersOwnPawn()
+        {
+            TrapFloorHostMoveFacts f = Move(1, 1, 1, 1);
+            f.Target = null;
+            Assert.AreEqual(TrapFloorHostMoveVerdict.Allowed, TrapFloorHostMoveRules.Check(f), "own pawn, own turn: a deliberate fall");
+            f.Sender = Other;
+            Assert.AreEqual(TrapFloorHostMoveVerdict.NotYourPawn, TrapFloorHostMoveRules.Check(f), "another player's pawn off the floor");
+            f.Sender = Me;
+            f.ActivePlayer = Other;
+            Assert.AreEqual(TrapFloorHostMoveVerdict.NotYourTurn, TrapFloorHostMoveRules.Check(f), "a stray placement out of turn");
+            f.ActivePlayer = Me;
+            f.IsPlayerTurn = false;
+            Assert.AreEqual(TrapFloorHostMoveVerdict.NotYourTurn, TrapFloorHostMoveRules.Check(f), "during the floor turn");
+            f.IsPlayerTurn = true;
+            f.Stuck = true;
+            Assert.AreEqual(TrapFloorHostMoveVerdict.Stuck, TrapFloorHostMoveRules.Check(f));
+            f.Stuck = false;
+            f.GuidedMoveDone = true;
+            Assert.AreNotEqual(TrapFloorHostMoveVerdict.Allowed, TrapFloorHostMoveRules.Check(f), "no second move after a guided one");
+            f.GuidedMoveDone = false;
+            f.FullRules = false;
+            f.Sender = Other;
+            Assert.AreEqual(TrapFloorHostMoveVerdict.Allowed, TrapFloorHostMoveRules.Check(f), "Free and Reminders keep tabletop freedom");
+        }
+
+        [Test]
         public void Full_InvalidMoves_AreRefused()
         {
             Assert.AreEqual(TrapFloorHostMoveVerdict.NotStraight, TrapFloorHostMoveRules.Check(Move(1, 1, 2, 2)));

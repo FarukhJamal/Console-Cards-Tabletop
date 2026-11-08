@@ -1524,8 +1524,21 @@ namespace ConsoleCards.Presentation.Composition
                 state.Pose.RotationDegrees,
                 state.Pose.Layer,
                 state.Pose.LocalOrder,
-                pose => view != null && view.IsBound && view.BoundState != null && MoveLoosePiece(view, view.BoundState, pose));
+                pose =>
+                {
+                    bool moved = view != null && view.IsBound && view.BoundState != null && MoveLoosePiece(view, view.BoundState, pose);
+                    // P8A (2026-11-08, live: a guest stayed in Move mode and a later click moved its pawn again): one
+                    // move per "Move (click where)". The placement ends right after it (a refused place keeps it open).
+                    if (moved) StartCoroutine(EndPieceMoveAfterPlacement());
+                    return moved;
+                });
             ShowPlacementHint($"Move the {ToolboxComponentLabel(kind)}"); // one move: a click sets it down
+        }
+
+        private System.Collections.IEnumerator EndPieceMoveAfterPlacement()
+        {
+            yield return null;
+            if (componentPlacementController != null && componentPlacementController.IsActive) componentPlacementController.Cancel();
         }
 
         private void ShowTintMenu(TabletopObjectView view)
