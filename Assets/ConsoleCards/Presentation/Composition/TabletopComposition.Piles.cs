@@ -699,6 +699,60 @@ namespace ConsoleCards.Presentation.Composition
                 feel.ShuffleMaxStagger);
         }
 
+        // P8A (owner, 2026-11-10: "the slide is not showing on the host"): a slide this composition runs itself. On the
+        // computer that runs the table's physics a loose card is a live body that puts itself straight back where it
+        // lies; for the slide it is held still (kinematic, its physics script paused) and let go where it ends.
+        internal void SlideCards(IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts, float seconds, float stagger)
+        {
+            if (starts == null || starts.Count == 0) return;
+            int index = 0;
+            foreach (KeyValuePair<Transform, TabletopTransformSnapshot> pair in starts)
+            {
+                Transform view = pair.Key;
+                if (view == null) continue;
+                TabletopTransformSnapshot from = pair.Value;
+                if ((view.position - from.Position).sqrMagnitude < 1e-6f && Quaternion.Angle(view.rotation, from.Rotation) < 0.5f) continue;
+                StartCoroutine(SlideCard(view, from, seconds, index * stagger));
+                index++;
+            }
+        }
+
+        private System.Collections.IEnumerator SlideCard(Transform view, TabletopTransformSnapshot from, float seconds, float delay)
+        {
+            Vector3 endPosition = view.position;
+            Quaternion endRotation = view.rotation;
+            Rigidbody body = view.GetComponent<Rigidbody>();
+            PhysicalLooseObject physical = view.GetComponent<PhysicalLooseObject>();
+            bool wasKinematic = body != null && body.isKinematic;
+            bool physicalWasOn = physical != null && physical.enabled;
+            if (body != null) body.isKinematic = true;
+            if (physical != null) physical.enabled = false;
+            view.SetPositionAndRotation(from.Position, from.Rotation);
+            float lift = Mathf.Max(0.05f, 0.25f * WorldPerCardWidth());
+            float started = Time.unscaledTime + delay;
+            while (view != null)
+            {
+                float t = Mathf.Clamp01((Time.unscaledTime - started) / Mathf.Max(0.01f, seconds));
+                float eased = t * t * (3f - (2f * t));
+                view.SetPositionAndRotation(
+                    Vector3.Lerp(from.Position, endPosition, eased) + (Vector3.up * (Mathf.Sin(eased * Mathf.PI) * lift)),
+                    Quaternion.Slerp(from.Rotation, endRotation, eased));
+                if (t >= 1f) break;
+                yield return null;
+            }
+
+            if (view == null) yield break;
+            view.SetPositionAndRotation(endPosition, endRotation);
+            if (body != null)
+            {
+                body.position = endPosition;
+                body.rotation = endRotation;
+                body.isKinematic = wasKinematic;
+            }
+
+            if (physical != null) physical.enabled = physicalWasOn;
+        }
+
         // P8A: a change made elsewhere (run by change) that moved this card: its view slides from where it was.
         internal void RunWithCardSlide(TabletopObjectId cardId, Func<bool> change)
         {
@@ -710,11 +764,12 @@ namespace ConsoleCards.Presentation.Composition
 
             IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts = CaptureCardTransforms(new[] { cardId });
             if (!change() || matchState == null) return;
-            if (matchState.Cards.TryGetValue(cardId, out CardInstanceState card) && !card.BaseState.ContainerId.IsEmpty)
-                ViewSync.SyncContainer(card.BaseState.ContainerId);
+            bool loose = !matchState.Cards.TryGetValue(cardId, out CardInstanceState card) || card.BaseState.ContainerId.IsEmpty;
+            if (!loose) ViewSync.SyncContainer(card.BaseState.ContainerId);
             PresentAcceptedObject(cardId);
             RefreshAcceptedCardFaces();
-            presentationTransitions.AnimateCardsFromCurrentResults(starts, 0.45f, 0f);
+            if (loose) SlideCards(starts, 0.45f, 0f); // a loose body: held still for the slide
+            else presentationTransitions.AnimateCardsFromCurrentResults(starts, 0.45f, 0f); // into a pile or a hand
         }
 
         // P8A: where these cards' views are now (loose cards have no container to capture by).

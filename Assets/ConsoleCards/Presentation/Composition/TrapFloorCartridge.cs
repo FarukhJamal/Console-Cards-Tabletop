@@ -737,7 +737,8 @@ namespace ConsoleCards.Presentation.Composition
                 if (result.DestinationContainerId.IsEmpty) host.PresentAcceptedObject(deckCardId); // loose beside the Console
                 host.RefreshCardContentVisibility();
                 host.RefreshSelectionPresenterAfterRuntimeProjection();
-                host.presentationTransitions.AnimateCardsFromCurrentResults(boughtStarts, 0.35f, 0f); // P8A: it slides from where it lay
+                if (result.DestinationContainerId.IsEmpty) host.SlideCards(boughtStarts, 0.35f, 0f); // loose beside the Console
+                else host.presentationTransitions.AnimateCardsFromCurrentResults(boughtStarts, 0.35f, 0f); // into the hand // P8A: it slides from where it lay
             }
 
             ShowPaymentReturned();

@@ -100,7 +100,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.ViewSync.SyncContainer(pile);
                 host.RefreshAcceptedCardFaces();
 
-                host.presentationTransitions.AnimateCardsFromCurrentResults(starts, 0.45f, 0.12f);
+                host.SlideCards(starts, 0.45f, 0.12f);
             }
 
             string who = FormatPlayerName(player);

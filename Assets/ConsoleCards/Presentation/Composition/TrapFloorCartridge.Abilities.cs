@@ -461,7 +461,7 @@ namespace ConsoleCards.Presentation.Composition
 
             host.ViewSync.SyncContainer(deck.Id);
             host.RefreshAcceptedCardFaces();
-            host.presentationTransitions.AnimateCardsFromCurrentResults(starts, AbilityDealSlideSeconds, AbilityDealStagger);
+            host.SlideCards(starts, AbilityDealSlideSeconds, AbilityDealStagger);
         }
 
         private const float AbilityDealSlideSeconds = 0.45f;
@@ -492,7 +492,7 @@ namespace ConsoleCards.Presentation.Composition
             dealtOffer.Clear();
             host.ViewSync.SyncContainer(deck.Id);
             host.RefreshAcceptedCardFaces();
-            host.presentationTransitions.AnimateCardsFromCurrentResults(starts, AbilityDealSlideSeconds, 0.06f);
+            host.presentationTransitions.AnimateCardsFromCurrentResults(starts, AbilityDealSlideSeconds, 0.06f); // into the deck (not a loose body)
         }
         private TrapFloorTurnState abilityOfferTurnState;
         private int abilityOfferRound = -1;
