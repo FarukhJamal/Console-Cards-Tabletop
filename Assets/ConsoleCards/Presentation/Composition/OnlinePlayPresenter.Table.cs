@@ -587,7 +587,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             List<PlayerId> outBefore = host.TrapFloorGame.OutPlayersNow(); // NOTICE-REMOTE
-            ReplayOutcome outcome = Replicated.Replay(command);
+            ReplayOutcome outcome = ReplayOutcome.Unknown;
+            host.RunWithCardSlide(AbilityCardMovedBy(command), () => (outcome = Replicated.Replay(command)) == ReplayOutcome.Accepted);
             host.TrapFloorGame.AnnounceOutChanges(outBefore);
             switch (outcome)
             {
@@ -610,11 +611,28 @@ namespace ConsoleCards.Presentation.Composition
             if (!sharedTable || awaitingTable) return;
             object command = TableWire.Read(message, 9, message.Length - 9, false);
             List<PlayerId> outBefore = host.TrapFloorGame.OutPlayersNow(); // NOTICE-REMOTE
-            ReplayOutcome outcome = Replicated.Replay(command);
+            ReplayOutcome outcome = ReplayOutcome.Unknown;
+            host.RunWithCardSlide(AbilityCardMovedBy(command), () => (outcome = Replicated.Replay(command)) == ReplayOutcome.Accepted);
             host.TrapFloorGame.AnnounceOutChanges(outBefore);
             if (outcome == ReplayOutcome.AlreadyApplied && command is CommitPhysicalObjectCommand own)
                 TakeHostDieResult(own); // AUTH-DICE: our own throw came back; a rules die shows the host's result
             if (outcome == ReplayOutcome.Rejected || outcome == ReplayOutcome.Unknown) RequestTable("a change from the host did not fit this table");
+        }
+
+        // P8A (owner, 2026-11-10: "I saw the slide on the client, not on the host"): an Ability card another computer
+        // dealt, bought, gave as a starting Ability or put back slides here too, as it did on that computer.
+        private TabletopObjectId AbilityCardMovedBy(object command)
+        {
+            if (host.trapFloorTemplate == null || host.matchState == null) return TabletopObjectId.Empty;
+            if (command is ConsoleCards.Games.TrapFloor.TrapFloorBuyFromShopCommand buy) return buy.SourceCardId;
+            if (!(command is TransferCardCommand transfer)) return TabletopObjectId.Empty;
+            ContainerId deck = host.trapFloorTemplate.AbilityDeckId;
+            ContainerId starting = ConsoleCards.Games.TrapFloor.TrapFloorTemplateFactory.StartingAbilitiesId;
+            bool abilityPile(ContainerId id) => !id.IsEmpty && (id == deck || id == starting);
+            if (!host.matchState.Cards.TryGetValue(transfer.CardObjectId, out var card)) return TabletopObjectId.Empty;
+            return abilityPile(card.BaseState.ContainerId) || abilityPile(transfer.DestinationContainerId)
+                ? transfer.CardObjectId
+                : TabletopObjectId.Empty;
         }
 
         // ---------- whole tables ----------

@@ -699,6 +699,24 @@ namespace ConsoleCards.Presentation.Composition
                 feel.ShuffleMaxStagger);
         }
 
+        // P8A: a change made elsewhere (run by change) that moved this card: its view slides from where it was.
+        internal void RunWithCardSlide(TabletopObjectId cardId, Func<bool> change)
+        {
+            if (cardId.IsEmpty || matchState == null)
+            {
+                change();
+                return;
+            }
+
+            IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts = CaptureCardTransforms(new[] { cardId });
+            if (!change() || matchState == null) return;
+            if (matchState.Cards.TryGetValue(cardId, out CardInstanceState card) && !card.BaseState.ContainerId.IsEmpty)
+                ViewSync.SyncContainer(card.BaseState.ContainerId);
+            PresentAcceptedObject(cardId);
+            RefreshAcceptedCardFaces();
+            presentationTransitions.AnimateCardsFromCurrentResults(starts, 0.45f, 0f);
+        }
+
         // P8A: where these cards' views are now (loose cards have no container to capture by).
         internal IReadOnlyDictionary<Transform, TabletopTransformSnapshot> CaptureCardTransforms(IEnumerable<TabletopObjectId> cardIds)
         {

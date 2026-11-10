@@ -690,10 +690,14 @@ namespace ConsoleCards.Presentation.Composition
         {
             PlayerId buyer = host.trapFloorTurnState.ActivePlayerId;
             HashSet<string> drawn = new HashSet<string>(StringComparer.Ordinal);
+            drawnCounts.Clear();
             for (int i = 0; i < abilityOffer.Count; i++)
             {
                 if (IsOfferCardAvailable(deck, abilityOffer[i]) && TryGetDeckCardDefinition(abilityOffer[i], out CardDefinitionData definition))
+                {
                     drawn.Add(definition.StableId);
+                    drawnCounts[definition.StableId] = drawnCounts.TryGetValue(definition.StableId, out int n) ? n + 1 : 1;
+                }
             }
 
             if (drawn.Count == 0 || host.runtimeUi == null)
@@ -708,6 +712,8 @@ namespace ConsoleCards.Presentation.Composition
             {
                 if (drawn.Contains(option.CardDefinitionStableId)) options.Add(option);
             }
+
+            drawnCounts.Clear();
 
             host.runtimeUi.ShowActionAbilityPurchase(
                 options,
@@ -727,6 +733,12 @@ namespace ConsoleCards.Presentation.Composition
                 "ABILITY DRAW",
                 "DRAWN");
         }
+
+        // P8A (owner, 2026-11-10): two of the same Ability in the draw show as one row with its count ("Shield ×2").
+        private readonly Dictionary<string, int> drawnCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        internal string DrawnCountName(CardDefinitionData definition) =>
+            drawnCounts.TryGetValue(definition.StableId, out int n) && n > 1 ? $"{definition.DisplayName} ×{n}" : definition.DisplayName;
 
         // The game's card behind a deck card (its cost and name).
         private bool TryGetDeckCardDefinition(TabletopObjectId cardId, out CardDefinitionData definition)

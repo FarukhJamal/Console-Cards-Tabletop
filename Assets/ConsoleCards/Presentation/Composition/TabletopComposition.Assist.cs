@@ -195,7 +195,7 @@ namespace ConsoleCards.Presentation.Composition
 
         // P8A (owner, 2026-11-10: the drawn Abilities overlapped the turn cartridge and the Console): where this turn's
         // Ability draw lies, a row of separate cards on the Console's cartridge side, past the cartridge and toward the
-        // player's own edge of the table (clear of the Console, the cartridge and the bought-card spot).
+        // player's own edge of the table (clear of the Console, the cartridge and the bought-card spot, which is just past the cartridge).
         internal bool TryAbilityDealSpots(PlayerId player, int count, List<TableCoordinate> spots)
         {
             spots.Clear();
@@ -208,8 +208,8 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < count; i++)
             {
                 Vector3 at = console.transform.position
-                    - (left * ((0.5f * width) + (2.0f * unit) + (i * 1.15f * unit)))
-                    - (inward * (0.35f * depth));
+                    - (left * ((0.5f * width) + (3.3f * unit) + (i * 1.15f * unit))) // past the cartridge and the bought-card spot
+                    - (inward * (0.4f * depth));
                 spots.Add(coordinateConverter.ToTableCoordinate(at));
             }
 

@@ -1593,8 +1593,10 @@ namespace ConsoleCards.Games.TrapFloor
 
             // TABLE-1: no Controller deck or Action stack per seat. A bought Ability that does not fit in the Hand
             // is placed loose where the stack was, beside the Console.
+            // P8A (owner, 2026-11-10: a starting Ability lay under the turn cartridge, which sits on this side of the
+            // Console): the spot moves out past the cartridge.
             TabletopPose abilityOverflowPose =
-                ConsoleAdjacentPlacement.ToTablePose(seatConsolePose, seatPieces.ActionStack);
+                ConsoleAdjacentPlacement.ToTablePose(seatConsolePose, MoveOutward(seatPieces.ActionStack, ConsoleSide.Left, OverflowPastCartridge));
 
             // D3: a seat that has not chosen an Avatar starts with an empty Main slot and no starting Abilities.
             TabletopObjectId avatarId = avatar != null ? new TabletopObjectId(CreateGuid(42, playerNumber)) : TabletopObjectId.Empty;
@@ -1734,6 +1736,8 @@ namespace ConsoleCards.Games.TrapFloor
                 staging,
                 layout.StartingAbilitiesTurnDegrees);
         }
+
+        private const double OverflowPastCartridge = 1.3d; // table units (about a card width each)
 
         private static ConsoleLocalRect MoveOutward(ConsoleLocalRect rect, ConsoleSide side, double outward)
         {

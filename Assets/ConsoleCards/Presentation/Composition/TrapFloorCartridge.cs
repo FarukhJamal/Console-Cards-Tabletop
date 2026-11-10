@@ -641,7 +641,7 @@ namespace ConsoleCards.Presentation.Composition
                 }
                 options.Add(new ActionAbilityPurchaseOption(
                     definition.StableId,
-                    definition.DisplayName,
+                    DrawnCountName(definition),
                     definition.Description,
                     cost,
                     artwork,

@@ -2954,7 +2954,9 @@ namespace ConsoleCards.Presentation.Composition
 
                 Texture artwork = null;
                 if (Guid.TryParse(definition.StableId, out Guid id) && host.TryGetAuthoredCardDefinition(new ObjectDefinitionId(id), out CardDefinition authored)) artwork = host.FrontArt(authored);
-                options.Add(new ActionAbilityPurchaseOption(definition.StableId, definition.DisplayName, definition.Description, cost, artwork, canPay, affordability, forSale,
+                options.Add(new ActionAbilityPurchaseOption(definition.StableId,
+                    guestDrawnCounts.TryGetValue(definition.StableId, out int drawnCount) && drawnCount > 1 ? $"{definition.DisplayName} ×{drawnCount}" : definition.DisplayName,
+                    definition.Description, cost, artwork, canPay, affordability, forSale,
                     TrapFloorShop.IsAction(definition) ? "Action" : TrapFloorShop.IsReaction(definition) ? "Reaction" : string.Empty));
             }
 
@@ -2983,6 +2985,8 @@ namespace ConsoleCards.Presentation.Composition
             PrivateNote(ok ? $"{member.Name}: this turn's Ability draw sent ({drawn.Count})." : $"{member.Name}: no Ability draw now (not their turn, a payment open, not Full, or the deck is empty).");
         }
 
+        private readonly Dictionary<string, int> guestDrawnCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+
         private void GuestAbilityOffer(byte[] bytes)
         {
             string text = bytes == null ? string.Empty : System.Text.Encoding.UTF8.GetString(bytes);
@@ -2992,12 +2996,17 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            HashSet<string> drawn = new HashSet<string>(text.Split('\n'), StringComparer.Ordinal);
+            string[] ids = text.Split('\n');
+            HashSet<string> drawn = new HashSet<string>(ids, StringComparer.Ordinal);
+            guestDrawnCounts.Clear();
+            foreach (string id in ids) guestDrawnCounts[id] = guestDrawnCounts.TryGetValue(id, out int n) ? n + 1 : 1;
             List<ActionAbilityPurchaseOption> options = new List<ActionAbilityPurchaseOption>();
             foreach (ActionAbilityPurchaseOption option in BuildGuestShopOptions())
             {
                 if (drawn.Contains(option.CardDefinitionStableId)) options.Add(option);
             }
+
+            guestDrawnCounts.Clear();
 
             host.runtimeUi.ShowActionAbilityPurchase(options, GuestPickShopItem, host.runtimeUi.CloseActionAbilityPurchase,
                 "Pick one to buy. What you do not buy goes back; the deck is shuffled when your turn ends.", "ABILITY DRAW", "DRAWN");
