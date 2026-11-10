@@ -699,6 +699,16 @@ namespace ConsoleCards.Presentation.Composition
                 feel.ShuffleMaxStagger);
         }
 
+        // P8A: where these cards' views are now (loose cards have no container to capture by).
+        internal IReadOnlyDictionary<Transform, TabletopTransformSnapshot> CaptureCardTransforms(IEnumerable<TabletopObjectId> cardIds)
+        {
+            Dictionary<Transform, TabletopTransformSnapshot> starts = new Dictionary<Transform, TabletopTransformSnapshot>();
+            foreach (TabletopObjectId cardId in cardIds)
+                if (Registry.TryGetCardView(cardId, out CardView view) && view != null)
+                    starts[view.transform] = presentationTransitions.StopAndCapture(view.transform);
+            return starts;
+        }
+
         internal IReadOnlyDictionary<Transform, TabletopTransformSnapshot> CaptureContainerCardTransforms(
             params ContainerId[] containerIds)
         {

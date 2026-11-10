@@ -65,6 +65,9 @@ namespace ConsoleCards.Presentation.Composition
             int given = 0;
             if (avatarIndex >= 0 && abilityCount > 0 && host.matchState.Containers.ContainsKey(pile))
             {
+                List<TabletopObjectId> sliding = new List<TabletopObjectId>(abilityCount);
+                for (int a = 0; a < abilityCount; a++) sliding.Add(TrapFloorTemplateFactory.StartingAbilityCardId(avatarIndex, a));
+                var starts = host.CaptureCardTransforms(sliding); // P8A: they slide out of the pile
                 host.SessionService.BeginUndoBatch();
                 try
                 {
@@ -96,6 +99,8 @@ namespace ConsoleCards.Presentation.Composition
 
                 host.ViewSync.SyncContainer(pile);
                 host.RefreshAcceptedCardFaces();
+
+                host.presentationTransitions.AnimateCardsFromCurrentResults(starts, 0.45f, 0.12f);
             }
 
             string who = FormatPlayerName(player);

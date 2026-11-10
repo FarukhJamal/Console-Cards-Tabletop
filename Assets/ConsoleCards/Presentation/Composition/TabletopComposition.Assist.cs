@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ConsoleCards.Core.Coordinates;
 using ConsoleCards.Core.Domain.Seats;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Presentation.UI;
@@ -190,6 +191,29 @@ namespace ConsoleCards.Presentation.Composition
 
             // (Owner's test, 2026-11-03: a glowing plate under the Console drew over the mat; the turn shows on the
             // cartridge and the player's avatar instead.)
+        }
+
+        // P8A (owner, 2026-11-10: the drawn Abilities overlapped the turn cartridge and the Console): where this turn's
+        // Ability draw lies, a row of separate cards on the Console's cartridge side, past the cartridge and toward the
+        // player's own edge of the table (clear of the Console, the cartridge and the bought-card spot).
+        internal bool TryAbilityDealSpots(PlayerId player, int count, List<TableCoordinate> spots)
+        {
+            spots.Clear();
+            if (coordinateConverter == null || !TryTurnConsole(player, out ConsoleView console, out Vector3 inward)) return false;
+            float unit = WorldPerCardWidth();
+            Vector3 size = ConsoleSize(console);
+            Vector3 left = Vector3.Cross(Vector3.up, inward).normalized;
+            float width = (Mathf.Abs(left.x) * size.x) + (Mathf.Abs(left.z) * size.z);
+            float depth = (Mathf.Abs(inward.x) * size.x) + (Mathf.Abs(inward.z) * size.z);
+            for (int i = 0; i < count; i++)
+            {
+                Vector3 at = console.transform.position
+                    - (left * ((0.5f * width) + (2.0f * unit) + (i * 1.15f * unit)))
+                    - (inward * (0.35f * depth));
+                spots.Add(coordinateConverter.ToTableCoordinate(at));
+            }
+
+            return spots.Count == count;
         }
 
         // The Console of the seat whose player has the turn, and the way from it to the middle of the table.

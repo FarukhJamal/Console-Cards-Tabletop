@@ -709,6 +709,7 @@ namespace ConsoleCards.Presentation.Composition
 
             // ABIL-DECK: a card drawn from the Ability deck is bought out of the deck itself.
             TabletopObjectId deckCardId = PeekPendingDeckCard(cardDefinitionStableId); // B01: kept until it succeeds
+            var boughtStarts = host.CaptureCardTransforms(deckCardId.IsEmpty ? Array.Empty<TabletopObjectId>() : new[] { deckCardId });
             TrapFloorBuyFromShopResult result = host.TableAuthority.Submit<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(
                 new TrapFloorBuyFromShopCommand(
                     host.CreateCommandContext(host.trapFloorTurnState.ActivePlayerId),
@@ -736,6 +737,7 @@ namespace ConsoleCards.Presentation.Composition
                 if (result.DestinationContainerId.IsEmpty) host.PresentAcceptedObject(deckCardId); // loose beside the Console
                 host.RefreshCardContentVisibility();
                 host.RefreshSelectionPresenterAfterRuntimeProjection();
+                host.presentationTransitions.AnimateCardsFromCurrentResults(boughtStarts, 0.35f, 0f); // P8A: it slides from where it lay
             }
 
             ShowPaymentReturned();
@@ -753,6 +755,8 @@ namespace ConsoleCards.Presentation.Composition
                     ? $"Bought {name} from {from} into {buyerName}'s hand."
                     : $"{buyerName} bought {name}. It is by their Console.");
                 host.GameplayLog($"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} bought the {name} ability card.");
+                if (!deckCardId.IsEmpty && IsAbilityBuyingOpen())
+                    host.FeedbackLine("Buy another from your draw, or End Buying (turn menu, or right-click the Ability deck).", FeedbackSeverity.Info);
             }
         }
         // ---------- from TabletopComposition.TrapFloor.cs ----------
@@ -5689,6 +5693,14 @@ namespace ConsoleCards.Presentation.Composition
                         () => ShowReactionOffer(host.trapFloorTurnState.ActivePlayerId)));
                 }
 
+                // P8A (owner, 2026-11-10): the buying step ends when the player says so (what is left goes back).
+                if (!purchasePending && CanEndAbilityBuying())
+                {
+                    if (TryGetAbilityOfferAction(out string buyLabel))
+                        actions.Add(new PopupActionOption(buyLabel, true, OpenAbilityOffer));
+                    actions.Add(new PopupActionOption("End Buying", true, EndAbilityBuying));
+                }
+
                 // F3: End Turn says when it will apply waiting Traps, and asks first.
                 int waiting = PendingEndTurnEffects(host.trapFloorTurnState.ActivePlayerId, null);
                 string applies = waiting > 0 && !PlayAssist.IsQuiet ? $" (applies {waiting})" : string.Empty; // doc 58: FREE applies nothing
@@ -5755,9 +5767,14 @@ namespace ConsoleCards.Presentation.Composition
 
             int handLimit = host.trapFloorTemplate.GameDefinition.ControllerConfiguration.MaximumHandSize;
             int moveTiles = MoveAllowance(out _);
+            // P8A (owner, 2026-11-10): while this turn's Ability draw lies out, buying is the step in front of the player.
+            string buyingStep = IsAbilityBuyingOpen()
+                ? "Buy a drawn Ability you can pay for, then End Buying (turn menu or right-click the Ability deck)\n"
+                : string.Empty;
             string standardGuidance =
-                $"Draw up to {handLimit} if needed (hover the deck)\n"
-                + (TryGetAbilityOfferAction(out _) ? $"Draw {AbilityOfferSize} from the Ability deck and buy any you can pay for\n" : string.Empty)
+                buyingStep
+                + $"Draw up to {handLimit} if needed (hover the deck)\n"
+                + (string.IsNullOrEmpty(buyingStep) && TryGetAbilityOfferAction(out _) ? $"Draw {AbilityOfferSize} from the Ability deck and buy any you can pay for\n" : string.Empty)
                 + $"Move up to {moveTiles} tile{(moveTiles == 1 ? string.Empty : "s")} "
                 + "in one straight line (they light while you hold your pawn); landing flips a tile. "
                 + "Take a prize you stand on, then End Turn";

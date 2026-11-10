@@ -427,6 +427,10 @@ namespace ConsoleCards.Presentation.Composition
             double radians = basePose.RotationDegrees * Math.PI / 180d;
             double acrossX = Math.Sin(radians), acrossY = Math.Cos(radians);
             double alongX = Math.Cos(radians), alongY = -Math.Sin(radians);
+            // Owner, 2026-11-10: separate cards clear of the Console and the turn cartridge, sliding out of the deck.
+            List<TableCoordinate> spots = new List<TableCoordinate>(abilityOffer.Count);
+            bool placed = host.TryAbilityDealSpots(buyer, abilityOffer.Count, spots);
+            var starts = host.CaptureCardTransforms(new List<TabletopObjectId>(abilityOffer)); // only the dealt cards slide
             bool batch = !host.undoBatchActive;
             if (batch) host.SessionService.BeginUndoBatch();
             try
@@ -435,11 +439,12 @@ namespace ConsoleCards.Presentation.Composition
                 {
                     TabletopObjectId cardId = abilityOffer[i];
                     if (!deck.Contains(cardId)) continue;
-                    TabletopPose pose = new TabletopPose(
-                        new TableCoordinate(
+                    TableCoordinate at = placed
+                        ? spots[i]
+                        : new TableCoordinate(
                             basePose.Position.X - (acrossX * 1.3d) + (alongX * i * 0.6d),
-                            basePose.Position.Y - (acrossY * 1.3d) + (alongY * i * 0.6d)),
-                        basePose.RotationDegrees, basePose.Layer, basePose.LocalOrder + i);
+                            basePose.Position.Y - (acrossY * 1.3d) + (alongY * i * 0.6d));
+                    TabletopPose pose = new TabletopPose(at, basePose.RotationDegrees, basePose.Layer, basePose.LocalOrder + i);
                     TransferCardResult moved = host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(
                         new TransferCardCommand(host.CreateCommandContext(buyer), cardId, deck.Id, ContainerId.Empty, pose));
                     if (!moved.Succeeded) continue;
@@ -456,23 +461,38 @@ namespace ConsoleCards.Presentation.Composition
 
             host.ViewSync.SyncContainer(deck.Id);
             host.RefreshAcceptedCardFaces();
+            host.presentationTransitions.AnimateCardsFromCurrentResults(starts, AbilityDealSlideSeconds, AbilityDealStagger);
         }
+
+        private const float AbilityDealSlideSeconds = 0.45f;
+        private const float AbilityDealStagger = 0.12f;
 
         // End Turn: what was not bought goes back into the deck (the deck is then shuffled).
         private void ReturnDealtOffer(PlayerId owner)
         {
             if (dealtOffer.Count == 0 || !TryGetAbilityDeck(out ContainerState deck)) return;
-            foreach (TabletopObjectId cardId in dealtOffer)
+            var starts = host.CaptureCardTransforms(dealtOffer);
+            bool batch = !host.undoBatchActive;
+            if (batch) host.SessionService.BeginUndoBatch();
+            try
             {
-                if (!host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card) || !card.BaseState.ContainerId.IsEmpty) continue;
-                CommandContext context = host.CreateCommandContext(owner);
-                if (card.BaseState.IsUserLocked) host.TableAuthority.Submit<SetObjectLockedCommand, CommandResult>(new SetObjectLockedCommand(context, cardId, false));
-                host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(TransferCardCommand.ToContainer(host.CreateCommandContext(owner), cardId, ContainerId.Empty, deck.Id));
+                foreach (TabletopObjectId cardId in dealtOffer)
+                {
+                    if (!host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card) || !card.BaseState.ContainerId.IsEmpty) continue;
+                    CommandContext context = host.CreateCommandContext(owner);
+                    if (card.BaseState.IsUserLocked) host.TableAuthority.Submit<SetObjectLockedCommand, CommandResult>(new SetObjectLockedCommand(context, cardId, false));
+                    host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(TransferCardCommand.ToContainer(host.CreateCommandContext(owner), cardId, ContainerId.Empty, deck.Id));
+                }
+            }
+            finally
+            {
+                if (batch) host.SessionService.EndUndoBatch();
             }
 
             dealtOffer.Clear();
             host.ViewSync.SyncContainer(deck.Id);
             host.RefreshAcceptedCardFaces();
+            host.presentationTransitions.AnimateCardsFromCurrentResults(starts, AbilityDealSlideSeconds, 0.06f);
         }
         private TrapFloorTurnState abilityOfferTurnState;
         private int abilityOfferRound = -1;
@@ -619,10 +639,50 @@ namespace ConsoleCards.Presentation.Composition
                 abilityOfferRound = host.trapFloorTurnState.CurrentRound;
                 abilityOfferPlayer = host.trapFloorTurnState.ActivePlayerId;
                 DealAbilityOffer(deck, abilityOfferPlayer);
+                // Owner, 2026-11-10: the cards slide out first; the window opens once they lie in front of the player.
+                host.StartCoroutine(ShowAbilityOfferAfterDeal());
+                return;
             }
 
             ShowAbilityOffer(deck);
         }
+
+        private System.Collections.IEnumerator ShowAbilityOfferAfterDeal()
+        {
+            yield return new UnityEngine.WaitForSecondsRealtime(AbilityDealSlideSeconds + (AbilityDealStagger * (AbilityOfferSize - 1)) + 0.1f);
+            if (IsAbilityOfferTurn() && !IsPaymentBlocking() && TryGetAbilityDeck(out ContainerState deck) && CountOfferStillInDeck(deck) > 0)
+                ShowAbilityOffer(deck);
+        }
+
+        // P8A (owner, 2026-11-10: "a way to end the buying phase"): the turn player is done buying; what is left of this
+        // turn's draw slides back into the deck now (no second draw this turn; the deck is shuffled at End Turn).
+        internal bool CanEndAbilityBuying() =>
+            IsAbilityOfferTurn()
+            && dealtOffer.Count > 0
+            && TryGetAbilityDeck(out ContainerState deck)
+            && CountOfferStillInDeck(deck) > 0
+            && host.IsPlayerOnThisComputer(abilityOfferPlayer)
+            && !(host.HasOnline && host.Online.IsPrivateGuest);
+
+        internal void EndAbilityBuying()
+        {
+            host.ContextMenus.CloseContextMenu();
+            if (!CanEndAbilityBuying()) return;
+            if (IsPaymentBlocking())
+            {
+                host.ShowMessage("Finish or cancel the current payment first.");
+                return;
+            }
+
+            host.runtimeUi?.CloseActionAbilityPurchase();
+            ReturnDealtOffer(abilityOfferPlayer);
+            host.ShowMessage("Buying is over for this turn: the rest went back into the Ability deck. Move, then End Turn.");
+            RefreshTrapFloorStatusUi();
+        }
+
+        // The buying step's line for the turn guidance (the HUD names it SHOP PHASE), while this turn's draw lies out.
+        internal bool IsAbilityBuyingOpen() =>
+            IsAbilityOfferTurn() && dealtOffer.Count > 0 && TryGetAbilityDeck(out ContainerState deck) && CountOfferStillInDeck(deck) > 0;
 
         // P8A (owner, 2026-11-08): this turn's draw shows in the Shop window, on every computer the same way: only the
         // drawn Abilities, each with its cost and whether the Hand can pay; Buy runs the Shop's own payment for that card.
@@ -663,7 +723,7 @@ namespace ConsoleCards.Presentation.Composition
                     BeginDeckPurchase(card);
                 },
                 host.runtimeUi.CloseActionAbilityPurchase,
-                "Pick one to buy. What you do not buy goes back; the deck is shuffled when your turn ends.",
+                "Pick one to buy. Done? Close this, then End Buying (turn menu or right-click the Ability deck): the rest goes back.",
                 "ABILITY DRAW",
                 "DRAWN");
         }
@@ -709,7 +769,7 @@ namespace ConsoleCards.Presentation.Composition
             TabletopObjectId cardId = pendingDeckCardId;
             return !cardId.IsEmpty
                 && TryGetAbilityDeck(out ContainerState deck)
-                && deck.Contains(cardId)
+                && IsOfferCardAvailable(deck, cardId) // P8A: a dealt card is bought itself, not a Shop copy (owner, 2026-11-10)
                 && TryGetDeckCardDefinition(cardId, out CardDefinitionData definition)
                 && string.Equals(definition.StableId, cardDefinitionStableId, StringComparison.OrdinalIgnoreCase)
                     ? cardId

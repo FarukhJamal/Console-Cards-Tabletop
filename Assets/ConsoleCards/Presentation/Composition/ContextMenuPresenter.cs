@@ -563,12 +563,15 @@ namespace ConsoleCards.Presentation.Composition
             bool fullAbilityDeck = host.IsFullAbilityDeck(targetDeckId);
             if (fullAbilityDeck)
             {
-                actions.Add(new PopupActionOption("Draw 3 Abilities", true, () =>
+                TrapFloorCartridge buying = host.ActiveCartridge as TrapFloorCartridge;
+                bool drawOut = buying != null && buying.CanEndAbilityBuying();
+                actions.Add(new PopupActionOption(drawOut ? "Buy from your draw" : "Draw 3 Abilities", true, () =>
                 {
                     CloseContextMenu();
                     if (host.HasOnline && host.Online.IsPrivateGuest) host.Online.GuestRequestAbilityDraw();
                     else if (host.ActiveCartridge is TrapFloorCartridge game) game.OpenAbilityOffer();
                 }));
+                if (drawOut) actions.Add(new PopupActionOption("End Buying", true, buying.EndAbilityBuying)); // P8A (owner, 2026-11-10)
             }
 
             if (!fullAbilityDeck && host.HasLocalHand() && !host.ActiveCartridge.IsAssistedControllerDeck(targetDeckId) && targetDeck.Count > 0)
