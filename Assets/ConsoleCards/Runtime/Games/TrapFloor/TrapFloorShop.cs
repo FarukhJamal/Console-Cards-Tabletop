@@ -242,7 +242,13 @@ namespace ConsoleCards.Games.TrapFloor
                     || !matchState.Cards.TryGetValue(command.SourceCardId, out deckCard)
                     // P8A: a card of this turn's draw lies dealt face up on the table (loose); the caller (the host)
                     // names only cards of that draw.
-                    || !(abilityDeck.Contains(command.SourceCardId) || deckCard.BaseState.ContainerId.IsEmpty)
+                    || !(abilityDeck.Contains(command.SourceCardId)
+                        // R4 (owner, 2026-11-12): a drawn card nobody has bought yet (a bought card has its owner), lying
+                        // on the table or put by the buyer into their own Console (Free: the player's own way to choose it)
+                        || (deckCard.BaseState.OwnerPlayerId.IsEmpty
+                            && (deckCard.BaseState.ContainerId.IsEmpty
+                                || TrapFloorTakePrizeUseCase.IsCardInPlayerSideSlot(matchState, player, deckCard))))
+                    || IndexOf(command.PaymentCardIds, command.SourceCardId) >= 0 // the bought card is not its own payment
                     || deckCard.BaseState.DefinitionId != new ObjectDefinitionId(definitionGuid))
                     return Failure(CommandResultStatus.Rejected, TrapFloorShopError.SourceCardNotInAbilityDeck);
             }
@@ -264,8 +270,14 @@ namespace ConsoleCards.Games.TrapFloor
                     return Failure(CommandResultStatus.Rejected, TrapFloorShopError.PaymentCardLocked);
             }
 
-            if (!TrapFloorTakePrizeUseCase.TryResolveDestination(
-                    template, matchState, player, out ContainerState destination, out bool placedInHand))
+            // Owner, 2026-11-12: buying a drawn card gives it to the buyer where it lies; only a card still in the deck (or a
+            // Shop copy) needs a place to go.
+            bool staysWhereItIs = fromDeck && !abilityDeck.Contains(command.SourceCardId);
+            ContainerState destination = null;
+            bool placedInHand = false;
+            if (!staysWhereItIs
+                && !TrapFloorTakePrizeUseCase.TryResolveDestination(
+                    template, matchState, player, out destination, out placedInHand))
                 return Failure(CommandResultStatus.Rejected, TrapFloorShopError.DestinationMissing);
             if (matchState.Revision == long.MaxValue)
                 return Failure(CommandResultStatus.Conflict, TrapFloorShopError.RevisionOverflow);
@@ -275,12 +287,10 @@ namespace ConsoleCards.Games.TrapFloor
                 // The drawn card itself leaves the deck for the buyer (face up, theirs): into the Hand, or (TABLE-1)
                 // loose beside the Console when the Hand is full.
                 ContainerTransferService deckTransfer = new ContainerTransferService();
-                bool dealt = deckCard.BaseState.ContainerId.IsEmpty;
-                if (dealt) deckCard.BaseState.SetUserLocked(false);
-                if (dealt)
+                if (staysWhereItIs)
                 {
-                    if (destination != null && !deckTransfer.PlaceIntoContainer(deckCard.BaseState, destination).Succeeded)
-                        return Failure(CommandResultStatus.Rejected, TrapFloorShopError.MutationFailed);
+                    // Ownership changes, the place does not: the owner moves it when they like.
+                    deckCard.BaseState.SetUserLocked(false);
                 }
                 else
                 {
@@ -289,9 +299,10 @@ namespace ConsoleCards.Games.TrapFloor
                         : deckTransfer.RemoveFromContainer(deckCard.BaseState, abilityDeck);
                     if (!moved.Succeeded) return Failure(CommandResultStatus.Rejected, TrapFloorShopError.MutationFailed);
                 }
-                if (destination == null) deckCard.BaseState.SetPose(TrapFloorTakePrizeUseCase.FreeOverflowPose(matchState, player, deckCard.BaseState.Id));
+                if (!staysWhereItIs && destination == null)
+                    deckCard.BaseState.SetPose(TrapFloorTakePrizeUseCase.FreeOverflowPose(matchState, player, deckCard.BaseState.Id));
                 deckCard.BaseState.SetOwner(actor);
-                deckCard.BaseState.SetVisibility(destination != null ? destination.Visibility : ObjectVisibility.Public);
+                if (!staysWhereItIs) deckCard.BaseState.SetVisibility(destination != null ? destination.Visibility : ObjectVisibility.Public);
                 deckCard.SetFace(CardFace.FaceUp);
                 TrapFloorTakePrizeUseCase.ReturnPaymentToControllerDeck(matchState, player, command.PaymentCardIds);
                 long deckRevision = matchState.AdvanceRevision(
@@ -361,6 +372,13 @@ namespace ConsoleCards.Games.TrapFloor
 
             resolved = null;
             return false;
+        }
+
+        private static int IndexOf(IReadOnlyList<TabletopObjectId> ids, TabletopObjectId id)
+        {
+            for (int i = 0; i < ids.Count; i++)
+                if (ids[i] == id) return i;
+            return -1;
         }
 
         private static TrapFloorBuyFromShopResult Failure(CommandResultStatus status, TrapFloorShopError error) =>

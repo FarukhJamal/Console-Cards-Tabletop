@@ -158,6 +158,15 @@ namespace ConsoleCards.Presentation.Composition
 
         // P8A: the Ability deck in a room that plays Full, on the host (its own game) and on a private guest (the host's
         // public table roles): the same answer on every computer, so every player's menus behave the same.
+        // P8A batch 2 (R1, owner 2026-11-12): Draw 3 and buying are in every assist level; only Full adds the strict
+        // rules (no draw into the hand) and the automatic clean-up.
+        internal bool IsAbilityDeck(ContainerId deckId)
+        {
+            if (deckId.IsEmpty) return false;
+            if (HasOnline && Online.IsPrivateGuest) return deckId == Online.GuestAbilityDeckId;
+            return ActiveCartridge is TrapFloorCartridge && trapFloorTemplate != null && deckId == trapFloorTemplate.AbilityDeckId;
+        }
+
         internal bool IsFullAbilityDeck(ContainerId deckId)
         {
             if (deckId.IsEmpty) return false;
@@ -708,21 +717,56 @@ namespace ConsoleCards.Presentation.Composition
             int index = 0;
             foreach (KeyValuePair<Transform, TabletopTransformSnapshot> pair in starts)
             {
-                Transform view = pair.Key;
-                if (view == null) continue;
-                TabletopTransformSnapshot from = pair.Value;
-                if ((view.position - from.Position).sqrMagnitude < 1e-6f && Quaternion.Angle(view.rotation, from.Rotation) < 0.5f) continue;
-                // Owner, 2026-11-10 ("still no slide on the host"): a loose card whose body this computer runs is drawn
-                // from its interpolated physics body every frame, so moving its transform shows nothing. Such a body
-                // glides the way the floor tiles do (moved as a body, passing through other pieces, resting where it
-                // lies); a later card takes a little longer, which staggers the row.
-                PhysicalLooseObject physical = view.GetComponent<PhysicalLooseObject>() ?? view.GetComponentInParent<PhysicalLooseObject>();
-                if (physical != null && physical.OwnsLooseTransform)
-                    physical.GlideFrom(from.Position, from.Rotation, seconds + (index * stagger), 0.02f);
-                else
-                    StartCoroutine(SlideCard(view, from, seconds, index * stagger));
+                if (pair.Key == null) continue;
+                StartCoroutine(SlideWhenPlaced(pair.Key, pair.Value, seconds, index * stagger));
                 index++;
             }
+        }
+
+        // Owner, 2026-11-12 ("the slide shows on the guest, not on the host"). Two causes found by reading the code (the
+        // [Slide] line below confirms which one it was on the owner's run):
+        // 1. The physics piece was looked up with `GetComponent(...) ?? GetComponentInParent(...)`. In the Editor (the
+        //    owner's host) a missing component comes back as Unity's stand-in object, which `??` does not treat as null,
+        //    so the parent was never searched and the card took the transform slide, which its interpolated physics body
+        //    overwrites every frame. A build returns a real null, which is why the guest build slid.
+        // 2. The card was skipped when its view had not reached its new place yet in that frame.
+        // Each card now finds its physics piece with Unity's own null test and glides once it stands where the table put
+        // it (tried at once, then for a few frames). One [Slide] line says what happened.
+        private System.Collections.IEnumerator SlideWhenPlaced(Transform view, TabletopTransformSnapshot from, float seconds, float delay)
+        {
+            PhysicalLooseObject physical = FindPhysicalPiece(view);
+            for (int frame = 0; frame < 6 && view != null; frame++)
+            {
+                bool moved = (view.position - from.Position).sqrMagnitude >= 1e-6f || Quaternion.Angle(view.rotation, from.Rotation) >= 0.5f;
+                if (physical != null && physical.OwnsLooseTransform)
+                {
+                    physical.GlideFrom(from.Position, from.Rotation, seconds + delay, 0.02f);
+                    if (physical.IsGliding)
+                    {
+                        Debug.Log($"[Slide] {view.name}: glides as a physics piece (frame {frame}).");
+                        yield break;
+                    }
+                }
+                else if (moved)
+                {
+                    Debug.Log($"[Slide] {view.name}: slides (no physics piece of its own here, frame {frame}).");
+                    yield return SlideCard(view, from, seconds, delay);
+                    yield break;
+                }
+
+                yield return null;
+            }
+
+            if (view != null)
+                Debug.Log($"[Slide] {view.name}: no slide (physics piece {(physical != null ? "found" : "not found")}, it did not move from where it started).");
+        }
+
+        private static PhysicalLooseObject FindPhysicalPiece(Transform view)
+        {
+            PhysicalLooseObject physical = view.GetComponent<PhysicalLooseObject>();
+            if (physical == null) physical = view.GetComponentInParent<PhysicalLooseObject>();
+            if (physical == null) physical = view.GetComponentInChildren<PhysicalLooseObject>();
+            return physical;
         }
 
         private System.Collections.IEnumerator SlideCard(Transform view, TabletopTransformSnapshot from, float seconds, float delay)
@@ -730,7 +774,7 @@ namespace ConsoleCards.Presentation.Composition
             Vector3 endPosition = view.position;
             Quaternion endRotation = view.rotation;
             Rigidbody body = view.GetComponent<Rigidbody>();
-            PhysicalLooseObject physical = view.GetComponent<PhysicalLooseObject>() ?? view.GetComponentInParent<PhysicalLooseObject>();
+            PhysicalLooseObject physical = FindPhysicalPiece(view);
             bool wasKinematic = body != null && body.isKinematic;
             bool physicalWasOn = physical != null && physical.enabled;
             if (body != null) body.isKinematic = true;

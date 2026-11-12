@@ -52,6 +52,9 @@ namespace ConsoleCards.Presentation.Composition
                 if (!host.matchState.Seats.TryGetValue(setup.SeatId, out SeatState seat) || seat.OccupantPlayerId.IsEmpty) continue;
                 if (!host.IsPlayerOnThisComputer(seat.OccupantPlayerId)) continue; // that player's computer does it
                 avatarGiven[i] = true;
+                // R2 (owner, 2026-11-12): in Free the players take their starting Abilities themselves (the card moves are
+                // recorded as any other); Full and Reminders keep handing them out.
+                if (PlayAssist.IsFree) continue;
                 GiveStartingAbilities(setup, seat.OccupantPlayerId, avatarCard);
             }
         }
@@ -200,7 +203,14 @@ namespace ConsoleCards.Presentation.Composition
                     continue;
                 }
 
-                if (avatarDraftAsked.Contains(player)) continue;
+                if (avatarDraftAsked.Contains(player))
+                {
+                    if (!avatarDraftOpenHere.IsEmpty) continue; // their question (or another seat's) is open here
+                    // R3: they locked in, but have no Avatar now: the host refused it (someone else's Lock In of that
+                    // Avatar came first) and set this table right. They are asked again with what is left.
+                    avatarDraftAsked.Remove(player);
+                }
+
                 if (!remote && !avatarDraftOpenHere.IsEmpty) continue; // one question at a time on this screen
                 if (!AskAvatarPick(setup, player, pile, remote)) continue; // not sent: asked again next frame
                 avatarDraftAsked.Add(player);

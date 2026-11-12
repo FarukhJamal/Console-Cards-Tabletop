@@ -415,9 +415,29 @@ namespace ConsoleCards.Presentation.Composition
         private readonly HashSet<TabletopObjectId> dealtOffer = new HashSet<TabletopObjectId>();
 
         // A card of this turn's draw that can still be bought: still in the deck, or dealt and still lying out.
+        // R4: a dealt card is for sale only while nobody owns it (the purchase gives it its owner).
         private bool IsOfferCardAvailable(ContainerState deck, TabletopObjectId cardId) =>
             deck.Contains(cardId)
-            || (dealtOffer.Contains(cardId) && host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card) && card.BaseState.ContainerId.IsEmpty);
+            || (dealtOffer.Contains(cardId) && host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card)
+                && card.BaseState.ContainerId.IsEmpty && card.BaseState.OwnerPlayerId.IsEmpty)
+            || IsUnboughtInOwnConsole(cardId);
+
+        // Owner, 2026-11-12 (Free): a drawn Ability deck card nobody has bought, put by the turn player into one of
+        // their own Console slots: that is how a player chooses it by hand.
+        internal bool IsUnboughtInOwnConsole(TabletopObjectId cardId)
+        {
+            if (!TrapFloorTemplateFactory.IsAbilityDeckCardId(cardId) || host.trapFloorTurnState == null
+                || !host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card) || !card.BaseState.OwnerPlayerId.IsEmpty
+                || card.BaseState.ContainerId.IsEmpty
+                || !TryGetTrapFloorPlayerSetup(host.trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition setup))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < setup.SideSlotContainerIds.Count; i++)
+                if (setup.SideSlotContainerIds[i] == card.BaseState.ContainerId) return true;
+            return false;
+        }
 
         // Deals this turn's draw out of the deck: face up, locked, in a row beside the buyer's Console (one Undo step).
         private void DealAbilityOffer(ContainerState deck, PlayerId buyer)
@@ -449,7 +469,10 @@ namespace ConsoleCards.Presentation.Composition
                         new TransferCardCommand(host.CreateCommandContext(buyer), cardId, deck.Id, ContainerId.Empty, pose));
                     if (!moved.Succeeded) continue;
                     host.TableAuthority.Submit<FlipCardCommand, FlipCardResult>(new FlipCardCommand(host.CreateCommandContext(buyer), cardId, CardFace.FaceUp));
-                    host.TableAuthority.Submit<SetObjectLockedCommand, CommandResult>(new SetObjectLockedCommand(host.CreateCommandContext(buyer), cardId, true));
+                    // Full keeps the draw where it was dealt (locked); Reminders and Free leave the cards in the players' hands
+                    // to handle (owner, 2026-11-12: "players retain control over physical card handling").
+                    if (PlayAssist.Level == PlayAssistLevel.Full)
+                        host.TableAuthority.Submit<SetObjectLockedCommand, CommandResult>(new SetObjectLockedCommand(host.CreateCommandContext(buyer), cardId, true));
                     dealtOffer.Add(cardId);
                     host.PresentAcceptedObject(cardId);
                 }
@@ -467,16 +490,21 @@ namespace ConsoleCards.Presentation.Composition
         private const float AbilityDealSlideSeconds = 0.45f;
         private const float AbilityDealStagger = 0.12f;
 
-        // P8A audit (reconnect / rebuild): the draw is known from the table, not only from this computer's memory. A dealt
-        // card is an Ability for sale lying loose, face up and locked (bought cards and starting Abilities are not locked).
+        internal bool HasDrawLyingOut() => !PlayAssist.IsFree && FindDrawLyingOut().Count > 0;
+
+        // P8A audit (reconnect / rebuild): the draw is known from the table, not only from this computer's memory.
         private List<TabletopObjectId> FindDrawLyingOut()
         {
             List<TabletopObjectId> found = new List<TabletopObjectId>();
-            if (host.matchState == null || host.trapFloorTemplate == null || !host.IsFullAbilityDeck(host.trapFloorTemplate.AbilityDeckId)) return found;
+            if (host.matchState == null || host.trapFloorTemplate == null || !host.IsAbilityDeck(host.trapFloorTemplate.AbilityDeckId)) return found;
             foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in host.matchState.Cards)
             {
                 CardInstanceState card = pair.Value;
-                if (!card.BaseState.ContainerId.IsEmpty || !card.BaseState.IsUserLocked || card.Face != CardFace.FaceUp) continue;
+                // R4 (owner, 2026-11-12): by the table's own state, never by place or lock: a card of the Ability deck, out of
+                // every pile, face up, that nobody owns (a bought card has its buyer as owner; starting Abilities, prizes
+                // and Shop copies are not Ability deck cards).
+                if (!TrapFloorTemplateFactory.IsAbilityDeckCardId(pair.Key)) continue;
+                if (!card.BaseState.ContainerId.IsEmpty || !card.BaseState.OwnerPlayerId.IsEmpty || card.Face != CardFace.FaceUp) continue;
                 if (TryGetDeckCardDefinition(pair.Key, out _)) found.Add(pair.Key);
             }
 
@@ -541,6 +569,7 @@ namespace ConsoleCards.Presentation.Composition
             foreach (TabletopObjectId lying in FindDrawLyingOut()) dealtOffer.Add(lying);
             if (dealtOffer.Count == 0 || !TryGetAbilityDeck(out ContainerState deck)) return;
             var starts = host.CaptureCardTransforms(dealtOffer);
+            int returned = 0;
             bool batch = !host.undoBatchActive;
             if (batch) host.SessionService.BeginUndoBatch();
             try
@@ -548,9 +577,14 @@ namespace ConsoleCards.Presentation.Composition
                 foreach (TabletopObjectId cardId in dealtOffer)
                 {
                     if (!host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card) || !card.BaseState.ContainerId.IsEmpty) continue;
+                    if (!card.BaseState.OwnerPlayerId.IsEmpty) continue; // R4: bought (it has an owner): it stays the buyer's
                     CommandContext context = host.CreateCommandContext(owner);
                     if (card.BaseState.IsUserLocked) host.TableAuthority.Submit<SetObjectLockedCommand, CommandResult>(new SetObjectLockedCommand(context, cardId, false));
-                    host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(TransferCardCommand.ToContainer(host.CreateCommandContext(owner), cardId, ContainerId.Empty, deck.Id));
+                    // Owner, 2026-11-12: face down before it goes back into the deck (the deck is hidden).
+                    if (card.Face != CardFace.FaceDown)
+                        host.TableAuthority.Submit<FlipCardCommand, FlipCardResult>(new FlipCardCommand(host.CreateCommandContext(owner), cardId, CardFace.FaceDown));
+                    TransferCardResult back = host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(TransferCardCommand.ToContainer(host.CreateCommandContext(owner), cardId, ContainerId.Empty, deck.Id));
+                    if (back.Succeeded) returned++;
                 }
             }
             finally
@@ -562,6 +596,9 @@ namespace ConsoleCards.Presentation.Composition
             host.ViewSync.SyncContainer(deck.Id);
             host.RefreshAcceptedCardFaces();
             host.presentationTransitions.AnimateCardsFromCurrentResults(starts, AbilityDealSlideSeconds, 0.06f); // into the deck (not a loose body)
+            // The deck is shuffled once, after what was returned (End Buying, or End Turn when buying was not ended; a
+            // second call finds nothing to return and does not shuffle again).
+            if (returned > 0 && deck.Count > 1) host.ShuffleDeck(deck.Id);
         }
         private TrapFloorTurnState abilityOfferTurnState;
         private int abilityOfferRound = -1;
@@ -629,6 +666,7 @@ namespace ConsoleCards.Presentation.Composition
         internal bool TryPrepareAbilityOfferFor(PlayerId player, out List<string> drawnStableIds)
         {
             drawnStableIds = new List<string>(AbilityOfferSize);
+            if (PlayAssist.IsFree) return false; // owner, 2026-11-12: Free draws by hand
             if (player.IsEmpty || host.trapFloorTurnState == null || host.trapFloorTurnState.IsCurrentFloorFailed
                 || host.trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn
                 || host.trapFloorTurnState.ActivePlayerId != player
@@ -695,6 +733,13 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (!TryGetAbilityDeck(out ContainerState deck)) return;
+            if (PlayAssist.IsFree)
+            {
+                // Owner, 2026-11-12: in Free nothing is drawn for the player.
+                host.ShowMessage("Free: draw Ability cards by hand. To buy one, put it in your Console with its payment, then CONFIRM PAYMENT.");
+                return;
+            }
+
             SyncDrawWithTable();
             if (!IsAbilityOfferTurn() && AdoptDrawLyingOut())
             {
@@ -740,7 +785,8 @@ namespace ConsoleCards.Presentation.Composition
         // P8A (owner, 2026-11-10: "a way to end the buying phase"): the turn player is done buying; what is left of this
         // turn's draw slides back into the deck now (no second draw this turn; the deck is shuffled at End Turn).
         internal bool CanEndAbilityBuying() =>
-            SyncedDraw()
+            !PlayAssist.IsFree
+            && SyncedDraw()
             && IsAbilityOfferTurn()
             && dealtOffer.Count > 0
             && TryGetAbilityDeck(out ContainerState deck)
@@ -766,7 +812,8 @@ namespace ConsoleCards.Presentation.Composition
 
         // The buying step's line for the turn guidance (the HUD names it SHOP PHASE), while this turn's draw lies out.
         internal bool IsAbilityBuyingOpen() =>
-            SyncedDraw()
+            !PlayAssist.IsFree
+            && SyncedDraw()
             && IsAbilityOfferTurn() && dealtOffer.Count > 0 && TryGetAbilityDeck(out ContainerState deck) && CountOfferStillInDeck(deck) > 0;
 
         // P8A (owner, 2026-11-08): this turn's draw shows in the Shop window, on every computer the same way: only the
@@ -842,6 +889,28 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             return false;
+        }
+
+        // Owner, 2026-11-12 (Free, and any level where a drawn card is not locked): a drawn Ability put into the turn
+        // player's own Console is chosen for buying; the existing payment then asks for its price (cards in the Console,
+        // CONFIRM PAYMENT). An unbought card is never used as an Ability.
+        internal bool BeginPurchaseOfInsertedCard(TabletopObjectId cardId, PlayerId actor)
+        {
+            if (!IsUnboughtInOwnConsole(cardId)) return false;
+            if (host.trapFloorTurnState == null || actor != host.trapFloorTurnState.ActivePlayerId || !host.IsPlayerOnThisComputer(actor))
+            {
+                host.ShowMessage("That Ability is not bought yet: only the player whose turn it is can buy it.");
+                return true;
+            }
+
+            if (IsPaymentBlocking())
+            {
+                if (pendingDeckCardId != cardId) host.ShowMessage("Finish or cancel the current payment first.");
+                return true;
+            }
+
+            BeginDeckPurchase(cardId);
+            return true;
         }
 
         private void BeginDeckPurchase(TabletopObjectId cardId)
@@ -931,19 +1000,29 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // As the turn ends: the draw is over; the deck is shuffled when cards were drawn from it this turn.
+        // R1 (owner, 2026-11-12): only Full cleans up by itself. Reminders says what is left; Free leaves it to the players.
         internal void EndAbilityOffer()
         {
-            bool drawn = IsAbilityOfferTurn() && abilityOffer.Count > 0;
-            ReturnDealtOffer(abilityOfferPlayer);
+            if (PlayAssist.Level != PlayAssistLevel.Full)
+            {
+                int left = FindDrawLyingOut().Count;
+                if (left > 0 && PlayAssist.Level == PlayAssistLevel.Reminders)
+                    host.FeedbackLine($"Reminder: {left} drawn Abilit{(left == 1 ? "y is" : "ies are")} still on the table: put back what was not bought (or End Buying), then shuffle the Ability deck.", FeedbackSeverity.Info);
+                dealtOffer.Clear();
+                abilityOffer.Clear();
+                abilityOfferTurnState = null;
+                abilityOfferRound = -1;
+                abilityOfferPlayer = PlayerId.Empty;
+                pendingDeckCardId = TabletopObjectId.Empty;
+                return;
+            }
+
+            ReturnDealtOffer(abilityOfferPlayer); // the same clean-up as End Buying (it shuffles once, when it returned cards)
             abilityOffer.Clear();
             abilityOfferTurnState = null;
             abilityOfferRound = -1;
             abilityOfferPlayer = PlayerId.Empty;
             pendingDeckCardId = TabletopObjectId.Empty;
-            if (drawn && TryGetAbilityDeck(out ContainerState deck) && deck.Count > 1)
-            {
-                host.ShuffleDeck(deck.Id);
-            }
         }
     }
 }

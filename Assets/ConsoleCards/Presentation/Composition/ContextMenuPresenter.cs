@@ -561,11 +561,12 @@ namespace ConsoleCards.Presentation.Composition
             // The same entry on every computer: a guest knows the Ability deck and the room's rules level from the host's
             // public table roles; the host draws, the buyer's own screen shows the Shop window.
             bool fullAbilityDeck = host.IsFullAbilityDeck(targetDeckId);
-            if (fullAbilityDeck)
+            if (host.IsAbilityDeck(targetDeckId) && !PlayAssist.IsFree) // R1: Full and Reminders (owner, 2026-11-12: Free draws by hand)
             {
                 TrapFloorCartridge buying = host.ActiveCartridge as TrapFloorCartridge;
                 bool drawOut = buying != null && buying.CanEndAbilityBuying();
-                actions.Add(new PopupActionOption(drawOut ? "Buy from your draw" : "Draw 3 Abilities", true, () =>
+                bool lyingOut = drawOut || (buying != null && buying.HasDrawLyingOut());
+                actions.Add(new PopupActionOption(lyingOut ? "Buy from your draw" : "Draw 3 Abilities", true, () =>
                 {
                     CloseContextMenu();
                     if (host.HasOnline && host.Online.IsPrivateGuest) host.Online.GuestRequestAbilityDraw();

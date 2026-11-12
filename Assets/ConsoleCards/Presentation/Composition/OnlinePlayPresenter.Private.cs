@@ -2979,10 +2979,10 @@ namespace ConsoleCards.Presentation.Composition
         {
             PlayerId sender = member.Player == Guid.Empty ? PlayerId.Empty : new PlayerId(member.Player);
             List<string> drawn = new List<string>();
-            bool ok = PlayAssist.Level == PlayAssistLevel.Full && host.TrapFloorGame.TryPrepareAbilityOfferFor(sender, out drawn);
+            bool ok = host.TrapFloorGame.TryPrepareAbilityOfferFor(sender, out drawn); // P8A batch 2 (R1): every assist level
             byte[] payload = System.Text.Encoding.UTF8.GetBytes(ok ? string.Join("\n", drawn) : string.Empty);
             SendPrivateBytes(member, MsgPrivateAbilityOffer, payload);
-            PrivateNote(ok ? $"{member.Name}: this turn's Ability draw sent ({drawn.Count})." : $"{member.Name}: no Ability draw now (not their turn, a payment open, not Full, or the deck is empty).");
+            PrivateNote(ok ? $"{member.Name}: this turn's Ability draw sent ({drawn.Count})." : $"{member.Name}: no Ability draw now (not their turn, a payment open, or the deck is empty).");
         }
 
         private readonly Dictionary<string, int> guestDrawnCounts = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -2992,7 +2992,7 @@ namespace ConsoleCards.Presentation.Composition
             string text = bytes == null ? string.Empty : System.Text.Encoding.UTF8.GetString(bytes);
             if (text.Length == 0 || privateShopDefinition == null)
             {
-                host.ShowMessage("No Ability draw now: it is on your own turn in Full, with no payment open.");
+                host.ShowMessage("No Ability draw now: it is on your own turn, with no payment open.");
                 return;
             }
 

@@ -4307,6 +4307,20 @@ namespace ConsoleCards.Presentation.Composition
         {
             HandlePendingPurchaseConsoleInteraction(interaction);
 
+            // Owner, 2026-11-12: a drawn Ability nobody has bought is never used as an Ability. Put into the turn player's
+            // own Console it is chosen for buying (Free's way; the existing payment asks for its price).
+            if (interaction is ConsoleCardInserted drawn
+                && TrapFloorTemplateFactory.IsAbilityDeckCardId(drawn.CardInstanceId)
+                && host.matchState != null
+                && host.matchState.Cards.TryGetValue(drawn.CardInstanceId, out CardInstanceState drawnCard)
+                && drawnCard.BaseState.OwnerPlayerId.IsEmpty)
+            {
+                if (host.HasOnline && host.Online.IsPrivateHost && host.Online.IsPlayerOnAnotherComputer(drawn.ActorPlayerId)) return;
+                if (!BeginPurchaseOfInsertedCard(drawn.CardInstanceId, drawn.ActorPlayerId))
+                    host.ShowMessage("That Ability is not bought yet: it can be used once its buyer owns it.");
+                return;
+            }
+
             if (!(interaction is ConsoleCardInserted insertion)
                 || behavior != ConsoleCardBehavior.ActivateOnInsert
                 || host.trapFloorAbilityResolutionService == null
@@ -4365,7 +4379,11 @@ namespace ConsoleCards.Presentation.Composition
 
             host.ContextMenus.CloseContextMenu();
             host.CardInspectPanel.CloseCardInspect();
-            QueueUsedAbilityDiscard(insertion.CardInstanceId); // TABLE-1: the used card goes on the Ability discard pile
+            // TABLE-1 / R4 (owner, 2026-11-12): in Full the used card goes on the Ability discard pile by itself (the use
+            // command has recorded it as used, so it is never used twice). Reminders says so; Free leaves it to the player.
+            if (PlayAssist.Level == PlayAssistLevel.Full) QueueUsedAbilityDiscard(insertion.CardInstanceId);
+            else if (PlayAssist.Level == PlayAssistLevel.Reminders)
+                host.FeedbackLine("Reminder: that Ability is used now: put it on the ABILITY DISCARD pile.", FeedbackSeverity.Info);
             RefreshTrapFloorStatusUi();
             if (effect == TrapFloorAbilityEffect.Dodge)
             {
@@ -6341,6 +6359,7 @@ namespace ConsoleCards.Presentation.Composition
         internal bool HostAllowsCommand(object command, PlayerId sender)
         {
             hostRefusal = null;
+            if (!HostAllowsMainSlotMove(command, sender)) return false; // R3 (owner, 2026-11-12), every assist level
             if (command is TrapFloorRevealFloorCommand || command is TrapFloorClaimKeyCommand || command is TrapFloorAttemptEscapeCommand)
                 return HostAllowsTileCommand(command, sender); // AUTH-TILE
             if (command is TrapFloorResolveCollapseCommand && PlayAssist.Level == PlayAssistLevel.Full && !FloorTurnMayCollapse())
@@ -6354,6 +6373,38 @@ namespace ConsoleCards.Presentation.Composition
             bool onTile = HostSeesPawnOnTile(sender, take.FloorCardId);
             if (!onTile) hostRefusal = "The host refused that: on the host's table your pawn is not on that prize's tile.";
             return onTile;
+        }
+
+        /// <summary>
+        /// R3 (owner, 2026-11-12: first come, first served): a seat's Main slot (its Avatar) is only that seat's. The host
+        /// refuses another player's move of a card into it, and of its Avatar out of it, in every assist level. The first
+        /// Lock In the host runs takes the card out of the Avatar pile, so a second player's Lock In of the same Avatar
+        /// asks to take it from the winner's Main slot and is refused here (nothing changes; their table is set right).
+        /// </summary>
+        internal bool HostAllowsMainSlotMove(object command, PlayerId sender)
+        {
+            if (!(command is TransferCardCommand transfer) || host.trapFloorTemplate == null || host.matchState == null) return true;
+            if (!host.matchState.Cards.TryGetValue(transfer.CardObjectId, out CardInstanceState card)) return true;
+            ContainerId from = card.BaseState.ContainerId;
+            ContainerId to = transfer.DestinationContainerId;
+            for (int i = 0; i < host.trapFloorTemplate.Players.Count; i++)
+            {
+                TrapFloorPlayerSetupDefinition setup = host.trapFloorTemplate.Players[i];
+                if (setup.MainSlotContainerId.IsEmpty || (setup.MainSlotContainerId != from && setup.MainSlotContainerId != to)) continue;
+                if (!host.matchState.Seats.TryGetValue(setup.SeatId, out SeatState seat) || seat.OccupantPlayerId.IsEmpty
+                    || seat.OccupantPlayerId == sender)
+                {
+                    continue;
+                }
+
+                bool avatar = TrapFloorTemplateFactory.AvatarIndexOf(host.trapFloorTemplate.GameDefinition, card.BaseState.DefinitionId, out _) >= 0;
+                hostRefusal = setup.MainSlotContainerId == from && avatar
+                    ? $"That Avatar is already {FormatPlayerName(seat.OccupantPlayerId)}'s: choose another one."
+                    : $"That Main slot is {FormatPlayerName(seat.OccupantPlayerId)}'s.";
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>AUTH-PRIZE: true when, in this computer's table, the player's pawn stands on that floor tile.</summary>

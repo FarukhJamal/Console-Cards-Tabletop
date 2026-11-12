@@ -564,6 +564,22 @@ namespace ConsoleCards.Games.TrapFloor
 
         public static ContainerId StartingAbilitiesId => new ContainerId(CreateGuid(71, 5));
 
+        /// <summary>
+        /// P8A batch 2 (R4): a card of the Ability deck itself (made with the deck; not a starting Ability, a floor
+        /// prize or a Shop copy). With the card's owner (set only when it is bought) this tells a dealt card from a
+        /// bought one by the table's own state.
+        /// </summary>
+        public static bool IsAbilityDeckCardId(TabletopObjectId cardId)
+        {
+            if (cardId.IsEmpty) return false;
+            byte[] bytes = cardId.Value.ToByteArray();
+            Guid category = CreateGuid(72, 1);
+            byte[] expected = category.ToByteArray();
+            for (int i = 0; i < 12; i++)
+                if (bytes[i] != expected[i]) return false; // the category part (the index is in the last 4 bytes)
+            return true;
+        }
+
         /// <summary>D2: the card of the Avatar at <paramref name="avatarIndex"/>'s starting Ability number <paramref name="abilityIndex"/>.</summary>
         public static TabletopObjectId StartingAbilityCardId(int avatarIndex, int abilityIndex) =>
             new TabletopObjectId(CreateGuid(44, (avatarIndex * 20) + abilityIndex + 1));
