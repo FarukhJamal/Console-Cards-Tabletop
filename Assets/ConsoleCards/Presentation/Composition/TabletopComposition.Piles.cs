@@ -818,7 +818,10 @@ namespace ConsoleCards.Presentation.Composition
             if (!change() || matchState == null) return;
             bool loose = !matchState.Cards.TryGetValue(cardId, out CardInstanceState card) || card.BaseState.ContainerId.IsEmpty;
             if (!loose) ViewSync.SyncContainer(card.BaseState.ContainerId);
-            PresentAcceptedObject(cardId);
+            // P8A (owner, 2026-11-13: "returned Draw 3 cards stayed visible, in different places on host and guest"): a card
+            // that went into a pile is laid out by the pile only. Presenting it as an object put its view back at its last
+            // loose pose (a contained card keeps that pose), so it looked like it still lay on the table.
+            if (loose) PresentAcceptedObject(cardId);
             RefreshAcceptedCardFaces();
             if (loose) SlideCards(starts, 0.45f, 0f); // a loose body: held still for the slide
             else presentationTransitions.AnimateCardsFromCurrentResults(starts, 0.45f, 0f); // into a pile or a hand

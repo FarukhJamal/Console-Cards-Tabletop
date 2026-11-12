@@ -647,6 +647,9 @@ namespace ConsoleCards.Presentation.Composition
         /// <summary>D3: while the next floor is dealt, each seat's Avatar (empty: none chosen); null otherwise.</summary>
         internal ObjectDefinitionId[] trapFloorCarriedAvatars;
 
+        /// <summary>P8A: the Avatars the table in play was dealt with (sent to joined computers so they deal the same table).</summary>
+        internal ObjectDefinitionId[] trapFloorDealtAvatars;
+
         internal int TrapFloorStageCount => trapFloorFloorPlan != null ? trapFloorFloorPlan.StageCount : 1;
 
         internal TrapFloorStage CurrentTrapFloorStage => trapFloorFloorPlan?.StageAt(trapFloorStageIndex);

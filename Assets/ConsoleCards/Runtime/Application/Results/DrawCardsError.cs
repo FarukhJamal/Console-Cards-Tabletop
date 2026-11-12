@@ -17,6 +17,8 @@ namespace ConsoleCards.Application.Results
         ObjectMissing,
         ObjectContainerMismatch,
         ObjectUserLocked,
-        RevisionOverflow
+        RevisionOverflow,
+        /// <summary>P8A: a game's own rule refuses it (Trap Floor, Full: a Blind player draws no Controller Cards).</summary>
+        RefusedByGameRule
     }
 }

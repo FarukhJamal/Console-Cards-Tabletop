@@ -1569,6 +1569,18 @@ namespace ConsoleCards.Presentation.Composition
                     new TrapFloorRollBlindDirectionCommand(
                         host.CreateCommandContext(host.physicalBlindDirectionActor),
                         host.physicalBlindDirectionDieId));
+            if (!result.Succeeded && result.Error == TrapFloorBlindDirectionRollError.DirectionBlocked)
+            {
+                // P8A (owner, 2026-11-13): the d4 maps to a way the pawn cannot step while another way is open: roll again.
+                askedBlindDieState = physicalState;
+                MarkPlayerRolls(host.physicalBlindDirectionDieId, ref askedBlindDieBody, ref askedBlindDieRolls);
+                host.FeedbackLine(
+                    $"BLIND — d4 {result.RolledValue} means {TrapFloorBlindRules.Describe(result.Direction)}, but your pawn has no step that way "
+                    + $"(the floor's edge or a hole). Roll the d4 again. ({BlindMapText(blindStatus)})",
+                    FeedbackSeverity.Warning);
+                return;
+            }
+
             if (!result.Succeeded)
             {
                 CancelPhysicalBlindDirection($"Blind direction rejected: {result.Error}.");
@@ -1579,9 +1591,20 @@ namespace ConsoleCards.Presentation.Composition
             host.physicalBlindDirectionActor = PlayerId.Empty;
             host.physicalBlindDirectionDieId = TabletopObjectId.Empty;
             RefreshTrapFloorStatusUi();
-            host.FeedbackLine( // DICE-2: always shown
-                $"BLIND DIRECTION: {result.Direction.ToString().ToUpperInvariant()} — move only that way this turn.",
+            host.FeedbackLine( // DICE-2: always shown; P8A: the d4's value, its direction in board words, and the map
+                result.NoLegalDirection
+                    ? $"BLIND — d4 {result.RolledValue}: {TrapFloorBlindRules.Describe(result.Direction)}. No way has a step for your pawn: you cannot move this turn."
+                    : $"BLIND — d4 {result.RolledValue} = {TrapFloorBlindRules.Describe(result.Direction)}: move only that way this turn. ({BlindMapText(blindStatus)})",
                 FeedbackSeverity.Info);
+        }
+
+        // P8A: the card's d4 map in words ("1 Left · 2 Down · 3 Right · 4 Up").
+        private static string BlindMapText(TrapFloorBlindStatusState status)
+        {
+            if (status == null || status.DirectionMapping == null) return string.Empty;
+            string[] parts = new string[4];
+            for (int i = 1; i <= 4; i++) parts[i - 1] = $"{i} {status.DirectionMapping.Resolve(i)}";
+            return string.Join(" · ", parts);
         }
 
         internal void CancelPhysicalBlindDirection(string message)
@@ -6914,6 +6937,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 // Owner, 2026-11-04: the mode's Keys and exits, the difficulty's mix, or the players' floor deck.
                 TrapFloorFloorRecipe recipe = DealRecipe(floorIndex, gameDefinition.Modes[i].StableId, content.PlayerDecks);
+                host.trapFloorDealtAvatars = host.trapFloorCarriedAvatars; // P8A: what joined computers deal with too
                 TrapFloorTemplateDefinition template;
                 try
                 {

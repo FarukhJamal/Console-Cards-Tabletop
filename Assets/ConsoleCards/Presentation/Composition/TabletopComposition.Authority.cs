@@ -96,7 +96,9 @@ namespace ConsoleCards.Presentation.Composition
             authority.Register<CommitPhysicalObjectCommand, CommandResult>(
                 command => commitPhysicalObjectUseCase.Execute(matchState, activeSession.Request.ActivePlayerIds, command), IsAccepted);
             authority.Register<TransferCardCommand, TransferCardResult>(
-                command => transferCardUseCase.Execute(matchState, command), IsAccepted);
+                command => TrapFloorGame != null && TrapFloorGame.RefusesBlindDraw(command.Context.RequestedByPlayerId, command.ExpectedSourceContainerId)
+                    ? TransferCardResult.Failure(CommandResultStatus.Rejected, TransferCardError.RefusedByGameRule) // P8A: Blind, Full
+                    : transferCardUseCase.Execute(matchState, command), IsAccepted);
             authority.Register<TransferTokenCommand, TransferTokenResult>(
                 command => transferTokenUseCase.Execute(matchState, command), IsAccepted);
             authority.Register<RotateObjectCommand, RotateObjectResult>(
@@ -112,7 +114,9 @@ namespace ConsoleCards.Presentation.Composition
             authority.Register<ShuffleDeckCommand, ShuffleDeckResult>(
                 command => new ShuffleDeckUseCase(authoritativeRandomValueSource).Execute(matchState, command), IsAccepted);
             authority.Register<DrawCardsCommand, DrawCardsResult>(
-                command => new DrawCardsUseCase().Execute(matchState, command), IsAccepted);
+                command => TrapFloorGame != null && TrapFloorGame.RefusesBlindDraw(command.Context.RequestedByPlayerId, command.SourceDeckContainerId)
+                    ? DrawCardsResult.Failure(CommandResultStatus.Rejected, DrawCardsError.RefusedByGameRule) // P8A: Blind, Full
+                    : new DrawCardsUseCase().Execute(matchState, command), IsAccepted);
             authority.Register<SplitStackCommand, SplitStackResult>(
                 command => new SplitStackUseCase().Execute(matchState, command), IsAccepted);
             authority.Register<ReorderContainerCommand, ReorderContainerResult>(

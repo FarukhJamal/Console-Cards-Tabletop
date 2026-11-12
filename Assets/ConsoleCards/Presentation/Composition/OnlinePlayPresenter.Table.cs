@@ -37,6 +37,8 @@ namespace ConsoleCards.Presentation.Composition
         public string ContentHash; // MP-4: the host content the table was dealt with
         public string RuleSetId; // MP-4: the host's house rules in play (empty: the game's default rules)
         public string PlayerGame; // MP-4: a game the host made (its save, JSON), else empty
+        public Guid[] CarriedAvatars; // P8A: each seat's Avatar the floor was dealt with (Guid.Empty: none), else empty
+        public int StageIndex; // P8A: the stage the floor belongs to
     }
 
     internal sealed class OnlineTablePacket
@@ -686,6 +688,8 @@ namespace ConsoleCards.Presentation.Composition
                 ContentHash = hosting ? hostContentHash : roomContentHash,
                 RuleSetId = host.RulesCardPanel.ActiveRuleSetId,
                 PlayerGame = host.PlayerGamesPanel.activePlayerGame != null ? JsonUtility.ToJson(host.PlayerGamesPanel.activePlayerGame) : string.Empty,
+                CarriedAvatars = DealtAvatarsForSetup(),
+                StageIndex = host.trapFloorStageIndex,
             };
         }
 
@@ -928,6 +932,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             host.trapFloorNextFloorIndex = setup.FloorIndex;
+            host.trapFloorNextStageIndex = setup.FloorIndex == 0 ? Math.Max(0, setup.StageIndex) : host.trapFloorStageIndex;
+            host.trapFloorCarriedAvatars = AvatarsFromSetup(setup.CarriedAvatars); // P8A: the same Avatars in place as the host's deal
             if (!hosting) host.RulesCardPanel.ReloadHouseRules(setup.RuleSetId); // MP-4: the host's house rules
             try
             {
@@ -939,7 +945,26 @@ namespace ConsoleCards.Presentation.Composition
             finally
             {
                 host.trapFloorNextFloorIndex = 0;
+                host.trapFloorNextStageIndex = 0;
+                host.trapFloorCarriedAvatars = null;
             }
+        }
+
+        private Guid[] DealtAvatarsForSetup()
+        {
+            ObjectDefinitionId[] dealt = host.trapFloorDealtAvatars;
+            if (dealt == null) return new Guid[0];
+            Guid[] ids = new Guid[dealt.Length];
+            for (int i = 0; i < dealt.Length; i++) ids[i] = dealt[i].Value;
+            return ids;
+        }
+
+        private static ObjectDefinitionId[] AvatarsFromSetup(Guid[] ids)
+        {
+            if (ids == null || ids.Length == 0) return null;
+            ObjectDefinitionId[] avatars = new ObjectDefinitionId[ids.Length];
+            for (int i = 0; i < ids.Length; i++) avatars[i] = new ObjectDefinitionId(ids[i]);
+            return avatars;
         }
 
         // MP-4: a game the host made is shown as that game here too (its name and written rules); its pieces come from
@@ -976,6 +1001,16 @@ namespace ConsoleCards.Presentation.Composition
             int floor = reader.ReadInt32();
             TabletopSessionSelection current = host.activeSession.Selection;
             if (current.Kind != TabletopSessionKind.GameTemplate || current.GameTemplateId.Value != template) return;
+            // P8A (owner, 2026-11-13): the host decides what follows from its own rules state (the next floor or stage of
+            // the run with its Avatars and Abilities kept, or a fresh run after GAME WON / GAME OVER); the floor number a
+            // joined computer asked for is only logged.
+            Debug.Log($"[Online] {member?.Name} asked for the next deal (their floor {floor + 1}); the host deals what its rules say.");
+            if (host.trapFloorTemplate != null)
+            {
+                host.TrapFloorGame.DealAfterFloorEnd();
+                return;
+            }
+
             host.TrapFloorGame.PendingWinMode = null;
             host.TrapFloorGame.PendingAnticlockwise = null;
             host.trapFloorNextFloorIndex = Mathf.Max(0, floor);

@@ -153,11 +153,16 @@ namespace ConsoleCards.Presentation.Composition
                 new TrapFloorEliminatePlayerCommand(LocalContextFor(causedBy), player, reason));
         }
 
-        private sealed class HostEvidence : ITrapFloorEffectEvidence
+        private sealed class HostEvidence : ITrapFloorEffectEvidence, ITrapFloorBlindEvidence
         {
             private readonly TrapFloorCartridge game;
 
             public HostEvidence(TrapFloorCartridge game) => this.game = game;
+
+            // P8A (Blind d4): a step that way from the player's pawn lands on a tile of this floor that is not a hole.
+            public bool HasLegalStep(PlayerId player, TrapFloorBlindMovementDirection direction) =>
+                game.TryGetBlindPawnTile(player, out TrapFloorCoordinate pawn)
+                && TrapFloorBlindRules.HasLegalStep(pawn, direction, game.IsOpenFloorTile);
 
             public bool IsSurvivalEndgame => game.IsSurvivalEndgame();
 

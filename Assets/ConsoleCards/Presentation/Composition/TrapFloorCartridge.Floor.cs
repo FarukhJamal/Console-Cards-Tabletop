@@ -119,11 +119,23 @@ namespace ConsoleCards.Presentation.Composition
 
         internal string FloorEndedActionLabel(bool won)
         {
-            if (StartsNextStage(won)) return $"Start Stage {host.trapFloorStageIndex + 2}"; // STAGES-1
-            if (host.trapFloorTemplate == null || host.trapFloorTemplate.IsLastFloor) return "Play Again";
-            int rows = NextFloorSize(out int columns);
-            return $"Start next phase ({columns}×{rows})"; // FLOOR-2
+            switch (RunStepAfter(won))
+            {
+                case TrapFloorRunStep.NextStage: return $"Start Stage {host.trapFloorStageIndex + 2}"; // STAGES-1
+                case TrapFloorRunStep.NextFloor:
+                    int rows = NextFloorSize(out int columns);
+                    return $"Start next phase ({columns}×{rows})"; // FLOOR-2
+                default: return "Play Again"; // GAME WON / GAME OVER: a fresh run from Floor 1
+            }
         }
+
+        // P8A (owner, 2026-11-13: "Floor won vs floor lost"): won goes on (next floor or stage); the last floor won is GAME
+        // WON; a lost floor is GAME OVER on any floor (never the next floor).
+        internal TrapFloorRunStep RunStepAfter(bool won) =>
+            TrapFloorRunProgression.After(
+                won,
+                host.trapFloorTemplate == null || host.trapFloorTemplate.IsLastFloor,
+                StartsNextStage(true));
 
         // STAGES-1: winning a stage's last floor (3×3) starts the next stage at full size, while there is one.
         private bool StartsNextStage(bool won) =>
@@ -131,6 +143,22 @@ namespace ConsoleCards.Presentation.Composition
             && host.trapFloorTemplate != null
             && host.trapFloorTemplate.IsLastFloor
             && host.trapFloorStageIndex < host.TrapFloorStageCount - 1;
+
+        // P8A: deals what follows this floor's end, on the computer that deals (offline, or the host for everyone): the
+        // next floor or stage of the same run (its players keep their Avatar and unused Abilities), or a fresh run.
+        internal void DealAfterFloorEnd()
+        {
+            if (!IsFloorEnded()) return; // Undo took the floor's end back
+            bool won = !host.trapFloorTurnState.IsCurrentFloorFailed || FloorFailedCountsAsWin(); // MODE-1
+            TrapFloorRunStep step = RunStepAfter(won);
+            Debug.Log($"[Floor] Floor {host.trapFloorTemplate.FloorIndex + 1} {(won ? "won" : "lost")}: {step}.");
+            switch (step)
+            {
+                case TrapFloorRunStep.NextFloor: DealFloor(host.trapFloorTemplate.FloorIndex + 1, 0, true); break;
+                case TrapFloorRunStep.NextStage: DealFloor(0, host.trapFloorStageIndex + 1, true); break;
+                default: DealFloor(0); break; // Play Again: a new run, chosen fresh
+            }
+        }
 
         private string StageName(int stageIndex)
         {
@@ -143,12 +171,12 @@ namespace ConsoleCards.Presentation.Composition
         // MODE-1: a Survival floor where someone escaped is won even when the rest are out.
         internal string FloorEndedChoiceText(bool won)
         {
-            if (StartsNextStage(won)) return $"Choose {FloorEndedActionLabel(true)} in the turn menu.";
-            return host.trapFloorTemplate == null || host.trapFloorTemplate.IsLastFloor
-                ? won
-                    ? "That was the last floor: the game is won. Choose Play Again to start over."
-                    : "That was the last floor: the game is lost. Choose Play Again to start over."
-                : $"Choose {FloorEndedActionLabel()} in the turn menu.";
+            switch (RunStepAfter(won))
+            {
+                case TrapFloorRunStep.GameWon: return "That was the last floor: the game is won. Choose Play Again to start a new game.";
+                case TrapFloorRunStep.GameOver: return "GAME OVER: the run is lost. Choose Play Again to start a new game from Floor 1.";
+                default: return $"Choose {FloorEndedActionLabel(won)} in the turn menu.";
+            }
         }
 
         private TrapFloorTemplateDefinition winRecordedFor;
@@ -221,8 +249,9 @@ namespace ConsoleCards.Presentation.Composition
             if (!string.IsNullOrEmpty(recap)) detail = string.IsNullOrEmpty(detail) ? recap : $"{detail} · {recap}";
             TrapFloorTemplateDefinition floor = host.trapFloorTemplate;
             int number = floor.FloorIndex + 1;
-            bool nextStage = StartsNextStage(won); // STAGES-1
-            bool last = floor.IsLastFloor && !nextStage;
+            TrapFloorRunStep step = RunStepAfter(won); // P8A: lost is GAME OVER on any floor
+            bool nextStage = step == TrapFloorRunStep.NextStage; // STAGES-1
+            bool last = !TrapFloorRunProgression.GoesOn(step); // GAME WON or GAME OVER: the run ends here
             int stageNumber = host.trapFloorStageIndex + 1;
             if (won && last && !ReferenceEquals(winRecordedFor, floor))
             {
@@ -240,7 +269,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 next = won
                     ? "That was the last floor: the team escaped the Trap Floor."
-                    : "Everyone is out on the last floor: the team lost.";
+                    : $"Everyone is out on Floor {number}: the run is lost. Play Again starts a new game from Floor 1 (Avatars are chosen again).";
             }
             else if (nextStage)
             {
@@ -251,8 +280,8 @@ namespace ConsoleCards.Presentation.Composition
             {
                 int rows = NextFloorSize(out int columns);
                 next = $"{result} Next: Floor {number + 1} of {floor.FloorCount}, {columns}×{rows}, dealt fresh. Knocked-out players "
-                    + "come back; Hands, Consoles and Abilities are dealt again (Avatars stay) and the Controller decks "
-                    + "are shuffled. This cannot be undone.";
+                    + "come back. Each player keeps their Avatar and the Abilities they still hold; Hands are dealt again and the "
+                    + "Controller deck is shuffled. This cannot be undone.";
             }
 
             string body = string.IsNullOrEmpty(detail) ? next : $"{detail}\n{next}";
@@ -285,9 +314,7 @@ namespace ConsoleCards.Presentation.Composition
                     {
                         host.runtimeUi?.CloseTableMilestone();
                         if (!IsFloorEnded()) return; // Undo took the floor's end back while the chip waited
-                        if (nextStage) DealFloor(0, stageNumber);
-                        else if (last) DealFloor(0);
-                        else DealFloor(floor.FloorIndex + 1);
+                        DealAfterFloorEnd(); // P8A: the run's next step, decided by the rules state
                     },
                     "Not yet",
                     () => host.runtimeUi?.CloseTableMilestone(),
@@ -310,9 +337,7 @@ namespace ConsoleCards.Presentation.Composition
                         () =>
                         {
                             close();
-                            if (nextStage) DealFloor(0, stageNumber);
-                            else if (last) DealFloor(0);
-                            else DealFloor(floor.FloorIndex + 1);
+                            if (IsFloorEnded()) DealAfterFloorEnd(); // P8A
                         }),
                     new PopupActionOption("Not yet", true, close),
                 },
@@ -388,7 +413,7 @@ namespace ConsoleCards.Presentation.Composition
             string line = $"Floor {number} marked {result} by hand" + (string.IsNullOrEmpty(winner) ? "." : $"; winner: {winner}.");
             host.FeedbackLine(line, FeedbackSeverity.Warning); // in the log, and shown once
             Debug.Log($"[Floor] {line}");
-            bool goOn = result != "abandoned" && !last;
+            bool goOn = result == "completed" && !last; // P8A: only a won floor goes on (failed or abandoned: a new game)
             host.runtimeUi.ShowTableMilestone(new TableMilestoneModel(
                 $"FLOOR {number} {result.ToUpperInvariant()}",
                 result == "completed" ? TableNoticeTone.Won : TableNoticeTone.Caution,
@@ -399,7 +424,8 @@ namespace ConsoleCards.Presentation.Composition
                 {
                     host.runtimeUi?.CloseTableMilestone();
                     if (host.IsOnlineTable && !(host.HasOnline && host.Online.IsHosting)) return; // the host deals online
-                    DealFloor(goOn ? floor.FloorIndex + 1 : 0);
+                    if (goOn) DealFloor(floor.FloorIndex + 1, 0, true);
+                    else DealFloor(0);
                 },
                 "Not yet",
                 () => host.runtimeUi?.CloseTableMilestone(),
@@ -408,14 +434,17 @@ namespace ConsoleCards.Presentation.Composition
 
         // Sets the table up again at the given floor (0 = a new game at full size, or the start of stage
         // <paramref name="stageIndex"/>), keeping the mode and seats.
-        private void DealFloor(int floorIndex, int stageIndex = 0)
+        private void DealFloor(int floorIndex, int stageIndex = 0, bool keepRun = false)
         {
             if (host.activeSession == null) return;
             PendingWinMode = null; // MODE-1: the next floor keeps this game's win mode and turn direction
             PendingAnticlockwise = null;
             host.trapFloorNextFloorIndex = floorIndex;
             host.trapFloorNextStageIndex = floorIndex == 0 ? Math.Max(0, stageIndex) : host.trapFloorStageIndex;
-            host.trapFloorCarriedAvatars = CaptureSeatAvatars(); // D3: each seat keeps the Avatar it chose
+            // D3 / P8A (owner, 2026-11-13: "Avatar selection happens once per run"): a run that goes on keeps each seat's
+            // Avatar and the Abilities it still holds; a new run (Play Again) starts with neither.
+            host.trapFloorCarriedAvatars = keepRun ? CaptureSeatAvatars() : null;
+            List<TrapFloorCarriedAbility> carried = keepRun ? TrapFloorRunCarry.Capture(host.matchState, host.trapFloorTemplate) : null;
             bool dealt;
             host.gameTemplatesPanelError = null; // NEXTFLOOR-1: only this deal's reason is reported
             try
@@ -440,6 +469,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (host.trapFloorTemplate == null) return;
+            if (carried != null) ApplyCarriedAbilities(carried); // P8A: before the new table is shared
             ReviewFloorStanding("deal"); // P7 (s162): every floor holds one standing Grand Exit
             host.ShowMessage(floorIndex == 0
                 ? stageIndex > 0 ? $"STAGE {stageIndex + 1}: {StageName(stageIndex)} — Floor 1." : "A new game: Floor 1."

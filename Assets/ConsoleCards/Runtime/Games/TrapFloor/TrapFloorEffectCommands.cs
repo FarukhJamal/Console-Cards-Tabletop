@@ -168,6 +168,16 @@ namespace ConsoleCards.Games.TrapFloor
         bool IsSurvivalEndgame { get; }
     }
 
+    /// <summary>
+    /// P8A (owner, 2026-11-13: Blind d4): optional evidence of where a player's pawn may step on this table. An evidence
+    /// object that also implements this lets a Blind d4 that maps to a blocked direction be rolled again.
+    /// </summary>
+    public interface ITrapFloorBlindEvidence
+    {
+        /// <summary>True when the player's pawn has at least one legal step in that direction on this table.</summary>
+        bool HasLegalStep(PlayerId player, TrapFloorBlindMovementDirection direction);
+    }
+
     /// <summary>AUTH-EFFECTS: whether an elimination has a reason on this table. Pure, so it is unit tested.</summary>
     public static class TrapFloorEliminationRules
     {
@@ -249,7 +259,11 @@ namespace ConsoleCards.Games.TrapFloor
         {
             if (!Ready || match == null || command == null)
                 return TrapFloorBlindDirectionRollResult.Failure(TrapFloorBlindDirectionRollError.MatchMismatch);
-            return ability.ResolveBlindDirection(match, command.Context, command.DieId);
+            // P8A: every table checks the d4 against its own floor (the same floor everywhere), so all agree on a re-roll.
+            ITrapFloorBlindEvidence blind = evidence as ITrapFloorBlindEvidence;
+            PlayerId roller = command.Context.RequestedByPlayerId;
+            return ability.ResolveBlindDirection(match, command.Context, command.DieId,
+                blind == null ? (Func<TrapFloorBlindMovementDirection, bool>)null : direction => blind.HasLegalStep(roller, direction));
         }
 
         public TrapFloorEffectResult RetriggerTrap(MatchState match, TrapFloorRetriggerTrapCommand command)

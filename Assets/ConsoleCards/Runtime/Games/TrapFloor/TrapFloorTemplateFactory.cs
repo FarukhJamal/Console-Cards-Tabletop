@@ -580,6 +580,27 @@ namespace ConsoleCards.Games.TrapFloor
             return true;
         }
 
+        /// <summary>
+        /// P8A (owner, 2026-11-13: "a run keeps its Avatar and unused Abilities"): the index part of a card id this factory
+        /// made in <paramref name="category"/> (44: a starting Ability from the pile, 46: one dealt beside a seat with its
+        /// Avatar, 72: an Ability deck card). False for any other id.
+        /// </summary>
+        public static bool TryGetFactoryIndex(TabletopObjectId cardId, int category, out int index)
+        {
+            index = 0;
+            if (cardId.IsEmpty) return false;
+            byte[] bytes = cardId.Value.ToByteArray();
+            byte[] expected = CreateGuid(category, 1).ToByteArray();
+            for (int i = 0; i < 12; i++)
+                if (bytes[i] != expected[i]) return false;
+            index = (bytes[12] << 24) | (bytes[13] << 16) | (bytes[14] << 8) | bytes[15];
+            return true;
+        }
+
+        /// <summary>P8A: the starting Ability number <paramref name="abilityIndex"/> dealt beside seat <paramref name="seatIndex"/> with its Avatar.</summary>
+        public static TabletopObjectId SeatStartingAbilityCardId(int seatIndex, int abilityIndex) =>
+            new TabletopObjectId(CreateGuid(46, (seatIndex * 100) + abilityIndex + 1));
+
         /// <summary>D2: the card of the Avatar at <paramref name="avatarIndex"/>'s starting Ability number <paramref name="abilityIndex"/>.</summary>
         public static TabletopObjectId StartingAbilityCardId(int avatarIndex, int abilityIndex) =>
             new TabletopObjectId(CreateGuid(44, (avatarIndex * 20) + abilityIndex + 1));

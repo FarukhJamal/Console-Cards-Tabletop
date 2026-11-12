@@ -1029,9 +1029,11 @@ namespace ConsoleCards.Games.TrapFloor
         DieUnavailable = 6,
         DieMustBeD4 = 7,
         DieNotSettled = 8,
+        /// <summary>P8A: the d4 maps to a direction with no legal step while another direction has one: roll again.</summary>
+        DirectionBlocked = 9,
     }
 
-    public readonly struct TrapFloorBlindDirectionRollResult
+    public struct TrapFloorBlindDirectionRollResult // P8A: not readonly (RolledValue, NoLegalDirection)
     {
         private TrapFloorBlindDirectionRollResult(
             bool succeeded,
@@ -1043,12 +1045,30 @@ namespace ConsoleCards.Games.TrapFloor
             Revision = revision;
             Direction = direction;
             Error = error;
+            RolledValue = 0; // P8A: a struct's auto-properties are all set here (CS0843)
+            NoLegalDirection = false;
         }
 
         public bool Succeeded { get; }
         public long Revision { get; }
+        /// <summary>The direction the d4 maps to (also on DirectionBlocked: the one that was blocked).</summary>
         public TrapFloorBlindMovementDirection Direction { get; }
         public TrapFloorBlindDirectionRollError Error { get; }
+        /// <summary>P8A: the d4 value read.</summary>
+        public int RolledValue { get; private set; }
+        /// <summary>P8A: accepted, but no direction has a legal step (the player is stuck this turn).</summary>
+        public bool NoLegalDirection { get; private set; }
+
+        internal static TrapFloorBlindDirectionRollResult Blocked(TrapFloorBlindMovementDirection mapped, int value) =>
+            new TrapFloorBlindDirectionRollResult(false, -1, mapped, TrapFloorBlindDirectionRollError.DirectionBlocked) { RolledValue = value };
+
+        internal TrapFloorBlindDirectionRollResult With(int value, bool noLegalDirection)
+        {
+            TrapFloorBlindDirectionRollResult copy = this;
+            copy.RolledValue = value;
+            copy.NoLegalDirection = noLegalDirection;
+            return copy;
+        }
 
         internal static TrapFloorBlindDirectionRollResult Accepted(
             long revision,
@@ -1782,7 +1802,18 @@ namespace ConsoleCards.Games.TrapFloor
         public TrapFloorBlindDirectionRollResult ResolveBlindDirection(
             MatchState matchState,
             CommandContext context,
-            TabletopObjectId dieId)
+            TabletopObjectId dieId) => ResolveBlindDirection(matchState, context, dieId, null);
+
+        /// <summary>
+        /// P8A (owner, 2026-11-13): with <paramref name="hasLegalStep"/> (the table's floor: is there a step that way from
+        /// the pawn?), a d4 mapped to a blocked direction is refused as DirectionBlocked (nothing changes: roll again)
+        /// while another direction has a step; with none, the roll stands and the result says NoLegalDirection.
+        /// </summary>
+        public TrapFloorBlindDirectionRollResult ResolveBlindDirection(
+            MatchState matchState,
+            CommandContext context,
+            TabletopObjectId dieId,
+            Func<TrapFloorBlindMovementDirection, bool> hasLegalStep)
         {
             if (matchState == null
                 || matchState.Id != state.MatchId
@@ -1809,6 +1840,20 @@ namespace ConsoleCards.Games.TrapFloor
                 || die.BaseState.PhysicalState.Mode != PhysicalObjectMode.Sleeping)
                 return TrapFloorBlindDirectionRollResult.Failure(TrapFloorBlindDirectionRollError.DieNotSettled);
 
+            bool noLegalDirection = false;
+            if (hasLegalStep != null)
+            {
+                TrapFloorBlindMovementDirection mapped = blindStatus.DirectionMapping.Resolve(die.CurrentValue);
+                if (!hasLegalStep(mapped))
+                {
+                    bool another = false;
+                    for (int i = 0; i < TrapFloorBlindRules.AllDirections.Length && !another; i++)
+                        another = hasLegalStep(TrapFloorBlindRules.AllDirections[i]);
+                    if (another) return TrapFloorBlindDirectionRollResult.Blocked(mapped, die.CurrentValue);
+                    noLegalDirection = true; // no step anywhere: the roll stands, the player is stuck this turn
+                }
+            }
+
             TrapFloorBlindMovementDirection direction = state.ResolveBlindDirection(
                 turnState.ActivePlayerId,
                 turnState.CurrentRound,
@@ -1824,7 +1869,7 @@ namespace ConsoleCards.Games.TrapFloor
                 context.Id,
                 context.RequestedByPlayerId,
                 AuthoritativeActionKind.PhysicalObjectSettled);
-            return TrapFloorBlindDirectionRollResult.Accepted(revision, direction);
+            return TrapFloorBlindDirectionRollResult.Accepted(revision, direction).With(die.CurrentValue, noLegalDirection);
         }
 
         public static TrapFloorAbilityEffect ResolveEffect(string effectMetadata)
