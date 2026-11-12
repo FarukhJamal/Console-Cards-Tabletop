@@ -144,6 +144,7 @@ namespace ConsoleCards.Presentation.Composition
                     ToggleReady = () => host.Online.ToggleReady(),
                     CycleOnlineColour = step => host.Online.CycleColour(step),
                     CycleOnlineSeat = step => host.Online.CycleSeat(step),
+                    SetOnlineRegion = code => host.Online.SetServerRegion(code),
                     CycleLight = step => ChangeLook(() => host.NextLightPreset(step)),
                     CycleColours = step => ChangeLook(host.ToggleColourBlind),
                     CycleQuality = step => ChangeLook(() => host.NextQuality(step)),

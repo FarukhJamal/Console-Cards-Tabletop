@@ -57,6 +57,12 @@ namespace ConsoleCards.Application.Authority
         /// <summary>The server region in use, empty until connected.</summary>
         string Region { get; }
 
+        /// <summary>P8A (owner, 2026-11-10): the server region the player chose for the room list and new rooms.</summary>
+        string PreferredRegion { get; }
+
+        /// <summary>P8A: picks the server region (kept for the next start); out of a room, the room list reconnects there.</summary>
+        void SetPreferredRegion(string region);
+
         /// <summary>Rooms in the room list (public rooms only).</summary>
         int VisibleRoomCount { get; }
 
@@ -122,6 +128,28 @@ namespace ConsoleCards.Application.Authority
 
         /// <summary>Leaves any room and the cloud.</summary>
         void Disconnect();
+    }
+
+    /// <summary>
+    /// P8A (owner, 2026-11-10: "if your server is not available, you can join Asia's one"): the server regions a
+    /// player can pick, by the networking product's region code. A room's code starts with its region, so a friend
+    /// joining by code always reaches the right one.
+    /// </summary>
+    public static class OnlineRegions
+    {
+        public static readonly string[] Codes = { "eu", "asia", "in", "uae", "jp", "kr", "us", "usw", "sa", "au", "za" };
+
+        public static readonly string[] Names =
+        {
+            "EUROPE", "ASIA", "INDIA", "UAE", "JAPAN", "KOREA", "US EAST", "US WEST", "S. AMERICA", "AUSTRALIA", "S. AFRICA",
+        };
+
+        public static string NameOf(string code)
+        {
+            for (int i = 0; i < Codes.Length; i++)
+                if (string.Equals(Codes[i], code, StringComparison.OrdinalIgnoreCase)) return Names[i];
+            return string.IsNullOrEmpty(code) ? "EUROPE" : code.ToUpperInvariant();
+        }
     }
 
     /// <summary>

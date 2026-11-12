@@ -247,6 +247,8 @@ namespace ConsoleCards.Presentation.UI
         public Action ToggleReady;
         public Action<int> CycleOnlineColour;
         public Action<int> CycleOnlineSeat;
+        /// <summary>P8A: the server region for the room list and new rooms (a region code).</summary>
+        public Action<string> SetOnlineRegion;
 
         // Owner, 2026-10-29: the main menu's SETTINGS screen, -1 or +1.
         public Action<int> CycleLight;

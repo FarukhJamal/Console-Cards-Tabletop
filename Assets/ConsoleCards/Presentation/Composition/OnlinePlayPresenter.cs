@@ -266,6 +266,16 @@ namespace ConsoleCards.Presentation.Composition
             });
         }
 
+        // P8A (owner, 2026-11-10): the server region, picked on the online screen.
+        internal void SetServerRegion(string code)
+        {
+            if (!MultiplayerSessions.IsAvailable) return;
+            Connect();
+            notice = null;
+            session?.SetPreferredRegion(code);
+            RefreshFrontEnd();
+        }
+
         internal void JoinRoom(string code)
         {
             Connect();
@@ -1137,6 +1147,7 @@ namespace ConsoleCards.Presentation.Composition
                 return model;
             }
 
+            model.ServerRegion = session.PreferredRegion;
             MultiplayerSessionState state = session.State;
             model.Status = !string.IsNullOrEmpty(notice) && state != MultiplayerSessionState.InRoom ? notice + "  " + session.Status : session.Status;
             if (!string.IsNullOrEmpty(roomNotice) && InRoom && Time.unscaledTime < roomNoticeUntil) model.Status = roomNotice;

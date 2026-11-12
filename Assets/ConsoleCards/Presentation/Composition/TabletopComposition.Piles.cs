@@ -712,7 +712,15 @@ namespace ConsoleCards.Presentation.Composition
                 if (view == null) continue;
                 TabletopTransformSnapshot from = pair.Value;
                 if ((view.position - from.Position).sqrMagnitude < 1e-6f && Quaternion.Angle(view.rotation, from.Rotation) < 0.5f) continue;
-                StartCoroutine(SlideCard(view, from, seconds, index * stagger));
+                // Owner, 2026-11-10 ("still no slide on the host"): a loose card whose body this computer runs is drawn
+                // from its interpolated physics body every frame, so moving its transform shows nothing. Such a body
+                // glides the way the floor tiles do (moved as a body, passing through other pieces, resting where it
+                // lies); a later card takes a little longer, which staggers the row.
+                PhysicalLooseObject physical = view.GetComponent<PhysicalLooseObject>() ?? view.GetComponentInParent<PhysicalLooseObject>();
+                if (physical != null && physical.OwnsLooseTransform)
+                    physical.GlideFrom(from.Position, from.Rotation, seconds + (index * stagger), 0.02f);
+                else
+                    StartCoroutine(SlideCard(view, from, seconds, index * stagger));
                 index++;
             }
         }
@@ -722,7 +730,7 @@ namespace ConsoleCards.Presentation.Composition
             Vector3 endPosition = view.position;
             Quaternion endRotation = view.rotation;
             Rigidbody body = view.GetComponent<Rigidbody>();
-            PhysicalLooseObject physical = view.GetComponent<PhysicalLooseObject>();
+            PhysicalLooseObject physical = view.GetComponent<PhysicalLooseObject>() ?? view.GetComponentInParent<PhysicalLooseObject>();
             bool wasKinematic = body != null && body.isKinematic;
             bool physicalWasOn = physical != null && physical.enabled;
             if (body != null) body.isKinematic = true;

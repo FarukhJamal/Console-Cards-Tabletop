@@ -410,12 +410,43 @@ namespace ConsoleCards.Networking
         // (Fixed Region), else this default. A player can still be sent elsewhere by a code.
         internal const string DefaultLobbyRegion = "eu";
 
-        private static string LobbyRegion()
+        private string LobbyRegion() => PreferredRegion;
+
+        private static string ProjectRegion()
         {
             string set = PhotonAppSettings.Global != null && PhotonAppSettings.Global.AppSettings != null
                 ? PhotonAppSettings.Global.AppSettings.FixedRegion
                 : null;
             return string.IsNullOrEmpty(set) ? DefaultLobbyRegion : set.Trim().ToLowerInvariant();
+        }
+
+        // P8A (owner, 2026-11-10): the region the player picked (kept between starts), else the project's.
+        private const string RegionPrefKey = "ConsoleCards.OnlineRegion";
+        private string pickedRegion;
+
+        public string PreferredRegion
+        {
+            get
+            {
+                if (pickedRegion == null) pickedRegion = PlayerPrefs.GetString(RegionPrefKey, string.Empty).Trim().ToLowerInvariant();
+                return pickedRegion.Length > 0 ? pickedRegion : ProjectRegion();
+            }
+        }
+
+        public void SetPreferredRegion(string chosen)
+        {
+            chosen = (chosen ?? string.Empty).Trim().ToLowerInvariant();
+            if (chosen.Length == 0 || chosen == PreferredRegion) return;
+            pickedRegion = chosen;
+            PlayerPrefs.SetString(RegionPrefKey, chosen);
+            PlayerPrefs.Save();
+            if (state == MultiplayerSessionState.InRoom || state == MultiplayerSessionState.JoiningRoom
+                || state == MultiplayerSessionState.Reconnecting)
+            {
+                return; // the room list moves there after this room
+            }
+
+            _ = ConnectToLobbyAsync(++attempt);
         }
 
         private static FusionAppSettings Settings(string fixedRegion)

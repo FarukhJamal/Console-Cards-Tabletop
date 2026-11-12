@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using ConsoleCards.Application.Authority;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -36,6 +37,7 @@ namespace ConsoleCards.Presentation.UI
 
         private void BindOnlineBoard(string at)
         {
+            BuildServerPicker(at); // P8A
             On(at + "Where/Local", LeaveOnlineForLibrary);
             On(at + "Rooms/Make", () => actions?.CreateRoom?.Invoke(DefaultRoomName(), roomPrivate));
             On(at + "Rooms/PrivacyToggle", () =>
@@ -112,6 +114,7 @@ namespace ConsoleCards.Presentation.UI
             string at = OnlinePath();
             SetText(at + "Status", online.Status);
             FitLine(at + "Status");
+            RenderServerPicker(at, online);
 
             // The lobby.
             SetInteractable(at + "Rooms/Make", online.Connected);
@@ -212,6 +215,147 @@ namespace ConsoleCards.Presentation.UI
                 ? online.Started && online.NotReady > 0 ? "A game is on: NEW GAME once everyone is READY again"
                 : online.NotReady > 0 ? $"Waiting for {online.NotReady} player{(online.NotReady == 1 ? string.Empty : "s")} to be ready" : string.Empty
                 : online.Ready ? "Waiting for the host to start" : "Press READY when you are");
+        }
+
+        // ---------- P8A: the server region (owner, 2026-11-10: "if your server is not available, you can join Asia's one") ----------
+        // A SERVER button beside ON THIS COMPUTER | ONLINE opens a list of regions. Made here from the board's own look
+        // (the board itself is built by the Editor's board builder). In a room it only shows the room's region.
+
+        private sealed class ServerPicker
+        {
+            public Button Button;
+            public Text Label;
+            public GameObject List;
+        }
+
+        private readonly Dictionary<string, ServerPicker> serverPickers = new Dictionary<string, ServerPicker>();
+
+        private void BuildServerPicker(string at)
+        {
+            if (serverPickers.ContainsKey(at)) return;
+            RectTransform board = transform.Find(at.TrimEnd('/')) as RectTransform;
+            RectTransform where = board != null ? board.Find("Where") as RectTransform : null;
+            Text sample = where != null ? where.Find("Local/Label")?.GetComponent<Text>() : null;
+            Image look = where != null ? where.GetComponent<Image>() : null;
+            if (where == null || sample == null || look == null) return;
+
+            float scale = where.sizeDelta.x / 287f; // the board's units (the builder's 1280 x 720 board, scaled)
+            Vector2 size = new Vector2(200f * scale, where.sizeDelta.y);
+            ServerPicker picker = new ServerPicker();
+            RectTransform button = NewRect("Server", board, where);
+            button.sizeDelta = size;
+            button.anchoredPosition = where.anchoredPosition + new Vector2(-(200f + 10f) * scale, 0f);
+            Image face = button.gameObject.AddComponent<Image>();
+            CopyLook(face, look);
+            picker.Button = button.gameObject.AddComponent<Button>();
+            picker.Button.targetGraphic = face;
+            picker.Label = NewLabel(button, sample, "SERVER · EUROPE");
+
+            // The list: one row a region, under the button, over the room panel while open.
+            float rowHeight = 30f * scale;
+            RectTransform list = NewRect("ServerList", board, where);
+            list.sizeDelta = new Vector2(size.x, (rowHeight * OnlineRegions.Codes.Length) + (8f * scale));
+            list.anchoredPosition = button.anchoredPosition + new Vector2(0f, -size.y - (4f * scale));
+            Image back = list.gameObject.AddComponent<Image>();
+            CopyLook(back, look);
+            back.color = new Color(0.07f, 0.08f, 0.09f, 0.98f);
+            for (int i = 0; i < OnlineRegions.Codes.Length; i++)
+            {
+                string code = OnlineRegions.Codes[i];
+                RectTransform row = NewRect("Region" + i, list, null);
+                row.anchorMin = new Vector2(0f, 1f);
+                row.anchorMax = new Vector2(1f, 1f);
+                row.pivot = new Vector2(0.5f, 1f);
+                row.sizeDelta = new Vector2(-8f * scale, rowHeight);
+                row.anchoredPosition = new Vector2(0f, -(4f * scale) - (i * rowHeight));
+                Image catcher = row.gameObject.AddComponent<Image>();
+                catcher.color = new Color(1f, 1f, 1f, 0f);
+                Button pick = row.gameObject.AddComponent<Button>();
+                pick.targetGraphic = catcher;
+                ColorBlock colours = pick.colors;
+                colours.highlightedColor = new Color(1f, 1f, 1f, 0.12f);
+                pick.colors = colours;
+                NewLabel(row, sample, OnlineRegions.Names[i]);
+                pick.onClick.AddListener(() =>
+                {
+                    CloseServerLists();
+                    actions?.SetOnlineRegion?.Invoke(code);
+                });
+            }
+
+            list.gameObject.SetActive(false);
+            picker.List = list.gameObject;
+            picker.Button.onClick.AddListener(() =>
+            {
+                bool open = !picker.List.activeSelf;
+                CloseServerLists();
+                if (open)
+                {
+                    picker.List.transform.SetAsLastSibling();
+                    picker.List.SetActive(true);
+                }
+            });
+            serverPickers[at] = picker;
+        }
+
+        private void RenderServerPicker(string at, OnlineScreenModel online)
+        {
+            if (!serverPickers.TryGetValue(at, out ServerPicker picker) || picker.Label == null) return;
+            string region = online.InRoom && !string.IsNullOrEmpty(online.RoomCode) && online.RoomCode.IndexOf('-') > 0
+                ? online.RoomCode.Substring(0, online.RoomCode.IndexOf('-'))
+                : online.ServerRegion;
+            picker.Label.text = $"SERVER · {OnlineRegions.NameOf(region)}";
+            picker.Button.interactable = !online.InRoom;
+            if (online.InRoom && picker.List != null && picker.List.activeSelf) picker.List.SetActive(false);
+        }
+
+        private void CloseServerLists()
+        {
+            foreach (ServerPicker picker in serverPickers.Values)
+                if (picker.List != null && picker.List.activeSelf) picker.List.SetActive(false);
+        }
+
+        private static RectTransform NewRect(string name, Transform parent, RectTransform likeAnchors)
+        {
+            GameObject made = new GameObject(name, typeof(RectTransform));
+            made.layer = parent.gameObject.layer;
+            RectTransform rect = (RectTransform)made.transform;
+            rect.SetParent(parent, false);
+            if (likeAnchors != null)
+            {
+                rect.anchorMin = likeAnchors.anchorMin;
+                rect.anchorMax = likeAnchors.anchorMax;
+                rect.pivot = likeAnchors.pivot;
+            }
+
+            return rect;
+        }
+
+        private static void CopyLook(Image image, Image look)
+        {
+            image.sprite = look.sprite;
+            image.type = look.type;
+            image.pixelsPerUnitMultiplier = look.pixelsPerUnitMultiplier;
+            image.color = look.color;
+        }
+
+        private static Text NewLabel(RectTransform parent, Text sample, string words)
+        {
+            RectTransform rect = NewRect("Label", parent, null);
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            Text text = rect.gameObject.AddComponent<Text>();
+            text.font = sample.font;
+            text.fontSize = sample.fontSize;
+            text.fontStyle = sample.fontStyle;
+            text.color = sample.color;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.raycastTarget = false;
+            text.text = words;
+            return text;
         }
 
         // PRIVATE sits just after the room's name.

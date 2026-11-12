@@ -37,6 +37,7 @@ namespace ConsoleCards.Presentation.UI
         public string SeatNumber = string.Empty;
         public string GameName = string.Empty;
         public string GameDetail = string.Empty;
+        public string ServerRegion = string.Empty; // P8A: the server region picked (a region code)
         public int NotReady;
 
         /// <summary>SEC-3 UI: replaces the READY hint (for example "This table is full…"); empty for the usual hint.</summary>

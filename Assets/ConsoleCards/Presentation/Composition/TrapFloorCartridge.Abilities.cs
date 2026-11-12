@@ -501,9 +501,12 @@ namespace ConsoleCards.Presentation.Composition
         // The deck card being paid for (the Shop's payment flow then buys that card out of the deck).
         internal TabletopObjectId pendingDeckCardId;
 
+        // The same turn: the same turn state, or (owner, 2026-11-10: a client's draw never opened its window) the copy
+        // of it a table rebuild hands back (an Undo step, a table received from the host) for the same game.
         private bool IsAbilityOfferTurn() =>
-            ReferenceEquals(abilityOfferTurnState, host.trapFloorTurnState)
-            && host.trapFloorTurnState != null
+            host.trapFloorTurnState != null
+            && abilityOfferTurnState != null
+            && (ReferenceEquals(abilityOfferTurnState, host.trapFloorTurnState) || abilityOfferTurnState.MatchId.Equals(host.trapFloorTurnState.MatchId))
             && abilityOfferRound == host.trapFloorTurnState.CurrentRound
             && abilityOfferPlayer == host.trapFloorTurnState.ActivePlayerId;
 
@@ -650,8 +653,12 @@ namespace ConsoleCards.Presentation.Composition
         private System.Collections.IEnumerator ShowAbilityOfferAfterDeal()
         {
             yield return new UnityEngine.WaitForSecondsRealtime(AbilityDealSlideSeconds + (AbilityDealStagger * (AbilityOfferSize - 1)) + 0.1f);
-            if (IsAbilityOfferTurn() && !IsPaymentBlocking() && TryGetAbilityDeck(out ContainerState deck) && CountOfferStillInDeck(deck) > 0)
-                ShowAbilityOffer(deck);
+            bool turn = IsAbilityOfferTurn();
+            bool deckFound = TryGetAbilityDeck(out ContainerState deck);
+            int left = deckFound ? CountOfferStillInDeck(deck) : 0;
+            bool paying = IsPaymentBlocking();
+            if (turn && !paying && left > 0) ShowAbilityOffer(deck);
+            else UnityEngine.Debug.Log($"[Abilities] The draw's window did not open: same turn {turn}, payment open {paying}, cards to buy {left} of {abilityOffer.Count}.");
         }
 
         // P8A (owner, 2026-11-10: "a way to end the buying phase"): the turn player is done buying; what is left of this
