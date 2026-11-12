@@ -284,9 +284,11 @@ namespace ConsoleCards.Presentation.Composition
         /// left that may collapse (Survival keeps the Grand Exit), or a collapse waiting for a re-roll. Free never owes one
         /// (owner decision C); Reminders keeps the B02 warning only.
         /// </summary>
-        internal bool FloorTurnCollapseOwed()
+        internal bool FloorTurnCollapseOwed(bool anyLevel = false)
         {
-            if (PlayAssist.Level != PlayAssistLevel.Full) return false;
+            // anyLevel (P8A, owner 2026-11-12): the same conditions, asked by Reminders to warn (never to refuse).
+            if (!anyLevel && PlayAssist.Level != PlayAssistLevel.Full) return false;
+            if (anyLevel && PlayAssist.IsFree) return false;
             if (host.trapFloorTurnState == null || host.trapFloorCollapseState == null || host.trapFloorTemplate == null) return false;
             if (host.trapFloorTurnState.Phase != TrapFloorTurnPhase.FloorTurn || host.trapFloorTurnState.IsCurrentFloorFailed) return false;
             if (host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsWon) return false;

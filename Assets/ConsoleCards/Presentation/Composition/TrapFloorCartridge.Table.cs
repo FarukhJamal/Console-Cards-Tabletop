@@ -260,6 +260,7 @@ namespace ConsoleCards.Presentation.Composition
             if (host.Registry.TryGetCardView(command.FloorCardId, out CardView floorCardView)) RevealFloorCardView(floorCardView);
             host.RefreshCardContentVisibility();
             RefreshTrapFloorStatusUi();
+            host.StartCoroutine(EnsureRevealShownSoon(command.FloorCardId)); // P8A: the screen shows what the table says
         }
 
         private void OnShopCardBought(TrapFloorBuyFromShopCommand command, TrapFloorBuyFromShopResult result)

@@ -1904,6 +1904,38 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
+        private string remindersOverrideKey;
+        private float remindersOverrideAt = -100f;
+
+        // Reminders: what a Full turn would still do before it ends (a collapse owed in a floor turn; a Trap or a Trap's
+        // move still waiting on the turn player). The first press warns; a second press within 15 s ends the turn.
+        private bool RemindersAllowsEnd(bool floorTurn, PlayerId actorForReminder)
+        {
+            string left = null;
+            if (floorTurn && FloorTurnCollapseOwed(anyLevel: true))
+                left = "this floor turn has not collapsed a tile yet. Roll the two floor dice to collapse one";
+            else if (!floorTurn && !actorForReminder.IsEmpty && host.trapFloorAbilityResolutionState != null
+                && (HasPendingLaunchMove(actorForReminder) || TryGetOldestPendingTrap(actorForReminder, out _)))
+            {
+                string name = TryGetOldestPendingTrap(actorForReminder, out TrapFloorTrapResolutionRecord trap) ? trap.Content.DisplayName : "a Trap";
+                left = $"{name} still waits on {FormatPlayerName(actorForReminder)}. Apply it from its popup (or move the pawn where it says)";
+            }
+
+            if (left == null) return true;
+            string key = $"{(floorTurn ? "floor" : "turn")}|{host.trapFloorTurnState.CurrentRound}|{actorForReminder.Value}|{left}";
+            if (remindersOverrideKey == key && Time.unscaledTime - remindersOverrideAt < 15f)
+            {
+                remindersOverrideKey = null;
+                host.FeedbackLine($"Ended anyway (Reminders): {left.Split('.')[0]}.", FeedbackSeverity.Info);
+                return true;
+            }
+
+            remindersOverrideKey = key;
+            remindersOverrideAt = Time.unscaledTime;
+            host.FeedbackLine($"Reminder: {left}, or press {(floorTurn ? "End Floor Turn" : "End Turn")} again to end anyway.", FeedbackSeverity.Warning);
+            return false;
+        }
+
         internal void AdvanceTrapFloorTurn()
         {
             AdvanceTrapFloorTurn(false);
@@ -1957,6 +1989,16 @@ namespace ConsoleCards.Presentation.Composition
             {
                 lastFloorTurnRefusal = "Full: the floor must collapse first. Roll the two floor dice, then End Floor Turn.";
                 host.FeedbackLine(lastFloorTurnRefusal, FeedbackSeverity.Warning);
+                RefreshTrapFloorStatusUi();
+                return;
+            }
+
+            // P8A (owner, 2026-11-12): Reminders enforces nothing, but never ends a turn silently past a rule it would
+            // have applied: it says what is left and the same button pressed again ends the turn anyway.
+            if (PlayAssist.Level == PlayAssistLevel.Reminders && !RemindersAllowsEnd(wasFloorTurn, actorForReminder: wasFloorTurn
+                    ? host.trapFloorTurnState.FloorOperatorPlayerId
+                    : host.trapFloorTurnState.ActivePlayerId))
+            {
                 RefreshTrapFloorStatusUi();
                 return;
             }
@@ -2381,6 +2423,7 @@ namespace ConsoleCards.Presentation.Composition
             if (!result.Succeeded) return false;
             if (host.Registry.TryGetCardView(floorCardId, out CardView floorCardView))
                 RevealFloorCardView(floorCardView);
+            host.StartCoroutine(EnsureRevealShownSoon(floorCardId)); // P8A: the screen shows what the table says
             host.RefreshCardContentVisibility();
             host.activeFloorRevealActivity = result.RevealedActivity;
             flippedName = result.FloorCard.Content.DisplayName;
@@ -3908,12 +3951,11 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             keyRevealedThisLanding = floorCardId; // KEYS-2 / PRIZE-3: this landing's popup comes from the reveal
-            host.ReactToRevealedTile(floorCardId, result.FloorCard.Content.Category.ToString()); // doc 57: a ring in its colour
             bool waits = IsAnyPawnOnFloorCard(floorCardId);
-            // P8A (owner, 2026-11-08): in Full the tile turns over the moment the pawn lands, together with its message
-            // (the pawn hops while it turns, as at the end of a turn), so the player sees what they landed on first.
-            // Free and Reminders keep the table rule: the tile turns once the pawn is off it.
-            if (waits && PlayAssist.Level == PlayAssistLevel.Full)
+            // P8A (owner, 2026-11-12): an automatic landing reveal (Full and Reminders; Free reveals by hand and never
+            // comes here) turns the tile over the moment the pawn lands (the pawn hops while it turns), and only then
+            // shows what it is: the popup, the message and the coloured ring follow the turn-over.
+            if (waits && PlayAssist.Level != PlayAssistLevel.Free)
             {
                 HopPawnsOffFloorCard(floorCardId);
                 waits = false;
@@ -3934,12 +3976,64 @@ namespace ConsoleCards.Presentation.Composition
             host.RefreshCardContentVisibility();
             host.selectionPresenter?.Refresh();
             host.activeFloorRevealActivity = result.RevealedActivity;
+            RefreshTrapFloorStatusUi();
+            if (waits) AnnounceLanding(result, floorCardId, true);
+            else host.StartCoroutine(AnnounceLandingAfterTurnOver(result, floorCardId));
+        }
+
+        private const float LandingTurnOverSeconds = 0.45f;
+
+        // The notification after the tile has turned (owner, 2026-11-12: flip, then the popup and its effect). The
+        // reveal itself is already the table's (accepted above), so nothing waits in the rules; only the showing does.
+        private System.Collections.IEnumerator AnnounceLandingAfterTurnOver(TrapFloorRevealFloorResult result, TabletopObjectId floorCardId)
+        {
+            int round = host.trapFloorTurnState != null ? host.trapFloorTurnState.CurrentRound : -1;
+            PlayerId active = host.trapFloorTurnState != null ? host.trapFloorTurnState.ActivePlayerId : PlayerId.Empty;
+            yield return new WaitForSecondsRealtime(LandingTurnOverSeconds);
+            EnsureRevealShown(floorCardId);
+            if (host.trapFloorTurnState == null || host.trapFloorTurnState.CurrentRound != round || host.trapFloorTurnState.ActivePlayerId != active)
+                yield break; // the turn has moved on meanwhile (Undo, End Turn): its popup is no longer this turn's
+            AnnounceLanding(result, floorCardId, false);
+        }
+
+        private void AnnounceLanding(TrapFloorRevealFloorResult result, TabletopObjectId floorCardId, bool waits)
+        {
+            host.ReactToRevealedTile(floorCardId, result.FloorCard.Content.Category.ToString()); // doc 57: a ring in its colour
             ShowFocusedSearchReveal(result);
             RefreshTrapFloorStatusUi();
             host.ShowMessage(
                 $"{FormatPlayerShortName(result.RevealedActivity.ActorPlayerId)} landed on "
                 + $"{result.FloorCard.Content.DisplayName}."
                 + (waits ? " The tile turns over when the pawn moves off it, or when the turn ends." : string.Empty));
+        }
+
+        /// <summary>
+        /// P8A (owner, 2026-11-12: "the Crane flipped on the guest but not on the moving host's screen"): the table says
+        /// the tile is face up; this screen must show it so. Checked after the turn-over on every computer that turns a
+        /// tile (the landing one and the ones replaying it). A view still showing the back is turned over again; one
+        /// bound to an older copy of the card's state is bound to the table's own first. One [Reveal] warning says which.
+        /// </summary>
+        internal void EnsureRevealShown(TabletopObjectId floorCardId)
+        {
+            if (host.matchState == null || !host.matchState.Cards.TryGetValue(floorCardId, out CardInstanceState state)
+                || state.Face != CardFace.FaceUp
+                || !host.Registry.TryGetCardView(floorCardId, out CardView view) || view == null || !view.IsBound
+                || view.HoldsFaceDown || !view.IsFacePresentationConfigured
+                || view.DisplayedFace == CardFace.FaceUp)
+            {
+                return;
+            }
+
+            bool stale = !ReferenceEquals(view.CardState, state);
+            Debug.LogWarning($"[Reveal] A revealed floor tile still showed its back on this screen ({(stale ? "its view held an older copy of the card" : "its face was not applied")}); turned over now.");
+            if (stale) view.Bind(state, host.coordinateConverter);
+            RevealFloorCardView(view);
+        }
+
+        internal System.Collections.IEnumerator EnsureRevealShownSoon(TabletopObjectId floorCardId)
+        {
+            yield return new WaitForSecondsRealtime(LandingTurnOverSeconds + 0.15f);
+            EnsureRevealShown(floorCardId);
         }
 
         // The pawn on a tile turning at the end of a turn lifts and lands again in place (Presentation only).
@@ -6362,7 +6456,7 @@ namespace ConsoleCards.Presentation.Composition
             if (!HostAllowsMainSlotMove(command, sender)) return false; // R3 (owner, 2026-11-12), every assist level
             if (command is TrapFloorRevealFloorCommand || command is TrapFloorClaimKeyCommand || command is TrapFloorAttemptEscapeCommand)
                 return HostAllowsTileCommand(command, sender); // AUTH-TILE
-            if (command is TrapFloorResolveCollapseCommand && PlayAssist.Level == PlayAssistLevel.Full && !FloorTurnMayCollapse())
+            if (command is TrapFloorResolveCollapseCommand && !PlayAssist.IsFree && !FloorTurnMayCollapse()) // COLLAPSE-ONCE: Reminders too (owner, 2026-11-12: never the same floor turn twice)
             {
                 hostRefusal = "The host refused that: this floor turn has already collapsed a tile."; // COLLAPSE-ONCE
                 return false;
