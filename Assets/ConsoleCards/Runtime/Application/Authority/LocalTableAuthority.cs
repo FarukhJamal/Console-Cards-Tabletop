@@ -18,6 +18,12 @@ namespace ConsoleCards.Application.Authority
         /// <inheritdoc />
         public event Action<object> CommandAccepted;
 
+        /// <summary>
+        /// P8A STAGE-A PHY-5: the result of the last command a handler did not accept (null after an accepted one), so a
+        /// refused replay can say why. Results are status values and error codes, never card contents.
+        /// </summary>
+        public object LastRefusal { get; private set; }
+
         /// <summary>Sets the handler for one command type (a second call for the same type replaces it).</summary>
         public void Register<TCommand, TResult>(Func<TCommand, TResult> handler) where TCommand : class
         {
@@ -45,8 +51,13 @@ namespace ConsoleCards.Application.Authority
                 TResult result = handler(command);
                 if (accepted(result))
                 {
+                    LastRefusal = null;
                     CommandAccepted?.Invoke(command);
                     slot.Listeners?.Invoke(command, result);
+                }
+                else
+                {
+                    LastRefusal = result; // PHY-5
                 }
 
                 return result;

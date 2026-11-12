@@ -561,7 +561,8 @@ namespace ConsoleCards.Presentation.Composition
 
             if (verdict != HostCommandVerdict.Allowed)
             {
-                Debug.Log($"[Authority] Refused {command.GetType().Name} from {member.Name}: {verdict}.");
+                if (command is CommitPhysicalObjectCommand refusedCommit) NotePhysicsRefused(member, refusedCommit, verdict);
+                else Debug.Log($"[Authority] Refused {command.GetType().Name} from {member.Name}: {verdict}.");
                 SendNotice(member, verdict == HostCommandVerdict.RefusedByGame
                     ? host.TrapFloorGame.HostRefusal ?? "The host refused that against its own table."
                     : verdict == HostCommandVerdict.InvalidPosition
@@ -605,9 +606,45 @@ namespace ConsoleCards.Presentation.Composition
                 case ReplayOutcome.OtherTable:
                     break; // made on a table replaced since; the new one is already on its way to them
                 default:
+                    LogReplayRefused(command, outcome, $"sending {member.Name} the host's whole table"); // PHY-5
                     SendTable(member); // it did not fit the host's table: theirs is set right
                     break;
             }
+        }
+
+        // P8A STAGE-A diagnostics (live finding, 2026-11-13 host console: "Refused CommitPhysicalObjectCommand from
+        // Player 1 (2): RefusedByGame" with "Pawn move refused (Full, PlayerIsOut)" several times a second): each refused
+        // physics commit sends the guest the host's whole table again, which puts that piece back on the host's last
+        // accepted state there; if the guest's physics then commits it again, the two computers loop. Counted per guest
+        // and logged at most every 3 s with the rate, so the loop is visible without one line per refusal.
+        private readonly Dictionary<Guid, (int Count, int Logged, float NextLog, float Since, float Last)> physicsRefusals =
+            new Dictionary<Guid, (int Count, int Logged, float NextLog, float Since, float Last)>();
+
+        private void NotePhysicsRefused(Member member, CommitPhysicalObjectCommand commit, HostCommandVerdict verdict)
+        {
+            float now = Time.unscaledTime;
+            Guid key = member.Player;
+            physicsRefusals.TryGetValue(key, out var entry);
+            if (entry.Count > 0 && now - entry.Last > 10f) entry = default; // a new episode
+            if (entry.Count == 0) entry.Since = now;
+            entry.Count++;
+            entry.Last = now;
+            if (now >= entry.NextLog)
+            {
+                int fresh = entry.Count - entry.Logged;
+                float span = Mathf.Max(0.001f, now - entry.Since);
+                string kind = host.matchState != null && host.matchState.ContainsObject(commit.ObjectId)
+                    ? host.matchState.GetObject(commit.ObjectId).Kind.ToString()
+                    : "unknown piece";
+                Debug.LogWarning($"[PhysDiag] Host refused {fresh} physics commit(s) from {member.Name} since the last note "
+                    + $"({entry.Count} in {span:0.0} s, {entry.Count / span:0.0}/s): latest {kind} {commit.State?.Mode}, {verdict}"
+                    + $"{(verdict == HostCommandVerdict.RefusedByGame && host.TrapFloorGame.HostRefusal != null ? " — " + host.TrapFloorGame.HostRefusal : string.Empty)}. "
+                    + "Each refusal sends them the host's whole table, which puts the piece back on the host's accepted state there.");
+                entry.Logged = entry.Count;
+                entry.NextLog = now + 3f;
+            }
+
+            physicsRefusals[key] = entry;
         }
 
         private void ClientCommand(byte[] message)
@@ -620,7 +657,37 @@ namespace ConsoleCards.Presentation.Composition
             host.TrapFloorGame.AnnounceOutChanges(outBefore);
             if (outcome == ReplayOutcome.AlreadyApplied && command is CommitPhysicalObjectCommand own)
                 TakeHostDieResult(own); // AUTH-DICE: our own throw came back; a rules die shows the host's result
-            if (outcome == ReplayOutcome.Rejected || outcome == ReplayOutcome.Unknown) RequestTable("a change from the host did not fit this table");
+            if (outcome == ReplayOutcome.Rejected || outcome == ReplayOutcome.Unknown)
+            {
+                LogReplayRefused(command, outcome, "asking the host for the whole table");
+                RequestTable("a change from the host did not fit this table");
+            }
+        }
+
+        // P8A STAGE-A PHY-5 (owner, 2026-11-13): a replayed command that did not fit says what it was and why, before the
+        // whole table is asked for or sent: its type, a short safe id (the first 8 hex digits of its command id), the
+        // seat it came from and the handler's own result (a status or error code). No card identity, no table contents.
+        private void LogReplayRefused(object command, ReplayOutcome outcome, string next)
+        {
+            CommandContext context = Replicated.ContextOf(command);
+            string id = context.Id.IsEmpty ? "none" : context.Id.Value.ToString("N").Substring(0, 8);
+            string reason = outcome == ReplayOutcome.Unknown
+                ? "no handler for this command type on this table"
+                : string.IsNullOrEmpty(Replicated.LastReplayRefusal) ? "refused (no reason given)" : Replicated.LastReplayRefusal;
+            string mode = command is CommitPhysicalObjectCommand commit && commit.State != null ? $", physical mode {commit.State.Mode}" : string.Empty;
+            Debug.LogWarning($"[Online] Replay {outcome}: {command.GetType().Name} {id} from {SeatLabel(context.RequestedByPlayerId)}{mode}: "
+                + $"{reason} (table revision {host.matchState?.Revision ?? -1}); {next}.");
+        }
+
+        private string SeatLabel(PlayerId player)
+        {
+            if (player.IsEmpty) return "no seat";
+            for (int i = 0; i < members.Count; i++)
+            {
+                if (members[i].Player == player.Value) return $"{members[i].Name}{(members[i].IsHost ? " (host)" : string.Empty)}";
+            }
+
+            return "a seat with no member here";
         }
 
         // P8A (owner, 2026-11-10: "I saw the slide on the client, not on the host"): an Ability card another computer
@@ -1079,35 +1146,8 @@ namespace ConsoleCards.Presentation.Composition
         private ulong TableHash() => MatchHash(host.matchState) + (host.GameStateHash() * 41UL);
 
         // The table's state as one number, whatever order its parts were added in on each computer.
-        private static ulong MatchHash(MatchState match)
-        {
-            return Sum(match.Cards) * 3UL
-                + Sum(match.Pawns) * 5UL
-                + Sum(match.Tokens) * 7UL
-                + Sum(match.Dice) * 11UL
-                + Sum(match.Containers) * 13UL
-                + Sum(match.ContainerPlacements) * 17UL
-                + Sum(match.Seats) * 19UL
-                + Sum(match.PlacedConsoles) * 23UL
-                + Sum(match.PlacedBoards) * 29UL
-                + Sum(match.PlayAreas) * 31UL;
-        }
-
-        private static ulong Sum<TKey, TValue>(IReadOnlyDictionary<TKey, TValue> items)
-        {
-            ulong sum = (ulong)items.Count;
-            foreach (KeyValuePair<TKey, TValue> item in items)
-            {
-                byte[] bytes = TableWire.Write(item.Value, false);
-                ulong hash = TableWire.Hash(bytes, 0, bytes.Length);
-                hash ^= hash >> 33;
-                hash *= 0xFF51AFD7ED558CCDUL;
-                hash ^= hash >> 33;
-                sum += hash;
-            }
-
-            return sum;
-        }
+        // P8A STAGE-A PHY-3: the same record hash the regression tests compare (Runtime TableStateHash).
+        private static ulong MatchHash(MatchState match) => TableStateHash.Of(match);
 
         // ---------- pieces in a hand ----------
 
@@ -1174,6 +1214,93 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
+        // P8A STAGE-A PHY-6 (owner, 2026-11-13: "MsgPoses relays are not validated against the actual controlling
+        // peer"): the host checks every streamed pose against its own table before using it or passing it on. The
+        // sender is the connection's member (its seat), never anything in the message. A pose is kept only for a loose
+        // piece the host's table has held by that very player (PoseRelayPolicy); the rest are dropped, counted and
+        // logged at most every few seconds. Only the kept poses are sent on to the other guests.
+        private readonly TabletopObjectId[] relayIds = new TabletopObjectId[MaxPoses];
+        private readonly Vector3[] relayPositions = new Vector3[MaxPoses];
+        private readonly Quaternion[] relayRotations = new Quaternion[MaxPoses];
+        private int refusedPoses;
+        private int refusedPosesLogged;
+        private float refusedPosesLogAt = -1f;
+        private PoseRelayVerdict lastPoseRefusal;
+        private string lastPoseRefusedFrom = string.Empty;
+
+        private void HostRelayPoses(Member member, byte[] data)
+        {
+            LocalPhysicalObjectAuthority physics = host.physicalAuthority;
+            if (physics == null || !sharedTable || applying || host.matchState == null) return;
+            PlayerId sender = member == null || member.Player == Guid.Empty ? PlayerId.Empty : new PlayerId(member.Player);
+            int kept = 0;
+            try
+            {
+                BinaryReader reader = Reader(data);
+                reader.ReadByte();
+                int count = Math.Min((int)reader.ReadByte(), MaxPoses);
+                for (int i = 0; i < count; i++)
+                {
+                    TabletopObjectId id = new TabletopObjectId(ReadGuid(reader));
+                    float px = reader.ReadSingle(), py = reader.ReadSingle(), pz = reader.ReadSingle();
+                    float rx = reader.ReadSingle(), ry = reader.ReadSingle(), rz = reader.ReadSingle(), rw = reader.ReadSingle();
+                    PoseRelayVerdict verdict = PoseRelayPolicy.Check(host.matchState, sender, id, px, py, pz, rx, ry, rz, rw);
+                    if (verdict != PoseRelayVerdict.Allowed)
+                    {
+                        NotePoseRefused(member, verdict);
+                        continue;
+                    }
+
+                    relayIds[kept] = id;
+                    relayPositions[kept] = new Vector3(px, py, pz);
+                    relayRotations[kept] = new Quaternion(rx, ry, rz, rw);
+                    kept++;
+                }
+            }
+            catch (EndOfStreamException)
+            {
+                NotePoseRefused(member, PoseRelayVerdict.InvalidPose); // a cut-off message: what was read and checked is kept
+            }
+
+            if (kept == 0) return;
+            for (int i = 0; i < kept; i++) physics.FollowRemote(relayIds[i], relayPositions[i], relayRotations[i]);
+            BeginMessage(MsgPoses);
+            writer.Write((byte)kept);
+            for (int i = 0; i < kept; i++)
+            {
+                WriteGuid(relayIds[i].Value);
+                writer.Write(relayPositions[i].x);
+                writer.Write(relayPositions[i].y);
+                writer.Write(relayPositions[i].z);
+                writer.Write(relayRotations[i].x);
+                writer.Write(relayRotations[i].y);
+                writer.Write(relayRotations[i].z);
+                writer.Write(relayRotations[i].w);
+            }
+
+            Flush();
+            for (int i = 0; i < members.Count; i++)
+            {
+                Member other = members[i];
+                if (other == member || other.IsHost || !other.Connected || other.Connection < 0) continue;
+                if (IsWatcher(other)) continue; // SEC-3
+                session.SendTo(other.Connection, outStream.GetBuffer(), 0, (int)outStream.Length);
+            }
+        }
+
+        private void NotePoseRefused(Member member, PoseRelayVerdict verdict)
+        {
+            refusedPoses++;
+            lastPoseRefusal = verdict;
+            lastPoseRefusedFrom = member?.Name ?? "?";
+            if (Time.unscaledTime < refusedPosesLogAt) return;
+            refusedPosesLogAt = Time.unscaledTime + 5f;
+            Debug.Log($"[Authority] PHY-6: dropped {refusedPoses - refusedPosesLogged} streamed pose(s) since the last note "
+                + $"({refusedPoses} in all); latest from {lastPoseRefusedFrom}: {lastPoseRefusal}. Only the player who holds a "
+                + "piece on the host's table may move it.");
+            refusedPosesLogged = refusedPoses;
+        }
+
         // ---------- reading the table's messages ----------
 
         private void HostReadTable(Member member, byte type, byte[] data)
@@ -1197,15 +1324,7 @@ namespace ConsoleCards.Presentation.Composition
                     if (sharedTable) SendTable(member);
                     break;
                 case MsgPoses:
-                    ApplyPoses(data);
-                    for (int i = 0; i < members.Count; i++)
-                    {
-                        Member other = members[i];
-                        if (other == member || other.IsHost || !other.Connected || other.Connection < 0) continue;
-                        if (IsWatcher(other)) continue; // SEC-3
-                        session.SendTo(other.Connection, data, 0, data.Length);
-                    }
-
+                    HostRelayPoses(member, data); // PHY-6: only the poses this connection's player may stream
                     break;
                 case MsgDeal:
                     HostDeal(member, data);

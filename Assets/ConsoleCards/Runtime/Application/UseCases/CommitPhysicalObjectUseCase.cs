@@ -20,11 +20,12 @@ namespace ConsoleCards.Application.UseCases
     {
         public CommitPhysicalObjectCommand(CommandContext context, TabletopObjectId objectId,
             PhysicalObjectState state, long expectedPhysicalRevision, int? settledDieValue = null,
-            AuthoritativeActionRecordMode recordMode = AuthoritativeActionRecordMode.None)
+            AuthoritativeActionRecordMode recordMode = AuthoritativeActionRecordMode.None, TabletopPose? layoutPose = null)
         {
             Context = context; ObjectId = objectId; State = state; ExpectedPhysicalRevision = expectedPhysicalRevision;
             SettledDieValue = settledDieValue;
             RecordMode = recordMode;
+            LayoutPose = layoutPose;
         }
         public CommandContext Context { get; }
         public TabletopObjectId ObjectId { get; }
@@ -32,6 +33,14 @@ namespace ConsoleCards.Application.UseCases
         public long ExpectedPhysicalRevision { get; }
         public int? SettledDieValue { get; }
         public AuthoritativeActionRecordMode RecordMode { get; }
+
+        /// <summary>
+        /// P8A STAGE-A PHY-3 (owner, 2026-11-13: "forced movement must produce one canonical destination and pose"): the
+        /// table pose a placement by the game (a forced Trap move, a piece the game sets down) gives the object, applied by
+        /// the use case in the same accepted action as the physical state, on every computer that runs the command (host
+        /// and replays alike). Null: the pose is left as it is (a player's own drag, a throw, a settle).
+        /// </summary>
+        public TabletopPose? LayoutPose { get; }
     }
 
     /// <summary>Accepts outcomes only from the authority's simulation adapter. No surface check on release/settlement.</summary>
@@ -69,6 +78,7 @@ namespace ConsoleCards.Application.UseCases
             }
             else if (obj.Kind == TabletopObjectKind.Die && command.State.Mode == PhysicalObjectMode.Sleeping)
                 return CommandResult.Failure(CommandResultStatus.Invalid);
+            if (command.LayoutPose.HasValue) obj.SetPose(command.LayoutPose.Value); // PHY-3: inside the command, never beside it
             obj.SetPhysicalState(command.State);
             if (die != null) die.SetAcceptedRoll(new DieRoll(die.SideCount, command.SettledDieValue.Value));
             match.RecordPhysicalCommand(command.Context.Id);

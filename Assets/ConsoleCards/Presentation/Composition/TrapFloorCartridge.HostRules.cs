@@ -653,8 +653,30 @@ namespace ConsoleCards.Presentation.Composition
                 return HostAllowsPawnMove(sender, move.ObjectId, move.TargetPose.Position);
             // A pawn held in the hand is not placed anywhere yet; its release and its resting place are checked.
             if (command is CommitPhysicalObjectCommand commit && (commit.State == null || commit.State.Mode != PhysicalObjectMode.Held))
+            {
+                if (!LayoutPoseAgrees(commit)) return false;
                 return HostAllowsPawnMove(sender, commit.ObjectId, CommitTablePosition(commit));
+            }
+
             return true;
+        }
+
+        // P8A STAGE-A PHY-3: one canonical destination. A game placement's table pose (LayoutPose) must name the same
+        // floor tile as its resting place, so a pawn can never rest on one tile while the table's pose says another.
+        private bool LayoutPoseAgrees(CommitPhysicalObjectCommand commit)
+        {
+            if (!commit.LayoutPose.HasValue || host.trapFloorTemplate == null || host.matchState == null) return true;
+            if (!TryGetPawnOwner(commit.ObjectId, out _, out _)) return true; // only a player's pawn is read by tile
+            TableCoordinate? resting = CommitTablePosition(commit);
+            if (!resting.HasValue) return true; // no converter here: the move rules decide alone
+            TrapFloorCoordinate? layoutTile = host.trapFloorTemplate.TryGetFloorCoordinateAt(
+                host.matchState, commit.LayoutPose.Value.Position, out TrapFloorCoordinate a) ? a : (TrapFloorCoordinate?)null;
+            TrapFloorCoordinate? restingTile = host.trapFloorTemplate.TryGetFloorCoordinateAt(
+                host.matchState, resting.Value, out TrapFloorCoordinate b) ? b : (TrapFloorCoordinate?)null;
+            if (layoutTile == restingTile) return true;
+            hostRefusal = "The host refused that: the pawn's resting place and its tile disagree.";
+            Debug.Log("[Authority] Pawn placement refused: its resting place and its table pose name different tiles (PHY-3).");
+            return false;
         }
     }
 }

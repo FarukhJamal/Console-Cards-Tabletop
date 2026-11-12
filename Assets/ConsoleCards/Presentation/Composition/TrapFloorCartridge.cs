@@ -2424,12 +2424,13 @@ namespace ConsoleCards.Presentation.Composition
                 // when the host's physics put it to sleep. The pawn is put down at rest on its tile instead (as a
                 // player's own pawn step is): one logical move, one revision.
                 PhysicalObjectState resting = pawnView.PhysicalObject.RestingOnTable(placed); // on what is under it (a floor card)
-                // P7 (s158) UNDO-POSE: the table's pose is set as part of the same accepted move (before the commit), so the
-                // Undo snapshot recorded when it is accepted holds the pawn on its new tile (live run s157: after a Key's
-                // return to start, Undo of the next move put the pawn back on the Key tile).
-                TabletopObjectState autoMoved = host.matchState.GetObject(pawn.BaseState.Id);
-                TabletopPose autoPoseBefore = autoMoved.Pose;
-                autoMoved.SetPose(new TabletopPose(targetPose.Position, autoPoseBefore.RotationDegrees, autoPoseBefore.Layer, autoPoseBefore.LocalOrder));
+                // P7 (s158) UNDO-POSE: the table's pose is part of the same accepted move, so the Undo snapshot recorded
+                // when it is accepted holds the pawn on its new tile (live run s157: after a Key's return to start, Undo of
+                // the next move put the pawn back on the Key tile).
+                // P8A STAGE-A PHY-3 (owner, 2026-11-13): the pose now travels INSIDE the command (LayoutPose), so the host
+                // and every guest that replays it set the same pose. It was set beside the command, on this computer only,
+                // and the tables' record hashes then differed ("this table differed from the host's").
+                TabletopPose autoPoseBefore = pawn.BaseState.Pose;
                 moved = host.TableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(
                     new CommitPhysicalObjectCommand(
                         host.CreateCommandContext(player),
@@ -2437,8 +2438,8 @@ namespace ConsoleCards.Presentation.Composition
                         resting,
                         pawn.BaseState.PhysicalRevision,
                         null,
-                        AuthoritativeActionRecordMode.Transaction)).Succeeded;
-                if (!moved) autoMoved.SetPose(autoPoseBefore);
+                        AuthoritativeActionRecordMode.Transaction,
+                        new TabletopPose(targetPose.Position, autoPoseBefore.RotationDegrees, autoPoseBefore.Layer, autoPoseBefore.LocalOrder))).Succeeded;
             }
             else
             {

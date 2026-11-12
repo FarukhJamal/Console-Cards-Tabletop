@@ -100,6 +100,10 @@ namespace ConsoleCards.Application.Authority
             if (command is CommitPhysicalObjectCommand commit)
             {
                 if (commit.State == null) return true; // the use case refuses it
+                if (commit.LayoutPose.HasValue // PHY-3: the game's layout pose travels with the commit
+                    && !(Sane(commit.LayoutPose.Value.Position.X) && Sane(commit.LayoutPose.Value.Position.Y)
+                        && Finite(commit.LayoutPose.Value.RotationDegrees)))
+                    return false;
                 return Sane(commit.State.Position.X) && Sane(commit.State.Position.Y) && Sane(commit.State.Position.Z)
                     && Finite(commit.State.Rotation.X) && Finite(commit.State.Rotation.Y)
                     && Finite(commit.State.Rotation.Z) && Finite(commit.State.Rotation.W);

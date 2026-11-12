@@ -816,12 +816,12 @@ namespace ConsoleCards.Presentation.Composition
                 // 0.9–1.5 m … without a player action", one more revision for every guest each time). A piece the game
                 // places is put down at rest on what is under it, as the game's own pawn moves are.
                 placed = piece.PhysicalObject.RestingOnTable(placed);
-                // P7 (s158) the table's pose moves with it, in the same accepted action (the physical commit records only the
-                // physical state): readers of the pose (the collapsed pile's "still in its cell" check, the Undo snapshot,
-                // every guest) see the piece where it now is. Before this every collapsed tile was slid to the pile again
-                // after each floor turn.
+                // P7 (s158) the table's pose moves with it, in the same accepted action: readers of the pose (the collapsed
+                // pile's "still in its cell" check, the Undo snapshot, every guest) see the piece where it now is. Before
+                // this every collapsed tile was slid to the pile again after each floor turn.
+                // P8A STAGE-A PHY-3 (owner, 2026-11-13): the pose travels inside the command (LayoutPose), so every computer
+                // that runs it sets it; it was set beside the command on this computer only (guests never got it).
                 TabletopPose poseBefore = state.Pose;
-                state.SetPose(new TabletopPose(pose.Position, poseBefore.RotationDegrees, pose.Layer, poseBefore.LocalOrder));
                 accepted = TableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(
                     new CommitPhysicalObjectCommand(
                         CreateCommandContext(),
@@ -829,8 +829,8 @@ namespace ConsoleCards.Presentation.Composition
                         placed,
                         state.PhysicalRevision,
                         null,
-                        AuthoritativeActionRecordMode.Transaction)).Succeeded;
-                if (!accepted) state.SetPose(poseBefore);
+                        AuthoritativeActionRecordMode.Transaction,
+                        new TabletopPose(pose.Position, poseBefore.RotationDegrees, pose.Layer, poseBefore.LocalOrder))).Succeeded;
             }
 
             if (accepted) piece.ApplyAcceptedState();

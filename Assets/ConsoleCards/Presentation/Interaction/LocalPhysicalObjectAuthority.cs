@@ -115,7 +115,12 @@ namespace ConsoleCards.Presentation.Interaction
             int? value,
             AuthoritativeActionRecordMode recordMode)
         {
-            if (IsLocalPlayer != null && !IsLocalPlayer(state.ControllingPlayerId)) return false; // MP-2: its own computer commits it
+            if (IsLocalPlayer != null && !IsLocalPlayer(state.ControllingPlayerId))
+            {
+                NoteRefused(view, state, "another computer's player controls it; only that computer commits it"); // PHY-4
+                return false; // MP-2: its own computer commits it
+            }
+
             // PRIVACY-P4: a door that takes no physics commits (the private view's) is not asked every frame.
             if (!tableAuthority.CanSubmit<CommitPhysicalObjectCommand>()) return false;
             if (!view.IsBound || !match.ContainsObject(view.ObjectId)
@@ -124,7 +129,42 @@ namespace ConsoleCards.Presentation.Interaction
                 new CommandContext(CommandId.New(), match.Id, state.ControllingPlayerId, match.Revision),
                 view.ObjectId, state, view.BoundState.PhysicalRevision, value, recordMode);
             if (value.HasValue && RulesDieResult != null) command = RulesDieResult(command) ?? command; // FAIR-DICE
-            return tableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(command).Succeeded;
+            CommandResult result = tableAuthority.Submit<CommitPhysicalObjectCommand, CommandResult>(command);
+            if (!result.Succeeded) NoteRefused(view, state, "the table refused it (" + ReplicatedTableAuthority.DescribeRefusal(result) + ")"); // PHY-4
+            return result.Succeeded;
+        }
+
+        // P8A STAGE-A PHY-4 (owner, 2026-11-13: "move the unauthorized-commit warning to the point where an unauthorized
+        // commit is actually rejected"): a refused commit is logged here, where it is refused, at most once per piece
+        // every 5 s with how many were refused meanwhile (a computer that does not control a moving piece tries once a
+        // checkpoint, so one line per refusal would flood the Console). Names the piece's kind and short id only.
+        private readonly Dictionary<TabletopObjectId, (int Count, float NextLog)> refusedCommits =
+            new Dictionary<TabletopObjectId, (int Count, float NextLog)>();
+
+        private void NoteRefused(TabletopObjectView view, PhysicalObjectState state, string why)
+        {
+            if (view == null || state == null) return;
+            refusedCommits.TryGetValue(view.ObjectId, out var entry);
+            entry.Count++;
+            float now = Time.unscaledTime;
+            if (now >= entry.NextLog)
+            {
+                PhysicalObjectState bound = view.IsBound ? view.BoundState.PhysicalState : null;
+                string distance = string.Empty;
+                if (bound != null)
+                {
+                    float dx = state.Position.X - bound.Position.X, dy = state.Position.Y - bound.Position.Y, dz = state.Position.Z - bound.Position.Z;
+                    distance = $", {Mathf.Sqrt(dx * dx + dy * dy + dz * dz):0.00} m from its accepted {bound.Mode} place";
+                }
+
+                Debug.Log($"[Physics] Commit refused here: {view.GetType().Name.Replace("View", string.Empty)} "
+                    + $"{view.ObjectId.Value.ToString("N").Substring(0, 8)} {state.Mode}{distance}: {why} "
+                    + $"({entry.Count} refused since the last note).");
+                entry.Count = 0;
+                entry.NextLog = now + 5f;
+            }
+
+            refusedCommits[view.ObjectId] = entry;
         }
 
         internal bool Commit(TabletopObjectView view, PhysicalObjectState state, int? value)

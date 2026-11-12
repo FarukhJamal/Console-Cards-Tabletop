@@ -178,6 +178,154 @@ namespace ConsoleCards.Presentation.Interaction
         /// <summary>PHYS-DEDUP: how often a piece at an accepted rest was held there instead of committing a hair's move.</summary>
         public int RestingJitterSnaps => restingJitterSnaps;
 
+        // ---------- P8A STAGE-A PHY-1: correction diagnostics (no behaviour change) ----------
+        // Owner, 2026-11-13: "instrument the existing resting-pawn correction mechanism… rate-limited structured logging".
+        // For a pawn, every correction back to its accepted rest (knocked / jitter / resting-jitter) is measured BEFORE it
+        // is made and gathered in a window of CorrectionWindowSeconds. At the window's end one line is written when it had
+        // CorrectionLogMinimum or more corrections, or any one of 5 cm or more: the pawn's short id and controlling
+        // player (this computer's or another's), accepted and actual place and turn, the largest move and turn undone,
+        // speed and spin, the rate, the body's state, and what is under the pawn and overlapping it at its accepted place
+        // (kinds only: Pawn, Card, Die, Board…; no card identity). Other pieces are counted, not logged.
+        // A second note ("rewound") is written when this computer's own resting pawn is put back to a MOVING state by the
+        // table (a whole table, or a host correction after a refusal): that is another movement source, not physics.
+        private const float CorrectionWindowSeconds = 2f;
+        private const int CorrectionLogMinimum = 3;
+
+        private struct CorrectionWindow
+        {
+            public int Count;
+            public float WindowStart;
+            public int Knocked, Jitter, RestingJitter;
+            public float MaxMove, MaxTurn, MaxSpeed, MaxSpin;
+            public Vector3 Actual;
+            public Quaternion ActualRotation;
+            public bool WasSleeping;
+            public int Total;
+        }
+
+        private CorrectionWindow corrections;
+        private int correctionWindowsLogged;
+        private static readonly Collider[] diagOverlaps = new Collider[12];
+        private static readonly RaycastHit[] diagHits = new RaycastHit[8];
+        private int rewound;
+        private float rewoundSince = -1f, rewoundNextLog;
+        private float rewoundLastDistance;
+
+        /// <summary>PHY-1: all corrections of this piece back to its accepted rest since it was made.</summary>
+        public int CorrectionsTotal => corrections.Total;
+
+        private void NoteCorrection(string source)
+        {
+            if (applied == null || body == null) return;
+            float now = Time.unscaledTime;
+            if (corrections.Count == 0) corrections.WindowStart = now;
+            corrections.Count++;
+            corrections.Total++;
+            if (source == "knocked") corrections.Knocked++;
+            else if (source == "jitter") corrections.Jitter++;
+            else corrections.RestingJitter++;
+            float move = (body.position - Vector(applied.Position)).magnitude;
+            float turn = Quaternion.Angle(body.rotation, Rotation(applied.Rotation));
+            if (move >= corrections.MaxMove)
+            {
+                corrections.MaxMove = move;
+                corrections.Actual = body.position;
+                corrections.ActualRotation = body.rotation;
+            }
+
+            corrections.MaxTurn = Mathf.Max(corrections.MaxTurn, turn);
+            corrections.MaxSpeed = Mathf.Max(corrections.MaxSpeed, body.linearVelocity.magnitude);
+            corrections.MaxSpin = Mathf.Max(corrections.MaxSpin, body.angularVelocity.magnitude);
+            corrections.WasSleeping |= body.IsSleeping();
+        }
+
+        private void FlushCorrections()
+        {
+            CorrectionWindow w = corrections;
+            int total = w.Total;
+            corrections = default;
+            corrections.Total = total;
+            if (!(view is PawnView) || applied == null || body == null) return;
+            if (w.Count < CorrectionLogMinimum && w.MaxMove < 0.05f) return;
+            float span = Mathf.Max(0.001f, Time.unscaledTime - w.WindowStart);
+            correctionWindowsLogged++;
+            Vector3 accepted = Vector(applied.Position);
+            Quaternion acceptedRotation = Rotation(applied.Rotation);
+            bool local = authority.IsLocalPlayer == null || authority.IsLocalPlayer(applied.ControllingPlayerId);
+            Debug.LogWarning("[PhysDiag] PHY-1 pawn " + ShortId(view.ObjectId.Value) + " (controlled by "
+                + (applied.ControllingPlayerId.IsEmpty ? "nobody" : ShortId(applied.ControllingPlayerId.Value))
+                + (local ? ", this computer" : ", another computer") + "): "
+                + $"{w.Count} correction(s) in {span:0.0} s ({w.Count / span:0.0}/s; knocked {w.Knocked}, jitter {w.Jitter}, "
+                + $"resting-jitter {w.RestingJitter}; {total} in all) with no player action. "
+                + $"Accepted {applied.Mode} at {Fmt(accepted)} yaw {acceptedRotation.eulerAngles.y:0}°; worst actual {Fmt(w.Actual)} "
+                + $"tilt {Vector3.Angle(w.ActualRotation * Vector3.up, Vector3.up):0}°; largest undone {w.MaxMove * 100f:0.0} cm / {w.MaxTurn:0.0}°; "
+                + $"speed up to {w.MaxSpeed:0.00} m/s, spin up to {w.MaxSpin:0.0} rad/s; body {(body.isKinematic ? "kinematic" : "dynamic")}"
+                + $"{(w.WasSleeping ? ", asleep at times" : ", awake")}. {DescribeSurroundings()}");
+        }
+
+        // Cheap queries, run only when a window is logged: what is under the pawn at its accepted place, and what its
+        // box overlaps there (the box is shrunk a little, so the surface it rests on is not counted as an overlap).
+        private string DescribeSurroundings()
+        {
+            if (physicalCollider == null) return "Support: no collider.";
+            Bounds bounds = physicalCollider.bounds;
+            string support = "NONE within 3 cm below";
+            int hits = Physics.RaycastNonAlloc(bounds.center, Vector3.down, diagHits, bounds.extents.y + 0.03f, ~0, QueryTriggerInteraction.Ignore);
+            float nearest = float.MaxValue;
+            for (int i = 0; i < hits; i++)
+            {
+                if (IsOwnCollider(diagHits[i].collider) || diagHits[i].distance >= nearest) continue;
+                nearest = diagHits[i].distance;
+                support = KindOf(diagHits[i].collider) + $" ({(diagHits[i].distance - bounds.extents.y) * 100f:0.0} cm gap)";
+            }
+
+            int count = Physics.OverlapBoxNonAlloc(bounds.center, bounds.extents * 0.9f, diagOverlaps, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
+            string overlaps = string.Empty;
+            int others = 0;
+            for (int i = 0; i < count; i++)
+            {
+                if (IsOwnCollider(diagOverlaps[i])) continue;
+                others++;
+                if (others <= 4) overlaps += (overlaps.Length > 0 ? ", " : string.Empty) + KindOf(diagOverlaps[i]);
+            }
+
+            return $"Support: {support}. Overlapping at the accepted place: {(others == 0 ? "none" : others + " (" + overlaps + (others > 4 ? ", …" : string.Empty) + ")")}.";
+        }
+
+        private bool IsOwnCollider(Collider other) => other == null || other.attachedRigidbody == body || other.transform.IsChildOf(transform);
+
+        private static string KindOf(Collider other)
+        {
+            TabletopObjectView piece = other.GetComponentInParent<TabletopObjectView>();
+            if (piece != null) return piece.GetType().Name.Replace("View", string.Empty) + (other.attachedRigidbody != null && !other.attachedRigidbody.isKinematic ? "" : " (fixed)");
+            return other.attachedRigidbody != null ? "a moving body" : "the table or board";
+        }
+
+        // Called from ApplyAccepted with the state it replaces: this computer's own pawn, resting, sent back to a moving
+        // state by the table (not a player's action here) is counted and noted at most every 3 s.
+        private void NoteRewound(PhysicalObjectState previous, PhysicalObjectState next)
+        {
+            if (!(view is PawnView) || previous == null || next == null || held || userActionActive || compoundActionActive) return;
+            if (previous.Mode != PhysicalObjectMode.Sleeping && previous.Mode != PhysicalObjectMode.SleepingUnresolved) return;
+            if (next.Mode != PhysicalObjectMode.Dynamic) return;
+            if (authority.IsLocalPlayer == null || !authority.IsLocalPlayer(next.ControllingPlayerId)) return;
+            float now = Time.unscaledTime;
+            if (rewound == 0 || now - rewoundSince > 10f) { rewound = 0; rewoundSince = now; }
+            rewound++;
+            rewoundLastDistance = (Vector(previous.Position) - Vector(next.Position)).magnitude;
+            if (now < rewoundNextLog) return;
+            rewoundNextLog = now + 3f;
+            float span = Mathf.Max(0.001f, now - rewoundSince);
+            Debug.LogWarning("[PhysDiag] PHY-1 pawn " + ShortId(view.ObjectId.Value) + ": its accepted rest on this computer was replaced "
+                + $"by an older MOVING state from the table ({rewoundLastDistance:0.00} m away, speed {Vector(next.Velocity).magnitude:0.00} m/s, "
+                + $"spin {Vector(next.AngularVelocity).magnitude:0.0} rad/s): it moves again from there with no player action "
+                + $"({rewound} time(s) in {span:0.0} s). Source: a whole table or a host correction, not this computer's physics.");
+        }
+
+        private static string ShortId(Guid value) => value.ToString("N").Substring(0, 8);
+
+        private static string Fmt(Vector3 v) => $"({v.x:0.000}, {v.y:0.000}, {v.z:0.000})";
+
         // A body that woke without anyone moving it, still within a centimetre and about a degree of the resting state
         // this table accepted for it. Anything larger (a real push, a fall, a throw) is a move and is committed as before.
         private bool IsRestingJitter()
@@ -312,6 +460,7 @@ namespace ConsoleCards.Presentation.Interaction
             RestoreContainedSmoothing();
             PhysicalObjectState state = view.BoundState.PhysicalState;
             if (state == null || ReferenceEquals(state, applied)) return;
+            NoteRewound(applied, state); // PHY-1 diagnostics: a resting pawn of ours sent moving again by the table
             bool stateHeld = state.Mode == PhysicalObjectMode.Held;
             // HOLD-RESTORE (live test, 2026-11-06): online, a hold by this computer's own player can arrive in a whole
             // table while no pointer here holds the piece (the host kept the pick-up of a move it then refused, and sent
@@ -982,6 +1131,7 @@ namespace ConsoleCards.Presentation.Interaction
         internal void Tick()
         {
             if (view == null || !view.IsBound || !gameObject.activeInHierarchy) return;
+            if (corrections.Count > 0 && Time.unscaledTime - corrections.WindowStart >= CorrectionWindowSeconds) FlushCorrections(); // PHY-1
             Synchronize();
             if (!OwnsLooseTransform || held || body.isKinematic) return;
             if (body.position.y < recoveryHeight) { RecoverOutOfBounds(); return; } // NaN height never recovers
@@ -1050,12 +1200,12 @@ namespace ConsoleCards.Presentation.Interaction
             }
             else if (IsKnockedFromRest())
             {
-                if ((body.position - Vector(applied.Position)).sqrMagnitude > 0.05f * 0.05f)
-                {
-                    knockedPawnSnaps++;
-                    Debug.Log($"[Physics] {name} was knocked from its place without a player's move: back where the table put it ({knockedPawnSnaps}).");
-                }
+                // P8A STAGE-A PHY-1: every correction is measured (before it is made) and reported in rate-limited windows
+                // by CorrectionDiagnostics below, with what is under and around the pawn; no line per correction any more.
+                bool knockedFar = (body.position - Vector(applied.Position)).sqrMagnitude > 0.05f * 0.05f;
+                if (knockedFar) knockedPawnSnaps++;
                 else restingJitterSnaps++;
+                NoteCorrection(knockedFar ? "knocked" : "jitter");
                 body.position = Vector(applied.Position);
                 body.rotation = Rotation(applied.Rotation);
                 transform.SetPositionAndRotation(body.position, body.rotation);
@@ -1070,6 +1220,7 @@ namespace ConsoleCards.Presentation.Interaction
                 // PHYS-DEDUP (P7 live finding, s155): a piece just accepted at rest woke by a hair (the physics settling
                 // it into its resting contact). That is not a move: it stays at its accepted resting place, asleep,
                 // and nothing is committed (each such commit was one more revision for every guest).
+                NoteCorrection("resting-jitter"); // PHY-1
                 body.position = Vector(applied.Position);
                 body.rotation = Rotation(applied.Rotation);
                 transform.SetPositionAndRotation(body.position, body.rotation);
@@ -1412,18 +1563,25 @@ namespace ConsoleCards.Presentation.Interaction
         {
             // P7 PHYS-DEDUP diagnostic (live finding, 2026-11-08: a guest's pawn went back to its old tile one revision
             // after its accepted step): a commit far from the accepted place with no player action is not a settle.
+            // P8A STAGE-A PHY-4 (owner, 2026-11-13): written only once the commit is ACCEPTED here (it was written before
+            // the authority check, so a computer that does not control the piece logged commits it never made). Refused
+            // commits are logged where they are refused (LocalPhysicalObjectAuthority.Commit).
             PhysicalObjectState bound = view.BoundState.PhysicalState;
+            string boundMode = bound?.Mode.ToString();
+            string appliedNote = applied == null ? "none" : ReferenceEquals(applied, bound) ? "same" : applied.Mode + " elsewhere";
+            float far = 0f;
             if (bound != null && state != null && !userActionActive && !compoundActionActive && !held)
             {
                 float dx = state.Position.X - bound.Position.X, dy = state.Position.Y - bound.Position.Y, dz = state.Position.Z - bound.Position.Z;
-                if (dx * dx + dy * dy + dz * dz > 0.09f)
-                {
-                    Debug.LogWarning($"[Physics] {name} commits {state.Mode} {Mathf.Sqrt(dx * dx + dy * dy + dz * dz):0.00} m from its accepted place "
-                        + $"({bound.Mode}; applied here {(applied == null ? "none" : ReferenceEquals(applied, bound) ? "same" : applied.Mode + " elsewhere")}) without a player action.");
-                }
+                far = dx * dx + dy * dy + dz * dz > 0.09f ? Mathf.Sqrt(dx * dx + dy * dy + dz * dz) : 0f;
             }
 
             if (!authority.Commit(view, state, value, recordMode)) return false;
+            if (far > 0f)
+            {
+                Debug.LogWarning($"[Physics] {name} committed {state.Mode} {far:0.00} m from its accepted place ({boundMode}; applied here "
+                    + $"{appliedNote}) without a player action: accepted here (this computer controls it).");
+            }
             applied = view.BoundState.PhysicalState;
             RecordAcceptedPose(applied);
             view.RefreshAcceptedAppearance();

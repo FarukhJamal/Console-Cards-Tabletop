@@ -198,7 +198,9 @@ namespace ConsoleCards.Application.Authority
             beginCommand?.Invoke(context.Id);
             try
             {
-                return inner.SubmitObject(command) ? ReplayOutcome.Accepted : ReplayOutcome.Rejected;
+                bool accepted = inner.SubmitObject(command);
+                LastReplayRefusal = accepted ? string.Empty : DescribeRefusal(inner.LastRefusal); // PHY-5
+                return accepted ? ReplayOutcome.Accepted : ReplayOutcome.Rejected;
             }
             finally
             {
@@ -206,6 +208,33 @@ namespace ConsoleCards.Application.Authority
                 depth--;
                 replaying = wasReplaying;
             }
+        }
+
+        /// <summary>
+        /// P8A STAGE-A PHY-5: why the last replayed command was not accepted here: the handler's own result (a status or
+        /// an error code), or a short note when no handler ran it. Never card contents.
+        /// </summary>
+        public string LastReplayRefusal { get; private set; } = string.Empty;
+
+        /// <summary>A short, safe description of a refused command's result (its status or error fields).</summary>
+        public static string DescribeRefusal(object result)
+        {
+            if (result == null) return "no result";
+            Type type = result.GetType();
+            if (type.IsEnum || type.IsPrimitive) return result.ToString();
+            string text = string.Empty;
+            foreach (string name in new[] { "Status", "Error", "Failure", "Reason" })
+            {
+                PropertyInfo property = type.GetProperty(name, BindingFlags.Instance | BindingFlags.Public);
+                if (property == null || property.GetIndexParameters().Length != 0) continue;
+                object value = property.GetValue(result);
+                if (value == null) continue;
+                Type valueType = value.GetType();
+                if (!(valueType.IsEnum || valueType.IsPrimitive)) continue; // codes only: no strings, no nested data
+                text += (text.Length > 0 ? ", " : string.Empty) + name + " " + value;
+            }
+
+            return text.Length > 0 ? type.Name + ": " + text : type.Name;
         }
 
         /// <summary>A whole table arrived: commands made here before it are no longer waiting to come back.</summary>
