@@ -28,6 +28,21 @@ namespace ConsoleCards.Presentation.Composition
         // Set only on the host, only while it runs a request it has checked: the sender's seat counts as played here.
         private Guid hostActingFor;
 
+        /// <summary>
+        /// P8A batch 4: the host is running a step it checked for a joined computer's player (that computer's End Turn).
+        /// What only that player's own computer can do (throw the dice, show a popup) is not done here.
+        /// </summary>
+        internal bool IsActingForAnotherComputer
+        {
+            get
+            {
+                if (hostActingFor == Guid.Empty) return false;
+                for (int i = 0; i < members.Count; i++)
+                    if (!members[i].IsHost && members[i].Player == hostActingFor) return true;
+                return false;
+            }
+        }
+
         /// <summary>A joined computer's End Turn goes to the host. False offline, on the host, or while away.</summary>
         /// <summary>P7: a joined computer of a normal shared table (its host decides turns).</summary>
         internal bool IsJoinedSharedClient => sharedTable && !hosting && session != null;

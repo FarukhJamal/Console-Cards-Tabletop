@@ -31,6 +31,17 @@ namespace ConsoleCards.Games.TrapFloor
         Shielded = 3,
         Dodged = 4,
         Neutralized = 5,
+        /// <summary>
+        /// P8A batch 4 (CR-1/CR-4): a Spring or Crane has picked its target, and the pawn still has to be moved
+        /// there. This is part of the rules state, so it is the same on every computer, and Undo, the network
+        /// and a rebuilt table all carry it. The Trap is not done until the move is made (then Resolved).
+        /// </summary>
+        MoveOwed = 6,
+        /// <summary>
+        /// P8A batch 4 (RM-1): in Reminders the player ended the turn on purpose without applying this occurrence.
+        /// It is never applied later and never warns again.
+        /// </summary>
+        Skipped = 7,
     }
 
     public sealed class TrapFloorDodgeAssistanceState
@@ -196,6 +207,10 @@ namespace ConsoleCards.Games.TrapFloor
         public TrapFloorFloorContentDefinition Content { get; }
         public TrapFloorTrapResolutionDisposition Disposition { get; private set; }
         public bool IsPending => Disposition == TrapFloorTrapResolutionDisposition.Pending;
+        /// <summary>P8A batch 4: a Spring or Crane whose pawn move to <see cref="LaunchTargetFloorCardId"/> is still owed.</summary>
+        public bool IsMoveOwed => Disposition == TrapFloorTrapResolutionDisposition.MoveOwed;
+        /// <summary>The tile a Spring or Crane sends the pawn to (empty until it has been resolved).</summary>
+        public TabletopObjectId LaunchTargetFloorCardId { get; private set; }
 
         internal void SetDisposition(TrapFloorTrapResolutionDisposition disposition)
         {
@@ -204,13 +219,23 @@ namespace ConsoleCards.Games.TrapFloor
             Disposition = disposition;
         }
 
+        internal void SetMoveOwed(TabletopObjectId target)
+        {
+            if (target.IsEmpty) throw new ArgumentException("A move needs a target tile.", nameof(target));
+            LaunchTargetFloorCardId = target;
+            Disposition = TrapFloorTrapResolutionDisposition.MoveOwed;
+        }
+
         internal TrapFloorTrapResolutionRecord Copy() =>
             new TrapFloorTrapResolutionRecord(
                 FloorCardId,
                 AffectedPlayerId,
                 RevealedRevision,
                 Content,
-                Disposition);
+                Disposition)
+            {
+                LaunchTargetFloorCardId = LaunchTargetFloorCardId,
+            };
     }
 
     /// <summary>Small authoritative next-Round status owned by Trap Floor assistance.</summary>
@@ -707,6 +732,63 @@ namespace ConsoleCards.Games.TrapFloor
             return cleared;
         }
 
+        /// <summary>P8A batch 4: the oldest Spring/Crane move still owed by <paramref name="playerId"/>, if any.</summary>
+        public bool TryGetOwedMove(PlayerId playerId, out TrapFloorTrapResolutionRecord record)
+        {
+            for (int i = 0; i < trapRecords.Count; i++)
+            {
+                if (trapRecords[i].IsMoveOwed && trapRecords[i].AffectedPlayerId == playerId)
+                {
+                    record = trapRecords[i];
+                    return true;
+                }
+            }
+
+            record = null;
+            return false;
+        }
+
+        /// <summary>
+        /// P8A batch 4: the owed move to <paramref name="landedFloorCardId"/> was made, so that Spring/Crane occurrence is
+        /// done. An empty tile id completes every move the player owes. Idempotent: false when nothing was owed.
+        /// </summary>
+        internal bool CompleteOwedMove(PlayerId playerId, TabletopObjectId landedFloorCardId)
+        {
+            bool done = false;
+            for (int i = 0; i < trapRecords.Count; i++)
+            {
+                TrapFloorTrapResolutionRecord record = trapRecords[i];
+                if (!record.IsMoveOwed || record.AffectedPlayerId != playerId) continue;
+                if (!landedFloorCardId.IsEmpty && record.LaunchTargetFloorCardId != landedFloorCardId) continue;
+                record.SetDisposition(TrapFloorTrapResolutionDisposition.Resolved);
+                done = true;
+            }
+
+            return done;
+        }
+
+        /// <summary>
+        /// P8A batch 4 (RM-1): the player ended the turn on purpose (Reminders override) with these occurrences still
+        /// open. Each Pending or move-owed record of theirs becomes Skipped: it is never applied later and never warns
+        /// again. A lit move of theirs goes out. Returns how many were skipped.
+        /// </summary>
+        internal int SkipUnresolved(PlayerId playerId)
+        {
+            int skipped = 0;
+            bool owedMove = false;
+            for (int i = 0; i < trapRecords.Count; i++)
+            {
+                TrapFloorTrapResolutionRecord record = trapRecords[i];
+                if (record.AffectedPlayerId != playerId || (!record.IsPending && !record.IsMoveOwed)) continue;
+                owedMove |= record.IsMoveOwed;
+                record.SetDisposition(TrapFloorTrapResolutionDisposition.Skipped);
+                skipped++;
+            }
+
+            if (owedMove && activeDodgeAssistance != null && activeDodgeAssistance.PlayerId == playerId) activeDodgeAssistance = null;
+            return skipped;
+        }
+
         internal TrapFloorDodgeAssistanceState CopyDodgeAssistance() =>
             activeDodgeAssistance?.Copy();
 
@@ -1185,6 +1267,12 @@ namespace ConsoleCards.Games.TrapFloor
 
         public bool ClearMovementAssistance() => state.ClearMovementAssistance();
 
+        /// <summary>P8A batch 4: the pawn reached the tile a Spring/Crane sent it to (empty: any owed move of theirs).</summary>
+        public bool CompleteOwedMove(PlayerId player, TabletopObjectId landedFloorCardId) => state.CompleteOwedMove(player, landedFloorCardId);
+
+        /// <summary>P8A batch 4 (RM-1): Reminders override at End Turn: the player's open occurrences are skipped.</summary>
+        public int SkipUnresolved(PlayerId player) => state.SkipUnresolved(player);
+
         /// <summary>
         /// Where a Pawn really is on the table. Presentation supplies it (a dragged physical Pawn lives in its
         /// physical state, not its placed pose); without it the placed pose is used.
@@ -1659,7 +1747,19 @@ namespace ConsoleCards.Games.TrapFloor
             if (player == null || !matchState.Pawns.TryGetValue(player.PawnId, out PawnState pawn))
                 return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.Unavailable);
 
-            trap.SetDisposition(TrapFloorTrapResolutionDisposition.Resolved);
+            if (targetFloorCardId == floorCardId)
+            {
+                // The Crane's dice point at the Crane's own tile: the pawn is already there, nothing is owed.
+                trap.SetDisposition(TrapFloorTrapResolutionDisposition.Resolved);
+                long stayed = matchState.AdvanceRevision(
+                    context.Id,
+                    context.RequestedByPlayerId,
+                    AuthoritativeActionKind.Unspecified);
+                return TrapFloorLaunchResult.MoveTo(stayed, targetFloorCardId, new TrapFloorCoordinate(x, y));
+            }
+
+            // P8A batch 4 (CR-4): the Trap is not done until the pawn has moved; the owed move is rules state.
+            trap.SetMoveOwed(targetFloorCardId);
             // The single-target movement assistance highlights where the Pawn must go; it clears once the
             // Pawn moves, and the landing flip handles a face-down target (chains end: each card flips once).
             state.BeginDodgeAssistance(new TrapFloorDodgeAssistanceState(

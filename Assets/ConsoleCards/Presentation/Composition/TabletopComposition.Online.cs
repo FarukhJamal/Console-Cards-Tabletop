@@ -84,6 +84,9 @@ namespace ConsoleCards.Presentation.Composition
         internal bool TrySendEndTurnToHost(ConsoleCards.Games.TrapFloor.TrapFloorEndTurnRequest request) =>
             online != null && online.TrySendEndTurnRequest(request);
 
+        /// <summary>P8A batch 4: the host runs a joined computer's End Turn right now (that player plays elsewhere).</summary>
+        internal bool IsActingForAnotherComputer => online != null && online.IsActingForAnotherComputer;
+
         /// <summary>AUTH-DICE: a joined computer waits for the host's result of a rules die it threw (Full).</summary>
         internal bool RulesDiceAwaitingHost => online != null && online.TableShared && online.RulesDiceAwaitingHost;
 

@@ -630,6 +630,17 @@ namespace ConsoleCards.Presentation.Composition
                     {
                         frontTitle = $"{floorCard.Content.DisplayName} — SAFE";
                     }
+                    else if (host.trapFloorAbilityResolutionState != null
+                        && host.trapFloorAbilityResolutionState.TryGetTrap(targetCardId, out TrapFloorTrapResolutionRecord shownTrap)
+                        && (shownTrap.Disposition == TrapFloorTrapResolutionDisposition.Skipped || shownTrap.IsMoveOwed))
+                    {
+                        // P8A batch 4: a skipped occurrence (Reminders) and a Spring/Crane whose move is still owed.
+                        bool skippedTrap = shownTrap.Disposition == TrapFloorTrapResolutionDisposition.Skipped;
+                        frontTitle = $"{floorCard.Content.DisplayName} — {(skippedTrap ? "SKIPPED" : "MOVE OWED")}";
+                        objectiveContext = skippedTrap
+                            ? "TRAP SKIPPED\nThe turn ended without applying it (Reminders). It will not be applied later.\n"
+                            : "MOVE OWED\nThe pawn still has to move to the lit tile.\n";
+                    }
                     else if (IsTrapFloorTrapResolved(targetCardId))
                     {
                         frontTitle = $"{floorCard.Content.DisplayName} — RESOLVED";

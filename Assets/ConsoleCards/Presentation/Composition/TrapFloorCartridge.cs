@@ -1908,18 +1908,18 @@ namespace ConsoleCards.Presentation.Composition
         private float remindersOverrideAt = -100f;
 
         // Reminders: what a Full turn would still do before it ends (a collapse owed in a floor turn; a Trap or a Trap's
-        // move still waiting on the turn player). The first press warns; a second press within 15 s ends the turn.
+        // move still waiting on the turn player). The first press warns; a second press within 15 s ends the turn, and
+        // what was left is recorded as skipped (P8A batch 4, RM-1: never applied later, never warned about again).
         private bool RemindersAllowsEnd(bool floorTurn, PlayerId actorForReminder)
         {
+            // P8A batch 4: the host running a joined computer's End Turn: that computer already warned and its player
+            // pressed again (the warning is theirs to see, not the host's).
+            if (host.IsActingForAnotherComputer) return true;
             string left = null;
             if (floorTurn && FloorTurnCollapseOwed(anyLevel: true))
                 left = "this floor turn has not collapsed a tile yet. Roll the two floor dice to collapse one";
-            else if (!floorTurn && !actorForReminder.IsEmpty && host.trapFloorAbilityResolutionState != null
-                && (HasPendingLaunchMove(actorForReminder) || TryGetOldestPendingTrap(actorForReminder, out _)))
-            {
-                string name = TryGetOldestPendingTrap(actorForReminder, out TrapFloorTrapResolutionRecord trap) ? trap.Content.DisplayName : "a Trap";
-                left = $"{name} still waits on {FormatPlayerName(actorForReminder)}. Apply it from its popup (or move the pawn where it says)";
-            }
+            else if (!floorTurn && !actorForReminder.IsEmpty && host.trapFloorAbilityResolutionState != null)
+                left = RemindersLeftOnTurn(actorForReminder);
 
             if (left == null) return true;
             string key = $"{(floorTurn ? "floor" : "turn")}|{host.trapFloorTurnState.CurrentRound}|{actorForReminder.Value}|{left}";
@@ -1932,8 +1932,32 @@ namespace ConsoleCards.Presentation.Composition
 
             remindersOverrideKey = key;
             remindersOverrideAt = Time.unscaledTime;
-            host.FeedbackLine($"Reminder: {left}, or press {(floorTurn ? "End Floor Turn" : "End Turn")} again to end anyway.", FeedbackSeverity.Warning);
+            host.FeedbackLine(floorTurn
+                ? $"Reminder: {left}, or press End Floor Turn again to end anyway."
+                : $"Reminder: {left}. Or press End Turn again to skip it: it will not be applied later.", FeedbackSeverity.Warning);
             return false;
+        }
+
+        // P8A batch 4 (RM-2): what the turn player still has to do, in the words of the action itself. Null: nothing.
+        private string RemindersLeftOnTurn(PlayerId player)
+        {
+            if (TryGetPendingLaunchTarget(player, out TabletopObjectId target))
+            {
+                string where = host.trapFloorTemplate.TryGetFloorCardState(host.matchState, target, out TrapFloorFloorCardState tile)
+                    ? $" ({tile.Coordinate.X},{tile.Coordinate.Y})"
+                    : string.Empty;
+                return $"a Trap sends {FormatPlayerName(player)}'s pawn to the lit tile{where}. Move the pawn there";
+            }
+
+            if (!TryGetOldestPendingTrap(player, out TrapFloorTrapResolutionRecord trap)) return null;
+            if (trap.Content.TrapEffect == TrapFloorTrapEffectCategory.CraneDrop)
+            {
+                return IsCraneRollReady(trap.FloorCardId)
+                    ? $"{trap.Content.DisplayName} waits on {FormatPlayerName(player)}: the dice are rolled. Choose Apply (turn menu or the Crane tile's menu)"
+                    : $"{trap.Content.DisplayName} waits on {FormatPlayerName(player)}: roll the two floor dice (first die = column, second = row), then choose Apply";
+            }
+
+            return $"{trap.Content.DisplayName} waits on {FormatPlayerName(player)}. Choose Apply in its popup, in the turn menu, or in the Trap tile's menu";
         }
 
         internal void AdvanceTrapFloorTurn()
@@ -2017,6 +2041,20 @@ namespace ConsoleCards.Presentation.Composition
             // whole table. It asks the host, which checks that this connection plays the turn's seat and that the turn is
             // still the one asked about, ends it once, and sends everyone the resulting table. Offline and on the host the
             // turn ends here as before.
+            // P8A batch 4 (CR-1): Full, a joined computer: a Crane that still needs its roll is rolled here, on the turn
+            // player's own computer (the host cannot throw for it); End Turn waits for it.
+            if (!wasFloorTurn
+                && PlayAssist.Level == PlayAssistLevel.Full
+                && host.HasOnline && host.Online.IsJoinedSharedClient
+                && TryGetOldestPendingTrap(host.trapFloorTurnState.ActivePlayerId, out TrapFloorTrapResolutionRecord craneFirst)
+                && craneFirst.Content.TrapEffect == TrapFloorTrapEffectCategory.CraneDrop)
+            {
+                BeginCraneRoll(craneFirst.FloorCardId);
+                host.FeedbackLine("Full: the Crane moves your pawn first. End Turn again once it has landed.", FeedbackSeverity.Warning);
+                RefreshTrapFloorStatusUi();
+                return;
+            }
+
             if (host.TrySendEndTurnToHost(TrapFloorEndTurnRequest.For(host.trapFloorTurnState, skipped)))
             {
                 host.ShowMessage("Ending the turn: the host confirms it.");
@@ -2055,6 +2093,25 @@ namespace ConsoleCards.Presentation.Composition
                     return;
                 }
 
+                // P8A batch 4 (RM-1): Reminders applies nothing; a turn ended with an occurrence still open was ended on
+                // purpose (the warning was pressed through, here or on the player's own computer). It is recorded as
+                // skipped: never applied later (a later Apply would schedule it for the wrong round), never warned again.
+                if (PlayAssist.Level == PlayAssistLevel.Reminders
+                    && !host.trapFloorTurnState.IsCurrentFloorFailed
+                    && host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
+                    && host.trapFloorAbilityResolutionService != null)
+                {
+                    int skippedCount = host.trapFloorAbilityResolutionService.SkipUnresolved(actor);
+                    if (skippedCount > 0)
+                    {
+                        craneGate.Clear();
+                        craneRollTrapId = TabletopObjectId.Empty;
+                        host.abilityTargetPresenter?.ClearCurrent();
+                        trapSummary += $"Skipped (Reminders): {skippedCount} Trap effect{(skippedCount == 1 ? string.Empty : "s")} not applied; "
+                            + $"{(skippedCount == 1 ? "it" : "they")} will not be applied later. ";
+                    }
+                }
+
                 // A waiting Trap knocked the player out: the turn has already passed on, so it is not ended twice.
                 knockedOut = !wasFloorTurn
                     && (host.trapFloorTurnState.IsCurrentFloorFailed
@@ -2083,8 +2140,7 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            pendingLaunchPlayerId = PlayerId.Empty;
-            pendingLaunchTargetId = TabletopObjectId.Empty;
+            craneGate.Clear(); // P8A batch 4: a roll never carries into another turn
 
             if (host.trapFloorAbilityResolutionService != null
                 && host.trapFloorAbilityResolutionService.ClearMovementAssistance())
@@ -2160,11 +2216,10 @@ namespace ConsoleCards.Presentation.Composition
                     break;
                 }
 
-                if (HasPendingLaunchMove(player))
+                // P8A batch 4 (CR-1, CR-4): the owed move is read from the rules state, so the host finds a joined
+                // computer's Spring/Crane move too.
+                if (TryGetPendingLaunchTarget(player, out TabletopObjectId target))
                 {
-                    TabletopObjectId target = pendingLaunchTargetId;
-                    pendingLaunchPlayerId = PlayerId.Empty;
-                    pendingLaunchTargetId = TabletopObjectId.Empty;
                     if (!TryAutoMovePawnToFloor(player, target, out TrapFloorCoordinate targetTile))
                     {
                         host.ShowMessage("A Trap still has to move your pawn, but the move was rejected. Move it by hand, then End Turn.");
@@ -2176,6 +2231,9 @@ namespace ConsoleCards.Presentation.Composition
                     summary += $"Pawn moved to {targetTile}. ";
                     if (TryLandingFlipNow(player, target, out string flipped))
                         summary += $"Flipped {flipped}. ";
+                    // The Spring/Crane occurrence is done only now (its new tile is turned over; a Trap there waits
+                    // and is applied by this loop).
+                    host.trapFloorAbilityResolutionService.CompleteOwedMove(player, target);
                     continue;
                 }
 
@@ -2184,9 +2242,20 @@ namespace ConsoleCards.Presentation.Composition
 
                 if (trap.Content.IsLaunchTrap)
                 {
-                    if (NeedsCraneRoll(trap.FloorCardId, trap.Content))
+                    if (trap.Content.TrapEffect == TrapFloorTrapEffectCategory.CraneDrop)
                     {
+                        // P8A batch 4 (CR-2): End Turn never reads the dice as they lie. The Crane waits for its own roll,
+                        // thrown on the turn player's computer (Full throws it there by itself).
+                        if (host.IsActingForAnotherComputer)
+                        {
+                            lastFloorTurnRefusal = $"Full: the Crane still waits for {FormatPlayerName(player)}'s roll. "
+                                + "It rolls on that player's computer; End Turn again once the pawn has landed.";
+                            Debug.Log("[Crane] End Turn of a joined computer's player waits: the Crane has not been rolled on that computer.");
+                            return false;
+                        }
+
                         BeginCraneRoll(trap.FloorCardId); // CRANE-1: End Turn waits for the roll too
+                        host.FeedbackLine("Full: the Crane moves your pawn first. End Turn again once it has landed.", FeedbackSeverity.Warning);
                         return false;
                     }
 
@@ -2211,9 +2280,7 @@ namespace ConsoleCards.Presentation.Composition
                         continue;
                     }
 
-                    pendingLaunchPlayerId = player;
-                    pendingLaunchTargetId = launch.TargetFloorCardId;
-                    continue;
+                    continue; // the Spring's owed move is in the rules state now; the loop makes it
                 }
 
                 TrapFloorTurnAdvanceResult applied = host.trapFloorAbilityResolutionService.ResolveSupportedTrap(
@@ -2236,15 +2303,21 @@ namespace ConsoleCards.Presentation.Composition
             return true;
         }
 
-        internal bool HasPendingLaunchMove(PlayerId player)
+        internal bool HasPendingLaunchMove(PlayerId player) => TryGetPendingLaunchTarget(player, out _);
+
+        // P8A batch 4 (CR-1, CR-4): a Spring/Crane move still owed by the player, from the rules state (the same on every
+        // computer, kept by Undo, the network and a rebuilt table), never from this screen's memory.
+        internal bool TryGetPendingLaunchTarget(PlayerId player, out TabletopObjectId target)
         {
-            TrapFloorDodgeAssistanceState assistance = host.trapFloorAbilityResolutionState.ActiveDodgeAssistance;
-            return pendingLaunchPlayerId == player
-                && !pendingLaunchTargetId.IsEmpty
-                && assistance != null
-                && assistance.PlayerId == player
-                && assistance.TargetFloorCardIds.Count == 1
-                && assistance.TargetFloorCardIds[0] == pendingLaunchTargetId;
+            target = TabletopObjectId.Empty;
+            if (host.trapFloorAbilityResolutionState == null || player.IsEmpty
+                || !host.trapFloorAbilityResolutionState.TryGetOwedMove(player, out TrapFloorTrapResolutionRecord owed))
+            {
+                return false;
+            }
+
+            target = owed.LaunchTargetFloorCardId;
+            return !target.IsEmpty;
         }
 
         internal bool TryGetOldestPendingTrap(PlayerId player, out TrapFloorTrapResolutionRecord trap)
@@ -2716,8 +2789,11 @@ namespace ConsoleCards.Presentation.Composition
 
             if (floorCard.Content.IsLaunchTrap)
             {
-                // CRANE-1 (owner, 2026-10-30): the player rolls the two floor dice first; the Crane waits for them.
-                if (NeedsCraneRoll(floorCardId, floorCard.Content))
+                // CRANE-1 (owner, 2026-10-30) / P8A batch 4: the Crane reads only the roll made for this occurrence. Full
+                // reads it the moment it settles (CompleteCraneRollIfSettled); elsewhere Apply uses the roll the dice
+                // still show, or asks for one.
+                if (floorCard.Content.TrapEffect == TrapFloorTrapEffectCategory.CraneDrop
+                    && (PlayAssist.Level == PlayAssistLevel.Full || !IsCraneRollReady(floorCardId)))
                 {
                     BeginCraneRoll(floorCardId);
                     return;
@@ -2772,18 +2848,30 @@ namespace ConsoleCards.Presentation.Composition
             PlayerId affectedPlayerId = host.trapFloorTurnState.ActivePlayerId;
             bool spring = content.TrapEffect == TrapFloorTrapEffectCategory.SpringLaunch;
             string trapName = spring ? "SPRING" : "CRANE";
+            bool full = PlayAssist.Level == PlayAssistLevel.Full;
             TrapFloorLaunchResult result = host.TableAuthority.Submit<TrapFloorLaunchTrapCommand, TrapFloorLaunchResult>( // AUTH-EFFECTS
                 new TrapFloorLaunchTrapCommand(host.CreateCommandContext(affectedPlayerId), floorCardId));
             if (!result.Succeeded)
             {
+                if (!spring && full && (result.Error == TrapFloorLaunchError.DieBeyondGrid || result.Error == TrapFloorLaunchError.DiceNotSettled))
+                {
+                    // FLOORS-1: a die beyond the floor is rolled again; Full throws again by itself.
+                    craneGate.Clear();
+                    host.FeedbackLine("CRANE — a die shows more than this floor has: the dice are rolled again.", FeedbackSeverity.Info);
+                    BeginCraneRoll(floorCardId);
+                    return;
+                }
+
+                if (!spring) craneGate.Clear(); // that roll is used up: the next Apply asks for a new one
                 host.ShowMessage(result.Error == TrapFloorLaunchError.DieBeyondGrid
-                    ? "CRANE — a die shows more than this floor has: roll that die again, then choose Resolve Trap again."
+                    ? "CRANE — a die shows more than this floor has: roll the two floor dice again, then choose Apply."
                     : result.Error == TrapFloorLaunchError.DiceNotSettled
-                    ? "CRANE — roll both dice and let them settle, then choose Resolve Trap again."
+                    ? "CRANE — roll both dice and let them settle, then choose Apply."
                     : $"Resolve Trap rejected: {result.Error}.");
                 return;
             }
 
+            if (!spring) craneGate.Clear(); // P8A batch 4: one roll, one Crane
             host.ContextMenus.CloseContextMenu();
             host.CardInspectPanel.CloseCardInspect();
             RefreshMovementAssistancePresentation();
@@ -2797,13 +2885,66 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            pendingLaunchPlayerId = affectedPlayerId;
-            pendingLaunchTargetId = result.TargetFloorCardId;
-            // TRAP-1: an instruction, shown even with action messages off.
+            if (result.TargetFloorCardId == floorCardId)
+            {
+                host.FeedbackLine($"{trapName} — the dice point at the tile you stand on ({result.TargetX},{result.TargetY}): your pawn stays.", FeedbackSeverity.Info);
+                return;
+            }
+
+            // P8A batch 4 (owner: "Full: execute the forced pawn movement, resolve the destination's landing"): Full
+            // moves the pawn itself, on the turn player's own computer.
+            if (full && host.IsPlayerOnThisComputer(affectedPlayerId) && !host.IsActingForAnotherComputer
+                && RunForcedMove(affectedPlayerId, result.TargetFloorCardId, trapName, result.TargetX, result.TargetY))
+            {
+                return;
+            }
+
+            // TRAP-1: an instruction, shown even with action messages off. RM-2: only Full moves the pawn at End Turn.
             host.FeedbackLine(
                 $"{trapName} — move your pawn to the lit tile ({result.TargetX},{result.TargetY}). "
-                + "A face-down tile there flips when you land. End Turn moves it for you.",
+                + "A face-down tile there flips when you land."
+                + (full ? " End Turn moves it for you." : string.Empty),
                 FeedbackSeverity.Info);
+        }
+
+        // P8A batch 4 (Full): the Spring/Crane moves the turn player's pawn to its tile through the table's own move,
+        // ends the lit guidance through the table's command (the host replays it and marks the occurrence done), then the
+        // new tile lands like any landing: it turns over and its own effect (an active Fall Trap) waits with its popup.
+        // A tile already face up does nothing again. False: the pawn could not be moved (the player moves it by hand).
+        private bool RunForcedMove(PlayerId player, TabletopObjectId target, string trapName, int x, int y)
+        {
+            bool moveWasGuided = guidedMoveThisTurn;
+            guidedMoveThisTurn = true; // R4: a rule's move, not the turn's move
+            if (!TryAutoMovePawnToFloor(player, target, out TrapFloorCoordinate tile))
+            {
+                guidedMoveThisTurn = moveWasGuided;
+                Debug.LogWarning($"[Crane] The forced move to ({x},{y}) was refused; the player moves the pawn by hand.");
+                return false;
+            }
+
+            if (host.trapFloorAbilityResolutionState.ActiveDodgeAssistance != null
+                && host.TableAuthority.Submit<TrapFloorClearGuidanceCommand, TrapFloorEffectResult>( // AUTH-EFFECTS
+                    new TrapFloorClearGuidanceCommand(host.CreateCommandContext(player))).Succeeded)
+            {
+                host.abilityTargetPresenter?.ClearCurrent();
+            }
+
+            RefreshMovementAssistancePresentation();
+            RefreshTrapFloorStatusUi();
+            if (host.trapFloorTemplate.TryGetFloorCardState(host.matchState, target, out TrapFloorFloorCardState landed)
+                && !landed.IsRevealed
+                && (host.trapFloorCollapseState == null || !host.trapFloorCollapseState.IsCollapsed(target)))
+            {
+                host.FeedbackLine($"{trapName} — your pawn is dropped on ({tile.X},{tile.Y}); that tile turns over.", FeedbackSeverity.Info);
+                host.landedFloorCards.Add(target);
+                TriggerLandedTile(target, player);
+            }
+            else
+            {
+                host.FeedbackLine($"{trapName} — your pawn is dropped on ({tile.X},{tile.Y}).", FeedbackSeverity.Info);
+            }
+
+            return true;
         }
 
         internal void ShowFocusedSearchReveal(TrapFloorRevealFloorResult result)
@@ -2848,7 +2989,9 @@ namespace ConsoleCards.Presentation.Composition
                 ? $"{revealedFloor.Content.DisplayText}\n\nREVEALED SAFELY"
                 : trapWaiting
                 ? $"{revealedFloor.Content.DisplayText}\n\nResolve it now, or return to play a Reaction first. "
-                    + "End Turn applies it if you leave it."
+                    + (PlayAssist.Level == PlayAssistLevel.Full
+                        ? "End Turn applies it if you leave it."
+                        : "Reminders: End Turn does not apply it. Choose Apply (here, in the turn menu or the tile's menu).")
                 : revealedFloor.Content.DisplayText;
             // Owner, 2026-10-20: a player holding a Reaction that can stop this trap is offered it right here.
             int usableReactions = trapWaiting ? CountUsableReactions(host.trapFloorTurnState.ActivePlayerId) : 0;
@@ -3009,7 +3152,13 @@ namespace ConsoleCards.Presentation.Composition
             TabletopObjectId trapId = floor.ObjectId;
             PlayerId active = host.trapFloorTurnState.ActivePlayerId;
             int usableReactions = CountUsableReactions(active);
+            bool autoCrane = floor.Content.TrapEffect == TrapFloorTrapEffectCategory.CraneDrop
+                && PlayAssist.Level == PlayAssistLevel.Full
+                && usableReactions == 0
+                && CanResolveTrapFloorTrap(trapId)
+                && !IsCraneRollAsked;
             string body = $"{floor.Content.DisplayText}\n\n{TrapTimingText(floor.Content)}"
+                + (autoCrane ? "\n\nThe two floor dice are rolled for you now." : string.Empty)
                 + (usableReactions > 0
                     ? $"\n\nYou hold {usableReactions} Reaction{(usableReactions == 1 ? string.Empty : "s")} that can stop it."
                     : string.Empty);
@@ -3022,14 +3171,28 @@ namespace ConsoleCards.Presentation.Composition
                 floor.Content.DisplayName,
                 floor.Content.DisplayText,
                 body,
-                NeedsCraneRoll(trapId, floor.Content) ? "Roll the dice" : "Apply",
+                autoCrane ? "OK" : NeedsCraneRoll(trapId, floor.Content) ? "Roll the dice" : "Apply",
                 () =>
                 {
                     CloseFocusedSearchReveal();
-                    ResolveTrapFloorTrap(trapId);
+                    if (!autoCrane) ResolveTrapFloorTrap(trapId);
                 },
                 usableReactions > 0 ? "Use a Reaction…" : null,
                 usableReactions > 0 ? (Action)(() => ShowReactionOffer(active)) : null));
+            // P8A batch 4 (owner: "Full: Crane must automatically roll"): with no Reaction to offer first, the dice are
+            // thrown at once for the turn player (on their own computer; the host decides the faces).
+            if (autoCrane) BeginCraneRoll(trapId);
+            // Reminders: the roll is asked for this Crane as it shows, so the player's next throw counts (not only one
+            // made after pressing the button); a roll already made for it keeps its Apply.
+            else if (floor.Content.TrapEffect == TrapFloorTrapEffectCategory.CraneDrop
+                && PlayAssist.Level == PlayAssistLevel.Reminders
+                && CanResolveTrapFloorTrap(trapId)
+                && !IsCraneRollAsked
+                && !IsCraneRollReady(trapId)
+                && host.IsPlayerOnThisComputer(active))
+            {
+                BeginCraneRoll(trapId);
+            }
         }
 
         // The Ability or Friend popup for the turn player standing on it: Take it (an Ability's cost is paid) or Reject.
@@ -5076,11 +5239,6 @@ namespace ConsoleCards.Presentation.Composition
                 {
                     if (targets[i] != landedId) continue;
                     guidedMoveThisTurn = true; // R4: not a regular move
-                    if (pendingLaunchTargetId == landedId)
-                    {
-                        pendingLaunchPlayerId = PlayerId.Empty;
-                        pendingLaunchTargetId = TabletopObjectId.Empty;
-                    }
 
                     if (host.trapFloorAbilityResolutionService != null
                         && host.TableAuthority.Submit<TrapFloorClearGuidanceCommand, TrapFloorEffectResult>( // AUTH-EFFECTS
@@ -5093,7 +5251,9 @@ namespace ConsoleCards.Presentation.Composition
             notAllowedLandingFloorCardId = TabletopObjectId.Empty;
             tooFarStateIndex = host.undoHistory.CurrentStateIndex;
             return HasPendingLaunchMove(host.trapFloorTurnState.ActivePlayerId)
-                ? "the Trap sends your pawn to the lit tile. Move it there, or End Turn moves it for you."
+                ? (PlayAssist.Level == PlayAssistLevel.Full
+                    ? "the Trap sends your pawn to the lit tile. Move it there, or End Turn moves it for you."
+                    : "the Trap sends your pawn to the lit tile. Move it there.")
                 : "the Ability moves your pawn to a lit tile only.";
         }
 
@@ -5366,8 +5526,6 @@ namespace ConsoleCards.Presentation.Composition
                 hash = (hash * 31) + (host.physicalBlindDirectionPending ? 1 : 0);
                 hash = (hash * 31) + (host.pendingPurchaseDefinitionStableId?.Length ?? 0);
                 hash = (hash * 31) + host.waitingLandingFloorCardId.GetHashCode();
-                hash = (hash * 31) + pendingLaunchPlayerId.GetHashCode();
-                hash = (hash * 31) + pendingLaunchTargetId.GetHashCode();
                 hash = (hash * 31) + (host.trapFloorActivityFeed?.Entries.Count ?? 0);
                 hash = (hash * 31) + host.localPlayerId.GetHashCode();
                 // V5: the player card's In hand and Keys redraw when they change.
@@ -5804,6 +5962,28 @@ namespace ConsoleCards.Presentation.Composition
                         "Use a Reaction…",
                         true,
                         () => ShowReactionOffer(host.trapFloorTurnState.ActivePlayerId)));
+                }
+
+                // P8A batch 4 (Reminders Crane / RM-1): a Trap still waiting on the turn player can always be applied from
+                // here, also after its popup was closed (a Crane: roll first, then Apply with that roll).
+                if (!purchasePending && !PlayAssist.IsFree
+                    && TryGetOldestPendingTrap(host.trapFloorTurnState.ActivePlayerId, out TrapFloorTrapResolutionRecord waitingTrap)
+                    && CanResolveTrapFloorTrap(waitingTrap.FloorCardId))
+                {
+                    TabletopObjectId waitingId = waitingTrap.FloorCardId;
+                    bool craneWaiting = waitingTrap.Content.TrapEffect == TrapFloorTrapEffectCategory.CraneDrop;
+                    string label = !craneWaiting
+                        ? $"Apply {waitingTrap.Content.DisplayName}"
+                        : IsCraneRollReady(waitingId)
+                        ? $"Apply {waitingTrap.Content.DisplayName} (dice rolled)"
+                        : IsCraneRollAsked
+                        ? $"{waitingTrap.Content.DisplayName}: waiting for the dice"
+                        : $"Roll for {waitingTrap.Content.DisplayName}";
+                    actions.Add(new PopupActionOption(label, true, () =>
+                    {
+                        host.ContextMenus.CloseContextMenu();
+                        ResolveTrapFloorTrap(waitingId);
+                    }));
                 }
 
                 // P8A (owner, 2026-11-10): the buying step ends when the player says so (what is left goes back).
@@ -6543,8 +6723,6 @@ namespace ConsoleCards.Presentation.Composition
         internal readonly Dictionary<TabletopObjectId, TrapFloorCoordinate?> landingPawnTiles =
             new Dictionary<TabletopObjectId, TrapFloorCoordinate?>();
         // Spring/Crane target the active player still has to move to (G2c); applied by End Turn if left.
-        internal PlayerId pendingLaunchPlayerId;
-        internal TabletopObjectId pendingLaunchTargetId;
 
         // ---------- the cartridge contract (CART-1a, doc 30 §A4) ----------
 

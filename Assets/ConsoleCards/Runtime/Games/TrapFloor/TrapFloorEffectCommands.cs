@@ -314,6 +314,11 @@ namespace ConsoleCards.Games.TrapFloor
             for (int i = 0; i < targets.Count && !onLit; i++) onLit = evidence.StandsOnFloorCard(requester, targets[i]);
             if (!onLit) return TrapFloorEffectResult.Failure(TrapFloorEffectError.NotOnThatTile);
             if (!ability.ClearMovementAssistance()) return TrapFloorEffectResult.Failure(TrapFloorEffectError.Rejected);
+            // P8A batch 4 (CR-1): the Spring/Crane move owed to the tile the pawn stands on is made: that occurrence is
+            // done on this table (the host's included), whichever computer moved the pawn.
+            if (abilityState.TryGetOwedMove(requester, out TrapFloorTrapResolutionRecord owed)
+                && evidence.StandsOnFloorCard(requester, owed.LaunchTargetFloorCardId))
+                ability.CompleteOwedMove(requester, owed.LaunchTargetFloorCardId);
             long revision = match.AdvanceRevision(
                 command.Context.Id,
                 requester,
@@ -396,6 +401,75 @@ namespace ConsoleCards.Games.TrapFloor
 
         public static long TurnKeyOf(TrapFloorTurnState turn) =>
             turn == null ? 0 : ((long)turn.CurrentRound << 20) | ((long)turn.Phase << 16) | (uint)(turn.CapturePosition().ActivePlayerIndex & 0xFFFF);
+    }
+
+    /// <summary>
+    /// P8A batch 4 (CR-2): one Crane occurrence: this match, this tile, revealed at this revision. A roll counts only for
+    /// the occurrence it was asked for, never for a later one (Undo, another floor, another match).
+    /// </summary>
+    public readonly struct TrapFloorCraneOccurrence : IEquatable<TrapFloorCraneOccurrence>
+    {
+        public TrapFloorCraneOccurrence(Guid matchId, TabletopObjectId floorCardId, long revealedRevision)
+        {
+            MatchId = matchId;
+            FloorCardId = floorCardId;
+            RevealedRevision = revealedRevision;
+        }
+
+        public Guid MatchId { get; }
+        public TabletopObjectId FloorCardId { get; }
+        public long RevealedRevision { get; }
+        public bool IsEmpty => FloorCardId.IsEmpty;
+
+        public static TrapFloorCraneOccurrence For(Guid matchId, TrapFloorTrapResolutionRecord record) =>
+            record == null ? default : new TrapFloorCraneOccurrence(matchId, record.FloorCardId, record.RevealedRevision);
+
+        public bool Equals(TrapFloorCraneOccurrence other) =>
+            MatchId == other.MatchId && FloorCardId == other.FloorCardId && RevealedRevision == other.RevealedRevision;
+
+        public override bool Equals(object obj) => obj is TrapFloorCraneOccurrence other && Equals(other);
+        public override int GetHashCode() => HashCode.Combine(MatchId, FloorCardId, RevealedRevision);
+    }
+
+    /// <summary>
+    /// P8A batch 4 (CR-2, CR-3): the Crane's own roll. It is asked for one occurrence; a roll thrown after the ask makes
+    /// it ready with the faces the dice settled on; it stays ready only while the dice still show those faces and only
+    /// for that occurrence. Using it (or any new ask) clears it, so a roll is never used twice or for another Crane.
+    /// Pure: the cartridge supplies the dice and decides what a roll is.
+    /// </summary>
+    public sealed class TrapFloorCraneRollGate
+    {
+        private TrapFloorCraneOccurrence asked;
+        private TrapFloorCraneOccurrence ready;
+        private int readyColumn;
+        private int readyRow;
+
+        public void Ask(TrapFloorCraneOccurrence occurrence)
+        {
+            asked = occurrence;
+            ready = default;
+        }
+
+        public bool IsAskedFor(TrapFloorCraneOccurrence occurrence) => !occurrence.IsEmpty && asked.Equals(occurrence);
+
+        /// <summary>The roll asked for that occurrence settled on these faces. False (nothing kept) for any other.</summary>
+        public bool Rolled(TrapFloorCraneOccurrence occurrence, int column, int row)
+        {
+            if (!IsAskedFor(occurrence) || column < 1 || row < 1) return false;
+            ready = occurrence;
+            readyColumn = column;
+            readyRow = row;
+            return true;
+        }
+
+        public bool IsReadyFor(TrapFloorCraneOccurrence occurrence, int column, int row) =>
+            !occurrence.IsEmpty && ready.Equals(occurrence) && readyColumn == column && readyRow == row;
+
+        public void Clear()
+        {
+            asked = default;
+            ready = default;
+        }
     }
 
     /// <summary>What a rule waiting for a die does with it now.</summary>
@@ -485,8 +559,9 @@ namespace ConsoleCards.Games.TrapFloor
 
                 if (was == null) return true; // a Trap came up in this step
                 if (was.Disposition == TrapFloorTrapResolutionDisposition.Pending
-                    && traps[i].Disposition == TrapFloorTrapResolutionDisposition.Resolved)
-                    return true; // applied or launched in this step
+                    && (traps[i].Disposition == TrapFloorTrapResolutionDisposition.Resolved
+                        || traps[i].Disposition == TrapFloorTrapResolutionDisposition.MoveOwed))
+                    return true; // applied or launched in this step (P8A batch 4: a launch now leaves its move owed)
             }
 
             return Holes(b.Collapse) > Holes(a.Collapse) // a taken prize leaves the floor too, but that is a choice

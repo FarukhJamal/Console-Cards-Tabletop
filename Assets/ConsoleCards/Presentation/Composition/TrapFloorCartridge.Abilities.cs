@@ -240,7 +240,9 @@ namespace ConsoleCards.Presentation.Composition
                 $"{trapName.ToUpperInvariant()} IS WAITING",
                 $"If it applies: {effectText} Pick a Reaction to stop it: Check makes it harmless, Dodge steps you "
                     + "off it, Shield blocks what it does.",
-                "Or let it happen: End Turn applies it.",
+                PlayAssist.Level == PlayAssistLevel.Full
+                    ? "Or let it happen: End Turn applies it."
+                    : "Or let it happen: choose Apply (its popup, the turn menu or the tile's menu).",
                 "Use",
                 options,
                 1,
@@ -256,8 +258,9 @@ namespace ConsoleCards.Presentation.Composition
                 () =>
                 {
                     host.runtimeUi?.CloseFocusedCardSelection();
-                    host.ShowMessage($"{trapName} still waits; End Turn applies it. Use a Reaction from the turn menu "
-                        + "until then.");
+                    host.ShowMessage(PlayAssist.Level == PlayAssistLevel.Full // P8A batch 4 (RM-2)
+                        ? $"{trapName} still waits; End Turn applies it. Use a Reaction from the turn menu until then."
+                        : $"{trapName} still waits. Choose Apply in the turn menu or the tile's menu; End Turn does not apply it.");
                 },
                 "Let it happen"));
         }
