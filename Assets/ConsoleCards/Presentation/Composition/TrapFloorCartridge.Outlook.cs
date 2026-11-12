@@ -37,10 +37,16 @@ namespace ConsoleCards.Presentation.Composition
 
         private bool HoldsTableAuthority => !(host.IsOnlineTable && !(host.HasOnline && host.Online.IsHosting));
 
-        // Auto elimination only where the host's proof is the authority: offline, or the private session (joined
-        // computers there receive the result; they do not re-check it).
-        private bool NoEscapeEndsFloorHere =>
-            HoldsTableAuthority && (!host.IsOnlineTable || (host.HasOnline && host.Online.IsPrivateHost));
+        // Auto elimination where the host's proof is the authority: offline, the private session, and (P8A, owner
+        // 2026-11-13: "the host must resolve the loss once and replicate the terminal state") a normal online table's
+        // host. A joined computer takes the host's elimination as the host checked it (TrustsHostsNoEscapeProof) and the
+        // whole table follows; it never runs the proof itself.
+        private bool NoEscapeEndsFloorHere => HoldsTableAuthority;
+
+        // A joined computer replaying the host's NoEscapePossible elimination: the host proved it (and checked any
+        // player's request before relaying it); this computer cannot run the proof, so it accepts the host's.
+        internal bool TrustsHostsNoEscapeProof =>
+            host.IsOnlineTable && host.HasOnline && host.Online.IsClientTable && host.Replicated != null && host.Replicated.Replaying;
 
         internal bool IsProvenTrapped(PlayerId player) =>
             NoEscapeEndsFloorHere
@@ -98,20 +104,29 @@ namespace ConsoleCards.Presentation.Composition
 
             // Every seat's held Ability or Friend cards count, escaped or not: help from another player is a move too.
             bool anyMoveCard = false;
+            string heldDetail = null;
             ControllerInputCardCatalog.TryCreate(template.GameDefinition, out ControllerInputCardCatalog controllers);
             HashSet<TabletopObjectId> floorCards = new HashSet<TabletopObjectId>(template.FloorCardIds.Values);
             foreach (PlayerId player in host.trapFloorTurnState.PlayerOrder)
             {
-                if (HoldsSpecialCard(player, controllers, floorCards)) { anyMoveCard = true; break; }
+                if (HoldsSpecialCard(player, controllers, floorCards, out string where))
+                {
+                    anyMoveCard = true;
+                    heldDetail = $"{FormatPlayerName(player)} holds one {where}"; // P8A diagnostics: where, never which card
+                    break;
+                }
             }
 
             // Cards can still come into play while the Shop is open, while any Ability card is left in the Ability deck
             // or its discard pile (a rule vote can open the Shop later; a discard is shuffled back), or while a special
             // card lies loose on the table. Only when none of that is true is "no card can be bought" proven.
-            bool shopOpen = IsShopOpen()
-                || ContainerHasCards(template.AbilityDeckId)
-                || ContainerHasCards(template.AbilityDiscardId)
-                || LooseSpecialCardOnTable(controllers, floorCards);
+            List<string> supply = new List<string>(4);
+            if (IsShopOpen()) supply.Add("the Shop is open");
+            if (ContainerHasCards(template.AbilityDeckId)) supply.Add($"{CountIn(template.AbilityDeckId)} card(s) left in the Ability deck");
+            if (ContainerHasCards(template.AbilityDiscardId)) supply.Add($"{CountIn(template.AbilityDiscardId)} card(s) in the Ability discard");
+            if (LooseSpecialCardOnTable(controllers, floorCards)) supply.Add("a special card lies loose on the table");
+            bool shopOpen = supply.Count > 0;
+            string supplyDetail = string.Join("; ", supply);
             List<PlayerId> onFloor = new List<PlayerId>();
             foreach (PlayerId player in host.trapFloorTurnState.PlayerOrder)
             {
@@ -128,7 +143,7 @@ namespace ConsoleCards.Presentation.Composition
                     || !TryReadPawnTile(setup.PawnId, out TrapFloorCoordinate tile)
                         ? new TrapFloorEscapeOutlook(TrapFloorEscapeVerdict.Undetermined, "the pawn is not on the floor")
                         : TrapFloorEscapeOutlook.Evaluate(template.GridColumns, template.GridRows, tile, holes.Contains,
-                            exits.Contains, faceDown.Contains, anyMoveCard, takeableCards.Contains, shopOpen);
+                            exits.Contains, faceDown.Contains, anyMoveCard, takeableCards.Contains, shopOpen, heldDetail, supplyDetail);
                 provenOutlook[player] = outlook;
                 if (outlook.Verdict == TrapFloorEscapeVerdict.Impossible) impossible++;
                 if (outlook.Verdict != TrapFloorEscapeVerdict.Possible)
@@ -138,7 +153,13 @@ namespace ConsoleCards.Presentation.Composition
 
             outlookRevision = host.matchState.Revision;
             outlookFloor = template;
-            if (onFloor.Count == 0 || impossible != onFloor.Count) return; // someone may still escape: play on
+            List<TrapFloorEscapeOutlook> verdicts = new List<TrapFloorEscapeOutlook>(onFloor.Count);
+            foreach (PlayerId player in onFloor) verdicts.Add(provenOutlook[player]);
+            bool everyoneOut = TrapFloorNoEscapeRule.PutsEveryoneOut(verdicts);
+            if (impossible > 0 || verdicts.Count != onFloor.Count)
+                Debug.Log($"[Outlook] Floor {template.FloorIndex + 1} ({when}): {onFloor.Count} still on the floor, {impossible} "
+                    + $"PROVABLY_NO_ESCAPE: {(everyoneOut ? "everyone is out" : "play on (someone may still escape, or it is not proven)")}.", host);
+            if (!everyoneOut) return; // someone may still escape: play on
 
             if (!NoEscapeEndsFloorHere)
             {
@@ -213,19 +234,23 @@ namespace ConsoleCards.Presentation.Composition
         // An Ability or Friend card in the seat's hand, beside its Console or in a slot. A Controller card (it pays costs,
         // it never moves a pawn) and a taken Key do not count; anything else, including a card this computer cannot
         // name, is counted as one that could move a pawn.
-        private bool HoldsSpecialCard(PlayerId player, ControllerInputCardCatalog controllers, HashSet<TabletopObjectId> floorCards)
+        private bool HoldsSpecialCard(PlayerId player, ControllerInputCardCatalog controllers, HashSet<TabletopObjectId> floorCards, out string where)
         {
+            where = null;
             if (!TryGetTrapFloorPlayerSetup(player, out TrapFloorPlayerSetupDefinition setup)) return false;
-            if (HasSpecialCardIn(setup.HandContainerId, controllers, floorCards)
-                || HasSpecialCardIn(setup.ActionAbilityAreaContainerId, controllers, floorCards)
-                || HasSpecialCardIn(setup.MainSlotContainerId, controllers, floorCards)) return true;
+            if (HasSpecialCardIn(setup.HandContainerId, controllers, floorCards)) { where = "in the Hand"; return true; }
+            if (HasSpecialCardIn(setup.ActionAbilityAreaContainerId, controllers, floorCards)) { where = "beside the Console"; return true; }
+            if (HasSpecialCardIn(setup.MainSlotContainerId, controllers, floorCards)) { where = "in the Main slot (an Avatar counts: it may move a pawn)"; return true; }
             for (int i = 0; i < setup.SideSlotContainerIds.Count; i++)
             {
-                if (HasSpecialCardIn(setup.SideSlotContainerIds[i], controllers, floorCards)) return true;
+                if (HasSpecialCardIn(setup.SideSlotContainerIds[i], controllers, floorCards)) { where = "in a Console slot"; return true; }
             }
 
             return false;
         }
+
+        private int CountIn(ContainerId id) =>
+            !id.IsEmpty && host.matchState.Containers.TryGetValue(id, out ContainerState c) ? c.Count : 0;
 
         private bool HasSpecialCardIn(ContainerId containerId, ControllerInputCardCatalog controllers, HashSet<TabletopObjectId> floorCards)
         {

@@ -82,6 +82,8 @@ namespace ConsoleCards.Presentation.Composition
             // MP-2: the door shared with other computers (TabletopComposition.Online.cs) wraps the local one. Made first,
             // so it hears each accepted command before the views and the game do.
             replicatedAuthority = new ReplicatedTableAuthority(authority, () => matchState, BeginCommandScope, EndCommandScope);
+            // P8A: a joined table out of touch with its host is not played (TableLinkGuard).
+            replicatedAuthority.Frozen = () => online != null && online.TableIsStale;
 
             // R2: views follow accepted changes, not the code that asked for them; panels redraw when something
             // changed (R2c).

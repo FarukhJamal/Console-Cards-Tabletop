@@ -15,6 +15,21 @@ namespace ConsoleCards.Application.Authority
         Failed = 6,
     }
 
+    /// <summary>
+    /// P8A (owner, 2026-11-13: "distinguish confirmed host departure from an unknown network failure"): why this
+    /// computer last left a room. Set when the room is left; None while in a room.
+    /// </summary>
+    public enum MultiplayerLeaveReason
+    {
+        None = 0,
+        /// <summary>The player left (Leave, or the game closed the connection on purpose).</summary>
+        LeftOnPurpose = 1,
+        /// <summary>The room is gone: the host closed it or left (the room was not found again).</summary>
+        HostClosedRoom = 2,
+        /// <summary>The connection broke and could not be made again (the room may still be there).</summary>
+        ConnectionFailed = 3,
+    }
+
     /// <summary>One room in the public room list (MP-2).</summary>
     public sealed class OnlineRoomListing
     {
@@ -53,6 +68,9 @@ namespace ConsoleCards.Application.Authority
 
         /// <summary>What is happening, in plain words for the player ("Connected (asia). 3 rooms open.").</summary>
         string Status { get; }
+
+        /// <summary>P8A: why this computer last left a room (None while in one).</summary>
+        MultiplayerLeaveReason LastLeaveReason { get; }
 
         /// <summary>The server region in use, empty until connected.</summary>
         string Region { get; }

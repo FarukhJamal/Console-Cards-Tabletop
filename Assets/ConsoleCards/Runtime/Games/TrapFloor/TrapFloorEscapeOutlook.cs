@@ -47,7 +47,9 @@ namespace ConsoleCards.Games.TrapFloor
             Func<TrapFloorCoordinate, bool> isFaceDown,
             bool anyPlayerOnTheFloorHoldsAMoveCard,
             Func<TrapFloorCoordinate, bool> isObtainableCardTile = null,
-            bool cardsCanStillBeBought = false)
+            bool cardsCanStillBeBought = false,
+            string heldDetail = null,
+            string supplyDetail = null)
         {
             if (isHole == null || isUsableExit == null || isFaceDown == null) throw new ArgumentNullException();
             if (columns < 1 || rows < 1) throw new ArgumentOutOfRangeException(nameof(columns));
@@ -80,10 +82,12 @@ namespace ConsoleCards.Games.TrapFloor
                     "no exit in walking reach, but an Ability or Friend on a face-up tile in reach can still be taken");
             if (anyPlayerOnTheFloorHoldsAMoveCard)
                 return new TrapFloorEscapeOutlook(TrapFloorEscapeVerdict.Undetermined,
-                    "no exit in walking reach, but a player still holds an Ability or Friend card that may move a pawn");
+                    "no exit in walking reach, but a player still holds an Ability or Friend card that may move a pawn"
+                    + (string.IsNullOrEmpty(heldDetail) ? string.Empty : $" ({heldDetail})"));
             if (cardsCanStillBeBought)
                 return new TrapFloorEscapeOutlook(TrapFloorEscapeVerdict.Undetermined,
-                    "no exit in walking reach, but a card that could move a pawn can still come into play (Shop, Ability deck or discard, or a card on the table)");
+                    "no exit in walking reach, but a card that could move a pawn can still come into play (Shop, Ability deck or discard, or a card on the table)"
+                    + (string.IsNullOrEmpty(supplyDetail) ? string.Empty : $" ({supplyDetail})"));
             return new TrapFloorEscapeOutlook(TrapFloorEscapeVerdict.Impossible,
                 $"no exit in walking reach of {pawn}, every tile in reach is face up, no card is held, takeable or for sale that could move a pawn");
         }
@@ -94,6 +98,23 @@ namespace ConsoleCards.Games.TrapFloor
             if (at.X < columns) yield return new TrapFloorCoordinate(at.X + 1, at.Y);
             if (at.Y > 1) yield return new TrapFloorCoordinate(at.X, at.Y - 1);
             if (at.Y < rows) yield return new TrapFloorCoordinate(at.X, at.Y + 1);
+        }
+    }
+
+    /// <summary>
+    /// P8A (owner, 2026-11-13): the floor-level decision from each player's outlook. ESCAPE_POSSIBLE = Possible,
+    /// PROVABLY_NO_ESCAPE = Impossible, UNDETERMINED = Undetermined. Only when every player still on the floor is
+    /// PROVABLY_NO_ESCAPE are they put out (owner decision 2026-11-08, option A); one trapped player while another may
+    /// still escape, or any Undetermined, plays on.
+    /// </summary>
+    public static class TrapFloorNoEscapeRule
+    {
+        public static bool PutsEveryoneOut(IReadOnlyList<TrapFloorEscapeOutlook> stillOnTheFloor)
+        {
+            if (stillOnTheFloor == null || stillOnTheFloor.Count == 0) return false;
+            for (int i = 0; i < stillOnTheFloor.Count; i++)
+                if (stillOnTheFloor[i].Verdict != TrapFloorEscapeVerdict.Impossible) return false;
+            return true;
         }
     }
 

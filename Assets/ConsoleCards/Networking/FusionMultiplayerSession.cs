@@ -61,6 +61,8 @@ namespace ConsoleCards.Networking
         public int LocalConnection =>
             runner != null && runner.IsRunning && state == MultiplayerSessionState.InRoom ? runner.LocalPlayer.RawEncoded : -1;
 
+        public MultiplayerLeaveReason LastLeaveReason { get; private set; }
+
         public event Action Changed;
         public event Action<int> ConnectionJoined;
         public event Action<int> ConnectionLeft;
@@ -167,6 +169,7 @@ namespace ConsoleCards.Networking
             attempt++;
             roomCode = string.Empty;
             hosting = false;
+            LastLeaveReason = MultiplayerLeaveReason.LeftOnPurpose;
             _ = BackToLobbyAsync(attempt, "You left the room.");
         }
 
@@ -245,6 +248,7 @@ namespace ConsoleCards.Networking
             }
 
             retry = 0;
+            LastLeaveReason = MultiplayerLeaveReason.None;
             bool tookOver = takingOver && mode == GameMode.Host;
             takingOver = false;
             newHostUntil = 0f;
@@ -317,7 +321,15 @@ namespace ConsoleCards.Networking
             retry = 0;
             roomCode = string.Empty;
             hosting = false;
-            string message = again && gone ? "The room has closed (the host left)." : (mode == GameMode.Host ? "Could not make the room: " : "Could not join: ") + why;
+            if (again) LastLeaveReason = gone ? MultiplayerLeaveReason.HostClosedRoom : MultiplayerLeaveReason.ConnectionFailed;
+            // P8A: one line with what a lost connection ended as (no keys, no card names).
+            if (again)
+                Debug.Log($"[Online] Getting back into the room ended: {LastLeaveReason} (shutdown {reason}, {(mode == GameMode.Host ? "as host" : "as guest")}): {why}");
+            string message = again && gone
+                ? "The room has closed (the host left)."
+                : again
+                ? "Could not get back into the room (the network failed): " + why
+                : (mode == GameMode.Host ? "Could not make the room: " : "Could not join: ") + why;
             await BackToLobbyAsync(tryNumber, message);
         }
 
@@ -331,6 +343,10 @@ namespace ConsoleCards.Networking
         }
 
         private string lastMessage;
+
+        // A room code in a log line: its region and length only (the code itself lets anyone in a private room).
+        private static string RoomCodeForLog(string code) =>
+            string.IsNullOrEmpty(code) ? "(none)" : $"[{code.Length} chars]";
 
         // ---------- messages ----------
 
@@ -361,6 +377,8 @@ namespace ConsoleCards.Networking
 
         public void Disconnect()
         {
+            if (state == MultiplayerSessionState.InRoom || state == MultiplayerSessionState.Reconnecting)
+                LastLeaveReason = MultiplayerLeaveReason.LeftOnPurpose;
             attempt++;
             roomCode = string.Empty;
             hosting = false;
@@ -661,15 +679,18 @@ namespace ConsoleCards.Networking
             if (state == MultiplayerSessionState.InRoom && !hosting && !string.IsNullOrEmpty(roomCode))
             {
                 // The connection to the host broke: get back in (the same seat waits for us).
+                Debug.Log($"[Online] The connection to the host closed (shutdown {shutdownReason}): getting back into room {RoomCodeForLog(roomCode)}.");
                 retry = 0;
                 _ = EnterRoomAsync(++attempt, GameMode.Client, true);
                 return;
             }
 
+            Debug.Log($"[Online] The connection closed (shutdown {shutdownReason}, {(hosting ? "host" : "guest")}, state {state}).");
             if (state == MultiplayerSessionState.InRoom && hosting)
             {
                 roomCode = string.Empty;
                 hosting = false;
+                LastLeaveReason = MultiplayerLeaveReason.ConnectionFailed;
                 _ = BackToLobbyAsync(++attempt, "Your room closed: " + Describe(shutdownReason, null));
                 return;
             }

@@ -189,6 +189,16 @@ namespace ConsoleCards.Presentation.Composition
                 PrivateNote("Lost the room: a private guest never takes over; getting back in if the room is still there.");
                 return;
             }
+            if (sharedTable)
+            {
+                // P8A (owner, 2026-11-13: "host session loss: end the guest session safely"): a joined computer never
+                // takes over a shared table. Its own lost connection looks exactly like a departed host, and a takeover
+                // then played on in a stale copy (the guest stuck at Round 3 while the host reached Round 12). It tries
+                // to get back in; a room that is gone ends the session (SESSION ENDED, Return to Main Menu).
+                Debug.Log("[Online] Lost the room with a shared table: getting back in (no takeover of a shared table).");
+                return;
+            }
+
             if (IsNextHost())
             {
                 takingOver = true;

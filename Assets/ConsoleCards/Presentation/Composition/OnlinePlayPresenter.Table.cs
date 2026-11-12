@@ -114,6 +114,8 @@ namespace ConsoleCards.Presentation.Composition
 
         private void StartSharing(bool asHost)
         {
+            if (asHost) LinkHosting();
+            else LinkJoined(); // P8A: a joined table is frozen until the host's table is applied
             sharedTable = true;
             host.hotSeatMode = false; // each computer plays its own seat
             ReplicatedTableAuthority door = Replicated;
@@ -891,6 +893,7 @@ namespace ConsoleCards.Presentation.Composition
             awaitingTable = false;
             mismatches = 0;
             if (host.matchState != null) lastRevision = host.matchState.Revision;
+            if (ok && !hosting) LinkTableArrived(); // P8A: the host's whole table is here: play may resume
             if (!ok)
             {
                 Debug.LogWarning($"[Online] The table from {(hosting ? "a player" : "the host")} could not be shown here: {error}");

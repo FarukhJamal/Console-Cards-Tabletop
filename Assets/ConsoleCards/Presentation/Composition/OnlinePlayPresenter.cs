@@ -89,6 +89,7 @@ namespace ConsoleCards.Presentation.Composition
         private IMultiplayerSession session;
         private bool subscribed;
         private MultiplayerSessionState lastState = MultiplayerSessionState.Offline;
+        private string lastRoomCode; // P8A: the last room this computer was in (Rejoin)
         private bool hosting;
         private bool welcomed;
         private string roomGame = string.Empty;
@@ -229,7 +230,8 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < members.Count; i++)
             {
                 Member member = members[i];
-                if (member.Player == id) return member.IsHost || !member.Connected;
+                // P8A (owner, 2026-11-13): a seat whose computer lost its connection is not played here (it waits).
+                if (member.Player == id) return member.IsHost;
             }
 
             return true;
@@ -402,7 +404,7 @@ namespace ConsoleCards.Presentation.Composition
             }
             else if (now == MultiplayerSessionState.Reconnecting && before == MultiplayerSessionState.InRoom)
             {
-                if (sharedTable) host.ShowMessage("Connection lost: getting back into the room… (your moves wait until you are back)");
+                if (sharedTable && !hosting) LinkLost(); // P8A: the table freezes and says so
                 hostLossCheck = true; // MP-5: next frame (not inside the session's own call): the next player may take over
             }
 
@@ -423,6 +425,7 @@ namespace ConsoleCards.Presentation.Composition
             welcomed = false;
             clientInbox.Reset();
             clientSeq = 0;
+            lastRoomCode = session.RoomCode; // P8A: kept for Rejoin after an ended session
             if (!again)
             {
                 watchNotice = null;
@@ -455,7 +458,7 @@ namespace ConsoleCards.Presentation.Composition
             SendHello();
             if (again)
             {
-                if (sharedTable) host.ShowMessage("Back in the room: getting the table…");
+                if (sharedTable) LinkBackInRoom(); // P8A: still frozen until the host's table is applied
                 return;
             }
 
@@ -467,6 +470,8 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (InPrivateSession) EndPrivateSession(why); // PRIVACY-P4: no filtered table is kept as a game
             bool hadTable = sharedTable;
+            bool joinedTable = sharedTable && !hosting && !InPrivateSession;
+            LinkLeft(joinedTable); // P8A: a joined table lost (not left on purpose) stays frozen and says why
             StopSharing();
             ForgetRoomContent(); // MP-4: back to this profile's own cards, decks and rules
             members.Clear();
@@ -480,7 +485,7 @@ namespace ConsoleCards.Presentation.Composition
             sentAssist = -1;
             if (hadTable)
             {
-                host.ShowMessage($"{why} The table stays on this computer, offline.");
+                host.ShowMessage(TableIsStale ? why : $"{why} The table stays on this computer, offline.");
                 if (IsFrontEndOpen()) host.runtimeUi.KeepPanelsOnNextRefresh(); // LEAVE on the Room screen goes to the Lobby
                 if (host.IsInitialized) host.SessionService.ShowActiveSessionUi(); // the seats' names and Undo come back
             }
@@ -513,7 +518,9 @@ namespace ConsoleCards.Presentation.Composition
             member.Ready = false;
             member.LeftAt = Time.unscaledTime;
             PrivateMemberGone(member, false); // P7: the connection dropped: its staged payment waits for it a while
-            if (sharedTable) host.ShowMessage($"{member.Name} lost the connection; their seat waits for them (you play it meanwhile).");
+            // P8A (owner, 2026-11-13: "no automatic turn skipping, impersonation or host takeover of the guest seat"): the
+            // seat waits; nothing on this computer plays it meanwhile.
+            if (sharedTable) host.ShowMessage($"{member.Name} lost the connection. Their seat, pieces and turn wait for them; the game goes on once they are back.");
             BroadcastRoster();
             RefreshFrontEnd();
         }
@@ -561,6 +568,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             TickTable(now);
+            TickLink(now); // P8A
             TickPrivate(); // PRIVACY-P4 (private development session only)
         }
 

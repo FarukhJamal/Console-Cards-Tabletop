@@ -133,8 +133,25 @@ namespace ConsoleCards.Application.Authority
         /// </summary>
         public ITableCommandInterceptor Interceptor { get; set; }
 
+        /// <summary>
+        /// P8A (owner, 2026-11-13: "stop accepting gameplay inputs on a disconnected/stale table"): while this says so,
+        /// nothing made on this computer changes the table (a joined computer whose connection is lost, or that is back
+        /// in the room but has not yet received the host's table). Commands from the host (<see cref="Replay"/>) still
+        /// run, and a whole table from the host still replaces this one. Null: never frozen.
+        /// </summary>
+        public Func<bool> Frozen { get; set; }
+
+        /// <summary>How many commands made here the frozen table refused (diagnostics).</summary>
+        public int RefusedWhileFrozen { get; private set; }
+
         public TResult Submit<TCommand, TResult>(TCommand command) where TCommand : class
         {
+            if (!replaying && depth == 0 && Frozen != null && Frozen())
+            {
+                RefusedWhileFrozen++;
+                return NotRun<TResult>(); // a stale table: nothing made here counts until the host's table is back
+            }
+
             if (Interceptor != null && Interceptor.TrySubmit(command, out TResult taken)) return taken;
             if (Mode == TableReplicationMode.Offline) return inner.Submit<TCommand, TResult>(command);
             if (command == null) throw new ArgumentNullException(nameof(command));

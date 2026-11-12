@@ -184,7 +184,7 @@ namespace ConsoleCards.Presentation.Composition
                     && !collapsed.IsTakenPrize;
             }
 
-            public bool CannotEscape(PlayerId player) => game.IsProvenTrapped(player);
+            public bool CannotEscape(PlayerId player) => game.IsProvenTrapped(player) || game.TrustsHostsNoEscapeProof; // P8A
 
             public bool IsStuckWithoutKey(PlayerId player)
             {
