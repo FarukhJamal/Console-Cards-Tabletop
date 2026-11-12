@@ -467,9 +467,78 @@ namespace ConsoleCards.Presentation.Composition
         private const float AbilityDealSlideSeconds = 0.45f;
         private const float AbilityDealStagger = 0.12f;
 
+        // P8A audit (reconnect / rebuild): the draw is known from the table, not only from this computer's memory. A dealt
+        // card is an Ability for sale lying loose, face up and locked (bought cards and starting Abilities are not locked).
+        private List<TabletopObjectId> FindDrawLyingOut()
+        {
+            List<TabletopObjectId> found = new List<TabletopObjectId>();
+            if (host.matchState == null || host.trapFloorTemplate == null || !host.IsFullAbilityDeck(host.trapFloorTemplate.AbilityDeckId)) return found;
+            foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in host.matchState.Cards)
+            {
+                CardInstanceState card = pair.Value;
+                if (!card.BaseState.ContainerId.IsEmpty || !card.BaseState.IsUserLocked || card.Face != CardFace.FaceUp) continue;
+                if (TryGetDeckCardDefinition(pair.Key, out _)) found.Add(pair.Key);
+            }
+
+            return found;
+        }
+
+        private bool SyncedDraw()
+        {
+            SyncDrawWithTable();
+            return true;
+        }
+
+        // P8A audit (Undo): the turn's draw as the table now shows it. Undo of the deal puts the cards back in the deck:
+        // the draw is then forgotten, so Draw 3 deals again (the same cards, the deck order is restored). Undo of End
+        // Buying puts them back out: they are this turn's draw again.
+        private void SyncDrawWithTable()
+        {
+            if (!IsAbilityOfferTurn() || !TryGetAbilityDeck(out ContainerState deck)) return;
+            List<TabletopObjectId> lying = FindDrawLyingOut();
+            if (lying.Count > 0)
+            {
+                foreach (TabletopObjectId cardId in lying) dealtOffer.Add(cardId);
+                return;
+            }
+
+            if (dealtOffer.Count == 0) return;
+            foreach (TabletopObjectId cardId in dealtOffer)
+                if (!deck.Contains(cardId)) return;
+            dealtOffer.Clear();
+            abilityOffer.Clear();
+            abilityOfferTurnState = null;
+            abilityOfferRound = -1;
+            abilityOfferPlayer = PlayerId.Empty;
+        }
+
+        // Takes a draw that lies out as this turn's (so a reconnected player can still buy from it or End Buying, and
+        // Draw 3 never deals a second row).
+        private bool AdoptDrawLyingOut()
+        {
+            if (host.trapFloorTurnState == null) return false;
+            List<TabletopObjectId> lying = FindDrawLyingOut();
+            if (lying.Count == 0) return false;
+            abilityOffer.Clear();
+            dealtOffer.Clear();
+            foreach (TabletopObjectId cardId in lying)
+            {
+                abilityOffer.Add(cardId);
+                dealtOffer.Add(cardId);
+            }
+
+            abilityOfferTurnState = host.trapFloorTurnState;
+            abilityOfferRound = host.trapFloorTurnState.CurrentRound;
+            abilityOfferPlayer = host.trapFloorTurnState.ActivePlayerId;
+            return true;
+        }
+
         // End Turn: what was not bought goes back into the deck (the deck is then shuffled).
         private void ReturnDealtOffer(PlayerId owner)
         {
+            // P8A audit: what this computer dealt, and any draw it did not deal that still lies out (dealt by the turn
+            // player's computer before a reconnect, or held only there), so nothing stays locked on the table.
+            foreach (TabletopObjectId lying in FindDrawLyingOut()) dealtOffer.Add(lying);
             if (dealtOffer.Count == 0 || !TryGetAbilityDeck(out ContainerState deck)) return;
             var starts = host.CaptureCardTransforms(dealtOffer);
             bool batch = !host.undoBatchActive;
@@ -626,6 +695,13 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (!TryGetAbilityDeck(out ContainerState deck)) return;
+            SyncDrawWithTable();
+            if (!IsAbilityOfferTurn() && AdoptDrawLyingOut())
+            {
+                ShowAbilityOffer(deck); // P8A: this turn's draw already lies out (dealt before a reconnect, a rebuild)
+                return;
+            }
+
             if (!IsAbilityOfferTurn())
             {
                 // TABLE-1: when the Ability deck runs out, the discard pile is shuffled into it.
@@ -664,7 +740,8 @@ namespace ConsoleCards.Presentation.Composition
         // P8A (owner, 2026-11-10: "a way to end the buying phase"): the turn player is done buying; what is left of this
         // turn's draw slides back into the deck now (no second draw this turn; the deck is shuffled at End Turn).
         internal bool CanEndAbilityBuying() =>
-            IsAbilityOfferTurn()
+            SyncedDraw()
+            && IsAbilityOfferTurn()
             && dealtOffer.Count > 0
             && TryGetAbilityDeck(out ContainerState deck)
             && CountOfferStillInDeck(deck) > 0
@@ -689,7 +766,8 @@ namespace ConsoleCards.Presentation.Composition
 
         // The buying step's line for the turn guidance (the HUD names it SHOP PHASE), while this turn's draw lies out.
         internal bool IsAbilityBuyingOpen() =>
-            IsAbilityOfferTurn() && dealtOffer.Count > 0 && TryGetAbilityDeck(out ContainerState deck) && CountOfferStillInDeck(deck) > 0;
+            SyncedDraw()
+            && IsAbilityOfferTurn() && dealtOffer.Count > 0 && TryGetAbilityDeck(out ContainerState deck) && CountOfferStillInDeck(deck) > 0;
 
         // P8A (owner, 2026-11-08): this turn's draw shows in the Shop window, on every computer the same way: only the
         // drawn Abilities, each with its cost and whether the Hand can pay; Buy runs the Shop's own payment for that card.
