@@ -879,7 +879,8 @@ namespace ConsoleCards.Presentation.Composition
             PlayAssist.UseRoomLevel((PlayAssistLevel)level, true);
             if (!changed) return;
             Debug.Log($"[Online] Assist for this room: {PlayAssist.Name((PlayAssistLevel)level)} (set by the host).");
-            if (sharedTable) host.ShowMessage($"The host set Assist to {PlayAssist.Name((PlayAssistLevel)level)} for everyone.");
+            // Owner QA 2026-11-14: a mid-game change pops up for every guest (ShowMessage dropped it with action messages off).
+            if (sharedTable) host.ShowNotice($"The host set Assist to {PlayAssist.Name((PlayAssistLevel)level)} for everyone.");
         }
 
         // ---------- sending ----------

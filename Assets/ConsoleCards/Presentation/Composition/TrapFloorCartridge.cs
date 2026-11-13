@@ -5035,6 +5035,7 @@ namespace ConsoleCards.Presentation.Composition
         internal readonly List<Vector3> reachPositions = new List<Vector3>();
         internal static readonly Color ReachMarkerColour = new Color(0.55f, 0.95f, 0.4f, 0.9f);
         internal int[,] reachSteps;
+        private int[] reachQueue; // ComputeMoveSteps' search queue, reused
         // H3 (owner, 2026-10-15): the face-down tile of a landing the rules do not allow (it does not flip unless
         // the table keeps the move), and the tile under the held pawn for the RULE reminder while holding.
         internal TabletopObjectId notAllowedLandingFloorCardId;
@@ -5280,8 +5281,10 @@ namespace ConsoleCards.Presentation.Composition
             return Mathf.Max(0, tiles);
         }
 
-        // Steps from the start along each straight line (up, down, left, right) until a hole or the edge (-1: not
-        // reachable in one straight line). With a Blind direction only that line counts. Fills reachSteps; reuses it.
+        // Fewest single steps from the start to each tile, up, down, left or right, turning allowed (owner, 2026-11-14:
+        // "first step horizontal and the next a vertical one; never directly diagonal"), never over a hole or off the
+        // grid (-1: not reachable). With a Blind direction only that one straight line counts. Fills reachSteps (and a
+        // reused queue); allocates only when the grid size changes.
         internal void ComputeMoveSteps(TrapFloorCoordinate start, TrapFloorBlindMovementDirection? onlyDirection)
         {
             int columns = host.trapFloorTemplate.GridColumns;
@@ -5295,6 +5298,30 @@ namespace ConsoleCards.Presentation.Composition
 
             if (start.X < 1 || start.Y < 1 || start.X > columns || start.Y > rows) return;
             reachSteps[start.X, start.Y] = 0;
+            if (!onlyDirection.HasValue)
+            {
+                int cells = columns * rows;
+                if (reachQueue == null || reachQueue.Length < cells) reachQueue = new int[cells];
+                int head = 0, tail = 0;
+                reachQueue[tail++] = (start.X - 1) + ((start.Y - 1) * columns);
+                while (head < tail)
+                {
+                    int cell = reachQueue[head++];
+                    int cx = (cell % columns) + 1, cy = (cell / columns) + 1;
+                    int next = reachSteps[cx, cy] + 1;
+                    for (int d = 0; d < 4; d++)
+                    {
+                        int nx = cx + (d == 0 ? 1 : d == 1 ? -1 : 0);
+                        int ny = cy + (d == 2 ? 1 : d == 3 ? -1 : 0);
+                        if (!IsWalkableTile(nx, ny) || reachSteps[nx, ny] >= 0) continue;
+                        reachSteps[nx, ny] = next;
+                        reachQueue[tail++] = (nx - 1) + ((ny - 1) * columns);
+                    }
+                }
+
+                return;
+            }
+
             for (int d = 0; d < 4; d++)
             {
                 TrapFloorBlindMovementDirection direction = (TrapFloorBlindMovementDirection)d;
@@ -5413,9 +5440,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 return onlyDirection.HasValue
                     ? $"BLIND: this turn you move {onlyDirection.Value.ToString().ToLowerInvariant()} only."
-                    : to.X == start.X || to.Y == start.Y
-                        ? "A hole is in the way; moves cannot cross holes."
-                        : "Moves go in one straight line (up, down, left or right), with no turning.";
+                    : "Holes block every way to that tile (moves go one tile at a time up, down, left or right; never diagonally).";
             }
 
             return steps > allowance
@@ -6172,7 +6197,7 @@ namespace ConsoleCards.Presentation.Composition
                 + $"Draw up to {handLimit} if needed (hover the deck)\n"
                 + (string.IsNullOrEmpty(buyingStep) && TryGetAbilityOfferAction(out _) ? $"Draw {AbilityOfferSize} from the Ability deck and buy any you can pay for\n" : string.Empty)
                 + $"Move up to {moveTiles} tile{(moveTiles == 1 ? string.Empty : "s")} "
-                + "in one straight line (they light while you hold your pawn); landing flips a tile. "
+                + "up, down, left or right, turning allowed but never diagonally (they light while you hold your pawn); landing flips a tile. "
                 + "Take a prize you stand on, then End Turn";
             bool isBlind = TryGetActiveBlindStatus(out TrapFloorBlindStatusState blindStatus);
             bool isSlow = TryGetActiveSlowStatus(out TrapFloorSlowStatusState slowStatus);

@@ -399,10 +399,10 @@ namespace ConsoleCards.Tests
         [Test]
         public void Full_InvalidMoves_AreRefused()
         {
-            Assert.AreEqual(TrapFloorHostMoveVerdict.NotStraight, TrapFloorHostMoveRules.Check(Move(1, 1, 2, 2)));
+            Assert.AreEqual(TrapFloorHostMoveVerdict.TooFar, TrapFloorHostMoveRules.Check(Move(1, 1, 2, 3)), "a turn still counts every step (owner, 2026-11-14)");
             Assert.AreEqual(TrapFloorHostMoveVerdict.TooFar, TrapFloorHostMoveRules.Check(Move(1, 1, 1, 4)));
             Assert.AreEqual(TrapFloorHostMoveVerdict.OntoHole, TrapFloorHostMoveRules.Check(Move(3, 1, 3, 3)));
-            Assert.AreEqual(TrapFloorHostMoveVerdict.NotStraight, TrapFloorHostMoveRules.Check(Move(3, 2, 3, 4)), "across a hole");
+            Assert.AreEqual(TrapFloorHostMoveVerdict.TooFar, TrapFloorHostMoveRules.Check(Move(3, 2, 3, 4)), "around a hole counts the way round, never across");
 
             TrapFloorHostMoveFacts other = Move(1, 1, 1, 2);
             other.PawnOwner = Other;

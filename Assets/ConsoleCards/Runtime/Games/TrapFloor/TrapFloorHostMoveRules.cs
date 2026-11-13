@@ -102,12 +102,17 @@ namespace ConsoleCards.Games.TrapFloor
             if (f.Stuck) return TrapFloorHostMoveVerdict.Stuck;
             if (f.BlindUnrolled) return TrapFloorHostMoveVerdict.Blind;
 
-            int steps = StepsAlongLine(f, f.TurnStart.Value, to);
+            // Owner, 2026-11-14: a move is up to its allowance in single steps up, down, left or right, and may turn
+            // between steps (2 tiles: one right then one up), never diagonally and never over a hole. BLIND keeps one
+            // straight line in the rolled direction.
+            int steps = f.BlindDirection.HasValue
+                ? StepsAlongLine(f, f.TurnStart.Value, to)
+                : ShortestSteps(f, f.TurnStart.Value, to);
             if (steps < 0)
             {
-                if (f.BlindDirection.HasValue && StepsAlongLine(f, f.TurnStart.Value, to, ignoreBlind: true) >= 0)
+                if (f.BlindDirection.HasValue && ShortestSteps(f, f.TurnStart.Value, to) >= 0)
                     return TrapFloorHostMoveVerdict.Blind;
-                return TrapFloorHostMoveVerdict.NotStraight;
+                return TrapFloorHostMoveVerdict.NotStraight; // no way there in steps over walkable tiles
             }
 
             return steps > Math.Max(0, f.Allowance) ? TrapFloorHostMoveVerdict.TooFar : TrapFloorHostMoveVerdict.Allowed;
@@ -122,7 +127,7 @@ namespace ConsoleCards.Games.TrapFloor
                 case TrapFloorHostMoveVerdict.PlayerIsOut: return "that player is out for this floor.";
                 case TrapFloorHostMoveVerdict.NotYourTurn: return "it is not your turn to move.";
                 case TrapFloorHostMoveVerdict.OntoHole: return "that tile is a hole (collapsed floor cannot be stood on).";
-                case TrapFloorHostMoveVerdict.NotStraight: return "moves go in one straight line (up, down, left or right), with no turning or crossing holes.";
+                case TrapFloorHostMoveVerdict.NotStraight: return "holes block every way to that tile (moves go one tile at a time up, down, left or right; never diagonally).";
                 case TrapFloorHostMoveVerdict.TooFar: return $"that is further than this turn allows ({allowance}).";
                 case TrapFloorHostMoveVerdict.Stuck: return "STUCK: this turn you stay where you are.";
                 case TrapFloorHostMoveVerdict.Blind: return "BLIND: roll the Blind direction, then move only that way.";
@@ -148,6 +153,40 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             return steps;
+        }
+
+        // Fewest single steps (up, down, left, right; turning allowed) from the start to the tile over walkable tiles;
+        // -1 if holes or the edge cut it off. Event-time only (a move check), so the small arrays are fine.
+        private static int ShortestSteps(TrapFloorHostMoveFacts f, TrapFloorCoordinate start, TrapFloorCoordinate to)
+        {
+            int columns = f.Columns, rows = f.Rows;
+            if (f.Walkable == null || columns < 1 || rows < 1) return -1;
+            if (start.X < 1 || start.Y < 1 || start.X > columns || start.Y > rows) return -1;
+            int[] steps = new int[columns * rows];
+            for (int i = 0; i < steps.Length; i++) steps[i] = -1;
+            int[] queue = new int[columns * rows];
+            int head = 0, tail = 0;
+            int first = (start.X - 1) + ((start.Y - 1) * columns);
+            steps[first] = 0;
+            queue[tail++] = first;
+            while (head < tail)
+            {
+                int cell = queue[head++];
+                int x = (cell % columns) + 1, y = (cell / columns) + 1;
+                if (x == to.X && y == to.Y) return steps[cell];
+                for (int d = 0; d < 4; d++)
+                {
+                    int nx = x + (d == 0 ? 1 : d == 1 ? -1 : 0);
+                    int ny = y + (d == 2 ? 1 : d == 3 ? -1 : 0);
+                    if (nx < 1 || ny < 1 || nx > columns || ny > rows || !f.Walkable(nx, ny)) continue;
+                    int next = (nx - 1) + ((ny - 1) * columns);
+                    if (steps[next] >= 0) continue;
+                    steps[next] = steps[cell] + 1;
+                    queue[tail++] = next;
+                }
+            }
+
+            return -1;
         }
 
         private static TrapFloorBlindMovementDirection DirectionOf(int dx, int dy) =>
