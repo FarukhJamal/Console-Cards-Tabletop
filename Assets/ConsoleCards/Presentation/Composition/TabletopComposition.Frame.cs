@@ -68,7 +68,7 @@ namespace ConsoleCards.Presentation.Composition
                     continue;
                 }
 
-                float t = Mathf.Clamp01((now - hop.Started) / Mathf.Max(0.05f, pawnHopSeconds));
+                float t = Mathf.Clamp01((now - hop.Started) / Mathf.Max(0.05f, hop.Spring ? PawnSpringArc.Seconds : pawnHopSeconds));
                 if (t >= 1f || hop.Visual.parent == null)
                 {
                     hop.Visual.localPosition = hop.RestLocal;
@@ -77,6 +77,13 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 Vector3 restWorld = hop.Visual.parent.TransformPoint(hop.RestLocal);
+                if (hop.Spring)
+                {
+                    PawnSpringArc.Evaluate(t, PawnSpringArc.Height, out float along, out float lift);
+                    hop.Visual.position = Vector3.LerpUnclamped(hop.StartWorld, restWorld, along) + (Vector3.up * lift);
+                    continue;
+                }
+
                 float eased = t * t * (3f - (2f * t));
                 hop.Visual.position = Vector3.Lerp(hop.StartWorld, restWorld, eased)
                     + (Vector3.up * (pawnHopHeight * 4f * t * (1f - t)));

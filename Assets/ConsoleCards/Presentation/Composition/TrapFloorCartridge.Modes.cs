@@ -286,10 +286,20 @@ namespace ConsoleCards.Presentation.Composition
                 escaped = AttemptTrapFloorEscape(landedFloorCardId, active, winsFloor, !grand);
                 if (escaped && !winsFloor)
                 {
-                    // The pawn leaves the floor and the player takes no more turns this floor.
-                    EndAbilityOffer(); // as End Turn does: the Ability draw not bought goes back
-                    SendEscapedPawnAway(active);
+                    // The player takes no more turns this floor, and their pawn leaves the floor.
+                    // P8A (owner, 2026-11-13: "a guest escapes but the turn never passes"): the rules step that passes the
+                    // turn goes straight after the escape, before the tidying (the Ability draw going back, the pawn set
+                    // beside the board), so nothing that tidying does or fails at can keep the turn from passing.
                     SubmitElimination(active, TrapFloorEliminationReason.Escaped, active); // AUTH-EFFECTS: the host sees the escape
+                    try
+                    {
+                        EndAbilityOffer(); // as End Turn does: the Ability draw not bought goes back
+                        SendEscapedPawnAway(active);
+                    }
+                    catch (Exception exception)
+                    {
+                        Debug.LogException(exception);
+                    }
                 }
             }
             finally

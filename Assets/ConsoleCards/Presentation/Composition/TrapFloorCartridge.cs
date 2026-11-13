@@ -2450,7 +2450,9 @@ namespace ConsoleCards.Presentation.Composition
             if (!moved) return false;
             pawnView?.ApplyAcceptedState();
             landingPawnTiles[pawn.BaseState.Id] = targetTile;
-            StartPawnHop(pawnView, hopVisual, hopStart, hopRootStart);
+            // P8A polish: a Spring's move already started its spring when the move was accepted (OnPawnCommitted, on
+            // every computer); the plain hop would replace it.
+            if (!IsSpringHopRunning(hopVisual)) StartPawnHop(pawnView, hopVisual, hopStart, hopRootStart);
             return true;
         }
 
@@ -2487,6 +2489,83 @@ namespace ConsoleCards.Presentation.Composition
                 StartWorld = startWorld,
                 Started = Time.unscaledTime,
             });
+        }
+
+        // ---------- P8A polish: the Spring's forced move springs ----------
+
+        // Owner, 2026-11-13: "in Full, the Spring trap's automated forced move should be animated as a spring: the pawn
+        // arcs from its tile, lands on the target and bounces once or twice before settling. Animation only." The move
+        // itself is the replicated CommitPhysicalObjectCommand with its LayoutPose (unchanged). Every computer that
+        // accepts it (the one that made it, the host replaying a guest's, a guest replaying the host's) sees the same
+        // rules state at that moment: the player still owes the Spring's move to that tile (the occurrence is completed
+        // by a later command). That is what starts the spring here, from the Spring's own tile to the target, so it
+        // plays the same everywhere and needs nothing new on the wire. Nothing in the table changes.
+        private void OnPawnCommitted(CommitPhysicalObjectCommand command, CommandResult result)
+        {
+            if (PlayAssist.Level != PlayAssistLevel.Full
+                || command == null
+                || !command.LayoutPose.HasValue
+                || host.trapFloorTemplate == null
+                || host.matchState == null
+                || host.trapFloorAbilityResolutionState == null
+                || !host.matchState.Pawns.ContainsKey(command.ObjectId)
+                || !TryGetPawnOwner(command.ObjectId, out PlayerId owner, out _)
+                || !host.trapFloorAbilityResolutionState.TryGetOwedMove(owner, out TrapFloorTrapResolutionRecord owed)
+                || owed.Content == null
+                || owed.Content.TrapEffect != TrapFloorTrapEffectCategory.SpringLaunch
+                || owed.LaunchTargetFloorCardId.IsEmpty
+                || !host.trapFloorTemplate.TryGetFloorCoordinate(owed.LaunchTargetFloorCardId, out TrapFloorCoordinate targetCell)
+                || !host.trapFloorTemplate.TryGetFloorCoordinateAt(host.matchState, command.LayoutPose.Value.Position, out TrapFloorCoordinate placedCell)
+                || !placedCell.Equals(targetCell)
+                || !host.Registry.TryGetCardView(owed.FloorCardId, out CardView springTile)
+                || !host.Registry.TryGetCardView(owed.LaunchTargetFloorCardId, out CardView targetTile))
+            {
+                return;
+            }
+
+            for (int i = 0; i < host.Registry.pawnViews.Count; i++)
+            {
+                PawnView view = host.Registry.pawnViews[i];
+                if (view == null || !view.IsBound || view.ObjectId != command.ObjectId) continue;
+                Transform visual = view.transform.Find("VisualRoot");
+                if (visual == null || visual.parent == null) return; // no visual child: the plain hop stays
+                StartSpringHop(visual, springTile.transform.position - targetTile.transform.position);
+                return;
+            }
+        }
+
+        // The spring starts where the pawn's visual would rest on the Spring's tile (its rest on the target, moved back
+        // by the step between the two tiles) and ends at its rest on the target.
+        private void StartSpringHop(Transform visual, Vector3 backToSpring)
+        {
+            Vector3 restLocal = visual.localPosition;
+            for (int i = host.pawnHops.Count - 1; i >= 0; i--)
+            {
+                if (host.pawnHops[i].Visual != visual) continue;
+                restLocal = host.pawnHops[i].RestLocal; // a hop already running keeps the true rest place
+                host.pawnHops.RemoveAt(i);
+            }
+
+            Vector3 restWorld = visual.parent.TransformPoint(restLocal);
+            host.pawnHops.Add(new PawnHop
+            {
+                Visual = visual,
+                RestLocal = restLocal,
+                StartWorld = restWorld + new Vector3(backToSpring.x, 0f, backToSpring.z),
+                Started = Time.unscaledTime,
+                Spring = true,
+            });
+        }
+
+        private bool IsSpringHopRunning(Transform visual)
+        {
+            if (visual == null) return false;
+            for (int i = 0; i < host.pawnHops.Count; i++)
+            {
+                if (host.pawnHops[i].Visual == visual && host.pawnHops[i].Spring) return true;
+            }
+
+            return false;
         }
 
         internal void FinishPawnHops()

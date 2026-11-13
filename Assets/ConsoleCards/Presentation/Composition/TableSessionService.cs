@@ -856,6 +856,7 @@ namespace ConsoleCards.Presentation.Composition
             if (host.undoBatchActive)
             {
                 undoBatchLastAcceptance = acceptance;
+                if (acceptance.RecordMode == AuthoritativeActionRecordMode.Transaction) undoBatchLastTransaction = acceptance;
                 return;
             }
 
@@ -910,26 +911,40 @@ namespace ConsoleCards.Presentation.Composition
             host.undoBatchActive = host.undoTrackedMatch == host.matchState && host.undoHistory.CurrentStateIndex >= 0;
             undoBatchBefore = host.undoBatchActive ? host.undoHistory.CurrentState : null;
             undoBatchLastAcceptance = null;
+            undoBatchLastTransaction = null;
         }
 
         internal void EndUndoBatch()
         {
             if (!host.undoBatchActive) return;
             host.undoBatchActive = false;
+            // P8A (live, 2026-11-13 host log: "Only completed transactions may enter Undo history" thrown from
+            // CompleteTakeFloorPrize): the batch's last accepted action is not always a completed step (a guidance clear
+            // or a physics settle is recorded as None or Intermediate). The step is recorded under the last completed
+            // action in it; a batch with none only refreshes the current state, as an action of its own would.
             if (undoBatchLastAcceptance.HasValue && host.undoTrackedMatch == host.matchState)
             {
-                AuthoritativeActionAcceptance last = undoBatchLastAcceptance.Value;
-                host.undoHistory.RecordAccepted(
-                    undoBatchBefore,
-                    CaptureUndoSnapshot(),
-                    last,
-                    DescribeUndoAction(last));
-                host.undoTransactionInProgress = false;
-                RefreshUndoUi();
+                if (undoBatchLastTransaction.HasValue)
+                {
+                    AuthoritativeActionAcceptance last = undoBatchLastTransaction.Value;
+                    host.undoHistory.RecordAccepted(
+                        undoBatchBefore,
+                        CaptureUndoSnapshot(),
+                        last,
+                        DescribeUndoAction(last));
+                    host.undoTransactionInProgress = false;
+                    RefreshUndoUi();
+                }
+                else if (!host.undoTransactionInProgress)
+                {
+                    host.undoHistory.ReplaceCurrentState(CaptureUndoSnapshot());
+                    RefreshUndoUi();
+                }
             }
 
             undoBatchBefore = null;
             undoBatchLastAcceptance = null;
+            undoBatchLastTransaction = null;
         }
 
         // Folds follow-up tidying (a stack left with one card turned back into a card) into the step the player
@@ -953,6 +968,7 @@ namespace ConsoleCards.Presentation.Composition
 
             undoBatchBefore = null;
             undoBatchLastAcceptance = null;
+            undoBatchLastTransaction = null;
         }
 
         internal SessionUndoSnapshot CaptureUndoSnapshot()
@@ -1089,5 +1105,6 @@ namespace ConsoleCards.Presentation.Composition
         internal string templateCatalogError;
         internal SessionUndoSnapshot undoBatchBefore;
         internal AuthoritativeActionAcceptance? undoBatchLastAcceptance;
+        internal AuthoritativeActionAcceptance? undoBatchLastTransaction; // P8A: the last completed step in the batch
     }
 }

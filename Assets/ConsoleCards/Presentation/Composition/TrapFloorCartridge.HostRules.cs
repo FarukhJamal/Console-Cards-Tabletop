@@ -486,6 +486,7 @@ namespace ConsoleCards.Presentation.Composition
                 PawnOwner = owner,
                 PawnOwnerOut = turn.GetPlayerState(owner) == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound
                     || (host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsPlayerEscaped(owner)),
+                PawnOwnerEscaped = host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsPlayerEscaped(owner),
                 IsPlayerTurn = playerTurn,
                 ActivePlayer = turn.ActivePlayerId,
                 Current = current,

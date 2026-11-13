@@ -345,6 +345,8 @@ namespace ConsoleCards.Presentation.Composition
             public Vector3 RestLocal;
             public Vector3 StartWorld;
             public float Started;
+            // P8A polish (owner, 2026-11-13): a Spring's forced move springs (a high arc, then two small bounces).
+            public bool Spring;
         }
 
         internal readonly List<PawnHop> pawnHops = new List<PawnHop>(4);

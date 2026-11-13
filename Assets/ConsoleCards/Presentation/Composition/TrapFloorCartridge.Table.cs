@@ -232,6 +232,7 @@ namespace ConsoleCards.Presentation.Composition
             authority.Observe<TrapFloorUseAbilityCommand, TrapFloorAbilityActivationResult>((c, r) => OnEffectAccepted());
             authority.Observe<TrapFloorClearGuidanceCommand, TrapFloorEffectResult>((c, r) => OnEffectAccepted());
             authority.Observe<TrapFloorEliminatePlayerCommand, TrapFloorTurnAdvanceResult>((c, r) => OnEffectAccepted());
+            authority.Observe<CommitPhysicalObjectCommand, CommandResult>(OnPawnCommitted); // P8A polish: the Spring springs
             authority.Observe<TrapFloorResolveCollapseCommand, TrapFloorCollapseResult>((c, r) => FloorDiceRead()); // AUTH-DICE
 
             authority.Observe<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(OnShopCardBought);
