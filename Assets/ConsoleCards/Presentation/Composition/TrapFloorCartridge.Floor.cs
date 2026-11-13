@@ -355,9 +355,43 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void AddManualEndFloor(System.Collections.Generic.List<PopupActionOption> actions)
         {
-            if (!PlayAssist.IsFree || host.trapFloorTemplate == null || host.trapFloorTurnState == null || IsFloorEnded()) return;
+            if (host.trapFloorTemplate == null || host.trapFloorTurnState == null || IsFloorEnded()) return;
             bool mayEnd = !host.IsOnlineTable || (host.HasOnline && host.Online.IsHosting);
-            actions.Add(new PopupActionOption(ManualEndFloorLabel, mayEnd, ShowManualEndFloor));
+            if (PlayAssist.IsFree) actions.Add(new PopupActionOption(ManualEndFloorLabel, mayEnd, ShowManualEndFloor));
+            else actions.Add(new PopupActionOption(EndGameLabel, mayEnd, ShowEndGameAndRestart)); // P8A
+        }
+
+        // ---------- Full / Reminders: end the game and restart (owner, 2026-11-13) ----------
+        // "The situation here … you cannot win it. … If it cannot be done [detecting it], I think it's fine for now. But
+        // then there should be an option of ending the game and restarting it." The table does not judge whether the
+        // floor can still be won (the no-escape check stays conservative, GB-1): the players decide. Online, the host
+        // (who deals) ends it; a joined player sees it greyed.
+        internal const string EndGameLabel = "End Game…";
+
+        private void ShowEndGameAndRestart()
+        {
+            if (host.runtimeUi == null || host.trapFloorTemplate == null) return;
+            if (host.IsOnlineTable && !(host.HasOnline && host.Online.IsHosting)) return; // the host deals online
+            Action close = () => host.runtimeUi?.CloseTabletopPopup();
+            host.runtimeUi.ShowContextMenu(
+                new Vector2((Screen.width * 0.5f) - 200f, Screen.height * 0.6f),
+                "END THIS GAME?",
+                "Ends this game for everyone at the table and deals a new game from floor 1 (for example when nobody can still reach an exit). This cannot be undone.",
+                new[]
+                {
+                    new PopupActionOption("End game & restart", true, () =>
+                    {
+                        close();
+                        int number = host.trapFloorTemplate != null ? host.trapFloorTemplate.FloorIndex + 1 : 0;
+                        string line = $"The game was ended on floor {number} and restarted.";
+                        host.FeedbackLine(line, FeedbackSeverity.Warning);
+                        Debug.Log($"[Floor] {line}");
+                        DealFloor(0); // a new run: no Avatars or Abilities carried
+                    }),
+                    new PopupActionOption("Cancel", true, close),
+                },
+                close,
+                _ => close());
         }
 
         private void ShowManualEndFloor()

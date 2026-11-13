@@ -46,6 +46,7 @@ namespace ConsoleCards.Presentation.Composition
         private const byte MsgUndo = 16; // MP-5: a joined player's Undo / Redo, run by the host
         private const byte MsgNotice = 17; // MP-5: a line from the host for one player
         private const byte MsgEndTurn = 19; // AUTH-ET: a joined player asks the host to end the turn it plays
+        private const byte MsgPiece = 20; // P8A: host → guest, in order: the host's record of one loose piece after a refused move
 
         // This computer in a room: the same while the game runs (a lost connection keeps it, a restart does not).
         // REJOIN-1 (2026-11-05): in a room the key is the one saved for that room in this profile, so a restart gets the

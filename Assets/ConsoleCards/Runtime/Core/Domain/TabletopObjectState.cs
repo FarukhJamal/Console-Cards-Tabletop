@@ -72,6 +72,18 @@ namespace ConsoleCards.Core.Domain
             PhysicalState = state;
         }
 
+        /// <summary>
+        /// P8A (owner, 2026-11-13): a joined computer takes the host's own record of one loose piece after the host
+        /// refused that computer's move of it: the host's physical state AND its physical revision, so the two tables'
+        /// records of the piece are the same again without the whole table being sent and rebuilt.
+        /// </summary>
+        public void CorrectPhysicalState(PhysicalObjectState state, long physicalRevision)
+        {
+            if (physicalRevision < 0) throw new ArgumentOutOfRangeException(nameof(physicalRevision));
+            CorrectPhysicalState(state);
+            PhysicalRevision = physicalRevision;
+        }
+
         public ContainerId ContainerId { get; private set; }
 
         public PlayerId OwnerPlayerId { get; private set; }

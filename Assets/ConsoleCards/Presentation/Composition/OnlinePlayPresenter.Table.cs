@@ -568,15 +568,28 @@ namespace ConsoleCards.Presentation.Composition
                 // most every few seconds (RefusalReconciliation); a player's own refused action is answered as before.
                 if (RefusalReconciliation.NotifiesPlayer(command))
                 {
-                    SendNotice(member, verdict == HostCommandVerdict.RefusedByGame
+                    string notice = verdict == HostCommandVerdict.RefusedByGame
                         ? host.TrapFloorGame.HostRefusal ?? "The host refused that against its own table."
                         : verdict == HostCommandVerdict.InvalidPosition
                             ? "The host refused that: the position is not on the table."
-                            : "The host refused that: Controller cards are drawn into your own hand only.");
+                            : "The host refused that: Controller cards are drawn into your own hand only.";
+                    // P8A: one drop is refused several times (the release and each checkpoint after it): one notice for it.
+                    if (!(lastNotice.TryGetValue(member.Player, out var said) && said.Text == notice && Time.unscaledTime - said.At < 3f))
+                        SendNotice(member, notice);
+                    lastNotice[member.Player] = (notice, Time.unscaledTime);
                 }
 
-                bool returned = command is CommitPhysicalObjectCommand refusedHold && ReturnRefusedHold(member, refusedHold); // P8A
-                if (returned || refusalReconciliation.SendsTable(member.Player, command, Time.unscaledTime)) SendTable(member);
+                // P8A (owner QA, 2026-11-13: hand cards glitched while a defeated player's pawn was dragged and refused):
+                // a refused move of a loose piece is set right with that piece alone (put back if it was left in the
+                // sender's hand, then the host's record of it); the whole table, which rebuilds the sender's table, is only
+                // for what one piece cannot set right.
+                if (command is CommitPhysicalObjectCommand refusedHold)
+                {
+                    ReturnRefusedHold(member, refusedHold);
+                    if (SendPieceCorrection(member, refusedHold.ObjectId)) return;
+                }
+
+                if (refusalReconciliation.SendsTable(member.Player, command, Time.unscaledTime)) SendTable(member);
                 return;
             }
 
@@ -621,8 +634,17 @@ namespace ConsoleCards.Presentation.Composition
                     break; // made on a table replaced since; the new one is already on its way to them
                 default:
                 {
-                    bool returned = physicalCommit != null && ReturnRefusedHold(member, physicalCommit); // P8A
-                    bool sendTable = returned || refusalReconciliation.SendsTable(member.Player, command, Time.unscaledTime); // P8A
+                    if (physicalCommit != null) // P8A: one piece is set right with that piece alone
+                    {
+                        ReturnRefusedHold(member, physicalCommit);
+                        if (SendPieceCorrection(member, physicalCommit.ObjectId))
+                        {
+                            LogReplayRefused(command, outcome, $"sending {member.Name} the host's record of that piece");
+                            break;
+                        }
+                    }
+
+                    bool sendTable = refusalReconciliation.SendsTable(member.Player, command, Time.unscaledTime); // P8A
                     LogReplayRefused(command, outcome, sendTable
                         ? $"sending {member.Name} the host's whole table"
                         : "a piece settling on its own: no whole table this time (one went to them in the last few seconds)"); // PHY-5
@@ -642,11 +664,53 @@ namespace ConsoleCards.Presentation.Composition
 
         private readonly RefusalReconciliation refusalReconciliation = new RefusalReconciliation();
         private readonly HeldReturnPolicy heldReturn = new HeldReturnPolicy();
+        private readonly Dictionary<Guid, (string Text, float At)> lastNotice = new Dictionary<Guid, (string Text, float At)>();
 
         // P8A (owner, 2026-11-13 live test: a pawn another player tried to move floated in the air and its reach lights
         // stayed on): a refused move must never leave the piece held by the player who was refused. The host puts it back
         // where it rested before that hold, in the holder's name (the only player the table lets end a hold), and sends
         // that to every other computer; the refused sender gets the host's whole table (which holds it) right after.
+        // Host → the refused sender, in order with the host's commands: the host's record of one loose piece.
+        private int pieceCorrectionsSent;
+
+        private bool SendPieceCorrection(Member member, TabletopObjectId objectId)
+        {
+            if (member == null || !PieceCorrection.TryCapture(host.matchState, objectId, out PieceCorrection correction)) return false;
+            byte[] payload;
+            try
+            {
+                payload = TableWire.Write(correction, false);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[Online] A piece's record could not be written ({exception.Message}); the whole table is sent.");
+                return false;
+            }
+
+            BeginOrdered(MsgPiece);
+            writer.Write(payload);
+            SendPrepared(member);
+            pieceCorrectionsSent++;
+            if (pieceCorrectionsSent == 1 || pieceCorrectionsSent % 20 == 0)
+                Debug.Log($"[Online] Sent {member.Name} the host's record of a refused piece instead of the whole table ({pieceCorrectionsSent} so far).");
+            return true;
+        }
+
+        // Guest: the host refused a move of this piece made here; its record is the host's again. No rebuild.
+        private void ClientPiece(byte[] message)
+        {
+            if (!sharedTable || awaitingTable || host.matchState == null) return;
+            object read = TableWire.Read(message, 9, message.Length - 9, false);
+            if (!(read is PieceCorrection correction) || !correction.ApplyTo(host.matchState))
+            {
+                RequestTable("a piece the host set right is not loose here");
+                return;
+            }
+
+            host.PresentAcceptedObject(correction.ObjectId);
+            Debug.Log($"[Online] The host set one piece right ({correction.State.Mode}); the rest of the table is unchanged.");
+        }
+
         private bool ReturnRefusedHold(Member member, CommitPhysicalObjectCommand refused)
         {
             if (member == null || member.Player == Guid.Empty || host.matchState == null) return false;
@@ -663,7 +727,7 @@ namespace ConsoleCards.Presentation.Composition
             byte[] payload = TableWire.Write(putBack, false);
             BeginOrdered(MsgCommand);
             writer.Write(payload);
-            BroadcastPrepared(member); // every other computer; the refused sender gets the whole table
+            BroadcastPrepared(member); // every other computer; the refused sender gets the host's record of the piece
             string kind = host.matchState.GetObject(refused.ObjectId).Kind.ToString();
             Debug.Log($"[Authority] {member.Name}'s refused move left the {kind} in their hand on the host's table: put back where it "
                 + $"rested before they picked it up, on every computer ({heldReturn.Returned} put back so far).");
@@ -1395,6 +1459,7 @@ namespace ConsoleCards.Presentation.Composition
                 case MsgCommand:
                 case MsgTable:
                 case MsgCheck:
+                case MsgPiece: // P8A: in order with the host's commands
                     ReceiveOrdered(clientInbox, data, null);
                     break;
                 case MsgPoses:
@@ -1471,6 +1536,9 @@ namespace ConsoleCards.Presentation.Composition
                         break;
                     case MsgEndTurn:
                         if (from != null) HostEndTurn(from, data); // AUTH-ET
+                        break;
+                    case MsgPiece:
+                        if (from == null) ClientPiece(data); // P8A
                         break;
                 }
             }

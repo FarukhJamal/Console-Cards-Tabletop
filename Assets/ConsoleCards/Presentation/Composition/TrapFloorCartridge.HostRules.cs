@@ -344,33 +344,13 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            TrapFloorTemplateDefinition template = host.trapFloorTemplate;
-            bool xAxis = commit.ObjectId == template.FloorfallXAxisDieId;
-            bool yAxis = commit.ObjectId == template.FloorfallYAxisDieId;
-            int value = hostDice.Decide(
-                commit.ObjectId,
-                die.SideCount,
-                TrapFloorHostDice.TurnKeyOf(host.trapFloorTurnState),
-                v => (xAxis && v > template.GridColumns) || (yAxis && v > template.GridRows), // the rules ask for a re-roll
-                sides => HostRandomFace(commit.ObjectId, sides));
+            // P8A (owner, 2026-11-13: "Dice will roll independently, but numbers will be collapsed, either if there's a
+            // tile to be collapsed. If not, then the system will tell the player … roll again."): the face the die came to
+            // rest on IS the result, on every computer. The host no longer draws its own number and turns the die to it;
+            // a value beyond the floor or on a hole is answered by the floor's own rules ("… — ROLL AGAIN"). The roll is
+            // still a rules result that Undo cannot take back in Full.
             if (commit.RecordMode == AuthoritativeActionRecordMode.Transaction) hostRolledSteps.Add(commit.Context.Id);
-            // DICE-LOOP (live test, 2026-11-06): the die already shows the host's result (the throw happened to land on it,
-            // or it settled again after the host turned it). Nothing is replaced, so the thrower's die is not turned
-            // again: turning it woke its physics, it settled again, and the host turned it again, without end.
-            if (value == commit.SettledDieValue.Value) return false;
-            PhysicalRotation thrown = commit.State.Rotation;
-            float yaw = new Quaternion(thrown.X, thrown.Y, thrown.Z, thrown.W).eulerAngles.y;
-            if (!dieView.TryGetValueRotation(value, yaw, out Quaternion shown)) return false;
-            rewritten = new CommitPhysicalObjectCommand(
-                commit.Context,
-                commit.ObjectId,
-                commit.State.WithRotation(new PhysicalRotation(shown.x, shown.y, shown.z, shown.w)),
-                commit.ExpectedPhysicalRevision,
-                value,
-                commit.RecordMode);
-            Debug.Log($"[Authority] Rules die (d{die.SideCount}) thrown{(host.IsPlayerOnThisComputer(commit.Context.RequestedByPlayerId) && !host.Replicated.Replaying ? " here" : " by another computer")}: "
-                + $"the host's result is {value} (it showed {commit.SettledDieValue.Value}).");
-            return true;
+            return false;
         }
 
         // The host's random face for a rules die. In the Editor only, a scenario may queue the next face for a die (the
@@ -409,18 +389,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             bool rules = PlayAssist.Level == PlayAssistLevel.Full && host.trapFloorTemplate != null && IsRulesDie(dieId);
-            if (rules)
-            {
-                TrapFloorTemplateDefinition template = host.trapFloorTemplate;
-                bool xAxis = dieId == template.FloorfallXAxisDieId;
-                bool yAxis = dieId == template.FloorfallYAxisDieId;
-                value = hostDice.Decide(
-                    dieId,
-                    die.SideCount,
-                    TrapFloorHostDice.TurnKeyOf(host.trapFloorTurnState),
-                    v => (xAxis && v > template.GridColumns) || (yAxis && v > template.GridRows),
-                    sides => HostRandomFace(dieId, sides));
-            }
+            // P8A (owner, 2026-11-13): the face thrown is the result here too (private sessions); the rules answer a value
+            // beyond the floor or on a hole with "roll again".
 
             if (!view.TryGetValueRotation(value, at.RotationDegrees, out Quaternion shown)) { refusal = "That face cannot be shown."; return false; }
             CommitPhysicalObjectCommand commit = new CommitPhysicalObjectCommand(

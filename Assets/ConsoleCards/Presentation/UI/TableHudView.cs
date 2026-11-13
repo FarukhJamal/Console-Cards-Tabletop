@@ -647,6 +647,7 @@ namespace ConsoleCards.Presentation.UI
 
         private static bool IsKeptBesideEndTurn(PopupActionOption action) =>
             string.Equals(action.Label, "End Floor…", StringComparison.Ordinal) // Free mode's manual floor end (2026-11-05)
+            || string.Equals(action.Label, "End Game…", StringComparison.Ordinal) // P8A: Full / Reminders end and restart
             || action.Label.StartsWith("Confirm Payment", StringComparison.OrdinalIgnoreCase)
             || action.Label.StartsWith("Cancel Payment", StringComparison.OrdinalIgnoreCase)
             || (action.Label.StartsWith("Take ", StringComparison.OrdinalIgnoreCase)
