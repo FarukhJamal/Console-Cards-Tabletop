@@ -1651,7 +1651,7 @@ namespace ConsoleCards.Games.TrapFloor
                 pawnId,
                 pawnDefinitionId,
                 TabletopObjectKind.Pawn,
-                CreateFloorPose(startingCorner, grid, 6, playerNumber),
+                CreateWaitingPose(startingCorner, grid, 6, playerNumber),
                 seatId,
                 ObjectVisibility.Public,
                 false,
@@ -1981,6 +1981,21 @@ namespace ConsoleCards.Games.TrapFloor
                 new TableCoordinate(
                     grid.OriginX + ((coordinate.X - ((grid.Columns + 1d) * 0.5d)) * grid.ColumnPitch),
                     grid.OriginY + ((coordinate.Y - ((grid.Rows + 1d) * 0.5d)) * grid.RowPitch)),
+                0f,
+                layer,
+                localOrder);
+        }
+
+        // Owner, 2026-11-14 ("I want all the pawns to start from this position rather than on the first tile"): a pawn
+        // starts beside the board, one cell outside its starting corner along the corner's row; its first step is onto
+        // that corner (1 step), so the corner tile is free to use. Safe there until it enters.
+        private static TabletopPose CreateWaitingPose(TrapFloorCoordinate corner, GridDefinitionData grid, int layer, int localOrder)
+        {
+            double outward = corner.X <= 1 ? -1d : 1d;
+            return new TabletopPose(
+                new TableCoordinate(
+                    grid.OriginX + ((corner.X + outward - ((grid.Columns + 1d) * 0.5d)) * grid.ColumnPitch),
+                    grid.OriginY + ((corner.Y - ((grid.Rows + 1d) * 0.5d)) * grid.RowPitch)),
                 0f,
                 layer,
                 localOrder);

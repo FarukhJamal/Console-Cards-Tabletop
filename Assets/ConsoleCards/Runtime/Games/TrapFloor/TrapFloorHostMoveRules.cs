@@ -46,6 +46,11 @@ namespace ConsoleCards.Games.TrapFloor
         public TrapFloorCoordinate? TurnStart;
         /// <summary>Where the command puts it (null: off the floor).</summary>
         public TrapFloorCoordinate? Target;
+        /// <summary>
+        /// Owner, 2026-11-14: the turn started with the pawn waiting beside the board; this is the corner tile it enters
+        /// by (that first step counts 1). Null when the turn started on the floor.
+        /// </summary>
+        public TrapFloorCoordinate? Entry;
         public int Columns;
         public int Rows;
         /// <summary>On the floor and not a hole, on the host's table.</summary>
@@ -98,19 +103,23 @@ namespace ConsoleCards.Games.TrapFloor
             if (f.LitTiles != null && f.LitTiles.Count > 0)
                 return f.LitTiles.Contains(to) ? TrapFloorHostMoveVerdict.Allowed : TrapFloorHostMoveVerdict.NotALitTile;
             if (f.GuidedMoveDone || f.RuleMoveExpected) return TrapFloorHostMoveVerdict.Allowed;
-            if (!f.TurnStart.HasValue || to.Equals(f.TurnStart.Value)) return TrapFloorHostMoveVerdict.Allowed;
+            if (!f.TurnStart.HasValue && !f.Entry.HasValue) return TrapFloorHostMoveVerdict.Allowed;
+            if (f.TurnStart.HasValue && to.Equals(f.TurnStart.Value)) return TrapFloorHostMoveVerdict.Allowed;
             if (f.Stuck) return TrapFloorHostMoveVerdict.Stuck;
             if (f.BlindUnrolled) return TrapFloorHostMoveVerdict.Blind;
 
             // Owner, 2026-11-14: a move is up to its allowance in single steps up, down, left or right, and may turn
             // between steps (2 tiles: one right then one up), never diagonally and never over a hole. BLIND keeps one
             // straight line in the rolled direction.
-            int steps = f.BlindDirection.HasValue
-                ? StepsAlongLine(f, f.TurnStart.Value, to)
-                : ShortestSteps(f, f.TurnStart.Value, to);
+            int steps = !f.TurnStart.HasValue
+                ? EntrySteps(f, to, false)
+                : f.BlindDirection.HasValue
+                    ? StepsAlongLine(f, f.TurnStart.Value, to)
+                    : ShortestSteps(f, f.TurnStart.Value, to);
             if (steps < 0)
             {
-                if (f.BlindDirection.HasValue && ShortestSteps(f, f.TurnStart.Value, to) >= 0)
+                if (f.BlindDirection.HasValue
+                    && (!f.TurnStart.HasValue ? EntrySteps(f, to, true) : ShortestSteps(f, f.TurnStart.Value, to)) >= 0)
                     return TrapFloorHostMoveVerdict.Blind;
                 return TrapFloorHostMoveVerdict.NotStraight; // no way there in steps over walkable tiles
             }
@@ -188,6 +197,27 @@ namespace ConsoleCards.Games.TrapFloor
 
             return -1;
         }
+
+        // From the waiting spot beside the board: 1 step onto the entry corner, then as from that corner. Under BLIND
+        // only when the rolled direction points onto the board, along the corner's row. -1: not reachable.
+        private static int EntrySteps(TrapFloorHostMoveFacts f, TrapFloorCoordinate to, bool ignoreBlind)
+        {
+            TrapFloorCoordinate entry = f.Entry.Value;
+            if (f.Walkable == null || !f.Walkable(entry.X, entry.Y)) return -1;
+            if (!ignoreBlind && f.BlindDirection.HasValue)
+            {
+                if (f.BlindDirection.Value != InwardFrom(entry)) return -1;
+                int along = to.Equals(entry) ? 0 : StepsAlongLine(f, entry, to);
+                return along < 0 ? -1 : along + 1;
+            }
+
+            int path = ShortestSteps(f, entry, to);
+            return path < 0 ? -1 : path + 1;
+        }
+
+        /// <summary>The direction from a waiting spot onto the board (the spot lies outside its corner's column).</summary>
+        public static TrapFloorBlindMovementDirection InwardFrom(TrapFloorCoordinate entry) =>
+            entry.X <= 1 ? TrapFloorBlindMovementDirection.Right : TrapFloorBlindMovementDirection.Left;
 
         private static TrapFloorBlindMovementDirection DirectionOf(int dx, int dy) =>
             dx > 0 ? TrapFloorBlindMovementDirection.Right

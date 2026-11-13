@@ -69,6 +69,7 @@ namespace ConsoleCards.Presentation.Composition
         private TrapFloorCoordinate? hostMoveStart;
         private long hostMoveStartRevision;
         private bool hostGuidedMoveDone;
+        private bool hostMoveFromWaiting; // the turn's pawn started beside the board (owner, 2026-11-14)
         // Where each pawn last rested on the host's table this turn, as the host accepted it. Physics sends a pawn's
         // carry and release as separate steps, so "where it is now" on the host can already be the release point; the
         // check counts from here instead.
@@ -426,6 +427,7 @@ namespace ConsoleCards.Presentation.Composition
             // pawn stood on before setup (setup is not a move; it ran no rules and spent nothing).
             landingPawnTiles[pawnId] = stagedTile;
             moveStartTile = stagedTile;
+            moveStartFromWaiting = false;
         }
 
         // A joined computer's pawn move, on the host, in Full only. True when it may run; else HostRefusal says why.
@@ -454,11 +456,11 @@ namespace ConsoleCards.Presentation.Composition
                 hostMoveStartRevision = host.matchState.Revision;
                 hostGuidedMoveDone = false;
                 hostRestTiles.Clear();
-                if (playerTurn
-                    && TryGetTrapFloorPlayerSetup(turn.ActivePlayerId, out TrapFloorPlayerSetupDefinition active)
-                    && TryReadPawnTile(active.PawnId, out TrapFloorCoordinate activeTile))
+                hostMoveFromWaiting = false;
+                if (playerTurn && TryGetTrapFloorPlayerSetup(turn.ActivePlayerId, out TrapFloorPlayerSetupDefinition active))
                 {
-                    hostMoveStart = activeTile;
+                    if (TryReadPawnTile(active.PawnId, out TrapFloorCoordinate activeTile)) hostMoveStart = activeTile;
+                    else hostMoveFromWaiting = IsPawnWaiting(active);
                 }
             }
 
@@ -491,6 +493,9 @@ namespace ConsoleCards.Presentation.Composition
                 ActivePlayer = turn.ActivePlayerId,
                 Current = current,
                 TurnStart = owned && turn.ActivePlayerId == sender ? hostMoveStart : current,
+                Entry = owned && turn.ActivePlayerId == sender && hostMoveFromWaiting && !hostMoveStart.HasValue
+                    ? ownerSetup.StartingCorner
+                    : (TrapFloorCoordinate?)null,
                 Target = target,
                 Columns = host.trapFloorTemplate.GridColumns,
                 Rows = host.trapFloorTemplate.GridRows,

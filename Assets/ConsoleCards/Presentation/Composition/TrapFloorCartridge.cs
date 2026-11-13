@@ -3600,6 +3600,7 @@ namespace ConsoleCards.Presentation.Composition
                 {
                     EnsureMoveTurn();
                     moveStartTile = destination.Value; // the pawn's coordinate; the move count is not reset
+                    moveStartFromWaiting = false;
                     moveSpentByRule = true;
                 }
 
@@ -4338,6 +4339,52 @@ namespace ConsoleCards.Presentation.Composition
                 && (host.trapFloorCollapseState == null || !host.trapFloorCollapseState.IsCollapsed(floorCardId));
         }
 
+        // Owner, 2026-11-14: each pawn starts beside the board, one cell outside its seat's starting corner along that
+        // corner's row (TrapFloorTemplateFactory.CreateWaitingPose), and enters onto the corner (1 step). Where that spot
+        // is on this table, measured from the grid like every tile.
+        internal bool TryGetWaitingSpot(TrapFloorPlayerSetupDefinition setup, out TableCoordinate spot)
+        {
+            spot = default;
+            if (setup == null || host.trapFloorTemplate == null || host.matchState == null
+                || !host.trapFloorTemplate.TryGetCellPosition(host.matchState, setup.StartingCorner, out TableCoordinate corner))
+            {
+                return false;
+            }
+
+            double pitch = host.trapFloorTemplate.Grid.ColumnPitch;
+            spot = new TableCoordinate(corner.X + (setup.StartingCorner.X <= 1 ? -pitch : pitch), corner.Y);
+            return true;
+        }
+
+        // The player's pawn stands (or is held) over its waiting spot beside the board.
+        internal bool IsPawnWaiting(TrapFloorPlayerSetupDefinition setup)
+        {
+            if (setup == null || host.matchState == null || !host.matchState.Pawns.TryGetValue(setup.PawnId, out PawnState pawn)
+                || !pawn.BaseState.ContainerId.IsEmpty || !TryGetWaitingSpot(setup, out TableCoordinate spot))
+            {
+                return false;
+            }
+
+            TableCoordinate at = PawnTablePosition(pawn);
+            return Math.Abs(at.X - spot.X) <= host.trapFloorTemplate.Grid.CellWidth * 0.5d
+                && Math.Abs(at.Y - spot.Y) <= host.trapFloorTemplate.Grid.CellHeight * 0.5d;
+        }
+
+        // The active player's pawn waits beside the board: the corner it enters by.
+        internal bool TryGetActiveWaitingEntry(out TrapFloorCoordinate entry)
+        {
+            entry = default;
+            if (host.trapFloorTurnState == null
+                || !TryGetTrapFloorPlayerSetup(host.trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition setup)
+                || !IsPawnWaiting(setup))
+            {
+                return false;
+            }
+
+            entry = setup.StartingCorner;
+            return true;
+        }
+
         internal bool TryReadPawnTile(TabletopObjectId pawnId, out TrapFloorCoordinate tile)
         {
             tile = default;
@@ -5023,6 +5070,8 @@ namespace ConsoleCards.Presentation.Composition
         internal int moveTurnRound = -1;
         internal PlayerId moveTurnPlayer;
         internal TrapFloorCoordinate? moveStartTile;
+        // Owner, 2026-11-14: the move began beside the board; moveStartTile is then the entry corner, 1 step in.
+        internal bool moveStartFromWaiting;
         // P7 (s157, owner decision 2: "separate the pawn's current coordinate from its remaining movement allowance"):
         // a rule that puts the pawn back on its starting tile (a Key or prize taken) moves the pawn, not the turn's move
         // count. The pawn's tile is now the start, and the move it made this turn (one straight line, doc 18 §15.2) is
@@ -5060,6 +5109,7 @@ namespace ConsoleCards.Presentation.Composition
             moveTurnRound = host.trapFloorTurnState.CurrentRound;
             moveTurnPlayer = host.trapFloorTurnState.ActivePlayerId;
             moveStartTile = null;
+            moveStartFromWaiting = false;
             moveSpentByRule = false;
             guidedMoveThisTurn = false;
             tooFarStateIndex = -1;
@@ -5122,8 +5172,14 @@ namespace ConsoleCards.Presentation.Composition
 
             if (!TryGetActivePawnTile(out _, out TrapFloorCoordinate current))
             {
-                Debug.Log("[Hints] No reach lights: the active pawn is not over a floor tile.", host);
-                return;
+                if (moveStartTile.HasValue || !TryGetActiveWaitingEntry(out current))
+                {
+                    Debug.Log("[Hints] No reach lights: the active pawn is not over a floor tile.", host);
+                    return;
+                }
+
+                moveStartTile = current; // entering from beside the board: counted from the corner, 1 step in
+                moveStartFromWaiting = true;
             }
 
             TrapFloorBlindMovementDirection? onlyDirection = null;
@@ -5147,7 +5203,7 @@ namespace ConsoleCards.Presentation.Composition
             TrapFloorCoordinate start = moveStartTile ?? current;
             int allowance = MoveAllowance(out _);
             stepsChipAllowance = allowance;
-            ComputeMoveSteps(start, onlyDirection);
+            ComputeMoveSteps(start, onlyDirection, StartExtraSteps(start));
             stepsChipReady = true;
             reachTileIds.Clear();
             for (int x = TrapFloorCoordinate.MinimumAxisValue; x <= host.trapFloorTemplate.GridColumns; x++)
@@ -5285,6 +5341,35 @@ namespace ConsoleCards.Presentation.Composition
         // "first step horizontal and the next a vertical one; never directly diagonal"), never over a hole or off the
         // grid (-1: not reachable). With a Blind direction only that one straight line counts. Fills reachSteps (and a
         // reused queue); allocates only when the grid size changes.
+        internal void ComputeMoveSteps(TrapFloorCoordinate start, TrapFloorBlindMovementDirection? onlyDirection, int extraSteps)
+        {
+            ComputeMoveSteps(start, onlyDirection);
+            if (extraSteps <= 0) return;
+            // From beside the board (owner, 2026-11-14): every count is extraSteps more; under BLIND only when the rolled
+            // direction points onto the board.
+            bool blocked = onlyDirection.HasValue && onlyDirection.Value != TrapFloorHostMoveRules.InwardFrom(start);
+            for (int x = 0; x < reachSteps.GetLength(0); x++)
+            {
+                for (int y = 0; y < reachSteps.GetLength(1); y++)
+                {
+                    if (reachSteps[x, y] < 0) continue;
+                    reachSteps[x, y] = blocked ? -1 : reachSteps[x, y] + extraSteps;
+                }
+            }
+
+            if (!blocked && !IsWalkableTile(start.X, start.Y)) // a hole at the corner: no way onto the board
+            {
+                for (int x = 0; x < reachSteps.GetLength(0); x++)
+                {
+                    for (int y = 0; y < reachSteps.GetLength(1); y++) reachSteps[x, y] = -1;
+                }
+            }
+        }
+
+        // 1 when the move began beside the board and start is its entry corner, else 0.
+        internal int StartExtraSteps(TrapFloorCoordinate start) =>
+            moveStartFromWaiting && moveStartTile.HasValue && moveStartTile.Value.Equals(start) ? 1 : 0;
+
         internal void ComputeMoveSteps(TrapFloorCoordinate start, TrapFloorBlindMovementDirection? onlyDirection)
         {
             int columns = host.trapFloorTemplate.GridColumns;
@@ -5393,8 +5478,21 @@ namespace ConsoleCards.Presentation.Composition
             notAllowedLandingFloorCardId = TabletopObjectId.Empty;
             if (!moveStartTile.HasValue)
             {
-                if (!from.HasValue) return null; // the pawn came from off the grid: nothing to count from
-                moveStartTile = from;
+                if (!from.HasValue)
+                {
+                    // Owner, 2026-11-14: a pawn comes onto the floor from its waiting spot beside the board; the
+                    // count starts at the entry corner, 1 step in.
+                    if (host.trapFloorTurnState == null
+                        || !TryGetTrapFloorPlayerSetup(host.trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition entering))
+                        return null; // nothing to count from
+                    moveStartTile = entering.StartingCorner;
+                    moveStartFromWaiting = true;
+                }
+                else
+                {
+                    moveStartTile = from;
+                    moveStartFromWaiting = false;
+                }
             }
 
             tooFarStateIndex = -1;
@@ -5422,7 +5520,7 @@ namespace ConsoleCards.Presentation.Composition
         // an event or when the held pawn's tile changes, not every frame.
         internal string DescribeMoveProblem(TrapFloorCoordinate start, TrapFloorCoordinate to)
         {
-            if (to.Equals(start)) return null;
+            if (to.Equals(start) && StartExtraSteps(start) == 0) return null;
             if (moveSpentByRule) return "This turn's move ended when your pawn went back to the tile the move began on; the rules give no further move this turn.";
             TrapFloorBlindMovementDirection? onlyDirection = null;
             if (TryGetActiveBlindStatus(out TrapFloorBlindStatusState blind))
@@ -5434,7 +5532,7 @@ namespace ConsoleCards.Presentation.Composition
             int allowance = MoveAllowance(out string why);
             if (allowance == 0 && why == "STUCK") return "STUCK: this turn you stay where you are.";
             if (!IsWalkableTile(to.X, to.Y)) return "That tile is a hole.";
-            ComputeMoveSteps(start, onlyDirection);
+            ComputeMoveSteps(start, onlyDirection, StartExtraSteps(start));
             int steps = reachSteps[to.X, to.Y];
             if (steps < 0)
             {
@@ -5466,7 +5564,14 @@ namespace ConsoleCards.Presentation.Composition
             if (!holdStartKnown)
             {
                 EnsureMoveTurn();
-                if (guidedMoveThisTurn || !TryGetActivePawnTile(out _, out TrapFloorCoordinate pickedUpFrom)) return;
+                if (guidedMoveThisTurn) return;
+                if (!TryGetActivePawnTile(out _, out TrapFloorCoordinate pickedUpFrom))
+                {
+                    if (moveStartTile.HasValue || !TryGetActiveWaitingEntry(out pickedUpFrom)) return;
+                    moveStartTile = pickedUpFrom; // picked up beside the board: counted from the corner, 1 step in
+                    moveStartFromWaiting = true;
+                }
+
                 holdStart = moveStartTile ?? pickedUpFrom;
                 holdStartKnown = true;
                 holdTileKnown = false;
