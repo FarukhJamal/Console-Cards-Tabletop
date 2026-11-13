@@ -192,7 +192,10 @@ namespace ConsoleCards.Presentation.Composition
         private Func<TabletopObjectId, bool> outOfPlayCheck;
 
         // P8A eliminated-pawn fix (owner, 2026-11-13): a Trap Floor pawn whose player is out this floor rests still.
-        private bool IsPieceOutOfPlay(TabletopObjectId id) => trapFloorTemplate != null && TrapFloorGame.IsEliminatedPawn(id);
+        // Not in Free (owner, 2026-11-13 16:39: "Free mode should be the same as Tabletop Simulator in terms of
+        // permissions and interactions"): there every piece keeps its plain physics.
+        private bool IsPieceOutOfPlay(TabletopObjectId id) =>
+            trapFloorTemplate != null && !ConsoleCards.Presentation.UI.PlayAssist.IsFree && TrapFloorGame.IsEliminatedPawn(id);
 
         private bool MayCommitFirstPhysicalState() => online == null || !online.IsClientTable;
 

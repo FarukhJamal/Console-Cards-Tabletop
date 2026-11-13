@@ -32,6 +32,40 @@ namespace ConsoleCards.Presentation.Composition
         private static int pendingSeed;
         private static bool armed;
 
+        // ---------- P8A debug: peek at the floor (owner, 2026-11-13) ----------
+        // "Flip all the floor cards … a little cheat … win it to check it." The floor's face-down tiles are DRAWN face up
+        // on this Editor only (CardView.EditorPeek); the table, the rules and every other computer are unchanged, so the
+        // floor is then played and won through the normal rules. Editor-only like the rest of this file.
+
+        public static bool IsFloorPeekOn => CardView.EditorPeek != null;
+
+        public static string ToggleFloorPeek(TabletopComposition host)
+        {
+            if (host == null || host.trapFloorTemplate == null) return "[Debug] No Trap Floor table in play.";
+            if (IsFloorPeekOn)
+            {
+                CardView.EditorPeek = null;
+            }
+            else
+            {
+                CardView.EditorPeek = id =>
+                    host != null && host.trapFloorTemplate != null && host.trapFloorTemplate.TryGetFloorCoordinate(id, out _);
+            }
+
+            int redrawn = 0;
+            for (int i = 0; i < host.Registry.cardViews.Count; i++)
+            {
+                CardView card = host.Registry.cardViews[i];
+                if (card == null || !card.IsBound || card.CardState == null || !card.IsFacePresentationConfigured) continue;
+                card.ApplyAcceptedFacePresentation();
+                redrawn++;
+            }
+
+            return IsFloorPeekOn
+                ? $"[Debug] Floor peek ON: face-down floor tiles are drawn face up on this Editor only ({redrawn} cards redrawn). The table is unchanged."
+                : $"[Debug] Floor peek OFF ({redrawn} cards redrawn).";
+        }
+
         /// <summary>True while the next deal will use <see cref="PendingSeed"/>.</summary>
         public static bool IsArmed => armed;
 

@@ -15,6 +15,16 @@ namespace ConsoleCards.Presentation.Views
 
         public CardInstanceState CardState => cardState;
 
+#if UNITY_EDITOR
+        /// <summary>
+        /// P8A debug (owner, 2026-11-13: "a debug panel … to flip all the floor cards … to check winning"). EDITOR ONLY
+        /// (compiled out of every player build): while set, a face-down card it names is DRAWN face up on this Editor's
+        /// screen. Nothing on the table changes (its state, the rules, the other computers). Set by the Editor menu
+        /// Console Cards › Debug › Fixtures › Peek at Floor.
+        /// </summary>
+        public static Func<ConsoleCards.Core.Identifiers.TabletopObjectId, bool> EditorPeek;
+#endif
+
         public GameObject FaceUpVisualRoot => faceUpVisualRoot;
 
         public GameObject FaceDownVisualRoot => faceDownVisualRoot;
@@ -118,6 +128,9 @@ namespace ConsoleCards.Presentation.Views
             CardFace face = cardState.Face;
             ValidateSupportedFace(face);
             if (holdFaceDown) face = CardFace.FaceDown;
+#if UNITY_EDITOR
+            if (face == CardFace.FaceDown && EditorPeek != null && EditorPeek(cardState.BaseState.Id)) face = CardFace.FaceUp; // debug peek
+#endif
 
             faceUpVisualRoot.SetActive(face == CardFace.FaceUp);
             faceDownVisualRoot.SetActive(face == CardFace.FaceDown);

@@ -30,6 +30,13 @@ namespace ConsoleCards.Editor.Board
             Debug.Log("[Fixture] The next deal is random again.");
         }
 
+        // P8A debug (owner, 2026-11-13): see every floor tile on this Editor's screen to play a floor through to a win.
+        [MenuItem(Root + "Peek at Floor: On or Off (Play mode)")]
+        private static void Peek() => Debug.Log(TrapFloorDevFixtures.ToggleFloorPeek(Object.FindFirstObjectByType<TabletopComposition>()));
+
+        [MenuItem(Root + "Peek at Floor: On or Off (Play mode)", true)]
+        private static bool CanPeek() => UnityEngine.Application.isPlaying;
+
         [MenuItem(Root + "Describe Floor (Play mode)")]
         private static void Describe()
         {
