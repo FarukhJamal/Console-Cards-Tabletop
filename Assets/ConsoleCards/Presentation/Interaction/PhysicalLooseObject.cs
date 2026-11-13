@@ -247,6 +247,9 @@ namespace ConsoleCards.Presentation.Interaction
             corrections.Total = total;
             if (!(view is PawnView) || applied == null || body == null) return;
             if (w.Count < CorrectionLogMinimum && w.MaxMove < 0.05f) return;
+            // A correction that undid nothing (under 1 mm and 0.1°) is a body that woke at its accepted place: counted in
+            // the total, not logged (live, 2026-11-13: every resting pawn did this every frame, 0.0 cm / 0.0°).
+            if (w.MaxMove < 0.001f && w.MaxTurn < 0.1f) return;
             float span = Mathf.Max(0.001f, Time.unscaledTime - w.WindowStart);
             correctionWindowsLogged++;
             Vector3 accepted = Vector(applied.Position);
@@ -353,7 +356,8 @@ namespace ConsoleCards.Presentation.Interaction
             Debug.Log($"[Physics] Pawn {ShortId(view.ObjectId.Value)} {(outOfPlayRest ? "rests out of play: held still at its accepted place" : "is back in play: normal physics")}.");
         }
 
-        private static string ShortId(Guid value) => value.ToString("N").Substring(0, 8);
+        // The LAST 8 hex digits: table pieces' ids share their first digits (they differ at the end).
+        private static string ShortId(Guid value) => value.ToString("N").Substring(24);
 
         private static string Fmt(Vector3 v) => $"({v.x:0.000}, {v.y:0.000}, {v.z:0.000})";
 
@@ -1616,6 +1620,20 @@ namespace ConsoleCards.Presentation.Interaction
                 Debug.LogWarning($"[Physics] {name} committed {state.Mode} {far:0.00} m from its accepted place ({boundMode}; applied here "
                     + $"{appliedNote}) without a player action: accepted here (this computer controls it).");
             }
+            // P8A (owner, 2026-11-13 live test: "the dice rolled 6 4 and it asked to collapse 6 6"; host log: "Rules die (d6)
+            // thrown here: the host's result is 6 (it showed 4)"): on the host, a rules die the host's own player threw is
+            // accepted with the HOST'S result and a rotation that shows it (FAIR-DICE rewrites the command). The accepted
+            // state is then not the one this body committed, so it is applied here and the die turns to the face the rules
+            // read. It was marked applied without being applied: the die kept showing the thrown face on the host's
+            // screen while every other screen and the rules showed the host's result.
+            if (!ReferenceEquals(view.BoundState.PhysicalState, state))
+            {
+                applied = null;
+                ApplyAccepted();
+                view.RefreshAcceptedAppearance();
+                return true;
+            }
+
             applied = view.BoundState.PhysicalState;
             RecordAcceptedPose(applied);
             view.RefreshAcceptedAppearance();

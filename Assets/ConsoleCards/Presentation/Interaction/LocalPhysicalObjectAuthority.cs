@@ -168,7 +168,7 @@ namespace ConsoleCards.Presentation.Interaction
                 }
 
                 Debug.Log($"[Physics] Commit refused here: {view.GetType().Name.Replace("View", string.Empty)} "
-                    + $"{view.ObjectId.Value.ToString("N").Substring(0, 8)} {state.Mode}{distance}: {why} "
+                    + $"{view.ObjectId.Value.ToString("N").Substring(24)} {state.Mode}{distance}: {why} "
                     + $"({entry.Count} refused since the last note).");
                 entry.Count = 0;
                 entry.NextLog = now + 5f;

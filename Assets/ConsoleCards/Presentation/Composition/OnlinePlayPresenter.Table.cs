@@ -5,6 +5,7 @@ using ConsoleCards.Application.Authority;
 using ConsoleCards.Application.Commands;
 using ConsoleCards.Application.Random;
 using ConsoleCards.Application.UseCases;
+using ConsoleCards.Core.Domain;
 using ConsoleCards.Core.Domain.Match;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.GameTemplates;
@@ -574,7 +575,8 @@ namespace ConsoleCards.Presentation.Composition
                             : "The host refused that: Controller cards are drawn into your own hand only.");
                 }
 
-                if (refusalReconciliation.SendsTable(member.Player, command, Time.unscaledTime)) SendTable(member);
+                bool returned = command is CommitPhysicalObjectCommand refusedHold && ReturnRefusedHold(member, refusedHold); // P8A
+                if (returned || refusalReconciliation.SendsTable(member.Player, command, Time.unscaledTime)) SendTable(member);
                 return;
             }
 
@@ -598,9 +600,15 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             List<PlayerId> outBefore = host.TrapFloorGame.OutPlayersNow(); // NOTICE-REMOTE
+            CommitPhysicalObjectCommand physicalCommit = command as CommitPhysicalObjectCommand;
+            PhysicalObjectState physicalBefore = physicalCommit != null && host.matchState != null && host.matchState.ContainsObject(physicalCommit.ObjectId)
+                ? host.matchState.GetObject(physicalCommit.ObjectId).PhysicalState
+                : null;
             ReplayOutcome outcome = ReplayOutcome.Unknown;
             host.RunWithCardSlide(AbilityCardMovedBy(command), () => (outcome = Replicated.Replay(command)) == ReplayOutcome.Accepted);
             host.TrapFloorGame.AnnounceOutChanges(outBefore);
+            if (outcome == ReplayOutcome.Accepted && physicalCommit != null) // P8A: where a held piece rested before its hold
+                heldReturn.NoteAccepted(host.matchState, physicalCommit.ObjectId, physicalBefore, physicalCommit.State);
             switch (outcome)
             {
                 case ReplayOutcome.Accepted:
@@ -613,7 +621,8 @@ namespace ConsoleCards.Presentation.Composition
                     break; // made on a table replaced since; the new one is already on its way to them
                 default:
                 {
-                    bool sendTable = refusalReconciliation.SendsTable(member.Player, command, Time.unscaledTime); // P8A
+                    bool returned = physicalCommit != null && ReturnRefusedHold(member, physicalCommit); // P8A
+                    bool sendTable = returned || refusalReconciliation.SendsTable(member.Player, command, Time.unscaledTime); // P8A
                     LogReplayRefused(command, outcome, sendTable
                         ? $"sending {member.Name} the host's whole table"
                         : "a piece settling on its own: no whole table this time (one went to them in the last few seconds)"); // PHY-5
@@ -632,6 +641,34 @@ namespace ConsoleCards.Presentation.Composition
             new Dictionary<Guid, (int Count, int Logged, float NextLog, float Since, float Last)>();
 
         private readonly RefusalReconciliation refusalReconciliation = new RefusalReconciliation();
+        private readonly HeldReturnPolicy heldReturn = new HeldReturnPolicy();
+
+        // P8A (owner, 2026-11-13 live test: a pawn another player tried to move floated in the air and its reach lights
+        // stayed on): a refused move must never leave the piece held by the player who was refused. The host puts it back
+        // where it rested before that hold, in the holder's name (the only player the table lets end a hold), and sends
+        // that to every other computer; the refused sender gets the host's whole table (which holds it) right after.
+        private bool ReturnRefusedHold(Member member, CommitPhysicalObjectCommand refused)
+        {
+            if (member == null || member.Player == Guid.Empty || host.matchState == null) return false;
+            if (!heldReturn.TryBuildReturn(host.matchState, new PlayerId(member.Player), refused.ObjectId, CommandId.New(),
+                    out CommitPhysicalObjectCommand putBack))
+                return false;
+            if (Replicated.Replay(putBack) != ReplayOutcome.Accepted)
+            {
+                Debug.LogWarning($"[Authority] A refused hold could not be put back here ({Replicated.LastReplayRefusal}); the table is sent.");
+                return false;
+            }
+
+            heldReturn.NoteReturned(refused.ObjectId);
+            byte[] payload = TableWire.Write(putBack, false);
+            BeginOrdered(MsgCommand);
+            writer.Write(payload);
+            BroadcastPrepared(member); // every other computer; the refused sender gets the whole table
+            string kind = host.matchState.GetObject(refused.ObjectId).Kind.ToString();
+            Debug.Log($"[Authority] {member.Name}'s refused move left the {kind} in their hand on the host's table: put back where it "
+                + $"rested before they picked it up, on every computer ({heldReturn.Returned} put back so far).");
+            return true;
+        }
 
         private void NotePhysicsRefused(Member member, CommitPhysicalObjectCommand commit, HostCommandVerdict verdict)
         {
