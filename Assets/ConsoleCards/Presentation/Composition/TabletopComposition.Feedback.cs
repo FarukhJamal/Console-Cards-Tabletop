@@ -125,6 +125,21 @@ namespace ConsoleCards.Presentation.Composition
             }
         }
 
+        // Owner QA 2026-11-14 ("there's no proper notification for guest on the proper notification bar"): a line from
+        // the host (a refusal, a host correction) always pops up, also with Show Action Messages off (ShowMessage drops
+        // ordinary lines then, which hid these on every computer).
+        internal void ShowNotice(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return;
+            if (runtimeUi == null)
+            {
+                ShowMessage(message);
+                return;
+            }
+
+            FeedbackLine(message, FeedbackSeverity.Warning);
+        }
+
         internal void ShowMessage(string message)
         {
             RecordHandoverLine(message);

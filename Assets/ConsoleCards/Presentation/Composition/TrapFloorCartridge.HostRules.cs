@@ -517,6 +517,42 @@ namespace ConsoleCards.Presentation.Composition
             return false;
         }
 
+        /// <summary>
+        /// Owner decision 2026-11-14 ("of course, if someone is doing wrong in the game, host can correct it"): the host
+        /// is the table's referee and may move another player's pawn in every assist level (drag or right-click Move).
+        /// True when <paramref name="command"/> moves or holds a pawn another seated player owns. held: a new hold;
+        /// placed: a Move or a placement that names its table pose (LayoutPose).
+        /// </summary>
+        internal bool TouchesOtherPlayersPawn(object command, PlayerId mover, out TabletopObjectId pawnId, out PlayerId owner,
+            out bool held, out bool placed)
+        {
+            pawnId = default;
+            owner = PlayerId.Empty;
+            held = false;
+            placed = false;
+            if (host.trapFloorTemplate == null || host.matchState == null || mover.IsEmpty) return false;
+            if (command is MoveObjectCommand move)
+            {
+                pawnId = move.ObjectId;
+                placed = true;
+            }
+            else if (command is CommitPhysicalObjectCommand commit)
+            {
+                pawnId = commit.ObjectId;
+                placed = commit.LayoutPose.HasValue;
+                held = !placed && commit.State != null && commit.State.Mode == PhysicalObjectMode.Held;
+            }
+            else
+            {
+                return false;
+            }
+
+            return TryGetPawnOwner(pawnId, out owner, out _) && owner != mover;
+        }
+
+        /// <summary>Full: the pawn move rules are enforced, so a host correction is announced to every computer.</summary>
+        internal bool PawnRulesEnforced => AssistRules.Enforces(AssistRule.PawnMoveRules);
+
         private bool TryGetPawnOwner(TabletopObjectId pawnId, out PlayerId owner, out TrapFloorPlayerSetupDefinition setup)
         {
             for (int i = 0; i < host.trapFloorTemplate.Players.Count; i++)

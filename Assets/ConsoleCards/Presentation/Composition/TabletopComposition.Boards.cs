@@ -121,9 +121,11 @@ namespace ConsoleCards.Presentation.Composition
             float spaceWidth = (float)floor.CellWidth;
             float spaceDepth = (float)floor.CellHeight;
             float gap = (float)Math.Max(floor.HorizontalSpacing, 0d);
+            // Owner, 2026-11-14 ("the game starts on a 6 x 6 floor; we don't need the extra columns"): the board starts with
+            // exactly the floor's spaces, in every mode; players (or the host, in Reminders and Full) add more from its menu.
             BoardGrid grid = templateBoardGrid ?? new BoardGrid(
-                playMat.x > 0f ? SpacesFitting(playMat.x, spaceWidth, gap, floorColumns) : floorColumns,
-                playMat.y > 0f ? SpacesFitting(playMat.y, spaceDepth, gap, floorRows) : floorRows,
+                floorColumns,
+                floorRows,
                 spaceWidth,
                 spaceDepth,
                 gap,
@@ -158,14 +160,37 @@ namespace ConsoleCards.Presentation.Composition
                 // Owner, 2026-11-03: more Columns or Rows than the printed board holds ran the spaces over the mat's
                 // painted edge. The mat now grows to keep a margin of board around every space (it never shrinks
                 // below the game's own size).
-                float matWidth = Mathf.Max(playMat.x, grid.Width + (2f * (PlayMatSpaceMargin + Mathf.Abs(back.x))));
-                float matDepth = Mathf.Max(playMat.y, grid.Depth + (2f * (PlayMatSpaceMargin + Mathf.Abs(back.z))));
+                // Owner, 2026-11-14 ("adjust the size of the board so we have more space on the table"): the mat is as big
+                // as its spaces and a margin, no longer at least the printed playmat; the board's support follows it.
+                float matWidth = grid.Width + (2f * (PlayMatSpaceMargin + Mathf.Abs(back.x)));
+                float matDepth = grid.Depth + (2f * (PlayMatSpaceMargin + Mathf.Abs(back.z)));
                 templateBoardMat.SetMatSize(matWidth, matDepth, new Vector2(back.x, back.z));
+                FitBoardSupport(boardCollider, matWidth, matDepth);
                 if (matWidth > grid.Width || matDepth > grid.Depth) templateBoardMat.SetSurfaceEnabled(true);
             }
 
             templateBoardMat.SetMatPicture(privateViewActive ? privateViewBoardPicture : ActiveCartridge.BoardMatPicture);
             if (gameBoardVisualRoot != null) gameBoardVisualRoot.gameObject.SetActive(false);
+        }
+
+        // Owner, 2026-11-14: the game board's support (its collider) is as wide and deep as the mat drawn on it, so pieces
+        // past the smaller mat rest on the table, not on an invisible board. Measured from the board's own size.
+        private Vector3 boardSupportOriginalSize;
+        private BoxCollider boardSupportMeasured;
+
+        private void FitBoardSupport(BoxCollider boardCollider, float matWidth, float matDepth)
+        {
+            if (boardCollider == null) return;
+            if (!ReferenceEquals(boardSupportMeasured, boardCollider))
+            {
+                boardSupportMeasured = boardCollider;
+                boardSupportOriginalSize = boardCollider.size;
+            }
+
+            Vector3 scale = boardCollider.transform.lossyScale;
+            if (Mathf.Abs(scale.x) < 0.0001f || Mathf.Abs(scale.z) < 0.0001f) return;
+            Vector3 size = new Vector3(matWidth / Mathf.Abs(scale.x), boardSupportOriginalSize.y, matDepth / Mathf.Abs(scale.z));
+            if (boardCollider.size != size) boardCollider.size = size;
         }
 
         // BOARD-1: how many spaces of this size fit along the playmat (a margin inside each edge), at least the floor's,

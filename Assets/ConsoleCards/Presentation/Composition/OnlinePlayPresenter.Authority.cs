@@ -143,13 +143,49 @@ namespace ConsoleCards.Presentation.Composition
         internal bool HostAllowsOwnCommand(object command, PlayerId requester)
         {
             if (!sharedTable || !hosting || privateHosting || command == null || requester.IsEmpty) return true;
-            if (IsActingForAnotherComputer || command is CommitPhysicalObjectCommand) return true;
+            // A physics commit is checked only when it is a placement the game or a Move makes (it carries a LayoutPose: the
+            // piece has not moved yet, so a refusal leaves it where it was). Owner QA 2026-11-14: the host's right-click
+            // Move of another player's pawn was not refused, because it is this kind of commit.
+            if (IsActingForAnotherComputer) return true;
+            // Owner decision 2026-11-14: the host is the referee and may move another player's pawn (drag or Move) in every
+            // assist level. In Full it is announced to every computer, once per drop or Move, so a correction is never silent.
+            if (host.TrapFloorGame != null && host.trapFloorTemplate != null
+                && host.TrapFloorGame.TouchesOtherPlayersPawn(command, requester, out TabletopObjectId pawnId, out PlayerId owner,
+                    out bool held, out bool placed))
+            {
+                bool cancelled = command is CommitPhysicalObjectCommand undone
+                    && undone.RecordMode == ConsoleCards.Core.Domain.Match.AuthoritativeActionRecordMode.CancelTransaction;
+                if (held) hostHolding.Add(pawnId);
+                else if (cancelled) hostHolding.Remove(pawnId); // put back where it was picked up: nothing was moved
+                else if ((placed || hostHolding.Remove(pawnId)) && host.TrapFloorGame.PawnRulesEnforced) AnnounceHostCorrection(owner);
+                return true;
+            }
+
+            if (command is CommitPhysicalObjectCommand commit && !commit.LayoutPose.HasValue) return true;
             if (host.TrapFloorGame == null || host.trapFloorTemplate == null) return true;
             if (host.TrapFloorGame.HostAllowsCommand(command, requester)) return true;
             string why = host.TrapFloorGame.HostRefusal;
             Debug.Log($"[Authority] The host player's {command.GetType().Name}: refused by the game check ({(why ?? "no reason given")}).");
-            host.ShowMessage(string.IsNullOrEmpty(why) ? "The rules do not allow that move." : why.Replace("The host refused", "Refused"));
+            host.ShowNotice(string.IsNullOrEmpty(why) ? "The rules do not allow that move." : why.Replace("The host refused", "Refused"));
             return false;
+        }
+
+        // Other players' pawns the host player is holding now (their let-go is announced once).
+        private readonly System.Collections.Generic.HashSet<TabletopObjectId> hostHolding =
+            new System.Collections.Generic.HashSet<TabletopObjectId>();
+
+        private void AnnounceHostCorrection(PlayerId owner)
+        {
+            string text = $"The host moved {host.FormatPlayerName(owner)}'s pawn.";
+            host.ShowNotice(text);
+            for (int i = 0; i < members.Count; i++)
+            {
+                Member member = members[i];
+                if (member.IsHost || !member.Connected || member.Connection < 0) continue;
+                SendNotice(member, text);
+            }
+
+            Debug.Log("[Authority] The host moved another player's pawn (a host correction): announced on every computer.");
         }
 
         private static string EndTurnRefusalText(TrapFloorEndTurnVerdict verdict)

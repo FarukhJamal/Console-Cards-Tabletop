@@ -177,7 +177,7 @@ namespace ConsoleCards.Presentation.Composition
             System.IO.BinaryReader reader = Reader(data);
             reader.ReadByte();
             string text = reader.ReadString();
-            host.ShowMessage(text);
+            host.ShowNotice(text); // always shown, like the host's own refusals and corrections
             if (!sharedTable)
             {
                 watchNotice = text; // SEC-3 UI: kept on the Room screen while this computer has no table
