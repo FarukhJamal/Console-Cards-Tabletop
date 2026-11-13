@@ -676,17 +676,20 @@ namespace ConsoleCards.Presentation.Composition
                 topFirst);
         }
 
-        // Draw: the top card flies to the hand first.
+        // Draw: the top card flies to the hand first. Owner, 2026-11-14: one card every HandDrawGapSeconds, the same times
+        // as the hand row at the table edge (no longer all at once on the screen).
         private void AnimateDrawnCards(IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts)
         {
             FeelSettings feel = Feel;
+            int count = starts != null ? starts.Count : 0;
             presentationTransitions.AnimateCardsStaggered(
                 starts,
                 feel.DrawSeconds,
                 feel.DrawArc * WorldPerCardWidth(),
-                feel.PileMoveStagger,
-                feel.PileMoveMaxStagger,
+                HandDrawGapSeconds,
+                HandDrawGapSeconds * Mathf.Max(1, count - 1),
                 true);
+            handDrawStartAt = Time.unscaledTime;
         }
 
         // Shuffle: the halves slide apart along the pile's width and drop back interleaved.

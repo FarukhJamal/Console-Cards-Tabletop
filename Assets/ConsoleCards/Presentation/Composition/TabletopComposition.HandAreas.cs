@@ -58,15 +58,31 @@ namespace ConsoleCards.Presentation.Composition
                     colour.a = mine ? 0.55f : 0.35f;
                     // Every seat's area is shown (its hand's cards lie there face down to the others, as before); another
                     // player's area takes a dropped card only in Free (owner, 2026-11-13).
-                    HandAreaAt(used++, seat.LayoutSeatIndex).Show(hand, handAreaStates, centre, rotation, size, colour, mine || free);
+                    // Owner, 2026-11-14 (TTS video): your area is a tall box standing over the table's edge, from below the
+                    // rim to well above the standing cards and reaching in over the rim, so letting go anywhere near your
+                    // hand puts the card in it.
+                    if (mine)
+                    {
+                        Vector3 inward = rotation * Vector3.forward;
+                        HandAreaAt(used++, seat.LayoutSeatIndex).Show(hand, handAreaStates, centre + (inward * (0.2f * card)), rotation,
+                            new Vector2(HandAreaWidthCards * card, 2.6f * card), colour, true, 3.4f * card, 1.2f * card);
+                    }
+                    else
+                    {
+                        HandAreaAt(used++, seat.LayoutSeatIndex).Show(hand, handAreaStates, centre, rotation, size, colour, free);
+                    }
                 }
             }
 
             for (int i = used; i < handAreas.Count; i++) handAreas[i].Hide();
 
-            // Owner, 2026-11-13: each area is a hidden zone; its frame lights only while the pointer is over it.
+            // Owner, 2026-11-13 / 11-14 (TTS video): each area is a hidden zone; its box lights only while a card is carried
+            // and the pointer is over it.
             UnityEngine.Camera viewer = hitResolver != null ? hitResolver.TargetCamera : null;
-            bool pointer = viewer != null && UnityEngine.InputSystem.Mouse.current != null;
+            bool carrying = (moveCoordinator != null && moveCoordinator.HasActiveInteraction)
+                || (interactionRouter != null && interactionRouter.HasActiveInteraction)
+                || IsCarryingHandCards;
+            bool pointer = carrying && viewer != null && UnityEngine.InputSystem.Mouse.current != null;
             Ray ray = pointer ? viewer.ScreenPointToRay(UnityEngine.InputSystem.Mouse.current.position.ReadValue()) : default;
             for (int i = 0; i < used; i++) handAreas[i].SetHighlighted(pointer && handAreas[i].Contains(ray));
         }
@@ -88,6 +104,7 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         private const float HandRowPastEdgeCards = 0.45f; // card widths past the table's edge (owner's mark, 2026-11-13)
+        private const float HandRowLiftCards = 0.3f;      // card widths above the table's top (owner, 2026-11-14: no clipping)
 
         // Owner, 2026-11-13 (screenshot, "above edge"): this screen's hand row stands just past the table's edge in front
         // of its Console, turned to the seat. False without a Console or a table to measure.
@@ -116,7 +133,7 @@ namespace ConsoleCards.Presentation.Composition
                 outward.Normalize();
                 float toEdge = DistanceToBoundsEdge(console, outward, table);
                 surface = console + (outward * (toEdge + (HandRowPastEdgeCards * WorldPerCardWidth())));
-                surface.y = table.max.y;
+                surface.y = table.max.y + (HandRowLiftCards * WorldPerCardWidth()); // floats clear of the rim, as in TTS
                 seatRotation = Quaternion.LookRotation(-outward, Vector3.up);
                 return true;
             }
@@ -138,7 +155,22 @@ namespace ConsoleCards.Presentation.Composition
         // Owner, 2026-11-13 (TTS video): cards drawn or moved from a pile into this screen's hand fly from that pile.
         private void NoteHandArrival(ContainerId from, ContainerId to)
         {
-            if (handView == null || !handView.IsBound || to != handView.ContainerId || from.IsEmpty || matchState == null) return;
+            if (handView == null || !handView.IsBound || to != handView.ContainerId || matchState == null) return;
+            if (from.IsEmpty)
+            {
+                // A loose card let go over the hand: it flies to the row from where it was let go (under the pointer),
+                // not from the screen hand.
+                if (pointerProjector == null || UnityEngine.InputSystem.Mouse.current == null
+                    || !pointerProjector.TryProjectScreenPoint(UnityEngine.InputSystem.Mouse.current.position.ReadValue(), out TableCoordinate dropped))
+                {
+                    return;
+                }
+
+                handEdgeArrivalFrom = coordinateConverter.ToWorldPosition(dropped);
+                handEdgeArrivalAt = Time.unscaledTime;
+                return;
+            }
+
             if (!matchState.TryGetContainerPlacement(from, out ContainerPlacementState pile)) return;
             handEdgeArrivalFrom = ContainerViewBinding.PlacementWorldPosition(pile, coordinateConverter);
             handEdgeArrivalAt = Time.unscaledTime;

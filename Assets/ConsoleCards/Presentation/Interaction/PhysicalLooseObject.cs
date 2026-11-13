@@ -1172,7 +1172,15 @@ namespace ConsoleCards.Presentation.Interaction
             Synchronize();
             RefreshOutOfPlayRest();
             if (!OwnsLooseTransform || held || body.isKinematic) return;
-            if (body.position.y < recoveryHeight) { RecoverOutOfBounds(); return; } // NaN height never recovers
+            if (body.position.y < recoveryHeight)
+            {
+                // Owner, 2026-11-14 (live: a card that fell on the host kept falling and jumping back on the guest): only
+                // the computer that controls the piece recovers it and commits where it went. Here it waits, still, where
+                // it fell, until that computer's commit arrives (the guest's own recovery was refused and ran again).
+                if (!authority.ControlsHere(view.BoundState.PhysicalState)) { WaitForControllerRecovery(); return; }
+                RecoverOutOfBounds();
+                return;
+            } // NaN height never recovers
             dynamicFrames++;
 
             // TTS-FEEL: don't wait on Unity's energy-based sleep alone (dice can creep for seconds).
@@ -1355,6 +1363,14 @@ namespace ConsoleCards.Presentation.Interaction
             position.y += lift + 0.002f;
             FreezeAt(position, rotation);
             return position;
+        }
+
+        private void WaitForControllerRecovery()
+        {
+            if (body.isKinematic) return;
+            body.linearVelocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
+            body.isKinematic = true; // the next accepted state from its controller sets it again (ApplyAccepted)
         }
 
         private void FreezeAt(Vector3 position, Quaternion rotation)

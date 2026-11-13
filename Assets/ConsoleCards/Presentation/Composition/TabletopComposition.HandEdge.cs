@@ -30,10 +30,10 @@ namespace ConsoleCards.Presentation.Composition
         private const float HandEdgeLean = 72f;            // degrees up from lying flat (owner, 2026-11-13: standing, as in TTS)
         private const float HandEdgeOverlap = 0.58f;       // of a card's width between two cards in the row
         private const float HandEdgeMaxRowCards = 7f;      // the row is never wider than this many cards
-        private const float HandEdgeLayerGap = 0.004f;     // world units between neighbours (no flicker)
+        private const float HandEdgeLayerGap = 0.045f;     // of a card's width between neighbours (owner, 2026-11-14: cards cut into each other)
         private const float HandEdgeSelectedLift = 0.22f;  // of a card's length: a selected card rises out of the row
         private const float HandEdgeFollow = 16f;          // how fast the shown cards reach where they should be
-        private const float HandCarryLift = 0.12f;         // world units the carried cards ride above the table
+        private const float HandCarryLift = 0.45f;         // world units the carried cards ride above the table (2026-11-14: over the rim)
         private const float HandRowSpacing = 1.08f;        // of a card's width between cards laid on the table
         private const float HandEdgeSize = 1.25f;          // the row's cards a little larger than on the table, to read
 
@@ -47,6 +47,10 @@ namespace ConsoleCards.Presentation.Composition
         private readonly Dictionary<TabletopObjectId, Pose> handEdgeLastPose = new Dictionary<TabletopObjectId, Pose>(16);
         private Vector3 handEdgeArrivalFrom;
         private float handEdgeArrivalAt = -10f;
+        // Owner, 2026-11-14 ("on the screen 10 cards pop up at once, on the table they go one by one"): a draw into the
+        // hand starts both the screen hand's cards and the row's at the same times, one card every HandDrawGapSeconds.
+        internal const float HandDrawGapSeconds = 0.25f;
+        private float handDrawStartAt = -10f;
         private ContainerId handEdgeContainerId;
         private Transform handEdgeRoot;
         private MaterialPropertyBlock handEdgeBlock;
@@ -123,7 +127,7 @@ namespace ConsoleCards.Presentation.Composition
                 else
                 {
                     float along = (i - ((count - 1) * 0.5f)) * spacing;
-                    position = surface + (right * along) + (Vector3.up * rise) + (normal * (i * HandEdgeLayerGap));
+                    position = surface + (right * along) + (Vector3.up * rise) + (normal * (i * HandEdgeLayerGap * width));
                     if (IndexOfPick(new ToolPick { View = card }) >= 0) position += up * (length * HandEdgeSelectedLift);
                     rotation = standing;
                 }
@@ -187,6 +191,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             bool arriving = Time.unscaledTime - handEdgeArrivalAt < 1.5f;
+            bool drawn = Time.unscaledTime - handDrawStartAt < 1.5f;
+            int arrived = 0;
             ClearHandEdge();
             ContainerId handId = handView.ContainerId;
             if (!matchState.Containers.TryGetValue(handId, out ContainerState hand)) return;
@@ -229,7 +235,12 @@ namespace ConsoleCards.Presentation.Composition
                 else if (arriving)
                 {
                     proxy.SetPositionAndRotation(handEdgeArrivalFrom, card.transform.rotation);
-                    startAt = Time.unscaledTime + NextCardSlideDelay(QueuedCardSlideSeconds);
+                    // A draw: the same start as this card's flight to the screen hand; otherwise the slide queue.
+                    // Owner, 2026-11-14 ("not consistent with the hand on screen"): the row flies when the screen hand's card
+                    // flies. A several-card draw staggers both the same way; any other arrival (one card drawn from a
+                    // menu, a card let go over the hand) flies at once, as the screen hand's card does.
+                    startAt = drawn ? handDrawStartAt + (arrived * HandDrawGapSeconds) : Time.unscaledTime;
+                    arrived++;
                 }
                 else
                 {

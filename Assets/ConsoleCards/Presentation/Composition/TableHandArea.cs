@@ -22,7 +22,7 @@ namespace ConsoleCards.Presentation.Composition
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorId = Shader.PropertyToID("_Color");
 
-        private readonly Renderer[] bars = new Renderer[4];
+        private readonly Renderer[] bars = new Renderer[12];
         private Func<ContainerId, ContainerState> stateOf;
         private ContainerId containerId;
         private BoxCollider zone;
@@ -31,6 +31,8 @@ namespace ConsoleCards.Presentation.Composition
         private Vector2 shownSize;
         private Color shownColour;
         private bool framed = true;
+        private float shownHeight = -1f;
+        private float shownBelow = -1f;
 
         public bool IsBound => !containerId.IsEmpty && ContainerState != null;
 
@@ -75,24 +77,41 @@ namespace ConsoleCards.Presentation.Composition
             Quaternion rotation,
             Vector2 size,
             Color colour,
-            bool acceptsDrops)
+            bool acceptsDrops,
+            float height = ZoneHeight,
+            float below = 0f)
         {
             bool rebind = hand != containerId || !ReferenceEquals(states, stateOf) || target.IsConfigured != acceptsDrops;
             containerId = hand;
             stateOf = states;
             if (!gameObject.activeSelf) gameObject.SetActive(true);
             transform.SetPositionAndRotation(centre, rotation);
-            if (size != shownSize)
+            if (size != shownSize || !Mathf.Approximately(height, shownHeight) || !Mathf.Approximately(below, shownBelow))
             {
                 shownSize = size;
-                zone.center = new Vector3(0f, ZoneHeight * 0.5f, 0f);
-                zone.size = new Vector3(size.x, ZoneHeight, size.y);
+                shownHeight = height;
+                shownBelow = below;
+                zone.center = new Vector3(0f, (height * 0.5f) - below, 0f);
+                zone.size = new Vector3(size.x, height, size.y);
+                // The box's twelve edges, drawn as thin bars (TTS: a thin outlined box while a card is held over it).
                 float halfX = size.x * 0.5f;
                 float halfZ = size.y * 0.5f;
-                SetBar(0, new Vector3(0f, FrameHeight, halfZ), new Vector3(size.x, FrameHeight, FrameThickness));
-                SetBar(1, new Vector3(0f, FrameHeight, -halfZ), new Vector3(size.x, FrameHeight, FrameThickness));
-                SetBar(2, new Vector3(-halfX, FrameHeight, 0f), new Vector3(FrameThickness, FrameHeight, size.y));
-                SetBar(3, new Vector3(halfX, FrameHeight, 0f), new Vector3(FrameThickness, FrameHeight, size.y));
+                float low = -below;
+                float high = height - below;
+                float midY = (low + high) * 0.5f;
+                for (int level = 0; level < 2; level++)
+                {
+                    float y = level == 0 ? low : high;
+                    SetBar((level * 4) + 0, new Vector3(0f, y, halfZ), new Vector3(size.x, FrameThickness, FrameThickness));
+                    SetBar((level * 4) + 1, new Vector3(0f, y, -halfZ), new Vector3(size.x, FrameThickness, FrameThickness));
+                    SetBar((level * 4) + 2, new Vector3(-halfX, y, 0f), new Vector3(FrameThickness, FrameThickness, size.y));
+                    SetBar((level * 4) + 3, new Vector3(halfX, y, 0f), new Vector3(FrameThickness, FrameThickness, size.y));
+                }
+
+                SetBar(8, new Vector3(-halfX, midY, -halfZ), new Vector3(FrameThickness, height, FrameThickness));
+                SetBar(9, new Vector3(halfX, midY, -halfZ), new Vector3(FrameThickness, height, FrameThickness));
+                SetBar(10, new Vector3(-halfX, midY, halfZ), new Vector3(FrameThickness, height, FrameThickness));
+                SetBar(11, new Vector3(halfX, midY, halfZ), new Vector3(FrameThickness, height, FrameThickness));
             }
 
             if (colour != shownColour)
@@ -120,17 +139,35 @@ namespace ConsoleCards.Presentation.Composition
             for (int i = 0; i < bars.Length; i++) bars[i].enabled = lit;
         }
 
-        /// <summary>True when the ray meets the table inside this zone (plane test, no physics, no allocation).</summary>
+        /// <summary>True when the ray passes through this zone's box (no physics, no allocation).</summary>
         internal bool Contains(Ray ray)
         {
             if (!gameObject.activeInHierarchy) return false;
             Vector3 origin = transform.InverseTransformPoint(ray.origin);
             Vector3 direction = transform.InverseTransformDirection(ray.direction);
-            if (Mathf.Abs(direction.y) < 0.0001f) return false;
-            float along = -origin.y / direction.y;
-            if (along < 0f) return false;
-            Vector3 hit = origin + (direction * along);
-            return Mathf.Abs(hit.x) <= shownSize.x * 0.5f && Mathf.Abs(hit.z) <= shownSize.y * 0.5f;
+            Vector3 min = zone.center - (zone.size * 0.5f);
+            Vector3 max = zone.center + (zone.size * 0.5f);
+            float near = 0f;
+            float far = float.MaxValue;
+            for (int axis = 0; axis < 3; axis++)
+            {
+                float o = origin[axis];
+                float d = direction[axis];
+                if (Mathf.Abs(d) < 0.000001f)
+                {
+                    if (o < min[axis] || o > max[axis]) return false;
+                    continue;
+                }
+
+                float a = (min[axis] - o) / d;
+                float b = (max[axis] - o) / d;
+                if (a > b) { float swap = a; a = b; b = swap; }
+                near = Mathf.Max(near, a);
+                far = Mathf.Min(far, b);
+                if (near > far) return false;
+            }
+
+            return true;
         }
 
         internal void Hide()

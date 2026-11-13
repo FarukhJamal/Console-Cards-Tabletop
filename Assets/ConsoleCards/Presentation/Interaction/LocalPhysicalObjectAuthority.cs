@@ -63,6 +63,10 @@ namespace ConsoleCards.Presentation.Interaction
 
         internal bool IsPieceOutOfPlay(TabletopObjectId id) => IsOutOfPlay != null && IsOutOfPlay(id);
 
+        /// <summary>True when this computer commits the piece (its controller plays here, or offline).</summary>
+        internal bool ControlsHere(PhysicalObjectState state) =>
+            IsLocalPlayer == null || state == null || state.ControllingPlayerId.IsEmpty || IsLocalPlayer(state.ControllingPlayerId);
+
         /// <summary>MP-2: true when another computer's player holds the piece (it cannot be taken from them).</summary>
         internal bool IsHeldElsewhere(PhysicalObjectState state) =>
             state != null && state.Mode == PhysicalObjectMode.Held && IsLocalPlayer != null && !IsLocalPlayer(state.ControllingPlayerId);
