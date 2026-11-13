@@ -186,7 +186,13 @@ namespace ConsoleCards.Presentation.Composition
             physicalAuthority.IsLocalPlayer = playerHereCheck;
             physicalAuthority.MayCommitInitialState = initialPhysicsCheck;
             physicalAuthority.RulesDieResult = rulesDieResult ??= HostPlayerRulesDieResult; // FAIR-DICE
+            physicalAuthority.IsOutOfPlay = outOfPlayCheck ??= IsPieceOutOfPlay; // P8A eliminated-pawn fix
         }
+
+        private Func<TabletopObjectId, bool> outOfPlayCheck;
+
+        // P8A eliminated-pawn fix (owner, 2026-11-13): a Trap Floor pawn whose player is out this floor rests still.
+        private bool IsPieceOutOfPlay(TabletopObjectId id) => trapFloorTemplate != null && TrapFloorGame.IsEliminatedPawn(id);
 
         private bool MayCommitFirstPhysicalState() => online == null || !online.IsClientTable;
 

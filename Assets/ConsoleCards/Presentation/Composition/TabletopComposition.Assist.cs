@@ -158,7 +158,13 @@ namespace ConsoleCards.Presentation.Composition
             if (turn != cartridgePlayer || !turnCartridge.gameObject.activeSelf)
             {
                 cartridgeFrom = turnCartridge.gameObject.activeSelf ? turnCartridge.position : place;
-                cartridgeHopStarted = Time.unscaledTime;
+                // P8A (owner, 2026-11-13: "the surviving player's turn marker disappears"): a table rebuilt from the host's
+                // whole table hides the cartridge (ClearPolish); the same player's turn on the same match comes back in
+                // place, without its hop and spin. Before, a whole table every ~0.3 s restarted a 0.7 s hop each time.
+                bool sameTurnRestored = !turnCartridge.gameObject.activeSelf && turn == cartridgeHiddenPlayer
+                    && matchState != null && matchState.Id == cartridgeHiddenMatch;
+                cartridgeHopStarted = sameTurnRestored ? Time.unscaledTime - CartridgeHopSeconds : Time.unscaledTime;
+                cartridgeHiddenPlayer = PlayerId.Empty;
                 cartridgePlayer = turn;
                 Color seat = FeedbackColour(turn);
                 Tint(turnCartridgeBody, seat);
@@ -314,16 +320,27 @@ namespace ConsoleCards.Presentation.Composition
             renderer.SetPropertyBlock(assistBlock);
         }
 
-        private void HideTurnCartridge()
+        private void HideTurnCartridge(bool tableRebuilt = false)
         {
-            if (turnCartridge != null && turnCartridge.gameObject.activeSelf) turnCartridge.gameObject.SetActive(false);
+            if (turnCartridge != null && turnCartridge.gameObject.activeSelf)
+            {
+                // P8A: whose turn it showed when the table is rebuilt (a whole table, an Undo), so the same turn on the
+                // same match comes straight back in place.
+                cartridgeHiddenPlayer = tableRebuilt ? cartridgePlayer : PlayerId.Empty;
+                cartridgeHiddenMatch = tableRebuilt && matchState != null ? matchState.Id : default;
+                turnCartridge.gameObject.SetActive(false);
+            }
+
             cartridgePlayer = PlayerId.Empty;
         }
+
+        private PlayerId cartridgeHiddenPlayer;
+        private ConsoleCards.Core.Identifiers.MatchId cartridgeHiddenMatch;
 
         // A new table: the cartridge is made again for its Consoles (from ClearPolish).
         private void ClearTurnCartridge()
         {
-            HideTurnCartridge();
+            HideTurnCartridge(true);
             consoleSizes.Clear();
             cartridgeRound = -1;
             appliedAssist = -1;

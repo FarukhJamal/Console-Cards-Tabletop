@@ -322,6 +322,37 @@ namespace ConsoleCards.Presentation.Interaction
                 + $"({rewound} time(s) in {span:0.0} s). Source: a whole table or a host correction, not this computer's physics.");
         }
 
+        // ---------- P8A eliminated-pawn fix (owner, 2026-11-13) ----------
+        // A pawn whose player is out this floor, at an accepted rest, is held still (kinematic, no gravity) at that place
+        // on every computer: it cannot fall into the hole of a collapsed tile, spin, be corrected again and again, or
+        // settle into a commit the host then refuses. Nothing else changes: active pawns, dice and cards keep their
+        // physics, and anyone may still pick the pawn up as before (BeginHold makes it dynamic; its next accepted rest
+        // holds it still again). When the player is back in (a new floor, an Undo) it gets its normal physics back.
+        private bool outOfPlayRest;
+
+        /// <summary>P8A: true while this pawn rests out of play (held still at its accepted place).</summary>
+        public bool IsRestingOutOfPlay => outOfPlayRest;
+
+        private bool WantsOutOfPlayRest(PhysicalObjectState state) =>
+            view is PawnView
+            && OutOfPlayRest.Wants(
+                true,
+                authority.IsPieceOutOfPlay(view.ObjectId),
+                held,
+                userActionActive || compoundActionActive,
+                !view.BoundState.ContainerId.IsEmpty,
+                state);
+
+        // The player went out or came back without the pawn's accepted state changing: apply its state again.
+        private void RefreshOutOfPlayRest()
+        {
+            if (!(view is PawnView) || held || body == null || !OwnsLooseTransform) return;
+            if (WantsOutOfPlayRest(view.BoundState.PhysicalState) == outOfPlayRest) return;
+            applied = null;
+            ApplyAccepted();
+            Debug.Log($"[Physics] Pawn {ShortId(view.ObjectId.Value)} {(outOfPlayRest ? "rests out of play: held still at its accepted place" : "is back in play: normal physics")}.");
+        }
+
         private static string ShortId(Guid value) => value.ToString("N").Substring(0, 8);
 
         private static string Fmt(Vector3 v) => $"({v.x:0.000}, {v.y:0.000}, {v.z:0.000})";
@@ -501,9 +532,11 @@ namespace ConsoleCards.Presentation.Interaction
             held = stateHeld;
 
             // TTS-FEEL: held bodies stay DYNAMIC (gravity off). Only user-locked objects are kinematic.
+            // P8A eliminated-pawn fix: a pawn out of play that rests is held still at its accepted place (see OutOfPlayRest).
             bool locked = view.BoundState.IsUserLocked;
-            body.isKinematic = locked || frozenAfterRecovery;
-            body.useGravity = !held && !locked && !frozenAfterRecovery;
+            outOfPlayRest = !held && WantsOutOfPlayRest(state);
+            body.isKinematic = locked || frozenAfterRecovery || outOfPlayRest;
+            body.useGravity = !held && !locked && !frozenAfterRecovery && !outOfPlayRest;
             body.detectCollisions = true;
             if (held) ApplyHeldPhysics(); else RestoreProfilePhysics();
             if (!body.isKinematic)
@@ -1133,6 +1166,7 @@ namespace ConsoleCards.Presentation.Interaction
             if (view == null || !view.IsBound || !gameObject.activeInHierarchy) return;
             if (corrections.Count > 0 && Time.unscaledTime - corrections.WindowStart >= CorrectionWindowSeconds) FlushCorrections(); // PHY-1
             Synchronize();
+            RefreshOutOfPlayRest();
             if (!OwnsLooseTransform || held || body.isKinematic) return;
             if (body.position.y < recoveryHeight) { RecoverOutOfBounds(); return; } // NaN height never recovers
             dynamicFrames++;

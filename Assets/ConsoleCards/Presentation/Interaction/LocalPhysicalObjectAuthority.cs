@@ -53,6 +53,16 @@ namespace ConsoleCards.Presentation.Interaction
 
         internal bool MayCommitFirstState => MayCommitInitialState == null || MayCommitInitialState();
 
+        /// <summary>
+        /// P8A eliminated-pawn fix (owner, 2026-11-13): true for a piece that is out of play and only lies on the table
+        /// (Trap Floor: the pawn of a player eliminated on this floor). Resting, it is held still at its accepted place
+        /// on every computer (no gravity, no settling, no corrections, nothing to commit), even over a collapsed tile;
+        /// a player can still pick it up as before. Null: no piece is out of play.
+        /// </summary>
+        public Func<TabletopObjectId, bool> IsOutOfPlay { get; set; }
+
+        internal bool IsPieceOutOfPlay(TabletopObjectId id) => IsOutOfPlay != null && IsOutOfPlay(id);
+
         /// <summary>MP-2: true when another computer's player holds the piece (it cannot be taken from them).</summary>
         internal bool IsHeldElsewhere(PhysicalObjectState state) =>
             state != null && state.Mode == PhysicalObjectMode.Held && IsLocalPlayer != null && !IsLocalPlayer(state.ControllingPlayerId);

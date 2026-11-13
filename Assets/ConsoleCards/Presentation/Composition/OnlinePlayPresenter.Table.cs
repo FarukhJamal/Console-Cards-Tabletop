@@ -563,12 +563,18 @@ namespace ConsoleCards.Presentation.Composition
             {
                 if (command is CommitPhysicalObjectCommand refusedCommit) NotePhysicsRefused(member, refusedCommit, verdict);
                 else Debug.Log($"[Authority] Refused {command.GetType().Name} from {member.Name}: {verdict}.");
-                SendNotice(member, verdict == HostCommandVerdict.RefusedByGame
-                    ? host.TrapFloorGame.HostRefusal ?? "The host refused that against its own table."
-                    : verdict == HostCommandVerdict.InvalidPosition
-                        ? "The host refused that: the position is not on the table."
-                        : "The host refused that: Controller cards are drawn into your own hand only.");
-                SendTable(member);
+                // P8A (owner, 2026-11-13): a piece settling on its own is refused quietly and the whole table goes back at
+                // most every few seconds (RefusalReconciliation); a player's own refused action is answered as before.
+                if (RefusalReconciliation.NotifiesPlayer(command))
+                {
+                    SendNotice(member, verdict == HostCommandVerdict.RefusedByGame
+                        ? host.TrapFloorGame.HostRefusal ?? "The host refused that against its own table."
+                        : verdict == HostCommandVerdict.InvalidPosition
+                            ? "The host refused that: the position is not on the table."
+                            : "The host refused that: Controller cards are drawn into your own hand only.");
+                }
+
+                if (refusalReconciliation.SendsTable(member.Player, command, Time.unscaledTime)) SendTable(member);
                 return;
             }
 
@@ -606,9 +612,14 @@ namespace ConsoleCards.Presentation.Composition
                 case ReplayOutcome.OtherTable:
                     break; // made on a table replaced since; the new one is already on its way to them
                 default:
-                    LogReplayRefused(command, outcome, $"sending {member.Name} the host's whole table"); // PHY-5
-                    SendTable(member); // it did not fit the host's table: theirs is set right
+                {
+                    bool sendTable = refusalReconciliation.SendsTable(member.Player, command, Time.unscaledTime); // P8A
+                    LogReplayRefused(command, outcome, sendTable
+                        ? $"sending {member.Name} the host's whole table"
+                        : "a piece settling on its own: no whole table this time (one went to them in the last few seconds)"); // PHY-5
+                    if (sendTable) SendTable(member); // it did not fit the host's table: theirs is set right
                     break;
+                }
             }
         }
 
@@ -619,6 +630,8 @@ namespace ConsoleCards.Presentation.Composition
         // and logged at most every 3 s with the rate, so the loop is visible without one line per refusal.
         private readonly Dictionary<Guid, (int Count, int Logged, float NextLog, float Since, float Last)> physicsRefusals =
             new Dictionary<Guid, (int Count, int Logged, float NextLog, float Since, float Last)>();
+
+        private readonly RefusalReconciliation refusalReconciliation = new RefusalReconciliation();
 
         private void NotePhysicsRefused(Member member, CommitPhysicalObjectCommand commit, HostCommandVerdict verdict)
         {
@@ -639,7 +652,10 @@ namespace ConsoleCards.Presentation.Composition
                 Debug.LogWarning($"[PhysDiag] Host refused {fresh} physics commit(s) from {member.Name} since the last note "
                     + $"({entry.Count} in {span:0.0} s, {entry.Count / span:0.0}/s): latest {kind} {commit.State?.Mode}, {verdict}"
                     + $"{(verdict == HostCommandVerdict.RefusedByGame && host.TrapFloorGame.HostRefusal != null ? " — " + host.TrapFloorGame.HostRefusal : string.Empty)}. "
-                    + "Each refusal sends them the host's whole table, which puts the piece back on the host's accepted state there.");
+                    + (RefusalReconciliation.IsPhysicsOnly(commit)
+                        ? $"Physics-only: refused quietly, their table re-sent at most every {RefusalReconciliation.PhysicsOnlyTableSeconds:0} s "
+                            + $"({refusalReconciliation.SuppressedTables} whole tables not sent so far)."
+                        : "A player's action: they get the notice and the host's whole table."));
                 entry.Logged = entry.Count;
                 entry.NextLog = now + 3f;
             }

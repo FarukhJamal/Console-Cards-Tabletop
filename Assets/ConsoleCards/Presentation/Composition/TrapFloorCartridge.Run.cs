@@ -35,6 +35,28 @@ namespace ConsoleCards.Presentation.Composition
                 + $"{result.StartingKept} starting Abilit{(result.StartingKept == 1 ? "y" : "ies")} kept, {result.StartingLeftOut} used ones not dealt again.");
         }
 
+        // P8A eliminated-pawn fix (owner, 2026-11-13): this pawn's player is out for the rest of this floor.
+        internal bool IsEliminatedPawn(TabletopObjectId pawnId)
+        {
+            if (host.trapFloorTemplate == null || host.trapFloorTurnState == null || host.matchState == null) return false;
+            IReadOnlyList<TrapFloorPlayerSetupDefinition> players = host.trapFloorTemplate.Players;
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (players[i].PawnId != pawnId) continue;
+                if (!host.matchState.Seats.TryGetValue(players[i].SeatId, out var seat) || seat.OccupantPlayerId.IsEmpty) return false;
+                IReadOnlyList<PlayerId> order = host.trapFloorTurnState.PlayerOrder;
+                for (int p = 0; p < order.Count; p++)
+                {
+                    if (order[p] == seat.OccupantPlayerId)
+                        return host.trapFloorTurnState.GetPlayerState(seat.OccupantPlayerId) == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound;
+                }
+
+                return false; // not in this floor's turn order
+            }
+
+            return false;
+        }
+
         // P8A (Blind): where the player's pawn stands now.
         internal bool TryGetBlindPawnTile(PlayerId player, out TrapFloorCoordinate tile)
         {

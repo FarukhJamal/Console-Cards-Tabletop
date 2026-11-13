@@ -510,6 +510,10 @@ namespace ConsoleCards.Games.TrapFloor
 
             long acceptedRevision = checked(matchState.Revision + 1L);
             state.MarkPlayerEliminatedForCurrentRound(affectedPlayerId);
+            // P8A eliminated-pawn fix (owner, 2026-11-13): the out player's pawn rests where it is, in this same command,
+            // on every computer (no moving state left for physics to settle and commit; see TrapFloorEliminatedPawnRest).
+            if (TryGetPlayerSetup(matchState, affectedPlayerId, out TrapFloorPlayerSetupDefinition eliminatedSetup))
+                TrapFloorEliminatedPawnRest.Rest(matchState, eliminatedSetup.PawnId);
             if (trap == null)
             {
                 activityFeed.RecordPlayerEliminated(
