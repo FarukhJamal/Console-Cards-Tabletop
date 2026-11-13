@@ -873,6 +873,7 @@ namespace ConsoleCards.Presentation.Composition
                 true,
                 () => host.BeginDuplicatePlacement(targetCardId)));
             host.AddPieceActions(actions, targetCardId, false); // doc 58: lock and size
+            host.TrapFloorGame?.AddFreeFloorActions(actions, targetCardId); // P-2b: Free, a floor tile's menu
             AddDeleteActionIfRuntime(
                 actions,
                 TabletopComponentTarget.ForObject(targetCardId));

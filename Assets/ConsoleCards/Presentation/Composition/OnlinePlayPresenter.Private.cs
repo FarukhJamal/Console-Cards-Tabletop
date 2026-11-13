@@ -132,7 +132,7 @@ namespace ConsoleCards.Presentation.Composition
         // Normal-play table messages: never used, and refused, in a private session.
         private static bool IsLegacyTableMessage(byte type) =>
             type == MsgCommand || type == MsgTable || type == MsgNeedTable || type == MsgPoses || type == MsgCheck
-            || type == MsgDeal || type == MsgUndo || type == MsgEndTurn || type == MsgLive || type == MsgPiece;
+            || type == MsgDeal || type == MsgUndo || type == MsgEndTurn || type == MsgLive || type == MsgPiece || type == MsgLevel || type == MsgBoardGrid;
 
         private int HelloProtocol => PrivateDevSession.Enabled ? PrivateDevProtocol : Protocol;
 

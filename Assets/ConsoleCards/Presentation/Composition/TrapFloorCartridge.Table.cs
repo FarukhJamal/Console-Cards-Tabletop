@@ -413,7 +413,7 @@ namespace ConsoleCards.Presentation.Composition
         // with removal from floor"): a taken prize's tile leaves the floor for the taker the same way, so no tile is a
         // hole marker any more; an empty cell is the gap.
         public bool IsFixedBoardPiece(TabletopObjectId objectId) =>
-            IsBoardTile(objectId) && !IsLiftedCollapsedTile(objectId);
+            !FreeFloor && IsBoardTile(objectId) && !IsLiftedCollapsedTile(objectId); // P-2b: Free leaves the floor to the players
 
         public bool IsBoardTile(TabletopObjectId objectId) =>
             host.trapFloorTemplate != null && host.trapFloorTemplate.IsFloorCard(objectId);

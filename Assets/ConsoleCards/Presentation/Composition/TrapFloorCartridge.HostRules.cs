@@ -230,7 +230,7 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            if (PlayAssist.Level != PlayAssistLevel.Full) return true;
+            if (!AssistRules.Enforces(AssistRule.EscapeChecks)) return true;
             TabletopObjectId floorCardId;
             string what;
             switch (command)
@@ -258,7 +258,7 @@ namespace ConsoleCards.Presentation.Composition
         /// </summary>
         internal bool IsRulesResultStep(ICartridgeUndoState before, ICartridgeUndoState after, CommandId stepId)
         {
-            if (PlayAssist.Level != PlayAssistLevel.Full) return false;
+            if (!AssistRules.Enforces(AssistRule.RulesResultsStand)) return false;
             if (!stepId.IsEmpty && hostRolledSteps.Contains(stepId)) return true;
             if (!(before is TrapFloorUndoState a) || !(after is TrapFloorUndoState b)) return false;
             return TrapFloorUndoEligibility.IsRulesResult(a.Snapshot, b.Snapshot);
@@ -292,8 +292,8 @@ namespace ConsoleCards.Presentation.Composition
         internal bool FloorTurnCollapseOwed(bool anyLevel = false)
         {
             // anyLevel (P8A, owner 2026-11-12): the same conditions, asked by Reminders to warn (never to refuse).
-            if (!anyLevel && PlayAssist.Level != PlayAssistLevel.Full) return false;
-            if (anyLevel && PlayAssist.IsFree) return false;
+            if (!anyLevel && !AssistRules.Enforces(AssistRule.FloorCollapseOwed)) return false;
+            if (anyLevel && !AssistRules.Watches(AssistRule.FloorCollapseOwed)) return false;
             if (host.trapFloorTurnState == null || host.trapFloorCollapseState == null || host.trapFloorTemplate == null) return false;
             if (host.trapFloorTurnState.Phase != TrapFloorTurnPhase.FloorTurn || host.trapFloorTurnState.IsCurrentFloorFailed) return false;
             if (host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.IsWon) return false;
@@ -317,7 +317,7 @@ namespace ConsoleCards.Presentation.Composition
         /// </summary>
         internal bool IsRulesDie(TabletopObjectId dieId)
         {
-            if (PlayAssist.Level != PlayAssistLevel.Full || host.trapFloorTemplate == null || host.matchState == null) return false;
+            if (!AssistRules.Enforces(AssistRule.RulesDice) || host.trapFloorTemplate == null || host.matchState == null) return false;
             if (dieId == host.trapFloorTemplate.FloorfallXAxisDieId || dieId == host.trapFloorTemplate.FloorfallYAxisDieId) return true;
             return host.matchState.Dice.TryGetValue(dieId, out DieState die)
                 && die.SideCount == 4
@@ -431,7 +431,7 @@ namespace ConsoleCards.Presentation.Composition
         // A joined computer's pawn move, on the host, in Full only. True when it may run; else HostRefusal says why.
         private bool HostAllowsPawnMove(PlayerId sender, TabletopObjectId objectId, TableCoordinate? targetPosition)
         {
-            if (PlayAssist.Level != PlayAssistLevel.Full) return true; // Free / Reminders: tabletop freedom
+            if (!AssistRules.Enforces(AssistRule.PawnMoveRules)) return true; // Free / Reminders: tabletop freedom
             if (host.trapFloorTemplate == null || host.matchState == null || host.trapFloorTurnState == null) return true;
             if (!TryGetPawnOwner(objectId, out PlayerId owner, out TrapFloorPlayerSetupDefinition ownerSetup)) return true; // not a player's pawn
             if (IsFloorEnded()) return true; // nothing more is played on this floor

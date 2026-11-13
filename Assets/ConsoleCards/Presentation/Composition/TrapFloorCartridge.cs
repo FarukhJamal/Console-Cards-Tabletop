@@ -738,7 +738,7 @@ namespace ConsoleCards.Presentation.Composition
                 host.RefreshCardContentVisibility();
                 host.RefreshSelectionPresenterAfterRuntimeProjection();
                 if (result.DestinationContainerId.IsEmpty) host.SlideCards(boughtStarts, 0.35f, 0f); // loose beside the Console
-                else host.presentationTransitions.AnimateCardsFromCurrentResults(boughtStarts, 0.35f, 0f); // into the hand // P8A: it slides from where it lay
+                else host.AnimateCardsQueued(boughtStarts, 0f); // into the hand (P-3: in the slide queue) // P8A: it slides from where it lay
             }
 
             ShowPaymentReturned();

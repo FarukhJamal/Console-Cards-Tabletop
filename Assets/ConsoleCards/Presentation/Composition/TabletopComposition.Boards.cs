@@ -128,6 +128,7 @@ namespace ConsoleCards.Presentation.Composition
                 spaceDepth,
                 gap,
                 playMat.x > 0f ? PlayMatSpaceFrame : BoardGrid.Standard.Frame);
+            if (templateBoardGrid == null) templateBoardDefaultGrid = grid; // P-2a: the game's own setup (Reminders / Full never go below it)
             if (templateBoardMat == null) templateBoardMat = CreateBoardMatInstance($"{(privateViewActive ? "Private View" : ActiveCartridge.DisplayName)} Board Mat", grid);
             else templateBoardMat.Apply(grid);
             templateBoardMat.SetSurfaceEnabled(false); // the board's own surface holds the floor tiles
@@ -430,17 +431,40 @@ namespace ConsoleCards.Presentation.Composition
                 actions.Add(new PopupActionOption("Move", true, () => BeginBoardMove(boardId)));
             }
 
-            actions.Add(new PopupActionOption("Columns +", grid.Columns < BoardGrid.MaximumColumns,
+            // P-2a (owner, 2026-11-13): the game's own board. Free: any player changes its grid. Reminders and Full: only
+            // the host, and only to make it bigger than the game's own setup (back down to that setup, never below it).
+            bool canGrow = true;
+            bool canShrinkColumns = grid.Columns > 1;
+            bool canShrinkRows = grid.Rows > 1;
+            bool canChangeSpaces = true;
+            string gridNote = null;
+            if (!placed)
+            {
+                if (!MayChangeGameBoardGrid(out gridNote))
+                {
+                    canGrow = canShrinkColumns = canShrinkRows = canChangeSpaces = false;
+                }
+                else if (!PlayAssist.IsFree)
+                {
+                    BoardGrid setup = templateBoardDefaultGrid ?? grid;
+                    canShrinkColumns = grid.Columns > setup.Columns;
+                    canShrinkRows = grid.Rows > setup.Rows;
+                    canChangeSpaces = false;
+                    gridNote = "Reminders and Full: the board can only grow past the game's own setup.";
+                }
+            }
+
+            actions.Add(new PopupActionOption("Columns +", canGrow && grid.Columns < BoardGrid.MaximumColumns,
                 () => ResizeBoard(boardId, grid.WithSize(grid.Columns + 1, grid.Rows))));
-            actions.Add(new PopupActionOption("Columns -", grid.Columns > 1,
+            actions.Add(new PopupActionOption("Columns -", canShrinkColumns,
                 () => ResizeBoard(boardId, grid.WithSize(grid.Columns - 1, grid.Rows))));
-            actions.Add(new PopupActionOption("Rows +", grid.Rows < BoardGrid.MaximumRows,
+            actions.Add(new PopupActionOption("Rows +", canGrow && grid.Rows < BoardGrid.MaximumRows,
                 () => ResizeBoard(boardId, grid.WithSize(grid.Columns, grid.Rows + 1))));
-            actions.Add(new PopupActionOption("Rows -", grid.Rows > 1,
+            actions.Add(new PopupActionOption("Rows -", canShrinkRows,
                 () => ResizeBoard(boardId, grid.WithSize(grid.Columns, grid.Rows - 1))));
             actions.Add(new PopupActionOption(
                 cardSpaces ? "Spaces: small tiles" : "Spaces: card size",
-                true,
+                canChangeSpaces,
                 () => ResizeBoard(boardId, cardSpaces
                     ? grid.WithSpace(SmallSpaceWidth, SmallSpaceDepth, 0f)
                     : grid.WithSpace(CardSpaceWidth, CardSpaceDepth, CardSpaceGap))));
@@ -455,7 +479,8 @@ namespace ConsoleCards.Presentation.Composition
                 boardMenuScreenPosition,
                 placed ? "BOARD" : "GAME BOARD",
                 $"{grid.Columns} x {grid.Rows} spaces ({(cardSpaces ? "card size" : "small tiles")})."
-                    + (placed ? " Cards on it stay where they are." : " The floor tiles do not move."),
+                    + (placed ? " Cards on it stay where they are." : " The floor tiles do not move.")
+                    + (string.IsNullOrEmpty(gridNote) ? string.Empty : " " + gridNote),
                 actions,
                 ContextMenus.CloseContextMenu,
                 ContextMenus.DismissPopupFromSecondary);
@@ -483,16 +508,16 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (boardId.IsEmpty)
             {
-                templateBoardGrid = grid; // a table setting for the game's own board
-                if (gameBoardPhysicalSurface is BoxCollider boardCollider)
+                // P-2a: online, a joined computer's change goes to the host, which sends it back to everyone in order.
+                if (IsOnlineTable && Online.SendsGameBoardGrid(grid))
                 {
-                    ApplyTemplateBoardMat(boardCollider); // BOARD-1: laid out again (spaces on the tiles, the playmat)
+                    ShowMessage("Asked the host to change the board's grid.");
+                    ContextMenus.CloseContextMenu();
+                    return;
                 }
-                else
-                {
-                    templateBoardMat?.Apply(grid);
-                    templateBoardMat?.SetSurfaceEnabled(false);
-                }
+
+                ApplyGameBoardGrid(grid);
+                if (IsOnlineTable) Online.BroadcastGameBoardGrid();
             }
             else
             {
@@ -508,6 +533,49 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             ShowBoardContextMenu(boardId); // stays open for the next + or −
+        }
+
+        // P-2a: the game's own board grid, a table setting (kept by Undo, Redo and seat switches).
+        private void ApplyGameBoardGrid(BoardGrid grid)
+        {
+            templateBoardGrid = grid; // a table setting for the game's own board
+            if (gameBoardPhysicalSurface is BoxCollider boardCollider)
+            {
+                ApplyTemplateBoardMat(boardCollider); // BOARD-1: laid out again (spaces on the tiles, the playmat)
+            }
+            else
+            {
+                templateBoardMat?.Apply(grid);
+                templateBoardMat?.SetSurfaceEnabled(false);
+            }
+        }
+
+        // P-2a: who may change the game's own board grid on this computer now.
+        private bool MayChangeGameBoardGrid(out string note)
+        {
+            note = null;
+            if (privateViewActive)
+            {
+                note = "A private session's board is the host's.";
+                return false;
+            }
+
+            if (!IsOnlineTable || PlayAssist.IsFree || Online.IsHosting) return true;
+            note = "Only the host can change the board's grid in Reminders and Full.";
+            return false;
+        }
+
+        /// <summary>P-2a: the game board's grid as it is now (for the room); false when the table has no game board.</summary>
+        internal bool TryGetGameBoardGrid(out BoardGrid grid) => TryGetBoardGrid(BoardId.Empty, out grid);
+
+        /// <summary>P-2a: the host's grid for the game board, applied here (a joined computer, or the host for a guest).</summary>
+        internal void ApplyGameBoardGridFromRoom(BoardGrid grid)
+        {
+            if (!grid.IsValid || grid.Columns > BoardGrid.MaximumColumns || grid.Rows > BoardGrid.MaximumRows) return;
+            if (!TryGetGameBoardGrid(out BoardGrid now)) return; // no game board on this table
+            if (now.Equals(grid)) return;
+            ApplyGameBoardGrid(grid);
+            Debug.Log($"[Online] Game board grid: {grid.Columns} x {grid.Rows} (from the room).");
         }
 
         private void DeleteBoard(BoardId boardId)

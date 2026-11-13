@@ -769,6 +769,17 @@ namespace ConsoleCards.Presentation.Composition
 
         // ---------- Group into deck ----------
 
+        /// <summary>P-2b: these cards grouped into one deck, as G does for a selection; the selection is then cleared.</summary>
+        internal void GroupCardsIntoDeck(List<CardView> cards)
+        {
+            if (cards == null || cards.Count < 2) return;
+            toolSelection.Clear();
+            for (int i = 0; i < cards.Count; i++)
+                if (cards[i] != null) toolSelection.Add(new ToolPick { View = cards[i] });
+            GroupToolSelection();
+            ClearToolSelection();
+        }
+
         // Gathers the selected loose cards and the cards of the selected decks, stacks and discard piles into one deck:
         // the first selected deck, or a new deck where the first selected card or pile lay. Piles left empty go away
         // (not the game's own piles). Pawns, tokens, dice and bags stay. One Undo step, then the landing tap and flash.

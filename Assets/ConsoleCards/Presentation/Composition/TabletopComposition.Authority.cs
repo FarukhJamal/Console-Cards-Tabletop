@@ -84,11 +84,17 @@ namespace ConsoleCards.Presentation.Composition
             replicatedAuthority = new ReplicatedTableAuthority(authority, () => matchState, BeginCommandScope, EndCommandScope);
             // P8A: a joined table out of touch with its host is not played (TableLinkGuard).
             replicatedAuthority.Frozen = () => online != null && online.TableIsStale;
+            // Foundation stage (A2): on a room's host, its own player's commands meet the same game checks as a guest's.
+            replicatedAuthority.LocalCheck = command => online == null
+                || online.HostAllowsOwnCommand(command, replicatedAuthority.ContextOf(command).RequestedByPlayerId);
 
             // R2: views follow accepted changes, not the code that asked for them; panels redraw when something
             // changed (R2c).
             ViewSync.Attach(authority);
             authority.CommandAccepted += HandleTableCommandAccepted;
+            // Owner, 2026-11-13: a card drawn into this screen's hand flies from its pile to the hand row.
+            authority.Observe<DrawCardsCommand, DrawCardsResult>((command, result) => NoteHandArrival(command.SourceDeckContainerId, command.DestinationContainerId));
+            authority.Observe<TransferCardCommand, TransferCardResult>((command, result) => NoteHandArrival(command.ExpectedSourceContainerId, command.DestinationContainerId));
 
             // Pieces and physics: drags, drops, turns, flips and physics commits (R1b part 2).
             authority.Register<MoveObjectCommand, MoveObjectResult>(

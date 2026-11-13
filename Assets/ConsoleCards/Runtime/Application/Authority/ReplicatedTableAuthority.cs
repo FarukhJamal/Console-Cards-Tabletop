@@ -141,6 +141,14 @@ namespace ConsoleCards.Application.Authority
         /// </summary>
         public Func<bool> Frozen { get; set; }
 
+        /// <summary>
+        /// Foundation stage (audit A2, owner "OK", 2026-11-13): the game's check of a command made on this computer at the
+        /// top level (not one run inside another command, not a replay from another computer), before it runs. The host
+        /// uses it so its own player's commands meet the same game checks as a joined computer's. False: not run.
+        /// Null: no check.
+        /// </summary>
+        public Func<object, bool> LocalCheck { get; set; }
+
         /// <summary>How many commands made here the frozen table refused (diagnostics).</summary>
         public int RefusedWhileFrozen { get; private set; }
 
@@ -161,6 +169,8 @@ namespace ConsoleCards.Application.Authority
             {
                 return NotRun<TResult>(); // another computer plays that seat
             }
+
+            if (depth == 0 && LocalCheck != null && !LocalCheck(command)) return NotRun<TResult>(); // A2: the game refused it
 
             slots.Add(outgoing.Count);
             outgoing.Add(null);

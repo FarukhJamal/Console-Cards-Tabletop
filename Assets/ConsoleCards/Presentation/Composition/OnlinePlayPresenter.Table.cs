@@ -898,6 +898,7 @@ namespace ConsoleCards.Presentation.Composition
             writer.Write(payload);
             Flush();
             SendPrepared(member);
+            SendGameBoardGrid(member); // P-2a: the board grid is part of the table's setup
         }
 
         private void BroadcastTable(Member except)
@@ -908,6 +909,7 @@ namespace ConsoleCards.Presentation.Composition
             BeginOrdered(MsgTable);
             writer.Write(payload);
             BroadcastPrepared(except);
+            if (hosting) BroadcastGameBoardGrid(); // P-2a: the board grid is part of the table's setup
         }
 
         private void PushTableToHost()
@@ -1435,6 +1437,7 @@ namespace ConsoleCards.Presentation.Composition
                 case MsgCommand:
                 case MsgTable:
                 case MsgEndTurn: // AUTH-ET: in order with the sender's commands
+                case MsgBoardGrid: // P-2a: in order with the sender's commands
                     ReceiveOrdered(member.FromClient, data, member);
                     break;
                 case MsgNeedTable:
@@ -1460,6 +1463,8 @@ namespace ConsoleCards.Presentation.Composition
                 case MsgTable:
                 case MsgCheck:
                 case MsgPiece: // P8A: in order with the host's commands
+                case MsgLevel: // ASSIST-ORDER: in order with the host's commands
+                case MsgBoardGrid: // P-2a
                     ReceiveOrdered(clientInbox, data, null);
                     break;
                 case MsgPoses:
@@ -1540,6 +1545,13 @@ namespace ConsoleCards.Presentation.Composition
                     case MsgPiece:
                         if (from == null) ClientPiece(data); // P8A
                         break;
+                    case MsgLevel:
+                        if (from == null && data.Length >= 10) UseRoomAssist(data[9]); // ASSIST-ORDER: only the host's counts
+                        break;
+                    case MsgBoardGrid:
+                        if (from != null) HostBoardGrid(from, data); // P-2a: a request, checked by the host
+                        else ClientBoardGrid(data);
+                        break;
                 }
             }
             catch (Exception exception)
@@ -1556,6 +1568,14 @@ namespace ConsoleCards.Presentation.Composition
         {
             BeginMessage(type);
             writer.Write(0L); // its number, written per computer
+        }
+
+        // ASSIST-ORDER: the host's new Assist level, numbered with its commands for every joined computer.
+        private void BroadcastLevelInOrder()
+        {
+            BeginOrdered(MsgLevel);
+            writer.Write((byte)ConsoleCards.Presentation.UI.PlayAssist.Level);
+            BroadcastPrepared(null);
         }
 
         private void SendOrderedToHost(byte type, byte[] payload)

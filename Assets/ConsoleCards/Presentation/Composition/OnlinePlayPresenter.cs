@@ -47,6 +47,7 @@ namespace ConsoleCards.Presentation.Composition
         private const byte MsgNotice = 17; // MP-5: a line from the host for one player
         private const byte MsgEndTurn = 19; // AUTH-ET: a joined player asks the host to end the turn it plays
         private const byte MsgPiece = 20; // P8A: host → guest, in order: the host's record of one loose piece after a refused move
+        private const byte MsgLevel = 21; // ASSIST-ORDER: host → guest, in order with the host's commands: the room's new Assist level
 
         // This computer in a room: the same while the game runs (a lost connection keeps it, a restart does not).
         // REJOIN-1 (2026-11-05): in a room the key is the one saved for that room in this profile, so a restart gets the
@@ -565,6 +566,10 @@ namespace ConsoleCards.Presentation.Composition
             {
                 // ASSIST-ROOM: the host changed Assist; everyone plays the new level.
                 Debug.Log($"[Online] Assist for this room: {PlayAssist.Name(PlayAssist.Level)} (host's choice).");
+                // ASSIST-ORDER (audit A1, owner "OK", 2026-11-13): at a shared table the change also goes in order with the
+                // host's commands, so a command sent before it is used under the old level and one after it under the new
+                // level on every computer. The roster (unordered) still carries it for joins and rejoins.
+                if (sharedTable) BroadcastLevelInOrder();
                 BroadcastRoster();
             }
 

@@ -123,6 +123,7 @@ namespace ConsoleCards.Presentation.Composition
             UpdateStackCarryMotion(); // POL-4
             UpdateGroupCarry();
             UpdateHandEdge(); // owner, 2026-11-03: your hand also stands at your edge of the table
+            UpdateHandAreas(); // P-1: the hand areas on the table take dropped cards
             UpdateCarryHeightAndGhost();
             UpdateHover();
             HandlePolishKeys();
@@ -858,7 +859,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 if (toolSelection.Count > 0) FlipToolSelection();
                 else if (IsPointerOnDrawablePile()) FlipWholePile(hoverPileId); // owner, 2026-11-05: as in TTS
-                else FlipFloorTileUnderPointer();
+                else if (!FlipFloorTileUnderPointer()) FlipHoveredCard(); // P-5: the card under the pointer, unselected
             }
         }
 
@@ -921,18 +922,31 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // F over a face-down floor tile turns it, like any card (owner, 2026-11-05).
-        private void FlipFloorTileUnderPointer()
+        private bool FlipFloorTileUnderPointer()
         {
-            if (trapFloorTemplate == null || hitResolver == null || Mouse.current == null) return;
+            if (trapFloorTemplate == null || hitResolver == null || Mouse.current == null) return false;
             if (!hitResolver.TryResolve(Mouse.current.position.ReadValue(), out TabletopObjectView resolved)
                 || !(resolved is CardView card)
                 || !card.IsBound
                 || !TrapFloorGame.IsFlippableFloorTile(card.ObjectId))
             {
-                return;
+                return false;
             }
 
             TrapFloorGame.FlipFloorTileByHand(card.ObjectId);
+            return true;
+        }
+
+        // P-5 (owner, 2026-11-13: "act on the hovered piece without selecting first", as in Tabletop Simulator): F turns
+        // the loose card under the pointer over, through the same flip command as its menu. With a piece selected the
+        // selection keeps F (the object input flips it), so one press never flips two cards.
+        private void FlipHoveredCard()
+        {
+            if (flipCoordinator == null || hoverIsHandCard || !hoverPileId.IsEmpty) return;
+            if (selectionState != null && selectionState.HasSelection) return;
+            if (!(hoverView is CardView card) || !card.IsBound || card.CardState == null) return;
+            if (!card.CardState.BaseState.ContainerId.IsEmpty || ActiveCartridge.IsBoardTile(card.ObjectId)) return; // tiles: the game's own flip
+            flipCoordinator.Flip(card);
         }
 
         private void RotateByKey(float degrees)

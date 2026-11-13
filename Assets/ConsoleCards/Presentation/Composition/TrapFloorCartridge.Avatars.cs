@@ -121,6 +121,14 @@ namespace ConsoleCards.Presentation.Composition
         private object avatarDraftMatch;
         private PlayerId avatarDraftOpenHere = PlayerId.Empty;
 
+        // Polish (owner, 2026-11-13): an Avatar someone has locked stays in the popup, greyed and "Taken by X"; when another
+        // player locks one, every open question is rebuilt with that news (the pick in progress is kept while still free).
+        private readonly bool[] avatarDraftSeatHad = new bool[MaxAvatarSeats];
+        private readonly Dictionary<PlayerId, int> avatarDraftSentTaken = new Dictionary<PlayerId, int>();
+        private int avatarDraftShownTaken = -1;
+        private TabletopObjectId avatarDraftPicked = TabletopObjectId.Empty;
+        private string avatarDraftNews = string.Empty;
+
         // Full only, on the computer that holds the table: every seated player without an Avatar is asked to pick one
         // of the Avatars still in the Avatar pile, on their own screen. The first pick of a card gets it (into that
         // player's Console Main slot; the starting Abilities follow as for a hand-placed Avatar). A pick of a card that
@@ -134,7 +142,8 @@ namespace ConsoleCards.Presentation.Composition
             // host) asks the players sitting at it, each on their own screen at the same time (owner, 2026-11-09).
             if (host.privateViewActive || (host.HasOnline && host.Online.IsPrivateGuest)) return;
             bool privateHost = host.HasOnline && host.Online.IsPrivateHost;
-            if (!ReferenceEquals(avatarDraftMatch, host.matchState))
+            bool freshTable = !ReferenceEquals(avatarDraftMatch, host.matchState);
+            if (freshTable)
             {
                 avatarDraftMatch = host.matchState;
                 avatarDraftAsked.Clear();
@@ -142,9 +151,29 @@ namespace ConsoleCards.Presentation.Composition
                 avatarDraftSeen.Clear();
                 avatarDraftSentAt.Clear();
                 avatarDraftOpenHere = PlayerId.Empty;
+                avatarDraftSentTaken.Clear();
+                avatarDraftShownTaken = -1;
+                avatarDraftPicked = TabletopObjectId.Empty;
+                avatarDraftNews = string.Empty;
             }
 
-            if (!host.matchState.Containers.TryGetValue(TrapFloorTemplateFactory.AvatarDeckId, out ContainerState pile) || pile.Count == 0) return;
+            // A new or rebuilt table only learns who has an Avatar (no news); afterwards each new lock is announced.
+            int taken = NoteAvatarLocks(freshTable);
+            bool havePile = host.matchState.Containers.TryGetValue(TrapFloorTemplateFactory.AvatarDeckId, out ContainerState pile);
+            if (!avatarDraftOpenHere.IsEmpty && avatarDraftShownTaken != taken)
+            {
+                // Someone locked an Avatar while this screen's question was open: show it again with that Avatar taken.
+                TrapFloorPlayerSetupDefinition openSetup = AvatarSetupOf(avatarDraftOpenHere);
+                if (openSetup == null || TryGetSeatAvatar(openSetup, out _) || !havePile || !AskAvatarPick(openSetup, avatarDraftOpenHere, pile, false, taken))
+                {
+                    host.runtimeUi.CloseFocusedCardSelection();
+                    if (openSetup != null && !TryGetSeatAvatar(openSetup, out _))
+                        host.ShowMessage("Every Avatar has been taken.");
+                    avatarDraftOpenHere = PlayerId.Empty;
+                }
+            }
+
+            if (!havePile || pile.Count == 0) return;
             int seats = Math.Min(host.trapFloorTemplate.Players.Count, MaxAvatarSeats);
             for (int i = 0; i < seats; i++)
             {
@@ -195,10 +224,13 @@ namespace ConsoleCards.Presentation.Composition
                         continue;
                     }
 
-                    if (host.Online.HasPendingPrivateSelection(player, FocusedCardSelectionModel.AvatarDraftTitle)) continue;
-                    if (avatarDraftSentAt.TryGetValue(player, out float sentAt) && Time.unscaledTime - sentAt < 3f) continue;
-                    bool sent = AskAvatarPick(setup, player, pile, true);
+                    // Newer news (another lock since their question went out) is sent at once; the newer question replaces it.
+                    bool news = avatarDraftSentTaken.TryGetValue(player, out int sentTaken) && sentTaken != taken;
+                    if (!news && host.Online.HasPendingPrivateSelection(player, FocusedCardSelectionModel.AvatarDraftTitle)) continue;
+                    if (!news && avatarDraftSentAt.TryGetValue(player, out float sentAt) && Time.unscaledTime - sentAt < 3f) continue;
+                    bool sent = AskAvatarPick(setup, player, pile, true, taken);
                     avatarDraftSentAt[player] = Time.unscaledTime;
+                    if (sent) avatarDraftSentTaken[player] = taken;
                     Debug.Log($"[Draft] Avatar choice for {FormatPlayerName(player)} on their own computer: {(sent ? "sent" : "not sent yet")}.");
                     continue;
                 }
@@ -212,33 +244,72 @@ namespace ConsoleCards.Presentation.Composition
                 }
 
                 if (!remote && !avatarDraftOpenHere.IsEmpty) continue; // one question at a time on this screen
-                if (!AskAvatarPick(setup, player, pile, remote)) continue; // not sent: asked again next frame
+                if (!AskAvatarPick(setup, player, pile, remote, taken)) continue; // not sent: asked again next frame
                 avatarDraftAsked.Add(player);
                 if (!remote) avatarDraftOpenHere = player;
             }
         }
 
-        private bool AskAvatarPick(TrapFloorPlayerSetupDefinition setup, PlayerId player, ContainerState pile, bool remote)
+        private bool AskAvatarPick(TrapFloorPlayerSetupDefinition setup, PlayerId player, ContainerState pile, bool remote, int taken)
         {
-            List<FocusedCardOptionModel> options = new List<FocusedCardOptionModel>(pile.Count);
+            // A new question on this screen starts with no pick; a rebuilt one keeps the player's pick while it is still free.
+            if (!remote && avatarDraftOpenHere != player) avatarDraftPicked = TabletopObjectId.Empty;
+            List<FocusedCardOptionModel> options = new List<FocusedCardOptionModel>(pile.Count + MaxAvatarSeats);
             for (int i = 0; i < pile.Count; i++)
             {
                 TabletopObjectId cardId = pile.GetObjectAt(i);
                 if (!host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card)) continue;
                 string name = host.TryGetAvatarLook(card.BaseState.DefinitionId, out AvatarDefinition look) ? look.DisplayName : "Avatar";
                 Texture art = look != null ? host.AvatarArt(look) : null;
-                options.Add(new FocusedCardOptionModel(cardId, name, "Available", art, true));
+                options.Add(new FocusedCardOptionModel(cardId, name, "Available", art, true, !remote && cardId == avatarDraftPicked));
             }
 
-            if (options.Count == 0) return false;
-            FocusedCardSelectionModel model = new FocusedCardSelectionModel(
+            int available = options.Count;
+            if (available == 0) return false;
+            // Taken Avatars stay in the row, greyed, with who has them (they cannot be picked).
+            int seats = Math.Min(host.trapFloorTemplate.Players.Count, MaxAvatarSeats);
+            for (int i = 0; i < seats; i++)
+            {
+                TrapFloorPlayerSetupDefinition other = host.trapFloorTemplate.Players[i];
+                if (!TryGetSeatAvatar(other, out CardInstanceState card)) continue;
+                string owner = host.matchState.Seats.TryGetValue(other.SeatId, out SeatState seat) && !seat.OccupantPlayerId.IsEmpty
+                    ? FormatPlayerName(seat.OccupantPlayerId) : $"Seat {i + 1}";
+                string name = host.TryGetAvatarLook(card.BaseState.DefinitionId, out AvatarDefinition look) ? look.DisplayName : "Avatar";
+                Texture art = look != null ? host.AvatarArt(look) : null;
+                options.Add(new FocusedCardOptionModel(card.BaseState.Id, name, $"Taken by {owner}", art, false));
+            }
+
+            FocusedCardSelectionModel model = AvatarPickModel(setup, player, options, available, remote);
+            if (remote)
+            {
+                if (host.Online.TrySendPrivateSelection(player, model)) return true;
+                if (options.Count == available) return false;
+                // That computer cannot be shown a taken card: send the free ones only.
+                options.RemoveRange(available, options.Count - available);
+                return host.Online.TrySendPrivateSelection(player, AvatarPickModel(setup, player, options, available, true));
+            }
+
+            host.runtimeUi.ShowFocusedCardSelection(model);
+            avatarDraftShownTaken = taken;
+            return true;
+        }
+
+        private FocusedCardSelectionModel AvatarPickModel(TrapFloorPlayerSetupDefinition setup, PlayerId player, List<FocusedCardOptionModel> options, int available, bool remote)
+        {
+            string status = $"{FormatPlayerName(player)} · {available} available";
+            if (avatarDraftNews.Length > 0) status = $"{avatarDraftNews} · {status}";
+            return new FocusedCardSelectionModel(
                 FocusedCardSelectionModel.AvatarDraftTitle,
-                "Pick your Avatar for this game. The first player to lock an Avatar gets it; its starting Abilities are placed beside your Console.",
-                $"{FormatPlayerName(player)} · {options.Count} available",
+                "Pick your Avatar for this game. The first player to lock an Avatar gets it; greyed Avatars are already taken. Its starting Abilities are placed beside your Console.",
+                status,
                 "Lock in",
                 options,
                 1,
-                selected => selected.Count == 1,
+                selected =>
+                {
+                    if (!remote) avatarDraftPicked = selected.Count == 1 ? selected[0] : TabletopObjectId.Empty;
+                    return selected.Count == 1;
+                },
                 selected => LockAvatarPick(setup, player, selected[0]),
                 () =>
                 {
@@ -248,9 +319,43 @@ namespace ConsoleCards.Presentation.Composition
                     host.ShowMessage("No Avatar chosen: drag one from the Avatar pile into your Console's Main slot when you are ready.");
                 },
                 "Later") { Spread = true };
-            if (remote) return host.Online.TrySendPrivateSelection(player, model);
-            host.runtimeUi.ShowFocusedCardSelection(model);
-            return true;
+        }
+
+        // Each frame of the draft: the number of seats holding an Avatar. A seat that has just got one is announced
+        // (who locked which), unless the table is new or rebuilt. No allocation unless something is announced.
+        private int NoteAvatarLocks(bool silent)
+        {
+            int taken = 0;
+            int seats = Math.Min(host.trapFloorTemplate.Players.Count, MaxAvatarSeats);
+            for (int i = 0; i < seats; i++)
+            {
+                TrapFloorPlayerSetupDefinition setup = host.trapFloorTemplate.Players[i];
+                bool has = TryGetSeatAvatar(setup, out CardInstanceState card);
+                if (has) taken++;
+                if (has == avatarDraftSeatHad[i]) continue;
+                avatarDraftSeatHad[i] = has;
+                if (!has || silent) continue;
+                if (!host.matchState.Seats.TryGetValue(setup.SeatId, out SeatState seat) || seat.OccupantPlayerId.IsEmpty) continue;
+                string avatar = host.TryGetAvatarLook(card.BaseState.DefinitionId, out AvatarDefinition look) ? look.DisplayName : "an Avatar";
+                avatarDraftNews = $"{FormatPlayerName(seat.OccupantPlayerId)} locked in {avatar}";
+                host.FeedbackLine(host.IsPlayerOnThisComputer(seat.OccupantPlayerId)
+                    ? $"{avatarDraftNews}."
+                    : $"{avatarDraftNews}: it is no longer available.", FeedbackSeverity.Info);
+            }
+
+            return taken;
+        }
+
+        private TrapFloorPlayerSetupDefinition AvatarSetupOf(PlayerId player)
+        {
+            int seats = Math.Min(host.trapFloorTemplate.Players.Count, MaxAvatarSeats);
+            for (int i = 0; i < seats; i++)
+            {
+                TrapFloorPlayerSetupDefinition setup = host.trapFloorTemplate.Players[i];
+                if (host.matchState.Seats.TryGetValue(setup.SeatId, out SeatState seat) && seat.OccupantPlayerId == player) return setup;
+            }
+
+            return null;
         }
 
         private void LockAvatarPick(TrapFloorPlayerSetupDefinition setup, PlayerId player, TabletopObjectId cardId)
@@ -281,10 +386,7 @@ namespace ConsoleCards.Presentation.Composition
 
             host.ViewSync.SyncContainer(pileId);
             host.ViewSync.SyncContainer(setup.MainSlotContainerId);
-            host.RefreshAcceptedCardFaces();
-            string name = host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card) && host.TryGetAvatarLook(card.BaseState.DefinitionId, out AvatarDefinition look)
-                ? look.DisplayName : "an Avatar";
-            host.FeedbackLine($"{FormatPlayerName(player)} locked in {name}.", FeedbackSeverity.Info);
+            host.RefreshAcceptedCardFaces(); // the "locked in" line follows from NoteAvatarLocks, as for every lock
         }
 
         /// <summary>The Avatar card in this seat's Main slot (the one it chose), else the one it was dealt.</summary>

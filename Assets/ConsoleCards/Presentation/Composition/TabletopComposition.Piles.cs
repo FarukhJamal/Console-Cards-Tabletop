@@ -711,15 +711,50 @@ namespace ConsoleCards.Presentation.Composition
         // P8A (owner, 2026-11-10: "the slide is not showing on the host"): a slide this composition runs itself. On the
         // computer that runs the table's physics a loose card is a live body that puts itself straight back where it
         // lies; for the slide it is held still (kinematic, its physics script paused) and let go where it ends.
+        // P-3: the cards join the slide queue (one after another; stagger is the queue's gap now).
         internal void SlideCards(IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts, float seconds, float stagger)
         {
             if (starts == null || starts.Count == 0) return;
-            int index = 0;
+            seconds = Mathf.Max(seconds, QueuedCardSlideSeconds);
             foreach (KeyValuePair<Transform, TabletopTransformSnapshot> pair in starts)
             {
                 if (pair.Key == null) continue;
-                StartCoroutine(SlideWhenPlaced(pair.Key, pair.Value, seconds, index * stagger));
-                index++;
+                StartCoroutine(SlideWhenPlaced(pair.Key, pair.Value, seconds, NextCardSlideDelay(seconds)));
+            }
+        }
+
+        // P-3 (owner, 2026-11-13: "Ability card slides to the player and back to the deck: smooth and clearly visible on
+        // every computer; several arrive together or are skipped"): every card slide (an Ability deal, a buy, a return to
+        // the deck, the starting Abilities, and the same moves replayed from another computer) takes its turn in one
+        // queue. Each card waits at its start, then slides; the next leaves a short gap later. A long backlog is capped so
+        // the table never lags far behind.
+        internal const float QueuedCardSlideSeconds = 0.6f;
+        private const float QueuedCardSlideGap = 0.32f;
+        private const float QueuedCardSlideMaxWait = 2.4f;
+        private float cardSlideQueueFreeAt;
+        private float cardSlidesEndAt;
+
+        internal float NextCardSlideDelay(float seconds)
+        {
+            float now = Time.unscaledTime;
+            float delay = Mathf.Clamp(cardSlideQueueFreeAt - now, 0f, QueuedCardSlideMaxWait);
+            cardSlideQueueFreeAt = now + delay + QueuedCardSlideGap;
+            cardSlidesEndAt = Mathf.Max(cardSlidesEndAt, now + delay + seconds);
+            return delay;
+        }
+
+        /// <summary>P-3: seconds until every queued card slide has ended (0 when none is running).</summary>
+        internal float CardSlidesDoneIn() => Mathf.Max(0f, cardSlidesEndAt - Time.unscaledTime);
+
+        /// <summary>P-3: cards going into a pile or a hand, one after another in the slide queue.</summary>
+        internal void AnimateCardsQueued(IReadOnlyDictionary<Transform, TabletopTransformSnapshot> starts, float arcHeight)
+        {
+            if (starts == null) return;
+            foreach (KeyValuePair<Transform, TabletopTransformSnapshot> pair in starts)
+            {
+                if (pair.Key == null) continue;
+                presentationTransitions.AnimateFromCurrentResult(
+                    pair.Key, pair.Value, QueuedCardSlideSeconds, arcHeight, NextCardSlideDelay(QueuedCardSlideSeconds));
             }
         }
 
@@ -740,7 +775,7 @@ namespace ConsoleCards.Presentation.Composition
                 bool moved = (view.position - from.Position).sqrMagnitude >= 1e-6f || Quaternion.Angle(view.rotation, from.Rotation) >= 0.5f;
                 if (physical != null && physical.OwnsLooseTransform)
                 {
-                    physical.GlideFrom(from.Position, from.Rotation, seconds + delay, 0.02f);
+                    physical.GlideFrom(from.Position, from.Rotation, seconds, 0.02f, delay);
                     if (physical.IsGliding)
                     {
                         Debug.Log($"[Slide] {view.name}: glides as a physics piece (frame {frame}).");
@@ -823,8 +858,8 @@ namespace ConsoleCards.Presentation.Composition
             // loose pose (a contained card keeps that pose), so it looked like it still lay on the table.
             if (loose) PresentAcceptedObject(cardId);
             RefreshAcceptedCardFaces();
-            if (loose) SlideCards(starts, 0.45f, 0f); // a loose body: held still for the slide
-            else presentationTransitions.AnimateCardsFromCurrentResults(starts, 0.45f, 0f); // into a pile or a hand
+            if (loose) SlideCards(starts, QueuedCardSlideSeconds, 0f); // a loose body: held still for the slide
+            else AnimateCardsQueued(starts, 0.06f); // into a pile or a hand (P-3: in the slide queue)
         }
 
         // P8A: where these cards' views are now (loose cards have no container to capture by).

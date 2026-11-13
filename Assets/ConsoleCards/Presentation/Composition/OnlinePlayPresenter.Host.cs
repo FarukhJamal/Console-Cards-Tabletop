@@ -33,6 +33,14 @@ namespace ConsoleCards.Presentation.Composition
         internal void AskHostToUndo(bool redo)
         {
             if (!InRoom || hosting) return;
+            // UNDO-HOST (owner, 2026-11-13: "Undo = host only online, for security and clarity"): in a shared online room
+            // only the host's Undo runs; a joined computer is told so and nothing is sent.
+            if (sharedTable && HostOnlyUndo)
+            {
+                host.ShowMessage(GuestUndoRefusal(redo));
+                return;
+            }
+
             // UNDO-AUTH (2026-11-06): the request names the change it means (as this table shows it) and carries its own id,
             // so the host takes back only that change of this player's, once.
             ActiveSessionUndoTransaction named = redo ? host.undoHistory.NextRedo : host.undoHistory.NextUndo;
@@ -71,13 +79,22 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             PlayerId actor = transaction.ActorPlayerId;
-            bool allowed = undoRequestPlayer != Guid.Empty ? actor.Value == undoRequestPlayer : IsLocalPlayer(actor);
+            // UNDO-HOST (owner, 2026-11-13): the host's Undo is the room's only Undo, so it takes back the latest change
+            // whoever made it (a rules result in Full still stands, above).
+            bool allowed = undoRequestPlayer != Guid.Empty ? actor.Value == undoRequestPlayer : (hosting || IsLocalPlayer(actor));
             if (allowed) return true;
             string who = NameOf(actor) ?? "another player";
             undoRefusal = $"The latest change is {who}'s: only they can {(redo ? "redo" : "undo")} it.";
             if (undoRequestPlayer == Guid.Empty) host.ShowMessage(undoRefusal);
             return false;
         }
+
+        private static readonly bool HostOnlyUndo = true; // UNDO-HOST (owner, 2026-11-13)
+
+        internal static string GuestUndoRefusal(bool redo) =>
+            redo
+                ? "Online, only the host can redo. Ask the host if a move should be made again."
+                : "Online, only the host can undo. Ask the host if a move should be taken back.";
 
         // Host: a joined player's Undo or Redo, run for them; the table that results goes to everyone.
         private void HostUndo(Member member, byte[] data)
@@ -86,6 +103,15 @@ namespace ConsoleCards.Presentation.Composition
             if (!sharedTable || member.Player == Guid.Empty)
             {
                 SendNotice(member, "Only players with a seat can undo.");
+                return;
+            }
+
+            // UNDO-HOST (owner, 2026-11-13): a joined computer's Undo or Redo is never run (an older build may still ask).
+            // The checked path below stays for the day the owner turns guest Undo back on (HostOnlyUndo).
+            if (HostOnlyUndo)
+            {
+                Debug.Log($"[Authority] {(redo ? "Redo" : "Undo")} from {member.Name}: refused (host-only Undo online).");
+                SendNotice(member, GuestUndoRefusal(redo));
                 return;
             }
 

@@ -151,14 +151,8 @@ namespace ConsoleCards.Presentation.Composition
 
                 // AVATAR-1: the name lies along the rim in front of the seat, letters to the outside, so the players across
                 // the table read it.
-                if (persona.RimName != null)
-                {
-                    Vector3 namePlace = console + (outward * (edge - (personaSet.RimNameInset * unit)));
-                    namePlace.y = persona.EdgeTop + (0.02f * unit);
-                    persona.RimName.transform.SetPositionAndRotation(namePlace, Quaternion.LookRotation(Vector3.down, outward));
-                    persona.RimName.characterSize = personaSet.RimNameSize * unit;
-                    if (!persona.RimName.gameObject.activeSelf) persona.RimName.gameObject.SetActive(true);
-                }
+                // Owner, 2026-11-13: no player name on the table (the name stays on the seat's picture).
+                if (persona.RimName != null && persona.RimName.gameObject.activeSelf) persona.RimName.gameObject.SetActive(false);
 
                 // The leaning name tag (off unless the set turns it on).
                 if (persona.Tag != null)

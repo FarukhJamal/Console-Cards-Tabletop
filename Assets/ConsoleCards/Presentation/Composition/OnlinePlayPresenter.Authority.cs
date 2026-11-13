@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using ConsoleCards.Application.Authority;
+using ConsoleCards.Application.UseCases;
 using ConsoleCards.Core.Identifiers;
 using ConsoleCards.Games.TrapFloor;
 using UnityEngine;
@@ -128,6 +129,27 @@ namespace ConsoleCards.Presentation.Composition
             dirty = false;
             matchReplaced = false;
             SendWholeTable(); // everyone, the sender too, gets the host's table
+        }
+
+        /// <summary>
+        /// Foundation stage (audit A2, owner "OK", 2026-11-13: "one host-authority check applied to host and guest
+        /// commands alike"): on the host of a normal shared room, a command the host's own player makes meets the same
+        /// game check a joined computer's command meets (<see cref="TrapFloorCartridge.HostAllowsCommand"/>: Main slots,
+        /// tiles, prizes, the one collapse per floor turn, and in Full the pawn move rules). A game step with no player,
+        /// a step the host runs for a joined player, and physics commits are not checked here: a refused commit of a body
+        /// the host itself simulates would leave it where its physics put it (guests get a put-back and a correction
+        /// from the host; the host has no one above it), so the host's own pawn drags stay as before (doc 15).
+        /// </summary>
+        internal bool HostAllowsOwnCommand(object command, PlayerId requester)
+        {
+            if (!sharedTable || !hosting || privateHosting || command == null || requester.IsEmpty) return true;
+            if (IsActingForAnotherComputer || command is CommitPhysicalObjectCommand) return true;
+            if (host.TrapFloorGame == null || host.trapFloorTemplate == null) return true;
+            if (host.TrapFloorGame.HostAllowsCommand(command, requester)) return true;
+            string why = host.TrapFloorGame.HostRefusal;
+            Debug.Log($"[Authority] The host player's {command.GetType().Name}: refused by the game check ({(why ?? "no reason given")}).");
+            host.ShowMessage(string.IsNullOrEmpty(why) ? "The rules do not allow that move." : why.Replace("The host refused", "Refused"));
+            return false;
         }
 
         private static string EndTurnRefusalText(TrapFloorEndTurnVerdict verdict)

@@ -905,7 +905,7 @@ namespace ConsoleCards.Presentation.Interaction
         /// POL-2: the accepted pose is already applied; the piece is shown gliding there from where it was, with a
         /// small springy overshoot, then rests. Purely visual: nothing is committed while it glides.
         /// </summary>
-        internal void GlideFrom(Vector3 fromPosition, Quaternion fromRotation, float seconds, float overshoot)
+        internal void GlideFrom(Vector3 fromPosition, Quaternion fromRotation, float seconds, float overshoot, float delay = 0f)
         {
             if (body == null || held || seconds <= 0f) return;
             Vector3 toPosition = body.position;
@@ -925,7 +925,7 @@ namespace ConsoleCards.Presentation.Interaction
             glideFromRotation = fromRotation;
             glideToPosition = toPosition;
             glideToRotation = toRotation;
-            glideStartTime = Time.unscaledTime;
+            glideStartTime = Time.unscaledTime + Mathf.Max(0f, delay); // P-3: a queued slide waits at its start until its turn
             glideSeconds = seconds;
             glideOvershoot = Mathf.Max(0f, overshoot);
             gliding = true;

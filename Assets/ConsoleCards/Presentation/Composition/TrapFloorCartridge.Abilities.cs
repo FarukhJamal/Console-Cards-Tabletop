@@ -598,7 +598,7 @@ namespace ConsoleCards.Presentation.Composition
             dealtOffer.Clear();
             host.ViewSync.SyncContainer(deck.Id);
             host.RefreshAcceptedCardFaces();
-            host.presentationTransitions.AnimateCardsFromCurrentResults(starts, AbilityDealSlideSeconds, 0.06f); // into the deck (not a loose body)
+            host.AnimateCardsQueued(starts, 0.06f); // into the deck (not a loose body); P-3: one after another
             // The deck is shuffled once, after what was returned (End Buying, or End Turn when buying was not ended; a
             // second call finds nothing to return and does not shuffle again).
             if (returned > 0 && deck.Count > 1) host.ShuffleDeck(deck.Id);
@@ -776,7 +776,8 @@ namespace ConsoleCards.Presentation.Composition
 
         private System.Collections.IEnumerator ShowAbilityOfferAfterDeal()
         {
-            yield return new UnityEngine.WaitForSecondsRealtime(AbilityDealSlideSeconds + (AbilityDealStagger * (AbilityOfferSize - 1)) + 0.1f);
+            // P-3: the window opens once the queued deal slides have ended.
+            yield return new UnityEngine.WaitForSecondsRealtime(UnityEngine.Mathf.Max(host.CardSlidesDoneIn(), AbilityDealSlideSeconds) + 0.1f);
             bool turn = IsAbilityOfferTurn();
             bool deckFound = TryGetAbilityDeck(out ContainerState deck);
             int left = deckFound ? CountOfferStillInDeck(deck) : 0;

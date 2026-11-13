@@ -190,6 +190,7 @@ namespace ConsoleCards.Presentation.Composition
         private GameBoardMatView boardMatPrefab;
         private GameBoardMatView templateBoardMat;
         private BoardGrid? templateBoardGrid;
+        private BoardGrid? templateBoardDefaultGrid; // P-2a: the game board's grid as the game sets it up
         internal bool boardSnapCheckPending;
         private Vector2 boardMenuScreenPosition;
         [SerializeField] private PhysicalInteractionConfig physicalInteraction = new PhysicalInteractionConfig();

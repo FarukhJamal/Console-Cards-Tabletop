@@ -288,21 +288,8 @@ namespace ConsoleCards.Presentation.Input
 
         private bool ShouldApplyCameraZoom()
         {
-            if (scrollRoutingPolicy == null)
-            {
-                return true;
-            }
-
-            switch (scrollRoutingPolicy.ResolveScrollRoute())
-            {
-                case TabletopScrollInputRoute.CameraZoom:
-                    return true;
-                case TabletopScrollInputRoute.ObjectRotation:
-                case TabletopScrollInputRoute.Suppressed:
-                    return false;
-                default:
-                    throw new InvalidOperationException("Unsupported scroll input route.");
-            }
+            // P-5 (owner, 2026-11-13): the wheel only zooms (it no longer turns a selected piece).
+            return scrollRoutingPolicy == null || scrollRoutingPolicy.WheelZoomsCamera();
         }
 
         private bool ValidateConfiguration()

@@ -27,7 +27,7 @@ namespace ConsoleCards.Presentation.Composition
     /// </summary>
     public sealed partial class TabletopComposition
     {
-        private const float HandEdgeLean = 35f;            // degrees up from lying flat: the faces turn up to your view
+        private const float HandEdgeLean = 72f;            // degrees up from lying flat (owner, 2026-11-13: standing, as in TTS)
         private const float HandEdgeOverlap = 0.58f;       // of a card's width between two cards in the row
         private const float HandEdgeMaxRowCards = 7f;      // the row is never wider than this many cards
         private const float HandEdgeLayerGap = 0.004f;     // world units between neighbours (no flicker)
@@ -41,6 +41,12 @@ namespace ConsoleCards.Presentation.Composition
         private readonly List<Transform> handEdgeProxies = new List<Transform>(16);
         private readonly List<Renderer> handEdgeCopyRenderers = new List<Renderer>(32);
         private readonly List<Renderer> handEdgeSourceRenderers = new List<Renderer>(32);
+        // Owner, 2026-11-13 (TTS video): a card drawn into the hand flies from its pile to the row, one after another;
+        // the cards already in the row keep their place when it is made again.
+        private readonly List<float> handEdgeStartAt = new List<float>(16);
+        private readonly Dictionary<TabletopObjectId, Pose> handEdgeLastPose = new Dictionary<TabletopObjectId, Pose>(16);
+        private Vector3 handEdgeArrivalFrom;
+        private float handEdgeArrivalAt = -10f;
         private ContainerId handEdgeContainerId;
         private Transform handEdgeRoot;
         private MaterialPropertyBlock handEdgeBlock;
@@ -105,6 +111,7 @@ namespace ConsoleCards.Presentation.Composition
                 Transform proxy = handEdgeProxies[i];
                 CardView card = handEdgeCards[i];
                 if (proxy == null) continue;
+                if (i < handEdgeStartAt.Count && Time.unscaledTime < handEdgeStartAt[i]) continue; // waits at its pile
                 Vector3 position;
                 Quaternion rotation;
                 if (IsHandCardCarried(card))
@@ -138,6 +145,8 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
+            if (TryGetLocalHandRowPose(out surface, out seatRotation)) return true; // owner, 2026-11-13: past the table's edge
+
             ContainerId handId = handView.ContainerId;
             if (handId.IsEmpty || !matchState.Containers.ContainsKey(handId)) return false;
             if (matchState.TryGetContainerPlacement(handId, out ContainerPlacementState zone))
@@ -170,6 +179,14 @@ namespace ConsoleCards.Presentation.Composition
         // Made again only when the hand changes: one copy of each card's face, at the table's card size.
         private void RebuildHandEdge()
         {
+            handEdgeLastPose.Clear();
+            for (int i = 0; i < handEdgeProxies.Count; i++)
+            {
+                if (handEdgeProxies[i] != null && handEdgeCards[i] != null && handEdgeCards[i].IsBound)
+                    handEdgeLastPose[handEdgeCards[i].ObjectId] = new Pose(handEdgeProxies[i].position, handEdgeProxies[i].rotation);
+            }
+
+            bool arriving = Time.unscaledTime - handEdgeArrivalAt < 1.5f;
             ClearHandEdge();
             ContainerId handId = handView.ContainerId;
             if (!matchState.Containers.TryGetValue(handId, out ContainerState hand)) return;
@@ -202,10 +219,26 @@ namespace ConsoleCards.Presentation.Composition
                 Collider[] colliders = face.GetComponentsInChildren<Collider>(true);
                 for (int c = 0; c < colliders.Length; c++) Destroy(colliders[c]);
                 CopyPropertyBlocks(card.FaceUpVisualRoot, face);
-                // It starts where the card is in the tray, so it glides out to the row.
-                proxy.SetPositionAndRotation(card.transform.position, card.transform.rotation);
+                // A card already in the row keeps its place; a card just drawn starts at its pile and flies to the row in
+                // its turn (the slide queue); any other starts where the card is in the tray.
+                float startAt = 0f;
+                if (handEdgeLastPose.TryGetValue(card.ObjectId, out Pose last))
+                {
+                    proxy.SetPositionAndRotation(last.position, last.rotation);
+                }
+                else if (arriving)
+                {
+                    proxy.SetPositionAndRotation(handEdgeArrivalFrom, card.transform.rotation);
+                    startAt = Time.unscaledTime + NextCardSlideDelay(QueuedCardSlideSeconds);
+                }
+                else
+                {
+                    proxy.SetPositionAndRotation(card.transform.position, card.transform.rotation);
+                }
+
                 handEdgeCards.Add(card);
                 handEdgeProxies.Add(proxy);
+                handEdgeStartAt.Add(startAt);
             }
         }
 
@@ -268,6 +301,7 @@ namespace ConsoleCards.Presentation.Composition
 
             handEdgeProxies.Clear();
             handEdgeCards.Clear();
+            handEdgeStartAt.Clear();
             handEdgeContainerId = ContainerId.Empty;
         }
 

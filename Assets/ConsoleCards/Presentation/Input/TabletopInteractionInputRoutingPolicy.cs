@@ -74,12 +74,20 @@ namespace ConsoleCards.Presentation.Input
                 return TabletopScrollInputRoute.Suppressed;
             }
 
-            if (PointerIsOver != null && !PointerIsOver(selectedView))
-            {
-                return TabletopScrollInputRoute.CameraZoom;
-            }
+            // P-5 (owner, 2026-11-13, as in Tabletop Simulator): the wheel only zooms; pieces turn with the keys (Q / E) on
+            // the piece under the pointer, the selection or the carried piece. The ObjectRotation route stays for callers
+            // that still name it, but the wheel never takes it.
+            return TabletopScrollInputRoute.CameraZoom;
+        }
 
-            return TabletopScrollInputRoute.ObjectRotation;
+        /// <summary>
+        /// P-5: the wheel zooms the camera whenever no piece is being dragged (a selected piece, or one in a pile or a
+        /// hand, no longer keeps the wheel). While a piece is carried the wheel still raises or lowers it.
+        /// </summary>
+        public bool WheelZoomsCamera()
+        {
+            if (interactionRouter != null && interactionRouter.HasActiveInteraction) return false;
+            return !MoveCoordinator.HasActiveInteraction;
         }
 
         private static bool IsContainedCard(TabletopObjectView view)
