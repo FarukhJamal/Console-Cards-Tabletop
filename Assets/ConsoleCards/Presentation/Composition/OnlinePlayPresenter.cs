@@ -1250,7 +1250,9 @@ namespace ConsoleCards.Presentation.Composition
                 : model.IsHost ? "Choose the game with CHOOSE GAME; START is on its last step." : "The host chooses the game and starts it.";
             model.Started = roomStarted;
             model.Ready = me != null && me.Ready;
-            model.CanReady = me != null && !hosting && !sharedTable;
+            // QA 2026-11-14: READY also works while a game is on. The host's NEW GAME waits for everyone to be READY
+            // again, and a guest at the room screen could not press it then, so no new table could ever be dealt.
+            model.CanReady = me != null && !hosting;
             model.ColourName = me != null ? TabletopComposition.ColourNameByIndex(me.Colour) : string.Empty;
             model.Colour = me != null ? TabletopComposition.ColourByIndex(me.Colour) : Color.grey;
             int mine = me != null ? members.IndexOf(me) : -1;

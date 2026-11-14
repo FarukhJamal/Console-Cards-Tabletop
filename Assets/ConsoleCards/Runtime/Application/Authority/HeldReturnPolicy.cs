@@ -42,13 +42,17 @@ namespace ConsoleCards.Application.Authority
                 rememberedFor = match;
             }
 
-            if (after == null || after.Mode != PhysicalObjectMode.Held)
+            // QA 2026-11-14 (T-2): the rest is kept while the released piece is still moving, so a refused roll can go
+            // back there; it is forgotten once the piece is accepted at rest.
+            if (after == null || (after.Mode != PhysicalObjectMode.Held && after.Mode != PhysicalObjectMode.Dynamic))
             {
                 restBeforeHold.Remove(objectId);
                 return;
             }
 
-            if (before != null && before.Mode != PhysicalObjectMode.Held) restBeforeHold[objectId] = before;
+            if (after.Mode == PhysicalObjectMode.Held && before != null
+                && before.Mode != PhysicalObjectMode.Held && before.Mode != PhysicalObjectMode.Dynamic)
+                restBeforeHold[objectId] = before;
         }
 
         /// <summary>
@@ -94,10 +98,18 @@ namespace ConsoleCards.Application.Authority
             if (piece.Kind == TabletopObjectKind.Die || now == null || now.Mode != PhysicalObjectMode.Dynamic
                 || now.ControllingPlayerId != sender || !piece.ContainerId.IsEmpty)
                 return false;
+            // QA 2026-11-14: the last accepted place of a moving piece can be in the air (a release checkpoint), where
+            // it then hung with nothing under it and the two computers corrected it 48 times a second. It goes back
+            // to where it rested before it was picked up, as a refused hold does; only when that is unknown does it
+            // stop where it was last accepted.
+            PhysicalObjectState rest = null;
+            bool knownRest = ReferenceEquals(match, rememberedFor) && restBeforeHold.TryGetValue(objectId, out rest) && rest != null;
             settle = new CommitPhysicalObjectCommand(
                 new CommandContext(commandId, match.Id, sender, match.Revision),
                 objectId,
-                new PhysicalObjectState(now.Position, now.Rotation, default, default, PhysicalObjectMode.Sleeping, sender),
+                knownRest
+                    ? new PhysicalObjectState(rest.Position, rest.Rotation, default, default, PhysicalObjectMode.Sleeping, sender)
+                    : new PhysicalObjectState(now.Position, now.Rotation, default, default, PhysicalObjectMode.Sleeping, sender),
                 piece.PhysicalRevision);
             return true;
         }

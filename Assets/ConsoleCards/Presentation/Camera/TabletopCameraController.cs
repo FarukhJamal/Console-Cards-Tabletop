@@ -1145,6 +1145,7 @@ namespace ConsoleCards.Presentation.Camera
 
         private void CancelTransition()
         {
+            if (introEasing) Debug.Log("[Camera] The opening camera move stopped early (camera input or another view).", this);
             introLegPending = false; // CAM-1: camera input (or another view) stops the intro where it is
             introEasing = false;
             transitionActive = false;

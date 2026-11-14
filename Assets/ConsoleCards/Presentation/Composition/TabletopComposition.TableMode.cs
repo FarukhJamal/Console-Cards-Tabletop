@@ -88,6 +88,11 @@ namespace ConsoleCards.Presentation.Composition
         private const string OnlineTableLockedText =
             "The table can't change shape or size during an online game. The host can change it before the next game.";
 
+        // QA 2026-11-14: the T-1 lock stopped the table growing to fit the game while it is dealt ("The table could not
+        // grow for this game"). That growth is part of dealing and is worked out the same way on every computer, so it
+        // goes through; only a player's own change waits for the next game.
+        private bool growingTableForGame;
+
         private bool RefuseTableChangeOnline()
         {
             if (!IsOnlineTable) return false;
@@ -211,7 +216,7 @@ namespace ConsoleCards.Presentation.Composition
         /// </summary>
         private bool TryChangeTable(TableSpec to, out string message)
         {
-            if (IsOnlineTable)
+            if (IsOnlineTable && !growingTableForGame)
             {
                 message = OnlineTableLockedText;
                 return false;

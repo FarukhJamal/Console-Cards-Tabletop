@@ -275,6 +275,15 @@ namespace ConsoleCards.Presentation.Composition
         // CAM-1: set when a game is chosen in the menu; the next game table plays the camera intro once.
         internal bool gameIntroWanted;
 
+        /// <summary>P-CAM: the camera intro on the table now showing (a guest's table, once the host's table is on it).</summary>
+        internal void PlayGameIntroNow()
+        {
+            gameIntroWanted = false;
+            bool started = cameraInputAdapter != null && cameraInputAdapter.CameraController != null
+                && cameraInputAdapter.CameraController.PlayGameIntro();
+            Debug.Log($"[Camera] Opening camera move on this table: {(started ? "playing" : "not available")}.", this);
+        }
+
         private void ProjectTemplateCameraBookmark()
         {
             bool intro = gameIntroWanted;

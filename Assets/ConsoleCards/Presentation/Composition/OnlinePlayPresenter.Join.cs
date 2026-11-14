@@ -106,7 +106,7 @@ namespace ConsoleCards.Presentation.Composition
             host.runtimeUi.ShowContextMenu(
                 new Vector2(Screen.width * 0.5f, Screen.height * 0.5f),
                 "JOIN REQUEST",
-                $"{request.Name} wants to join this game. Allowed, they take an open seat (or watch) and get the table as it is now. "
+                $"{request.Name} wants to join this game. Allowed, they take an open seat and get the table as it is now; with every seat taken they wait in the room for the next game. "
                     + $"No answer in {JoinRequestSeconds:0} s refuses.",
                 actions,
                 host.ContextMenus.CloseContextMenu,

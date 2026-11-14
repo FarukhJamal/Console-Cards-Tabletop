@@ -118,7 +118,19 @@ namespace ConsoleCards.Presentation.Composition
             if (!classic) grown.cornerRadius = tableSpec.cornerRadius;
             grown.Clamp();
             TableSpec previous = tableSpec;
-            if (TryChangeTable(grown, out string note))
+            growingTableForGame = true;
+            bool changed;
+            string note;
+            try
+            {
+                changed = TryChangeTable(grown, out note);
+            }
+            finally
+            {
+                growingTableForGame = false;
+            }
+
+            if (changed)
             {
                 GrowFrom(previous, grown);
                 ShowMessage($"The table grew to {grown.width:0.#} × {grown.depth:0.#} so every seat fits.{note}");

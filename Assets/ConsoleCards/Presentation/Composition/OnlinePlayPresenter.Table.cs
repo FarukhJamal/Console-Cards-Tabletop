@@ -102,6 +102,9 @@ namespace ConsoleCards.Presentation.Composition
         private readonly Quaternion[] poseRotations = new Quaternion[MaxPoses];
         private static readonly System.Random SeedRandom = new System.Random();
 
+        // P-CAM: the guest came from the room to a new game's table; the opening camera move plays once it is here.
+        private bool introOnArrival;
+
         /// <summary>True while this table is shared with the room.</summary>
         internal bool TableShared => sharedTable;
 
@@ -1068,8 +1071,10 @@ namespace ConsoleCards.Presentation.Composition
                         host.runtimeUi.CloseGameSelect(); // the game starts: everyone goes to the table
                         // P-CAM (owner, 2026-11-14: the opening camera move "only plays on the host"): a guest coming from
                         // the room to a game's table gets the same opening as the host (CAM-1). A resync or a next floor,
-                        // with the table already showing, does not replay it.
-                        host.gameIntroWanted = setup.Kind == 1;
+                        // with the table already showing, does not replay it. QA 2026-11-14: started while the table was
+                        // dealt it never showed on the guest (the host's table is put on it afterwards), so it starts
+                        // once that table is here.
+                        introOnArrival = setup.Kind == 1;
                     }
 
                     ok = BuildFromSetup(setup, out error);
@@ -1102,6 +1107,11 @@ namespace ConsoleCards.Presentation.Composition
             mismatches = 0;
             if (host.matchState != null) lastRevision = host.matchState.Revision;
             if (ok && !hosting) LinkTableArrived(); // P8A: the host's whole table is here: play may resume
+            if (introOnArrival)
+            {
+                introOnArrival = false;
+                if (ok) host.PlayGameIntroNow();
+            }
             if (!ok)
             {
                 Debug.LogWarning($"[Online] The table from {(hosting ? "a player" : "the host")} could not be shown here: {error}");
