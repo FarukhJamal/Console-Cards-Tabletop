@@ -197,8 +197,18 @@ namespace ConsoleCards.Presentation.Composition
 
         private void SendContentToRoom()
         {
+            string before = hostContentHash;
             RefreshHostContent();
             for (int i = 0; i < members.Count; i++) SendContent(members[i]);
+            // Audit C-3: the host's card, deck, picture or game edits made since the last table are used from this one.
+            if (string.IsNullOrEmpty(before) || before == hostContentHash) return;
+            const string Changed = "The host's cards, decks or pictures changed: this table uses them.";
+            host.ShowNotice(Changed);
+            for (int i = 0; i < members.Count; i++)
+            {
+                Member member = members[i];
+                if (!member.IsHost && member.Connected && member.Connection >= 0) SendNotice(member, Changed);
+            }
         }
 
         // ---------- a joined computer ----------

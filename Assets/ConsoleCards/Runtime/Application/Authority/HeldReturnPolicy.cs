@@ -77,6 +77,31 @@ namespace ConsoleCards.Application.Authority
             return true;
         }
 
+        /// <summary>
+        /// Audit T-2 (owner approved, 2026-11-14): the host refused <paramref name="sender"/>'s commit of a piece that is
+        /// no longer held but still moving in that player's hands (a legal drop that then rolled on to a place the rules
+        /// refuse). The command that stops it where the host last accepted it (at rest, no speed, no spin), in the
+        /// sender's name, so the two computers stop correcting each other. Dice are left to their own rules. False when
+        /// the piece is not moving under the sender's control on the host's table.
+        /// </summary>
+        public bool TryBuildSettle(MatchState match, PlayerId sender, TabletopObjectId objectId, CommandId commandId,
+            out CommitPhysicalObjectCommand settle)
+        {
+            settle = null;
+            if (match == null || sender.IsEmpty || commandId.IsEmpty || !match.ContainsObject(objectId)) return false;
+            TabletopObjectState piece = match.GetObject(objectId);
+            PhysicalObjectState now = piece.PhysicalState;
+            if (piece.Kind == TabletopObjectKind.Die || now == null || now.Mode != PhysicalObjectMode.Dynamic
+                || now.ControllingPlayerId != sender || !piece.ContainerId.IsEmpty)
+                return false;
+            settle = new CommitPhysicalObjectCommand(
+                new CommandContext(commandId, match.Id, sender, match.Revision),
+                objectId,
+                new PhysicalObjectState(now.Position, now.Rotation, default, default, PhysicalObjectMode.Sleeping, sender),
+                piece.PhysicalRevision);
+            return true;
+        }
+
         /// <summary>The put-back ran: the piece is no longer held.</summary>
         public void NoteReturned(TabletopObjectId objectId)
         {

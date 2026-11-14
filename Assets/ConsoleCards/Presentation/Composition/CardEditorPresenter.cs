@@ -65,6 +65,9 @@ namespace ConsoleCards.Presentation.Composition
         internal const int CardEditorMaximumCodeLength = 8;
         internal const string CardEditorHint =
             "Saved cards are used from the next table you start. A cost set as a house rule on the rules card wins over the cost here.";
+        // Audit C-1: a guest in someone else's room edits its own saves; the room plays the host's cards.
+        internal const string CardEditorRoomHint =
+            "Your own cards, saved on this computer. This room plays the host's cards: right-click the table › Send my cards to the host.";
         // The deck ID the "In decks" list uses for the game's own deck (the card's copies in the game).
         internal const string GameDeckId = "game";
 
@@ -140,9 +143,10 @@ namespace ConsoleCards.Presentation.Composition
         {
             ContentArtService previous = editorOtherArt;
             editorOtherArt = null;
-            if (!host.UsesTableArt(game))
+            // Audit C-1: a guest in someone else's room always edits its own saves, never the room's copy.
+            if (!host.UsesTableArt(game) || ContentPackStore.InSomeoneElsesRoom)
             {
-                editorOtherArt = new ContentArtService(ContentPackStore.ForCards(host.EnsureProfile()));
+                editorOtherArt = new ContentArtService(ContentPackStore.ForOwnEdits(host.EnsureProfile()));
                 editorOtherArt.UseGame(game);
             }
 
@@ -226,7 +230,9 @@ namespace ConsoleCards.Presentation.Composition
                 CanChangeGame = editorGames.Count > 1,
                 DeckSummary = EditorDeckSummary(gameName),
                 Rows = BuildEditorRows(),
-                Status = string.IsNullOrEmpty(status) ? CardEditorHint : status,
+                Status = string.IsNullOrEmpty(status)
+                    ? ContentPackStore.InSomeoneElsesRoom ? CardEditorRoomHint : CardEditorHint
+                    : status,
                 Saved = editorAutoSaved,
                 CanImport = PictureFilePicker.IsAvailable,
             };

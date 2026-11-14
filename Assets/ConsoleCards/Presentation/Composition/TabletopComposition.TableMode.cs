@@ -82,6 +82,19 @@ namespace ConsoleCards.Presentation.Composition
         // tools (Done or Cancel) goes back there.
         private bool tableModeReturnsToFrontEnd;
 
+        // Audit T-1 (owner, 2026-11-14: "nothing should be affected on network when a game is being played"): the table's
+        // shape, size and edge change only on the computer that changes them, so during an online game nobody changes
+        // them. The host's table is sent with each new table (UseOnlineTableSpec); change it in the room between games.
+        private const string OnlineTableLockedText =
+            "The table can't change shape or size during an online game. The host can change it before the next game.";
+
+        private bool RefuseTableChangeOnline()
+        {
+            if (!IsOnlineTable) return false;
+            ShowNotice(OnlineTableLockedText);
+            return true;
+        }
+
         /// <summary>Opens Table tools from the front end; false when there is no table to change.</summary>
         internal bool OpenTableToolsFromFrontEnd()
         {
@@ -93,6 +106,7 @@ namespace ConsoleCards.Presentation.Composition
         private void OpenTableMode()
         {
             if (runtimeUi == null || !FindClassicTable()) return;
+            if (RefuseTableChangeOnline()) return;
             tableModeStart = tableSpec.Copy();
             tableUndo.Clear();
             tableRedo.Clear();
@@ -197,6 +211,12 @@ namespace ConsoleCards.Presentation.Composition
         /// </summary>
         private bool TryChangeTable(TableSpec to, out string message)
         {
+            if (IsOnlineTable)
+            {
+                message = OnlineTableLockedText;
+                return false;
+            }
+
             if (!PrepareTableChange(tableSpec, to, out string why))
             {
                 message = why;

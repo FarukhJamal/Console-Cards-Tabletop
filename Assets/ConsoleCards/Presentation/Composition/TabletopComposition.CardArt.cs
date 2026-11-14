@@ -158,6 +158,14 @@ namespace ConsoleCards.Presentation.Composition
 
         internal void OpenCardArtPanel()
         {
+            // Audit C-5 (owner, 2026-11-14): nothing changes the online game while it is played. A picture chosen here
+            // shows at once on this computer only, so it waits for the next table (the card editor saves for it).
+            if (IsOnlineTable)
+            {
+                ShowNotice("Card pictures can't change during an online game. Change them in the card editor; the host's pictures are used from the next table.");
+                return;
+            }
+
             EnsureContentArt();
             if (!contentArt.HasGame)
             {

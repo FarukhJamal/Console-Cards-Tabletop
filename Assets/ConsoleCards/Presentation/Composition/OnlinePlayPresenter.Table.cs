@@ -714,13 +714,27 @@ namespace ConsoleCards.Presentation.Composition
         private bool ReturnRefusedHold(Member member, CommitPhysicalObjectCommand refused)
         {
             if (member == null || member.Player == Guid.Empty || host.matchState == null) return false;
-            if (!heldReturn.TryBuildReturn(host.matchState, new PlayerId(member.Player), refused.ObjectId, CommandId.New(),
-                    out CommitPhysicalObjectCommand putBack))
+            bool held = heldReturn.TryBuildReturn(host.matchState, new PlayerId(member.Player), refused.ObjectId, CommandId.New(),
+                out CommitPhysicalObjectCommand putBack);
+            // Audit T-2: a piece no longer held but still moving (a legal drop that rolled on): stopped where the host
+            // last accepted it, so the sender's physics and the host's refusals do not loop.
+            if (!held && !heldReturn.TryBuildSettle(host.matchState, new PlayerId(member.Player), refused.ObjectId, CommandId.New(),
+                    out putBack))
                 return false;
             if (Replicated.Replay(putBack) != ReplayOutcome.Accepted)
             {
-                Debug.LogWarning($"[Authority] A refused hold could not be put back here ({Replicated.LastReplayRefusal}); the table is sent.");
+                Debug.LogWarning($"[Authority] A refused move could not be set right here ({Replicated.LastReplayRefusal}); the table is sent.");
                 return false;
+            }
+
+            if (!held)
+            {
+                byte[] settled = TableWire.Write(putBack, false);
+                BeginOrdered(MsgCommand);
+                writer.Write(settled);
+                BroadcastPrepared(member);
+                Debug.Log($"[Authority] {member.Name}'s piece rolled on to a refused place: stopped where the host last accepted it, on every computer.");
+                return true;
             }
 
             heldReturn.NoteReturned(refused.ObjectId);
@@ -1052,6 +1066,10 @@ namespace ConsoleCards.Presentation.Composition
                     {
                         host.GameSelectPanel.returnToGameSelect = false;
                         host.runtimeUi.CloseGameSelect(); // the game starts: everyone goes to the table
+                        // P-CAM (owner, 2026-11-14: the opening camera move "only plays on the host"): a guest coming from
+                        // the room to a game's table gets the same opening as the host (CAM-1). A resync or a next floor,
+                        // with the table already showing, does not replay it.
+                        host.gameIntroWanted = setup.Kind == 1;
                     }
 
                     ok = BuildFromSetup(setup, out error);
@@ -1449,6 +1467,12 @@ namespace ConsoleCards.Presentation.Composition
                 case MsgDeal:
                     HostDeal(member, data);
                     break;
+                case MsgRuleBallot: // audit C-6
+                    HostRoomRuleBallot(member, data);
+                    break;
+                case MsgOffer: // audit C-4: a guest's own cards, for the host to accept or refuse
+                    HostOffer(member, data);
+                    break;
                 case MsgLive:
                     HostLive(member, data); // SYNC-1
                     break;
@@ -1465,7 +1489,11 @@ namespace ConsoleCards.Presentation.Composition
                 case MsgPiece: // P8A: in order with the host's commands
                 case MsgLevel: // ASSIST-ORDER: in order with the host's commands
                 case MsgBoardGrid: // P-2a
+                case MsgRuleSet: // audit C-6
                     ReceiveOrdered(clientInbox, data, null);
+                    break;
+                case MsgRuleVote: // audit C-6
+                    ClientRoomRuleVote(data);
                     break;
                 case MsgPoses:
                     ApplyPoses(data);
@@ -1551,6 +1579,9 @@ namespace ConsoleCards.Presentation.Composition
                     case MsgBoardGrid:
                         if (from != null) HostBoardGrid(from, data); // P-2a: a request, checked by the host
                         else ClientBoardGrid(data);
+                        break;
+                    case MsgRuleSet:
+                        if (from == null) ClientRoomRules(data); // audit C-6: only the host's counts
                         break;
                 }
             }

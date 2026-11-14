@@ -226,6 +226,13 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            // Audit C-6: the same in a normal room. A change made here would change this computer alone.
+            if (host.HasOnline && host.Online.IsRoomRulesGuest)
+            {
+                host.ShowNotice("Online, rule changes are proposed on the host's computer. You agree or say No here when one is open.");
+                return;
+            }
+
             ruleProposalAgreeing = false;
             ruleProposalVoters.Clear();
             ruleProposalAgreed.Clear();
@@ -396,7 +403,8 @@ namespace ConsoleCards.Presentation.Composition
 
         internal Guid ruleProposalId;
 
-        private bool PrivateHostVoting => host.HasOnline && host.Online.IsPrivateHost;
+        // Audit C-6: a normal room's host votes across computers too.
+        private bool PrivateHostVoting => host.HasOnline && (host.Online.IsPrivateHost || host.Online.IsRoomRulesHost);
 
         // Offline and in normal play every button works on this screen (the game's own local vote, unchanged). On a
         // private host only the players this computer plays can agree here; the others agree on their own computer.
@@ -414,7 +422,10 @@ namespace ConsoleCards.Presentation.Composition
                 preview = entry.WithChange(ruleProposalText, ruleProposalValue).FormatText();
             }
 
-            host.Online.PrivateRuleVoteChanged(ruleProposalId, open, current, preview, ruleProposalVoters, ruleProposalAgreed, message);
+            if (host.Online.IsRoomRulesHost)
+                host.Online.RoomRuleVoteChanged(ruleProposalId, open, current, preview, ruleProposalVoters, ruleProposalAgreed, message);
+            else
+                host.Online.PrivateRuleVoteChanged(ruleProposalId, open, current, preview, ruleProposalVoters, ruleProposalAgreed, message);
         }
 
         /// <summary>
@@ -576,8 +587,62 @@ namespace ConsoleCards.Presentation.Composition
             RefreshGameHints(); // tips follow the rules in play
             host.ActiveCartridge.RefreshShopEntry(); // the Shop opens or closes at once (owner, 2026-10-15)
             bool restartNeeded = host.templatesRuleSet != null && SettingsDiffer(host.templatesRuleSet, ActiveRuleSet);
-            CloseRuleProposal(restartNeeded ? $"{message} Changed settings start when you restart." : message);
+            string said = restartNeeded ? $"{message} Changed settings start when you restart." : message;
+            CloseRuleProposal(said);
             RefreshRulesCard();
+            // Audit C-6: the agreed rules go to every computer in the room, in order with the host's commands.
+            if (host.HasOnline && host.Online.IsRoomRulesHost)
+            {
+                int index = ActiveRuleSetIndex;
+                string json = index > 0 && index - 1 < houseRuleRecords.Count
+                    ? JsonUtility.ToJson(houseRuleRecords[index - 1])
+                    : string.Empty;
+                host.Online.BroadcastRoomRules(json, said);
+            }
+        }
+
+        /// <summary>
+        /// Audit C-6, a joined computer: the rules the host put in play after everyone agreed. Empty JSON: the game's own
+        /// rules. A set this computer does not have yet (made just now on the host) is added for this run.
+        /// </summary>
+        internal void UseRoomRules(string recordJson, string message)
+        {
+            EnsureHouseRulesLoaded();
+            if (string.IsNullOrEmpty(recordJson))
+            {
+                activeRuleSet = null;
+            }
+            else
+            {
+                HouseRuleSetRecord record = JsonUtility.FromJson<HouseRuleSetRecord>(recordJson);
+                if (record == null || string.IsNullOrEmpty(record.stableId) || host.TableGame == null) return;
+                int found = -1;
+                for (int i = 0; i < host.houseRuleSets.Count; i++)
+                {
+                    if (!string.Equals(host.houseRuleSets[i].StableId, record.stableId, StringComparison.Ordinal)) continue;
+                    found = i;
+                    break;
+                }
+
+                if (found < 0)
+                {
+                    RuleSetDefinition defaults = host.TableGame.DefaultRuleSet;
+                    string name = string.IsNullOrWhiteSpace(record.displayName) ? "House rules" : record.displayName;
+                    host.houseRuleSets.Add(RuleSetDefinition.CreateHouseRules(defaults, record.stableId, name, record.ToChanges()));
+                    houseRuleRecords.Add(record);
+                    found = host.houseRuleSets.Count - 1;
+                }
+
+                activeRuleSet = host.houseRuleSets[found];
+            }
+
+            ruleProposalAgreeing = false;
+            host.ruleProposalOpen = false;
+            host.runtimeUi?.CloseRuleProposal();
+            RefreshGameHints();
+            host.ActiveCartridge.RefreshShopEntry();
+            RefreshRulesCard();
+            if (!string.IsNullOrEmpty(message)) host.ShowNotice(message);
         }
 
         // "Restart" on the rules card: load this game again with the rules in play (asks before replacing the table).

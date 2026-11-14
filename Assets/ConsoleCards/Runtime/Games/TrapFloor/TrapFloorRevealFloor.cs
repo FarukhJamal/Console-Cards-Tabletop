@@ -37,6 +37,8 @@ namespace ConsoleCards.Games.TrapFloor
         SlowApplied = 19,
         StickyApplied = 20,
         SafelyRevealedTrap = 22,
+        /// <summary>R1 (owner, 2026-11-14): a tile turned over by hand with no pawn on it: revealed only, no effect.</summary>
+        RevealedByHand = 23,
     }
 
     /// <summary>
@@ -47,6 +49,12 @@ namespace ConsoleCards.Games.TrapFloor
     {
         /// <summary>Free reveal when the active Player's pawn lands on the tile (doc 18 §15.2, G2a). No payment.</summary>
         Landing = 2,
+        /// <summary>
+        /// R1 (owner, 2026-11-14: a Trap should never flip with nobody on it; as exception handling it is only revealed,
+        /// and that flip can be undone): turned over by hand with no pawn on the tile. No Trap, no movement change; its
+        /// own Undo step, which is not a rules result.
+        /// </summary>
+        HandReveal = 3,
     }
 
     /// <summary>
@@ -269,7 +277,9 @@ namespace ConsoleCards.Games.TrapFloor
                 acceptedRevision,
                 actorPlayerId,
                 floorCard,
-                trapSuppressed && floorCard.Content.Category == TrapFloorFloorContentCategory.Trap
+                searchKind == TrapFloorSearchKind.HandReveal
+                    ? TrapFloorActivityKind.RevealedByHand
+                    : trapSuppressed && floorCard.Content.Category == TrapFloorFloorContentCategory.Trap
                     ? TrapFloorActivityKind.SafelyRevealedTrap
                     : TrapFloorActivityKind.RevealedFloorContent,
                 searchKind,
@@ -984,7 +994,9 @@ namespace ConsoleCards.Games.TrapFloor
                 floorCard.Coordinate,
                 floorCard.Content,
                 true);
-            bool trapSuppressed = false; // only the retired Careful Search made a Trap harmless on reveal
+            // Only the retired Careful Search made a Trap harmless on reveal; R1: a hand flip with nobody on the tile too.
+            bool handReveal = command.SearchKind == TrapFloorSearchKind.HandReveal;
+            bool trapSuppressed = handReveal;
             TrapFloorActivityEntry searchedActivity = null;
             TrapFloorActivityEntry revealedActivity = null;
             try
@@ -1020,6 +1032,7 @@ namespace ConsoleCards.Games.TrapFloor
             // Overcharged (G2b): the player who flips it gets its movement change on their next turn.
             if (abilityResolutionState != null
                 && turnState != null
+                && !handReveal
                 && revealedFloorCard.Content.FlipMovementModifier.HasValue)
             {
                 abilityResolutionState.AddMovementModifier(
@@ -1031,11 +1044,12 @@ namespace ConsoleCards.Games.TrapFloor
 
             // A landing flip belongs to the pawn move that caused it, so it amends that Undo step instead of
             // adding its own (record mode None).
+            // R1: a hand flip with nobody on the tile is its own step, so it can be undone on its own.
             matchState.AdvanceRevision(
                 command.Context.Id,
                 command.Context.RequestedByPlayerId,
                 AuthoritativeActionKind.TrapFloorReveal,
-                AuthoritativeActionRecordMode.None);
+                handReveal ? AuthoritativeActionRecordMode.Transaction : AuthoritativeActionRecordMode.None);
 
             return TrapFloorRevealFloorResult.Accepted(
                 acceptedRevision,

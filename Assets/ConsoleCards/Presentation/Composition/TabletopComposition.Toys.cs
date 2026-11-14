@@ -1099,6 +1099,15 @@ namespace ConsoleCards.Presentation.Composition
                 new PopupActionOption(flipSaved.Count > 0 ? "Put the table back" : "Flip the table!", true,
                     flipSaved.Count > 0 ? (Action)PutTableBack : FlipTable),
             };
+            // Audit C-4: a guest offers its own cards to the host, who accepts or refuses them.
+            if (HasOnline && Online.CanOfferContent)
+            {
+                actions.Add(new PopupActionOption("Send my cards to the host…", true, () =>
+                {
+                    ContextMenus.CloseContextMenu();
+                    Online.OfferOwnContent();
+                }));
+            }
             runtimeUi.ShowContextMenu(
                 toyMenuScreen,
                 "TABLE",

@@ -112,6 +112,28 @@ namespace ConsoleCards.Presentation.Content
             }
         }
 
+        /// <summary>True while this computer sits in someone else's online room and reads the host's content.</summary>
+        public static bool InSomeoneElsesRoom => !string.IsNullOrEmpty(RoomRoot);
+
+        /// <summary>
+        /// Audit C-1 (owner, 2026-11-14): where this computer's own card and deck edits go, also while it is a guest in
+        /// someone else's room: its own saves (as <see cref="ForCards"/> outside a room), never the room's temporary copy,
+        /// which the host's next content replaces. They are used in a room only once the host takes them.
+        /// </summary>
+        public static ContentPackStore ForOwnEdits(ProfileService profiles)
+        {
+            string room = RoomRoot;
+            RoomRoot = null;
+            try
+            {
+                return ForCards(profiles);
+            }
+            finally
+            {
+                RoomRoot = room;
+            }
+        }
+
         /// <summary>The game saves of the active profile (or of the online room, see <see cref="RoomRoot"/>).</summary>
         public static ContentPackStore ForProfile(ProfileService profiles)
         {

@@ -124,6 +124,8 @@ namespace ConsoleCards.Presentation.Composition
             public float StagedCleanupAt = -1f; // host only, P7: when a departed guest's staged payment goes back
             public long SentSeq; // host only: ordered messages sent to this computer
             public string ContentHash = string.Empty; // host only: the host content this computer has (MP-4)
+            public float LastHeardAt = -1f; // host only, audit T-3: when anything last came from it
+            public bool SendsAlive; // host only, audit T-3: it says "still here", so its silence means it is gone
             public readonly Inbox FromClient = new Inbox(); // host only: ordered messages from it
         }
 
@@ -509,6 +511,7 @@ namespace ConsoleCards.Presentation.Composition
                 if (waiting[i].Connection == connection) waiting.RemoveAt(i);
             }
 
+            ForgetJoinRequest(connection);
             Member member = MemberAt(connection);
             // P7 (s155): every leave is logged (the private path showed nothing, which read as "never detected").
             Debug.Log(member == null
@@ -562,6 +565,16 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             if (hosting) TickHostRoom(now);
+            if (hosting)
+            {
+                TickSilentMembers(now); // audit T-3
+                TickJoinRequests(now); // late join by request
+                TickOffer(now); // audit C-4
+            }
+            else
+            {
+                TickAlive(now); // audit T-3
+            }
             if (hosting && sentAssist >= 0 && sentAssist != (int)PlayAssist.Level)
             {
                 // ASSIST-ROOM: the host changed Assist; everyone plays the new level.
@@ -620,6 +633,8 @@ namespace ConsoleCards.Presentation.Composition
 
             Member member = MemberAt(connection);
             if (member == null) return; // no hello yet
+            NoteHeardFrom(member, type); // audit T-3
+            if (type == MsgAlive) return;
             if (IsPrivateMessage(type))
             {
                 HostReadPrivate(member, type, data); // PRIVACY-P4
@@ -746,6 +761,9 @@ namespace ConsoleCards.Presentation.Composition
                     return;
                 }
 
+                // Owner, 2026-11-14: once a game is on, a newcomer joins only when the host lets them in.
+                if (HoldLateJoiner(connection, data, name)) return;
+
                 member = new Member { Key = key, Colour = -1 };
                 members.Add(member);
                 member.Colour = NextFreeColour(member, 0, colour);
@@ -764,13 +782,17 @@ namespace ConsoleCards.Presentation.Composition
             member.Connection = connection;
             member.Connected = true;
             member.LeftAt = -1f;
+            member.LastHeardAt = Time.unscaledTime; // audit T-3
+            member.SendsAlive = false;
             member.SentSeq = 0;
             member.FromClient.Reset();
             member.ContentHash = contentHash;
             BeginMessage(MsgWelcome);
             SendTo(member);
             BroadcastRoster();
-            RefreshHostContent(); // MP-4: the host's content goes first, then the table dealt with it
+            // MP-4: the host's content goes first, then the table dealt with it. Audit C-2: while a game is on, a joiner gets
+            // the content that game was dealt with, not files the host edited since (they are used from the next deal).
+            if (!roomStarted || hostContentBundle == null) RefreshHostContent();
             SendContent(member);
             if (privateHosting) SendPrivatePackage(member); // PRIVACY-P4: its own package (join, rejoin, late join), never the table
             if (sharedTable)

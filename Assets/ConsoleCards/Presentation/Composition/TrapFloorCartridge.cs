@@ -2579,7 +2579,8 @@ namespace ConsoleCards.Presentation.Composition
         }
 
         // Flips a face-down, usable target at once for the player (same Landing reveal as a hand move).
-        internal bool TryLandingFlipNow(PlayerId player, TabletopObjectId floorCardId, out string flippedName)
+        internal bool TryLandingFlipNow(PlayerId player, TabletopObjectId floorCardId, out string flippedName,
+            TrapFloorSearchKind kind = TrapFloorSearchKind.Landing)
         {
             flippedName = string.Empty;
             if (host.trapFloorRevealFloorUseCase == null
@@ -2594,7 +2595,7 @@ namespace ConsoleCards.Presentation.Composition
                 new TrapFloorRevealFloorCommand(
                     host.CreateCommandContext(player),
                     floorCardId,
-                    TrapFloorSearchKind.Landing,
+                    kind,
                     Array.Empty<TabletopObjectId>()));
             if (!result.Succeeded) return false;
             if (host.Registry.TryGetCardView(floorCardId, out CardView floorCardView))
@@ -2763,7 +2764,10 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            bool flipped = TryLandingFlipNow(player, floorCardId, out _);
+            // R1 (owner, 2026-11-14): with no pawn on the tile it is only revealed (no Trap, nothing owed) and can be undone.
+            bool nobodyOnIt = !AnyPawnOnFloorCard(floorCardId);
+            bool flipped = TryLandingFlipNow(player, floorCardId, out _,
+                nobodyOnIt ? TrapFloorSearchKind.HandReveal : TrapFloorSearchKind.Landing);
             if (!flipped)
             {
                 host.ShowMessage("That tile can't be turned over now.");
@@ -2784,6 +2788,22 @@ namespace ConsoleCards.Presentation.Composition
             return true;
         }
 
+        // R1: does any player's pawn stand on this floor tile?
+        internal bool AnyPawnOnFloorCard(TabletopObjectId floorCardId)
+        {
+            if (host.trapFloorTemplate == null || host.matchState == null) return false;
+            var players = host.trapFloorTemplate.Players;
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (TryReadPawnTile(players[i].PawnId, out TrapFloorCoordinate tile)
+                    && host.trapFloorTemplate.TryGetFloorCardId(tile, out TabletopObjectId under)
+                    && under == floorCardId)
+                    return true;
+            }
+
+            return false;
+        }
+
         // A face-down, standing floor tile of this table (F turns it like any card).
         internal bool IsFlippableFloorTile(TabletopObjectId cardId)
         {
@@ -2802,7 +2822,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 if (WasTrapSafelyRevealed(floorCard.ObjectId))
                 {
-                    return $"{description}\nCAREFUL SEARCH — this reveal did not trigger the Trap; it remains a Trap.";
+                    return $"{description}\nTURNED OVER WITH NOBODY ON IT — this reveal did not trigger the Trap.";
                 }
                 if (IsTrapFloorTrapNeutralized(floorCard.ObjectId))
                 {
@@ -5011,7 +5031,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 TrapFloorActivityEntry entry = host.trapFloorActivityFeed.Entries[i];
                 if (entry.FloorCardId == floorCardId
-                    && entry.Kind == TrapFloorActivityKind.SafelyRevealedTrap)
+                    && (entry.Kind == TrapFloorActivityKind.SafelyRevealedTrap || entry.Kind == TrapFloorActivityKind.RevealedByHand))
                     return true;
             }
             return false;
@@ -6458,6 +6478,9 @@ namespace ConsoleCards.Presentation.Composition
                         break;
                     case TrapFloorActivityKind.SafelyRevealedTrap:
                         line = $"{FormatPlayerName(entry.ActorPlayerId)} revealed {entry.ContentName} safely";
+                        break;
+                    case TrapFloorActivityKind.RevealedByHand:
+                        line = $"{FormatPlayerName(entry.ActorPlayerId)} turned over {entry.ContentName} (nobody on it: no effect)";
                         break;
                     case TrapFloorActivityKind.ClaimedKey:
                         line = $"{FormatPlayerName(entry.ActorPlayerId)} claimed {entry.ContentName}";

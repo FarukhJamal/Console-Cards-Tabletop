@@ -240,6 +240,32 @@ namespace ConsoleCards.Presentation.Composition
             ShowFloorEnded(won);
         }
 
+        // R3: the team that won the game (Team Play, last floor won), from this floor's escapes in the order they came.
+        private bool TryGetWinningTeam(out string line)
+        {
+            line = string.Empty;
+            if (host.trapFloorActivityFeed == null) return false;
+            int[] escaped = new int[2];
+            int first = -1;
+            IReadOnlyList<TrapFloorActivityEntry> entries = host.trapFloorActivityFeed.Entries;
+            for (int i = 0; i < entries.Count; i++)
+            {
+                if (entries[i].Kind != TrapFloorActivityKind.PlayerEscaped) continue;
+                int team = TeamOf(entries[i].ActorPlayerId);
+                if (team < 0 || team > 1) continue;
+                escaped[team]++;
+                if (first < 0) first = team;
+            }
+
+            if (first < 0) return false;
+            int winner = escaped[0] == escaped[1] ? first : escaped[0] > escaped[1] ? 0 : 1;
+            line = escaped[1 - winner] == 0
+                ? $"{TeamName(winner)} wins the game."
+                : $"{TeamName(winner)} wins the game ({escaped[winner]} out to {escaped[1 - winner]}"
+                    + (escaped[0] == escaped[1] ? ", and out first)." : ").");
+            return true;
+        }
+
         // The floor's end: says what happened and offers the next floor (or a new game after the last one).
         internal void ShowFloorEnded(bool won, string detail = null)
         {
@@ -282,6 +308,14 @@ namespace ConsoleCards.Presentation.Composition
                 next = $"{result} Next: Floor {number + 1} of {floor.FloorCount}, {columns}×{rows}, dealt fresh. Knocked-out players "
                     + "come back. Each player keeps their Avatar and the Abilities they still hold; Hands are dealt again and the "
                     + "Controller deck is shuffled. This cannot be undone.";
+            }
+
+            // R3 (owner, 2026-11-14, accepted as proposed): in Team Play the game is won by the team any of whose players
+            // escaped the last floor; when both did, by the one with more players out, then the one out first.
+            if (won && last && WinMode == TrapFloorWinMode.TeamPlay && TryGetWinningTeam(out string teamLine))
+            {
+                next = $"{teamLine} {next}";
+                detail = string.IsNullOrEmpty(detail) ? teamLine : $"{teamLine} · {detail}";
             }
 
             string body = string.IsNullOrEmpty(detail) ? next : $"{detail}\n{next}";

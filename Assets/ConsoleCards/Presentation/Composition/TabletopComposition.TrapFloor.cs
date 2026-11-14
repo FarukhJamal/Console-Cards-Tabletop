@@ -380,6 +380,8 @@ namespace ConsoleCards.Presentation.Composition
                     return $"{who} found {name}.";
                 case TrapFloorActivityKind.SafelyRevealedTrap:
                     return $"{who} revealed {name} safely.";
+                case TrapFloorActivityKind.RevealedByHand:
+                    return $"{who} turned over {name}: nobody stood on it, so it does nothing.";
                 case TrapFloorActivityKind.ClaimedKey:
                     return $"{who} took {name}: it counts for the team.";
                 case TrapFloorActivityKind.CollapsedFloor:
