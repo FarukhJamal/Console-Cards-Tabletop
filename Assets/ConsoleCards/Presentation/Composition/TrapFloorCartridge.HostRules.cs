@@ -154,11 +154,16 @@ namespace ConsoleCards.Presentation.Composition
                 new TrapFloorEliminatePlayerCommand(LocalContextFor(causedBy), player, reason));
         }
 
-        private sealed class HostEvidence : ITrapFloorEffectEvidence, ITrapFloorBlindEvidence
+        private sealed class HostEvidence : ITrapFloorEffectEvidence, ITrapFloorBlindEvidence, ITrapFloorTurnEvidence
         {
             private readonly TrapFloorCartridge game;
 
             public HostEvidence(TrapFloorCartridge game) => this.game = game;
+
+            // Rules v1.151126: a turn is a move or an Action; no Reaction after an Action (enforced in Full).
+            public bool EnforcesMoveOrAction => AssistRules.Enforces(AssistRule.PawnMoveRules);
+
+            public bool HasMovedThisTurn(PlayerId player) => game.HasMovedThisTurn(player);
 
             // P8A (Blind d4): a step that way from the player's pawn lands on a tile of this floor that is not a hole.
             public bool HasLegalStep(PlayerId player, TrapFloorBlindMovementDirection direction) =>
@@ -639,8 +644,8 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
-            // The way back after a Key or prize goes to the tile the move began on (owner rule 2026-11-08).
-            TrapFloorCoordinate? origin = setup != null ? CurrentMoveOrigin(sender) : null;
+            // The way back after a Key or prize: one step back, or to where the move began (rules v1.151126).
+            TrapFloorCoordinate? origin = setup != null && current.HasValue ? PickupReturnTile(sender, current.Value) : null;
             if (setup == null || !target.HasValue || !current.HasValue || !origin.HasValue || target.Value != origin.Value) return false;
             if (!host.trapFloorTemplate.TryGetFloorCardId(current.Value, out TabletopObjectId onId)) return false;
             bool keyTaken = host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.HasPlayerClaimedKey(onId, sender);

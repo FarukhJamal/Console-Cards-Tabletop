@@ -144,6 +144,7 @@ namespace ConsoleCards.Presentation.Composition
                 trapFloorObjectiveState = restored.Objective;
                 trapFloorTurnState = restored.Turn;
                 trapFloorAbilityResolutionState = restored.AbilityResolution;
+                TrapFloorGame.RecallMoveTurn(restored); // rules v1.151126: the turn's move count of that step
             }
             else
             {

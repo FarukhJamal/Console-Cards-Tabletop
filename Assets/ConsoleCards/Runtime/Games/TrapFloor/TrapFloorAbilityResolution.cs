@@ -802,6 +802,19 @@ namespace ConsoleCards.Games.TrapFloor
             return copy;
         }
 
+        /// <summary>
+        /// Rules v1.151126 (owner, 2026-11-15): the Ability cards this player used in this round's turn, so a rule can ask
+        /// whether one of them was an Action ("a turn is a move or an Action; no Reaction after an Action").
+        /// </summary>
+        public void CollectUsedThisTurn(PlayerId playerId, int round, List<TabletopObjectId> cards)
+        {
+            if (cards == null) return;
+            foreach (TrapFloorAbilityActivationRecord activation in abilityActivations)
+            {
+                if (activation.PlayerId == playerId && activation.Round == round) cards.Add(activation.CardInstanceId);
+            }
+        }
+
         internal TrapFloorAbilityActivationRecord[] CopyAbilityActivations()
         {
             TrapFloorAbilityActivationRecord[] copy =
@@ -932,6 +945,10 @@ namespace ConsoleCards.Games.TrapFloor
         PawnFloorUnavailable = 7,
         NoValidDodgeDestination = 8,
         NoValidRushDestination = 9,
+        /// <summary>Rules v1.151126: a turn is a move or an Action (the player has moved, or already used an Action).</summary>
+        ActionAfterMove = 10,
+        /// <summary>Rules v1.151126: no Reaction after an Action in the same turn.</summary>
+        ReactionAfterAction = 11,
     }
 
     public readonly struct TrapFloorAbilityActivationResult

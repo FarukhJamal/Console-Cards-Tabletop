@@ -3591,12 +3591,13 @@ namespace ConsoleCards.Presentation.Composition
             host.FeedbackLine( // KEYS-1: always shown
                 $"{FormatPlayerName(result.Activity.ActorPlayerId)} took {result.FloorCard.Content.DisplayName}.",
                 FeedbackSeverity.Info);
-            ReturnPawnToMoveOrigin(result.Activity.ActorPlayerId, floorCardId); // rules: back to the tile the move began on
+            ReturnPawnToMoveOrigin(result.Activity.ActorPlayerId, floorCardId); // rules v1.151126: one step back
             EliminateStuckPlayers();
         }
 
-        // Rules: after a Key or a prize (Ability, Friend) is taken from a floor tile, the pawn goes back to the tile THIS
-        // move began on. Owner, 2026-11-08 (P7 rule correction, replaces 2026-11-04 "back to your default starting
+        // Rules v1.151126 (owner, 2026-11-17): after a Key or a prize (Ability, Friend) is taken from a floor tile, the pawn
+        // steps back to the tile it stood on just before (PickupReturnTile); a face-down tile there turns over and takes
+        // effect. Before: the pawn went back to the tile THIS move began on (still used when a 2-tile move turned). Owner, 2026-11-08 (P7 rule correction, replaces 2026-11-04 "back to your default starting
         // card"): C3 → C5 takes a Key → back to C3, not to the spawn corner (unless the move began there).
         // Positions kept apart: spawn = setup.StartingCorner; turn start = hostMoveStart (HostRules); move origin =
         // moveStartTile (captured by the landing scan from the tile the pawn left, before the move's landing rules
@@ -3614,12 +3615,12 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            TrapFloorCoordinate? origin = CurrentMoveOrigin(player);
+            TrapFloorCoordinate? origin = PickupReturnTile(player, tile);
             TrapFloorCoordinate? destination = TrapFloorPickupReturn.Destination(origin, tile, c => IsWalkableTile(c.X, c.Y));
             if (!destination.HasValue)
             {
                 if (origin.HasValue && origin.Value != tile)
-                    host.FeedbackLine($"{FormatPlayerName(player)}'s tile the move began on is gone, so the pawn stays here.", FeedbackSeverity.Info);
+                    host.FeedbackLine($"{FormatPlayerName(player)}'s tile to step back to is gone, so the pawn stays here.", FeedbackSeverity.Info);
                 return;
             }
 
@@ -3632,10 +3633,12 @@ namespace ConsoleCards.Presentation.Composition
                     moveStartTile = destination.Value; // the pawn's coordinate; the move count is not reset
                     moveStartFromWaiting = false;
                     moveSpentByRule = true;
+                    stepBackTile = null;
                 }
 
                 CollectTakenPrizesOffPawns(); // the prize the pawn just left goes by the Console now
-                host.FeedbackLine($"{FormatPlayerName(player)} goes back to the tile the move began on.", FeedbackSeverity.Info);
+                host.FeedbackLine($"{FormatPlayerName(player)} steps back to the tile they stood on before.", FeedbackSeverity.Info);
+                RevealSteppedBackTile(player, originId); // rules v1.151126: a face-down tile there turns over
             }
         }
 
@@ -3982,7 +3985,7 @@ namespace ConsoleCards.Presentation.Composition
                 $"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} took {prizeName}. "
                     + "It goes by their Console when the pawn moves off.",
                 FeedbackSeverity.Info);
-            ReturnPawnToMoveOrigin(host.trapFloorTurnState.ActivePlayerId, floorCardId); // rules: back to the move origin, prize in hand
+            ReturnPawnToMoveOrigin(host.trapFloorTurnState.ActivePlayerId, floorCardId); // rules v1.151126: one step back, prize in hand
         }
 
         // TABLE-1: the Controller Cards that paid went back into the Controller deck: lay out the deck and the
@@ -4529,6 +4532,7 @@ namespace ConsoleCards.Presentation.Composition
             if (landedTile.HasValue)
             {
                 moveProblem = CheckGuidedMove(landedTile.Value) ?? CheckActivePawnMove(landedFrom, landedTile.Value);
+                NoteStepBack(landedFrom, landedTile.Value); // rules v1.151126: where a pickup here steps back to
                 if (moveProblem != null && PlayAssist.IsQuiet)
                 {
                     // Doc 57 (Assist FREE / REMINDERS): the referee only whispers; the move stands and the tile flips.
@@ -4793,6 +4797,10 @@ namespace ConsoleCards.Presentation.Composition
         private void ActivateAbility(ConsoleCardInserted insertion, CardDefinition definition, TrapFloorAbilityEffect effect)
         {
             IConsoleCardInteraction interaction = insertion;
+            // Rules v1.151126: Reminders reminds about "a move or an Action; no Reaction after an Action" (Full refuses).
+            string turnReminder = AssistRules.Warns(AssistRule.PawnMoveRules)
+                ? MoveOrActionProblem(insertion.CardInstanceId, insertion.ActorPlayerId)
+                : null;
             // AUTH-EFFECTS: the card in the slot is used through a command; every table (the host's first) reads the card
             // and the waiting Trap from its own state.
             TrapFloorAbilityActivationResult result = host.TableAuthority.Submit<TrapFloorUseAbilityCommand, TrapFloorAbilityActivationResult>(
@@ -4816,6 +4824,7 @@ namespace ConsoleCards.Presentation.Composition
 
             host.ContextMenus.CloseContextMenu();
             host.CardInspectPanel.CloseCardInspect();
+            if (turnReminder != null) host.FeedbackLine($"Reminder: {turnReminder}", FeedbackSeverity.Warning);
             // TABLE-1 / R4 (owner, 2026-11-12): in Full the used card goes on the Ability discard pile by itself (the use
             // command has recorded it as used, so it is never used twice). Reminders says so; Free leaves it to the player.
             if (PlayAssist.Level == PlayAssistLevel.Full) QueueUsedAbilityDiscard(insertion.CardInstanceId);
@@ -4985,6 +4994,10 @@ namespace ConsoleCards.Presentation.Composition
                     return "Dodge unavailable — no adjacent Floor.";
                 case TrapFloorAbilityActivationError.NoValidRushDestination:
                     return "Run unavailable — no reachable Floor.";
+                case TrapFloorAbilityActivationError.ActionAfterMove:
+                    return "A turn is a move or one Action: you have moved, or used an Action, this turn.";
+                case TrapFloorAbilityActivationError.ReactionAfterAction:
+                    return "No Reaction after an Action: a Reaction goes only with a move.";
                 default:
                     return $"{effect} assistance could not resolve ({error}).";
             }
@@ -5143,6 +5156,7 @@ namespace ConsoleCards.Presentation.Composition
             moveSpentByRule = false;
             guidedMoveThisTurn = false;
             tooFarStateIndex = -1;
+            stepBackTile = null;
         }
 
         internal bool TryGetActivePawnTile(out TabletopObjectId pawnId, out TrapFloorCoordinate tile)
@@ -5226,7 +5240,7 @@ namespace ConsoleCards.Presentation.Composition
 
             if (moveSpentByRule)
             {
-                Debug.Log("[Hints] No reach lights: this turn's move ended when the pawn went back to the tile the move began on.", host);
+                Debug.Log("[Hints] No reach lights: this turn's move ended when the pawn stepped back after a pickup.", host);
                 return;
             }
 
@@ -5352,6 +5366,13 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             why = string.Empty;
+            // Rules v1.151126 (owner, 2026-11-15): a turn is a move or an Action; after an Action there is no move.
+            if (host.trapFloorTurnState != null && UsedActionThisTurn(host.trapFloorTurnState.ActivePlayerId))
+            {
+                why = "ACTION";
+                return 0;
+            }
+
             if (TryGetActiveStickyStatus(out _))
             {
                 why = "STUCK";
@@ -5551,7 +5572,7 @@ namespace ConsoleCards.Presentation.Composition
         internal string DescribeMoveProblem(TrapFloorCoordinate start, TrapFloorCoordinate to)
         {
             if (to.Equals(start) && StartExtraSteps(start) == 0) return null;
-            if (moveSpentByRule) return "This turn's move ended when your pawn went back to the tile the move began on; the rules give no further move this turn.";
+            if (moveSpentByRule) return "This turn's move ended when your pawn stepped back after a pickup; the rules give no further move this turn.";
             TrapFloorBlindMovementDirection? onlyDirection = null;
             if (TryGetActiveBlindStatus(out TrapFloorBlindStatusState blind))
             {
@@ -5561,6 +5582,7 @@ namespace ConsoleCards.Presentation.Composition
 
             int allowance = MoveAllowance(out string why);
             if (allowance == 0 && why == "STUCK") return "STUCK: this turn you stay where you are.";
+            if (allowance == 0 && why == "ACTION") return "A turn is a move or an Action: you used an Action this turn, so no move.";
             if (!IsWalkableTile(to.X, to.Y)) return "That tile is a hole.";
             ComputeMoveSteps(start, onlyDirection, StartExtraSteps(start));
             int steps = reachSteps[to.X, to.Y];

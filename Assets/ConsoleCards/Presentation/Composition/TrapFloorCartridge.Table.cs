@@ -358,12 +358,14 @@ namespace ConsoleCards.Presentation.Composition
                 || host.trapFloorTurnState == null
                 || host.trapFloorAbilityResolutionState == null)
                 throw new InvalidOperationException("Trap Floor Undo capture requires its complete Match-scoped state.");
-            return new TrapFloorUndoState(TrapFloorSessionStateSnapshot.Capture(
+            TrapFloorSessionStateSnapshot step = TrapFloorSessionStateSnapshot.Capture(
                 host.trapFloorActivityFeed,
                 host.trapFloorObjectiveState,
                 host.trapFloorCollapseState,
                 host.trapFloorTurnState,
-                host.trapFloorAbilityResolutionState));
+                host.trapFloorAbilityResolutionState);
+            RememberMoveTurn(step); // rules v1.151126: the turn's move count goes with the step (TurnRules)
+            return new TrapFloorUndoState(step);
         }
 
         private sealed class TrapFloorUndoState : ICartridgeUndoState
@@ -375,7 +377,12 @@ namespace ConsoleCards.Presentation.Composition
                 this.snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
             }
 
-            public object Restore() => snapshot.Restore();
+            public object Restore()
+            {
+                object restored = snapshot.Restore();
+                LinkRestoredStep(snapshot, restored); // rules v1.151126: the step's move count (TurnRules)
+                return restored;
+            }
 
             /// <summary>AUTH-RULES: the host merges a pushed rules state against its own.</summary>
             internal TrapFloorSessionStateSnapshot Snapshot => snapshot;

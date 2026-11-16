@@ -78,6 +78,14 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
+            // Rules v1.151126: a turn is a move or an Action; no Reaction after an Action (Full refuses, Reminders reminds).
+            string turnRule = MoveOrActionProblem(cardId, player);
+            if (turnRule != null && AssistRules.Enforces(AssistRule.PawnMoveRules))
+            {
+                what = turnRule;
+                return false;
+            }
+
             if (effect == TrapFloorAbilityEffect.Rush)
             {
                 what = "Move up to 3 spaces, even over a hole, instead of your normal move.";

@@ -192,6 +192,47 @@ namespace ConsoleCards.Games.TrapFloor
         bool HasLegalStep(PlayerId player, TrapFloorBlindMovementDirection direction);
     }
 
+    /// <summary>
+    /// Rules v1.151126 (owner, 2026-11-15): optional evidence for "a turn is a move or an Action; no Reaction after an
+    /// Action". An evidence object that also implements this has those rules checked when an Ability is used.
+    /// </summary>
+    public interface ITrapFloorTurnEvidence
+    {
+        /// <summary>True when this table enforces the rule (Full).</summary>
+        bool EnforcesMoveOrAction { get; }
+
+        /// <summary>True when the turn player's pawn has made a move this turn on this table.</summary>
+        bool HasMovedThisTurn(PlayerId player);
+    }
+
+    /// <summary>Rules v1.151126: a turn is a move or an Action; no Reaction after an Action. Event-time only.</summary>
+    public static class TrapFloorMoveOrActionRules
+    {
+        /// <summary>True when one of the Abilities the player used in this round's turn (other than <paramref name="except"/>) is an Action.</summary>
+        public static bool UsedActionThisTurn(
+            TrapFloorAbilityResolutionState state,
+            MatchState match,
+            PlayerId player,
+            int round,
+            Func<ObjectDefinitionId, CardDefinitionData> definitionOf,
+            TabletopObjectId except = default,
+            List<TabletopObjectId> buffer = null)
+        {
+            if (state == null || match == null || definitionOf == null || player.IsEmpty) return false;
+            List<TabletopObjectId> used = buffer ?? new List<TabletopObjectId>();
+            used.Clear();
+            state.CollectUsedThisTurn(player, round, used);
+            for (int i = 0; i < used.Count; i++)
+            {
+                if (used[i] == except || !match.Cards.TryGetValue(used[i], out CardInstanceState card)) continue;
+                CardDefinitionData definition = definitionOf(card.BaseState.DefinitionId);
+                if (definition != null && TrapFloorShop.IsAction(definition)) return true;
+            }
+
+            return false;
+        }
+    }
+
     /// <summary>AUTH-EFFECTS: whether an elimination has a reason on this table. Pure, so it is unit tested.</summary>
     public static class TrapFloorEliminationRules
     {
@@ -305,6 +346,19 @@ namespace ConsoleCards.Games.TrapFloor
             CardDefinitionData definition = definitionOf(card.BaseState.DefinitionId); // this table's own card text
             if (definition == null)
                 return TrapFloorAbilityActivationResult.Failure(TrapFloorAbilityActivationError.CardIdentityMismatch, TrapFloorAbilityEffect.None);
+
+            // Rules v1.151126 (owner, 2026-11-15), Full: a turn is a move or one Action; no Reaction after an Action.
+            if (evidence is ITrapFloorTurnEvidence turnRules && turnRules.EnforcesMoveOrAction)
+            {
+                PlayerId user = command.Context.RequestedByPlayerId;
+                TrapFloorAbilityEffect used = TrapFloorAbilityResolutionService.ResolveEffect(definition.EffectMetadata);
+                bool actionUsed = TrapFloorMoveOrActionRules.UsedActionThisTurn(
+                    abilityState, match, user, turn.CurrentRound, definitionOf, command.CardInstanceId);
+                if (TrapFloorShop.IsAction(definition) && (actionUsed || turnRules.HasMovedThisTurn(user)))
+                    return TrapFloorAbilityActivationResult.Failure(TrapFloorAbilityActivationError.ActionAfterMove, used);
+                if (TrapFloorShop.IsReaction(definition) && actionUsed)
+                    return TrapFloorAbilityActivationResult.Failure(TrapFloorAbilityActivationError.ReactionAfterAction, used);
+            }
 
             ConsoleCardInserted insertion = new ConsoleCardInserted(
                 new DomainEventContext(match.Id, match.Revision),
