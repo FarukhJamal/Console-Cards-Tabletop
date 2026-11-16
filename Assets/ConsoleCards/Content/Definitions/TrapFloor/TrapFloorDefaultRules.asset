@@ -56,7 +56,7 @@ MonoBehaviour:
       displayValue: 'at random'
       modeStableIds: []
     - stableId: tf-setup-avatar
-      text: 'Each player starts with their Avatar''s ability.'
+      text: 'Each player starts with their Avatar''s ability. Pawns start beside the board, next to their starting corner, and are safe there; stepping onto that corner tile is the first step of a move.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -78,7 +78,7 @@ MonoBehaviour:
       hintHelper: 
       modeStableIds: []
     - stableId: tf-turn-move
-      text: 'Move up to {value} tiles in one straight line: up, down, left or right. No diagonals and no turning. Or play an Action ability instead of moving.'
+      text: 'Move up to {value} tiles, one tile at a time: up, down, left or right. You may turn between steps (one right, then one up), but never move diagonally or over a hole. Or play an Action ability instead of moving.'
       settingKind: 1
       settingKey: move.tiles
       value: '2'
@@ -255,7 +255,7 @@ MonoBehaviour:
     numbered: 0
     entries:
     - stableId: tf-trap-once
-      text: 'A Trap only affects the player who flips it, once.'
+      text: 'A Trap only affects the player who flips it, once. A tile turned over by hand with nobody on it is only revealed: it does nothing, and that can be undone.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -288,7 +288,7 @@ MonoBehaviour:
       displayValue: ''
       modeStableIds: []
     - stableId: tf-trap-out
-      text: 'Knocked out? You are out for the rest of this floor and come back when it ends (won or lost). If every player is out, the floor is lost.'
+      text: 'Knocked out? You are out for the rest of this floor and come back on the next floor. If every player is out, the floor is lost. A lost floor ends the game: play starts again from floor 1 (6×6).'
       settingKind: 0
       settingKey: 
       value: ''
@@ -346,7 +346,7 @@ MonoBehaviour:
       hintHelper: 
       modeStableIds: []
     - stableId: tf-goal-secret-exit
-      text: 'Exits are taken by landing on them, one player at a time; the floor ends when everyone still in has escaped. A Key used at the Secret Exit is gone, and the Secret Exit can collapse. The Grand Exit never collapses: a Floorfall roll on it is rolled again. Free for all: one Key each; you need your own Key for the Grand Exit (6×6: 3 Keys, Grand and Secret Exit; 5×5: 2 Keys, Grand and Secret; 4×4: 2 Keys, Grand). Team Play (2 v 2): a Key belongs to whoever took it and one player may carry them all; your team needs a Key for the Grand Exit (6×6: 3 Keys, Grand and Secret; 5×5 and 4×4: 2 Keys, Grand). With no Key and none left to take, you are out. Taking a Key, an Ability or a Friend sends your pawn back to the tile its move began on (not to your starting tile, unless the move began there). Win the 4×4 to win the game.'
+      text: 'Exits are taken by landing on them, one player at a time; the floor ends when everyone still in has escaped. A Key used at the Secret Exit is gone, and the Secret Exit can collapse. The Grand Exit never collapses: a Floorfall roll on it is rolled again. Free for all: one Key each; you need your own Key for the Grand Exit (6×6: 3 Keys, Grand and Secret Exit; 5×5: 2 Keys, Grand and Secret; 4×4: 2 Keys, Grand). Team Play (2 v 2): a Key belongs to whoever took it and one player may carry them all; your team needs a Key for the Grand Exit (6×6: 3 Keys, Grand and Secret; 5×5 and 4×4: 2 Keys, Grand). With no Key and none left to take, you are out. Taking a Key, an Ability or a Friend sends your pawn back to the tile its move began on (not to your starting tile, unless the move began there). If every way to the Grand Exit is cut off by holes, the floor is lost. Free for all: the floor is won when the last player still in wins it, or when every player escapes. Win the 4×4 to win the game. Team Play: a team wins when any of its players escapes the 4×4; a tie goes to the team with more players out.'
       settingKind: 0
       settingKey: 
       value: ''
