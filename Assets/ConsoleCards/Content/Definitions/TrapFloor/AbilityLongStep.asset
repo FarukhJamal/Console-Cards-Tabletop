@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: AbilityRush
   m_EditorClassIdentifier: 
   stableId: 54460015-4f4f-4000-8000-001500000021
-  displayName: Rush
+  displayName: Run
   category: Ability
-  description: 'Action. Instead of moving, move up to 3 tiles quickly, even over a missing (collapsed) tile.'
+  description: 'Action. Instead of moving, move 3 tiles in a straight line (up, down, left or right), never over a hole.'
   frontArtwork: {fileID: 2800000, guid: 827041e1c7734303936e8f1b3ae15df5, type: 3}
   frontArtworkReference: trap-floor/fronts/rush.png
   backArtwork: {fileID: 0}
@@ -27,14 +27,20 @@ MonoBehaviour:
       alsoAccepts:
       - 3
       count: 1
+    - input: 0
+      alsoAccepts:
+      - 1
+      count: 1
     - input: 4
       alsoAccepts:
-      - 5
       - 6
+      count: 1
+    - input: 5
+      alsoAccepts:
       - 7
       count: 1
   orientation: 0
   preferredConsolePlacement: Side
   consoleBehavior: 1
-  tags: [trap-floor, ability, rush, action, provisional-input-cost]
+  tags: [trap-floor, ability, rush, run, action]
   effectMetadata: trap-floor-ability-rush

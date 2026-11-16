@@ -17,8 +17,9 @@ namespace ConsoleCards.Presentation.Composition
     /// The game mode (owner, 2026-11-04, TRAP CARDS rules), chosen at New table… apart from the difficulty:
     /// Free for all (default): everyone works toward the exit; a player may hold one Key and needs it for the Grand
     /// Exit. Team Play (2v2, competitive): a Key belongs to the player who took it and one player may carry them all;
-    /// a team needs a Key for the Grand Exit. Survival: one 6×6 floor, 3 Keys, Grand Exit only, and a tile collapses
-    /// after every player's turn (never the Grand Exit). In every mode a Key used at the Secret Exit is gone, and the
+    /// a team needs a Key for the Grand Exit. Survival: one 6×6 floor, 4 Keys, Grand Exit only, one Key each and a
+    /// player needs their own for the Grand Exit (owner, 2026-11-15), and a tile collapses after every player's turn
+    /// (never the Grand Exit). In every mode a Key used at the Secret Exit is gone, and the
     /// floor ends when every player still in has escaped.
     /// </summary>
     internal enum TrapFloorWinMode
@@ -35,7 +36,11 @@ namespace ConsoleCards.Presentation.Composition
     internal sealed partial class TrapFloorCartridge
     {
         internal const string ImpossibleModeStableId = "trap-floor-mode-impossible";
-        internal const int SurvivalKeyCount = 3;
+        // Rules v1.151126 (owner, 2026-11-15): Free for all and Survival hold 4 Keys on every floor (one is the Copper Key).
+        internal const int SurvivalKeyCount = 4;
+        internal const int FreeForAllKeyCount = 4;
+        // Insurance and Lasso carry this tag: left off the floor and out of the Ability deck outside Team Play.
+        internal const string TeamOnlyTag = "team-only";
 
         // Chosen at New table… and kept for the next floors, Play Again and Reset.
         internal TrapFloorWinMode WinMode { get; set; } = TrapFloorWinMode.FreeForAll;
@@ -74,7 +79,7 @@ namespace ConsoleCards.Presentation.Composition
             switch (mode)
             {
                 case TrapFloorWinMode.TeamPlay: return "Team Play: 2 v 2. Take the Keys before the other team; your team needs a Key to exit.";
-                case TrapFloorWinMode.Survival: return "Survival: one 6×6 floor. A tile collapses after every turn; 3 Keys open the Grand Exit.";
+                case TrapFloorWinMode.Survival: return "Survival: one 6×6 floor. A tile collapses after every turn; one Key each, no Key, no Grand Exit.";
                 default: return "Free for all: everyone heads for the exit. One Key each; no Key, no Grand Exit.";
             }
         }
@@ -83,8 +88,8 @@ namespace ConsoleCards.Presentation.Composition
 
         // Owner, 2026-11-04 (TRAP CARDS rules): what each floor holds in each mode.
         //   Team Play:    6×6 3 Keys, Grand + Secret · 5×5 2 Keys, Grand · 4×4 2 Keys, Grand
-        //   Free for all: 6×6 3 Keys, Grand + Secret · 5×5 2 Keys, Grand + Secret · 4×4 2 Keys, Grand
-        //   Survival:     6×6 only, 3 Keys, Grand
+        //   Free for all: 4 Keys on every floor (rules v1.151126) · 6×6 and 5×5 Grand + Secret · 4×4 Grand
+        //   Survival:     6×6 only, 4 Keys, Grand (one Key each)
         // The difficulty shapes the rest of the mix (rules: "trap cards and ability cards are more if the difficulty is
         // high; the easier the difficulty the more assisting cards"); a floor deck of the players' replaces it.
         internal static TrapFloorFloorRecipe RecipeFor(
@@ -95,11 +100,11 @@ namespace ConsoleCards.Presentation.Composition
         {
             DifficultyWeights(difficultyStableId, out double traps, out double abilities, out double friends);
             if (mode == TrapFloorWinMode.Survival)
-                return new TrapFloorFloorRecipe(1, SurvivalKeyCount, false, SurvivalKeyCount, traps, abilities, friends, tileCounts);
-            int keys = floorIndex == 0 ? 3 : 2;
+                return new TrapFloorFloorRecipe(1, SurvivalKeyCount, false, 1, traps, abilities, friends, tileCounts, TeamOnlyTag);
+            int keys = mode == TrapFloorWinMode.FreeForAll ? FreeForAllKeyCount : floorIndex == 0 ? 3 : 2;
             bool secret = floorIndex == 0 || (floorIndex == 1 && mode == TrapFloorWinMode.FreeForAll);
             return new TrapFloorFloorRecipe(3, keys, secret, 1, traps, abilities, friends, tileCounts,
-                mode == TrapFloorWinMode.FreeForAll ? "lasso" : null); // rules: "No lasso in this game mode"
+                mode == TrapFloorWinMode.TeamPlay ? null : TeamOnlyTag); // rules v1.151126: Insurance and Lasso are Team Play only
         }
 
         private static void DifficultyWeights(string stableId, out double traps, out double abilities, out double friends)
@@ -150,15 +155,15 @@ namespace ConsoleCards.Presentation.Composition
             return null;
         }
 
-        // The Keys the Grand Exit needs, counted by the objective: 3 in Survival; else 1 (a player's own Key in Free for
-        // all, the team's in Team Play; the table checks whose).
-        internal int RequiredKeysForGrandExit() => WinMode == TrapFloorWinMode.Survival ? SurvivalKeyCount : 1;
+        // The Keys the Grand Exit needs, counted by the objective: 1 in every mode (a player's own Key in Free for all and
+        // Survival, the team's in Team Play; the table checks whose). Owner, 2026-11-15: Survival is one Key each too.
+        internal int RequiredKeysForGrandExit() => 1;
 
         internal void ConfigureKeyRules(TrapFloorObjectiveState objective)
         {
             if (objective == null) return;
-            objective.KeysAreExclusive = WinMode != TrapFloorWinMode.Survival;
-            objective.OneKeyPerPlayer = WinMode == TrapFloorWinMode.FreeForAll;
+            objective.KeysAreExclusive = true;
+            objective.OneKeyPerPlayer = WinMode == TrapFloorWinMode.FreeForAll || WinMode == TrapFloorWinMode.Survival;
         }
 
         internal bool IsImpossibleMode =>
@@ -181,40 +186,8 @@ namespace ConsoleCards.Presentation.Composition
             host.trapFloorTurnState.FloorTurnAfterEachPlayer = WinMode == TrapFloorWinMode.Survival;
         }
 
-        // What the status shows as the Keys the Grand Exit needs.
-        internal int KeysNeededForGrandExit()
-        {
-            if (WinMode != TrapFloorWinMode.Survival) return 1;
-            int needed = host.trapFloorObjectiveState != null ? host.trapFloorObjectiveState.RequiredKeyCount : 0;
-            return Math.Max(needed, Math.Min(SurvivalKeyCount, KeyTileCount()));
-        }
-
-        // The Key tiles a floor holds never change while it is played: counted once per floor (no per-frame scan).
-        private TrapFloorTemplateDefinition keyCountTemplate;
-        private int keyCountCached;
-
-        private int KeyTileCount()
-        {
-            if (ReferenceEquals(keyCountTemplate, host.trapFloorTemplate)) return keyCountCached;
-            int keys = 0;
-            if (host.trapFloorTemplate == null || host.matchState == null) return keys;
-            foreach (KeyValuePair<TrapFloorCoordinate, TabletopObjectId> cell in host.trapFloorTemplate.FloorCardIds)
-            {
-                if (host.trapFloorTemplate.TryGetFloorCardState(host.matchState, cell.Value, out TrapFloorFloorCardState floor)
-                    && floor.Content.Category == TrapFloorFloorContentCategory.Key)
-                {
-                    keys++;
-                }
-            }
-
-            if (keys > 0)
-            {
-                keyCountTemplate = host.trapFloorTemplate; // counted once the floor's cards are there
-                keyCountCached = keys;
-            }
-
-            return keys;
-        }
+        // What the status shows as the Keys the Grand Exit needs (one, the player's own or the team's, in every mode).
+        internal int KeysNeededForGrandExit() => 1;
 
         // The rules have no endgame after the Exit is revealed (MODE-2 is gone, owner 2026-11-04).
         internal bool IsSurvivalEndgame() => false;
@@ -250,23 +223,12 @@ namespace ConsoleCards.Presentation.Composition
             if (host.trapFloorObjectiveState.IsPlayerEscaped(active)) return;
             if (grand)
             {
-                if (WinMode == TrapFloorWinMode.Survival)
-                {
-                    int needed = KeysNeededForGrandExit();
-                    if (host.trapFloorObjectiveState.CollectedKeyCount < needed)
-                    {
-                        host.FeedbackLine(
-                            $"GRAND EXIT — locked: {needed} Keys needed, {host.trapFloorObjectiveState.CollectedKeyCount} taken.",
-                            FeedbackSeverity.Warning);
-                        return;
-                    }
-                }
-                else if (WinMode == TrapFloorWinMode.TeamPlay && !TeamHasKey(active))
+                if (WinMode == TrapFloorWinMode.TeamPlay && !TeamHasKey(active))
                 {
                     host.FeedbackLine($"GRAND EXIT — locked: {TeamName(TeamOf(active))} needs a Key.", FeedbackSeverity.Warning);
                     return;
                 }
-                else if (WinMode == TrapFloorWinMode.FreeForAll && !host.trapFloorObjectiveUseCase.HasClaimedKey(active))
+                else if (WinMode != TrapFloorWinMode.TeamPlay && !host.trapFloorObjectiveUseCase.HasClaimedKey(active))
                 {
                     host.FeedbackLine("GRAND EXIT — locked: you need a Key of your own.", FeedbackSeverity.Warning);
                     return;

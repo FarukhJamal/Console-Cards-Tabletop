@@ -75,7 +75,9 @@ namespace ConsoleCards.Tests
             CardDefinitionData ability = t.PricedAbility();
             List<TabletopObjectId> payment = t.PaymentFromDeck(buyer, ability.InputCost);
             TabletopObjectId wrong = t.UnacceptedController(buyer, ability.InputCost);
-            if (wrong.IsEmpty) Assert.Inconclusive("every controller card pays this price");
+            // Rules v1.151126: every price accepts all eight inputs; the wrong card is then one too many of an input.
+            if (wrong.IsEmpty) wrong = t.SurplusController(buyer, ability.InputCost, payment);
+            if (wrong.IsEmpty) Assert.Inconclusive("no controller card makes this payment wrong");
             payment[payment.Count - 1] = wrong;
             t.StageInConsole(buyer, payment);
             SortedDictionary<string, string> before = t.CardPlaces();

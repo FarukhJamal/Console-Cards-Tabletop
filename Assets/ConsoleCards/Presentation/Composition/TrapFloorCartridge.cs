@@ -4974,7 +4974,7 @@ namespace ConsoleCards.Presentation.Composition
                 case TrapFloorAbilityActivationError.NoValidDodgeDestination:
                     return "Dodge unavailable — no adjacent Floor.";
                 case TrapFloorAbilityActivationError.NoValidRushDestination:
-                    return "Rush unavailable — no reachable Floor.";
+                    return "Run unavailable — no reachable Floor.";
                 default:
                     return $"{effect} assistance could not resolve ({error}).";
             }
@@ -6525,7 +6525,7 @@ namespace ConsoleCards.Presentation.Composition
                         line = $"{FormatPlayerShortName(entry.ActorPlayerId)} used Dodge on {entry.ContentName}";
                         break;
                     case TrapFloorActivityKind.UsedRush:
-                        line = $"{FormatPlayerShortName(entry.ActorPlayerId)} activated Rush";
+                        line = $"{FormatPlayerShortName(entry.ActorPlayerId)} activated Run";
                         break;
                     case TrapFloorActivityKind.UsedCheck:
                         line = $"{FormatPlayerShortName(entry.ActorPlayerId)} checked "

@@ -300,7 +300,7 @@ namespace ConsoleCards.Presentation.Composition
             if (avatarDraftNews.Length > 0) status = $"{avatarDraftNews} · {status}";
             return new FocusedCardSelectionModel(
                 FocusedCardSelectionModel.AvatarDraftTitle,
-                "Pick your Avatar for this game. The first player to lock an Avatar gets it; greyed Avatars are already taken. Its starting Abilities are placed beside your Console.",
+                "Pick your Avatar for this game. The first player to lock an Avatar gets it; greyed Avatars are already taken. On Easy, its starting Ability is placed beside your Console.",
                 status,
                 "Lock in",
                 options,

@@ -56,7 +56,7 @@ MonoBehaviour:
       displayValue: 'at random'
       modeStableIds: []
     - stableId: tf-setup-avatar
-      text: 'Each player starts with their Avatar''s ability. Pawns start beside the board, next to their starting corner, and are safe there; stepping onto that corner tile is the first step of a move.'
+      text: 'On Easy, each player starts with their Avatar''s Ability (Athlete: Jump, Engineer: Arm and Disarm, Strategist: Shield, Clairvoyant: Safe Search); on Medium, Hard and Impossible nobody starts with one. Pawns start beside the board, next to their starting corner, and are safe there; stepping onto that corner tile is the first step of a move.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -90,10 +90,10 @@ MonoBehaviour:
       hintHelper: trapfloor.reach
       modeStableIds: []
     - stableId: tf-turn-move-athlete
-      text: 'The Athlete moves up to {value} tiles instead.'
+      text: 'Every Avatar moves the same: the Athlete moves up to {value} tiles too.'
       settingKind: 1
       settingKey: move.tiles.avatar.54460014-4f4f-4000-8000-001400000006
-      value: '3'
+      value: '2'
       displayValue: ''
       modeStableIds: []
     - stableId: tf-turn-flip
@@ -136,6 +136,7 @@ MonoBehaviour:
       hintHelper: trapfloor.collapse
       modeStableIds:
       - trap-floor-mode-easy
+      - trap-floor-mode-medium
       - trap-floor-mode-hard
     - stableId: tf-floor-impossible
       text: 'Once the first player escapes, turns go player, floor, player, floor: the players roll the floor dice after every player turn.'
@@ -202,50 +203,64 @@ MonoBehaviour:
   - heading: 'Ability costs'
     numbered: 0
     entries:
-    - stableId: tf-cost-check
-      text: 'Check: {value}'
+    - stableId: tf-cost-jump
+      text: 'Jump (Action): {value}'
       settingKind: 4
-      settingKey: card.cost.54460015-4f4f-4000-8000-001500000022
-      value: 'Up + A/B/X/Y'
-      displayValue: ''
-      modeStableIds: []
-    - stableId: tf-cost-dodge
-      text: 'Dodge: {value}'
-      settingKind: 4
-      settingKey: card.cost.54460015-4f4f-4000-8000-00150000001f
-      value: 'Down + A/B/X/Y'
-      displayValue: ''
-      modeStableIds: []
-    - stableId: tf-cost-shield
-      text: 'Shield: {value}'
-      settingKind: 4
-      settingKey: card.cost.54460015-4f4f-4000-8000-001500000020
-      value: 'A + B + X + Y'
+      settingKey: card.cost.54460015-4f4f-4000-8000-0015000000a3
+      value: 'Up/Down + Left/Right + A/B + X/Y'
       displayValue: ''
       modeStableIds: []
     - stableId: tf-cost-rush
-      text: 'Rush: {value}'
+      text: 'Run (Action): {value}'
       settingKind: 4
       settingKey: card.cost.54460015-4f4f-4000-8000-001500000021
-      value: 'Left/Right + A/B/X/Y'
+      value: 'Left/Right + Up/Down + A/X + B/Y'
       displayValue: ''
       modeStableIds: []
     - stableId: tf-cost-disarm
-      text: 'Disarm: {value}'
+      text: 'Arm and Disarm (Action): {value}'
       settingKind: 4
       settingKey: card.cost.54460015-4f4f-4000-8000-001500000023
-      value: ''
-      displayValue: 'not set yet'
+      value: 'A/B + X/Y + Left/Right + Up/Down'
+      displayValue: ''
       modeStableIds: []
-    - stableId: tf-cost-push
-      text: 'Push: {value}'
+    - stableId: tf-cost-safe-search
+      text: 'Safe Search (Action): {value}'
       settingKind: 4
-      settingKey: card.cost.54460015-4f4f-4000-8000-00150000002a
-      value: ''
-      displayValue: 'not set yet'
+      settingKey: card.cost.54460015-4f4f-4000-8000-0015000000a4
+      value: 'Left/A + Down/B + X/Up + Y/Right'
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-cost-dodge
+      text: 'Dodge (Reaction): {value}'
+      settingKind: 4
+      settingKey: card.cost.54460015-4f4f-4000-8000-00150000001f
+      value: 'Up/Down + Left/Right + A/B + X/Y + A/X'
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-cost-shield
+      text: 'Shield (Reaction): {value}'
+      settingKind: 4
+      settingKey: card.cost.54460015-4f4f-4000-8000-001500000020
+      value: 'Left/Right + Up/Down + B/Y + A/X + Left/Right'
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-cost-insurance
+      text: 'Insurance (Reaction, Team Play only): {value}'
+      settingKind: 4
+      settingKey: card.cost.54460015-4f4f-4000-8000-0015000000a1
+      value: 'A/B + X/Y + Up/Down + Left/Right + X/B'
+      displayValue: ''
+      modeStableIds: []
+    - stableId: tf-cost-lasso
+      text: 'Lasso (Reaction, Team Play only): {value}'
+      settingKind: 4
+      settingKey: card.cost.54460015-4f4f-4000-8000-0015000000a2
+      value: 'Up/Down + A/Y + B/X + Left/Right + Up/Down'
+      displayValue: ''
       modeStableIds: []
     - stableId: tf-cost-notation
-      text: 'A slash means any one of those cards, so Up + A/B/X/Y is an Up card and one of A, B, X or Y.'
+      text: 'Each part of a cost is paid with its own Console Card; a slash means any one of those cards, so Up/Down + A/B is an Up or Down card and an A or B card. Actions cost 4 cards, Reactions 5. Insurance and Lasso are used in Team Play only: they are not on the floor or in the Ability deck in Free for all or Survival.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -303,13 +318,21 @@ MonoBehaviour:
     numbered: 0
     entries:
     - stableId: tf-goal-easy
-      text: 'Easy: more helping cards (Friends) on the floor.'
+      text: 'Easy: more helping cards (Friends) on the floor, and each player starts with their Avatar''s Ability.'
       settingKind: 1
       settingKey: mode.keys-needed
       value: '1'
       displayValue: ''
       modeStableIds:
       - trap-floor-mode-easy
+    - stableId: tf-goal-medium
+      text: 'Medium: the standard mix of Traps, Abilities and Friends.'
+      settingKind: 1
+      settingKey: mode.keys-needed
+      value: '3'
+      displayValue: ''
+      modeStableIds:
+      - trap-floor-mode-medium
     - stableId: tf-goal-hard
       text: 'Hard: more Traps and Abilities on the floor.'
       settingKind: 1
@@ -334,7 +357,7 @@ MonoBehaviour:
       displayValue: 'Team, one player must escape'
       modeStableIds: []
     - stableId: tf-goal-exit-roll
-      text: 'Survival: one 6×6 floor with 3 Keys and the Grand Exit only. A tile collapses after every player''s turn; Keys can collapse, the Grand Exit cannot. 3 Keys open the Grand Exit.'
+      text: 'Survival: one 6×6 floor with 4 Keys and the Grand Exit only. A tile collapses after every player''s turn; Keys can collapse, the Grand Exit cannot. One Key each: you need a Key of your own for the Grand Exit.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -346,7 +369,7 @@ MonoBehaviour:
       hintHelper: 
       modeStableIds: []
     - stableId: tf-goal-secret-exit
-      text: 'Exits are taken by landing on them, one player at a time; the floor ends when everyone still in has escaped. A Key used at the Secret Exit is gone, and the Secret Exit can collapse. The Grand Exit never collapses: a Floorfall roll on it is rolled again. Free for all: one Key each; you need your own Key for the Grand Exit (6×6: 3 Keys, Grand and Secret Exit; 5×5: 2 Keys, Grand and Secret; 4×4: 2 Keys, Grand). Team Play (2 v 2): a Key belongs to whoever took it and one player may carry them all; your team needs a Key for the Grand Exit (6×6: 3 Keys, Grand and Secret; 5×5 and 4×4: 2 Keys, Grand). With no Key and none left to take, you are out. Taking a Key, an Ability or a Friend sends your pawn back to the tile its move began on (not to your starting tile, unless the move began there). If every way to the Grand Exit is cut off by holes, the floor is lost. Free for all: the floor is won when the last player still in wins it, or when every player escapes. Win the 4×4 to win the game. Team Play: a team wins when any of its players escapes the 4×4; a tie goes to the team with more players out.'
+      text: 'Exits are taken by landing on them, one player at a time; the floor ends when everyone still in has escaped. A Key used at the Secret Exit is gone, and the Secret Exit can collapse. The Grand Exit never collapses: a Floorfall roll on it is rolled again. Free for all: one Key each; you need your own Key for the Grand Exit (every floor has 4 Keys, one of them the Copper Key; 6×6 and 5×5: Grand and Secret Exit; 4×4: Grand). Team Play (2 v 2): a Key belongs to whoever took it and one player may carry them all; your team needs a Key for the Grand Exit (6×6: 3 Keys, Grand and Secret; 5×5 and 4×4: 2 Keys, Grand). With no Key and none left to take, you are out. Taking a Key, an Ability or a Friend sends your pawn back to the tile its move began on (not to your starting tile, unless the move began there). If every way to the Grand Exit is cut off by holes, the floor is lost. Free for all: the floor is won when the last player still in wins it, or when every player escapes. Win the 4×4 to win the game. Team Play: a team wins when any of its players escapes the 4×4; a tie goes to the team with more players out.'
       settingKind: 0
       settingKey: 
       value: ''

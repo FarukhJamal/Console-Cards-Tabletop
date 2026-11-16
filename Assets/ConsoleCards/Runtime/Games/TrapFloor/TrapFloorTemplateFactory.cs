@@ -153,8 +153,8 @@ namespace ConsoleCards.Games.TrapFloor
 
         /// <summary>
         /// PLACE-1 (owner, 2026-10-21): as above, for <paramref name="playerCount"/> players (2, 3 or 4 within the
-        /// game's authored range). Only those seats are dealt; the shared Controller deck and the Ability deck hold
-        /// one set per player. SETUP-1: <paramref name="tableSetup"/> is the game's default table setup (the board,
+        /// game's authored range). Only those seats are dealt; the shared Controller deck holds one set per player and
+        /// the Ability deck 6 copies of each Ability the mode uses. SETUP-1: <paramref name="tableSetup"/> is the game's default table setup (the board,
         /// the Consoles, the shared piles, the dice and the pieces beside every Console); the saved table layout still
         /// wins over it. Null: the built-in places.
         /// </summary>
@@ -187,7 +187,7 @@ namespace ConsoleCards.Games.TrapFloor
             GridDefinitionData grid = gameDefinition.Grid;
             IReadOnlyList<TrapFloorFloorContentDefinition> floorContent =
                 ResolveFloorContent(gameDefinition, activeMode, grid, randomValueSource, floorIndex > 0, recipe);
-            IReadOnlyList<TrapFloorAvatarSetup> avatars = ResolveAvatars(gameDefinition);
+            IReadOnlyList<TrapFloorAvatarSetup> avatars = ResolveAvatars(gameDefinition, activeMode);
             IReadOnlyList<CardDefinitionData> controllerInputCards = ResolveControllerInputCards(gameDefinition);
             ConsoleSlotDefinitionData mainSlot = ResolveConsoleSlot(gameDefinition.Console, "Main", 1);
             ConsoleSlotDefinitionData sideSlots = ResolveConsoleSlot(gameDefinition.Console, "Side", 1);
@@ -297,7 +297,8 @@ namespace ConsoleCards.Games.TrapFloor
 
             ContainerId abilityDeckId = CreateAbilityDeck(
                 gameDefinition, playerCount, grid, randomValueSource, containers, memberships, objects, labels,
-                tableLayout?.AbilityDeck ?? SetupPlace(tableSetup, setup => setup.AbilityDeck));
+                tableLayout?.AbilityDeck ?? SetupPlace(tableSetup, setup => setup.AbilityDeck),
+                recipe);
             ContainerId abilityDiscardId = CreateAbilityDiscard(
                 grid,
                 containers,
@@ -478,18 +479,21 @@ namespace ConsoleCards.Games.TrapFloor
             List<GameTemplateContainerMembership> memberships,
             List<GameTemplateObjectInstanceDefinition> objects,
             Dictionary<TabletopObjectId, string> labels,
-            TabletopPose? placed = null)
+            TabletopPose? placed = null,
+            TrapFloorFloorRecipe recipe = null)
         {
             List<CardDefinitionData> forSale = new List<CardDefinitionData>();
             List<CardDefinitionData> catalog = TrapFloorShop.Catalog(gameDefinition);
             for (int i = 0; i < catalog.Count; i++)
             {
-                if (TrapFloorShop.IsForSale(catalog[i])) forSale.Add(catalog[i]);
+                // Rules v1.151126: a card the mode leaves out (Insurance and Lasso outside Team Play) is not in the deck.
+                if (TrapFloorShop.IsForSale(catalog[i]) && (recipe == null || !recipe.Excludes(catalog[i]))) forSale.Add(catalog[i]);
             }
 
             if (forSale.Count == 0) return ContainerId.Empty;
-            List<CardDefinitionData> copies = new List<CardDefinitionData>(forSale.Count * playerCount);
-            for (int copy = 0; copy < playerCount; copy++) copies.AddRange(forSale);
+            // Rules v1.151126 (owner, 2026-11-15): 6 copies of every Ability the mode uses, whatever the player count.
+            List<CardDefinitionData> copies = new List<CardDefinitionData>(forSale.Count * AbilityCopiesPerType);
+            for (int copy = 0; copy < AbilityCopiesPerType; copy++) copies.AddRange(forSale);
             IReadOnlyList<CardDefinitionData> order = Shuffled(copies, randomValueSource);
 
             ContainerId deckId = new ContainerId(CreateGuid(71, 1));
@@ -527,6 +531,7 @@ namespace ConsoleCards.Games.TrapFloor
 
         // D1: the names shown beside the game's piles (the cards have no backs yet).
         private const string AbilityDeckName = "ABILITIES";
+        private const int AbilityCopiesPerType = 6;
         private const string AbilityDiscardName = "ABILITY DISCARD";
         private const string ConsoleCardDeckName = "CONSOLE CARDS";
         private const string AvatarDeckName = "AVATARS";
@@ -1279,17 +1284,20 @@ namespace ConsoleCards.Games.TrapFloor
         }
 
         // Every Avatar with its starting Abilities (doc 18 §15.9); the pairing is data on each Avatar.
-        private static IReadOnlyList<TrapFloorAvatarSetup> ResolveAvatars(GameDefinitionData definition)
+        // Owner, 2026-11-15 (rules v1.151126): starting Abilities only in a difficulty that gives them (Easy); the
+        // others deal every Avatar without one.
+        private static IReadOnlyList<TrapFloorAvatarSetup> ResolveAvatars(GameDefinitionData definition, ModeDefinitionData activeMode)
         {
             if (definition.Avatars.Count == 0)
                 throw new ArgumentException("Trap Floor requires at least one authored Avatar Definition.", nameof(definition));
 
+            bool startingAbilities = activeMode == null || activeMode.StartingAbilityCount > 0;
             List<TrapFloorAvatarSetup> avatars = new List<TrapFloorAvatarSetup>(definition.Avatars.Count);
             for (int i = 0; i < definition.Avatars.Count; i++)
             {
                 AvatarDefinitionData avatar = definition.Avatars[i];
                 List<CardDefinitionData> abilities = new List<CardDefinitionData>(avatar.StartingAbilityIds.Count);
-                for (int abilityIndex = 0; abilityIndex < avatar.StartingAbilityIds.Count; abilityIndex++)
+                for (int abilityIndex = 0; startingAbilities && abilityIndex < avatar.StartingAbilityIds.Count; abilityIndex++)
                 {
                     string abilityId = avatar.StartingAbilityIds[abilityIndex];
                     if (!definition.TryGetCard(abilityId, out CardDefinitionData card))

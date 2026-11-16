@@ -15,7 +15,7 @@ MonoBehaviour:
   stableId: 54460015-4f4f-4000-8000-00150000001f
   displayName: Dodge
   category: Ability
-  description: 'Reaction. Play on the Trap you are on. Resolve Dodge manually according to the current agreed rules.'
+  description: 'Reaction. When a Trap triggers, move to any adjacent floor tile instead. No diagonal moves.'
   frontArtwork: {fileID: 2800000, guid: 08bbad5f0c634cc99c9f37e6a3d6c7d2, type: 3}
   frontArtworkReference: trap-floor/fronts/dodge.png
   backArtwork: {fileID: 0}
@@ -23,17 +23,28 @@ MonoBehaviour:
   quantity: 1
   inputCost:
     requirements:
-    - input: 1
-      alsoAccepts: []
+    - input: 0
+      alsoAccepts:
+      - 1
+      count: 1
+    - input: 2
+      alsoAccepts:
+      - 3
       count: 1
     - input: 4
       alsoAccepts:
       - 5
-      - 6
+      count: 1
+    - input: 6
+      alsoAccepts:
       - 7
+      count: 1
+    - input: 4
+      alsoAccepts:
+      - 6
       count: 1
   orientation: 0
   preferredConsolePlacement: Side
   consoleBehavior: 1
-  tags: [trap-floor, ability, dodge, reaction, provisional-input-cost]
+  tags: [trap-floor, ability, dodge, reaction]
   effectMetadata: trap-floor-ability-dodge

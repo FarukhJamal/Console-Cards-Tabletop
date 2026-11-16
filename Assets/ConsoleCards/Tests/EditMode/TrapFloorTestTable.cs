@@ -140,6 +140,41 @@ namespace ConsoleCards.Tests
             return TabletopObjectId.Empty;
         }
 
+        /// <summary>
+        /// Rules v1.151126 (2026-11-16): every price now accepts all eight inputs, so a "wrong" card is one too many of
+        /// an input. A card from <paramref name="player"/>'s Controller deck, not in <paramref name="payment"/>, that,
+        /// put in place of the payment's last card, makes that input appear more often than the price has parts
+        /// accepting it (so the payment cannot pay the price); Empty when there is none.
+        /// </summary>
+        public TabletopObjectId SurplusController(PlayerId player, InputCostData cost, IReadOnlyList<TabletopObjectId> payment)
+        {
+            Assert.IsTrue(ControllerInputCardCatalog.TryCreate(Game, out ControllerInputCardCatalog catalog));
+            ContainerState deck = Match.Containers[SetupOf(player).ControllerDeckId];
+            List<ControllerInput> kept = new List<ControllerInput>();
+            HashSet<TabletopObjectId> inPayment = new HashSet<TabletopObjectId>(payment);
+            for (int i = 0; i < payment.Count - 1; i++)
+            {
+                if (Match.Cards.TryGetValue(payment[i], out CardInstanceState paid)
+                    && catalog.TryGetInput(paid.BaseState.DefinitionId, out ControllerInput paidInput)) kept.Add(paidInput);
+            }
+
+            for (int i = 0; i < deck.Count; i++)
+            {
+                TabletopObjectId id = deck.GetObjectAt(i);
+                if (inPayment.Contains(id)
+                    || !Match.Cards.TryGetValue(id, out CardInstanceState card)
+                    || !catalog.TryGetInput(card.BaseState.DefinitionId, out ControllerInput input)) continue;
+                int copies = 1;
+                for (int k = 0; k < kept.Count; k++) if (kept[k] == input) copies++;
+                int accepting = 0;
+                for (int r = 0; r < cost.Requirements.Count; r++)
+                    if (cost.Requirements[r].Accepts(input)) accepting += cost.Requirements[r].Count;
+                if (copies > accepting) return id;
+            }
+
+            return TabletopObjectId.Empty;
+        }
+
         /// <summary>Puts the cards into <paramref name="owner"/>'s Console side slots (one card per slot, then wraps).</summary>
         public void StageInConsole(PlayerId owner, IReadOnlyList<TabletopObjectId> cards)
         {

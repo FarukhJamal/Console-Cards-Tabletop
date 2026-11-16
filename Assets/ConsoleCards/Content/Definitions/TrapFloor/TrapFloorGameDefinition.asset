@@ -53,8 +53,9 @@ MonoBehaviour:
     - {fileID: 11400000, guid: b0000000000000000000000000000017, type: 2}
     - {fileID: 11400000, guid: b0000000000000000000000000000018, type: 2}
     - {fileID: 11400000, guid: b0000000000000000000000000000019, type: 2}
+    - {fileID: 11400000, guid: bf238bde68fe45198ddb0e1f69cdf248, type: 2}
     role: floor
-    drawCount: 6
+    drawCount: 4
     allowRepeats: 0
   - stableId: trap-floor-floor-exits
     displayName: Floor Exits
@@ -67,12 +68,12 @@ MonoBehaviour:
   - stableId: trap-floor-floor-abilities
     displayName: Floor Abilities
     cards:
-    - {fileID: 11400000, guid: a4444444444444448444444444444444, type: 2}
+    - {fileID: 11400000, guid: 949050d95c2642ed8dcc594e2647b2b3, type: 2}
+    - {fileID: 11400000, guid: 4fc442c866a544d798fe56716f2b4cfa, type: 2}
     - {fileID: 11400000, guid: a3333333333343338333333333333333, type: 2}
     - {fileID: 11400000, guid: a1111111111141118111111111111111, type: 2}
     - {fileID: 11400000, guid: a5555555555545558555555555555555, type: 2}
     - {fileID: 11400000, guid: a2222222222242228222222222222222, type: 2}
-    - {fileID: 11400000, guid: fd525b561aca4c5dadc5336438e94f7c, type: 2}
     - {fileID: 11400000, guid: 42e18ee5bf3e53040857c0ade485af34, type: 2}
     - {fileID: 11400000, guid: 57beeea43ce01074c957a2a071534516, type: 2}
     role: floor
@@ -84,9 +85,9 @@ MonoBehaviour:
     - {fileID: 11400000, guid: a1111111111141118111111111111111, type: 2}
     - {fileID: 11400000, guid: a2222222222242228222222222222222, type: 2}
     - {fileID: 11400000, guid: a3333333333343338333333333333333, type: 2}
-    - {fileID: 11400000, guid: a4444444444444448444444444444444, type: 2}
+    - {fileID: 11400000, guid: 949050d95c2642ed8dcc594e2647b2b3, type: 2}
     - {fileID: 11400000, guid: a5555555555545558555555555555555, type: 2}
-    - {fileID: 11400000, guid: fd525b561aca4c5dadc5336438e94f7c, type: 2}
+    - {fileID: 11400000, guid: 4fc442c866a544d798fe56716f2b4cfa, type: 2}
     - {fileID: 11400000, guid: 42e18ee5bf3e53040857c0ade485af34, type: 2}
     - {fileID: 11400000, guid: 57beeea43ce01074c957a2a071534516, type: 2}
     role: 
@@ -108,6 +109,7 @@ MonoBehaviour:
     allowRepeats: 0
   modes:
   - {fileID: 11400000, guid: e6fc968bd0524b30b74dd03b849015e1, type: 2}
+  - {fileID: 11400000, guid: 8bfe830035ef447b8ac24ed18668c676, type: 2}
   - {fileID: 11400000, guid: 6ff21f7274b542939d3fa5c727c7d7ad, type: 2}
   - {fileID: 11400000, guid: d971f7fccb304cf28a47a0c88b58ff93, type: 2}
   defaultModeStableId: trap-floor-mode-easy

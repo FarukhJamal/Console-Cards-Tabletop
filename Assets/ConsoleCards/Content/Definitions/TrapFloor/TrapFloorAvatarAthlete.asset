@@ -18,4 +18,4 @@ MonoBehaviour:
   artworkReference: trap-floor/avatars/athlete.png
   stats: []
   startingAbilities:
-  - {fileID: 11400000, guid: a3333333333343338333333333333333, type: 2}
+  - {fileID: 11400000, guid: 949050d95c2642ed8dcc594e2647b2b3, type: 2}

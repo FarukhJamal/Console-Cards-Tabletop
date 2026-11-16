@@ -18,4 +18,4 @@ MonoBehaviour:
   artworkReference: trap-floor/avatars/clairvoyant.png
   stats: []
   startingAbilities:
-  - {fileID: 11400000, guid: a1111111111141118111111111111111, type: 2}
+  - {fileID: 11400000, guid: 4fc442c866a544d798fe56716f2b4cfa, type: 2}

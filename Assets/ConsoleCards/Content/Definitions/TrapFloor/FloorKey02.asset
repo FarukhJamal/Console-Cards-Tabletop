@@ -20,7 +20,7 @@ MonoBehaviour:
   frontArtworkReference: trap-floor/fronts/silver-key.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
-  quantity: 2
+  quantity: 1
   inputCost:
     requirements: []
   orientation: 0

@@ -15,15 +15,34 @@ MonoBehaviour:
   stableId: 54460015-4f4f-4000-8000-0015000000a1
   displayName: Insurance
   category: Ability
-  description: Reaction. Saves you when you would fall into a collapsed tile. (Cost
-    and full text to come.)
+  description: 'Reaction. When you land on a collapsed tile, discard this card instead of being eliminated. Team Play only.'
   frontArtwork: {fileID: 0}
   frontArtworkReference: 
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1
   inputCost:
-    requirements: []
+    requirements:
+    - input: 4
+      alsoAccepts:
+      - 5
+      count: 1
+    - input: 6
+      alsoAccepts:
+      - 7
+      count: 1
+    - input: 0
+      alsoAccepts:
+      - 1
+      count: 1
+    - input: 2
+      alsoAccepts:
+      - 3
+      count: 1
+    - input: 6
+      alsoAccepts:
+      - 5
+      count: 1
   orientation: 0
   defaultFace: 0
   preferredConsolePlacement: Side
@@ -33,7 +52,7 @@ MonoBehaviour:
   - ability
   - reaction
   - insurance
-  - cost-pending
+  - team-only
   effectMetadata: trap-floor-ability-insurance
   objectiveMetadata: 
   representsControllerInput: 0

@@ -15,14 +15,34 @@ MonoBehaviour:
   stableId: 54460015-4f4f-4000-8000-0015000000a2
   displayName: Lasso
   category: Ability
-  description: Reaction. (Effect and cost to come.) Not used in Free for all.
+  description: 'Reaction. If you have used no other Ability this turn: when your teammate triggers a Trap, pull them to your tile. Team Play only.'
   frontArtwork: {fileID: 0}
   frontArtworkReference: 
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1
   inputCost:
-    requirements: []
+    requirements:
+    - input: 0
+      alsoAccepts:
+      - 1
+      count: 1
+    - input: 4
+      alsoAccepts:
+      - 7
+      count: 1
+    - input: 5
+      alsoAccepts:
+      - 6
+      count: 1
+    - input: 2
+      alsoAccepts:
+      - 3
+      count: 1
+    - input: 0
+      alsoAccepts:
+      - 1
+      count: 1
   orientation: 0
   defaultFace: 0
   preferredConsolePlacement: Side
@@ -32,7 +52,7 @@ MonoBehaviour:
   - ability
   - reaction
   - lasso
-  - cost-pending
+  - team-only
   effectMetadata: trap-floor-ability-lasso
   objectiveMetadata: 
   representsControllerInput: 0

@@ -13,18 +13,34 @@ MonoBehaviour:
   m_Name: AbilityDisarm
   m_EditorClassIdentifier: 
   stableId: 54460015-4f4f-4000-8000-001500000023
-  displayName: Disarm
+  displayName: Arm and Disarm
   category: Ability
-  description: 'Action. Resolve Disarm manually according to the current agreed rules.'
+  description: 'Action. Pick a floor tile to disarm, and rearm the nearest triggered Trap by flipping it back over. A tile that is not a Trap: no effect, and the turn is used.'
   frontArtwork: {fileID: 2800000, guid: a1773e02ec2749c49e226eb3c09eb8a2, type: 3}
   frontArtworkReference: trap-floor/fronts/disarm.png
   backArtwork: {fileID: 0}
   backArtworkReference: 
   quantity: 1
   inputCost:
-    requirements: []
+    requirements:
+    - input: 4
+      alsoAccepts:
+      - 5
+      count: 1
+    - input: 6
+      alsoAccepts:
+      - 7
+      count: 1
+    - input: 2
+      alsoAccepts:
+      - 3
+      count: 1
+    - input: 0
+      alsoAccepts:
+      - 1
+      count: 1
   orientation: 0
   preferredConsolePlacement: Side
   consoleBehavior: 1
-  tags: [trap-floor, ability, disarm, action, cost-pending]
+  tags: [trap-floor, ability, disarm, arm-and-disarm, action]
   effectMetadata: trap-floor-ability-disarm
