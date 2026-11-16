@@ -32,6 +32,8 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly int floorResumeIndex; // IMP-1
         private readonly PlayerId[] eliminatedTurnPlayerIds;
         private readonly bool isCurrentFloorFailed;
+        private readonly PlayerId[] doneBuyingPlayerIds; // Buy Phase (rules v1.151126)
+        private readonly bool buyPhaseDealt;
         private readonly TrapFloorTrapResolutionRecord[] trapResolutionRecords;
         private readonly TrapFloorAbilityActivationRecord[] abilityActivations;
         private readonly TrapFloorDodgeAssistanceState dodgeAssistance;
@@ -72,6 +74,8 @@ namespace ConsoleCards.Games.TrapFloor
             floorResumeIndex = turnPosition.FloorResumeIndex;
             eliminatedTurnPlayerIds = turn.CopyEliminatedPlayerIds();
             isCurrentFloorFailed = turn.IsCurrentFloorFailed;
+            doneBuyingPlayerIds = turn.CopyDoneBuyingPlayerIds();
+            buyPhaseDealt = turn.IsBuyPhaseDealt;
             trapResolutionRecords = abilityResolution.CopyTrapRecords();
             abilityActivations = abilityResolution.CopyAbilityActivations();
             dodgeAssistance = abilityResolution.CopyDodgeAssistance();
@@ -140,6 +144,7 @@ namespace ConsoleCards.Games.TrapFloor
                 eliminatedTurnPlayerIds,
                 isCurrentFloorFailed,
                 floorResumeIndex);
+            turn.RestoreBuyPhase(doneBuyingPlayerIds, buyPhaseDealt);
             TrapFloorAbilityResolutionState abilityResolution =
                 new TrapFloorAbilityResolutionState(MatchId);
             abilityResolution.Restore(

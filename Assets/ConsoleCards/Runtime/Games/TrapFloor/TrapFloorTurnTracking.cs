@@ -12,6 +12,12 @@ namespace ConsoleCards.Games.TrapFloor
     {
         PlayerTurn = 0,
         FloorTurn = 1,
+        /// <summary>
+        /// Rules v1.151126 (owner, 2026-11-16): everyone buys at the same time, before round 1 and after every collapse.
+        /// The player who plays next is kept (<see cref="TrapFloorTurnState.NextPlayerId"/>); nobody has the turn until
+        /// every player still in has finished buying.
+        /// </summary>
+        BuyPhase = 2,
     }
 
     public enum TrapFloorCurrentFloorPlayerState
@@ -25,6 +31,8 @@ namespace ConsoleCards.Games.TrapFloor
     {
         private readonly ReadOnlyCollection<PlayerId> playerOrder;
         private readonly HashSet<PlayerId> eliminatedPlayerIds;
+        // Buy Phase: the players who have finished buying (empty outside it).
+        private readonly HashSet<PlayerId> doneBuyingPlayerIds = new HashSet<PlayerId>();
         private int activePlayerIndex;
         private int floorOperatorIndex;
         // IMP-1: in a floor turn between two player turns, the index of the player who plays next (-1: the floor turn
@@ -89,7 +97,7 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             if (!isCurrentFloorFailed
-                && phase == TrapFloorTurnPhase.PlayerTurn
+                && (phase == TrapFloorTurnPhase.PlayerTurn || phase == TrapFloorTurnPhase.BuyPhase)
                 && (activePlayerIndex < 0 || activePlayerIndex >= players.Count))
             {
                 throw new ArgumentOutOfRangeException(nameof(activePlayerIndex));
@@ -107,7 +115,7 @@ namespace ConsoleCards.Games.TrapFloor
                 throw new ArgumentException("A failed Trap Floor cannot retain an assisted turn actor.");
             }
             if (!isCurrentFloorFailed
-                && phase == TrapFloorTurnPhase.PlayerTurn
+                && (phase == TrapFloorTurnPhase.PlayerTurn || phase == TrapFloorTurnPhase.BuyPhase)
                 && eliminated.Contains(players[activePlayerIndex]))
             {
                 throw new ArgumentException("The active Trap Floor turn Player cannot be eliminated.");
@@ -125,7 +133,8 @@ namespace ConsoleCards.Games.TrapFloor
             CurrentRound = currentRound;
             Phase = phase;
             IsCurrentFloorFailed = isCurrentFloorFailed;
-            this.activePlayerIndex = !isCurrentFloorFailed && phase == TrapFloorTurnPhase.PlayerTurn
+            this.activePlayerIndex = !isCurrentFloorFailed
+                && (phase == TrapFloorTurnPhase.PlayerTurn || phase == TrapFloorTurnPhase.BuyPhase)
                 ? activePlayerIndex
                 : -1;
             this.floorOperatorIndex = !isCurrentFloorFailed && phase == TrapFloorTurnPhase.FloorTurn
@@ -176,6 +185,92 @@ namespace ConsoleCards.Games.TrapFloor
                 ? playerOrder[floorOperatorIndex]
                 : PlayerId.Empty;
 
+        // ---------- Buy Phase (rules v1.151126) ----------
+
+        public bool IsBuyPhase => !IsCurrentFloorFailed && Phase == TrapFloorTurnPhase.BuyPhase;
+
+        /// <summary>The player whose turn comes once the Buy Phase ends (the turn player outside it).</summary>
+        public PlayerId NextPlayerId => IsBuyPhase ? playerOrder[activePlayerIndex] : ActivePlayerId;
+
+        /// <summary>
+        /// True once the computer that deals (offline, or the host) has collected and dealt the Console Cards for this
+        /// Buy Phase. Kept with the turn so an Undo step or a rebuilt table never deals twice.
+        /// </summary>
+        public bool IsBuyPhaseDealt { get; private set; }
+
+        public bool HasFinishedBuying(PlayerId playerId) => doneBuyingPlayerIds.Contains(playerId);
+
+        /// <summary>In the Buy Phase: a player still in for the floor who has not finished buying.</summary>
+        public bool IsBuyingPlayer(PlayerId playerId) =>
+            IsBuyPhase
+            && playerOrder.Contains(playerId)
+            && !eliminatedPlayerIds.Contains(playerId)
+            && !doneBuyingPlayerIds.Contains(playerId);
+
+        internal PlayerId[] CopyDoneBuyingPlayerIds()
+        {
+            List<PlayerId> done = new List<PlayerId>();
+            for (int i = 0; i < playerOrder.Count; i++)
+            {
+                if (doneBuyingPlayerIds.Contains(playerOrder[i])) done.Add(playerOrder[i]);
+            }
+            return done.ToArray();
+        }
+
+        /// <summary>Opens the Buy Phase in front of the coming player turn (nothing else moves).</summary>
+        public void OpenBuyPhase()
+        {
+            if (IsCurrentFloorFailed || Phase != TrapFloorTurnPhase.PlayerTurn)
+                throw new InvalidOperationException("The Buy Phase opens only in front of a player turn.");
+            Phase = TrapFloorTurnPhase.BuyPhase;
+            doneBuyingPlayerIds.Clear();
+            IsBuyPhaseDealt = false;
+        }
+
+        public void MarkBuyPhaseDealt()
+        {
+            if (IsBuyPhase) IsBuyPhaseDealt = true;
+        }
+
+        // Undo, Redo, a table received: the Buy Phase as it was kept.
+        internal void RestoreBuyPhase(IEnumerable<PlayerId> donePlayerIds, bool dealt)
+        {
+            doneBuyingPlayerIds.Clear();
+            IsBuyPhaseDealt = IsBuyPhase && dealt;
+            if (!IsBuyPhase || donePlayerIds == null) return;
+            foreach (PlayerId playerId in donePlayerIds)
+            {
+                if (playerOrder.Contains(playerId)) doneBuyingPlayerIds.Add(playerId);
+            }
+        }
+
+        /// <summary>The player has finished buying. True when that ended the Buy Phase (the coming turn begins).</summary>
+        internal bool MarkFinishedBuying(PlayerId playerId)
+        {
+            if (!IsBuyingPlayer(playerId)) throw new InvalidOperationException("The Player is not buying.");
+            doneBuyingPlayerIds.Add(playerId);
+            if (!EveryoneHasBought()) return false;
+            CloseBuyPhase();
+            return true;
+        }
+
+        private bool EveryoneHasBought()
+        {
+            for (int i = 0; i < playerOrder.Count; i++)
+            {
+                PlayerId playerId = playerOrder[i];
+                if (!eliminatedPlayerIds.Contains(playerId) && !doneBuyingPlayerIds.Contains(playerId)) return false;
+            }
+            return true;
+        }
+
+        private void CloseBuyPhase()
+        {
+            Phase = TrapFloorTurnPhase.PlayerTurn;
+            doneBuyingPlayerIds.Clear();
+            IsBuyPhaseDealt = false;
+        }
+
         internal bool ContainsPlayer(PlayerId playerId) => playerOrder.Contains(playerId);
 
         public TrapFloorCurrentFloorPlayerState GetPlayerState(PlayerId playerId)
@@ -219,6 +314,8 @@ namespace ConsoleCards.Games.TrapFloor
 
         internal void Advance()
         {
+            if (Phase == TrapFloorTurnPhase.BuyPhase)
+                throw new InvalidOperationException("The Buy Phase ends when every player has finished buying.");
             if (Phase == TrapFloorTurnPhase.PlayerTurn)
             {
                 if (IsCurrentFloorFailed)
@@ -292,6 +389,28 @@ namespace ConsoleCards.Games.TrapFloor
                 activePlayerIndex = -1;
                 floorOperatorIndex = -1;
                 floorResumeIndex = -1;
+                return playerId;
+            }
+
+            if (Phase == TrapFloorTurnPhase.BuyPhase)
+            {
+                // Buy Phase: a player out for the floor no longer buys; when it was the coming turn player, the turn
+                // goes to the next player still in (or, with nobody left this round, to the floor turn).
+                doneBuyingPlayerIds.Remove(playerId);
+                if (playerIndex == activePlayerIndex)
+                {
+                    int nextIndex = FindNextActivePlayerIndex(playerIndex + 1, false);
+                    if (nextIndex < 0)
+                    {
+                        CloseBuyPhase();
+                        Advance();
+                        return playerId;
+                    }
+
+                    activePlayerIndex = nextIndex;
+                }
+
+                if (EveryoneHasBought()) CloseBuyPhase();
                 return playerId;
             }
 
@@ -537,6 +656,27 @@ namespace ConsoleCards.Games.TrapFloor
             return TrapFloorTurnAdvanceResult.Accepted(revision, 0);
         }
 
+        /// <summary>
+        /// Rules v1.151126 Buy Phase: the requesting player has finished buying. When every player still in has, the
+        /// coming player's turn begins. Every computer runs it the same way (the host replays a joined computer's).
+        /// </summary>
+        public TrapFloorTurnAdvanceResult FinishBuying(MatchState matchState, CommandContext context)
+        {
+            TrapFloorTurnAdvanceResult validation = ValidateSessionOperation(matchState, context);
+            if (!validation.Succeeded) return validation;
+            PlayerId buyer = context.RequestedByPlayerId;
+            if (!state.ContainsPlayer(buyer))
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.PlayerIsNotParticipant);
+            if (!state.IsBuyingPlayer(buyer))
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.ActorIsNotActivePlayer);
+            state.MarkFinishedBuying(buyer);
+            long revision = matchState.AdvanceRevision(
+                context.Id,
+                buyer,
+                AuthoritativeActionKind.Unspecified);
+            return TrapFloorTurnAdvanceResult.Accepted(revision, 0);
+        }
+
         private TrapFloorTurnAdvanceResult Advance(
             MatchState matchState,
             CommandContext context,
@@ -581,6 +721,8 @@ namespace ConsoleCards.Games.TrapFloor
         {
             TrapFloorTurnAdvanceResult validation = ValidateSessionOperation(matchState, context);
             if (!validation.Succeeded) return validation;
+            if (!state.IsCurrentFloorFailed && state.Phase == TrapFloorTurnPhase.BuyPhase)
+                return TrapFloorTurnAdvanceResult.Failure(TrapFloorTurnAdvanceError.ActorIsNotActivePlayer);
             if (state.IsCurrentFloorFailed)
             {
                 return state.Phase == TrapFloorTurnPhase.FloorTurn

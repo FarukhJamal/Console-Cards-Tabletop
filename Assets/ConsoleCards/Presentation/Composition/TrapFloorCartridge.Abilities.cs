@@ -432,7 +432,7 @@ namespace ConsoleCards.Presentation.Composition
             if (!TrapFloorTemplateFactory.IsAbilityDeckCardId(cardId) || host.trapFloorTurnState == null
                 || !host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card) || !card.BaseState.OwnerPlayerId.IsEmpty
                 || card.BaseState.ContainerId.IsEmpty
-                || !TryGetTrapFloorPlayerSetup(host.trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition setup))
+                || !TryGetTrapFloorPlayerSetup(BuyerId, out TrapFloorPlayerSetupDefinition setup)) // Buy Phase: the buyer here
             {
                 return false;
             }
@@ -527,6 +527,8 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!IsAbilityOfferTurn() || !TryGetAbilityDeck(out ContainerState deck)) return;
             List<TabletopObjectId> lying = FindDrawLyingOut();
+            // Rules v1.151126: online, every player's Buy Phase draw lies out at once; only this computer's own counts here.
+            if (IsBuyPhase && host.IsOnlineTable) lying.RemoveAll(cardId => !abilityOffer.Contains(cardId));
             if (lying.Count > 0)
             {
                 foreach (TabletopObjectId cardId in lying) dealtOffer.Add(cardId);
@@ -560,16 +562,17 @@ namespace ConsoleCards.Presentation.Composition
 
             abilityOfferTurnState = host.trapFloorTurnState;
             abilityOfferRound = host.trapFloorTurnState.CurrentRound;
-            abilityOfferPlayer = host.trapFloorTurnState.ActivePlayerId;
+            abilityOfferPlayer = BuyerId;
             return true;
         }
 
         // End Turn: what was not bought goes back into the deck (the deck is then shuffled).
-        private void ReturnDealtOffer(PlayerId owner)
+        private void ReturnDealtOffer(PlayerId owner, bool alsoOthersLyingOut = true)
         {
             // P8A audit: what this computer dealt, and any draw it did not deal that still lies out (dealt by the turn
             // player's computer before a reconnect, or held only there), so nothing stays locked on the table.
-            foreach (TabletopObjectId lying in FindDrawLyingOut()) dealtOffer.Add(lying);
+            // Rules v1.151126: a player's Done Buying returns only their own draw (the others may still be buying).
+            if (alsoOthersLyingOut) foreach (TabletopObjectId lying in FindDrawLyingOut()) dealtOffer.Add(lying);
             if (dealtOffer.Count == 0 || !TryGetAbilityDeck(out ContainerState deck)) return;
             var starts = host.CaptureCardTransforms(dealtOffer);
             int returned = 0;
@@ -617,7 +620,7 @@ namespace ConsoleCards.Presentation.Composition
             && abilityOfferTurnState != null
             && (ReferenceEquals(abilityOfferTurnState, host.trapFloorTurnState) || abilityOfferTurnState.MatchId.Equals(host.trapFloorTurnState.MatchId))
             && abilityOfferRound == host.trapFloorTurnState.CurrentRound
-            && abilityOfferPlayer == host.trapFloorTurnState.ActivePlayerId;
+            && abilityOfferPlayer == BuyerId; // Buy Phase: the player buying on this computer
 
         private bool TryGetAbilityDeck(out ContainerState deck)
         {
@@ -632,9 +635,10 @@ namespace ConsoleCards.Presentation.Composition
         internal bool TryGetAbilityOfferAction(out string label)
         {
             label = null;
+            // Rules v1.151126 (owner, 2026-11-16): Abilities are drawn only in the Buy Phase, by the player buying here.
             if (host.trapFloorTurnState == null
-                || host.trapFloorTurnState.IsCurrentFloorFailed
-                || host.trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn
+                || !IsBuyPhase
+                || BuyerId.IsEmpty
                 || !TryGetAbilityDeck(out ContainerState deck))
             {
                 return false;
@@ -722,9 +726,15 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (host.trapFloorTurnState != null && !host.IsPlayerOnThisComputer(host.trapFloorTurnState.ActivePlayerId))
+            if (host.trapFloorTurnState != null && !IsBuyPhase)
             {
-                host.ShowMessage("Only the player whose turn it is can buy from the Ability deck."); // B01
+                host.ShowMessage("Abilities are drawn and bought in the Buy Phase (before round 1 and after every collapse).");
+                return;
+            }
+
+            if (host.trapFloorTurnState != null && BuyerId.IsEmpty)
+            {
+                host.ShowMessage("You have finished buying: the others are still buying."); // Buy Phase
                 return;
             }
 
@@ -744,7 +754,8 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             SyncDrawWithTable();
-            if (!IsAbilityOfferTurn() && AdoptDrawLyingOut())
+            // Online, several players' draws lie out in the Buy Phase: one lying out is not necessarily this player's.
+            if (!IsAbilityOfferTurn() && !(IsBuyPhase && host.IsOnlineTable) && AdoptDrawLyingOut())
             {
                 ShowAbilityOffer(deck); // P8A: this turn's draw already lies out (dealt before a reconnect, a rebuild)
                 return;
@@ -764,7 +775,7 @@ namespace ConsoleCards.Presentation.Composition
 
                 abilityOfferTurnState = host.trapFloorTurnState;
                 abilityOfferRound = host.trapFloorTurnState.CurrentRound;
-                abilityOfferPlayer = host.trapFloorTurnState.ActivePlayerId;
+                abilityOfferPlayer = BuyerId;
                 DealAbilityOffer(deck, abilityOfferPlayer);
                 // Owner, 2026-11-10: the cards slide out first; the window opens once they lie in front of the player.
                 host.StartCoroutine(ShowAbilityOfferAfterDeal());
@@ -824,7 +835,7 @@ namespace ConsoleCards.Presentation.Composition
         // drawn Abilities, each with its cost and whether the Hand can pay; Buy runs the Shop's own payment for that card.
         private void ShowAbilityOffer(ContainerState deck)
         {
-            PlayerId buyer = host.trapFloorTurnState.ActivePlayerId;
+            PlayerId buyer = BuyerId;
             HashSet<string> drawn = new HashSet<string>(StringComparer.Ordinal);
             drawnCounts.Clear();
             for (int i = 0; i < abilityOffer.Count; i++)
@@ -865,7 +876,9 @@ namespace ConsoleCards.Presentation.Composition
                     BeginDeckPurchase(card);
                 },
                 host.runtimeUi.CloseActionAbilityPurchase,
-                "Pick one to buy. Done? Close this, then End Buying (turn menu or right-click the Ability deck): the rest goes back.",
+                IsBuyPhase
+                    ? "Pick one to buy. Done? Close this, then Done Buying (turn menu or right-click the Ability deck): the rest goes back."
+                    : "Pick one to buy. Done? Close this, then End Buying (turn menu or right-click the Ability deck): the rest goes back.",
                 "ABILITY DRAW",
                 "DRAWN");
         }
@@ -901,9 +914,9 @@ namespace ConsoleCards.Presentation.Composition
         internal bool BeginPurchaseOfInsertedCard(TabletopObjectId cardId, PlayerId actor)
         {
             if (!IsUnboughtInOwnConsole(cardId)) return false;
-            if (host.trapFloorTurnState == null || actor != host.trapFloorTurnState.ActivePlayerId || !host.IsPlayerOnThisComputer(actor))
+            if (host.trapFloorTurnState == null || actor != BuyerId || !host.IsPlayerOnThisComputer(actor))
             {
-                host.ShowMessage("That Ability is not bought yet: only the player whose turn it is can buy it.");
+                host.ShowMessage("That Ability is not bought yet: only the player buying now can buy it.");
                 return true;
             }
 

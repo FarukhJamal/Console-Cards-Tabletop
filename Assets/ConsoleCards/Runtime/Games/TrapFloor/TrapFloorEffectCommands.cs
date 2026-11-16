@@ -94,6 +94,20 @@ namespace ConsoleCards.Games.TrapFloor
         public CommandContext Context { get; }
     }
 
+    /// <summary>
+    /// Rules v1.151126 Buy Phase: the requesting player has finished buying (their unbought Abilities went back first).
+    /// When every player still in has finished, the coming player's turn begins.
+    /// </summary>
+    public sealed class TrapFloorFinishBuyingCommand : ITabletopCommand
+    {
+        public TrapFloorFinishBuyingCommand(CommandContext context)
+        {
+            Context = context;
+        }
+
+        public CommandContext Context { get; }
+    }
+
     /// <summary>Why a player is out for the floor. There is no concession: the rules have none.</summary>
     public enum TrapFloorEliminationReason
     {

@@ -159,6 +159,7 @@ namespace ConsoleCards.Presentation.Composition
                 trapFloorTurnState = new TrapFloorTurnState(
                     matchState.Id,
                     TrapFloorGame.OrderedTurnPlayers(activeSession.Request.ActivePlayerIds)); // DIR-1
+                trapFloorTurnState.OpenBuyPhase(); // rules v1.151126: the first Buy Phase comes before round 1
                 trapFloorAbilityResolutionState =
                     new TrapFloorAbilityResolutionState(matchState.Id);
             }
@@ -351,7 +352,7 @@ namespace ConsoleCards.Presentation.Composition
 
         private void AnnounceTurn()
         {
-            if (trapFloorTurnState.IsCurrentFloorFailed) return;
+            if (trapFloorTurnState.IsCurrentFloorFailed || trapFloorTurnState.IsBuyPhase) return; // Buy Phase: no turn yet
             RulesCardPanel.RaiseHint(HintTriggers.TurnStart, trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn ? "player" : "floor");
             // Owner, 2026-10-24: no big turn banner in the middle; the round bar shows whose turn it is.
         }

@@ -225,6 +225,10 @@ namespace ConsoleCards.Presentation.Composition
                 command => EffectExecutor().ClearGuidance(host.matchState, command), result => result.Succeeded);
             authority.Register<TrapFloorEliminatePlayerCommand, TrapFloorTurnAdvanceResult>(
                 command => EffectExecutor().Eliminate(host.matchState, command), result => result.Succeeded);
+            // Rules v1.151126 Buy Phase: a player's Done Buying runs on every table (the host replays a joined computer's).
+            authority.Register<TrapFloorFinishBuyingCommand, TrapFloorTurnAdvanceResult>(
+                command => host.trapFloorTurnService.FinishBuying(host.matchState, command.Context), result => result.Succeeded);
+            authority.Observe<TrapFloorFinishBuyingCommand, TrapFloorTurnAdvanceResult>(OnBuyingFinished);
             authority.Observe<TrapFloorApplyTrapCommand, TrapFloorTurnAdvanceResult>((c, r) => OnEffectAccepted());
             authority.Observe<TrapFloorLaunchTrapCommand, TrapFloorLaunchResult>((c, r) => OnEffectAccepted(true));
             authority.Observe<TrapFloorRollBlindDirectionCommand, TrapFloorBlindDirectionRollResult>((c, r) => OnEffectAccepted(false, c.DieId));
@@ -381,7 +385,10 @@ namespace ConsoleCards.Presentation.Composition
 
         public IReadOnlyList<CartridgeSeat> Seats => seats;
 
-        public PlayerId TurnPlayerId => host.trapFloorTurnState != null ? host.trapFloorTurnState.ActivePlayerId : PlayerId.Empty;
+        // Rules v1.151126: in the Buy Phase the player buying on this computer (hot-seat hands the screen to them).
+        public PlayerId TurnPlayerId => host.trapFloorTurnState != null
+            ? host.trapFloorTurnState.IsBuyPhase ? BuyerId : host.trapFloorTurnState.ActivePlayerId
+            : PlayerId.Empty;
 
         // A player's turn (not a Floor turn, and the floor has not failed).
         public bool IsPlayerTurnOpen =>

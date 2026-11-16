@@ -66,7 +66,7 @@ MonoBehaviour:
     numbered: 1
     entries:
     - stableId: tf-turn-draw
-      text: 'Draw from the Controller deck (one deck for everyone) until you hold {value}. Then draw 3 cards from the Ability deck beside the board yourself and buy any you can pay for (the Controller Cards you pay with go back into the Controller deck); put the ones you do not buy back on the Ability deck and shuffle it.'
+      text: 'Buy Phase, before round 1 and after every collapse, everyone at the same time: all Console Cards are collected, the Console deck (56 cards, 7 of each input) is shuffled and {value} are dealt to each player. Each player draws 3 cards from the Ability deck, buys any they can pay for (the Console Cards you pay with go back into the Console deck) and presses Done Buying; the rest go back into the Ability deck, which is shuffled. Used Abilities go back into it at the next Buy Phase. Nothing is drawn during turns.'
       settingKind: 1
       settingKey: controller.hand-size
       value: '10'
@@ -350,7 +350,7 @@ MonoBehaviour:
       modeStableIds:
       - trap-floor-mode-impossible
     - stableId: tf-goal-win-mode
-      text: 'Game mode: chosen in New table… (Free for all, Team Play or Survival).'
+      text: 'Game mode: chosen on the game''s setup page, under Win mode (Free for all, Team Play or Survival).'
       settingKind: 3
       settingKey: game.win-mode
       value: 'Team'

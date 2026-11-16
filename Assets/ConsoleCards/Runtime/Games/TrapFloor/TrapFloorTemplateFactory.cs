@@ -153,8 +153,8 @@ namespace ConsoleCards.Games.TrapFloor
 
         /// <summary>
         /// PLACE-1 (owner, 2026-10-21): as above, for <paramref name="playerCount"/> players (2, 3 or 4 within the
-        /// game's authored range). Only those seats are dealt; the shared Controller deck holds one set per player and
-        /// the Ability deck 6 copies of each Ability the mode uses. SETUP-1: <paramref name="tableSetup"/> is the game's default table setup (the board,
+        /// game's authored range). Only those seats are dealt; the shared Controller deck holds 56 cards (7 of each
+        /// input) and the Ability deck 6 copies of each Ability the mode uses. SETUP-1: <paramref name="tableSetup"/> is the game's default table setup (the board,
         /// the Consoles, the shared piles, the dice and the pieces beside every Console); the saved table layout still
         /// wins over it. Null: the built-in places.
         /// </summary>
@@ -298,7 +298,8 @@ namespace ConsoleCards.Games.TrapFloor
             ContainerId abilityDeckId = CreateAbilityDeck(
                 gameDefinition, playerCount, grid, randomValueSource, containers, memberships, objects, labels,
                 tableLayout?.AbilityDeck ?? SetupPlace(tableSetup, setup => setup.AbilityDeck),
-                recipe);
+                recipe,
+                floorContent);
             ContainerId abilityDiscardId = CreateAbilityDiscard(
                 grid,
                 containers,
@@ -428,12 +429,19 @@ namespace ConsoleCards.Games.TrapFloor
                 pileStyle: ControllerDeckPileStyle,
                 displayName: ConsoleCardDeckName));
 
-            List<TabletopObjectId> cardIds = new List<TabletopObjectId>(controllerInputCards.Count * playerCount);
-            for (int seatIndex = 0; seatIndex < playerCount; seatIndex++)
+            // Rules v1.151126 (owner, 2026-11-15): one shared 56-card deck, 7 of each input, whatever the player count.
+            // The card IDs keep their old pattern (copy × 10000 + input), so copies 1–4 are the cards a 4-player deck had.
+            // The authored list repeats each input (its quantity, for the old per-player sets): one of each input here.
+            List<CardDefinitionData> inputs = new List<CardDefinitionData>();
+            HashSet<string> seenInputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < controllerInputCards.Count; i++)
+                if (seenInputs.Add(controllerInputCards[i].StableId)) inputs.Add(controllerInputCards[i]);
+            List<TabletopObjectId> cardIds = new List<TabletopObjectId>(inputs.Count * ControllerCopiesPerInput);
+            for (int seatIndex = 0; seatIndex < ControllerCopiesPerInput; seatIndex++)
             {
-                for (int i = 0; i < controllerInputCards.Count; i++)
+                for (int i = 0; i < inputs.Count; i++)
                 {
-                    CardDefinitionData controllerCard = controllerInputCards[i];
+                    CardDefinitionData controllerCard = inputs[i];
                     TabletopObjectId controllerCardId = new TabletopObjectId(CreateGuid(47, (seatIndex * 10000) + i + 1));
                     objects.Add(new GameTemplateObjectInstanceDefinition(
                         controllerCardId,
@@ -480,7 +488,8 @@ namespace ConsoleCards.Games.TrapFloor
             List<GameTemplateObjectInstanceDefinition> objects,
             Dictionary<TabletopObjectId, string> labels,
             TabletopPose? placed = null,
-            TrapFloorFloorRecipe recipe = null)
+            TrapFloorFloorRecipe recipe = null,
+            IReadOnlyList<TrapFloorFloorContentDefinition> floorContent = null)
         {
             List<CardDefinitionData> forSale = new List<CardDefinitionData>();
             List<CardDefinitionData> catalog = TrapFloorShop.Catalog(gameDefinition);
@@ -492,9 +501,25 @@ namespace ConsoleCards.Games.TrapFloor
 
             if (forSale.Count == 0) return ContainerId.Empty;
             // Rules v1.151126 (owner, 2026-11-15): 6 copies of every Ability the mode uses, whatever the player count.
-            List<CardDefinitionData> copies = new List<CardDefinitionData>(forSale.Count * AbilityCopiesPerType);
-            for (int copy = 0; copy < AbilityCopiesPerType; copy++) copies.AddRange(forSale);
-            IReadOnlyList<CardDefinitionData> order = Shuffled(copies, randomValueSource);
+            // Owner, 2026-11-16: the floor's Ability cards are taken out of those copies first; the rest is the Buy Phase
+            // deck. Each copy keeps its own card id (the Ability and the copy number, not its place in the shuffle), so a
+            // card a player carries to the next floor is the same Ability there.
+            List<int> copyIds = new List<int>(forSale.Count * AbilityCopiesPerType);
+            for (int copy = 0; copy < AbilityCopiesPerType; copy++)
+            {
+                for (int type = 0; type < forSale.Count; type++)
+                {
+                    if (copy < AbilityCopiesPerType - CountOnFloor(floorContent, forSale[type])) copyIds.Add((type * 100) + copy + 1);
+                }
+            }
+
+            for (int i = copyIds.Count - 1; i > 0; i--)
+            {
+                int pick = randomValueSource.NextInt(0, i + 1);
+                int swap = copyIds[i];
+                copyIds[i] = copyIds[pick];
+                copyIds[pick] = swap;
+            }
 
             ContainerId deckId = new ContainerId(CreateGuid(71, 1));
             containers.Add(new GameTemplateContainerDefinition(
@@ -507,11 +532,11 @@ namespace ConsoleCards.Games.TrapFloor
                 placed ?? AbilityDeckPose(grid),
                 pileStyle: ControllerDeckPileStyle,
                 displayName: AbilityDeckName));
-            List<TabletopObjectId> cardIds = new List<TabletopObjectId>(order.Count);
-            for (int i = 0; i < order.Count; i++)
+            List<TabletopObjectId> cardIds = new List<TabletopObjectId>(copyIds.Count);
+            for (int i = 0; i < copyIds.Count; i++)
             {
-                CardDefinitionData card = order[i];
-                TabletopObjectId cardId = new TabletopObjectId(CreateGuid(72, i + 1));
+                CardDefinitionData card = forSale[(copyIds[i] - 1) / 100];
+                TabletopObjectId cardId = new TabletopObjectId(CreateGuid(72, copyIds[i]));
                 objects.Add(new GameTemplateObjectInstanceDefinition(
                     cardId,
                     new ObjectDefinitionId(ParseStableGuid(card.StableId, $"Ability '{card.DisplayName}'")),
@@ -529,9 +554,23 @@ namespace ConsoleCards.Games.TrapFloor
             return deckId;
         }
 
+        // How many of the floor's tiles hold this Ability (rules v1.151126: those copies are not in the deck).
+        private static int CountOnFloor(IReadOnlyList<TrapFloorFloorContentDefinition> floorContent, CardDefinitionData ability)
+        {
+            int count = 0;
+            for (int i = 0; floorContent != null && i < floorContent.Count; i++)
+            {
+                CardDefinitionData card = floorContent[i] != null ? floorContent[i].AuthoredCard : null;
+                if (card != null && string.Equals(card.StableId, ability.StableId, StringComparison.OrdinalIgnoreCase)) count++;
+            }
+
+            return count;
+        }
+
         // D1: the names shown beside the game's piles (the cards have no backs yet).
         private const string AbilityDeckName = "ABILITIES";
         private const int AbilityCopiesPerType = 6;
+        private const int ControllerCopiesPerInput = 7;
         private const string AbilityDiscardName = "ABILITY DISCARD";
         private const string ConsoleCardDeckName = "CONSOLE CARDS";
         private const string AvatarDeckName = "AVATARS";
@@ -568,6 +607,17 @@ namespace ConsoleCards.Games.TrapFloor
         public static ContainerId AvatarDeckId => new ContainerId(CreateGuid(71, 4));
 
         public static ContainerId StartingAbilitiesId => new ContainerId(CreateGuid(71, 5));
+
+        /// <summary>Rules v1.151126: a card of the shared Console deck (collected back at every Buy Phase).</summary>
+        public static bool IsConsoleCardId(TabletopObjectId cardId)
+        {
+            if (cardId.IsEmpty) return false;
+            byte[] bytes = cardId.Value.ToByteArray();
+            byte[] expected = CreateGuid(47, 1).ToByteArray();
+            for (int i = 0; i < 12; i++)
+                if (bytes[i] != expected[i]) return false; // the category part (the index is in the last 4 bytes)
+            return true;
+        }
 
         /// <summary>
         /// P8A batch 2 (R4): a card of the Ability deck itself (made with the deck; not a starting Ability, a floor

@@ -131,6 +131,7 @@ namespace ConsoleCards.Games.TrapFloor
             int startingKept = 0;
             int startingLeftOut = 0;
             Dictionary<int, List<ObjectDefinitionId>> startingHeld = new Dictionary<int, List<ObjectDefinitionId>>();
+            List<TrapFloorCarriedAbility> boughtItems = new List<TrapFloorCarriedAbility>();
             foreach (TrapFloorCarriedAbility item in carried)
             {
                 if (item.SeatIndex < 0 || item.SeatIndex >= template.Players.Count) continue;
@@ -142,9 +143,25 @@ namespace ConsoleCards.Games.TrapFloor
                     continue;
                 }
 
+                boughtItems.Add(item);
+            }
+
+            // Rules v1.151126: the new floor's Ability deck lacks the copies its floor holds. A bought card keeps its own copy
+            // when the new deck has it (first pass); otherwise it takes another copy of the same Ability from the deck.
+            bool[] placed = new bool[boughtItems.Count];
+            for (int pass = 0; pass < 2; pass++)
+            for (int b = 0; b < boughtItems.Count; b++)
+            {
+                if (placed[b]) continue;
+                TrapFloorCarriedAbility item = boughtItems[b];
                 TrapFloorPlayerSetupDefinition setup = template.Players[item.SeatIndex];
                 if (!match.Seats.TryGetValue(setup.SeatId, out SeatState seat) || seat.OccupantPlayerId.IsEmpty) continue;
-                if (!match.Cards.TryGetValue(item.CardId, out CardInstanceState card)) continue;
+                TabletopObjectId cardId = pass == 0 ? item.CardId : SameAbilityInDeck(match, template, item.DefinitionId);
+                if (cardId.IsEmpty || !match.Cards.TryGetValue(cardId, out CardInstanceState card)
+                    || card.BaseState.DefinitionId != item.DefinitionId
+                    || card.BaseState.ContainerId != template.AbilityDeckId)
+                    continue;
+                placed[b] = true;
                 ContainerId from = card.BaseState.ContainerId;
                 if (!from.IsEmpty && match.Containers.TryGetValue(from, out ContainerState source))
                 {
@@ -192,6 +209,20 @@ namespace ConsoleCards.Games.TrapFloor
             }
 
             return new TrapFloorCarryResult(bought, startingKept, startingLeftOut);
+        }
+
+        // A card of this Ability still in the Ability deck (the first from the bottom: the same on every computer).
+        private static TabletopObjectId SameAbilityInDeck(MatchState match, TrapFloorTemplateDefinition template, ObjectDefinitionId definitionId)
+        {
+            if (template.AbilityDeckId.IsEmpty || !match.Containers.TryGetValue(template.AbilityDeckId, out ContainerState deck))
+                return TabletopObjectId.Empty;
+            for (int i = 0; i < deck.Count; i++)
+            {
+                TabletopObjectId cardId = deck.GetObjectAt(i);
+                if (match.Cards.TryGetValue(cardId, out CardInstanceState card) && card.BaseState.DefinitionId == definitionId) return cardId;
+            }
+
+            return TabletopObjectId.Empty;
         }
 
         // Still the seat's: loose, or in its own hand or Console slots (never the Ability deck, the discard or a public pile).

@@ -79,6 +79,8 @@ namespace ConsoleCards.Presentation.Composition
         /// </summary>
         internal bool RefusesBlindDraw(PlayerId drawer, ContainerId source)
         {
+            if (IsBuyPhase) return false; // rules v1.151126: the Buy Phase deal (Blind players are skipped by the deal itself)
+            if (RefusesTurnDraw(drawer, source)) return true; // rules v1.151126 (Full): hands are dealt in the Buy Phase
             if (PlayAssist.IsFree || host.trapFloorTemplate == null || host.trapFloorTurnState == null
                 || host.trapFloorAbilityResolutionState == null) return false;
             if (!TrapFloorBlindRules.RefusesControllerDraw(host.trapFloorTemplate, host.trapFloorTurnState,

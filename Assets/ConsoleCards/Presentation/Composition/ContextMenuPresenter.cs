@@ -572,7 +572,8 @@ namespace ConsoleCards.Presentation.Composition
                     if (host.HasOnline && host.Online.IsPrivateGuest) host.Online.GuestRequestAbilityDraw();
                     else if (host.ActiveCartridge is TrapFloorCartridge game) game.OpenAbilityOffer();
                 }));
-                if (drawOut) actions.Add(new PopupActionOption("End Buying", true, buying.EndAbilityBuying)); // P8A (owner, 2026-11-10)
+                if (drawOut && !buying.IsBuyPhase) actions.Add(new PopupActionOption("End Buying", true, buying.EndAbilityBuying)); // P8A (owner, 2026-11-10)
+                if (buying != null && buying.CanFinishBuying()) actions.Add(new PopupActionOption("Done Buying", true, buying.FinishBuying)); // rules v1.151126
             }
 
             if (!fullAbilityDeck && host.HasLocalHand() && !host.ActiveCartridge.IsAssistedControllerDeck(targetDeckId) && targetDeck.Count > 0)

@@ -103,7 +103,8 @@ namespace ConsoleCards.Games.TrapFloor
                 && a.FloorOperatorIndex == b.FloorOperatorIndex
                 && a.IsCurrentFloorFailed == b.IsCurrentFloorFailed
                 && a.FloorResumeIndex == b.FloorResumeIndex
-                && SameOrder(host.PlayerOrder, pushed.PlayerOrder);
+                && SameOrder(host.PlayerOrder, pushed.PlayerOrder)
+                && SameOrder(host.CopyDoneBuyingPlayerIds(), pushed.CopyDoneBuyingPlayerIds()); // Buy Phase
             if (!same)
                 Note(refused, $"turn (pushed round {b.Round} {b.Phase} #{b.ActivePlayerIndex}, host round {a.Round} {a.Phase} #{a.ActivePlayerIndex})");
         }

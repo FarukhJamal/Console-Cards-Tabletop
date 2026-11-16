@@ -219,9 +219,11 @@ namespace ConsoleCards.Games.TrapFloor
                 return Failure(CommandResultStatus.Rejected, TrapFloorShopError.MatchTemplateMismatch);
 
             PlayerId actor = command.Context.RequestedByPlayerId;
-            if (turnState.IsCurrentFloorFailed
-                || turnState.Phase != TrapFloorTurnPhase.PlayerTurn
-                || turnState.ActivePlayerId != actor)
+            // Rules v1.151126: in the Buy Phase every player still buying buys at the same time.
+            if (!turnState.IsBuyingPlayer(actor)
+                && (turnState.IsCurrentFloorFailed
+                    || turnState.Phase != TrapFloorTurnPhase.PlayerTurn
+                    || turnState.ActivePlayerId != actor))
                 return Failure(CommandResultStatus.Rejected, TrapFloorShopError.ActorIsNotActivePlayer);
             if (!TryGetPlayerSetup(matchState, actor, out TrapFloorPlayerSetupDefinition player))
                 return Failure(CommandResultStatus.Rejected, TrapFloorShopError.PlayerSetupMissing);

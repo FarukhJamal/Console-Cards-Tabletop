@@ -113,11 +113,11 @@ namespace ConsoleCards.Presentation.Composition
 
         // B01 (playtest, 2026-11-05): only the computer that plays the turn player's seat buys for them; a player who
         // is not on turn could otherwise start a payment for someone else and block their own Shop for the session.
+        // Rules v1.151126: in the Buy Phase the player buying on this computer buys (BuyerId).
         internal bool IsShopBuyingTurn() =>
-            host.trapFloorTurnState != null
-            && !host.trapFloorTurnState.IsCurrentFloorFailed
-            && host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
-            && host.IsPlayerOnThisComputer(host.trapFloorTurnState.ActivePlayerId);
+            IsBuyingStep
+            && !BuyerId.IsEmpty
+            && host.IsPlayerOnThisComputer(BuyerId);
 
         // B01: a payment belongs to the turn player who started it, on this computer. One left over from another turn,
         // another phase, or a seat played elsewhere never blocks anything: it is dropped (its cards stay where they
@@ -126,10 +126,8 @@ namespace ConsoleCards.Presentation.Composition
         {
             PendingControllerPurchaseState state = host.pendingControllerPurchaseState;
             if (state == null || !state.IsActive) return false;
-            if (host.trapFloorTurnState != null
-                && !host.trapFloorTurnState.IsCurrentFloorFailed
-                && host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
-                && state.PlayerId == host.trapFloorTurnState.ActivePlayerId
+            if (IsBuyingStep // rules v1.151126: the player's own turn, or the Buy Phase
+                && state.PlayerId == BuyerId
                 && host.IsPlayerOnThisComputer(state.PlayerId))
             {
                 return true;
@@ -325,7 +323,7 @@ namespace ConsoleCards.Presentation.Composition
 
             pendingDeckCardId = TabletopObjectId.Empty; // a Shop purchase, not a card from the Ability deck
             ShowActionAbilityPurchase(IsShopBuyingTurn()
-                ? $"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} is buying."
+                ? $"{FormatPlayerName(BuyerId)} is buying."
                 : "You can look; buying is on a player's own turn.");
         }
 
@@ -357,7 +355,7 @@ namespace ConsoleCards.Presentation.Composition
             if (!IsShopBuyingTurn())
             {
                 host.runtimeUi?.SetActionAbilityPurchaseStatus(
-                    host.trapFloorTurnState != null && !host.IsPlayerOnThisComputer(host.trapFloorTurnState.ActivePlayerId)
+                    host.trapFloorTurnState != null && !BuyerId.IsEmpty && !host.IsPlayerOnThisComputer(BuyerId)
                         ? "Only the player whose turn it is can buy."
                         : "Buying is on a player's own turn.");
                 return;
@@ -400,7 +398,7 @@ namespace ConsoleCards.Presentation.Composition
             string status = string.IsNullOrEmpty(missing)
                 ? "Pick the cards that pay the cost."
                 : $"Missing: {missing}";
-            ShowSelectionFor(host.trapFloorTurnState != null ? host.trapFloorTurnState.ActivePlayerId : PlayerId.Empty, new FocusedCardSelectionModel(
+            ShowSelectionFor(BuyerId, new FocusedCardSelectionModel(
                 $"BUY {purchasedDefinition.DisplayName.ToUpperInvariant()} — HAND",
                 $"Choose {FormatPurchaseInputCost(purchasedDefinition.InputCost)} from your Hand.",
                 status,
@@ -505,7 +503,7 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             string definitionId = host.pendingPurchaseDefinitionStableId;
-            PlayerId playerId = host.trapFloorTurnState.ActivePlayerId;
+            PlayerId playerId = BuyerId; // rules v1.151126: the turn player, or the Buy Phase buyer here
             host.pendingControllerPurchaseState.Begin(playerId, definitionId, selectedCardIds, pendingPurchaseSource);
             RecordPaymentOrigins(selectedCardIds); // owner decision D: Cancel puts every staged card back where it was
             {
@@ -537,7 +535,7 @@ namespace ConsoleCards.Presentation.Composition
                 || !host.pendingControllerPurchaseState.IsActive
                 || !host.pendingControllerPurchaseState.IsPaymentComplete
                 || host.trapFloorTurnState == null
-                || host.pendingControllerPurchaseState.PlayerId != host.trapFloorTurnState.ActivePlayerId)
+                || host.pendingControllerPurchaseState.PlayerId != BuyerId)
             {
                 host.ShowMessage("Place the chosen cards in your Console first.");
                 return;
@@ -712,7 +710,7 @@ namespace ConsoleCards.Presentation.Composition
             var boughtStarts = host.CaptureCardTransforms(deckCardId.IsEmpty ? Array.Empty<TabletopObjectId>() : new[] { deckCardId });
             TrapFloorBuyFromShopResult result = host.TableAuthority.Submit<TrapFloorBuyFromShopCommand, TrapFloorBuyFromShopResult>(
                 new TrapFloorBuyFromShopCommand(
-                    host.CreateCommandContext(host.trapFloorTurnState.ActivePlayerId),
+                    host.CreateCommandContext(BuyerId),
                     cardDefinitionStableId,
                     deckCardId.IsEmpty ? TabletopObjectId.New() : deckCardId,
                     paymentCardIds,
@@ -748,16 +746,19 @@ namespace ConsoleCards.Presentation.Composition
             {
                 host.presentationTransitions.Appear(boughtView.transform, host.settleDuration);
             }
-            if (TryGetTrapFloorPlayerSetup(host.trapFloorTurnState.ActivePlayerId, out TrapFloorPlayerSetupDefinition buyer))
+            PlayerId buyerId = BuyerId;
+            if (TryGetTrapFloorPlayerSetup(buyerId, out TrapFloorPlayerSetupDefinition buyer))
             {
                 string buyerName = host.HandOwnerName(buyer.HandContainerId);
                 string from = deckCardId.IsEmpty ? "the Shop" : "the Ability deck";
                 host.ShowMessage(result.PlacedInHand
                     ? $"Bought {name} from {from} into {buyerName}'s hand."
                     : $"{buyerName} bought {name}. It is by their Console.");
-                host.GameplayLog($"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} bought the {name} ability card.");
+                host.GameplayLog($"{FormatPlayerName(buyerId)} bought the {name} ability card.");
                 if (!deckCardId.IsEmpty && IsAbilityBuyingOpen())
-                    host.FeedbackLine("Buy another from your draw, or End Buying (turn menu, or right-click the Ability deck).", FeedbackSeverity.Info);
+                    host.FeedbackLine(IsBuyPhase
+                        ? "Buy another from your draw, or Done Buying (turn menu, or right-click the Ability deck)."
+                        : "Buy another from your draw, or End Buying (turn menu, or right-click the Ability deck).", FeedbackSeverity.Info);
             }
         }
         // ---------- from TabletopComposition.TrapFloor.cs ----------
@@ -1000,7 +1001,7 @@ namespace ConsoleCards.Presentation.Composition
                     for (int i = 0; i < turn.PlayerOrder.Count; i++)
                     {
                         PlayerId player = turn.PlayerOrder[i];
-                        players += Mix(IdHash(player.Value), (ulong)turn.GetPlayerState(player));
+                        players += Mix(IdHash(player.Value), (ulong)turn.GetPlayerState(player) + (turn.HasFinishedBuying(player) ? 4UL : 0UL));
                     }
 
                     hash = Mix(hash, players);
@@ -2008,6 +2009,14 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            if (host.trapFloorTurnState.IsBuyPhase)
+            {
+                // Rules v1.151126: the Buy Phase ends when every player still in has pressed Done Buying.
+                lastFloorTurnRefusal = "Buy Phase: every player finishes buying first (Done Buying).";
+                host.ShowMessage(lastFloorTurnRefusal);
+                return;
+            }
+
             bool wasFloorTurn = host.trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn;
             // AUTH-2 (authority audit, 2026-11-05): a turn is ended only on the computer that plays the player (or floor
             // operator) whose turn it is. Elsewhere it would change this table alone and the tables would drift apart.
@@ -2149,6 +2158,7 @@ namespace ConsoleCards.Presentation.Composition
                     result = skipped
                         ? host.trapFloorTurnService.Skip(host.matchState, host.CreateCommandContext(actor))
                         : host.trapFloorTurnService.Advance(host.matchState, host.CreateCommandContext(actor));
+                    if (result.Succeeded && wasFloorTurn) OpenBuyPhaseAfterCollapse(); // rules v1.151126: buy after every collapse
                 }
             }
             finally
@@ -2181,9 +2191,11 @@ namespace ConsoleCards.Presentation.Composition
                 string setAside = tilesSetAside == 0
                     ? string.Empty
                     : $" {(tilesSetAside == 1 ? "The collapsed tile was" : $"{tilesSetAside} collapsed tiles were")} set beside the board.";
-                host.ShowMessage(
-                    $"ROUND {host.trapFloorTurnState.CurrentRound} — "
-                    + $"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} turn.{reactivated}{setAside}");
+                host.ShowMessage(host.trapFloorTurnState.IsBuyPhase
+                    ? $"ROUND {host.trapFloorTurnState.CurrentRound} — BUY PHASE: everyone draws 3 Abilities, buys, then Done Buying. "
+                        + $"{FormatPlayerName(host.trapFloorTurnState.NextPlayerId)} plays next.{reactivated}{setAside}"
+                    : $"ROUND {host.trapFloorTurnState.CurrentRound} — "
+                        + $"{FormatPlayerName(host.trapFloorTurnState.ActivePlayerId)} turn.{reactivated}{setAside}");
                 // NEXT-1 popup off (owner, 2026-10-24): the effects show on the player card's Status chip.
             }
             else if (host.trapFloorTurnState.IsCurrentFloorFailed)
@@ -2200,12 +2212,10 @@ namespace ConsoleCards.Presentation.Composition
             }
             else
             {
-                int handLimit = host.trapFloorTemplate.GameDefinition.ControllerConfiguration.MaximumHandSize;
                 PlayerId next = host.trapFloorTurnState.ActivePlayerId;
                 string effects = PlayerEffectChips(next);
-                host.FeedbackLine( // TURN-2: always shown
-                    $"{skip}{FormatPlayerName(next).ToUpperInvariant()}'S TURN{effects}: draw up to {handLimit} Controller Cards "
-                        + "and 3 Abilities to buy, then move or use an Ability.",
+                host.FeedbackLine( // TURN-2: always shown; rules v1.151126: cards are dealt and bought in the Buy Phase
+                    $"{skip}{FormatPlayerName(next).ToUpperInvariant()}'S TURN{effects}: move or use an Ability.",
                     FeedbackSeverity.Info);
                 // NEXT-1 popup off (owner, 2026-10-24): the effects show on the player card's Status chip.
             }
@@ -3979,7 +3989,7 @@ namespace ConsoleCards.Presentation.Composition
         // active player's Console slots again.
         internal void ShowPaymentReturned()
         {
-            if (host.trapFloorTurnState != null) ShowPaymentReturned(host.trapFloorTurnState.ActivePlayerId);
+            if (host.trapFloorTurnState != null) ShowPaymentReturned(BuyerId); // rules v1.151126: the turn player, or the Buy Phase buyer
         }
 
         // CONSOLE-2: also run on the computers that replay another player's purchase (OnPrizeTaken, OnShopCardBought).
@@ -5815,7 +5825,7 @@ namespace ConsoleCards.Presentation.Composition
                     ? PlayerId.Empty
                     : host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
                         ? host.trapFloorTurnState.ActivePlayerId
-                        : host.trapFloorTurnState.FloorOperatorPlayerId;
+                        : IsBuyPhase ? BuyPhaseCardPlayer() : host.trapFloorTurnState.FloorOperatorPlayerId;
                 Color? turnColor = host.TryGetSeatIndex(turnPlayerId, out int turnSeatIndex)
                     ? PlayerSeatColor(turnSeatIndex)
                     : (Color?)null;
@@ -5825,7 +5835,7 @@ namespace ConsoleCards.Presentation.Composition
                     : host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
                         ? $"{(turnColor.HasValue ? PlayerColorName(turnSeatIndex) : FormatPlayerName(turnPlayerId).ToUpperInvariant())}'S TURN"
                             + TurnMovesText()
-                        : "FLOOR TURN");
+                        : IsBuyPhase ? BuyPhaseText() : "FLOOR TURN");
                 string turnDetail = CurrentTrapFloorCollapseStatusText();
                 if (!host.trapFloorTurnState.IsCurrentFloorFailed
                     && host.trapFloorTurnState.Phase == TrapFloorTurnPhase.FloorTurn)
@@ -5906,13 +5916,13 @@ namespace ConsoleCards.Presentation.Composition
                 ? PlayerId.Empty
                 : host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
                     ? host.trapFloorTurnState.ActivePlayerId
-                    : host.trapFloorTurnState.FloorOperatorPlayerId;
+                    : IsBuyPhase ? BuyPhaseCardPlayer() : host.trapFloorTurnState.FloorOperatorPlayerId;
             turnColor = host.TryGetSeatIndex(turnPlayerId, out int turnSeatIndex) ? PlayerSeatColor(turnSeatIndex) : (Color?)null;
             phase = EndedFloorPhaseText() ?? (host.trapFloorTurnState.IsCurrentFloorFailed
                 ? "ALL PLAYERS ELIMINATED"
                 : host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn
                     ? $"{(turnColor.HasValue ? PlayerColorName(turnSeatIndex) : FormatPlayerName(turnPlayerId).ToUpperInvariant())}'S TURN" + TurnMovesText()
-                    : "FLOOR TURN");
+                    : IsBuyPhase ? BuyPhaseText() : "FLOOR TURN");
             round = $"ROUND {host.trapFloorTurnState.CurrentRound}";
             players = BuildHudPlayers(turnPlayerId);
             card = BuildPlayerCard(turnPlayerId);
@@ -6139,6 +6149,12 @@ namespace ConsoleCards.Presentation.Composition
                 return actions;
             }
 
+            if (host.trapFloorTurnState.Phase == TrapFloorTurnPhase.BuyPhase)
+            {
+                AddBuyPhaseActions(actions); // rules v1.151126
+                return actions;
+            }
+
             if (host.trapFloorTurnState.Phase == TrapFloorTurnPhase.PlayerTurn)
             {
                 if (TryGetActiveBlindStatus(out TrapFloorBlindStatusState blindStatus)
@@ -6298,6 +6314,8 @@ namespace ConsoleCards.Presentation.Composition
                 return "Roll 2d6 to resolve Collapse\nEnd Floor Turn when complete";
             }
 
+            if (host.trapFloorTurnState.Phase == TrapFloorTurnPhase.BuyPhase) return BuyPhaseGuidanceText(); // rules v1.151126
+
             if (host.pendingControllerPurchaseState != null
                 && host.pendingControllerPurchaseState.IsActive
                 && host.pendingControllerPurchaseState.PlayerId == host.trapFloorTurnState.ActivePlayerId)
@@ -6310,16 +6328,13 @@ namespace ConsoleCards.Presentation.Composition
                 return $"{PaymentVerb(host.pendingControllerPurchaseState)} {abilityName} — Place the chosen cards in your Console";
             }
 
-            int handLimit = host.trapFloorTemplate.GameDefinition.ControllerConfiguration.MaximumHandSize;
             int moveTiles = MoveAllowance(out _);
             // P8A (owner, 2026-11-10): while this turn's Ability draw lies out, buying is the step in front of the player.
             string buyingStep = IsAbilityBuyingOpen()
                 ? "Buy a drawn Ability you can pay for, then End Buying (turn menu or right-click the Ability deck)\n"
                 : string.Empty;
             string standardGuidance =
-                buyingStep
-                + $"Draw up to {handLimit} if needed (hover the deck)\n"
-                + (string.IsNullOrEmpty(buyingStep) && TryGetAbilityOfferAction(out _) ? $"Draw {AbilityOfferSize} from the Ability deck and buy any you can pay for\n" : string.Empty)
+                buyingStep // rules v1.151126: Console Cards and Abilities come in the Buy Phase, not on the turn
                 + $"Move up to {moveTiles} tile{(moveTiles == 1 ? string.Empty : "s")} "
                 + "up, down, left or right, turning allowed but never diagonally (they light while you hold your pawn); landing flips a tile. "
                 + "Take a prize you stand on, then End Turn";
@@ -6341,7 +6356,7 @@ namespace ConsoleCards.Presentation.Composition
             if (!isBlind)
             {
                 string availableActions = isSticky
-                    ? $"Draw up to {handLimit} if needed (hover the deck)\nAction ability / {shopWord}End Turn"
+                    ? $"Action ability / {shopWord}End Turn"
                     : standardGuidance;
                 return string.IsNullOrEmpty(movementGuidance)
                     ? availableActions
@@ -6851,15 +6866,14 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (host.trapFloorTemplate == null
                 || host.trapFloorTurnState == null
-                || host.trapFloorTurnState.IsCurrentFloorFailed
-                || host.trapFloorTurnState.Phase != TrapFloorTurnPhase.PlayerTurn)
+                || !IsBuyingStep) // rules v1.151126: a player turn, or the Buy Phase (the buyer here)
             {
                 throw new InvalidOperationException(
                     "Controller assistance requires an active Trap Floor Player turn.");
             }
 
             if (TryGetTrapFloorPlayerSetup(
-                    host.trapFloorTurnState.ActivePlayerId,
+                    BuyerId,
                     out TrapFloorPlayerSetupDefinition player))
                 return player;
 
@@ -6887,6 +6901,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             hostRefusal = null;
             if (!HostAllowsMainSlotMove(command, sender)) return false; // R3 (owner, 2026-11-12), every assist level
+            if (!HostAllowsBuyPhaseCommand(command, sender)) return false; // rules v1.151126: each player buys for themselves
             if (command is TrapFloorRevealFloorCommand || command is TrapFloorClaimKeyCommand || command is TrapFloorAttemptEscapeCommand)
                 return HostAllowsTileCommand(command, sender); // AUTH-TILE
             if (command is TrapFloorResolveCollapseCommand && !PlayAssist.IsFree && !FloorTurnMayCollapse()) // COLLAPSE-ONCE: Reminders too (owner, 2026-11-12: never the same floor turn twice)
@@ -7225,6 +7240,7 @@ namespace ConsoleCards.Presentation.Composition
             CompletePendingLandingFlip();
             ShowFloorEndReachedElsewhere(); // FLOOREND-GUEST
             DiscardUsedAbility();
+            TickBuyPhase(); // rules v1.151126: the deal of each Buy Phase (offline, or the host)
             GiveChosenAvatarsTheirAbilities(); // D2/D3
             TickAvatarDraft(); // P8A: Full, each player picks an Avatar from a popup
             DealArrangedBoardIfPlaced();

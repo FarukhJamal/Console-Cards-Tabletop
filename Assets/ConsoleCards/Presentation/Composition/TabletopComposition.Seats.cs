@@ -691,8 +691,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             PlayerId turn = ActiveCartridge.TurnPlayerId;
             return templateContext != null
-                && ActiveCartridge.IsPlayerTurnOpen
-                && !turn.IsEmpty
+                && !turn.IsEmpty // rules v1.151126: a player turn, or the Buy Phase's buyer (empty in a Floor turn)
                 && turn != localPlayerId
                 && turn != handSeatSyncFailedFor;
         }
