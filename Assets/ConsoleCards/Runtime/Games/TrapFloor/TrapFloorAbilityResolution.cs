@@ -19,8 +19,18 @@ namespace ConsoleCards.Games.TrapFloor
         Check = 1,
         Dodge = 2,
         Shield = 3,
+        /// <summary>Run (rules v1.151126): exactly 3 tiles in a straight line, never over a hole.</summary>
         Rush = 4,
+        /// <summary>Arm and Disarm (rules v1.151126): disarm a picked tile, rearm the nearest triggered Trap.</summary>
         Disarm = 5,
+        /// <summary>Rules v1.151126: jump over 1 missing tile (the Athlete over 2).</summary>
+        Jump = 6,
+        /// <summary>Rules v1.151126: flip 1 adjacent tile; a Trap there does not affect the player.</summary>
+        SafeSearch = 7,
+        /// <summary>Rules v1.151126, Team Play: saves the player from a fall (used by itself, never put in a Console).</summary>
+        Insurance = 8,
+        /// <summary>Rules v1.151126, Team Play: when a teammate triggers a Trap, pull them to your tile.</summary>
+        Lasso = 9,
     }
 
     public enum TrapFloorTrapResolutionDisposition
@@ -368,7 +378,7 @@ namespace ConsoleCards.Games.TrapFloor
     /// <summary>
     /// Match-scoped Trap/Ability assistance only. It never constrains physical tabletop interaction.
     /// </summary>
-    public sealed class TrapFloorAbilityResolutionState
+    public sealed partial class TrapFloorAbilityResolutionState
     {
         private readonly List<TrapFloorTrapResolutionRecord> trapRecords =
             new List<TrapFloorTrapResolutionRecord>();
@@ -418,7 +428,10 @@ namespace ConsoleCards.Games.TrapFloor
         {
             if (floorCard == null) throw new ArgumentNullException(nameof(floorCard));
             if (floorCard.Content.Category != TrapFloorFloorContentCategory.Trap) return;
-            for (int i = 0; i < trapRecords.Count; i++)
+            if (IsDisarmed(floorCard.ObjectId)) return; // step 5: a disarmed Trap is harmless
+            // Step 5: a Trap that Arm and Disarm turned back face down triggers again (a new waiting record).
+            bool rearmed = TakeRearmed(floorCard.ObjectId);
+            for (int i = 0; i < trapRecords.Count && !rearmed; i++)
             {
                 if (trapRecords[i].FloorCardId == floorCard.ObjectId) return;
             }
@@ -949,6 +962,14 @@ namespace ConsoleCards.Games.TrapFloor
         ActionAfterMove = 10,
         /// <summary>Rules v1.151126: no Reaction after an Action in the same turn.</summary>
         ReactionAfterAction = 11,
+        /// <summary>Step 5: the tile or tiles the Ability needs were not picked, or are not allowed.</summary>
+        NoTargetChosen = 12,
+        /// <summary>Step 5: Jump: no hole next to the pawn with a tile to land on behind it.</summary>
+        NoJumpDestination = 13,
+        /// <summary>Step 5: Lasso: the user is not a teammate who may pull the turn player now.</summary>
+        LassoNotAllowed = 14,
+        /// <summary>Step 5: Insurance is used by itself when the player falls, never from a Console.</summary>
+        UsedOnlyWhenFalling = 15,
     }
 
     public readonly struct TrapFloorAbilityActivationResult
@@ -957,18 +978,28 @@ namespace ConsoleCards.Games.TrapFloor
             bool succeeded,
             TrapFloorAbilityActivationError error,
             TrapFloorAbilityEffect effect,
-            TrapFloorTrapResolutionRecord trap)
+            TrapFloorTrapResolutionRecord trap,
+            TrapFloorAbilityTileChanges tiles = null)
         {
             Succeeded = succeeded;
             Error = error;
             Effect = effect;
             Trap = trap;
+            Tiles = tiles;
         }
 
         public bool Succeeded { get; }
         public TrapFloorAbilityActivationError Error { get; }
         public TrapFloorAbilityEffect Effect { get; }
         public TrapFloorTrapResolutionRecord Trap { get; }
+        /// <summary>Step 5: the floor tiles this use turned over (null: none).</summary>
+        public TrapFloorAbilityTileChanges Tiles { get; }
+
+        internal static TrapFloorAbilityActivationResult AcceptedTiles(
+            TrapFloorAbilityEffect effect,
+            TrapFloorTrapResolutionRecord trap,
+            TrapFloorAbilityTileChanges tiles) =>
+            new TrapFloorAbilityActivationResult(true, TrapFloorAbilityActivationError.None, effect, trap, tiles);
 
         internal static TrapFloorAbilityActivationResult Accepted(
             TrapFloorAbilityEffect effect,
@@ -1004,7 +1035,8 @@ namespace ConsoleCards.Games.TrapFloor
             bool targetOnGrid,
             int targetX,
             int targetY,
-            TabletopObjectId targetFloorCardId)
+            TabletopObjectId targetFloorCardId,
+            TabletopObjectId savedByCardId = default)
         {
             Succeeded = succeeded;
             Error = error;
@@ -1014,7 +1046,14 @@ namespace ConsoleCards.Games.TrapFloor
             TargetX = targetX;
             TargetY = targetY;
             TargetFloorCardId = targetFloorCardId;
+            SavedByCardId = savedByCardId;
         }
+
+        /// <summary>Step 5: the card (Insurance, or the Strategist's Shield) that kept the player from falling; the pawn stays.</summary>
+        public TabletopObjectId SavedByCardId { get; }
+
+        internal static TrapFloorLaunchResult Saved(long revision, TabletopObjectId stayFloorCardId, TrapFloorCoordinate stay, TabletopObjectId card) =>
+            new TrapFloorLaunchResult(true, TrapFloorLaunchError.None, revision, false, true, stay.X, stay.Y, stayFloorCardId, card);
 
         public bool Succeeded { get; }
         public TrapFloorLaunchError Error { get; }
@@ -1098,13 +1137,17 @@ namespace ConsoleCards.Games.TrapFloor
     }
 
     /// <summary>Trap Floor-owned interpretation of accepted generic Console insertions.</summary>
-    public sealed class TrapFloorAbilityResolutionService
+    public sealed partial class TrapFloorAbilityResolutionService
     {
         public const string CheckEffectMetadata = "trap-floor-ability-check";
         public const string DodgeEffectMetadata = "trap-floor-ability-dodge";
         public const string ShieldEffectMetadata = "trap-floor-ability-shield";
         public const string RushEffectMetadata = "trap-floor-ability-rush";
         public const string DisarmEffectMetadata = "trap-floor-ability-disarm";
+        public const string JumpEffectMetadata = "trap-floor-ability-jump";
+        public const string SafeSearchEffectMetadata = "trap-floor-ability-safe-search";
+        public const string InsuranceEffectMetadata = "trap-floor-ability-insurance";
+        public const string LassoEffectMetadata = "trap-floor-ability-lasso";
 
         private readonly TrapFloorAbilityResolutionState state;
         private readonly TrapFloorTurnState turnState;
@@ -1143,14 +1186,27 @@ namespace ConsoleCards.Games.TrapFloor
         public TrapFloorAbilityActivationResult Activate(
             MatchState matchState,
             ConsoleCardInserted insertion,
-            CardDefinitionData cardDefinition)
+            CardDefinitionData cardDefinition) =>
+            Activate(matchState, insertion, cardDefinition, null);
+
+        /// <param name="choice">Step 5: the tiles the player picked (Arm and Disarm, Safe Search); null for the others.</param>
+        public TrapFloorAbilityActivationResult Activate(
+            MatchState matchState,
+            ConsoleCardInserted insertion,
+            CardDefinitionData cardDefinition,
+            TrapFloorAbilityChoice choice)
         {
             if (matchState == null) throw new ArgumentNullException(nameof(matchState));
             if (insertion == null) throw new ArgumentNullException(nameof(insertion));
             if (cardDefinition == null) throw new ArgumentNullException(nameof(cardDefinition));
 
             TrapFloorAbilityEffect effect = ResolveEffect(cardDefinition.EffectMetadata);
+            if (effect == TrapFloorAbilityEffect.Insurance)
+                return TrapFloorAbilityActivationResult.Failure(TrapFloorAbilityActivationError.UsedOnlyWhenFalling, effect);
             if (effect != TrapFloorAbilityEffect.Disarm
+                && effect != TrapFloorAbilityEffect.Jump
+                && effect != TrapFloorAbilityEffect.SafeSearch
+                && effect != TrapFloorAbilityEffect.Lasso
                 && effect != TrapFloorAbilityEffect.Shield
                 && effect != TrapFloorAbilityEffect.Dodge
                 && effect != TrapFloorAbilityEffect.Rush
@@ -1174,6 +1230,8 @@ namespace ConsoleCards.Games.TrapFloor
                 return TrapFloorAbilityActivationResult.Failure(
                     TrapFloorAbilityActivationError.CardIdentityMismatch,
                     effect);
+            // Step 5: Lasso is used by a teammate while the turn player's Trap waits.
+            if (effect == TrapFloorAbilityEffect.Lasso) return ActivateLasso(matchState, insertion);
             if (turnState.Phase != TrapFloorTurnPhase.PlayerTurn
                 || turnState.IsCurrentFloorFailed
                 || insertion.ActorPlayerId != turnState.ActivePlayerId
@@ -1190,6 +1248,11 @@ namespace ConsoleCards.Games.TrapFloor
                 return TrapFloorAbilityActivationResult.Failure(
                     TrapFloorAbilityActivationError.AbilityAlreadyUsed,
                     effect);
+            // Step 5: the Abilities that act on picked tiles or jump.
+            if (effect == TrapFloorAbilityEffect.Disarm
+                || effect == TrapFloorAbilityEffect.SafeSearch
+                || effect == TrapFloorAbilityEffect.Jump)
+                return ActivateOnFloor(matchState, insertion, effect, choice);
 
             bool rush = effect == TrapFloorAbilityEffect.Rush;
             bool shield = effect == TrapFloorAbilityEffect.Shield;
@@ -1417,7 +1480,9 @@ namespace ConsoleCards.Games.TrapFloor
                 return false;
             }
 
-            List<TabletopObjectId> targets = FindRushTargets(matchState, origin);
+            // Rules v1.151126 (owner, 2026-11-17): Run is exactly 3 tiles in a straight line, never over a hole.
+            List<TabletopObjectId> targets = new List<TabletopObjectId>(4);
+            TrapFloorAbilityRules.RunTargets(matchState, template, collapseState, origin, targets);
             assistance = new TrapFloorRushAssistanceState(
                 playerId,
                 player.PawnId,
@@ -1576,6 +1641,7 @@ namespace ConsoleCards.Games.TrapFloor
                 || !template.TryGetFloorCardState(matchState, floorCardId, out TrapFloorFloorCardState floorCard)
                 || !floorCard.IsRevealed
                 || floorCard.Content.Category != TrapFloorFloorContentCategory.Trap
+                || state.IsDisarmed(floorCardId) // step 5: a disarmed Trap never triggers
                 || (state.TryGetTrap(floorCardId, out TrapFloorTrapResolutionRecord latest) && latest.IsPending)
                 || matchState.Revision == long.MaxValue)
             {
@@ -1755,6 +1821,10 @@ namespace ConsoleCards.Games.TrapFloor
                 && !collapseState.IsCollapsed(targetFloorCardId);
             if (!usable)
             {
+                // Step 5: Insurance, or the Strategist's Shield, keeps the player from falling; the pawn stays where it is.
+                TabletopObjectId saver = FallSaver != null ? FallSaver(trap.AffectedPlayerId) : TabletopObjectId.Empty;
+                if (!saver.IsEmpty)
+                    return SaveFromLaunch(matchState, context, trap, trapTile, saver);
                 trap.SetDisposition(TrapFloorTrapResolutionDisposition.Resolved);
                 TrapFloorTurnAdvanceResult elimination = turnService.MarkPlayerEliminatedForCurrentRound(
                     matchState,
@@ -1901,6 +1971,14 @@ namespace ConsoleCards.Games.TrapFloor
                 return TrapFloorAbilityEffect.Rush;
             if (string.Equals(effectMetadata, DisarmEffectMetadata, StringComparison.OrdinalIgnoreCase))
                 return TrapFloorAbilityEffect.Disarm;
+            if (string.Equals(effectMetadata, JumpEffectMetadata, StringComparison.OrdinalIgnoreCase))
+                return TrapFloorAbilityEffect.Jump;
+            if (string.Equals(effectMetadata, SafeSearchEffectMetadata, StringComparison.OrdinalIgnoreCase))
+                return TrapFloorAbilityEffect.SafeSearch;
+            if (string.Equals(effectMetadata, InsuranceEffectMetadata, StringComparison.OrdinalIgnoreCase))
+                return TrapFloorAbilityEffect.Insurance;
+            if (string.Equals(effectMetadata, LassoEffectMetadata, StringComparison.OrdinalIgnoreCase))
+                return TrapFloorAbilityEffect.Lasso;
             return TrapFloorAbilityEffect.None;
         }
     }

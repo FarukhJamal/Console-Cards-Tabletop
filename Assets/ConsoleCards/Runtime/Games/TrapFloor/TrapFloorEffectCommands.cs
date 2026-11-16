@@ -68,19 +68,55 @@ namespace ConsoleCards.Games.TrapFloor
         public TabletopObjectId FloorCardId { get; }
     }
 
-    /// <summary>Use the Ability card that lies in a Console slot (Check, Disarm, Shield, Dodge, Rush).</summary>
+    /// <summary>Use the Ability card that lies in a Console slot (Check, Arm and Disarm, Shield, Dodge, Run, Jump, Safe Search, Lasso).</summary>
     public sealed class TrapFloorUseAbilityCommand : ITabletopCommand
     {
         public TrapFloorUseAbilityCommand(CommandContext context, TabletopObjectId cardInstanceId, ContainerId slotContainerId)
+            : this(context, cardInstanceId, slotContainerId, null, null)
+        {
+        }
+
+        /// <param name="tiles">Step 5: the tiles the player picked (Arm and Disarm, Safe Search).</param>
+        /// <param name="rearmChoices">Step 5: Arm and Disarm: the player's pick among Traps at the same distance.</param>
+        public TrapFloorUseAbilityCommand(
+            CommandContext context,
+            TabletopObjectId cardInstanceId,
+            ContainerId slotContainerId,
+            TabletopObjectId[] tiles,
+            TabletopObjectId[] rearmChoices)
         {
             Context = context;
             CardInstanceId = cardInstanceId;
             SlotContainerId = slotContainerId;
+            Tiles = tiles ?? Array.Empty<TabletopObjectId>();
+            RearmChoices = rearmChoices ?? Array.Empty<TabletopObjectId>();
         }
 
         public CommandContext Context { get; }
         public TabletopObjectId CardInstanceId { get; }
         public ContainerId SlotContainerId { get; }
+        public TabletopObjectId[] Tiles { get; }
+        public TabletopObjectId[] RearmChoices { get; }
+    }
+
+    /// <summary>
+    /// Rules v1.151126, step 5: the tile under a player collapsed and a card of theirs (Insurance, or the Strategist's
+    /// Shield) keeps them from falling. Every table checks the card and the hole for itself.
+    /// </summary>
+    public sealed class TrapFloorSaveFromFallCommand : ITabletopCommand
+    {
+        public TrapFloorSaveFromFallCommand(CommandContext context, PlayerId playerId, TabletopObjectId holeFloorCardId, TabletopObjectId cardInstanceId)
+        {
+            Context = context;
+            PlayerId = playerId;
+            HoleFloorCardId = holeFloorCardId;
+            CardInstanceId = cardInstanceId;
+        }
+
+        public CommandContext Context { get; }
+        public PlayerId PlayerId { get; }
+        public TabletopObjectId HoleFloorCardId { get; }
+        public TabletopObjectId CardInstanceId { get; }
     }
 
     /// <summary>A guided move (Dodge, Rush, Spring, Crane) reached a lit tile: the guidance ends.</summary>
@@ -307,7 +343,36 @@ namespace ConsoleCards.Games.TrapFloor
         public TrapFloorLaunchResult LaunchTrap(MatchState match, TrapFloorLaunchTrapCommand command)
         {
             if (!Ready || match == null || command == null) return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.Unavailable);
-            return ability.ResolveLaunchTrap(match, command.Context, command.FloorCardId, turnService);
+            // Step 5: Insurance, or the Strategist's Shield, keeps a player a Spring or Crane drops off the floor (this table's cards).
+            ability.FallSaver = player => SaveCardOf(match, player);
+            try
+            {
+                return ability.ResolveLaunchTrap(match, command.Context, command.FloorCardId, turnService);
+            }
+            finally
+            {
+                ability.FallSaver = null;
+            }
+        }
+
+        /// <summary>Step 5: the card on this table that would keep <paramref name="player"/> from falling (empty: none).</summary>
+        public TabletopObjectId SaveCardOf(MatchState match, PlayerId player) =>
+            template == null || definitionOf == null || turn == null
+                ? TabletopObjectId.Empty
+                : TrapFloorAbilityRules.FindSaveCard(match, template, abilityState, definitionOf, player, turn.CurrentRound);
+
+        public TrapFloorEffectResult SaveFromFall(MatchState match, TrapFloorSaveFromFallCommand command)
+        {
+            if (!Ready || match == null || command == null || evidence == null || template == null)
+                return TrapFloorEffectResult.Failure(TrapFloorEffectError.Unavailable);
+            if (command.CardInstanceId.IsEmpty || SaveCardOf(match, command.PlayerId) != command.CardInstanceId)
+                return TrapFloorEffectResult.Failure(TrapFloorEffectError.NoReasonOnThisTable);
+            if (!evidence.StandsOnHoleOrOffFloor(command.PlayerId)
+                || !evidence.StandsOnFloorCard(command.PlayerId, command.HoleFloorCardId))
+                return TrapFloorEffectResult.Failure(TrapFloorEffectError.NotOnThatTile);
+            return ability.SaveFromCollapse(match, command.Context, command.PlayerId, command.HoleFloorCardId, command.CardInstanceId)
+                ? TrapFloorEffectResult.Accepted(match.Revision)
+                : TrapFloorEffectResult.Failure(TrapFloorEffectError.Rejected);
         }
 
         public TrapFloorBlindDirectionRollResult RollBlindDirection(MatchState match, TrapFloorRollBlindDirectionCommand command)
@@ -367,7 +432,11 @@ namespace ConsoleCards.Games.TrapFloor
                 card.BaseState.DefinitionId,
                 owner,
                 command.SlotContainerId);
-            TrapFloorAbilityActivationResult result = ability.Activate(match, insertion, definition);
+            TrapFloorAbilityActivationResult result = ability.Activate(
+                match,
+                insertion,
+                definition,
+                new TrapFloorAbilityChoice(command.Tiles, command.RearmChoices));
             if (result.Succeeded)
             {
                 // One step with the card's way into the Console (it amends that Undo step, as before).

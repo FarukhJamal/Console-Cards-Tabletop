@@ -407,7 +407,17 @@ namespace ConsoleCards.Presentation.Composition
                 case TrapFloorActivityKind.UsedDisarm:
                     return $"{who} used Disarm on {name}.";
                 case TrapFloorActivityKind.UsedRush:
-                    return $"{who} used Rush: move to a lit tile.";
+                    return $"{who} used Run: move to a lit tile.";
+                case TrapFloorActivityKind.UsedJump:
+                    return $"{who} used Jump: jump to a lit tile.";
+                case TrapFloorActivityKind.UsedSafeSearch:
+                    return $"{who} used Safe Search.";
+                case TrapFloorActivityKind.UsedArmAndDisarm:
+                    return $"{who} used Arm and Disarm.";
+                case TrapFloorActivityKind.UsedLasso:
+                    return $"{who} used Lasso: the turn player is pulled to their tile.";
+                case TrapFloorActivityKind.SavedFromFall:
+                    return $"{who} was saved from falling.";
                 case TrapFloorActivityKind.BlindApplied:
                     return $"{who} is Blind: next move only in the rolled direction.";
                 case TrapFloorActivityKind.BlindDirectionRolled:
@@ -490,7 +500,7 @@ namespace ConsoleCards.Presentation.Composition
                     FeedbackLine($"{who} used Disarm.", FeedbackSeverity.Gain);
                     break;
                 case TrapFloorActivityKind.UsedRush:
-                    FeedbackLine($"{who} used Rush — move to a lit tile.", FeedbackSeverity.Gain);
+                    FeedbackLine($"{who} used Run — move to a lit tile.", FeedbackSeverity.Gain);
                     break;
                 case TrapFloorActivityKind.BlindApplied:
                     FeedbackLine($"{who} will be BLIND next round.", FeedbackSeverity.Warning);

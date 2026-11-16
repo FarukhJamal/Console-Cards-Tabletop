@@ -43,7 +43,11 @@ namespace ConsoleCards.Presentation.Composition
             || effect == TrapFloorAbilityEffect.Shield
             || effect == TrapFloorAbilityEffect.Dodge
             || effect == TrapFloorAbilityEffect.Rush
-            || effect == TrapFloorAbilityEffect.Check;
+            || effect == TrapFloorAbilityEffect.Check
+            || effect == TrapFloorAbilityEffect.Jump // rules v1.151126, step 5
+            || effect == TrapFloorAbilityEffect.SafeSearch
+            || effect == TrapFloorAbilityEffect.Insurance
+            || effect == TrapFloorAbilityEffect.Lasso;
 
         private static bool IsReaction(TrapFloorAbilityEffect effect) =>
             effect == TrapFloorAbilityEffect.Check
@@ -59,6 +63,16 @@ namespace ConsoleCards.Presentation.Composition
             PlayerId player,
             out string what)
         {
+            // Step 5: Insurance acts by itself; a Lasso is a teammate's, on the turn player's waiting Trap.
+            if (effect == TrapFloorAbilityEffect.Insurance)
+            {
+                what = "Insurance is used by itself: when you would fall (a collapse, or a Spring or Crane off the floor), "
+                    + "you are saved and it is discarded.";
+                return false;
+            }
+
+            if (effect == TrapFloorAbilityEffect.Lasso) return CanUseLassoNow(cardId, player, out what);
+
             if (host.trapFloorTurnState == null
                 || host.trapFloorAbilityResolutionState == null
                 || host.trapFloorTurnState.IsCurrentFloorFailed
@@ -88,7 +102,22 @@ namespace ConsoleCards.Presentation.Composition
 
             if (effect == TrapFloorAbilityEffect.Rush)
             {
-                what = "Move up to 3 spaces, even over a hole, instead of your normal move.";
+                what = "Move exactly 3 tiles in a straight line (they light up), never over a hole, instead of your normal move.";
+                return true;
+            }
+
+            // Rules v1.151126, step 5.
+            if (effect == TrapFloorAbilityEffect.Jump || effect == TrapFloorAbilityEffect.SafeSearch)
+                return CanUseFloorActionNow(effect, player, out what);
+            if (effect == TrapFloorAbilityEffect.Disarm)
+            {
+                bool engineer = TrapFloorAbilityRules.SpecialOf(host.matchState, host.trapFloorTemplate, player)
+                    == TrapFloorAvatarSpecial.Engineer;
+                what = engineer
+                    ? "Pick 1 or 2 floor tiles next to each other to disarm. Each Trap disarmed rearms a triggered Trap within 2 "
+                        + "tiles of you (up to 2). A tile that is not a Trap: no effect, and the turn is used."
+                    : "Pick any floor tile to disarm. Disarming a Trap rearms the nearest triggered Trap (it turns back face "
+                        + "down). A tile that is not a Trap: no effect, and the turn is used.";
                 return true;
             }
 
@@ -335,7 +364,11 @@ namespace ConsoleCards.Presentation.Composition
         // Uses the card from a Console slot: where it already is, or a free slot it is put into first.
         private void UseAbilityCard(TabletopObjectId cardId, CardDefinition definition)
         {
-            PlayerId player = host.trapFloorTurnState != null ? host.trapFloorTurnState.ActivePlayerId : PlayerId.Empty;
+            TrapFloorAbilityEffect effect = TrapFloorAbilityResolutionService.ResolveEffect(definition.EffectMetadata);
+            // Step 5: a Lasso is used by the teammate who holds it, not by the turn player.
+            PlayerId player = effect == TrapFloorAbilityEffect.Lasso
+                ? HolderOf(cardId)
+                : host.trapFloorTurnState != null ? host.trapFloorTurnState.ActivePlayerId : PlayerId.Empty;
             if (!TryGetTrapFloorPlayerSetup(player, out TrapFloorPlayerSetupDefinition setup)
                 || !host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card))
             {
@@ -343,7 +376,6 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            TrapFloorAbilityEffect effect = TrapFloorAbilityResolutionService.ResolveEffect(definition.EffectMetadata);
             ContainerId slot = card.BaseState.ContainerId;
             if (IsConsoleSlotOf(setup, slot))
             {

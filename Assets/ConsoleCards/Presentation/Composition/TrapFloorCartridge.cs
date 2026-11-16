@@ -1310,6 +1310,7 @@ namespace ConsoleCards.Presentation.Composition
                     PlayerId actor = host.physicalFloorCollapseActor.IsEmpty
                         ? host.trapFloorTurnState.FloorOperatorPlayerId
                         : host.physicalFloorCollapseActor;
+                    if (TrySaveFromCollapse(player, collapsedTile, actor.IsEmpty ? player : actor)) continue; // step 5
                     TrapFloorTurnAdvanceResult knocked = SubmitElimination( // AUTH-EFFECTS: every table sees the hole itself
                         player,
                         TrapFloorEliminationReason.Fell,
@@ -2719,6 +2720,9 @@ namespace ConsoleCards.Presentation.Composition
                 // Owner, 2026-10-21: exits are taken by landing on them (no Attempt Escape button).
             }
 
+            AddTilePickActions(targetCardId, actions); // step 5: Arm and Disarm, Safe Search
+            AddLassoActions(targetCardId, actions); // step 5: a teammate pulls the turn player off this Trap
+
             // Owner, 2026-11-05: a floor card flips like any card (menu Flip or F).
             if (!floorCard.IsRevealed && !isCollapsed)
             {
@@ -3018,6 +3022,12 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
+            if (!result.SavedByCardId.IsEmpty)
+            {
+                AnnounceFallSaved(affectedPlayerId, result.SavedByCardId, $"{trapName} would drop them off the floor");
+                return;
+            }
+
             if (result.TargetFloorCardId == floorCardId)
             {
                 host.FeedbackLine($"{trapName} — the dice point at the tile you stand on ({result.TargetX},{result.TargetY}): your pawn stays.", FeedbackSeverity.Info);
@@ -3312,6 +3322,7 @@ namespace ConsoleCards.Presentation.Composition
                 },
                 usableReactions > 0 ? "Use a Reaction…" : null,
                 usableReactions > 0 ? (Action)(() => ShowReactionOffer(active)) : null));
+            HintLasso(trapId); // step 5: a teammate on this computer may pull them off it
             // P8A batch 4 (owner: "Full: Crane must automatically roll"): with no Reaction to offer first, the dice are
             // thrown at once for the turn player (on their own computer; the host decides the faces).
             if (autoCrane) BeginCraneRoll(trapId);
@@ -4794,20 +4805,38 @@ namespace ConsoleCards.Presentation.Composition
 
         // Uses an Ability for real (the player chose it, and paid when it has a cost): the trap it answers is marked,
         // Dodge and Rush light their tiles, and the result is said.
-        private void ActivateAbility(ConsoleCardInserted insertion, CardDefinition definition, TrapFloorAbilityEffect effect)
+        private void ActivateAbility(
+            ConsoleCardInserted insertion,
+            CardDefinition definition,
+            TrapFloorAbilityEffect effect,
+            TabletopObjectId[] tiles = null,
+            TabletopObjectId[] rearmChoices = null)
         {
+            // Step 5: Arm and Disarm and Safe Search act on tiles the player picks first.
+            if (NeedsTilePick(effect) && tiles == null)
+            {
+                BeginTilePick(insertion, definition, effect);
+                return;
+            }
+
             IConsoleCardInteraction interaction = insertion;
+            // Step 5: a Lasso is used by its holder, a teammate of the turn player.
+            PlayerId user = effect == TrapFloorAbilityEffect.Lasso && !insertion.ConsoleOwnerPlayerId.IsEmpty
+                ? insertion.ConsoleOwnerPlayerId
+                : insertion.ActorPlayerId;
             // Rules v1.151126: Reminders reminds about "a move or an Action; no Reaction after an Action" (Full refuses).
             string turnReminder = AssistRules.Warns(AssistRule.PawnMoveRules)
-                ? MoveOrActionProblem(insertion.CardInstanceId, insertion.ActorPlayerId)
+                ? MoveOrActionProblem(insertion.CardInstanceId, user)
                 : null;
             // AUTH-EFFECTS: the card in the slot is used through a command; every table (the host's first) reads the card
             // and the waiting Trap from its own state.
             TrapFloorAbilityActivationResult result = host.TableAuthority.Submit<TrapFloorUseAbilityCommand, TrapFloorAbilityActivationResult>(
                 new TrapFloorUseAbilityCommand(
-                    host.CreateCommandContext(insertion.ActorPlayerId),
+                    host.CreateCommandContext(user),
                     insertion.CardInstanceId,
-                    insertion.SlotContainerId));
+                    insertion.SlotContainerId,
+                    tiles,
+                    rearmChoices));
             if (!result.Succeeded)
             {
                 host.ShowMessage(TrapFloorAbilityRejectionMessage(effect, result.Error));
@@ -4839,7 +4868,27 @@ namespace ConsoleCards.Presentation.Composition
             else if (effect == TrapFloorAbilityEffect.Rush)
             {
                 RefreshMovementAssistancePresentation();
-                host.FeedbackLine("RUSH — move up to 3 tiles, to a lit tile.", FeedbackSeverity.Info); // TRAP-1: always shown
+                host.FeedbackLine("RUN — move 3 tiles in a straight line, to a lit tile.", FeedbackSeverity.Info); // TRAP-1: always shown
+            }
+            else if (effect == TrapFloorAbilityEffect.Jump)
+            {
+                RefreshMovementAssistancePresentation();
+                host.FeedbackLine("JUMP — jump over the hole to a lit tile.", FeedbackSeverity.Info); // always shown
+            }
+            else if (effect == TrapFloorAbilityEffect.Lasso)
+            {
+                RefreshMovementAssistancePresentation();
+                host.FeedbackLine(
+                    $"LASSO — {FormatPlayerShortName(user)} pulls {FormatPlayerShortName(result.Trap.AffectedPlayerId)}: "
+                    + $"{result.Trap.Content.DisplayName} does not apply. Move that pawn to the lit tile.",
+                    FeedbackSeverity.Info);
+            }
+            else if (NeedsTilePick(effect))
+            {
+                ShowAbilityTileChanges(result.Tiles);
+                RefreshMovementAssistancePresentation();
+                RefreshNeutralizedTrapPresentation();
+                host.ShowMessage(TileChangesText(user, effect, result.Tiles));
             }
             else if (effect == TrapFloorAbilityEffect.Check)
             {
@@ -4993,7 +5042,15 @@ namespace ConsoleCards.Presentation.Composition
                 case TrapFloorAbilityActivationError.NoValidDodgeDestination:
                     return "Dodge unavailable — no adjacent Floor.";
                 case TrapFloorAbilityActivationError.NoValidRushDestination:
-                    return "Run unavailable — no reachable Floor.";
+                    return "Run unavailable — no straight line of 3 tiles without a hole.";
+                case TrapFloorAbilityActivationError.NoJumpDestination:
+                    return "Jump unavailable — no hole next to you with a tile to land on behind it.";
+                case TrapFloorAbilityActivationError.NoTargetChosen:
+                    return $"{effect} — that tile cannot be picked.";
+                case TrapFloorAbilityActivationError.LassoNotAllowed:
+                    return "Lasso — only a teammate who used no other Ability this round can pull the turn player.";
+                case TrapFloorAbilityActivationError.UsedOnlyWhenFalling:
+                    return "Insurance is used by itself when you would fall.";
                 case TrapFloorAbilityActivationError.ActionAfterMove:
                     return "A turn is a move or one Action: you have moved, or used an Action, this turn.";
                 case TrapFloorAbilityActivationError.ReactionAfterAction:
@@ -5006,6 +5063,7 @@ namespace ConsoleCards.Presentation.Composition
         internal void RefreshMovementAssistancePresentation()
         {
             if (host.abilityTargetPresenter == null) return;
+            if (RefreshTilePickPresentation()) return; // step 5: the tiles a pick may choose stay lit
             IReadOnlyList<TabletopObjectId> targetFloorCardIds =
                 host.trapFloorAbilityResolutionState?.ActiveRushAssistance?.TargetFloorCardIds
                 ?? host.trapFloorAbilityResolutionState?.ActiveDodgeAssistance?.TargetFloorCardIds;
@@ -5031,6 +5089,12 @@ namespace ConsoleCards.Presentation.Composition
                     if (trap.Disposition == TrapFloorTrapResolutionDisposition.Neutralized)
                         neutralizedFloorCardIds.Add(trap.FloorCardId);
                 }
+
+                // Step 5: a disarmed Trap is harmless too.
+                foreach (TabletopObjectId disarmed in host.trapFloorAbilityResolutionState.DisarmedFloors)
+                {
+                    if (!neutralizedFloorCardIds.Contains(disarmed)) neutralizedFloorCardIds.Add(disarmed);
+                }
             }
             host.abilityTargetPresenter.ShowNeutralized(neutralizedFloorCardIds);
         }
@@ -5038,10 +5102,11 @@ namespace ConsoleCards.Presentation.Composition
         internal bool IsTrapFloorTrapNeutralized(TabletopObjectId floorCardId)
         {
             return host.trapFloorAbilityResolutionState != null
-                && host.trapFloorAbilityResolutionState.TryGetTrap(
-                    floorCardId,
-                    out TrapFloorTrapResolutionRecord trap)
-                && trap.Disposition == TrapFloorTrapResolutionDisposition.Neutralized;
+                && (host.trapFloorAbilityResolutionState.IsDisarmed(floorCardId) // step 5
+                    || (host.trapFloorAbilityResolutionState.TryGetTrap(
+                        floorCardId,
+                        out TrapFloorTrapResolutionRecord trap)
+                    && trap.Disposition == TrapFloorTrapResolutionDisposition.Neutralized));
         }
 
         internal bool WasTrapSafelyRevealed(TabletopObjectId floorCardId)
@@ -6562,6 +6627,21 @@ namespace ConsoleCards.Presentation.Composition
                         break;
                     case TrapFloorActivityKind.UsedRush:
                         line = $"{FormatPlayerShortName(entry.ActorPlayerId)} activated Run";
+                        break;
+                    case TrapFloorActivityKind.UsedJump: // step 5
+                        line = $"{FormatPlayerShortName(entry.ActorPlayerId)} used Jump";
+                        break;
+                    case TrapFloorActivityKind.UsedSafeSearch:
+                        line = $"{FormatPlayerShortName(entry.ActorPlayerId)} used Safe Search";
+                        break;
+                    case TrapFloorActivityKind.UsedArmAndDisarm:
+                        line = $"{FormatPlayerShortName(entry.ActorPlayerId)} used Arm and Disarm";
+                        break;
+                    case TrapFloorActivityKind.UsedLasso:
+                        line = $"{FormatPlayerShortName(entry.ActorPlayerId)} used Lasso";
+                        break;
+                    case TrapFloorActivityKind.SavedFromFall:
+                        line = $"{FormatPlayerShortName(entry.ActorPlayerId)} was saved from falling";
                         break;
                     case TrapFloorActivityKind.UsedCheck:
                         line = $"{FormatPlayerShortName(entry.ActorPlayerId)} checked "

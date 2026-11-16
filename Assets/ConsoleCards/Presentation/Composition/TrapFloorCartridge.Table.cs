@@ -225,6 +225,10 @@ namespace ConsoleCards.Presentation.Composition
                 command => EffectExecutor().ClearGuidance(host.matchState, command), result => result.Succeeded);
             authority.Register<TrapFloorEliminatePlayerCommand, TrapFloorTurnAdvanceResult>(
                 command => EffectExecutor().Eliminate(host.matchState, command), result => result.Succeeded);
+            // Rules v1.151126, step 5: Insurance, or the Strategist's Shield, keeps a player whose tile collapsed.
+            authority.Register<TrapFloorSaveFromFallCommand, TrapFloorEffectResult>(
+                command => EffectExecutor().SaveFromFall(host.matchState, command), result => result.Succeeded);
+            authority.Observe<TrapFloorSaveFromFallCommand, TrapFloorEffectResult>(OnFallSaved);
             // Rules v1.151126 Buy Phase: a player's Done Buying runs on every table (the host replays a joined computer's).
             authority.Register<TrapFloorFinishBuyingCommand, TrapFloorTurnAdvanceResult>(
                 command => host.trapFloorTurnService.FinishBuying(host.matchState, command.Context), result => result.Succeeded);
@@ -233,7 +237,7 @@ namespace ConsoleCards.Presentation.Composition
             authority.Observe<TrapFloorLaunchTrapCommand, TrapFloorLaunchResult>((c, r) => OnEffectAccepted(true));
             authority.Observe<TrapFloorRollBlindDirectionCommand, TrapFloorBlindDirectionRollResult>((c, r) => OnEffectAccepted(false, c.DieId));
             authority.Observe<TrapFloorRetriggerTrapCommand, TrapFloorEffectResult>((c, r) => OnEffectAccepted());
-            authority.Observe<TrapFloorUseAbilityCommand, TrapFloorAbilityActivationResult>((c, r) => OnEffectAccepted());
+            authority.Observe<TrapFloorUseAbilityCommand, TrapFloorAbilityActivationResult>(OnAbilityUsed); // step 5: tiles turned
             authority.Observe<TrapFloorClearGuidanceCommand, TrapFloorEffectResult>((c, r) => OnEffectAccepted());
             authority.Observe<TrapFloorEliminatePlayerCommand, TrapFloorTurnAdvanceResult>((c, r) => OnEffectAccepted());
             authority.Observe<CommitPhysicalObjectCommand, CommandResult>(OnPawnCommitted); // P8A polish: the Spring springs
@@ -265,6 +269,7 @@ namespace ConsoleCards.Presentation.Composition
             if (host.Registry.TryGetCardView(command.FloorCardId, out CardView floorCardView)) RevealFloorCardView(floorCardView);
             host.RefreshCardContentVisibility();
             RefreshTrapFloorStatusUi();
+            HintLasso(command.FloorCardId); // step 5: a teammate here may pull the turn player off it
             host.StartCoroutine(EnsureRevealShownSoon(command.FloorCardId)); // P8A: the screen shows what the table says
         }
 

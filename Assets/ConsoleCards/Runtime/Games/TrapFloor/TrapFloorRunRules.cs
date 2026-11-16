@@ -245,7 +245,7 @@ namespace ConsoleCards.Games.TrapFloor
 
         // A starting Ability of this seat: dealt beside it with its Avatar (46), or taken from the pile for the Avatar in
         // its Main slot (44). A loose one of another seat's Avatar is that seat's.
-        private static bool IsSeatsStartingAbility(TabletopObjectId cardId, int seatIndex, int avatarIndex)
+        internal static bool IsSeatsStartingAbility(TabletopObjectId cardId, int seatIndex, int avatarIndex) // step 5: also read by the save from a fall
         {
             if (TrapFloorTemplateFactory.TryGetFactoryIndex(cardId, StartingBesideSeat, out int besideIndex))
                 return (besideIndex - 1) / 100 == seatIndex;
@@ -254,7 +254,7 @@ namespace ConsoleCards.Games.TrapFloor
             return false;
         }
 
-        private static int SeatAvatarIndex(MatchState match, TrapFloorTemplateDefinition template, TrapFloorPlayerSetupDefinition setup)
+        internal static int SeatAvatarIndex(MatchState match, TrapFloorTemplateDefinition template, TrapFloorPlayerSetupDefinition setup)
         {
             if (setup.MainSlotContainerId.IsEmpty || !match.Containers.TryGetValue(setup.MainSlotContainerId, out ContainerState slot)) return -1;
             for (int i = 0; i < slot.Count; i++)

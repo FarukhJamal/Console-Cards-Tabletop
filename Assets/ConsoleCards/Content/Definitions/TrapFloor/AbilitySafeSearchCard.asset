@@ -42,7 +42,7 @@ MonoBehaviour:
   orientation: 0
   defaultFace: 0
   preferredConsolePlacement: Side
-  consoleBehavior: 0
+  consoleBehavior: 1
   tags:
   - trap-floor
   - ability

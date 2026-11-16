@@ -41,6 +41,9 @@ namespace ConsoleCards.Games.TrapFloor
         private readonly TrapFloorBlindStatusState[] blindStatuses;
         private readonly TrapFloorSlowStatusState[] slowStatuses;
         private readonly TrapFloorStickyStatusState[] stickyStatuses;
+        private readonly TabletopObjectId[] disarmedFloors; // step 5
+        private readonly TabletopObjectId[] rearmedFloors;
+        private readonly TrapFloorSavedFromFall[] savedFromFalls;
 
         private TrapFloorSessionStateSnapshot(
             TrapFloorActivityFeedState activity,
@@ -83,6 +86,9 @@ namespace ConsoleCards.Games.TrapFloor
             blindStatuses = abilityResolution.CopyBlindStatuses();
             slowStatuses = abilityResolution.CopySlowStatuses();
             stickyStatuses = abilityResolution.CopyStickyStatuses();
+            disarmedFloors = abilityResolution.CopyDisarmed();
+            rearmedFloors = abilityResolution.CopyRearmed();
+            savedFromFalls = abilityResolution.CopySavedFromFalls();
         }
 
         public MatchId MatchId { get; }
@@ -155,6 +161,7 @@ namespace ConsoleCards.Games.TrapFloor
                 blindStatuses,
                 slowStatuses,
                 stickyStatuses);
+            abilityResolution.RestoreArming(disarmedFloors, rearmedFloors, savedFromFalls);
             return new TrapFloorSessionState(
                 activity,
                 objective,

@@ -39,6 +39,13 @@ namespace ConsoleCards.Games.TrapFloor
         SafelyRevealedTrap = 22,
         /// <summary>R1 (owner, 2026-11-14): a tile turned over by hand with no pawn on it: revealed only, no effect.</summary>
         RevealedByHand = 23,
+        /// <summary>Rules v1.151126, step 5.</summary>
+        UsedJump = 24,
+        UsedSafeSearch = 25,
+        /// <summary>Step 5: Insurance or the Strategist's Shield kept the player from falling.</summary>
+        SavedFromFall = 26,
+        UsedLasso = 27,
+        UsedArmAndDisarm = 28,
     }
 
     /// <summary>
@@ -136,6 +143,7 @@ namespace ConsoleCards.Games.TrapFloor
                 || kind == TrapFloorActivityKind.AllPlayersEliminated
                 || kind == TrapFloorActivityKind.PlayersReactivated
                 || kind == TrapFloorActivityKind.UsedRush
+                || (kind >= TrapFloorActivityKind.UsedJump && kind <= TrapFloorActivityKind.UsedArmAndDisarm) // step 5
                 || kind == TrapFloorActivityKind.BlindDirectionRolled;
             if (floorCardId.IsEmpty
                 && kind != TrapFloorActivityKind.TriggeredFloorfall
@@ -487,6 +495,13 @@ namespace ConsoleCards.Games.TrapFloor
             entries.Add(entry);
             return entry;
         }
+
+        /// <summary>Step 5: an Ability use with no Trap of its own (Jump, Safe Search, Arm and Disarm, Lasso, a save).</summary>
+        internal TrapFloorActivityEntry RecordAbilityActivity(
+            long acceptedRevision,
+            PlayerId actorPlayerId,
+            TrapFloorActivityKind kind) =>
+            RecordPlayerActivity(acceptedRevision, actorPlayerId, kind);
 
         internal TrapFloorActivityEntry RecordRushActivated(
             long acceptedRevision,
