@@ -937,7 +937,11 @@ namespace ConsoleCards.Games.TrapFloor
                 }
             }
 
-            if (scaleToGrid || recipe != null)
+            // Rules v1.151126 (owner, 2026-11-16): the rulebook's exact deck for the mode, difficulty and floor size,
+            // when it fits this grid; a players' floor deck, or a grid it does not fit, keeps the scaled mix.
+            bool exactDeck = recipe != null && recipe.HasExactDeck && !recipe.HasTileCounts
+                && TryApplyExactDeck(groups, recipe, grid.CellCount);
+            if (!exactDeck && (scaleToGrid || recipe != null))
                 ScaleFloorDrawCounts(groups, grid.CellCount, requiredKeys, recipe != null ? recipe.KeyCount : -1);
             bool ownFloorDeck = recipe != null && recipe.HasTileCounts;
             int otherCells = 0;
@@ -946,6 +950,12 @@ namespace ConsoleCards.Games.TrapFloor
                 if (ownFloorDeck && groups[i].Kind == FloorGroupKind.Other)
                 {
                     otherCells += groups[i].Count; // the players' floor deck fills these cells instead
+                    continue;
+                }
+
+                if (exactDeck && groups[i].Kind == FloorGroupKind.Other && groups[i].FirstCategory == TrapFloorFloorContentCategory.Trap)
+                {
+                    DrawExactTraps(groups[i].ContentSet, groups[i].Pool, groups[i].Count, recipe.ExactFallTraps, randomValueSource, drawn);
                     continue;
                 }
 
@@ -1136,6 +1146,113 @@ namespace ConsoleCards.Games.TrapFloor
                 groups[best].Count++;
                 leftOver[best] = -1d;
                 assigned++;
+            }
+        }
+
+        // Rules v1.151126: sets every group to the rulebook's exact deck (Keys from the recipe, the Exits the mode
+        // keeps, then Friends, floor Abilities and Traps). Nothing changes, and false comes back, when the counts do
+        // not add up to this grid's cells or a group cannot hold its count (a grid or game the rulebook does not
+        // cover), so the scaled mix is used instead.
+        private static bool TryApplyExactDeck(List<FloorGroupDraw> groups, TrapFloorFloorRecipe recipe, int cellCount)
+        {
+            int[] counts = new int[groups.Count];
+            int total = 0;
+            int keys = 0;
+            bool trapGroup = false;
+            for (int i = 0; i < groups.Count; i++)
+            {
+                FloorGroupDraw group = groups[i];
+                int count;
+                if (group.Kind == FloorGroupKind.Exits)
+                {
+                    count = group.Count;
+                }
+                else if (group.Kind == FloorGroupKind.Keys)
+                {
+                    count = Math.Min(group.MaximumCount, Math.Max(0, recipe.KeyCount - keys));
+                    keys += count;
+                }
+                else
+                {
+                    switch (group.FirstCategory)
+                    {
+                        case TrapFloorFloorContentCategory.Trap:
+                            if (trapGroup) return false; // the rulebook's Trap count needs one Trap group
+                            trapGroup = true;
+                            count = recipe.ExactTraps; // drawn with repeats when the Traps run out (DrawExactTraps)
+                            break;
+                        case TrapFloorFloorContentCategory.Ability:
+                            count = recipe.ExactAbilities;
+                            if (count > group.MaximumCount) return false;
+                            break;
+                        case TrapFloorFloorContentCategory.Friend:
+                            count = recipe.ExactFriends;
+                            if (count > group.MaximumCount) return false;
+                            break;
+                        default:
+                            return false;
+                    }
+
+                    if (count > 0 && group.Pool.Count == 0) return false;
+                }
+
+                counts[i] = count;
+                total += count;
+            }
+
+            if (total != cellCount || keys != recipe.KeyCount || (!trapGroup && recipe.ExactTraps > 0)) return false;
+            for (int i = 0; i < groups.Count; i++) groups[i].Count = counts[i];
+            return true;
+        }
+
+        // Rules v1.151126: the floor's Traps with exactly fallTraps Fall Traps; the rest are the other Traps at random.
+        // Each kind is drawn without repeats until its copies run out, then from all its copies again, so a floor can
+        // hold more Traps than the cards authored (27 on a 6×6 Hard floor). No Fall card authored: every Trap at random.
+        private static void DrawExactTraps(
+            GameContentSetData contentSet,
+            List<TrapFloorFloorContentDefinition> pool,
+            int drawCount,
+            int fallTraps,
+            IRandomValueSource randomValueSource,
+            List<TrapFloorFloorContentDefinition> drawn)
+        {
+            List<TrapFloorFloorContentDefinition> falls = new List<TrapFloorFloorContentDefinition>();
+            List<TrapFloorFloorContentDefinition> others = new List<TrapFloorFloorContentDefinition>();
+            for (int i = 0; i < pool.Count; i++)
+            {
+                if (pool[i].TrapEffect == TrapFloorTrapEffectCategory.EliminateForCurrentRound) falls.Add(pool[i]);
+                else others.Add(pool[i]);
+            }
+
+            int fall = falls.Count == 0 ? 0 : Math.Min(Math.Max(0, fallTraps), drawCount);
+            DrawCycling(contentSet, falls, fall, randomValueSource, drawn);
+            DrawCycling(contentSet, others.Count > 0 ? others : falls, drawCount - fall, randomValueSource, drawn);
+        }
+
+        private static void DrawCycling(
+            GameContentSetData contentSet,
+            List<TrapFloorFloorContentDefinition> pool,
+            int drawCount,
+            IRandomValueSource randomValueSource,
+            List<TrapFloorFloorContentDefinition> drawn)
+        {
+            if (drawCount <= 0) return;
+            if (pool.Count == 0)
+            {
+                throw new ArgumentException(
+                    $"Trap Floor floor group '{contentSet.StableId}' has no cards to draw {drawCount} from.");
+            }
+
+            int next = 0;
+            for (int i = 0; i < drawCount; i++)
+            {
+                if (next >= pool.Count) next = 0; // every copy used: start a new pass over all of them
+                int pick = randomValueSource.NextInt(next, pool.Count);
+                TrapFloorFloorContentDefinition swap = pool[next];
+                pool[next] = pool[pick];
+                pool[pick] = swap;
+                drawn.Add(pool[next]);
+                next++;
             }
         }
 

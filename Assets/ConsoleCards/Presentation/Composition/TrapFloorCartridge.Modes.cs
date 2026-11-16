@@ -17,7 +17,7 @@ namespace ConsoleCards.Presentation.Composition
     /// The game mode (owner, 2026-11-04, TRAP CARDS rules), chosen at New table… apart from the difficulty:
     /// Free for all (default): everyone works toward the exit; a player may hold one Key and needs it for the Grand
     /// Exit. Team Play (2v2, competitive): a Key belongs to the player who took it and one player may carry them all;
-    /// a team needs a Key for the Grand Exit. Survival: one 6×6 floor, 4 Keys, Grand Exit only, one Key each and a
+    /// a team needs a Key for the Grand Exit. Survival: 6×6, 5×5, 4×4, 4 Keys, Grand Exit only, one Key each and a
     /// player needs their own for the Grand Exit (owner, 2026-11-15), and a tile collapses after every player's turn
     /// (never the Grand Exit). In every mode a Key used at the Secret Exit is gone, and the
     /// floor ends when every player still in has escaped.
@@ -37,7 +37,6 @@ namespace ConsoleCards.Presentation.Composition
     {
         internal const string ImpossibleModeStableId = "trap-floor-mode-impossible";
         // Rules v1.151126 (owner, 2026-11-15): Free for all and Survival hold 4 Keys on every floor (one is the Copper Key).
-        internal const int SurvivalKeyCount = 4;
         internal const int FreeForAllKeyCount = 4;
         // Insurance and Lasso carry this tag: left off the floor and out of the Ability deck outside Team Play.
         internal const string TeamOnlyTag = "team-only";
@@ -79,19 +78,19 @@ namespace ConsoleCards.Presentation.Composition
             switch (mode)
             {
                 case TrapFloorWinMode.TeamPlay: return "Team Play: 2 v 2. Take the Keys before the other team; your team needs a Key to exit.";
-                case TrapFloorWinMode.Survival: return "Survival: one 6×6 floor. A tile collapses after every turn; one Key each, no Key, no Grand Exit.";
+                case TrapFloorWinMode.Survival: return "Survival: 6×6, 5×5, 4×4. A tile collapses after every turn; one Key each, no Key, no Grand Exit.";
                 default: return "Free for all: everyone heads for the exit. One Key each; no Key, no Grand Exit.";
             }
         }
 
         internal static string TurnsName(bool anticlockwise) => anticlockwise ? "Anticlockwise" : "Clockwise";
 
-        // Owner, 2026-11-04 (TRAP CARDS rules): what each floor holds in each mode.
+        // Owner, 2026-11-04 (TRAP CARDS rules) and rules v1.151126 (2026-11-16): what each floor holds in each mode.
         //   Team Play:    6×6 3 Keys, Grand + Secret · 5×5 2 Keys, Grand · 4×4 2 Keys, Grand
-        //   Free for all: 4 Keys on every floor (rules v1.151126) · 6×6 and 5×5 Grand + Secret · 4×4 Grand
-        //   Survival:     6×6 only, 4 Keys, Grand (one Key each)
-        // The difficulty shapes the rest of the mix (rules: "trap cards and ability cards are more if the difficulty is
-        // high; the easier the difficulty the more assisting cards"); a floor deck of the players' replaces it.
+        //   Free for all: 4 Keys on every floor · 6×6 and 5×5 Grand + Secret · 4×4 Grand
+        //   Survival:     6×6, 5×5, 4×4 · 4 Keys on every floor · Grand only (one Key each)
+        // The rest of the floor is the rulebook's exact deck for the mode, difficulty and size (ExactDeck; Impossible
+        // uses Hard's). The weights stay for a grid the rulebook does not cover; a floor deck of the players' replaces both.
         internal static TrapFloorFloorRecipe RecipeFor(
             TrapFloorWinMode mode,
             int floorIndex,
@@ -99,13 +98,67 @@ namespace ConsoleCards.Presentation.Composition
             IReadOnlyDictionary<string, int> tileCounts = null)
         {
             DifficultyWeights(difficultyStableId, out double traps, out double abilities, out double friends);
-            if (mode == TrapFloorWinMode.Survival)
-                return new TrapFloorFloorRecipe(1, SurvivalKeyCount, false, 1, traps, abilities, friends, tileCounts, TeamOnlyTag);
-            int keys = mode == TrapFloorWinMode.FreeForAll ? FreeForAllKeyCount : floorIndex == 0 ? 3 : 2;
-            bool secret = floorIndex == 0 || (floorIndex == 1 && mode == TrapFloorWinMode.FreeForAll);
-            return new TrapFloorFloorRecipe(3, keys, secret, 1, traps, abilities, friends, tileCounts,
+            int keys = mode == TrapFloorWinMode.TeamPlay ? (floorIndex == 0 ? 3 : 2) : FreeForAllKeyCount;
+            bool secret = mode != TrapFloorWinMode.Survival
+                && (floorIndex == 0 || (floorIndex == 1 && mode == TrapFloorWinMode.FreeForAll));
+            TrapFloorFloorRecipe recipe = new TrapFloorFloorRecipe(3, keys, secret, 1, traps, abilities, friends, tileCounts,
                 mode == TrapFloorWinMode.TeamPlay ? null : TeamOnlyTag); // rules v1.151126: Insurance and Lasso are Team Play only
+            return ExactDeck(mode, floorIndex, difficultyStableId, out int deckFriends, out int deckAbilities, out int deckTraps, out int deckFalls)
+                ? recipe.WithExactDeck(deckFriends, deckAbilities, deckTraps, deckFalls)
+                : recipe;
         }
+
+        // Rules v1.151126 §09 "Full deck composition" (27 rows): Friends ("Blue"), floor Abilities, Traps and the Fall
+        // Traps among them, by floor (6×6, 5×5, 4×4), difficulty (Easy, Medium, Hard; Impossible uses Hard's, owner
+        // 2026-11-15) and mode. Keys and Exits come from the recipe. False for a floor the rulebook has no row for.
+        internal static bool ExactDeck(
+            TrapFloorWinMode mode,
+            int floorIndex,
+            string difficultyStableId,
+            out int friends,
+            out int abilities,
+            out int traps,
+            out int fallTraps)
+        {
+            friends = abilities = traps = fallTraps = 0;
+            if (floorIndex < 0 || floorIndex > 2) return false;
+            string id = difficultyStableId ?? string.Empty;
+            int level = id.EndsWith("easy", StringComparison.OrdinalIgnoreCase) ? 0
+                : id.EndsWith("medium", StringComparison.OrdinalIgnoreCase) ? 1
+                : id.EndsWith("hard", StringComparison.OrdinalIgnoreCase) || id.EndsWith("impossible", StringComparison.OrdinalIgnoreCase) ? 2
+                : -1;
+            if (level < 0) return false;
+            int modeIndex = mode == TrapFloorWinMode.TeamPlay ? 0 : mode == TrapFloorWinMode.FreeForAll ? 1 : 2;
+            int[] row = ExactDeckRows[floorIndex][modeIndex][level];
+            friends = row[0];
+            abilities = row[1];
+            traps = row[2];
+            fallTraps = row[3];
+            return true;
+        }
+
+        // [floor][mode: Team Play, Free for all, Survival][difficulty: Easy, Medium, Hard] = { Friends, Abilities, Traps, Fall }.
+        private static readonly int[][][][] ExactDeckRows =
+        {
+            new[] // 6×6, 36 tiles
+            {
+                new[] { new[] { 4, 10, 17, 4 }, new[] { 4, 5, 22, 5 }, new[] { 4, 0, 27, 6 } },
+                new[] { new[] { 4, 10, 16, 4 }, new[] { 4, 5, 21, 5 }, new[] { 4, 0, 26, 6 } },
+                new[] { new[] { 4, 10, 17, 4 }, new[] { 4, 5, 22, 5 }, new[] { 4, 0, 27, 6 } },
+            },
+            new[] // 5×5, 25 tiles
+            {
+                new[] { new[] { 3, 7, 12, 3 }, new[] { 3, 3, 16, 4 }, new[] { 3, 0, 19, 5 } },
+                new[] { new[] { 3, 7, 9, 3 }, new[] { 3, 3, 13, 4 }, new[] { 3, 0, 16, 5 } },
+                new[] { new[] { 3, 7, 10, 3 }, new[] { 3, 3, 14, 4 }, new[] { 3, 0, 17, 5 } },
+            },
+            new[] // 4×4, 16 tiles
+            {
+                new[] { new[] { 2, 4, 7, 2 }, new[] { 2, 2, 9, 3 }, new[] { 2, 0, 11, 4 } },
+                new[] { new[] { 2, 4, 5, 2 }, new[] { 2, 2, 7, 3 }, new[] { 2, 0, 9, 4 } },
+                new[] { new[] { 2, 4, 5, 2 }, new[] { 2, 2, 7, 3 }, new[] { 2, 0, 9, 4 } },
+            },
+        };
 
         private static void DifficultyWeights(string stableId, out double traps, out double abilities, out double friends)
         {

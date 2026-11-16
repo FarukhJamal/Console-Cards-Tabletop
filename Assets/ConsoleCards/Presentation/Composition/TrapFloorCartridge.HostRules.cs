@@ -195,8 +195,8 @@ namespace ConsoleCards.Presentation.Composition
             public bool IsStuckWithoutKey(PlayerId player)
             {
                 TabletopComposition host = game.host;
-                if (game.WinMode == TrapFloorWinMode.Survival
-                    || host.trapFloorObjectiveState == null
+                // Owner, 2026-11-15: Survival needs a Key of your own too, so a player left without one is stuck there as well.
+                if (host.trapFloorObjectiveState == null
                     || host.trapFloorObjectiveUseCase == null
                     || host.trapFloorObjectiveState.IsWon
                     || host.trapFloorObjectiveState.IsPlayerEscaped(player)

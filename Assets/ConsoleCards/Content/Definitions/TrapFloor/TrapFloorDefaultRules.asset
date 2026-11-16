@@ -21,28 +21,28 @@ MonoBehaviour:
     numbered: 0
     entries:
     - stableId: tf-setup-traps
-      text: 'The floor holds {value} Traps, picked at random from Spring, Crane, Fall, Slow, Sticky and Blind.'
-      settingKind: 1
-      settingKey: floor.count.trap-floor-floor-traps
-      value: '18'
+      text: 'Every floor has a fixed deck for its game mode, difficulty and size. For example, a 6×6 Team Play floor on Easy holds 4 Friends, 10 Abilities, 3 Keys, a Secret and a Grand Exit, and 17 Traps, 4 of them Fall Traps.'
+      settingKind: 0
+      settingKey: 
+      value: ''
       displayValue: ''
       modeStableIds: []
     - stableId: tf-setup-friends
-      text: '{value} Friends, picked at random from the Friend cards and Overcharged.'
-      settingKind: 1
-      settingKey: floor.count.trap-floor-floor-friends
-      value: '4'
+      text: 'Friends: 4 on 6×6, 3 on 5×5, 2 on 4×4, picked at random from the Friend cards and Overcharged. Abilities: 10, 7 and 4 on Easy; 5, 3 and 2 on Medium; none on Hard. The same Ability can appear more than once.'
+      settingKind: 0
+      settingKey: 
+      value: ''
       displayValue: ''
       modeStableIds: []
     - stableId: tf-setup-abilities
-      text: '{value} Abilities, picked at random. The same Ability can appear more than once.'
-      settingKind: 1
-      settingKey: floor.count.trap-floor-floor-abilities
-      value: '6'
+      text: 'Traps fill the rest. Fall Traps: 4, 5 or 6 on 6×6; 3, 4 or 5 on 5×5; 2, 3 or 4 on 4×4 (Easy, Medium, Hard). The other Traps are picked at random from Spring, Crane, Slow, Sticky and Blind. Impossible uses the Hard decks.'
+      settingKind: 0
+      settingKey: 
+      value: ''
       displayValue: ''
       modeStableIds: []
     - stableId: tf-setup-fixed
-      text: 'The game mode sets each floor''s Keys and Exits (see Goal); the other tiles are scaled to fill the floor. Each later floor is one row and one column smaller: 6×6, 5×5, 4×4. Survival plays one 6×6 floor.'
+      text: 'The game mode sets each floor''s Keys and Exits (see Goal). Each later floor is one row and one column smaller: 6×6, 5×5, 4×4, in every game mode. A floor deck of your own (Decks) replaces the game''s Traps, Friends and Abilities on that floor.'
       settingKind: 0
       settingKey: 
       value: ''
@@ -318,7 +318,7 @@ MonoBehaviour:
     numbered: 0
     entries:
     - stableId: tf-goal-easy
-      text: 'Easy: more helping cards (Friends) on the floor, and each player starts with their Avatar''s Ability.'
+      text: 'Easy: the most Abilities on the floor and the fewest Traps, and each player starts with their Avatar''s Ability.'
       settingKind: 1
       settingKey: mode.keys-needed
       value: '1'
@@ -326,7 +326,7 @@ MonoBehaviour:
       modeStableIds:
       - trap-floor-mode-easy
     - stableId: tf-goal-medium
-      text: 'Medium: the standard mix of Traps, Abilities and Friends.'
+      text: 'Medium: fewer Abilities on the floor and more Traps.'
       settingKind: 1
       settingKey: mode.keys-needed
       value: '3'
@@ -334,7 +334,7 @@ MonoBehaviour:
       modeStableIds:
       - trap-floor-mode-medium
     - stableId: tf-goal-hard
-      text: 'Hard: more Traps and Abilities on the floor.'
+      text: 'Hard: no Abilities on the floor; the most Traps.'
       settingKind: 1
       settingKey: mode.keys-needed
       value: '3'
@@ -342,7 +342,7 @@ MonoBehaviour:
       modeStableIds:
       - trap-floor-mode-hard
     - stableId: tf-goal-impossible
-      text: 'Impossible: the most Traps and the fewest helping cards.'
+      text: 'Impossible: the Hard decks, and once a player escapes, a tile collapses after every player''s turn.'
       settingKind: 1
       settingKey: mode.keys-needed
       value: '3'
@@ -357,7 +357,7 @@ MonoBehaviour:
       displayValue: 'Team, one player must escape'
       modeStableIds: []
     - stableId: tf-goal-exit-roll
-      text: 'Survival: one 6×6 floor with 4 Keys and the Grand Exit only. A tile collapses after every player''s turn; Keys can collapse, the Grand Exit cannot. One Key each: you need a Key of your own for the Grand Exit.'
+      text: 'Survival: three floors (6×6, 5×5, 4×4), each with 4 Keys and the Grand Exit only. A tile collapses after every player''s turn; Keys can collapse, the Grand Exit cannot. One Key each: you need a Key of your own for the Grand Exit.'
       settingKind: 0
       settingKey: 
       value: ''

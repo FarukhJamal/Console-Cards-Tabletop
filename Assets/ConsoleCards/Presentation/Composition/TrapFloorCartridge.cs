@@ -5990,10 +5990,9 @@ namespace ConsoleCards.Presentation.Composition
                 inHand = cards == 1 ? "1 CARD" : $"{cards} CARDS";
             }
 
+            // Owner, 2026-11-15: Survival is one Key each too, so it shows the player's own Keys like Free for all.
             string keys = host.trapFloorObjectiveState != null
-                ? WinMode == TrapFloorWinMode.Survival
-                    ? $"{host.trapFloorObjectiveState.CollectedKeyCount} / {KeysNeededForGrandExit()}"
-                    : $"{KeysHeldBy(playerId)}{(WinMode == TrapFloorWinMode.TeamPlay ? $" · {TeamName(TeamOf(playerId))}" : string.Empty)}"
+                ? $"{KeysHeldBy(playerId)}{(WinMode == TrapFloorWinMode.TeamPlay ? $" · {TeamName(TeamOf(playerId))}" : string.Empty)}"
                 : "—";
             string floor = host.trapFloorTemplate != null
                 ? (host.TrapFloorStageCount > 1 ? $"Stage {host.trapFloorStageIndex + 1} · " : string.Empty) // STAGES-1
@@ -6575,9 +6574,7 @@ namespace ConsoleCards.Presentation.Composition
 
         internal string CurrentTrapFloorObjectiveProgressText()
         {
-            string keys = WinMode == TrapFloorWinMode.Survival
-                ? $"KEYS {host.trapFloorObjectiveState.CollectedKeyCount} / {KeysNeededForGrandExit()}"
-                : $"KEYS {host.trapFloorObjectiveState.CollectedKeyCount} TAKEN";
+            string keys = $"KEYS {host.trapFloorObjectiveState.CollectedKeyCount} TAKEN"; // every mode: one Key per player or team
             return $"{keys}\nESCAPED {host.trapFloorObjectiveState.EscapedPlayerCount} / "
                 + $"{host.activeSession.Request.ActivePlayerIds.Count}";
         }

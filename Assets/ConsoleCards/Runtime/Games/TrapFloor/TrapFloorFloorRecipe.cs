@@ -45,6 +45,36 @@ namespace ConsoleCards.Games.TrapFloor
 
         public int FloorCount { get; }
 
+        /// <summary>
+        /// Rules v1.151126 (owner, 2026-11-16): the rulebook's exact floor deck for this mode, difficulty and floor size:
+        /// Friends, floor Abilities, Traps and, of those Traps, Fall Traps. -1: not set (the weighted mix).
+        /// </summary>
+        public int ExactFriends { get; private set; } = -1;
+
+        public int ExactAbilities { get; private set; } = -1;
+
+        public int ExactTraps { get; private set; } = -1;
+
+        public int ExactFallTraps { get; private set; } = -1;
+
+        public bool HasExactDeck => ExactFriends >= 0 && ExactAbilities >= 0 && ExactTraps >= 0;
+
+        /// <summary>This recipe with the rulebook's exact floor deck (see <see cref="ExactTraps"/>).</summary>
+        public TrapFloorFloorRecipe WithExactDeck(int friends, int abilities, int traps, int fallTraps)
+        {
+            if (friends < 0) throw new ArgumentOutOfRangeException(nameof(friends));
+            if (abilities < 0) throw new ArgumentOutOfRangeException(nameof(abilities));
+            if (traps < 0) throw new ArgumentOutOfRangeException(nameof(traps));
+            if (fallTraps < 0 || fallTraps > traps) throw new ArgumentOutOfRangeException(nameof(fallTraps));
+            TrapFloorFloorRecipe copy = new TrapFloorFloorRecipe(
+                FloorCount, KeyCount, SecretExit, RequiredKeys, TrapWeight, AbilityWeight, FriendWeight, TileCounts, ExcludedTag);
+            copy.ExactFriends = friends;
+            copy.ExactAbilities = abilities;
+            copy.ExactTraps = traps;
+            copy.ExactFallTraps = fallTraps;
+            return copy;
+        }
+
         /// <summary>A card tag this mode leaves off the floor (Free for all: "lasso"); null: none.</summary>
         public string ExcludedTag { get; }
 
