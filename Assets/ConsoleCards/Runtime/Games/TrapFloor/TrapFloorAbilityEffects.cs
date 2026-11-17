@@ -74,6 +74,15 @@ namespace ConsoleCards.Games.TrapFloor
             return null;
         }
 
+        /// <summary>Team Play: two different seated players on the same team (partners sit opposite: seats 1 and 3, 2 and 4).</summary>
+        public static bool AreTeammates(MatchState match, TrapFloorTemplateDefinition template, PlayerId a, PlayerId b)
+        {
+            if (a.IsEmpty || b.IsEmpty || a == b) return false;
+            TrapFloorPlayerSetupDefinition setupA = SetupOf(match, template, a);
+            TrapFloorPlayerSetupDefinition setupB = SetupOf(match, template, b);
+            return setupA != null && setupB != null && setupA.LayoutSeatIndex % 2 == setupB.LayoutSeatIndex % 2;
+        }
+
         /// <summary>A tile a pawn may stand on: on the grid, with its floor card, not collapsed.</summary>
         public static bool IsStandable(MatchState match, TrapFloorTemplateDefinition template, TrapFloorCollapseState collapse, int x, int y)
         {
@@ -379,9 +388,10 @@ namespace ConsoleCards.Games.TrapFloor
         }
 
         /// <summary>
-        /// The card that saves this player from falling (owner, 2026-11-17 assumptions, doc 19 §17): Insurance first, then
-        /// Shield when the player is the Strategist. The card must lie in the player's hand, their Ability area or their
-        /// Console, or loose beside it (theirs), and not be used yet this round. Empty: nothing saves them.
+        /// The card that saves this player from falling (owner, 2026-11-17): Insurance first (their tile collapses, or a
+        /// Trap drops them onto a hole), then Shield when the player is the Strategist (only when their tile collapses:
+        /// <paramref name="collapse"/>). The card must lie in the player's hand, their Ability area or their Console, or
+        /// loose beside it (theirs), and not be used yet this round. Empty: nothing saves them.
         /// </summary>
         public static TabletopObjectId FindSaveCard(
             MatchState match,
@@ -389,12 +399,13 @@ namespace ConsoleCards.Games.TrapFloor
             TrapFloorAbilityResolutionState state,
             Func<ObjectDefinitionId, CardDefinitionData> definitionOf,
             PlayerId player,
-            int round)
+            int round,
+            bool collapse = true)
         {
             if (match == null || template == null || definitionOf == null) return TabletopObjectId.Empty;
             TrapFloorPlayerSetupDefinition setup = SetupOf(match, template, player);
             if (setup == null) return TabletopObjectId.Empty;
-            bool strategist = SpecialOf(match, template, player) == TrapFloorAvatarSpecial.Strategist;
+            bool strategist = collapse && SpecialOf(match, template, player) == TrapFloorAvatarSpecial.Strategist;
             TabletopObjectId shield = TabletopObjectId.Empty;
             List<ContainerId> places = new List<ContainerId>(8)
             {
@@ -437,6 +448,69 @@ namespace ConsoleCards.Games.TrapFloor
 
             if (!looseInsurance.IsEmpty) return looseInsurance;
             return shield.IsEmpty ? looseShield : shield;
+        }
+
+        /// <summary>
+        /// Step 5: a card with <paramref name="effect"/> the player holds and has not used this round: in their hand,
+        /// their Ability area or their Console, else loose beside it (the lowest id). Empty: none.
+        /// </summary>
+        public static TabletopObjectId FindHeldAbility(
+            MatchState match,
+            TrapFloorTemplateDefinition template,
+            TrapFloorAbilityResolutionState state,
+            Func<ObjectDefinitionId, CardDefinitionData> definitionOf,
+            PlayerId player,
+            int round,
+            TrapFloorAbilityEffect effect)
+        {
+            if (match == null || template == null || definitionOf == null) return TabletopObjectId.Empty;
+            TrapFloorPlayerSetupDefinition setup = SetupOf(match, template, player);
+            if (setup == null) return TabletopObjectId.Empty;
+            List<ContainerId> places = new List<ContainerId>(8)
+            {
+                setup.HandContainerId,
+                setup.ActionAbilityAreaContainerId,
+                setup.MainSlotContainerId,
+            };
+            for (int i = 0; i < setup.SideSlotContainerIds.Count; i++) places.Add(setup.SideSlotContainerIds[i]);
+            for (int p = 0; p < places.Count; p++)
+            {
+                if (places[p].IsEmpty || !match.Containers.TryGetValue(places[p], out ContainerState container)) continue;
+                for (int i = 0; i < container.Count; i++)
+                {
+                    TabletopObjectId cardId = container.GetObjectAt(i);
+                    if (IsUnusedAbility(match, state, definitionOf, player, round, cardId, effect)) return cardId;
+                }
+            }
+
+            TabletopObjectId loose = TabletopObjectId.Empty;
+            foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in match.Cards)
+            {
+                if (!IsLooseAbilityOf(match, template, player, pair.Key, pair.Value)
+                    || !IsUnusedAbility(match, state, definitionOf, player, round, pair.Key, effect))
+                {
+                    continue;
+                }
+
+                if (loose.IsEmpty || pair.Key.Value.CompareTo(loose.Value) < 0) loose = pair.Key;
+            }
+
+            return loose;
+        }
+
+        private static bool IsUnusedAbility(
+            MatchState match,
+            TrapFloorAbilityResolutionState state,
+            Func<ObjectDefinitionId, CardDefinitionData> definitionOf,
+            PlayerId player,
+            int round,
+            TabletopObjectId cardId,
+            TrapFloorAbilityEffect effect)
+        {
+            if (!match.Cards.TryGetValue(cardId, out CardInstanceState card)) return false;
+            if (state != null && state.HasAbilityActivatedThisTurn(cardId, player, round)) return false;
+            CardDefinitionData definition = definitionOf(card.BaseState.DefinitionId);
+            return definition != null && TrapFloorAbilityResolutionService.ResolveEffect(definition.EffectMetadata) == effect;
         }
     }
 
@@ -570,8 +644,8 @@ namespace ConsoleCards.Games.TrapFloor
     public sealed partial class TrapFloorAbilityResolutionService
     {
         /// <summary>
-        /// Step 5: the card that keeps a player from falling when a Spring or Crane drops them off the floor (Insurance,
-        /// or the Strategist's Shield); empty: none. The executor sets it from this table's own cards.
+        /// Step 5: the card that keeps a player from falling when a Spring or Crane drops them onto a hole (Insurance;
+        /// owner, 2026-11-17); empty: none. The executor sets it from this table's own cards.
         /// </summary>
         public Func<PlayerId, TabletopObjectId> FallSaver { get; set; }
 
@@ -708,8 +782,9 @@ namespace ConsoleCards.Games.TrapFloor
         }
 
         /// <summary>
-        /// Step 5, Lasso (Team Play): a teammate who used no other Ability this round pulls the turn player, whose Trap
-        /// waits, to their own tile: the Trap does not apply, and the turn player's pawn is guided to that lit tile.
+        /// Step 5, Lasso (Team Play): a teammate who used no Action Ability this round (owner, 2026-11-17; the executor
+        /// checks it) pulls the turn player, whose Trap waits, to their own tile: the Trap does not apply, and the turn
+        /// player's pawn is guided to that lit tile.
         /// </summary>
         private TrapFloorAbilityActivationResult ActivateLasso(MatchState matchState, ConsoleCardInserted insertion)
         {
@@ -726,7 +801,7 @@ namespace ConsoleCards.Games.TrapFloor
                 || insertion.ConsoleOwnerPlayerId != user
                 || !turnState.ContainsPlayer(user)
                 || turnState.GetPlayerState(user) == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound
-                || state.UsedAnyAbilityThisRound(user, round))
+                || !TrapFloorAbilityRules.AreTeammates(matchState, template, user, active))
                 return TrapFloorAbilityActivationResult.Failure(TrapFloorAbilityActivationError.LassoNotAllowed, effect);
             if (!state.TryGetLatestPendingTrap(active, false, out TrapFloorTrapResolutionRecord trap))
                 return TrapFloorAbilityActivationResult.Failure(TrapFloorAbilityActivationError.NoUnresolvedTrap, effect);
@@ -752,7 +827,7 @@ namespace ConsoleCards.Games.TrapFloor
             return TrapFloorAbilityActivationResult.Accepted(effect, trap);
         }
 
-        // Step 5: a Spring or Crane would drop the player off the floor, and a card saves them: the Trap is stopped and the
+        // Step 5: a Spring or Crane would drop the player onto a hole, and Insurance saves them: the Trap is stopped and the
         // pawn stays where it is.
         private TrapFloorLaunchResult SaveFromLaunch(
             MatchState matchState,
@@ -773,16 +848,19 @@ namespace ConsoleCards.Games.TrapFloor
 
         /// <summary>
         /// Step 5: the tile under the player collapsed and <paramref name="card"/> (Insurance, or the Strategist's Shield)
-        /// saves them: they stay on the hole and step off on their next turn. The caller checked the card and the hole on
-        /// its own table. False when it does not apply.
+        /// saves them: they stay on the hole and step off on their next turn. Or a teammate's Lasso (<paramref name="user"/>,
+        /// owner 2026-11-17): the pawn is pulled to that teammate's tile (the computer that plays the player moves it).
+        /// The caller checked the card and the hole on its own table. False when it does not apply.
         /// </summary>
         public bool SaveFromCollapse(
             MatchState matchState,
             CommandContext context,
             PlayerId player,
             TabletopObjectId holeFloorCardId,
-            TabletopObjectId card)
+            TabletopObjectId card,
+            PlayerId user = default)
         {
+            if (user.IsEmpty) user = player;
             if (matchState == null
                 || template == null
                 || collapseState == null
@@ -792,13 +870,13 @@ namespace ConsoleCards.Games.TrapFloor
                 || !collapseState.IsCollapsed(holeFloorCardId)
                 || !turnState.ContainsPlayer(player)
                 || turnState.GetPlayerState(player) == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound
-                || state.HasAbilityActivatedThisTurn(card, player, turnState.CurrentRound)
+                || state.HasAbilityActivatedThisTurn(card, user, turnState.CurrentRound)
                 || state.IsSavedOnHole(player, holeFloorCardId))
             {
                 return false;
             }
 
-            state.RecordAbilityActivation(card, player, turnState.CurrentRound);
+            state.RecordAbilityActivation(card, user, turnState.CurrentRound);
             state.MarkSavedOnHole(player, holeFloorCardId);
             long revision = matchState.AdvanceRevision(
                 context.Id,

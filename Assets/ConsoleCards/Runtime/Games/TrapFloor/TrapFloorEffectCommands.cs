@@ -101,22 +101,42 @@ namespace ConsoleCards.Games.TrapFloor
 
     /// <summary>
     /// Rules v1.151126, step 5: the tile under a player collapsed and a card of theirs (Insurance, or the Strategist's
-    /// Shield) keeps them from falling. Every table checks the card and the hole for itself.
+    /// Shield) keeps them from falling; or a teammate's Lasso pulls them to the teammate's tile (owner, 2026-11-17).
+    /// Every table checks the card, the hole and the teammate's tile for itself.
     /// </summary>
     public sealed class TrapFloorSaveFromFallCommand : ITabletopCommand
     {
         public TrapFloorSaveFromFallCommand(CommandContext context, PlayerId playerId, TabletopObjectId holeFloorCardId, TabletopObjectId cardInstanceId)
+            : this(context, playerId, holeFloorCardId, cardInstanceId, PlayerId.Empty, TabletopObjectId.Empty)
+        {
+        }
+
+        /// <summary>A teammate's Lasso: <paramref name="lassoPlayerId"/> pulls the player to <paramref name="targetFloorCardId"/>.</summary>
+        public TrapFloorSaveFromFallCommand(
+            CommandContext context,
+            PlayerId playerId,
+            TabletopObjectId holeFloorCardId,
+            TabletopObjectId cardInstanceId,
+            PlayerId lassoPlayerId,
+            TabletopObjectId targetFloorCardId)
         {
             Context = context;
             PlayerId = playerId;
             HoleFloorCardId = holeFloorCardId;
             CardInstanceId = cardInstanceId;
+            LassoPlayerId = lassoPlayerId;
+            TargetFloorCardId = targetFloorCardId;
         }
 
         public CommandContext Context { get; }
         public PlayerId PlayerId { get; }
         public TabletopObjectId HoleFloorCardId { get; }
         public TabletopObjectId CardInstanceId { get; }
+        /// <summary>The teammate whose Lasso saves the player (empty: the player's own card).</summary>
+        public PlayerId LassoPlayerId { get; }
+        /// <summary>A Lasso: the teammate's tile the player is pulled to (empty: the player stays on the hole).</summary>
+        public TabletopObjectId TargetFloorCardId { get; }
+        public bool IsLasso => !LassoPlayerId.IsEmpty;
     }
 
     /// <summary>A guided move (Dodge, Rush, Spring, Crane) reached a lit tile: the guidance ends.</summary>
@@ -343,8 +363,9 @@ namespace ConsoleCards.Games.TrapFloor
         public TrapFloorLaunchResult LaunchTrap(MatchState match, TrapFloorLaunchTrapCommand command)
         {
             if (!Ready || match == null || command == null) return TrapFloorLaunchResult.Failure(TrapFloorLaunchError.Unavailable);
-            // Step 5: Insurance, or the Strategist's Shield, keeps a player a Spring or Crane drops off the floor (this table's cards).
-            ability.FallSaver = player => SaveCardOf(match, player);
+            // Step 5 (owner, 2026-11-17): Insurance keeps a player a Spring or Crane drops onto a hole (this table's cards).
+            // The Strategist's Shield saves only from a collapse.
+            ability.FallSaver = player => SaveCardOf(match, player, false);
             try
             {
                 return ability.ResolveLaunchTrap(match, command.Context, command.FloorCardId, turnService);
@@ -355,22 +376,53 @@ namespace ConsoleCards.Games.TrapFloor
             }
         }
 
-        /// <summary>Step 5: the card on this table that would keep <paramref name="player"/> from falling (empty: none).</summary>
-        public TabletopObjectId SaveCardOf(MatchState match, PlayerId player) =>
+        /// <summary>
+        /// Step 5: the card on this table that would keep <paramref name="player"/> from falling (empty: none);
+        /// <paramref name="collapse"/>: their tile collapsed (else a Trap drops them onto a hole).
+        /// </summary>
+        public TabletopObjectId SaveCardOf(MatchState match, PlayerId player, bool collapse = true) =>
             template == null || definitionOf == null || turn == null
                 ? TabletopObjectId.Empty
-                : TrapFloorAbilityRules.FindSaveCard(match, template, abilityState, definitionOf, player, turn.CurrentRound);
+                : TrapFloorAbilityRules.FindSaveCard(match, template, abilityState, definitionOf, player, turn.CurrentRound, collapse);
+
+        /// <summary>
+        /// Step 5 (owner, 2026-11-17): the Lasso of <paramref name="holder"/> that can pull their teammate
+        /// <paramref name="player"/> off a collapsing tile: the holder is still in, used no Action Ability this round,
+        /// and stands on a tile (empty: none).
+        /// </summary>
+        public TabletopObjectId LassoSaverOf(MatchState match, PlayerId player, PlayerId holder)
+        {
+            if (!Ready || match == null || template == null || definitionOf == null || evidence == null
+                || !TrapFloorAbilityRules.AreTeammates(match, template, player, holder)
+                || !turn.ContainsPlayer(holder)
+                || turn.GetPlayerState(holder) == TrapFloorCurrentFloorPlayerState.EliminatedForCurrentRound
+                || evidence.StandsOnHoleOrOffFloor(holder)
+                || TrapFloorMoveOrActionRules.UsedActionThisTurn(abilityState, match, holder, turn.CurrentRound, definitionOf))
+            {
+                return TabletopObjectId.Empty;
+            }
+
+            return TrapFloorAbilityRules.FindHeldAbility(
+                match, template, abilityState, definitionOf, holder, turn.CurrentRound, TrapFloorAbilityEffect.Lasso);
+        }
 
         public TrapFloorEffectResult SaveFromFall(MatchState match, TrapFloorSaveFromFallCommand command)
         {
             if (!Ready || match == null || command == null || evidence == null || template == null)
                 return TrapFloorEffectResult.Failure(TrapFloorEffectError.Unavailable);
-            if (command.CardInstanceId.IsEmpty || SaveCardOf(match, command.PlayerId) != command.CardInstanceId)
+            if (command.CardInstanceId.IsEmpty
+                || (command.IsLasso
+                    ? LassoSaverOf(match, command.PlayerId, command.LassoPlayerId)
+                    : SaveCardOf(match, command.PlayerId)) != command.CardInstanceId)
                 return TrapFloorEffectResult.Failure(TrapFloorEffectError.NoReasonOnThisTable);
             if (!evidence.StandsOnHoleOrOffFloor(command.PlayerId)
                 || !evidence.StandsOnFloorCard(command.PlayerId, command.HoleFloorCardId))
                 return TrapFloorEffectResult.Failure(TrapFloorEffectError.NotOnThatTile);
-            return ability.SaveFromCollapse(match, command.Context, command.PlayerId, command.HoleFloorCardId, command.CardInstanceId)
+            if (command.IsLasso
+                && (command.TargetFloorCardId.IsEmpty || !evidence.StandsOnFloorCard(command.LassoPlayerId, command.TargetFloorCardId)))
+                return TrapFloorEffectResult.Failure(TrapFloorEffectError.NotOnThatTile);
+            return ability.SaveFromCollapse(
+                    match, command.Context, command.PlayerId, command.HoleFloorCardId, command.CardInstanceId, command.LassoPlayerId)
                 ? TrapFloorEffectResult.Accepted(match.Revision)
                 : TrapFloorEffectResult.Failure(TrapFloorEffectError.Rejected);
         }
@@ -411,6 +463,12 @@ namespace ConsoleCards.Games.TrapFloor
             CardDefinitionData definition = definitionOf(card.BaseState.DefinitionId); // this table's own card text
             if (definition == null)
                 return TrapFloorAbilityActivationResult.Failure(TrapFloorAbilityActivationError.CardIdentityMismatch, TrapFloorAbilityEffect.None);
+
+            // Owner, 2026-11-17: a Lasso is used only by a teammate who has played no Action Ability this round.
+            if (TrapFloorAbilityResolutionService.ResolveEffect(definition.EffectMetadata) == TrapFloorAbilityEffect.Lasso
+                && TrapFloorMoveOrActionRules.UsedActionThisTurn(
+                    abilityState, match, command.Context.RequestedByPlayerId, turn.CurrentRound, definitionOf, command.CardInstanceId))
+                return TrapFloorAbilityActivationResult.Failure(TrapFloorAbilityActivationError.LassoNotAllowed, TrapFloorAbilityEffect.Lasso);
 
             // Rules v1.151126 (owner, 2026-11-15), Full: a turn is a move or one Action; no Reaction after an Action.
             if (evidence is ITrapFloorTurnEvidence turnRules && turnRules.EnforcesMoveOrAction)

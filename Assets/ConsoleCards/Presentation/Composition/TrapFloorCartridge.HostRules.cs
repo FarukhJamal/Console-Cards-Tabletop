@@ -644,9 +644,9 @@ namespace ConsoleCards.Presentation.Composition
                 }
             }
 
-            // The way back after a Key or prize: one step back, or to where the move began (rules v1.151126).
-            TrapFloorCoordinate? origin = setup != null && current.HasValue ? PickupReturnTile(sender, current.Value) : null;
-            if (setup == null || !target.HasValue || !current.HasValue || !origin.HasValue || target.Value != origin.Value) return false;
+            // The way back after a Key or prize: one step back (after a turning move, either tile it may have crossed:
+            // the player picks), or to where the move began (rules v1.151126).
+            if (setup == null || !target.HasValue || !current.HasValue || !IsPickupReturnTarget(sender, current.Value, target.Value)) return false;
             if (!host.trapFloorTemplate.TryGetFloorCardId(current.Value, out TabletopObjectId onId)) return false;
             bool keyTaken = host.trapFloorObjectiveState != null && host.trapFloorObjectiveState.HasPlayerClaimedKey(onId, sender);
             bool prizeTaken = host.trapFloorCollapseState != null

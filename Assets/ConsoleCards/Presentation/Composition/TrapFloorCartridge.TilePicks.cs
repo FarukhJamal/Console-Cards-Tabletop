@@ -506,7 +506,8 @@ namespace ConsoleCards.Presentation.Composition
             return tiles.Count > 0;
         }
 
-        // Lasso (Team Play): a teammate, who used no other Ability this round, while the turn player's Trap waits.
+        // Lasso (Team Play): a teammate who played no Action Ability this round (owner, 2026-11-17), while the turn
+        // player's Trap waits. (It also saves a teammate whose tile collapses: by itself, TrySaveByLasso.)
         private bool CanUseLassoNow(TabletopObjectId cardId, PlayerId player, out string what)
         {
             TrapFloorTurnState turn = host.trapFloorTurnState;
@@ -520,7 +521,14 @@ namespace ConsoleCards.Presentation.Composition
             PlayerId active = turn.ActivePlayerId;
             if (player == active)
             {
-                what = "Lasso is used on a teammate: when they trigger a Trap on their turn, pull them to your tile.";
+                what = "Lasso is used on a teammate: when they trigger a Trap on their turn, pull them to your tile. "
+                    + "It also saves them by itself when their tile collapses.";
+                return false;
+            }
+
+            if (!TrapFloorAbilityRules.AreTeammates(host.matchState, host.trapFloorTemplate, player, active))
+            {
+                what = $"Lasso is used only on a teammate; {FormatPlayerShortName(active)} is on the other team.";
                 return false;
             }
 
@@ -530,9 +538,9 @@ namespace ConsoleCards.Presentation.Composition
                 return false;
             }
 
-            if (state.UsedAnyAbilityThisRound(player, turn.CurrentRound))
+            if (UsedActionThisTurn(player, cardId))
             {
-                what = "Lasso works only if you have used no other Ability this round.";
+                what = "Lasso works only if you have played no Action Ability this round.";
                 return false;
             }
 
@@ -668,20 +676,56 @@ namespace ConsoleCards.Presentation.Composition
             return PlayerId.Empty;
         }
 
-        // ---------- Saved from a fall (Insurance; the Strategist's Shield) ----------
+        // ---------- Saved from a fall (Insurance; the Strategist's Shield; a teammate's Lasso) ----------
 
         // The tile under the player collapsed: a card of theirs keeps them (they stay on the hole and step off on their
-        // next turn). False: nothing saves them.
+        // next turn), else a teammate's Lasso pulls them to the teammate's tile (owner, 2026-11-17). False: nothing saves them.
         private bool TrySaveFromCollapse(PlayerId player, TrapFloorCoordinate tile, PlayerId actor)
         {
             if (host.trapFloorTemplate == null || !host.trapFloorTemplate.TryGetFloorCardId(tile, out TabletopObjectId hole)) return false;
             TabletopObjectId card = EffectExecutor().SaveCardOf(host.matchState, player);
-            if (card.IsEmpty) return false;
+            if (card.IsEmpty) return TrySaveByLasso(player, tile, hole, actor);
             TrapFloorEffectResult saved = host.TableAuthority.Submit<TrapFloorSaveFromFallCommand, TrapFloorEffectResult>(
                 new TrapFloorSaveFromFallCommand(LocalContextFor(actor), player, hole, card));
             if (!saved.Succeeded) return false;
             AnnounceFallSaved(player, card, $"the floor collapsed under them at {tile}; they stay on the hole and step off next turn");
             return true;
+        }
+
+        // A teammate who holds a Lasso, used no Action Ability this round and stands on a tile pulls the player there.
+        private bool TrySaveByLasso(PlayerId player, TrapFloorCoordinate tile, TabletopObjectId hole, PlayerId actor)
+        {
+            for (int i = 0; i < host.trapFloorTemplate.Players.Count; i++)
+            {
+                TrapFloorPlayerSetupDefinition setup = host.trapFloorTemplate.Players[i];
+                if (!host.matchState.Seats.TryGetValue(setup.SeatId, out var seat)) continue;
+                PlayerId holder = seat.OccupantPlayerId;
+                TabletopObjectId lasso = EffectExecutor().LassoSaverOf(host.matchState, player, holder);
+                if (lasso.IsEmpty
+                    || !TryReadPawnTile(setup.PawnId, out TrapFloorCoordinate holderTile)
+                    || !host.trapFloorTemplate.TryGetFloorCardId(holderTile, out TabletopObjectId target))
+                {
+                    continue;
+                }
+
+                TrapFloorEffectResult saved = host.TableAuthority.Submit<TrapFloorSaveFromFallCommand, TrapFloorEffectResult>(
+                    new TrapFloorSaveFromFallCommand(LocalContextFor(actor), player, hole, lasso, holder, target));
+                if (!saved.Succeeded) continue;
+                AnnounceFallSaved(player, lasso,
+                    $"{FormatPlayerShortName(holder)} pulls them off the collapsing tile at {tile} to {holderTile}");
+                PullToLassoTile(player, target);
+                return true;
+            }
+
+            return false;
+        }
+
+        // The computer that plays the pulled player moves the pawn to the Lasso holder's tile.
+        private void PullToLassoTile(PlayerId player, TabletopObjectId target)
+        {
+            if (!host.IsPlayerOnThisComputer(player)) return;
+            if (!TryAutoMovePawnToFloor(player, target, out _))
+                host.FeedbackLine($"Move {FormatPlayerName(player)}'s pawn to the Lasso's tile by hand.", FeedbackSeverity.Warning);
         }
 
         private void AnnounceFallSaved(PlayerId player, TabletopObjectId card, string why)
@@ -702,6 +746,7 @@ namespace ConsoleCards.Presentation.Composition
         {
             if (!result.Succeeded || !host.ViewSync.Ready || !host.Replicated.Replaying) return;
             host.FeedbackLine($"{FormatPlayerName(command.PlayerId).ToUpperInvariant()} is saved from the fall.", FeedbackSeverity.Gain);
+            if (command.IsLasso) PullToLassoTile(command.PlayerId, command.TargetFloorCardId);
             RefreshTrapFloorStatusUi();
         }
 

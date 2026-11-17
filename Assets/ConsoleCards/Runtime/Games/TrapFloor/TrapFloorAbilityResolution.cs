@@ -1821,8 +1821,10 @@ namespace ConsoleCards.Games.TrapFloor
                 && !collapseState.IsCollapsed(targetFloorCardId);
             if (!usable)
             {
-                // Step 5: Insurance, or the Strategist's Shield, keeps the player from falling; the pawn stays where it is.
-                TabletopObjectId saver = FallSaver != null ? FallSaver(trap.AffectedPlayerId) : TabletopObjectId.Empty;
+                // Step 5 (owner, 2026-11-17): Insurance keeps a player dropped onto a hole (a collapsed tile, not off the
+                // floor) from falling; the pawn stays where it is.
+                bool ontoHole = onGrid && !targetFloorCardId.IsEmpty && collapseState.IsCollapsed(targetFloorCardId);
+                TabletopObjectId saver = ontoHole && FallSaver != null ? FallSaver(trap.AffectedPlayerId) : TabletopObjectId.Empty;
                 if (!saver.IsEmpty)
                     return SaveFromLaunch(matchState, context, trap, trapTile, saver);
                 trap.SetDisposition(TrapFloorTrapResolutionDisposition.Resolved);

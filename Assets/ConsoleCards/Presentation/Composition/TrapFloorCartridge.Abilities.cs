@@ -66,8 +66,8 @@ namespace ConsoleCards.Presentation.Composition
             // Step 5: Insurance acts by itself; a Lasso is a teammate's, on the turn player's waiting Trap.
             if (effect == TrapFloorAbilityEffect.Insurance)
             {
-                what = "Insurance is used by itself: when you would fall (a collapse, or a Spring or Crane off the floor), "
-                    + "you are saved and it is discarded.";
+                what = "Insurance is used by itself: when you would fall onto a collapsed tile (your tile collapses, or a "
+                    + "Spring or Crane drops you onto a hole), you are saved and it is discarded.";
                 return false;
             }
 

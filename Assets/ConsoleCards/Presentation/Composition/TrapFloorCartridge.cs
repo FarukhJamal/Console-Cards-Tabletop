@@ -3608,7 +3608,7 @@ namespace ConsoleCards.Presentation.Composition
 
         // Rules v1.151126 (owner, 2026-11-17): after a Key or a prize (Ability, Friend) is taken from a floor tile, the pawn
         // steps back to the tile it stood on just before (PickupReturnTile); a face-down tile there turns over and takes
-        // effect. Before: the pawn went back to the tile THIS move began on (still used when a 2-tile move turned). Owner, 2026-11-08 (P7 rule correction, replaces 2026-11-04 "back to your default starting
+        // effect; after a 2-tile move that turned, the player picks the tile crossed (AskStepBackTile). Owner, 2026-11-08 (P7 rule correction, replaces 2026-11-04 "back to your default starting
         // card"): C3 → C5 takes a Key → back to C3, not to the spawn corner (unless the move began there).
         // Positions kept apart: spawn = setup.StartingCorner; turn start = hostMoveStart (HostRules); move origin =
         // moveStartTile (captured by the landing scan from the tile the pawn left, before the move's landing rules
@@ -3627,6 +3627,14 @@ namespace ConsoleCards.Presentation.Composition
             }
 
             TrapFloorCoordinate? origin = PickupReturnTile(player, tile);
+            // Owner, 2026-11-17: after a 2-tile move that turned, the player says which tile in between they crossed.
+            List<TrapFloorCoordinate> crossed = new List<TrapFloorCoordinate>(2);
+            if (origin.HasValue && TurnedStepBackTiles(tile, crossed) == 2)
+            {
+                AskStepBackTile(player, fromFloorCardId, tile, crossed);
+                return;
+            }
+
             TrapFloorCoordinate? destination = TrapFloorPickupReturn.Destination(origin, tile, c => IsWalkableTile(c.X, c.Y));
             if (!destination.HasValue)
             {
@@ -3635,16 +3643,24 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            if (!host.trapFloorTemplate.TryGetFloorCardId(destination.Value, out TabletopObjectId originId)) return;
+            StepBackTo(player, destination.Value);
+        }
+
+        // The pawn steps back to the tile (the move count is not reset; a face-down tile there turns over).
+        private void StepBackTo(PlayerId player, TrapFloorCoordinate destination)
+        {
+            if (!host.trapFloorTemplate.TryGetFloorCardId(destination, out TabletopObjectId originId)) return;
             if (TryAutoMovePawnToFloor(player, originId, out _))
             {
                 if (host.trapFloorTurnState != null && host.trapFloorTurnState.ActivePlayerId == player)
                 {
                     EnsureMoveTurn();
-                    moveStartTile = destination.Value; // the pawn's coordinate; the move count is not reset
+                    moveStartTile = destination; // the pawn's coordinate; the move count is not reset
                     moveStartFromWaiting = false;
                     moveSpentByRule = true;
                     stepBackTile = null;
+                    stepBackTurnA = null;
+                    stepBackTurnB = null;
                 }
 
                 CollectTakenPrizesOffPawns(); // the prize the pawn just left goes by the Console now
@@ -5048,7 +5064,7 @@ namespace ConsoleCards.Presentation.Composition
                 case TrapFloorAbilityActivationError.NoTargetChosen:
                     return $"{effect} — that tile cannot be picked.";
                 case TrapFloorAbilityActivationError.LassoNotAllowed:
-                    return "Lasso — only a teammate who used no other Ability this round can pull the turn player.";
+                    return "Lasso — only a teammate who played no Action Ability this round can pull the turn player.";
                 case TrapFloorAbilityActivationError.UsedOnlyWhenFalling:
                     return "Insurance is used by itself when you would fall.";
                 case TrapFloorAbilityActivationError.ActionAfterMove:
@@ -5222,6 +5238,8 @@ namespace ConsoleCards.Presentation.Composition
             guidedMoveThisTurn = false;
             tooFarStateIndex = -1;
             stepBackTile = null;
+            stepBackTurnA = null;
+            stepBackTurnB = null;
         }
 
         internal bool TryGetActivePawnTile(out TabletopObjectId pawnId, out TrapFloorCoordinate tile)

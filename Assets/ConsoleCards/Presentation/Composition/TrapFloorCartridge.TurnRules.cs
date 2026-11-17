@@ -25,9 +25,10 @@ namespace ConsoleCards.Presentation.Composition
     /// Rules v1.151126, step 4 (owner, 2026-11-15 and 2026-11-17):
     /// <list type="bullet">
     /// <item>After a Key, a Friend or a floor Ability is taken, the pawn steps back to the tile it stood on just before
-    /// (a 1-tile move: where it came from; a straight move: the tile behind it). When a 2-tile move turned, the tile in
-    /// between is not known, so the pawn goes back to where the move began. A face-down tile it steps back onto is
-    /// turned over and takes effect.</item>
+    /// (a 1-tile move: where it came from; a straight move: the tile behind it). When a 2-tile move turned (an L), the
+    /// game cannot see which of the 2 tiles in between was crossed (owner, 2026-11-17: follow the rulebook): if only one
+    /// can be stood on, that one; if both can, the player picks. A face-down tile it steps back onto is turned over and
+    /// takes effect.</item>
     /// <item>A turn is a move or one Action Ability; after an Action no Reaction may be used. Full refuses (the host
     /// too), Reminders reminds, Free does nothing.</item>
     /// </list>
@@ -38,16 +39,30 @@ namespace ConsoleCards.Presentation.Composition
         // The tile the active pawn stood on just before its latest landing, and that landing's tile (null: not known).
         internal TrapFloorCoordinate? stepBackTile;
         internal TrapFloorCoordinate stepBackLanding;
+        // A 2-tile move that turned (an L): the 2 tiles it may have crossed (null: not such a move).
+        internal TrapFloorCoordinate? stepBackTurnA;
+        internal TrapFloorCoordinate? stepBackTurnB;
 
         // The landing scan saw the turn player's pawn go from one tile to another.
         private void NoteStepBack(TrapFloorCoordinate? from, TrapFloorCoordinate to)
         {
             stepBackTile = null;
+            stepBackTurnA = null;
+            stepBackTurnB = null;
             if (!from.HasValue) return; // onto the floor from beside the board: back to where the move began
             int dx = to.X - from.Value.X;
             int dy = to.Y - from.Value.Y;
             if (dx == 0 && dy == 0) return;
-            if (dx != 0 && dy != 0) return; // the move turned (owner, 2026-11-17): back to where the move began
+            if (dx != 0 && dy != 0)
+            {
+                // The move turned (an L): it crossed one of these 2 tiles (owner, 2026-11-17: the rulebook's tile before).
+                if (Math.Abs(dx) != 1 || Math.Abs(dy) != 1) return;
+                stepBackTurnA = new TrapFloorCoordinate(to.X, from.Value.Y);
+                stepBackTurnB = new TrapFloorCoordinate(from.Value.X, to.Y);
+                stepBackLanding = to;
+                return;
+            }
+
             stepBackTile = new TrapFloorCoordinate(to.X - Math.Sign(dx), to.Y - Math.Sign(dy));
             stepBackLanding = to;
         }
@@ -60,7 +75,96 @@ namespace ConsoleCards.Presentation.Composition
         {
             TrapFloorCoordinate? origin = CurrentMoveOrigin(player); // also starts a new turn's count
             if (!origin.HasValue) return null;
-            return stepBackTile.HasValue && stepBackLanding.Equals(pawnTile) ? stepBackTile : origin;
+            if (stepBackTile.HasValue && stepBackLanding.Equals(pawnTile)) return stepBackTile;
+            int crossed = TurnedStepBackTiles(pawnTile, turnedStepBackBuffer);
+            return crossed == 1 ? turnedStepBackBuffer[0] : origin; // 2: the player picks (ReturnPawnToMoveOrigin)
+        }
+
+        private readonly List<TrapFloorCoordinate> turnedStepBackBuffer = new List<TrapFloorCoordinate>(2);
+
+        /// <summary>
+        /// After a 2-tile move that turned and landed on <paramref name="pawnTile"/>: the tiles in between it may have
+        /// crossed that a pawn can stand on now (0, 1 or 2), in <paramref name="into"/>.
+        /// </summary>
+        internal int TurnedStepBackTiles(TrapFloorCoordinate pawnTile, List<TrapFloorCoordinate> into)
+        {
+            into.Clear();
+            if (!stepBackTurnA.HasValue || !stepBackTurnB.HasValue || !stepBackLanding.Equals(pawnTile)) return 0;
+            if (IsWalkableTile(stepBackTurnA.Value.X, stepBackTurnA.Value.Y)) into.Add(stepBackTurnA.Value);
+            if (IsWalkableTile(stepBackTurnB.Value.X, stepBackTurnB.Value.Y)) into.Add(stepBackTurnB.Value);
+            return into.Count;
+        }
+
+        // After a 2-tile move that turned, both tiles in between can be stood on: the player says which one they crossed
+        // (owner, 2026-11-17). A face-down tile shows only its back. The choice is needed, so closing asks again.
+        private void AskStepBackTile(PlayerId player, TabletopObjectId fromFloorCardId, TrapFloorCoordinate pawnTile, List<TrapFloorCoordinate> crossed)
+        {
+            List<FocusedCardOptionModel> options = new List<FocusedCardOptionModel>(crossed.Count);
+            for (int i = 0; i < crossed.Count; i++)
+            {
+                if (!host.trapFloorTemplate.TryGetFloorCardId(crossed[i], out TabletopObjectId id)
+                    || !host.trapFloorTemplate.TryGetFloorCardState(host.matchState, id, out TrapFloorFloorCardState floor)
+                    || !host.matchState.Cards.TryGetValue(id, out CardInstanceState card))
+                {
+                    continue;
+                }
+
+                bool known = floor.IsRevealed;
+                host.TryGetAuthoredCardDefinition(card.BaseState.DefinitionId, out CardDefinition art);
+                options.Add(new FocusedCardOptionModel(
+                    id,
+                    known ? floor.Content.DisplayName : "Face-down tile",
+                    $"Floor {crossed[i]}",
+                    art == null ? null : known ? host.FrontArt(art) : host.BackArt(art),
+                    true));
+            }
+
+            if (options.Count == 0) return;
+            int round = host.trapFloorTurnState != null ? host.trapFloorTurnState.CurrentRound : -1;
+            ShowSelectionFor(player, new FocusedCardSelectionModel(
+                "STEP BACK — WHICH TILE DID YOU CROSS?",
+                $"{FormatPlayerShortName(player)} turned on the way to {pawnTile}. Pick the tile the pawn crossed: it steps back there.",
+                "A face-down tile there turns over and takes effect.",
+                "Step back",
+                options,
+                1,
+                selected => selected.Count == 1,
+                selected =>
+                {
+                    host.runtimeUi?.CloseFocusedCardSelection();
+                    if (!StillOnPickupTile(player, fromFloorCardId, round)
+                        || !host.trapFloorTemplate.TryGetFloorCoordinate(selected[0], out TrapFloorCoordinate target))
+                    {
+                        return;
+                    }
+
+                    StepBackTo(player, target);
+                },
+                () =>
+                {
+                    host.runtimeUi?.CloseFocusedCardSelection();
+                    if (StillOnPickupTile(player, fromFloorCardId, round)) AskStepBackTile(player, fromFloorCardId, pawnTile, crossed);
+                }));
+        }
+
+        // The pawn still stands on the tile it took something from, in the same turn.
+        private bool StillOnPickupTile(PlayerId player, TabletopObjectId fromFloorCardId, int round) =>
+            host.trapFloorTurnState != null
+            && host.trapFloorTurnState.CurrentRound == round
+            && host.trapFloorTurnState.ActivePlayerId == player
+            && TryGetTrapFloorPlayerSetup(player, out TrapFloorPlayerSetupDefinition setup)
+            && TryReadPawnTile(setup.PawnId, out TrapFloorCoordinate tile)
+            && host.trapFloorTemplate.TryGetFloorCardId(tile, out TabletopObjectId onId)
+            && onId == fromFloorCardId;
+
+        /// <summary>True when a pickup on <paramref name="pawnTile"/> may send the pawn to <paramref name="target"/>.</summary>
+        internal bool IsPickupReturnTarget(PlayerId player, TrapFloorCoordinate pawnTile, TrapFloorCoordinate target)
+        {
+            TrapFloorCoordinate? origin = PickupReturnTile(player, pawnTile);
+            if (!origin.HasValue) return false;
+            if (origin.Value == target) return true;
+            List<TrapFloorCoordinate> crossed = new List<TrapFloorCoordinate>(2);
+            return TurnedStepBackTiles(pawnTile, crossed) == 2 && crossed.Contains(target);
         }
 
         // The pawn stepped back onto a tile still face down: it turns over and takes effect (Free: the player does it).
@@ -159,6 +263,8 @@ namespace ConsoleCards.Presentation.Composition
             internal bool Guided;
             internal TrapFloorCoordinate? StepBack;
             internal TrapFloorCoordinate StepBackLanding;
+            internal TrapFloorCoordinate? StepBackTurnA;
+            internal TrapFloorCoordinate? StepBackTurnB;
         }
 
         private static readonly ConditionalWeakTable<object, MoveTurnRecord> moveTurnByStep =
@@ -178,6 +284,8 @@ namespace ConsoleCards.Presentation.Composition
                 Guided = guidedMoveThisTurn,
                 StepBack = stepBackTile,
                 StepBackLanding = stepBackLanding,
+                StepBackTurnA = stepBackTurnA,
+                StepBackTurnB = stepBackTurnB,
             });
         }
 
@@ -201,6 +309,8 @@ namespace ConsoleCards.Presentation.Composition
             guidedMoveThisTurn = record.Guided;
             stepBackTile = record.StepBack;
             stepBackLanding = record.StepBackLanding;
+            stepBackTurnA = record.StepBackTurnA;
+            stepBackTurnB = record.StepBackTurnB;
             tooFarStateIndex = -1;
         }
     }
