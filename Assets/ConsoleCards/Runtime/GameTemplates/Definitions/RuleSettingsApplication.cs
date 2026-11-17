@@ -22,6 +22,25 @@ namespace ConsoleCards.GameTemplates.Definitions
         /// </summary>
         public const string FloorCountPrefix = "floor.count.";
 
+        /// <summary>
+        /// Text, prefix: "floor.deck." + the floor size ("6x6") sets that floor's deck for the modes it applies to
+        /// (owner, 2026-11-17): "Friends/Abilities/Fall Traps", for example "4/10/4"; Traps fill the rest of the floor
+        /// after the Keys and Exits. Passed through to the game's setup, which checks it fits (see
+        /// <see cref="TryParseFloorDeck"/>).
+        /// </summary>
+        public const string FloorDeckPrefix = "floor.deck.";
+
+        /// <summary>Reads a floor deck value "Friends/Abilities/Fall Traps" (three whole numbers, 0 or more).</summary>
+        public static bool TryParseFloorDeck(string value, out int friends, out int abilities, out int fallTraps)
+        {
+            friends = abilities = fallTraps = 0;
+            string[] parts = (value ?? string.Empty).Split('/');
+            return parts.Length == 3
+                && int.TryParse(parts[0].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out friends)
+                && int.TryParse(parts[1].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out abilities)
+                && int.TryParse(parts[2].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out fallTraps);
+        }
+
         /// <summary>Choice: how floor cards are placed, <see cref="FloorPlacementRandom"/> or <see cref="FloorPlacementPattern"/>.</summary>
         public const string FloorPlacement = "floor.placement";
 
@@ -192,6 +211,13 @@ namespace ConsoleCards.GameTemplates.Definitions
                     {
                         passedThrough.Add(setting);
                     }
+                }
+                else if (setting.Key.StartsWith(RuleSettingKeys.FloorDeckPrefix, StringComparison.Ordinal))
+                {
+                    // Passed through even when it does not read, so the game's setup check can say what is wrong.
+                    if (!RuleSettingKeys.TryParseFloorDeck(setting.Value, out _, out _, out _))
+                        Warn(warnings, setting, "expected Friends/Abilities/Fall Traps, for example 4/10/4");
+                    passedThrough.Add(setting);
                 }
                 else if (string.Equals(setting.Key, RuleSettingKeys.MoveTiles, StringComparison.Ordinal))
                 {

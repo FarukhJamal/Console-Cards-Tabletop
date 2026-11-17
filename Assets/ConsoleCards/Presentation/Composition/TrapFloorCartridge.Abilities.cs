@@ -398,7 +398,8 @@ namespace ConsoleCards.Presentation.Composition
             if (free.IsEmpty
                 || host.TransferCoordinator == null
                 || !host.Registry.TryGetCardView(cardId, out CardView view)
-                || !host.TransferCoordinator.Transfer(view, CardDropTarget.ForContainer(free)).Succeeded)
+                || (!host.TransferCoordinator.Transfer(view, CardDropTarget.ForContainer(free)).Succeeded
+                    && !MoveCardAs(player, cardId, card.BaseState.ContainerId, free)))
             {
                 // Could not place it: the player puts it in; it is used as it lands.
                 host.ShowMessage($"Put {definition.DisplayName} into your Console to use it.");
@@ -431,6 +432,20 @@ namespace ConsoleCards.Presentation.Composition
 
         // The first empty side slot, then the Main slot (D3: it is kept for the Avatar the player chooses); empty when
         // every slot is taken.
+        // The transfer coordinator moves cards as this screen's seat, so a card held by another seat played on this computer
+        // (a teammate's Lasso, a used Insurance) would not move. It is moved as its holder instead.
+        private bool MoveCardAs(PlayerId player, TabletopObjectId cardId, ContainerId from, ContainerId to)
+        {
+            if (player.IsEmpty || !host.IsPlayerOnThisComputer(player)) return false;
+            TransferCardResult moved = host.TableAuthority.Submit<TransferCardCommand, TransferCardResult>(
+                new TransferCardCommand(host.CreateCommandContext(player), cardId, from, to, null));
+            if (!moved.Succeeded) return false;
+            if (!from.IsEmpty) host.ViewSync.SyncContainer(from);
+            host.ViewSync.SyncContainer(to);
+            host.RefreshAcceptedCardFaces();
+            return true;
+        }
+
         private ContainerId FreeConsoleSlot(TrapFloorPlayerSetupDefinition setup)
         {
             for (int i = 0; i < setup.SideSlotContainerIds.Count; i++)
@@ -1053,7 +1068,9 @@ namespace ConsoleCards.Presentation.Composition
                 return;
             }
 
-            host.TransferCoordinator.Transfer(view, CardDropTarget.ForContainer(host.trapFloorTemplate.AbilityDiscardId));
+            ContainerId discard = host.trapFloorTemplate.AbilityDiscardId;
+            if (!host.TransferCoordinator.Transfer(view, CardDropTarget.ForContainer(discard)).Succeeded)
+                MoveCardAs(HolderOf(cardId), cardId, card.BaseState.ContainerId, discard);
         }
 
         // As the turn ends: the draw is over; the deck is shuffled when cards were drawn from it this turn.

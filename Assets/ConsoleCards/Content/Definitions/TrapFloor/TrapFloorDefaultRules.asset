@@ -21,21 +21,89 @@ MonoBehaviour:
     numbered: 0
     entries:
     - stableId: tf-setup-traps
-      text: 'Every floor has a fixed deck for its game mode, difficulty and size. For example, a 6×6 Team Play floor on Easy holds 4 Friends, 10 Abilities, 3 Keys, a Secret and a Grand Exit, and 17 Traps, 4 of them Fall Traps.'
+      text: 'Every floor has a deck for its difficulty and size (below; the table can change them as house rules). For example, a 6×6 Team Play floor on Easy holds 4 Friends, 10 Abilities, 3 Keys, a Secret and a Grand Exit, and 17 Traps, 4 of them Fall Traps.'
       settingKind: 0
       settingKey: 
       value: ''
       displayValue: ''
       modeStableIds: []
-    - stableId: tf-setup-friends
-      text: 'Friends: 4 on 6×6, 3 on 5×5, 2 on 4×4, picked at random from the Friend cards and Overcharged. Abilities: 10, 7 and 4 on Easy; 5, 3 and 2 on Medium; none on Hard. The same Ability can appear more than once.'
-      settingKind: 0
-      settingKey: 
-      value: ''
+    - stableId: tf-setup-deck-6x6-easy
+      text: '6×6 floor deck (Friends/Abilities/Fall Traps): {value}. Traps fill the rest after the Keys and Exits.'
+      settingKind: 4
+      settingKey: floor.deck.6x6
+      value: '4/10/4'
       displayValue: ''
-      modeStableIds: []
+      modeStableIds:
+      - trap-floor-mode-easy
+    - stableId: tf-setup-deck-6x6-medium
+      text: '6×6 floor deck (Friends/Abilities/Fall Traps): {value}. Traps fill the rest after the Keys and Exits.'
+      settingKind: 4
+      settingKey: floor.deck.6x6
+      value: '4/5/5'
+      displayValue: ''
+      modeStableIds:
+      - trap-floor-mode-medium
+    - stableId: tf-setup-deck-6x6-hard
+      text: '6×6 floor deck (Friends/Abilities/Fall Traps): {value}. Traps fill the rest after the Keys and Exits.'
+      settingKind: 4
+      settingKey: floor.deck.6x6
+      value: '4/0/6'
+      displayValue: ''
+      modeStableIds:
+      - trap-floor-mode-hard
+      - trap-floor-mode-impossible
+    - stableId: tf-setup-deck-5x5-easy
+      text: '5×5 floor deck (Friends/Abilities/Fall Traps): {value}. Traps fill the rest after the Keys and Exits.'
+      settingKind: 4
+      settingKey: floor.deck.5x5
+      value: '3/7/3'
+      displayValue: ''
+      modeStableIds:
+      - trap-floor-mode-easy
+    - stableId: tf-setup-deck-5x5-medium
+      text: '5×5 floor deck (Friends/Abilities/Fall Traps): {value}. Traps fill the rest after the Keys and Exits.'
+      settingKind: 4
+      settingKey: floor.deck.5x5
+      value: '3/3/4'
+      displayValue: ''
+      modeStableIds:
+      - trap-floor-mode-medium
+    - stableId: tf-setup-deck-5x5-hard
+      text: '5×5 floor deck (Friends/Abilities/Fall Traps): {value}. Traps fill the rest after the Keys and Exits.'
+      settingKind: 4
+      settingKey: floor.deck.5x5
+      value: '3/0/5'
+      displayValue: ''
+      modeStableIds:
+      - trap-floor-mode-hard
+      - trap-floor-mode-impossible
+    - stableId: tf-setup-deck-4x4-easy
+      text: '4×4 floor deck (Friends/Abilities/Fall Traps): {value}. Traps fill the rest after the Keys and Exits.'
+      settingKind: 4
+      settingKey: floor.deck.4x4
+      value: '2/4/2'
+      displayValue: ''
+      modeStableIds:
+      - trap-floor-mode-easy
+    - stableId: tf-setup-deck-4x4-medium
+      text: '4×4 floor deck (Friends/Abilities/Fall Traps): {value}. Traps fill the rest after the Keys and Exits.'
+      settingKind: 4
+      settingKey: floor.deck.4x4
+      value: '2/2/3'
+      displayValue: ''
+      modeStableIds:
+      - trap-floor-mode-medium
+    - stableId: tf-setup-deck-4x4-hard
+      text: '4×4 floor deck (Friends/Abilities/Fall Traps): {value}. Traps fill the rest after the Keys and Exits.'
+      settingKind: 4
+      settingKey: floor.deck.4x4
+      value: '2/0/4'
+      displayValue: ''
+      modeStableIds:
+      - trap-floor-mode-hard
+      - trap-floor-mode-impossible
     - stableId: tf-setup-abilities
-      text: 'Traps fill the rest. Fall Traps: 4, 5 or 6 on 6×6; 3, 4 or 5 on 5×5; 2, 3 or 4 on 4×4 (Easy, Medium, Hard). The other Traps are picked at random from Spring, Crane, Slow, Sticky and Blind. Impossible uses the Hard decks.'
+      text: 'Friends are picked at random from the Friend cards and Overcharged; the same Ability can appear more than once. The Traps that are not Fall Traps are picked at random from Spring, Crane, Slow, Sticky and Blind. Impossible uses the Hard decks.'
       settingKind: 0
       settingKey: 
       value: ''

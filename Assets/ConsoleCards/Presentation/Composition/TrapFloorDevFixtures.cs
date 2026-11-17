@@ -276,6 +276,84 @@ namespace ConsoleCards.Presentation.Composition
             return $"[Scenario] FAIL setup: this floor has no standing {exitKind} (floor {template.FloorIndex + 1}, {template.GridColumns}×{template.GridRows}).";
         }
 
+        /// <summary>
+        /// Setup only (2026-11-17, step 5 checks): in the floor turn, puts seat <paramref name="seatIndex"/>'s pawn
+        /// (0-based) on the tile the floor dice point at (waiting for Collapse), written straight into the host's table
+        /// like the other scenario setups (no rules run), so a collapse under that player can be tested.
+        /// </summary>
+        public static string PutSeatPawnOnCollapseTile(TabletopComposition host, int seatIndex)
+        {
+            if (host == null || (host.HasOnline && host.Online.InRoom && !host.Online.IsPrivateHost)) return "[Scenario] FAIL setup: host only.";
+            TrapFloorTemplateDefinition template = host.trapFloorTemplate;
+            TrapFloorCartridge game = host.TrapFloorGame;
+            if (template == null || game == null || host.matchState == null || seatIndex < 0 || seatIndex >= template.Players.Count)
+                return "[Scenario] FAIL setup: no such seat on this Trap Floor table.";
+            TrapFloorCoordinate? target = game.CollapsePreviewTileForScenario;
+            if (!target.HasValue) return "[Scenario] FAIL setup: no tile is waiting for Collapse (roll the floor dice first).";
+            TrapFloorPlayerSetupDefinition setup = template.Players[seatIndex];
+            if (!host.matchState.Pawns.TryGetValue(setup.PawnId, out PawnState pawn)
+                || !host.matchState.Seats.TryGetValue(setup.SeatId, out ConsoleCards.Core.Domain.Seats.SeatState seat)
+                || !template.TryGetFloorCardId(target.Value, out TabletopObjectId standId)
+                || !host.matchState.Cards.TryGetValue(standId, out CardInstanceState standCard))
+                return "[Scenario] FAIL setup: the pawn or the tile is missing.";
+            PawnView view = null;
+            foreach (PawnView candidate in host.Registry.pawnViews)
+                if (candidate != null && candidate.IsBound && candidate.ObjectId == setup.PawnId) view = candidate;
+            TabletopObjectState state = pawn.BaseState;
+            TabletopPose pose = new TabletopPose(standCard.BaseState.Pose.Position, state.Pose.RotationDegrees, state.Pose.Layer, state.Pose.LocalOrder);
+            if (state.PhysicalState != null && view != null && view.PhysicalObject != null && host.physicalAuthority != null)
+            {
+                if (!host.physicalAuthority.Surfaces.TryResolveAuthoredLooseObject(pose, seat.OccupantPlayerId, view.PhysicalObject.PhysicalCollider, state.IsUserLocked, out PhysicalObjectState placed))
+                    return "[Scenario] FAIL setup: the tile's place is not on the table.";
+                state.SetPhysicalState(view.PhysicalObject.RestingOnTable(placed));
+            }
+
+            state.SetPose(pose);
+            view?.ApplyAcceptedState();
+            return $"[Scenario] SETUP (host-only, no rules run): seat {seatIndex + 1}'s pawn put on {target.Value}, the tile waiting for Collapse.";
+        }
+
+        /// <summary>
+        /// Setup only (2026-11-17, step 5 checks): moves a card named <paramref name="cardName"/> from the Ability deck
+        /// into seat <paramref name="seatIndex"/>'s hand (0-based), through the normal transfer command.
+        /// </summary>
+        public static string GiveSeatAbility(TabletopComposition host, int seatIndex, string cardName)
+        {
+            if (host == null || (host.HasOnline && host.Online.InRoom && !host.Online.IsPrivateHost)) return "[Scenario] FAIL setup: host only.";
+            TrapFloorTemplateDefinition template = host.trapFloorTemplate;
+            if (template == null || host.matchState == null || seatIndex < 0 || seatIndex >= template.Players.Count)
+                return "[Scenario] FAIL setup: no such seat on this Trap Floor table.";
+            TrapFloorPlayerSetupDefinition setup = template.Players[seatIndex];
+            if (!host.matchState.Seats.TryGetValue(setup.SeatId, out ConsoleCards.Core.Domain.Seats.SeatState seat) || seat.OccupantPlayerId.IsEmpty)
+                return $"[Scenario] FAIL setup: seat {seatIndex + 1} is empty.";
+            if (!host.matchState.Containers.TryGetValue(template.AbilityDeckId, out ConsoleCards.Core.Domain.Containers.ContainerState deck))
+                return "[Scenario] FAIL setup: no Ability deck.";
+            for (int i = 0; i < deck.Count; i++)
+            {
+                TabletopObjectId cardId = deck.GetObjectAt(i);
+                if (!host.matchState.Cards.TryGetValue(cardId, out CardInstanceState card)
+                    || !host.TryGetAuthoredCardDefinition(card.BaseState.DefinitionId, out ConsoleCards.Definitions.CardDefinition definition)
+                    || !string.Equals(definition.DisplayName, cardName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                ConsoleCards.Application.Results.TransferCardResult moved =
+                    host.TableAuthority.Submit<ConsoleCards.Application.Commands.TransferCardCommand, ConsoleCards.Application.Results.TransferCardResult>(
+                        new ConsoleCards.Application.Commands.TransferCardCommand(
+                            host.CreateCommandContext(seat.OccupantPlayerId), cardId, deck.Id, setup.HandContainerId, null));
+                if (!moved.Succeeded) return $"[Scenario] FAIL setup: the move was refused ({moved.Error}).";
+                // Owned like a bought card (TrapFloorShop sets the owner); an unowned card is an unbought draw.
+                card.BaseState.SetOwner(seat.OccupantPlayerId);
+                host.ViewSync.SyncContainer(deck.Id);
+                host.ViewSync.SyncContainer(setup.HandContainerId);
+                host.RefreshAcceptedCardFaces();
+                return $"[Scenario] SETUP (host-only): {cardName} moved from the Ability deck into seat {seatIndex + 1}'s hand.";
+            }
+
+            return $"[Scenario] FAIL setup: no '{cardName}' left in the Ability deck.";
+        }
+
         private static void Enqueue(TabletopObjectId dieId, int face)
         {
             if (!queuedFaces.TryGetValue(dieId, out Queue<int> q)) queuedFaces[dieId] = q = new Queue<int>();

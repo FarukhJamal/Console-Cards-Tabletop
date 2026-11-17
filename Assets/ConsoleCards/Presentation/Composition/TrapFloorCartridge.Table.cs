@@ -98,9 +98,22 @@ namespace ConsoleCards.Presentation.Composition
         // A changed setting or a deck of yours must still fill the floor: the game is set up once, off the table.
         public void CheckSetUp(GameDefinitionData data, string modeStableId)
         {
+            // Owner, 2026-11-17: a floor deck rule must fit every floor size it names (up to 4 Keys and 2 Exits), and
+            // every floor is set up once with this difficulty's deck (so a rule asking for more cards than exist is refused).
+            TrapFloorTemplateFactory.CheckFloorDeckRules(data, modeStableId, FreeForAllKeyCount);
             TrapFloorTemplateFactory.CreateStandardFourPlayer(
                 new SystemRandomValueSource(), data, modeStableId, host.GetConsoleLayout(), 0, null, DealPlayerCount,
                 recipe: DealRecipe(0));
+            int floors = Math.Min(TrapFloorTemplateFactory.FloorCountFor(data.Grid), DealRecipe(0).FloorCount);
+            TrapFloorTemplateFactory.CheckFloorDeckDeal(() =>
+            {
+                for (int floor = 0; floor < floors; floor++)
+                {
+                    TrapFloorTemplateFactory.CreateStandardFourPlayer(
+                        new SystemRandomValueSource(), data, modeStableId, host.GetConsoleLayout(), floor, null, DealPlayerCount,
+                        recipe: DealRecipe(floor, modeStableId));
+                }
+            });
         }
 
         // ---------- how many players (PLACE-1) ----------

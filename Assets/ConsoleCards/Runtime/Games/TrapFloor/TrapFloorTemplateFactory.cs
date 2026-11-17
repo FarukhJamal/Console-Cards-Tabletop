@@ -987,10 +987,35 @@ namespace ConsoleCards.Games.TrapFloor
                 }
             }
 
+            // Owner, 2026-11-17 (doc 19 §18): the rule set's floor deck for this size and difficulty (editable as a house
+            // rule) replaces the built-in rulebook row.
+            TrapFloorFloorRecipe builtInRecipe = recipe;
+            if (recipe != null && recipe.HasExactDeck && !recipe.HasTileCounts)
+                recipe = WithFloorDeckRule(gameDefinition, activeMode.StableId, grid, groups, recipe);
+            bool deckRule = !ReferenceEquals(recipe, builtInRecipe);
+            if (deckRule && !FloorDeckFitsGroups(groups, recipe, grid, out string deckProblem))
+            {
+                if (strictFloorDeckRules) throw new InvalidOperationException(deckProblem);
+                recipe = builtInRecipe; // a saved house rule that no longer fits: the built-in deck is dealt
+                deckRule = false;
+            }
+
             // Rules v1.151126 (owner, 2026-11-16): the rulebook's exact deck for the mode, difficulty and floor size,
             // when it fits this grid; a players' floor deck, or a grid it does not fit, keeps the scaled mix.
             bool exactDeck = recipe != null && recipe.HasExactDeck && !recipe.HasTileCounts
                 && TryApplyExactDeck(groups, recipe, grid.CellCount);
+            if (deckRule && !exactDeck)
+            {
+                if (strictFloorDeckRules)
+                {
+                    throw new InvalidOperationException(
+                        $"The {grid.Columns}x{grid.Rows} floor deck {recipe.ExactFriends}/{recipe.ExactAbilities}/{recipe.ExactFallTraps} "
+                        + "cannot be dealt with this game's floor cards.");
+                }
+
+                recipe = builtInRecipe;
+                exactDeck = TryApplyExactDeck(groups, recipe, grid.CellCount);
+            }
             if (!exactDeck && (scaleToGrid || recipe != null))
                 ScaleFloorDrawCounts(groups, grid.CellCount, requiredKeys, recipe != null ? recipe.KeyCount : -1);
             bool ownFloorDeck = recipe != null && recipe.HasTileCounts;
@@ -1196,6 +1221,123 @@ namespace ConsoleCards.Games.TrapFloor
                 groups[best].Count++;
                 leftOver[best] = -1d;
                 assigned++;
+            }
+        }
+
+        /// <summary>The rule setting key of a floor's deck: "floor.deck.6x6".</summary>
+        public static string FloorDeckKey(int columns, int rows) =>
+            RuleSettingKeys.FloorDeckPrefix + columns.ToString(CultureInfo.InvariantCulture) + "x" + rows.ToString(CultureInfo.InvariantCulture);
+
+        // Owner, 2026-11-17: the floor deck rule ("Friends/Abilities/Fall Traps"; Traps fill the rest after the Keys and
+        // Exits) for this grid and mode, as the recipe's exact deck. Unchanged when there is none or it does not fit
+        // (CheckFloorDeckRules refuses such a rule before it is used).
+        private static TrapFloorFloorRecipe WithFloorDeckRule(
+            GameDefinitionData gameDefinition,
+            string modeStableId,
+            GridDefinitionData grid,
+            List<FloorGroupDraw> groups,
+            TrapFloorFloorRecipe recipe)
+        {
+            if (!gameDefinition.TryGetRuleSetting(FloorDeckKey(grid.Columns, grid.Rows), modeStableId, out string raw)
+                || !RuleSettingKeys.TryParseFloorDeck(raw, out int friends, out int abilities, out int fallTraps))
+            {
+                return recipe;
+            }
+
+            int exits = 0;
+            for (int i = 0; i < groups.Count; i++)
+            {
+                if (groups[i].Kind == FloorGroupKind.Exits) exits += groups[i].Count;
+            }
+
+            int traps = grid.CellCount - exits - recipe.KeyCount - friends - abilities;
+            return traps < fallTraps ? recipe : recipe.WithExactDeck(friends, abilities, traps, fallTraps);
+        }
+
+        // Set while a floor deck rule is being checked (CheckSetUp): a rule that cannot be dealt throws. Otherwise (a
+        // saved house rule that no longer fits) the built-in deck is dealt.
+        [ThreadStatic] private static bool strictFloorDeckRules;
+
+        /// <summary>Owner, 2026-11-17: runs <paramref name="setUp"/> so a floor deck rule that cannot be dealt throws.</summary>
+        public static void CheckFloorDeckDeal(Action setUp)
+        {
+            if (setUp == null) return;
+            bool was = strictFloorDeckRules;
+            strictFloorDeckRules = true;
+            try
+            {
+                setUp();
+            }
+            finally
+            {
+                strictFloorDeckRules = was;
+            }
+        }
+
+        // Owner, 2026-11-17: false (and why) when a floor deck rule asks for more Friends or Abilities than the game's
+        // floor cards hold.
+        private static bool FloorDeckFitsGroups(
+            List<FloorGroupDraw> groups,
+            TrapFloorFloorRecipe recipe,
+            GridDefinitionData grid,
+            out string problem)
+        {
+            problem = null;
+            for (int i = 0; i < groups.Count; i++)
+            {
+                FloorGroupDraw group = groups[i];
+                if (group.Kind != FloorGroupKind.Other) continue;
+                bool friends = group.FirstCategory == TrapFloorFloorContentCategory.Friend;
+                bool abilities = group.FirstCategory == TrapFloorFloorContentCategory.Ability;
+                int wanted = friends ? recipe.ExactFriends : abilities ? recipe.ExactAbilities : 0;
+                if ((!friends && !abilities) || wanted <= group.MaximumCount) continue;
+                problem = $"The {grid.Columns}x{grid.Rows} floor deck asks for {wanted} {(friends ? "Friends" : "Abilities")}, "
+                    + $"but the game has only {group.MaximumCount} {(friends ? "Friend" : "Ability")} cards for the floor.";
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Owner, 2026-11-17: throws when a floor deck rule for this mode does not read or cannot fit its floor with up
+        /// to <paramref name="mostKeys"/> Keys and 2 Exits (the Traps left must hold the Fall Traps).
+        /// </summary>
+        public static void CheckFloorDeckRules(GameDefinitionData gameDefinition, string modeStableId, int mostKeys)
+        {
+            if (gameDefinition == null) return;
+            IReadOnlyList<RuleSettingValue> settings = gameDefinition.RuleSettings;
+            for (int i = 0; i < settings.Count; i++)
+            {
+                RuleSettingValue setting = settings[i];
+                if (!setting.Key.StartsWith(RuleSettingKeys.FloorDeckPrefix, StringComparison.Ordinal)
+                    || !setting.AppliesToMode(modeStableId))
+                {
+                    continue;
+                }
+
+                string size = setting.Key.Substring(RuleSettingKeys.FloorDeckPrefix.Length);
+                string[] sides = size.Split('x');
+                if (sides.Length != 2
+                    || !int.TryParse(sides[0], NumberStyles.None, CultureInfo.InvariantCulture, out int columns)
+                    || !int.TryParse(sides[1], NumberStyles.None, CultureInfo.InvariantCulture, out int rows))
+                {
+                    throw new InvalidOperationException($"The floor deck rule '{setting.Key}' names no floor size like 6x6.");
+                }
+
+                if (!RuleSettingKeys.TryParseFloorDeck(setting.Value, out int friends, out int abilities, out int fallTraps))
+                {
+                    throw new InvalidOperationException(
+                        $"The {size} floor deck '{setting.Value}' must be Friends/Abilities/Fall Traps, for example 4/10/4.");
+                }
+
+                int traps = columns * rows - mostKeys - 2 - friends - abilities;
+                if (traps < fallTraps)
+                {
+                    throw new InvalidOperationException(
+                        $"The {size} floor deck {setting.Value} does not fit: {columns * rows} tiles hold up to {mostKeys} Keys and 2 Exits, "
+                        + $"so Friends and Abilities leave {Math.Max(0, traps)} Traps, fewer than the {fallTraps} Fall Traps.");
+                }
             }
         }
 

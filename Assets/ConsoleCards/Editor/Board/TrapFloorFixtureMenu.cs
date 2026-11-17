@@ -60,6 +60,25 @@ namespace ConsoleCards.Editor.Board
         [MenuItem(Stage + "Stage turn pawn next to: Blind Trap")] private static void NextToBlind() => StageNextTo("Blind Trap");
         [MenuItem(Stage + "Stage turn pawn next to: Sticky Trap")] private static void NextToSticky() => StageNextTo("Sticky Trap");
 
+        // 2026-11-17 (step 5 checks): an Ability card in a chosen seat's hand, and a pawn put on the tile waiting for Collapse.
+        [MenuItem(Stage + "Give seat 1/Lasso")] private static void GiveLasso1() => Debug.Log(TrapFloorDevFixtures.GiveSeatAbility(Object.FindFirstObjectByType<TabletopComposition>(), 0, "Lasso"));
+        [MenuItem(Stage + "Give seat 1/Insurance")] private static void GiveInsurance1() => Debug.Log(TrapFloorDevFixtures.GiveSeatAbility(Object.FindFirstObjectByType<TabletopComposition>(), 0, "Insurance"));
+        [MenuItem(Stage + "Give seat 1/Shield")] private static void GiveShield1() => Debug.Log(TrapFloorDevFixtures.GiveSeatAbility(Object.FindFirstObjectByType<TabletopComposition>(), 0, "Shield"));
+        [MenuItem(Stage + "Give seat 2/Lasso")] private static void GiveLasso2() => Debug.Log(TrapFloorDevFixtures.GiveSeatAbility(Object.FindFirstObjectByType<TabletopComposition>(), 1, "Lasso"));
+        [MenuItem(Stage + "Give seat 2/Insurance")] private static void GiveInsurance2() => Debug.Log(TrapFloorDevFixtures.GiveSeatAbility(Object.FindFirstObjectByType<TabletopComposition>(), 1, "Insurance"));
+        [MenuItem(Stage + "Give seat 2/Shield")] private static void GiveShield2() => Debug.Log(TrapFloorDevFixtures.GiveSeatAbility(Object.FindFirstObjectByType<TabletopComposition>(), 1, "Shield"));
+        [MenuItem(Stage + "Give seat 3/Lasso")] private static void GiveLasso3() => Debug.Log(TrapFloorDevFixtures.GiveSeatAbility(Object.FindFirstObjectByType<TabletopComposition>(), 2, "Lasso"));
+        [MenuItem(Stage + "Give seat 3/Insurance")] private static void GiveInsurance3() => Debug.Log(TrapFloorDevFixtures.GiveSeatAbility(Object.FindFirstObjectByType<TabletopComposition>(), 2, "Insurance"));
+        [MenuItem(Stage + "Give seat 3/Shield")] private static void GiveShield3() => Debug.Log(TrapFloorDevFixtures.GiveSeatAbility(Object.FindFirstObjectByType<TabletopComposition>(), 2, "Shield"));
+        [MenuItem(Stage + "Give seat 4/Lasso")] private static void GiveLasso4() => Debug.Log(TrapFloorDevFixtures.GiveSeatAbility(Object.FindFirstObjectByType<TabletopComposition>(), 3, "Lasso"));
+        [MenuItem(Stage + "Give seat 4/Insurance")] private static void GiveInsurance4() => Debug.Log(TrapFloorDevFixtures.GiveSeatAbility(Object.FindFirstObjectByType<TabletopComposition>(), 3, "Insurance"));
+        [MenuItem(Stage + "Give seat 4/Shield")] private static void GiveShield4() => Debug.Log(TrapFloorDevFixtures.GiveSeatAbility(Object.FindFirstObjectByType<TabletopComposition>(), 3, "Shield"));
+
+        [MenuItem(Stage + "Put seat 1 pawn on the collapse tile")] private static void Put1() => Debug.Log(TrapFloorDevFixtures.PutSeatPawnOnCollapseTile(Object.FindFirstObjectByType<TabletopComposition>(), 0));
+        [MenuItem(Stage + "Put seat 2 pawn on the collapse tile")] private static void Put2() => Debug.Log(TrapFloorDevFixtures.PutSeatPawnOnCollapseTile(Object.FindFirstObjectByType<TabletopComposition>(), 1));
+        [MenuItem(Stage + "Put seat 3 pawn on the collapse tile")] private static void Put3() => Debug.Log(TrapFloorDevFixtures.PutSeatPawnOnCollapseTile(Object.FindFirstObjectByType<TabletopComposition>(), 2));
+        [MenuItem(Stage + "Put seat 4 pawn on the collapse tile")] private static void Put4() => Debug.Log(TrapFloorDevFixtures.PutSeatPawnOnCollapseTile(Object.FindFirstObjectByType<TabletopComposition>(), 3));
+
         [MenuItem(Stage + "Report state")]
         private static void Report() => Debug.Log(TrapFloorDevFixtures.Report(Object.FindFirstObjectByType<TabletopComposition>()));
 

@@ -111,6 +111,8 @@ namespace ConsoleCards.Presentation.Composition
         // Rules v1.151126 §09 "Full deck composition" (27 rows): Friends ("Blue"), floor Abilities, Traps and the Fall
         // Traps among them, by floor (6×6, 5×5, 4×4), difficulty (Easy, Medium, Hard; Impossible uses Hard's, owner
         // 2026-11-15) and mode. Keys and Exits come from the recipe. False for a floor the rulebook has no row for.
+        // Owner, 2026-11-17: the rule set's "floor.deck.<size>" settings (the Setup section, house rules too) replace
+        // these rows in the factory; the rows stay as the fallback with the same values.
         internal static bool ExactDeck(
             TrapFloorWinMode mode,
             int floorIndex,

@@ -1404,6 +1404,9 @@ namespace ConsoleCards.Presentation.Composition
 
         private string CollapsePreviewLabel() => $"Collapse tile {collapsePreviewTile}";
 
+        /// <summary>Editor scenarios (2026-11-17): the tile the floor dice point at, waiting for Collapse (null: none).</summary>
+        internal TrapFloorCoordinate? CollapsePreviewTileForScenario => collapsePreviewId.IsEmpty ? null : collapsePreviewTile;
+
         // ROUND-1: forgets the marked tile and closes its popup.
         private void ResetCollapsePreview()
         {
