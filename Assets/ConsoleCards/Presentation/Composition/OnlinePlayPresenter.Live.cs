@@ -1,7 +1,11 @@
 using System;
 using System.IO;
 using ConsoleCards.Application.Authority;
+using ConsoleCards.Core.Domain;
+using ConsoleCards.Core.Domain.Containers;
+using ConsoleCards.Core.Domain.Seats;
 using ConsoleCards.Core.Identifiers;
+using ConsoleCards.Presentation.Interaction;
 using UnityEngine;
 
 namespace ConsoleCards.Presentation.Composition
@@ -20,6 +24,7 @@ namespace ConsoleCards.Presentation.Composition
         private const byte LiveStroke = 2;
         private const byte LiveStrokeEnd = 3;
         private const byte LiveMeasure = 4; // owner, 2026-11-03: the Measure tool is seen by everyone too
+        private const byte LiveHeldCard = 5; // LIVE-HELD (owner, 2026-11-18): a card held out of a deck, hand or Console
         private const int MaxLivePoints = 256; // per message; a longer line goes in several
         private readonly Vector3[] livePoints = new Vector3[MaxLivePoints];
 
@@ -100,6 +105,78 @@ namespace ConsoleCards.Presentation.Composition
             SendLive();
         }
 
+        // LIVE-HELD (owner's online test, 2026-11-18: "while getting the cards out of the deck, it's not lively
+        // updating"): a card held out of a deck, a hand or a Console stays in it on the table until it is dropped, so
+        // the poses of loose pieces never named it and the others saw nothing until the drop. Sent at the pose rate
+        // while it is carried over the table, and once more when it is let go (the drop's own command moves it; a
+        // card put back returns to its place). Only where it is goes out: each computer shows the card's face or back
+        // as it already shows it in that container (another seat's hand: its back).
+        private TabletopObjectId liveHeldCard;
+
+        private void SendHeldCard()
+        {
+            if (!CanSendLive()) return;
+            ContainedCardDragCoordinator drag = host.ContainedCardDragCoordinator;
+            TabletopObjectId card = TabletopObjectId.Empty;
+            Vector3 position = Vector3.zero;
+            Quaternion rotation = Quaternion.identity;
+            bool holding = drag != null && drag.TryGetCarriedPose(out card, out position, out rotation);
+            if (holding)
+            {
+                liveHeldCard = card;
+            }
+            else
+            {
+                if (liveHeldCard.IsEmpty) return;
+                card = liveHeldCard;
+                liveHeldCard = TabletopObjectId.Empty;
+            }
+
+            BeginMessage(MsgLive);
+            writer.Write(LiveHeldCard);
+            WriteGuid(host.LocalPlayerId.Value);
+            WriteGuid(card.Value);
+            writer.Write(holding);
+            WriteVector(position);
+            writer.Write(rotation.x);
+            writer.Write(rotation.y);
+            writer.Write(rotation.z);
+            writer.Write(rotation.w);
+            SendLive();
+        }
+
+        // LIVE-HELD, as PHY-6 for streamed poses: the host shows and passes on a held card only from the player it
+        // names (the sender's own seat, never the message's word), and while held only for a card its own table has
+        // in a container, unlocked, and not in another seat's hand. The last message (let go) needs only the sender.
+        private bool HostAllowsHeldCard(Member from, byte[] data)
+        {
+            if (from == null || from.Player == Guid.Empty || host.matchState == null) return false;
+            try
+            {
+                BinaryReader reader = Reader(data);
+                reader.ReadByte();
+                reader.ReadByte();
+                if (ReadGuid(reader) != from.Player) return false;
+                TabletopObjectId card = new TabletopObjectId(ReadGuid(reader));
+                if (!reader.ReadBoolean()) return true;
+                if (!host.matchState.Cards.TryGetValue(card, out CardInstanceState state)
+                    || state.BaseState.ContainerId.IsEmpty
+                    || state.BaseState.IsUserLocked
+                    || !host.matchState.Containers.TryGetValue(state.BaseState.ContainerId, out ContainerState container))
+                {
+                    return false;
+                }
+
+                if (container.Kind != ContainerKind.Hand || container.OwnerSeatId.IsEmpty) return true;
+                return host.matchState.Seats.TryGetValue(container.OwnerSeatId, out SeatState seat)
+                    && seat.OccupantPlayerId.Value == from.Player;
+            }
+            catch (EndOfStreamException)
+            {
+                return false;
+            }
+        }
+
         private bool CanSendLive() =>
             sharedTable && session != null && session.State == MultiplayerSessionState.InRoom && !applying;
 
@@ -134,6 +211,7 @@ namespace ConsoleCards.Presentation.Composition
         // Host: shown here, then passed on to everyone but the sender.
         private void HostLive(Member from, byte[] data)
         {
+            if (data.Length > 1 && data[1] == LiveHeldCard && !HostAllowsHeldCard(from, data)) return; // LIVE-HELD
             ApplyLive(data);
             for (int i = 0; i < members.Count; i++)
             {
@@ -188,6 +266,16 @@ namespace ConsoleCards.Presentation.Composition
                             Vector3 start = ReadVector(reader);
                             Vector3 end = ReadVector(reader);
                             host.ShowRemoteMeasure(player, start, end, visible);
+                            break;
+                        }
+
+                    case LiveHeldCard:
+                        {
+                            TabletopObjectId card = new TabletopObjectId(ReadGuid(reader));
+                            bool holding = reader.ReadBoolean();
+                            Vector3 position = ReadVector(reader);
+                            Quaternion rotation = new Quaternion(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+                            host.ShowRemoteHeldCard(player, card, holding, position, rotation);
                             break;
                         }
                 }

@@ -406,6 +406,7 @@ namespace ConsoleCards.Presentation.Composition
             {
                 nextPoseAt = now + PoseSeconds;
                 SendPoses();
+                SendHeldCard(); // LIVE-HELD: a card held out of a deck, hand or Console
             }
 
             if (hosting && now >= nextCheckAt)

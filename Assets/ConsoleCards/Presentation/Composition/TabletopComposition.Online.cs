@@ -312,5 +312,152 @@ namespace ConsoleCards.Presentation.Composition
                 SessionService.RefreshUndoUi();
             }
         }
+
+        // ---------- LIVE-HELD: cards another computer's player holds out of a deck, a hand or a Console ----------
+
+        private const int MaxRemoteHeldCards = 8;
+        private const float RemoteHeldTimeoutSeconds = 1.5f; // no news for this long: the card goes back to its place
+        private const float RemoteHeldResponse = 18f; // how fast the card catches up with the pose it was sent (per s)
+
+        private struct RemoteHeldCard
+        {
+            public PlayerId Player;
+            public CardView View;
+            public ContainerId Source;
+            public Vector3 Position;
+            public Quaternion Rotation;
+            public float LastAt;
+        }
+
+        private readonly RemoteHeldCard[] remoteHeldCards = new RemoteHeldCard[MaxRemoteHeldCards];
+        private int remoteHeldCount;
+
+        /// <summary>
+        /// LIVE-HELD (owner's online test, 2026-11-18): another computer's player carries a card out of a deck, a hand
+        /// or a Console, or lets it go. The card is lifted out of its place here and follows the poses it is sent. It is
+        /// shown as this computer already shows it in that container (another seat's hand: its back). Presentation
+        /// only: its state stays where it is until the drop's own command moves it.
+        /// </summary>
+        internal void ShowRemoteHeldCard(PlayerId player, TabletopObjectId cardId, bool holding, Vector3 position, Quaternion rotation)
+        {
+            if (!IsInitialized) return;
+            int index = -1;
+            for (int i = 0; i < remoteHeldCount; i++)
+            {
+                if (remoteHeldCards[i].Player == player)
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            if (index >= 0 && (!holding || remoteHeldCards[index].View == null || remoteHeldCards[index].View.ObjectId != cardId))
+            {
+                EndRemoteHeldCard(index, true);
+                index = -1;
+            }
+
+            if (!holding
+                || float.IsNaN(position.x) || float.IsInfinity(position.x)
+                || float.IsNaN(position.y) || float.IsInfinity(position.y)
+                || float.IsNaN(position.z) || float.IsInfinity(position.z)
+                || float.IsNaN(rotation.w) || float.IsInfinity(rotation.w))
+            {
+                return;
+            }
+
+            rotation = rotation.normalized;
+            if (index < 0)
+            {
+                if (remoteHeldCount >= MaxRemoteHeldCards
+                    || !Registry.TryGetCardView(cardId, out CardView view)
+                    || view.CardState == null
+                    || view.CardState.BaseState.ContainerId.IsEmpty
+                    || view.IsPreviewing
+                    || ReferenceEquals(containedCardDragCoordinator?.ActiveCardView, view))
+                {
+                    return;
+                }
+
+                index = remoteHeldCount++;
+                remoteHeldCards[index].Player = player;
+                remoteHeldCards[index].View = view;
+                remoteHeldCards[index].Source = view.CardState.BaseState.ContainerId;
+            }
+
+            remoteHeldCards[index].Position = position;
+            remoteHeldCards[index].Rotation = rotation;
+            remoteHeldCards[index].LastAt = Time.unscaledTime;
+        }
+
+        // Every frame: each card held elsewhere moves towards its last pose. A card that left its container (its drop
+        // was accepted, or the table changed) is left to the table; one with no news for a while goes back.
+        internal void TickRemoteHeldCards()
+        {
+            if (remoteHeldCount == 0) return;
+            float now = Time.unscaledTime;
+            float blend = 1f - Mathf.Exp(-RemoteHeldResponse * Time.unscaledDeltaTime);
+            for (int i = remoteHeldCount - 1; i >= 0; i--)
+            {
+                CardView view = remoteHeldCards[i].View;
+                if (view == null
+                    || !view.IsBound
+                    || view.CardState == null
+                    || view.CardState.BaseState.ContainerId != remoteHeldCards[i].Source
+                    || ReferenceEquals(containedCardDragCoordinator?.ActiveCardView, view))
+                {
+                    EndRemoteHeldCard(i, false);
+                    continue;
+                }
+
+                if (now - remoteHeldCards[i].LastAt > RemoteHeldTimeoutSeconds || view.IsPreviewing)
+                {
+                    EndRemoteHeldCard(i, true);
+                    continue;
+                }
+
+                Transform card = view.transform;
+                view.ApplyContainerWorldPose(
+                    Vector3.Lerp(card.position, remoteHeldCards[i].Position, blend),
+                    Quaternion.Slerp(card.rotation, remoteHeldCards[i].Rotation, blend));
+            }
+        }
+
+        private void EndRemoteHeldCard(int index, bool putBack)
+        {
+            CardView view = remoteHeldCards[index].View;
+            ContainerId source = remoteHeldCards[index].Source;
+            remoteHeldCount--;
+            remoteHeldCards[index] = remoteHeldCards[remoteHeldCount];
+            remoteHeldCards[remoteHeldCount] = default(RemoteHeldCard);
+            if (!putBack
+                || view == null
+                || !view.IsBound
+                || view.CardState == null
+                || view.CardState.BaseState.ContainerId != source)
+            {
+                return;
+            }
+
+            // Back to its place: its container lays its cards out again (the face it showed there is kept).
+            if (layoutViewLookup != null
+                && layoutViewLookup.TryGet(source, out IContainerLayoutView layout)
+                && layout != null
+                && layout.IsBound)
+            {
+                layout.ApplyAcceptedLayout();
+                return;
+            }
+
+            for (int i = 0; i < Registry.hiddenHandViews.Count; i++)
+            {
+                HiddenHandView hidden = Registry.hiddenHandViews[i];
+                if (hidden != null && hidden.IsBound && hidden.ContainerId == source)
+                {
+                    hidden.ApplyAcceptedLayout();
+                    return;
+                }
+            }
+        }
     }
 }

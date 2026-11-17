@@ -179,6 +179,34 @@ namespace ConsoleCards.Presentation.Interaction
 
         public bool HasActiveInteraction => ActiveCardView != null;
 
+        /// <summary>
+        /// LIVE-HELD (owner's online test, 2026-11-18: a card taken out of a deck is not seen moving on the other
+        /// computer): the card held out of its container and where its body is, while it is carried over the table
+        /// (not while it is still in the hand tray). The other computers are shown it; nothing is committed.
+        /// </summary>
+        public bool TryGetCarriedPose(out TabletopObjectId cardId, out Vector3 position, out Quaternion rotation)
+        {
+            cardId = default(TabletopObjectId);
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            CardView view = ActiveCardView;
+            PhysicalLooseObject physical = view != null ? view.PhysicalObject : null;
+            if (physical == null
+                || !view.IsBound
+                || stateMachine.Phase != TabletopInteractionPhase.DraggingObject
+                || !physical.IsHeld
+                || physical.Body == null
+                || (trayDragActive && !trayDragOnTable))
+            {
+                return false;
+            }
+
+            cardId = view.ObjectId;
+            position = physical.Body.position;
+            rotation = physical.Body.rotation;
+            return true;
+        }
+
         public TabletopInteractionPhase Phase => stateMachine.Phase;
 
         public bool TryBegin(

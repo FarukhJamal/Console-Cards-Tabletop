@@ -1088,6 +1088,7 @@ namespace ConsoleCards.Presentation.Composition
 
             online?.Tick(); // MP-2: the room's messages and the shared table
             TickRemotePing(); // QA S1: the extra ripples of someone else's ping
+            TickRemoteHeldCards(); // LIVE-HELD: cards held out of a deck, hand or Console on another computer
             TickAssist(); // doc 57: the Assist setting, the turn cartridge and the Console glow
             if (SessionService.HandleRedoShortcut()) return;
             if (SessionService.HandleUndoShortcut()) return;
