@@ -333,6 +333,12 @@ namespace ConsoleCards.Presentation.Interaction
         // holds it still again). When the player is back in (a new floor, an Undo) it gets its normal physics back.
         private bool outOfPlayRest;
 
+        // PHY-1 REMOTE-REST: true while this piece rests here under another computer's control (see ApplyAccepted).
+        private bool remoteRest;
+
+        /// <summary>PHY-1: true while this piece rests held still because another computer's player controls it.</summary>
+        public bool IsRemoteRest => remoteRest;
+
         /// <summary>P8A: true while this pawn rests out of play (held still at its accepted place).</summary>
         public bool IsRestingOutOfPlay => outOfPlayRest;
 
@@ -539,8 +545,15 @@ namespace ConsoleCards.Presentation.Interaction
             // P8A eliminated-pawn fix: a pawn out of play that rests is held still at its accepted place (see OutOfPlayRest).
             bool locked = view.BoundState.IsUserLocked;
             outOfPlayRest = !held && WantsOutOfPlayRest(state);
-            body.isKinematic = locked || frozenAfterRecovery || outOfPlayRest;
-            body.useGravity = !held && !locked && !frozenAfterRecovery && !outOfPlayRest;
+            // PHY-1 REMOTE-REST (doc 15, "one physics owner per piece"): a resting piece another computer's player
+            // controls is not simulated here. Only its controller commits it, so a local nudge could only be snapped
+            // back (the pawn correction loop, ~140 a second) or refused (the "Commit refused" spam). It is held still at
+            // the accepted resting place; a moving state from its controller is still simulated between checkpoints,
+            // and picking it up here makes it dynamic again (BeginHold).
+            remoteRest = !held && !locked && authority != null && !authority.ControlsHere(state)
+                && (state.Mode == PhysicalObjectMode.Sleeping || state.Mode == PhysicalObjectMode.SleepingUnresolved);
+            body.isKinematic = locked || frozenAfterRecovery || outOfPlayRest || remoteRest;
+            body.useGravity = !held && !locked && !frozenAfterRecovery && !outOfPlayRest && !remoteRest;
             body.detectCollisions = true;
             if (held) ApplyHeldPhysics(); else RestoreProfilePhysics();
             if (!body.isKinematic)
@@ -619,6 +632,7 @@ namespace ConsoleCards.Presentation.Interaction
             }
             held = true;
             frozenAfterRecovery = false;
+            remoteRest = false; // PHY-1: picked up here, it moves here
 
             // Contained cards are positioned by presentation (transform) while kinematic; make sure the
             // physics pose matches the visible pose before the body becomes dynamic.
