@@ -77,9 +77,25 @@ namespace ConsoleCards.Presentation.Composition
         /// every table's draw from a Controller deck refuses a Blind player's draw in Full (the same answer on every
         /// computer, replays included). Reminders lets it through and says it breaks the card's rule; Free is manual.
         /// </summary>
+        // SYNC-DEAL: true while a joined computer (not the room's host) replays a command the host sent: the host's
+        // decision stands there. On the host, a guest's command is still checked (it replays them too).
+        private bool IsReplayingHostCommand =>
+            host.ReplicatedIfMade != null
+            && host.ReplicatedIfMade.Replaying
+            && host.HasOnline
+            && host.Online.InRoom
+            && !host.Online.IsHosting
+            && !host.Online.IsPrivateHost;
+
         internal bool RefusesBlindDraw(PlayerId drawer, ContainerId source)
         {
             if (IsBuyPhase) return false; // rules v1.151126: the Buy Phase deal (Blind players are skipped by the deal itself)
+            // SYNC-DEAL (online test, 2026-11-18): a joined computer replaying the host's commands does not judge them
+            // again by its own game state. The host deals the Buy Phase hands in the step that opens the phase, but the
+            // phase itself (game state outside the command door) reaches the guest only with the next whole table, so
+            // the guest still saw a turn, refused the host's deal and had to ask for the whole table every Buy Phase.
+            // The host already checked the command (its own commands meet the same checks, audit A2).
+            if (IsReplayingHostCommand) return false;
             if (RefusesTurnDraw(drawer, source)) return true; // rules v1.151126 (Full): hands are dealt in the Buy Phase
             if (PlayAssist.IsFree || host.trapFloorTemplate == null || host.trapFloorTurnState == null
                 || host.trapFloorAbilityResolutionState == null) return false;

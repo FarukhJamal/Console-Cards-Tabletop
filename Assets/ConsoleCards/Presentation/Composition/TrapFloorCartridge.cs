@@ -2718,7 +2718,10 @@ namespace ConsoleCards.Presentation.Composition
             }
             else if (host.trapFloorObjectiveState != null && host.trapFloorObjectiveUseCase != null)
             {
-                if (floorCard.Content.Category == TrapFloorFloorContentCategory.Key
+                // HIDDEN-KEY (online test, 2026-11-18): only a revealed Key. The entry used to show on a face-down tile
+                // too, so right-clicking the floor named which hidden tiles were Keys (and let one be claimed unseen).
+                if (floorCard.IsRevealed
+                    && floorCard.Content.Category == TrapFloorFloorContentCategory.Key
                     && host.trapFloorTurnState != null
                     && !host.trapFloorObjectiveState.HasPlayerClaimedKey(targetCardId, host.trapFloorTurnState.ActivePlayerId)) // KEYS-3
                 {

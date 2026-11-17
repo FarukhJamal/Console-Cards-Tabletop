@@ -707,7 +707,9 @@ namespace ConsoleCards.Presentation.Composition
                         frontTitle = "KEY — UNCLAIMED";
                         objectiveContext = "Key status: UNCLAIMED\n"
                             + "Claim this Key before attempting to escape.\n";
-                        primaryAction = new PopupActionOption(
+                        // HIDDEN-KEY: the button only for a revealed Key (the window of a face-down tile shows its
+                        // back, but the button named it as a Key).
+                        if (floorCard.IsRevealed) primaryAction = new PopupActionOption(
                             "Claim Key",
                             !host.trapFloorObjectiveState.IsWon,
                             () => ClaimTrapFloorKey(targetCardId));

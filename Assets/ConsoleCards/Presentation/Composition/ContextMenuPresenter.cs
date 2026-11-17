@@ -565,7 +565,10 @@ namespace ConsoleCards.Presentation.Composition
             {
                 TrapFloorCartridge buying = host.ActiveCartridge as TrapFloorCartridge;
                 bool drawOut = buying != null && buying.CanEndAbilityBuying();
-                bool lyingOut = drawOut || (buying != null && buying.HasDrawLyingOut());
+                // Online, every buyer's draw lies out in the Buy Phase: another player's draw is not "your draw" (it
+                // used to name this entry "Buy from your draw" on the host while only the guest's draw lay out).
+                bool lyingOut = drawOut
+                    || (buying != null && !(buying.IsBuyPhase && host.IsOnlineTable) && buying.HasDrawLyingOut());
                 actions.Add(new PopupActionOption(lyingOut ? "Buy from your draw" : "Draw 3 Abilities", true, () =>
                 {
                     CloseContextMenu();

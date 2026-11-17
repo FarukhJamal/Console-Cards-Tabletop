@@ -582,7 +582,8 @@ namespace ConsoleCards.Presentation.Composition
                 // A bought Lasso lies beside the player's Console, out of any pile.
                 foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in host.matchState.Cards)
                 {
-                    if (!TrapFloorAbilityRules.IsLooseAbilityOf(host.matchState, host.trapFloorTemplate, player, pair.Key, pair.Value)
+                    if (held.Contains(pair.Key) // LOOSE-REACTION: CollectHeldAbilities already lists a loose one
+                        || !TrapFloorAbilityRules.IsLooseAbilityOf(host.matchState, host.trapFloorTemplate, player, pair.Key, pair.Value)
                         || !host.TryGetAuthoredCardDefinition(pair.Value.BaseState.DefinitionId, out CardDefinition loose))
                     {
                         continue;

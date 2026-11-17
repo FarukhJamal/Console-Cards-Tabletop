@@ -327,6 +327,23 @@ namespace ConsoleCards.Presentation.Composition
             {
                 CollectAbilitiesIn(setup.SideSlotContainerIds[i], reactionsOnly, cards, definitions);
             }
+
+            // LOOSE-REACTION: an Ability bought from the Buy Phase draw stays lying beside its buyer's Console, out of any
+            // pile (P8A); it is held too, so a bought Shield, Dodge or Check is offered when a trap is waiting.
+            foreach (KeyValuePair<TabletopObjectId, CardInstanceState> pair in host.matchState.Cards)
+            {
+                if (!TrapFloorAbilityRules.IsLooseAbilityOf(host.matchState, host.trapFloorTemplate, player, pair.Key, pair.Value)
+                    || !host.TryGetAuthoredCardDefinition(pair.Value.BaseState.DefinitionId, out CardDefinition definition)
+                    || definition.ConsoleBehavior != ConsoleCardBehavior.ActivateOnInsert)
+                {
+                    continue;
+                }
+
+                TrapFloorAbilityEffect effect = TrapFloorAbilityResolutionService.ResolveEffect(definition.EffectMetadata);
+                if (!IsAssistedAbility(effect) || (reactionsOnly && !IsReaction(effect))) continue;
+                cards.Add(pair.Key);
+                definitions.Add(definition);
+            }
         }
 
         private void CollectAbilitiesIn(
@@ -629,6 +646,10 @@ namespace ConsoleCards.Presentation.Composition
             // Rules v1.151126: a player's Done Buying returns only their own draw (the others may still be buying).
             if (alsoOthersLyingOut) foreach (TabletopObjectId lying in FindDrawLyingOut()) dealtOffer.Add(lying);
             if (dealtOffer.Count == 0 || !TryGetAbilityDeck(out ContainerState deck)) return;
+            // END-TURN-RETURN: End Turn with no draw this turn (abilityOfferPlayer empty) can still find a draw lying out
+            // (a guest's, left after a rejoin); the clean-up then runs as this computer's player, like End Buying does.
+            if (owner.IsEmpty) owner = host.localPlayerId;
+            if (owner.IsEmpty) return;
             var starts = host.CaptureCardTransforms(dealtOffer);
             int returned = 0;
             bool batch = !host.undoBatchActive;
